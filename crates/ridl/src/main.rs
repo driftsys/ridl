@@ -213,6 +213,11 @@ enum Command {
     /// Run the MCP server over stdio for an agent host: exit 0 on a clean
     /// shutdown, 2 on a transport error. It takes no flag of its own.
     Mcp,
+    /// Print a catalog descriptor as strict JSON, after verifying it.
+    Describe {
+        /// The `<base>.catalog.binfb` file `ridl build --emit catalog` wrote.
+        path: PathBuf,
+    },
 }
 
 /// The subcommands of `ridl lock`.
@@ -322,6 +327,43 @@ fn main() -> ExitCode {
         } => lock::run_lock(&path, &rename, &retire),
         Command::Lsp { .. } => run_lsp(),
         Command::Mcp => run_mcp(),
+        Command::Describe { path } => run_describe(&path),
+    }
+}
+
+/// `ridl describe`: read, verify (identifier, version, whole-buffer walk),
+/// render. Every failure means the tool could not answer: exit 2 with the
+/// cause named (ADR-0010 decision 1; the runtime descriptors design, D-8).
+fn run_describe(path: &Path) -> ExitCode {
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            eprintln!("error: {}: {err}", path.display());
+            return ExitCode::from(2);
+        }
+    };
+    let catalog = match ridl_descriptor::verify(&bytes) {
+        Ok(catalog) => catalog,
+        Err(err) => {
+            eprintln!("error: {}: {err}", path.display());
+            return ExitCode::from(2);
+        }
+    };
+    match ridl_descriptor::describe::to_json(catalog) {
+        Ok(json) => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json).expect("a JSON value serializes")
+            );
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!(
+                "error: {}: catalog descriptor is malformed: {err}",
+                path.display()
+            );
+            ExitCode::from(2)
+        }
     }
 }
 

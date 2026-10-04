@@ -356,3 +356,66 @@ service veh.hvac.cabin {\n\
         .collect();
     assert_eq!(names, vec!["veh.hvac.cabin"]);
 }
+
+#[test]
+fn describe_prints_the_descriptor_as_json() {
+    let out = TempDir::new("describe");
+    let file = build_catalog(out.path());
+    let (code, stdout, stderr) = ridl(&["describe".as_ref(), file.as_os_str()]);
+    assert_eq!(code, 0, "{stderr}");
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("stdout is JSON");
+    assert_eq!(json["version"], 1);
+    // The descriptor records the workspace version, which every release
+    // changes. The test checks it here and the snapshot holds a placeholder,
+    // so a release does not make the snapshot stale.
+    assert_eq!(json["toolchain"], env!("CARGO_PKG_VERSION"));
+    let stdout = stdout.replace(
+        &format!("\"toolchain\": \"{}\"", env!("CARGO_PKG_VERSION")),
+        "\"toolchain\": \"[version]\"",
+    );
+    insta::assert_snapshot!("corpus_catalog", stdout);
+}
+
+#[test]
+fn describe_reports_a_missing_path_with_exit_2() {
+    let (code, stdout, stderr) =
+        ridl(&["describe".as_ref(), "/nonexistent/x.catalog.binfb".as_ref()]);
+    assert_eq!(code, 2);
+    assert!(stdout.is_empty());
+    assert!(
+        stderr.starts_with("error: /nonexistent/x.catalog.binfb: "),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn describe_rejects_a_foreign_file_before_any_read() {
+    let out = TempDir::new("foreign");
+    let file = out.path().join("ir.binpb");
+    // Twelve bytes, so the header is long enough and the file identifier
+    // check is what rejects it: bytes 4..8 are `cdef`, not `RDLC`.
+    std::fs::write(&file, b"\x08\x01\x12\x08abcdefgh").unwrap();
+    let (code, _, stderr) = ridl(&["describe".as_ref(), file.as_os_str()]);
+    assert_eq!(code, 2);
+    assert!(stderr.contains("not a catalog descriptor"), "{stderr}");
+}
+
+#[test]
+fn describe_rejects_a_truncated_and_a_flipped_descriptor() {
+    let out = TempDir::new("corrupt");
+    let file = build_catalog(out.path());
+    let bytes = std::fs::read(&file).unwrap();
+
+    let truncated = out.path().join("truncated.catalog.binfb");
+    std::fs::write(&truncated, &bytes[..bytes.len() / 2]).unwrap();
+    let (code, _, stderr) = ridl(&["describe".as_ref(), truncated.as_os_str()]);
+    assert_eq!(code, 2, "{stderr}");
+    assert!(stderr.contains("malformed"), "{stderr}");
+
+    let mut flipped = bytes.clone();
+    flipped[0..4].copy_from_slice(&(bytes.len() as u32 + 64).to_le_bytes());
+    let path = out.path().join("flipped.catalog.binfb");
+    std::fs::write(&path, &flipped).unwrap();
+    let (code, _, stderr) = ridl(&["describe".as_ref(), path.as_os_str()]);
+    assert_eq!(code, 2, "{stderr}");
+}

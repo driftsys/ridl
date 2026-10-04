@@ -780,7 +780,7 @@ validate a vocabulary and its combinations (diagnostics `TYPL-402` and
 ridl build --emit rust --out-dir out
 ```
 
-`ridl build` compiles a workspace and writes one artifact per package. Seven
+`ridl build` compiles a workspace and writes one artifact per package. Eight
 emit targets exist today:
 
 | `--emit`      | Output               | Contents                                       |
@@ -792,6 +792,7 @@ emit targets exist today:
 | `typescript`  | `<package>.ts`       | idiomatic TypeScript source                    |
 | `proto`       | `<package>.proto`    | the proto3 schema — types and the ordinals     |
 | `flatbuffers` | `<package>.fbs`      | the FlatBuffers schema — types and the ordinals |
+| `catalog` | `<package>.catalog.binfb` | the catalog descriptor an engine reads — interfaces, numbers, members, sizes |
 
 One more artifact joins them when a package names a type from `ridl.std` —
 `Duration` above does — because generated code refers to standard types by
