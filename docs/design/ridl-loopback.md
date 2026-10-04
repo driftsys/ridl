@@ -696,9 +696,10 @@ a provider settles a call with it
 (`a_providers_busy_settlement_reaches_the_caller`); and `Attached::catalog`
 returns the `CatalogRef` the runtime was built with, unexamined. ADR-0021
 decision 3 places the check of it against an interface's own `CATALOG` in the
-generated face's constructor, once, when the face is built; the constructor the
-Rust backend emits today performs no such check, which driftsys/ridl#448 is open
-on. Either way the check is the face's and not the runtime's.
+generated face's constructor, once, when the face is built; since story E16.5
+(driftsys/ridl#381) the constructor the Rust backend emits makes that check and
+panics on a mismatch (ADR-0023 decision 8). The check is the face's and not the
+runtime's.
 
 Three more that are the runtime's own shape rather than the descriptor's:
 

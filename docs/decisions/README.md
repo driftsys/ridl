@@ -302,10 +302,12 @@ other entry below is Accepted.
   the member methods stay inherent, so a member may carry any of those names; a
   generated `prelude` per interface puts the traits in scope with one `use`
   line, and on a real collision the consumer writes the trait's path
-  (`<Client<_> as Bind>::new(port)`). Binds every later story that extends the
-  Rust backend's interaction face, until superseded: E5.1, Epic 10, and any
-  later language backend that follows this precedent. The as-built face this
-  record's decisions produced is
+  (`<Client<_> as Bind>::new(port)`). The 2026-10-04 amendment adds decision 8:
+  `Bind::new` and `serve` compare the port's catalog with the interface's
+  `CATALOG` once, at the binding, and panic on a mismatch. Binds every later
+  story that extends the Rust backend's interaction face, until superseded:
+  E5.1, Epic 10, and any later language backend that follows this precedent. The
+  as-built face this record's decisions produced is
   [the interaction-face design record](../design/interaction-face.md).
 
 - **ADR-0024 — The lint registry and levels.** Sixteen decisions: seven agreed

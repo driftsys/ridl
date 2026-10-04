@@ -10,6 +10,7 @@
 
 pub mod generated;
 pub mod hash;
+pub mod lower;
 pub mod number;
 pub mod size;
 
@@ -20,6 +21,7 @@ pub use generated::ridl::descriptor::{
     MemberRef, Payload, PayloadRef, RetiredInterface, RetiredInterfaceRef,
     SizeState as SizeStateTag, Timing, TimingMode, TimingRef, UnboundedCause,
 };
+pub use lower::lower;
 
 /// The schema version this toolchain writes and accepts.
 pub const SCHEMA_VERSION: u32 = 1;

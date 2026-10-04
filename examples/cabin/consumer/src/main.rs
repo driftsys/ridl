@@ -76,14 +76,14 @@ use std::time::Duration;
 use api::cabin;
 use api::cabin::prelude::*;
 use ridl_loopback::Loopback;
-use ridl_rt::contract::{CatalogHash, CatalogRef};
+use ridl_rt::contract::{CatalogRef, Interface};
 use ridl_rt::sample::Provenance;
 use veh_cabin::veh::cabin as api;
 
-const CATALOG: CatalogRef = CatalogRef {
-    name: "veh.cabin",
-    hash: CatalogHash([0u8; 32]),
-};
+/// The catalog the runtime is attached to: the one the face was generated
+/// from. The face's `Bind::new` and `serve` compare the port's catalog with
+/// it and panic on a mismatch (ADR-0023 decision 8).
+const CATALOG: CatalogRef = *<api::Cabin as Interface>::CATALOG;
 
 struct Cabin {
     levels: Vec<i64>,

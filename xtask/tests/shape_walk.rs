@@ -167,6 +167,14 @@ const ALLOWED: &[Allowed] = &[
               the hash; the hash itself walks `shapes()`",
     },
     Allowed {
+        path: "crates/ridl-descriptor/tests/lower.rs",
+        lines: 3,
+        why: "the `vehicle()` helper and a test, each reading the catalog \
+              descriptor's own `Catalog.interfaces` field back out of a \
+              buffer, and a test that zeroes the number of the one interface \
+              its package declares; the lowering itself walks `shapes()`",
+    },
+    Allowed {
         path: "crates/ridl-descriptor/tests/round_trip.rs",
         lines: 1,
         why: "a test reading the catalog descriptor's own `Catalog.interfaces` \
@@ -177,6 +185,13 @@ const ALLOWED: &[Allowed] = &[
         lines: 1,
         why: "a test case naming the catalog descriptor's own `Catalog.interfaces` \
               field, not a read of `Package::interfaces`",
+    },
+    Allowed {
+        path: "crates/ridl/tests/describe_cli.rs",
+        lines: 1,
+        why: "a test reading the catalog descriptor's own `Catalog.interfaces` \
+              field back out of a buffer that `ridl build --emit catalog` \
+              wrote, not a read of `Package::interfaces`",
     },
     Allowed {
         path: "crates/ridl-ir/src/catalog_hash.rs",

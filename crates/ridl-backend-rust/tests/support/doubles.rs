@@ -410,15 +410,13 @@ impl QueuedClaims {
     }
 }
 
-/// The catalog `QueuedClaims` reports. The generated face checks no catalog.
-const QUEUED_CATALOG: CatalogRef = CatalogRef {
-    name: "face.demo",
-    hash: ridl_rt::contract::CatalogHash([0u8; 32]),
-};
-
+/// `QueuedClaims` reports the catalog of the generated fixture face, which
+/// `serve` compares with its own and panics on a mismatch (ADR-0023 decision
+/// 8). This module is reached only from `tests/interaction_face.rs`, whose
+/// crate root holds `generated`.
 impl Attached for QueuedClaims {
     fn catalog(&self) -> &CatalogRef {
-        &QUEUED_CATALOG
+        <crate::generated::Cabin as ridl_rt::contract::Interface>::CATALOG
     }
 }
 

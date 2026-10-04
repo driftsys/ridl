@@ -25,8 +25,8 @@
 //! waits — an event, a command or a query; a signal-only interface's `Client`
 //! never blocks, so it gets no `blocking` module.
 
-use super::{Call, Member, client_bounds, ident, type_path};
-use proc_macro2::TokenStream;
+use super::{Call, Member, catalog_panics_doc, client_bounds, ident, type_path};
+use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 
 /// A type reference as the blocking module names it: one module deeper than
@@ -44,6 +44,7 @@ fn ty(reference: &str) -> TokenStream {
 /// The `blocking` module, or nothing for an interface with no event, command
 /// or query.
 pub(super) fn blocking(
+    iface: &Ident,
     iface_name: &str,
     signals: &[(Member, &str)],
     events: &[(Member, &str)],
@@ -57,10 +58,12 @@ pub(super) fn blocking(
     let bounds = client_bounds(signals, events, commands, queries);
     let mut items = vec![
         deadline_after(),
-        client(iface_name, &bounds, signals, events, commands, queries),
+        client(
+            iface, iface_name, &bounds, signals, events, commands, queries,
+        ),
     ];
     if has_calls {
-        items.push(serve(iface_name));
+        items.push(serve(iface, iface_name));
     }
 
     let doc = format!(
@@ -97,6 +100,7 @@ fn deadline_after() -> TokenStream {
 }
 
 fn client(
+    iface: &Ident,
     iface_name: &str,
     bounds: &[TokenStream],
     signals: &[(Member, &str)],
@@ -104,6 +108,15 @@ fn client(
     commands: &[Call],
     queries: &[Call],
 ) -> TokenStream {
+    let new_doc = format!(
+        "Binds the face to a port, with no timeout. The port is held by value: \
+         pass a handle, or a `&mut` borrow of one.\n\n{}",
+        catalog_panics_doc(
+            iface,
+            "port",
+            "the comparison is made once, by `super::Client`'s `new`",
+        )
+    );
     let mut methods: Vec<TokenStream> = Vec::new();
 
     for (member, payload) in signals {
@@ -248,8 +261,8 @@ fn client(
         impl<P: #(#bounds)+*> ::ridl_rt::face::Bind for Client<P> {
             type Port = P;
 
-            /// Binds the face to a port, with no timeout. The port is held
-            /// by value: pass a handle, or a `&mut` borrow of one.
+            #[doc = #new_doc]
+            #[track_caller]
             fn new(port: P) -> Self {
                 Client {
                     inner: <super::Client<P> as ::ridl_rt::face::Bind>::new(port),
@@ -334,7 +347,7 @@ fn call_method(call: &Call, kind: &str, output: TokenStream, expired: &str) -> T
 
 /// `blocking::serve`: `block_on` over `serve`'s future, which never resolves
 /// to `Ok`, so `Ok(())` here means the timeout passed (note F-11).
-fn serve(iface_name: &str) -> TokenStream {
+fn serve(iface: &Ident, iface_name: &str) -> TokenStream {
     let doc = format!(
         "Serves interface `{iface_name}`'s commands and queries with `p`, over \
          the handler port `h`, on the calling thread, until the handler port \
@@ -342,10 +355,12 @@ fn serve(iface_name: &str) -> TokenStream {
          is returned as `serve`'s future resolves to it; the timeout is \
          `Ok(())`, so a loop that also does other work can call this \
          repeatedly. With `None` it returns only on a failure. `h` is dropped \
-         when this returns."
+         when this returns.\n\n{panics}",
+        panics = catalog_panics_doc(iface, "h", "the comparison is made once, by `super::serve`"),
     );
     quote! {
         #[doc = #doc]
+        #[track_caller]
         pub fn serve<H, P>(
             h: H,
             p: &mut P,

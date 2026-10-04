@@ -1718,6 +1718,17 @@ pub mod cabin {
     ///Identifies one sent query `average` to its caller. It is returned by the internal send and accepted by that call's own outcome read, and by no other.
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     pub(crate) struct AverageCorrelation(pub ::ridl_rt::port::Correlation);
+    ///Panics unless `found` is the catalog the face of interface `Cabin` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new` of the face, and `serve` where the interface emits one, call it once, before they store or use the port.
+    #[track_caller]
+    fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
+        let expected = <super::Cabin as ::ridl_rt::contract::Interface>::CATALOG;
+        if *found != *expected {
+            ::core::panic!(
+                "the face of interface `Cabin` was generated from catalog {:?}, but the port is attached to catalog {:?}",
+                expected, found
+            );
+        }
+    }
     ///Starts delivery of one event of interface `Cabin`: one method per event, implemented by `Client` and by `blocking::Client`. A trait rather than inherent methods so that a member of the interface may be named `subscribe<Event>` (ADR-0023 decision 7); `prelude` brings it into scope anonymously.
     pub trait Subscribe {
         ///Starts delivery of event `warning`.
@@ -1845,9 +1856,14 @@ The call's bound is the member's `max`, measured from the port's clock when this
             + ::ridl_rt::port::Wakeable,
     > ::ridl_rt::face::Bind for Client<P> {
         type Port = P;
-        /// Binds the face to a port. The port is held by value: pass a
-        /// handle, or a `&mut` borrow of one.
+        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Cabin as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Cabin` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
         fn new(port: P) -> Self {
+            check_catalog(::ridl_rt::port::Attached::catalog(&port));
             Client { port }
         }
     }
@@ -2422,9 +2438,14 @@ The interface number is checked before the ordinal, for the reason `serve` check
         W: ::ridl_rt::port::SignalWriter + ::ridl_rt::port::EventSink,
     > ::ridl_rt::face::Bind for Publisher<W> {
         type Port = W;
-        /// Binds the face to a port. The port is held by value: pass a
-        /// handle, or a `&mut` borrow of one.
+        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Cabin as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Cabin` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
         fn new(port: W) -> Self {
+            check_catalog(::ridl_rt::port::Attached::catalog(&port));
             Publisher { port }
         }
     }
@@ -2680,12 +2701,18 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
     }
     ///The most claims one poll of `Serve` takes (driftsys/ridl#568). A future that holds one poll for an unbounded time blocks every other task on a single-threaded executor; 32 bounds one poll and keeps the cost of registering the claim interest, paid once per poll, small beside the claims the poll settles.
     const SERVE_BUDGET: usize = 32;
-    ///Serves interface `Cabin`'s commands and queries with `p`, over the handler port `h`, and returns the future that does the serving. `Handler::serve` is called with the interface's command and query ordinals when this function runs; a refusal is a future that is ready with `ProviderError::Serve`. Each poll of the future registers its interest in the interface's claims, then takes and settles the claims the handler has, at most 32 in one poll, so that one poll does not hold a single-threaded executor while callers keep sending. A poll that took 32 claims wakes the future's waker and is `Pending`, so the executor polls it again after other tasks have run; a poll that found no claim left before 32 is `Pending` without waking it. Under `ridl_rt::task::noop_waker` that wake is discarded, so a frame loop that polls the future once per frame settles at most 32 claims per frame; a frame loop that polls with `ridl_rt::task::flag_waker` polls again while its flag was set, up to the loop's own limit of polls per frame. The future resolves only when the handler port fails, to `ProviderError::Claim`; every claim settled before the failure stays settled. `h` is held by value and `p` by `&mut` until the future is dropped.
+    /**Serves interface `Cabin`'s commands and queries with `p`, over the handler port `h`, and returns the future that does the serving. `Handler::serve` is called with the interface's command and query ordinals when this function runs; a refusal is a future that is ready with `ProviderError::Serve`. Each poll of the future registers its interest in the interface's claims, then takes and settles the claims the handler has, at most 32 in one poll, so that one poll does not hold a single-threaded executor while callers keep sending. A poll that took 32 claims wakes the future's waker and is `Pending`, so the executor polls it again after other tasks have run; a poll that found no claim left before 32 is `Pending` without waking it. Under `ridl_rt::task::noop_waker` that wake is discarded, so a frame loop that polls the future once per frame settles at most 32 claims per frame; a frame loop that polls with `ridl_rt::task::flag_waker` polls again while its flag was set, up to the loop's own limit of polls per frame. The future resolves only when the handler port fails, to `ProviderError::Claim`; every claim settled before the failure stays settled. `h` is held by value and `p` by `&mut` until the future is dropped.
+
+# Panics
+
+Panics when `h` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before `Handler::serve` is called. A program that must not panic makes the same comparison first, `h.catalog() == <Cabin as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Cabin` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+    #[track_caller]
     pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
     where
         H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
         P: Provider,
     {
+        check_catalog(::ridl_rt::port::Attached::catalog(&h));
         let state = match h
             .serve(
                 <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER,
@@ -2894,8 +2921,12 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                 + ::ridl_rt::port::Wakeable,
         > ::ridl_rt::face::Bind for Client<P> {
             type Port = P;
-            /// Binds the face to a port, with no timeout. The port is held
-            /// by value: pass a handle, or a `&mut` borrow of one.
+            /**Binds the face to a port, with no timeout. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, by `super::Client`'s `new`. A program that must not panic makes the same comparison first, `port.catalog() == <Cabin as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Cabin` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+            #[track_caller]
             fn new(port: P) -> Self {
                 Client {
                     inner: <super::Client<P> as ::ridl_rt::face::Bind>::new(port),
@@ -2965,7 +2996,12 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                 super::Subscribe::subscribe_warning(&mut self.inner)
             }
         }
-        ///Serves interface `Cabin`'s commands and queries with `p`, over the handler port `h`, on the calling thread, until the handler port fails or `timeout` passes: it is `block_on` over `serve`. A failure is returned as `serve`'s future resolves to it; the timeout is `Ok(())`, so a loop that also does other work can call this repeatedly. With `None` it returns only on a failure. `h` is dropped when this returns.
+        /**Serves interface `Cabin`'s commands and queries with `p`, over the handler port `h`, on the calling thread, until the handler port fails or `timeout` passes: it is `block_on` over `serve`. A failure is returned as `serve`'s future resolves to it; the timeout is `Ok(())`, so a loop that also does other work can call this repeatedly. With `None` it returns only on a failure. `h` is dropped when this returns.
+
+# Panics
+
+Panics when `h` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, by `super::serve`. A program that must not panic makes the same comparison first, `h.catalog() == <Cabin as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Cabin` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
         pub fn serve<H, P>(
             h: H,
             p: &mut P,
@@ -2987,6 +3023,17 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
 }
 ///The generated interaction face of interface `Horn`.
 pub mod horn {
+    ///Panics unless `found` is the catalog the face of interface `Horn` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new` of the face, and `serve` where the interface emits one, call it once, before they store or use the port.
+    #[track_caller]
+    fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
+        let expected = <super::Horn as ::ridl_rt::contract::Interface>::CATALOG;
+        if *found != *expected {
+            ::core::panic!(
+                "the face of interface `Horn` was generated from catalog {:?}, but the port is attached to catalog {:?}",
+                expected, found
+            );
+        }
+    }
     ///The consumer face of interface `Horn`, generic over exactly the ports the interface's interactions need. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, in scope through `prelude`.
     pub struct Client<P: ::ridl_rt::port::SignalReader> {
         port: P,
@@ -3053,9 +3100,14 @@ pub mod horn {
     }
     impl<P: ::ridl_rt::port::SignalReader> ::ridl_rt::face::Bind for Client<P> {
         type Port = P;
-        /// Binds the face to a port. The port is held by value: pass a
-        /// handle, or a `&mut` borrow of one.
+        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Horn as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Horn` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
         fn new(port: P) -> Self {
+            check_catalog(::ridl_rt::port::Attached::catalog(&port));
             Client { port }
         }
     }
@@ -3102,9 +3154,14 @@ pub mod horn {
     }
     impl<W: ::ridl_rt::port::SignalWriter> ::ridl_rt::face::Bind for Publisher<W> {
         type Port = W;
-        /// Binds the face to a port. The port is held by value: pass a
-        /// handle, or a `&mut` borrow of one.
+        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Horn as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Horn` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
         fn new(port: W) -> Self {
+            check_catalog(::ridl_rt::port::Attached::catalog(&port));
             Publisher { port }
         }
     }
@@ -3134,6 +3191,17 @@ pub mod horn {
 }
 ///The generated interaction face of interface `Siren`.
 pub mod siren {
+    ///Panics unless `found` is the catalog the face of interface `Siren` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new` of the face, and `serve` where the interface emits one, call it once, before they store or use the port.
+    #[track_caller]
+    fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
+        let expected = <super::Siren as ::ridl_rt::contract::Interface>::CATALOG;
+        if *found != *expected {
+            ::core::panic!(
+                "the face of interface `Siren` was generated from catalog {:?}, but the port is attached to catalog {:?}",
+                expected, found
+            );
+        }
+    }
     ///Starts delivery of one event of interface `Siren`: one method per event, implemented by `Client` and by `blocking::Client`. A trait rather than inherent methods so that a member of the interface may be named `subscribe<Event>` (ADR-0023 decision 7); `prelude` brings it into scope anonymously.
     pub trait Subscribe {
         ///Starts delivery of event `tripped`.
@@ -3149,9 +3217,14 @@ pub mod siren {
         P: ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable,
     > ::ridl_rt::face::Bind for Client<P> {
         type Port = P;
-        /// Binds the face to a port. The port is held by value: pass a
-        /// handle, or a `&mut` borrow of one.
+        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Siren as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Siren` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
         fn new(port: P) -> Self {
+            check_catalog(::ridl_rt::port::Attached::catalog(&port));
             Client { port }
         }
     }
@@ -3299,9 +3372,14 @@ The interface number is checked before the ordinal, for the reason `serve` check
     }
     impl<W: ::ridl_rt::port::EventSink> ::ridl_rt::face::Bind for Publisher<W> {
         type Port = W;
-        /// Binds the face to a port. The port is held by value: pass a
-        /// handle, or a `&mut` borrow of one.
+        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Siren as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Siren` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
         fn new(port: W) -> Self {
+            check_catalog(::ridl_rt::port::Attached::catalog(&port));
             Publisher { port }
         }
     }
@@ -3333,8 +3411,12 @@ The interface number is checked before the ordinal, for the reason `serve` check
             P: ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable,
         > ::ridl_rt::face::Bind for Client<P> {
             type Port = P;
-            /// Binds the face to a port, with no timeout. The port is held
-            /// by value: pass a handle, or a `&mut` borrow of one.
+            /**Binds the face to a port, with no timeout. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, by `super::Client`'s `new`. A program that must not panic makes the same comparison first, `port.catalog() == <Siren as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Siren` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+            #[track_caller]
             fn new(port: P) -> Self {
                 Client {
                     inner: <super::Client<P> as ::ridl_rt::face::Bind>::new(port),
@@ -3408,6 +3490,17 @@ pub mod valve {
     ///Identifies one sent query `pressure` to its caller. It is returned by the internal send and accepted by that call's own outcome read, and by no other.
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     pub(crate) struct PressureCorrelation(pub ::ridl_rt::port::Correlation);
+    ///Panics unless `found` is the catalog the face of interface `Valve` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new` of the face, and `serve` where the interface emits one, call it once, before they store or use the port.
+    #[track_caller]
+    fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
+        let expected = <super::Valve as ::ridl_rt::contract::Interface>::CATALOG;
+        if *found != *expected {
+            ::core::panic!(
+                "the face of interface `Valve` was generated from catalog {:?}, but the port is attached to catalog {:?}",
+                expected, found
+            );
+        }
+    }
     ///The consumer face of interface `Valve`, generic over exactly the ports the interface's interactions need. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, in scope through `prelude`.
     pub struct Client<
         P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
@@ -3464,9 +3557,14 @@ The call's bound is the member's `max`, measured from the port's clock when this
         P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
     > ::ridl_rt::face::Bind for Client<P> {
         type Port = P;
-        /// Binds the face to a port. The port is held by value: pass a
-        /// handle, or a `&mut` borrow of one.
+        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Valve as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Valve` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
         fn new(port: P) -> Self {
+            check_catalog(::ridl_rt::port::Attached::catalog(&port));
             Client { port }
         }
     }
@@ -4084,12 +4182,18 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
     }
     ///The most claims one poll of `Serve` takes (driftsys/ridl#568). A future that holds one poll for an unbounded time blocks every other task on a single-threaded executor; 32 bounds one poll and keeps the cost of registering the claim interest, paid once per poll, small beside the claims the poll settles.
     const SERVE_BUDGET: usize = 32;
-    ///Serves interface `Valve`'s commands and queries with `p`, over the handler port `h`, and returns the future that does the serving. `Handler::serve` is called with the interface's command and query ordinals when this function runs; a refusal is a future that is ready with `ProviderError::Serve`. Each poll of the future registers its interest in the interface's claims, then takes and settles the claims the handler has, at most 32 in one poll, so that one poll does not hold a single-threaded executor while callers keep sending. A poll that took 32 claims wakes the future's waker and is `Pending`, so the executor polls it again after other tasks have run; a poll that found no claim left before 32 is `Pending` without waking it. Under `ridl_rt::task::noop_waker` that wake is discarded, so a frame loop that polls the future once per frame settles at most 32 claims per frame; a frame loop that polls with `ridl_rt::task::flag_waker` polls again while its flag was set, up to the loop's own limit of polls per frame. The future resolves only when the handler port fails, to `ProviderError::Claim`; every claim settled before the failure stays settled. `h` is held by value and `p` by `&mut` until the future is dropped.
+    /**Serves interface `Valve`'s commands and queries with `p`, over the handler port `h`, and returns the future that does the serving. `Handler::serve` is called with the interface's command and query ordinals when this function runs; a refusal is a future that is ready with `ProviderError::Serve`. Each poll of the future registers its interest in the interface's claims, then takes and settles the claims the handler has, at most 32 in one poll, so that one poll does not hold a single-threaded executor while callers keep sending. A poll that took 32 claims wakes the future's waker and is `Pending`, so the executor polls it again after other tasks have run; a poll that found no claim left before 32 is `Pending` without waking it. Under `ridl_rt::task::noop_waker` that wake is discarded, so a frame loop that polls the future once per frame settles at most 32 claims per frame; a frame loop that polls with `ridl_rt::task::flag_waker` polls again while its flag was set, up to the loop's own limit of polls per frame. The future resolves only when the handler port fails, to `ProviderError::Claim`; every claim settled before the failure stays settled. `h` is held by value and `p` by `&mut` until the future is dropped.
+
+# Panics
+
+Panics when `h` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before `Handler::serve` is called. A program that must not panic makes the same comparison first, `h.catalog() == <Valve as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Valve` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+    #[track_caller]
     pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
     where
         H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
         P: Provider,
     {
+        check_catalog(::ridl_rt::port::Attached::catalog(&h));
         let state = match h
             .serve(
                 <super::Valve as ::ridl_rt::contract::Interface>::NUMBER,
@@ -4282,8 +4386,12 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                 + ::ridl_rt::port::Wakeable,
         > ::ridl_rt::face::Bind for Client<P> {
             type Port = P;
-            /// Binds the face to a port, with no timeout. The port is held
-            /// by value: pass a handle, or a `&mut` borrow of one.
+            /**Binds the face to a port, with no timeout. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, by `super::Client`'s `new`. A program that must not panic makes the same comparison first, `port.catalog() == <Valve as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Valve` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+            #[track_caller]
             fn new(port: P) -> Self {
                 Client {
                     inner: <super::Client<P> as ::ridl_rt::face::Bind>::new(port),
@@ -4313,7 +4421,12 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
                 self.timeout = timeout;
             }
         }
-        ///Serves interface `Valve`'s commands and queries with `p`, over the handler port `h`, on the calling thread, until the handler port fails or `timeout` passes: it is `block_on` over `serve`. A failure is returned as `serve`'s future resolves to it; the timeout is `Ok(())`, so a loop that also does other work can call this repeatedly. With `None` it returns only on a failure. `h` is dropped when this returns.
+        /**Serves interface `Valve`'s commands and queries with `p`, over the handler port `h`, on the calling thread, until the handler port fails or `timeout` passes: it is `block_on` over `serve`. A failure is returned as `serve`'s future resolves to it; the timeout is `Ok(())`, so a loop that also does other work can call this repeatedly. With `None` it returns only on a failure. `h` is dropped when this returns.
+
+# Panics
+
+Panics when `h` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, by `super::serve`. A program that must not panic makes the same comparison first, `h.catalog() == <Valve as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Valve` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
         pub fn serve<H, P>(
             h: H,
             p: &mut P,

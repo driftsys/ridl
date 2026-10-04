@@ -56,16 +56,12 @@ use ridl_rt::sample::{Duration, Provenance};
 
 use support::doubles::{self, FailingHandler, Op, QueuedClaims, RecordingPorts};
 
-/// The catalog the runtime is built with: the fixture's package name and an
-/// all-zero hash, not the computed hash the generated `CATALOG` carries
-/// (ADR-0014 decision 15). The zero hash is enough here because no generated
-/// code compares catalogs until story E16.5 (driftsys/ridl#381) emits the
-/// constructor's check (driftsys/ridl#448), and the loopback checks nothing
-/// against it either.
-const CATALOG: CatalogRef = CatalogRef {
-    name: "face.demo",
-    hash: CatalogHash([0u8; 32]),
-};
+/// The catalog the runtime is built with: the generated `CATALOG` of the
+/// fixture's package, the catalog the face was generated from. The generated
+/// `Bind::new` and `serve` compare the port's catalog with it and panic on a
+/// mismatch (ADR-0023 decision 8); every interface of the fixture belongs to
+/// this one catalog.
+const CATALOG: CatalogRef = *<generated::Cabin as ridl_rt::contract::Interface>::CATALOG;
 
 fn loopback() -> Loopback {
     Loopback::new(CATALOG)
@@ -2539,13 +2535,8 @@ struct MinimalSignalOnlyPort {
 }
 
 impl MinimalSignalOnlyPort {
-    fn new(package_name: &'static str) -> Self {
-        MinimalSignalOnlyPort {
-            catalog: ridl_rt::contract::CatalogRef {
-                name: package_name,
-                hash: ridl_rt::contract::CatalogHash([0u8; 32]),
-            },
-        }
+    fn new() -> Self {
+        MinimalSignalOnlyPort { catalog: CATALOG }
     }
 }
 
@@ -2589,7 +2580,7 @@ impl ridl_rt::port::SignalReader for MinimalSignalOnlyPort {
 /// served real data, which is outside this test's purpose.
 #[test]
 fn ra19_a_minimal_signal_only_port_constructs_the_signal_only_client() {
-    let mut port = MinimalSignalOnlyPort::new("face.demo");
+    let mut port = MinimalSignalOnlyPort::new();
     let client = generated::horn::Client::new(&mut port);
     let sample = client.active().expect("read");
     assert_eq!(
@@ -2611,13 +2602,8 @@ struct DistinctiveInitPort {
 }
 
 impl DistinctiveInitPort {
-    fn new(package_name: &'static str) -> Self {
-        DistinctiveInitPort {
-            catalog: ridl_rt::contract::CatalogRef {
-                name: package_name,
-                hash: ridl_rt::contract::CatalogHash([0u8; 32]),
-            },
-        }
+    fn new() -> Self {
+        DistinctiveInitPort { catalog: CATALOG }
     }
 }
 
@@ -2650,7 +2636,7 @@ impl ridl_rt::port::SignalReader for DistinctiveInitPort {
 
 #[test]
 fn the_init_branch_passes_the_ports_freshness_and_envelope_through_unchanged() {
-    let mut port = DistinctiveInitPort::new("face.demo");
+    let mut port = DistinctiveInitPort::new();
     let client = generated::horn::Client::new(&mut port);
     let sample = client.active().expect("read");
     assert_eq!(
@@ -2734,4 +2720,150 @@ fn generated_try_from_delegates_to_new() {
             .map(generated::Level::get),
         Some(50)
     );
+}
+
+// ---------------------------------------------------------------------------
+// The catalog check (ADR-0023 decision 8, story E16.5, driftsys/ridl#381).
+// ---------------------------------------------------------------------------
+
+/// A catalog with the fixture's package name and an all-zero hash, which
+/// differs from the computed hash the generated `CATALOG` carries.
+const OTHER_HASH: CatalogRef = CatalogRef {
+    name: "face.demo",
+    hash: CatalogHash([0u8; 32]),
+};
+
+/// A catalog with the face's own hash under another package name: two
+/// `CatalogRef`s are equal only when both the name and the hash are.
+const OTHER_NAME: CatalogRef = CatalogRef {
+    name: "face.other",
+    hash: CATALOG.hash,
+};
+
+thread_local! {
+    /// The file of the last panic on this thread, as the panic hook
+    /// installed by [`panic_file`] records it.
+    static PANIC_FILE: std::cell::RefCell<Option<String>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `f`, which must panic, and returns the panic's payload and the file
+/// its location names. The hook is installed once for the process and
+/// records into a thread-local, so tests on other threads do not see each
+/// other's panics; it then calls the hook it replaced, which prints as
+/// before.
+fn panic_file(f: impl FnOnce()) -> (Box<dyn std::any::Any + Send>, String) {
+    static HOOK: std::sync::Once = std::sync::Once::new();
+    HOOK.call_once(|| {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            let file = info.location().map(|l| l.file().to_owned());
+            PANIC_FILE.with(|cell| *cell.borrow_mut() = file);
+            previous(info);
+        }));
+    });
+    PANIC_FILE.with(|cell| *cell.borrow_mut() = None);
+    let payload = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f))
+        .expect_err("binding to a port of another catalog panics");
+    let file = PANIC_FILE
+        .with(|cell| cell.borrow_mut().take())
+        .expect("the hook recorded the panic's location");
+    (payload, file)
+}
+
+/// Runs `bind`, which must panic, and returns the panic message. The message
+/// must name the interface, then the catalog the face was generated from,
+/// then the catalog the port is attached to. Every generated function on the
+/// path is `#[track_caller]`, so the panic's location is the binding call in
+/// this file, not a line of the generated face.
+fn mismatch_message(found: CatalogRef, bind: impl FnOnce()) -> String {
+    assert_ne!(found, CATALOG, "the test catalog differs from the face's");
+    let (payload, file) = panic_file(bind);
+    let message = payload
+        .downcast_ref::<String>()
+        .cloned()
+        .or_else(|| payload.downcast_ref::<&str>().map(|s| (*s).to_string()))
+        .expect("the panic carries a message");
+    assert_eq!(
+        message,
+        format!(
+            "the face of interface `Cabin` was generated from catalog {CATALOG:?}, \
+             but the port is attached to catalog {found:?}"
+        )
+    );
+    // The generated face is `tests/generated/interaction_face.rs`, so the
+    // whole path is compared, not the file name.
+    assert_eq!(file, file!(), "the panic is located at the binding call");
+    message
+}
+
+#[test]
+fn a_client_bound_to_a_port_of_another_catalog_panics() {
+    let mut rt = Loopback::new(OTHER_HASH);
+    mismatch_message(OTHER_HASH, || {
+        let _ = generated::cabin::Client::new(&mut rt);
+    });
+}
+
+#[test]
+fn a_client_bound_to_a_port_of_another_package_name_panics() {
+    let mut rt = Loopback::new(OTHER_NAME);
+    mismatch_message(OTHER_NAME, || {
+        let _ = generated::cabin::Client::new(&mut rt);
+    });
+}
+
+#[test]
+fn a_blocking_client_bound_to_a_port_of_another_catalog_panics() {
+    let mut rt = Loopback::new(OTHER_HASH);
+    mismatch_message(OTHER_HASH, || {
+        let _ = generated::cabin::blocking::Client::new(&mut rt);
+    });
+}
+
+#[test]
+fn a_publisher_bound_to_a_port_of_another_catalog_panics() {
+    let mut rt = Loopback::new(OTHER_HASH);
+    mismatch_message(OTHER_HASH, || {
+        let _ = generated::cabin::Publisher::new(&mut rt);
+    });
+}
+
+/// `serve` compares before it calls `Handler::serve`, so the handler port
+/// never registers the members of a catalog it does not serve.
+#[test]
+fn serve_over_a_handler_of_another_catalog_panics_before_registering() {
+    let rt = Loopback::new(OTHER_HASH);
+    let mut handler = rt.handler();
+    let mut provider = TestProvider::new(0);
+    mismatch_message(OTHER_HASH, || {
+        let _serve = generated::cabin::serve(&mut handler, &mut provider);
+    });
+    assert_eq!(
+        handler.served(),
+        &[],
+        "nothing was registered with the handler"
+    );
+}
+
+#[test]
+fn blocking_serve_over_a_handler_of_another_catalog_panics() {
+    let rt = Loopback::new(OTHER_HASH);
+    let mut provider = TestProvider::new(0);
+    mismatch_message(OTHER_HASH, || {
+        let _ = generated::cabin::blocking::serve(rt.handler(), &mut provider, Some(SHORT));
+    });
+}
+
+/// The comparison a program makes before it binds, to handle a mismatch
+/// without the panic, is the one the face makes.
+#[test]
+fn a_program_can_make_the_comparison_before_it_binds() {
+    use ridl_rt::port::Attached;
+
+    let other = Loopback::new(OTHER_HASH);
+    assert!(other.catalog() != <generated::Cabin as ridl_rt::contract::Interface>::CATALOG);
+    let mut own = loopback();
+    assert!(own.catalog() == <generated::Cabin as ridl_rt::contract::Interface>::CATALOG);
+    let _ = generated::cabin::Client::new(&mut own);
 }

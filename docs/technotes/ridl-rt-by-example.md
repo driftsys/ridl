@@ -892,7 +892,6 @@ what it stands on are placeholders with a named replacement.
 | Placeholder                                                                                                                                                              | Replaced by                |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------- |
 | The transport under the in-process runtime the examples run against                                                                                                      | E11.9                      |
-| The catalog check a generated `new` does not yet perform                                                                                                                 | E16.5 (driftsys/ridl#381)  |
 | `PayloadInfo.max_size.repr_c`, which is `None` (`flatbuffers` was filled by E16.4, driftsys/ridl#380; `proto3` is `None` because the Rust backend emits no proto3 codec) | E11.12 (driftsys/ridl#317) |
 | The contract-clause translator                                                                                                                                           | E5.1                       |
 

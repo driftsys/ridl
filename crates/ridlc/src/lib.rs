@@ -33,9 +33,12 @@
 //! they add the remote-import lockfile round trip on top of `compile_workspace`
 //! and, for `build`, write the selected [`Emit`] artifacts. [`run_build_with`]
 //! is `run_build` plus the codegen plugins of `--plugin`, run through the
-//! process host in [`plugin`] (ADR-0020 decision 10); every code emit and
-//! every plugin is reached through one contract, [`codegen::Backend`], over
-//! the request [`codegen_request`] builds (ADR-0020 decision 9).
+//! process host in [`plugin`] (ADR-0020 decision 10); every code emit but
+//! [`Emit::Catalog`], and every plugin, is reached through one contract,
+//! [`codegen::Backend`], over the request [`codegen_request`] builds
+//! (ADR-0020 decision 9). [`Emit::Catalog`] writes its file directly, with
+//! the bytes `ridl_descriptor::lower` returns, and a lowering failure stops
+//! the build with exit code 2.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -476,6 +479,11 @@ pub enum Emit {
     /// code emit reads, `ridl.std` included, and `ridl baseline` publishes
     /// only `.ir.json` artifacts.
     CodegenModel,
+    /// The catalog descriptor an engine reads, written to
+    /// `<base>.catalog.binfb` when the package declares an interface or a
+    /// service with an inline body: a FlatBuffers file of the package's
+    /// interfaces, their members and their catalog hash.
+    Catalog,
 }
 
 impl Emit {
@@ -530,7 +538,13 @@ impl Emit {
             | Emit::TypeScript
             | Emit::Proto
             | Emit::Flatbuffers
-            | Emit::CodegenModel => None,
+            | Emit::CodegenModel
+            // `Catalog` is classed as a code emit although it goes through no
+            // backend: a code emit keeps `ridl.std` in the `others` that
+            // `run_build` passes, so the descriptor's catalog hash covers a
+            // `ridl.std` type a payload names, as the hash the Rust face
+            // carries does.
+            | Emit::Catalog => None,
             Emit::IrJson => Some(".ir.json"),
             Emit::IrText => Some(".ir.txtpb"),
             Emit::IrBinary => Some(".ir.binpb"),
@@ -556,7 +570,8 @@ impl Emit {
             | Emit::TypeScript
             | Emit::Proto
             | Emit::Flatbuffers
-            | Emit::CodegenModel => None,
+            | Emit::CodegenModel
+            | Emit::Catalog => None,
             Emit::IrJson => Some(".system.json"),
             Emit::IrText => Some(".system.txtpb"),
             Emit::IrBinary => Some(".system.binpb"),
@@ -1518,7 +1533,7 @@ fn write_response(
 /// Writes the selected `emits`, then the `plugins`, for one package's IR
 /// into `out_dir`.
 ///
-/// Every code emit goes through the backend contract
+/// Every code emit but [`Emit::Catalog`] goes through the backend contract
 /// ([`codegen::Backend`], ADR-0020 decision 9): one [`codegen_request`] is
 /// built for the package — the model lowered once — and each in-tree
 /// backend is called over it as a plugin would be, the response written by
@@ -1537,6 +1552,13 @@ fn write_response(
 /// place of the request's model. A backend that cannot render this package
 /// answers with an error diagnostic and no file, and only its own artifact
 /// is skipped.
+///
+/// [`Emit::Catalog`] calls no backend: it writes the bytes
+/// `ridl_descriptor::lower` returns to `<base>.catalog.binfb`, and writes
+/// nothing for a package with no interface shape. A lowering failure is an
+/// internal error, not a diagnostic: it is returned as an I/O error, which
+/// stops the build and which the command reports with exit code 2
+/// (ADR-0010 decision 1).
 ///
 /// The `ir-json`, `ir-text` and `ir-binary` emits are direct IR dumps, not
 /// backends: they need no request. When the package cannot be rendered in
@@ -1584,6 +1606,22 @@ fn write_emits(
             Emit::Proto => Box::new(ridl_backend_proto::Backend::new(raw)),
             Emit::Flatbuffers => Box::new(ridl_backend_flatbuffers::Backend::new(raw)),
             Emit::CodegenModel => Box::new(codegen::ModelBackend),
+            // A package with no interface shape has no catalog, so no file is
+            // written. `ridl-sem` numbers every shape of a checked package, so
+            // a lowering failure is an internal error: it is returned as an
+            // I/O error, which the command reports with exit code 2
+            // (ADR-0010 decision 1).
+            Emit::Catalog => {
+                if ir.shapes().next().is_some() {
+                    let bytes = ridl_descriptor::lower(ir, others)
+                        .map_err(|err| std::io::Error::other(err.to_string()))?;
+                    std::fs::write(
+                        out_dir.join(format!("{base}{}", ridl_descriptor::FILE_SUFFIX)),
+                        bytes,
+                    )?;
+                }
+                continue;
+            }
             Emit::IrJson => match ridl_ir::v2::to_json_pretty(ir) {
                 Ok(json) => {
                     std::fs::write(ir_dump_path(out_dir, base, *emit), json)?;
@@ -1689,7 +1727,8 @@ fn write_system_emits(
             | Emit::TypeScript
             | Emit::Proto
             | Emit::Flatbuffers
-            | Emit::CodegenModel => continue,
+            | Emit::CodegenModel
+            | Emit::Catalog => continue,
             Emit::IrJson => ridl_ir::v2::system_to_json_pretty(system).map(String::into_bytes),
             Emit::IrText => ridl_ir::v2::system_to_text_format(system).map(String::into_bytes),
             Emit::IrBinary => Ok(ridl_ir::v2::system_to_binary(system)),

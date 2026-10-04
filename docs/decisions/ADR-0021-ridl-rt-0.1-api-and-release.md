@@ -200,6 +200,16 @@ trusted with no `unsafe` and no second verification pass.
    engine reads. Until E16.5, the last sentence of the amendment above still
    holds.
 
+   **Note (2026-10-04, story E16.5, driftsys/ridl#381).** The check is emitted.
+   `Bind::new` of the generated `Client` and `Publisher` compares
+   `port.catalog()` with the interface's `CATALOG` once, before it stores the
+   port, and `serve` makes the same comparison on its handler port; the blocking
+   client and the blocking `serve` make it through the async face. What a
+   mismatch does — a panic that names the interface and both catalogs — is
+   [ADR-0023](ADR-0023-interaction-face-generation.md) decision 8. The tense the
+   2026-09-21 amendment changed is restored: decision 3 describes what a
+   generated client does. No `ridl-rt` item changed.
+
 4. **A failed `require` or `ensure` clause carries no value.** Both methods
    return `Result<(), ()>` (`#[allow(clippy::result_unit_err)]`, because the
    omission is deliberate): the method that fails already decides the contract

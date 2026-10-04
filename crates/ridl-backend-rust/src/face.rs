@@ -33,6 +33,11 @@
 //!   that name cannot capture them;
 //! - `Provider`, the trait the application implements, with one method per
 //!   command and query;
+//! - `check_catalog`, private, which panics unless a port's catalog is the
+//!   interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new` of the
+//!   face, and `serve` where the interface emits one, call it once, before
+//!   they store or use the port; the blocking face reaches it through the
+//!   async face;
 //! - `serve`, which registers the interface's calls with the handler and
 //!   returns the future that settles every claim, and resolves only when the
 //!   handler port fails;
@@ -219,6 +224,9 @@ pub(crate) fn one_interface(
     let mut body: Vec<TokenStream> = Vec::new();
     body.extend(correlations(&commands, &queries));
     if !signals.is_empty() || !events.is_empty() || !commands.is_empty() || !queries.is_empty() {
+        // Every interface that gets a `Client` gets `check_catalog`: the
+        // client's `Bind::new` calls it, as do `Publisher`'s and `serve`.
+        body.push(check_catalog(&iface, iface_name));
         if !events.is_empty() {
             body.push(subscribe_trait(iface_name, &events));
         }
@@ -249,7 +257,7 @@ pub(crate) fn one_interface(
 
     // The prelude follows every trait it re-exports, and the blocking module
     // stays the module's last item.
-    let blocking = blocking(iface_name, &signals, &events, &commands, &queries);
+    let blocking = blocking(&iface, iface_name, &signals, &events, &commands, &queries);
     body.push(prelude(iface_name, &signals, &events, blocking.is_some()));
     body.extend(blocking);
 
@@ -486,6 +494,7 @@ fn client(
          `ridl_rt::face::Events`'s and `subscribe_<event>` is this module's \
          `Subscribe`'s, all in scope through `prelude`."
     };
+    let new_doc = bind_new_doc(iface);
     let doc = format!(
         "The consumer face of interface `{iface_name}`, generic over exactly \
          the ports the interface's interactions need. Its member methods are \
@@ -502,9 +511,10 @@ fn client(
         impl<P: #(#bounds)+*> ::ridl_rt::face::Bind for Client<P> {
             type Port = P;
 
-            /// Binds the face to a port. The port is held by value: pass a
-            /// handle, or a `&mut` borrow of one.
+            #[doc = #new_doc]
+            #[track_caller]
             fn new(port: P) -> Self {
+                check_catalog(::ridl_rt::port::Attached::catalog(&port));
                 Client { port }
             }
         }
@@ -892,6 +902,7 @@ fn publisher(
          `ridl_rt::face::Publish`'s and `invalidate_<signal>` is this \
          module's `Invalidate`'s, all in scope through `prelude`."
     };
+    let new_doc = bind_new_doc(iface);
     let doc = format!(
         "The provider face of interface `{iface_name}`'s signals and events. \
          Its member methods are inherent; {traits}"
@@ -909,9 +920,10 @@ fn publisher(
         impl<W: #(#bounds)+*> ::ridl_rt::face::Bind for Publisher<W> {
             type Port = W;
 
-            /// Binds the face to a port. The port is held by value: pass a
-            /// handle, or a `&mut` borrow of one.
+            #[doc = #new_doc]
+            #[track_caller]
             fn new(port: W) -> Self {
+                check_catalog(::ridl_rt::port::Attached::catalog(&port));
                 Publisher { port }
             }
         }
@@ -971,6 +983,71 @@ fn provider(iface_name: &str, commands: &[Call], queries: &[Call]) -> TokenStrea
 // ---------------------------------------------------------------------------
 // Shared pieces.
 // ---------------------------------------------------------------------------
+
+/// `check_catalog`, the interface module's private comparison of a port's
+/// catalog with the interface's `CATALOG` (ADR-0023 decision 8). It is
+/// emitted once per module and called once per binding, so the generated code
+/// carries one comparison and one panic message per interface. The whole
+/// `CatalogRef` is compared, name and hash. `::core::panic!` keeps it valid
+/// under `no_std`. It and every generated function that calls it — both
+/// `Bind::new`s, the blocking `Bind::new` and both `serve`s — are
+/// `#[track_caller]`, so the panic reports the program's binding call as its
+/// location, not a line of the generated file.
+fn check_catalog(iface: &Ident, iface_name: &str) -> TokenStream {
+    let message = format!(
+        "the face of interface `{iface_name}` was generated from catalog {{:?}}, \
+         but the port is attached to catalog {{:?}}"
+    );
+    let doc = format!(
+        "Panics unless `found` is the catalog the face of interface \
+         `{iface_name}` was generated from, the interface's `CATALOG` \
+         (ADR-0023 decision 8). Every `Bind::new` of the face, and `serve` where \
+         the interface emits one, call it once, before they store or use the \
+         port."
+    );
+    quote! {
+        #[doc = #doc]
+        #[track_caller]
+        fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
+            let expected = <super::#iface as ::ridl_rt::contract::Interface>::CATALOG;
+            if *found != *expected {
+                ::core::panic!(#message, expected, found);
+            }
+        }
+    }
+}
+
+/// The rustdoc of the async `Client`'s and of `Publisher`'s `Bind::new`: the
+/// binding, then its `# Panics` section.
+fn bind_new_doc(iface: &Ident) -> String {
+    format!(
+        "Binds the face to a port. The port is held by value: pass a handle, \
+         or a `&mut` borrow of one.\n\n{}",
+        catalog_panics_doc(
+            iface,
+            "port",
+            "the comparison is made once, before the port is stored",
+        )
+    )
+}
+
+/// The `# Panics` section of every rustdoc whose function compares the
+/// port's catalog, directly or through the async face: what panics, where the
+/// comparison is made (`when`), and the comparison a program makes first to
+/// handle a mismatch without the panic, in the paths a consumer of the
+/// generated crate writes.
+pub(super) fn catalog_panics_doc(iface: &Ident, port: &str, when: &str) -> String {
+    format!(
+        "# Panics\n\nPanics when `{port}` is attached to a catalog other than \
+         the one this face was generated from, that is, when the package name \
+         or the catalog hash differs (ADR-0023 decision 8); {when}. A program \
+         that must not panic makes the same comparison first, \
+         `{port}.catalog() == <{iface} as ridl_rt::contract::Interface>::CATALOG` \
+         with `ridl_rt::port::Attached` in scope, where `{iface}` is the \
+         interface's descriptor type, declared beside this interface's \
+         module, and handles a mismatch its own way."
+    )
+}
 
 /// The interface's number, named through its descriptor rather than repeated
 /// as a literal.

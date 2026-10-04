@@ -655,6 +655,74 @@ fn serve_returns_a_future_over_the_internal_dispatch_step() {
     );
 }
 
+/// ADR-0023 decision 8: `Bind::new` of `Client` and of `Publisher`, and
+/// `serve`, compare the port's catalog with the interface's `CATALOG` through
+/// the module's `check_catalog` before they store or use the port, and the
+/// blocking client and `blocking::serve` reach that comparison through the
+/// async face rather than repeating it. Each `new` and each `serve` states the
+/// panic under `# Panics`.
+#[test]
+fn bind_new_and_serve_check_the_ports_catalog() {
+    let source = module(&face(), "cabin");
+    let d = dense(&source);
+
+    assert!(
+        d.contains(
+            "fncheck_catalog(found:&::ridl_rt::contract::CatalogRef){letexpected=\
+             <super::Cabinas::ridl_rt::contract::Interface>::CATALOG;if*found!=*expected{\
+             ::core::panic!("
+        ),
+        "check_catalog compares the whole CatalogRef with the interface's CATALOG and panics",
+    );
+    let check = "check_catalog(::ridl_rt::port::Attached::catalog(&port));";
+
+    let client = between(&d, "::ridl_rt::face::BindforClient<P>{", "Client{port}");
+    assert!(
+        client.contains(check),
+        "the client's new checks the port before it stores it"
+    );
+    let publisher = between(
+        &d,
+        "::ridl_rt::face::BindforPublisher<W>{",
+        "Publisher{port}",
+    );
+    assert!(
+        publisher.contains(check),
+        "the publisher's new checks the port before it stores it"
+    );
+
+    let serve = between(&d, "pubfnserve<H,P>", "pubstructServe<'a,");
+    assert!(
+        at(
+            &serve,
+            "check_catalog(::ridl_rt::port::Attached::catalog(&h));"
+        ) < at(&serve, "h.serve("),
+        "serve checks the handler port before it registers the members",
+    );
+
+    let blocking = d[at(&d, "pubmodblocking{")..].to_string();
+    assert!(
+        !blocking.contains("check_catalog"),
+        "the blocking face reaches the check through the async face, once"
+    );
+    assert_eq!(
+        d.matches("check_catalog(").count(),
+        4,
+        "one definition and three calls: Client::new, Publisher::new and serve"
+    );
+
+    // Five rustdocs state the panic: the three `new`s and the two `serve`s.
+    assert_eq!(
+        source.matches("# Panics").count(),
+        5,
+        "each new and each serve documents the panic:\n{source}"
+    );
+    assert!(
+        source.contains("port.catalog() == <Cabin as ridl_rt::contract::Interface>::CATALOG"),
+        "the rustdoc names the comparison a program can make first"
+    );
+}
+
 /// The `blocking` module of the async face design's notes F-10 and F-11:
 /// under the crate's `std` feature, for an interface that declares an event,
 /// a command or a query; its `Client` repeats the async client's bounds; its

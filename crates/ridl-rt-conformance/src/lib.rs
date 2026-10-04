@@ -294,9 +294,9 @@ const ORD: Ordinal = Ordinal(1);
 const OTHER: Ordinal = Ordinal(2);
 
 /// The catalog every test attaches to. The hash is all zeros, which is
-/// enough here: the runtime carries the catalog without examining it, and no
-/// generated code compares catalogs until story E16.5 (driftsys/ridl#381)
-/// emits the constructor's check.
+/// enough here: the runtime carries the catalog without examining it. The
+/// generated `Bind::new` and `serve` compare the catalogs (ADR-0023
+/// decision 8), but these tests do not run generated code.
 fn catalog() -> CatalogRef {
     CatalogRef {
         name: "face.demo",

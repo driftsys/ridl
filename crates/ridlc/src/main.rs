@@ -45,7 +45,7 @@ enum Command {
         out_dir: PathBuf,
         /// The artifacts to emit: `rust` (default), `ir-json`, `ir-text`,
         /// `ir-binary`, `typescript`, `proto`, `flatbuffers`,
-        /// `codegen-model`.
+        /// `codegen-model`, `catalog`.
         #[arg(long, value_delimiter = ',', default_value = "rust")]
         emit: Vec<Emit>,
         /// A codegen plugin to run beside the emits, once per package:
