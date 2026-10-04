@@ -309,6 +309,12 @@ interface Clock {\n\
     let with_face = TempDir::new("std-face");
     build_from(&file, with_face.path(), "rust,catalog");
 
+    assert_eq!(
+        catalogs_in(alone.path()),
+        ["clock.catalog.binfb"],
+        "`--emit catalog` writes no catalog for ridl.std"
+    );
+
     let name = "clock.catalog.binfb";
     let alone_bytes = std::fs::read(alone.path().join(name)).unwrap();
     let face_bytes = std::fs::read(with_face.path().join(name)).unwrap();
@@ -355,4 +361,140 @@ service veh.hvac.cabin {\n\
         .map(|interface| interface.unwrap().name().unwrap())
         .collect();
     assert_eq!(names, vec!["veh.hvac.cabin"]);
+}
+
+#[test]
+fn describe_prints_the_descriptor_as_json() {
+    let out = TempDir::new("describe");
+    let file = build_catalog(out.path());
+    let (code, stdout, stderr) = ridl(&["describe".as_ref(), file.as_os_str()]);
+    assert_eq!(code, 0, "{stderr}");
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("stdout is JSON");
+    assert_eq!(json["version"], 1);
+    // The descriptor records the workspace version, which every release
+    // changes. The test checks it here and the snapshot holds a placeholder,
+    // so a release does not make the snapshot stale.
+    assert_eq!(json["toolchain"], env!("CARGO_PKG_VERSION"));
+    let stdout = stdout.replace(
+        &format!("\"toolchain\": \"{}\"", env!("CARGO_PKG_VERSION")),
+        "\"toolchain\": \"[version]\"",
+    );
+    insta::assert_snapshot!("corpus_catalog", stdout);
+}
+
+#[test]
+fn describe_reports_a_missing_path_with_exit_2() {
+    let missing = "/nonexistent/x.catalog.binfb";
+    let cause = std::fs::read(missing).expect_err("the path does not exist");
+    assert_eq!(cause.kind(), std::io::ErrorKind::NotFound);
+    let (code, stdout, stderr) = ridl(&["describe".as_ref(), missing.as_ref()]);
+    assert_eq!(code, 2);
+    assert!(stdout.is_empty());
+    assert_eq!(stderr, format!("error: {missing}: {cause}\n"));
+}
+
+/// Runs `ridl describe` on `path` and asserts that it is rejected as the
+/// tool being unable to answer: exit 2, nothing on stdout, and a stderr
+/// message that names `path` and contains `cause`.
+fn assert_describe_rejects(path: &Path, cause: &str) {
+    let (code, stdout, stderr) = ridl(&["describe".as_ref(), path.as_os_str()]);
+    assert_eq!(code, 2, "{stderr}");
+    assert!(stdout.is_empty(), "{stdout}");
+    assert!(
+        stderr.starts_with(&format!("error: {}: ", path.display())),
+        "{stderr}"
+    );
+    assert!(stderr.contains(cause), "{stderr}");
+}
+
+#[test]
+fn describe_rejects_a_foreign_file_before_any_read() {
+    let out = TempDir::new("foreign");
+    let file = out.path().join("ir.binpb");
+    // Twelve bytes, so the header is long enough and the file identifier
+    // check is what rejects it: bytes 4..8 are `abcd`, not `RDLC`.
+    std::fs::write(&file, b"\x08\x01\x12\x08abcdefgh").unwrap();
+    assert_describe_rejects(&file, "not a catalog descriptor");
+}
+
+#[test]
+fn describe_rejects_a_truncated_and_a_flipped_descriptor() {
+    let out = TempDir::new("corrupt");
+    let file = build_catalog(out.path());
+    let bytes = std::fs::read(&file).unwrap();
+
+    let truncated = out.path().join("truncated.catalog.binfb");
+    std::fs::write(&truncated, &bytes[..bytes.len() / 2]).unwrap();
+    assert_describe_rejects(&truncated, "malformed");
+
+    // The root offset at bytes 0..4 is overwritten to point past the end of
+    // the buffer.
+    let mut past_the_end = bytes.clone();
+    past_the_end[0..4].copy_from_slice(&(bytes.len() as u32 + 64).to_le_bytes());
+    let path = out.path().join("past-the-end.catalog.binfb");
+    std::fs::write(&path, &past_the_end).unwrap();
+    assert_describe_rejects(&path, "malformed");
+
+    // One byte inside the body is flipped: the most significant byte of the
+    // root table's signed offset to its vtable. The vtable offset then points
+    // outside the buffer.
+    let root = u32::from_le_bytes(bytes[0..4].try_into().unwrap()) as usize;
+    let mut flipped = bytes.clone();
+    flipped[root + 3] ^= 0x40;
+    let path = out.path().join("flipped.catalog.binfb");
+    std::fs::write(&path, &flipped).unwrap();
+    assert_describe_rejects(&path, "malformed");
+}
+
+/// A descriptor whose schema version is one this toolchain does not read is
+/// rejected with exit 2 and the version named.
+#[test]
+fn describe_rejects_a_version_this_toolchain_does_not_read() {
+    let out = TempDir::new("next-version");
+    let version = ridl_descriptor::SCHEMA_VERSION + 1;
+    let bytes = ridl_descriptor::finish(&ridl_descriptor::Catalog {
+        version,
+        ..Default::default()
+    });
+    let path = out.path().join("next.catalog.binfb");
+    std::fs::write(&path, bytes).unwrap();
+    let cause = ridl_descriptor::VerifyError::WrongVersion(version).to_string();
+    assert_describe_rejects(&path, &cause);
+}
+
+/// A reader that closes its end of the pipe before reading anything: every
+/// write of `ridl describe` to stdout then fails. The descriptor has 2000
+/// members, so its JSON view is far larger than a pipe buffer, and a write
+/// fails even when the process starts writing before the pipe is closed.
+/// A write I/O failure is exit 2 (ADR-0010 decision 1), not the exit 101 of
+/// a panic. Unix only: the expected cause is built from EPIPE, which is 32
+/// on Linux and macOS.
+#[cfg(unix)]
+#[test]
+fn describe_exits_2_when_the_stdout_reader_has_gone() {
+    let src = TempDir::new("closed-pipe-src");
+    let mut source =
+        String::from("package veh.wide\ntype Level: integer [0..100]\ninterface Wide {\n");
+    for i in 0..2000 {
+        source.push_str(&format!("  signal level{i}: Level @10ms\n"));
+    }
+    source.push_str("}\n");
+    let file = src.write("wide.ridl", &source);
+    let out = TempDir::new("closed-pipe-out");
+    build_from(&file, out.path(), "catalog");
+    let catalog = out.path().join("wide.catalog.binfb");
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_ridl"))
+        .args(["describe".as_ref(), catalog.as_os_str()])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("the ridl binary must run");
+    drop(child.stdout.take());
+    let output = child.wait_with_output().expect("the ridl binary exits");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(2), "{stderr}");
+    // EPIPE is 32 on Linux and macOS.
+    let cause = std::io::Error::from_raw_os_error(32);
+    assert_eq!(stderr, format!("error: {}: {cause}\n", catalog.display()));
 }

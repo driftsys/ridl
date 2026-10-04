@@ -44,8 +44,9 @@ crates/                         The compiler workspace (typl + ridl)
 ├── ridl-core/                  Salsa database, manifest, lockfile, fetch, diagnostics
 ├── ridl-sem/                   Resolver + checker (per-profile semantic passes)
 ├── ridl-ir/                    IR v2 protobuf schema + generated types
+├── ridl-descriptor/            The catalog descriptor an engine reads
 ├── ridlc/                      Compiler driver (check / build / emit)
-├── ridl/                       Porcelain facade (check / baseline / build / test / fmt / diff / lsp / mcp)
+├── ridl/                       Porcelain facade (check / baseline / build / test / fmt / diff / lock / lsp / mcp / describe)
 ├── ridl-lsp/                   Language server library (`ridl lsp`)
 ├── ridl-mcp/                   MCP server (ADR-0005 Layer B): `ridl mcp`, the `ridl_check` tool
 ├── ridl-backend-rust/          Rust + extern-C code generation over the IR

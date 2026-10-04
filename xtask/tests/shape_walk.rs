@@ -154,6 +154,14 @@ const ALLOWED: &[Allowed] = &[
               `Catalog.interfaces` field, not a read of `Package::interfaces`",
     },
     Allowed {
+        path: "crates/ridl-descriptor/src/describe.rs",
+        lines: 1,
+        why: "`to_json` reading the descriptor's own `interfaces` vector \
+              through the planus accessor, not a read of `Package::interfaces`; \
+              the descriptor already holds every shape, inline ones included, \
+              because `lower` walks `Package::shapes()`",
+    },
+    Allowed {
         path: "crates/ridl-descriptor/src/lib.rs",
         lines: 1,
         why: "`verify` walking the catalog descriptor's own `Catalog.interfaces` \

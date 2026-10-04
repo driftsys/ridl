@@ -1,0 +1,230 @@
+---
+source: crates/ridl/tests/describe_cli.rs
+expression: stdout
+---
+{
+  "hash": [
+    105,
+    123,
+    139,
+    12,
+    97,
+    60,
+    233,
+    175,
+    248,
+    199,
+    220,
+    174,
+    145,
+    74,
+    113,
+    228,
+    194,
+    103,
+    166,
+    64,
+    156,
+    74,
+    25,
+    87,
+    222,
+    172,
+    148,
+    53,
+    20,
+    119,
+    236,
+    209
+  ],
+  "interfaces": [
+    {
+      "members": [
+        {
+          "kind": "Signal",
+          "name": "currentSpeed",
+          "ordinal": 1,
+          "payloads": [
+            {
+              "max_sizes": [
+                {
+                  "bytes": 46,
+                  "cause": "Unspecified",
+                  "encoding": "FlatBuffers",
+                  "state": "Bounded"
+                }
+              ],
+              "role": "value",
+              "type_name": "Speed"
+            }
+          ],
+          "timing": {
+            "max_us": "10000",
+            "min_us": "10000",
+            "mode": "StrictPeriodic"
+          }
+        },
+        {
+          "kind": "Event",
+          "name": "tyrePressure",
+          "ordinal": 2,
+          "payloads": [
+            {
+              "max_sizes": [
+                {
+                  "bytes": 43,
+                  "cause": "Unspecified",
+                  "encoding": "FlatBuffers",
+                  "state": "Bounded"
+                }
+              ],
+              "role": "occurrence",
+              "type_name": "DoorState"
+            }
+          ],
+          "timing": {
+            "max_us": "1000000",
+            "min_us": "100000",
+            "mode": "Range"
+          }
+        },
+        {
+          "kind": "Event",
+          "name": "doorClosed",
+          "ordinal": 3,
+          "payloads": [
+            {
+              "max_sizes": [
+                {
+                  "bytes": 43,
+                  "cause": "Unspecified",
+                  "encoding": "FlatBuffers",
+                  "state": "Bounded"
+                }
+              ],
+              "role": "occurrence",
+              "type_name": "DoorState"
+            }
+          ],
+          "timing": {
+            "max_us": "1000000",
+            "min_us": "100000",
+            "mode": "Range"
+          }
+        },
+        {
+          "kind": "Event",
+          "name": "doorOpened",
+          "ordinal": 4,
+          "payloads": [
+            {
+              "max_sizes": [
+                {
+                  "bytes": 43,
+                  "cause": "Unspecified",
+                  "encoding": "FlatBuffers",
+                  "state": "Bounded"
+                }
+              ],
+              "role": "occurrence",
+              "type_name": "DoorState"
+            }
+          ],
+          "timing": {
+            "max_us": "1000000",
+            "min_us": "100000",
+            "mode": "Range"
+          }
+        },
+        {
+          "kind": "Signal",
+          "name": "legacyWheelPhase",
+          "ordinal": 5,
+          "payloads": [
+            {
+              "max_sizes": [
+                {
+                  "bytes": 46,
+                  "cause": "Unspecified",
+                  "encoding": "FlatBuffers",
+                  "state": "Bounded"
+                }
+              ],
+              "role": "value",
+              "type_name": "Speed"
+            }
+          ],
+          "timing": {
+            "max_us": "10000",
+            "min_us": "10000",
+            "mode": "StrictPeriodic"
+          }
+        }
+      ],
+      "name": "VehicleStatus",
+      "number": 1,
+      "provisional": true,
+      "reserved_ordinals": []
+    },
+    {
+      "members": [
+        {
+          "kind": "Signal",
+          "name": "cabinTemp",
+          "ordinal": 1,
+          "payloads": [
+            {
+              "max_sizes": [
+                {
+                  "bytes": 46,
+                  "cause": "Unspecified",
+                  "encoding": "FlatBuffers",
+                  "state": "Bounded"
+                }
+              ],
+              "role": "value",
+              "type_name": "Speed"
+            }
+          ],
+          "timing": {
+            "max_us": "5000000",
+            "min_us": "500000",
+            "mode": "Range"
+          }
+        },
+        {
+          "kind": "Event",
+          "name": "filterClogged",
+          "ordinal": 2,
+          "payloads": [
+            {
+              "max_sizes": [
+                {
+                  "bytes": 43,
+                  "cause": "Unspecified",
+                  "encoding": "FlatBuffers",
+                  "state": "Bounded"
+                }
+              ],
+              "role": "occurrence",
+              "type_name": "DoorState"
+            }
+          ],
+          "timing": {
+            "max_us": "1000000",
+            "min_us": "100000",
+            "mode": "Range"
+          }
+        }
+      ],
+      "name": "corpus.baseline.hvac",
+      "number": 2,
+      "provisional": true,
+      "reserved_ordinals": []
+    }
+  ],
+  "name": "corpus.baseline",
+  "retired": [],
+  "toolchain": "[version]",
+  "version": 1
+}

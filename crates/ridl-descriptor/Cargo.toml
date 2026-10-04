@@ -18,6 +18,8 @@ planus.workspace = true
 # it generates, with no option to turn that off, so the accessors do not
 # compile without serde.
 serde.workspace = true
+# `describe::to_json` builds the JSON view `ridl describe` prints.
+serde_json.workspace = true
 
 [dev-dependencies]
 # The codec agreement test (`tests/codec_agreement.rs`) runs the Rust backend
