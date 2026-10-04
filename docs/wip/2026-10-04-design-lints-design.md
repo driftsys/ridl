@@ -132,8 +132,8 @@ evals/
 ```
 
 Each upstream `LICENSE` file is listed in `.primignore`, so `prim fmt` does not
-rewrite it. `NOTICE` (created if absent) gets one entry per set: the upstream
-project, its licence, and the path of the port.
+rewrite it. `THIRD-PARTY-NOTICES.txt`, the existing notices file, gets one entry
+per set: the upstream project, its licence, and the path of the port.
 
 ### 3.2 The sets
 
