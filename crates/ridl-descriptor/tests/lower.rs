@@ -668,7 +668,7 @@ fn inline(backing: backing::Kind, constraint: Constraint) -> FieldType {
 }
 
 #[test]
-fn a_structural_type_name_is_spelled_as_the_typl_source_writes_it() {
+fn a_structural_type_name_is_spelled_in_the_typl_syntax_over_the_canonical_values() {
     let integer = || ty(field_type::Kind::Primitive(PrimitiveType::Integer as i32));
     let cases: Vec<(FieldType, &str)> = vec![
         (integer(), "integer"),
@@ -729,13 +729,13 @@ fn a_structural_type_name_is_spelled_as_the_typl_source_writes_it() {
             inline(
                 backing::Kind::Unit("km/h".to_owned()),
                 Constraint {
-                    min: Some("0.0".to_owned()),
-                    max: Some("250.0".to_owned()),
+                    min: Some("0".to_owned()),
+                    max: Some("250".to_owned()),
                     step: Some("0.5".to_owned()),
                     ..Default::default()
                 },
             ),
-            "km/h [0.0..250.0 step 0.5]",
+            "km/h [0..250 step 0.5]",
         ),
         (
             inline(

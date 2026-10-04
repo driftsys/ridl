@@ -44,9 +44,12 @@ impl From<ZeroNumber> for LowerError {
     }
 }
 
-/// Lowers `package` to the finished descriptor bytes; `others` are the
-/// other packages of the build, which name resolution and the hash closure
-/// search.
+/// Lowers `package` to the finished descriptor bytes. `others` is every
+/// checked package of the build that `ridlc` passes, which can include
+/// `package` itself, plus `ridl.std` when a package references it; name
+/// resolution and the hash closure search it. An entry named like `package` is
+/// skipped by the hash (`ridl_ir::catalog_hash`), so the hash is the same
+/// whether or not `others` holds it.
 pub fn lower(package: &Package, others: &[&Package]) -> Result<Vec<u8>, LowerError> {
     let numbered = numbered_shapes(package)?;
     let hash = catalog_hash(package, others);
@@ -230,12 +233,13 @@ fn row(encoding: Encoding, state: SizeState) -> MaxSize {
     }
 }
 
-/// The typl source form of a type for the descriptor's `type_name`: the
-/// canonical name when there is one, the structural form otherwise — a tuple
+/// A type spelled for the descriptor's `type_name`, in the typl syntax over the
+/// IR's canonical values, which are not the source's literals: the canonical
+/// name when there is one, the structural form otherwise — a tuple
 /// `(a: T, b: U)` (typl §11), an exact-length array `[T; N]`, a bounded array
 /// `[T; min..max]`, a map `[K: V; min..max]` (typl §12, in `ridl-fmt`'s
 /// spacing), an inline scalar as its backing and constraint, such as
-/// `km/h [0.0..250.0 step 0.5]` (typl §5.1-§5.4), and a stream `<T>`
+/// `km/h [0..250 step 0.5]` (typl §5.1-§5.4), and a stream `<T>`
 /// (ridl §12). An optional type carries the `?` suffix (typl §7.1).
 fn spell(ty: &FieldType) -> String {
     let base = match &ty.kind {
@@ -297,7 +301,8 @@ fn spell_bound(min: u64, max: u64) -> String {
     }
 }
 
-/// An inline scalar's constraint as the source writes it: a range
+/// An inline scalar's constraint in the typl syntax, over the IR's canonical
+/// values: a range
 /// `[min..max step s]` with an absent bound left empty (typl §5.5), or a
 /// length `[N]` or `[min..max]` (typl §5.3, §5.4), followed inside the
 /// brackets by `match` and the regex constant's name or the regex literal,
