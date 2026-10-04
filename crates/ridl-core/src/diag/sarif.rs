@@ -214,8 +214,10 @@ impl Normalized {
     }
 
     /// The URI of this path: `file://` plus the absolute path when it is
-    /// rooted, else the relative path. A Windows drive prefix is written as it
-    /// is (`file:///C:/...`); every other segment is percent-encoded.
+    /// rooted, else the relative path. A Windows prefix is written after
+    /// `file:///` with `\` turned into `/` (`file:///C:/...`); no test covers
+    /// that branch, because the test suite runs on Unix only. Every other
+    /// segment is percent-encoded.
     fn uri(&self) -> String {
         let mut uri = String::new();
         if self.rooted {
@@ -337,9 +339,10 @@ fn related_location(label: &Label, sources: &SourceMap, root: Option<&Root>) -> 
 /// directory: every artifact under it is a URI relative to it with
 /// `uriBaseId` `%SRCROOT%`, which `originalUriBaseIds` resolves; every other
 /// artifact is an absolute `file://` URI. With no `root` (the working
-/// directory could not be read) every artifact is an absolute `file://` URI
-/// and the run has no `originalUriBaseIds`. `tool_version` is the version
-/// `tool.driver` reports.
+/// directory could not be read) the run has no `originalUriBaseIds` and every
+/// artifact is written as its source path is, after lexical normalisation: an
+/// absolute path is an absolute `file://` URI, a relative path stays relative
+/// with no `uriBaseId`. `tool_version` is the version `tool.driver` reports.
 pub fn to_sarif(
     diagnostics: &[Diagnostic],
     sources: &SourceMap,
@@ -647,6 +650,21 @@ mod tests {
             uri_of(root, "/else where/a#b.ridl"),
             ("file:///else%20where/a%23b.ridl".to_string(), None)
         );
+        assert_eq!(
+            uri_of(root, "/my ws/100%.ridl"),
+            ("100%25.ridl".to_string(), srcroot()),
+            "a literal `%` is encoded, so the URI decodes to the path"
+        );
+        assert_eq!(
+            uri_of(root, "/my ws/a:b.ridl"),
+            ("a%3Ab.ridl".to_string(), srcroot()),
+            "`:` is encoded, so a relative URI is not read as a scheme"
+        );
+        assert_eq!(
+            uri_of(root, "/my ws/~u.ridl"),
+            ("~u.ridl".to_string(), srcroot()),
+            "`~` is unreserved and passes"
+        );
         let log = log_for(root, "/my ws/b c.typl");
         assert_eq!(
             log["runs"][0]["originalUriBaseIds"]["%SRCROOT%"]["uri"],
@@ -654,8 +672,9 @@ mod tests {
         );
     }
 
-    /// With no root (the working directory could not be read) every file is
-    /// an absolute `file://` URI and the run has no `originalUriBaseIds`.
+    /// With no root (the working directory could not be read) an absolute
+    /// file is an absolute `file://` URI and the run has no
+    /// `originalUriBaseIds`.
     #[test]
     fn no_root_gives_absolute_uris_and_no_base_ids() {
         assert_eq!(
@@ -664,5 +683,61 @@ mod tests {
         );
         let log = log_for(None, "/ws/sensor/a.ridl");
         assert!(log["runs"][0].get("originalUriBaseIds").is_none(), "{log}");
+    }
+
+    /// With no root a relative file stays relative, with no `uriBaseId`. A
+    /// leading `..` is kept, and a second one does not remove the first.
+    #[test]
+    fn no_root_keeps_a_relative_path_relative() {
+        assert_eq!(
+            uri_of(None, "sensor/a.ridl"),
+            ("sensor/a.ridl".to_string(), None)
+        );
+        assert_eq!(
+            uri_of(None, "../../a.ridl"),
+            ("../../a.ridl".to_string(), None)
+        );
+        assert_eq!(
+            uri_of(None, "../x/../a.ridl"),
+            ("../a.ridl".to_string(), None)
+        );
+    }
+
+    /// A `..` directly under the filesystem root is dropped, as the
+    /// filesystem would: `/../x` is `/x`.
+    #[test]
+    fn a_parent_dir_under_the_filesystem_root_is_dropped() {
+        assert_eq!(
+            uri_of(None, "/../x.ridl"),
+            ("file:///x.ridl".to_string(), None)
+        );
+        assert_eq!(
+            uri_of(Some(Path::new("/ws")), "/../ws/a.ridl"),
+            ("a.ridl".to_string(), srcroot())
+        );
+    }
+
+    /// The filesystem root as the working directory gives the base
+    /// `file:///`, not `file:////`.
+    #[test]
+    fn the_filesystem_root_as_root_gives_one_trailing_slash() {
+        let root = Some(Path::new("/"));
+        let log = log_for(root, "/a.ridl");
+        assert_eq!(
+            log["runs"][0]["originalUriBaseIds"]["%SRCROOT%"]["uri"],
+            "file:///"
+        );
+        assert_eq!(uri_of(root, "/a.ridl"), ("a.ridl".to_string(), srcroot()));
+    }
+
+    /// A relative root does not claim an absolute source path whose first
+    /// segments spell the root's name: the two are compared as rooted or not
+    /// before their segments are.
+    #[test]
+    fn a_relative_root_does_not_claim_an_absolute_path() {
+        assert_eq!(
+            uri_of(Some(Path::new("ws")), "/ws/a.ridl"),
+            ("file:///ws/a.ridl".to_string(), None)
+        );
     }
 }
