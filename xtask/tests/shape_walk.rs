@@ -102,6 +102,13 @@ const ALLOWED: &[Allowed] = &[
               identity",
     },
     Allowed {
+        path: "crates/ridl-backend-rust/tests/descriptor_generation.rs",
+        lines: 1,
+        why: "the read is of `ridl_ir::codegen::v1::Model::interfaces`, not of \
+              `Package::interfaces`: the model's list is lowered from \
+              `Package::shapes()` and already holds an inline shape",
+    },
+    Allowed {
         path: "crates/ridl-backend-rust/src/face.rs",
         lines: 1,
         why: "the read is of `ridl_ir::codegen::v1::Model::interfaces`, for \
