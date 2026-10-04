@@ -5,8 +5,10 @@
 //! The lints are **ordinary coded diagnostics** — warnings and infos on the
 //! same channel as every other check, so the CLI and the LSP surface them
 //! through the existing diagnostic pipeline. A project sets the levels of
-//! these lints in the `[lints]` table of `ridl.toml`; the lint names and the
-//! step that applies the levels live in `ridl_core::lint`, not in this pass.
+//! these lints in the `[lints]` table of `ridl.toml`. The lint names are
+//! declared on the catalogue rows in `ridl_core::diag`; `ridl_core::lint` looks
+//! them up and applies the levels after this pass, so this pass emits each code
+//! at its catalogue severity.
 //!
 //! | Code     | Rule                                                     | Severity |
 //! | -------- | -------------------------------------------------------- | -------- |
@@ -32,8 +34,9 @@ use crate::resolve::{Symbol, SymbolKind, resolve_package, significant_text, sour
 /// The number of distinct interfaces an error type must serve before RIDL-405
 /// calls it "shared across unrelated failure domains". Two interfaces are a
 /// deliberate pairing; three start to look like one catch-all error type
-/// standing in for several failure domains. The threshold lives here, not in a
-/// configuration file — E2 ships no lint configuration surface.
+/// standing in for several failure domains. The threshold is fixed here; the
+/// `[lints]` table sets the level of RIDL-405 (`shared-error-type`), not the
+/// threshold.
 const SHARED_ERROR_INTERFACE_THRESHOLD: usize = 3;
 
 /// The verbs that name a mutation (ridl §7.2). A query whose name starts with
