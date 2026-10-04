@@ -11,10 +11,10 @@
 //! `ridl_ir::projection::flatbuffers::max_size` (ADR-0019 decision 8) in
 //! `flatbuffers`, and ADR-0017's projection in `proto3`. This module holds the
 //! context both sizers resolve names with, the string capacity, and the leaf
-//! model `proto3` counts over. The FlatBuffers sizer is a placeholder until
-//! Task 7 of the catalog descriptor plan lands. A request of zero or several
-//! parameters, an inline `T | E` reply and a stream payload (§4 answer 10)
-//! are absent until a record defines their encoding.
+//! model `proto3` counts over; `flatbuffers` counts nothing of its own, it
+//! reads the projection's bound and the codegen model's cause. A request of
+//! zero or several parameters, an inline `T | E` reply and a stream payload
+//! (§4 answer 10) are absent until a record defines their encoding.
 
 pub(crate) mod flatbuffers;
 pub(crate) mod proto3;
@@ -147,10 +147,6 @@ pub enum SizeState {
 /// The state of the named type `type_name` under `encoding`: `None` when
 /// this toolchain computes no state (the `repr(C)` layout is undefined, a
 /// name does not resolve, or the projection has no root form for the type).
-///
-/// The `FlatBuffers` arm reaches a placeholder that panics until Task 7 of
-/// the catalog descriptor plan replaces it; no caller outside this module's
-/// tests exists before then. The `Proto3` and `ReprC` arms are final.
 pub fn size_state(type_name: &str, ctx: &Ctx<'_>, encoding: Encoding) -> Option<SizeState> {
     match encoding {
         Encoding::Proto3 => proto3::state(type_name, ctx),
@@ -1114,9 +1110,8 @@ mod tests {
     #[test]
     fn the_repr_c_column_is_absent() {
         // `Point` resolves, so a `ReprC` arm routed to a sizer would reach
-        // that sizer: the proto3 sizer answers a bound, and the FlatBuffers
-        // placeholder panics until Task 7 replaces it. Either way such a
-        // routing fails this test.
+        // that sizer, and both sizers answer a bound for it; such a routing
+        // fails this test.
         let package = package(
             "p",
             vec![decl(
@@ -1406,6 +1401,36 @@ pub(crate) mod tests_support {
                     ..Default::default()
                 },
             ],
+            ..Default::default()
+        }
+    }
+
+    /// `Open { text: string }` with no bound on the string: the one member
+    /// the FlatBuffers projection cannot bound, so `max_size` answers `None`
+    /// and the codegen model attributes the `Member` cause to it.
+    pub(crate) fn unbounded_fixture() -> Package {
+        Package {
+            name: "q".to_owned(),
+            decls: vec![Decl {
+                name: "Open".to_owned(),
+                kind: Some(decl::Kind::StructDef(StructDef {
+                    members: vec![StructMember {
+                        member: Some(struct_member::Member::Field(Field {
+                            name: "text".to_owned(),
+                            ordinal: 1,
+                            r#type: Some(FieldType {
+                                optional: false,
+                                kind: Some(field_type::Kind::Primitive(
+                                    PrimitiveType::String as i32,
+                                )),
+                            }),
+                            ..Default::default()
+                        })),
+                    }],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            }],
             ..Default::default()
         }
     }
