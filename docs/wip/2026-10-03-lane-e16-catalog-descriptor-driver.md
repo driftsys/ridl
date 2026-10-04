@@ -17,7 +17,7 @@ an answer departs from an ADR (answer 4 and ADR-0014 decision 9; answer 8 and
 the FlatBuffers runtime that ADR-0020 decision 5 permits `ridl-rt`), the stage
 that applies it writes the decision record first.
 
-**THIS SESSION RUNS: D7**. D0 is the pull request that added this document; D1
+**THIS SESSION RUNS: D8**. D0 is the pull request that added this document; D1
 re-baselined the plan on 2026-10-03 (its "Re-baseline 2026-10" section lists
 every change and the decisions it took beyond §4). D2 landed as PR #669 on
 2026-10-03. Every buffer is finished with `ridl_descriptor::finish`, not with
@@ -155,6 +155,30 @@ D6 landed as PR #692 (a8ad508e) on 2026-10-04 and closed #381. Facts D7 needs:
   (ADR-0023 decision 8). This is a breaking face change; #693 asks for the
   ridlc-gen-kotlin heads-up.
 - Debt from the review: #693.
+
+D7 landed as PR #696 (681e6661) on 2026-10-04 and closed #382. Facts D8 needs:
+
+- `ridl describe <PATH>` verifies a catalog descriptor and prints it as JSON
+  through `ridl_descriptor::describe::to_json`. Keys print in alphabetical
+  order, because the workspace's `serde_json` has no `preserve_order` feature.
+  Every failure exits 2 with `error: <path>: <cause>`, including a failed write
+  to a stdout pipe whose reader has gone. ADR-0010 has the `ridl describe` row.
+- The book is current for E16: `docs/book/cli-reference.md` has a
+  `### ridl describe` section, nine `--emit` values in both build transcripts
+  and the exit-code row; `docs/book/getting-started.md` has nine emit rows,
+  `codegen-model` included. `AGENTS.md` counts twenty crates.
+- Gardening must fix the citations of
+  `docs/wip/2026-09-13-runtime-descriptors-design.md` by path: the module doc of
+  `crates/ridl-descriptor/src/lib.rs` (line 2), the comment on line 2 of
+  `crates/ridl-descriptor/schema/catalog.fbs`, and the link in `docs/ROADMAP.md`
+  (near line 319). The design's own text near line 289 also says the `flatc`
+  view is the same as `ridl describe`'s, which is no longer true (key order, and
+  `null` for an absent `timing`, `min_us` or `max_us`); that item is on #697.
+  Grep `.rs`, `.ridl`, `.fbs` and `.md` files for every wip path before moving
+  them (§3 D8).
+- The ridlc-gen-kotlin heads-up for D6's catalog check is
+  driftsys/ridlc-gen-kotlin#27, linked on #693.
+- Debt from the review: #697.
 
 ## 0. How to work in this repository
 
@@ -752,3 +776,61 @@ named.
     that fixed pass 1's findings. During pass 1, review seats were mutating the
     shared worktree in place. Cost if wrong: an intermittent CI failure, which
     would show in CI.
+
+### D7 — PR #696 (681e6661)
+
+1. **`ridl describe` prints JSON keys in alphabetical order, not in schema
+   order.** Reason: the workspace's `serde_json` stores an object's keys sorted.
+   The `preserve_order` feature would apply to every crate in the workspace
+   through feature unification and change the key order of `ridl-mcp`,
+   `ridl-diff` and the other JSON writers. The module doc names this difference
+   from `flatc --json`, and the snapshot pins the order. Cost if wrong: a reader
+   that expects schema order; a later change can turn the feature on.
+2. **A failed write to stdout exits 2, and the other subcommands are not
+   changed.** `run_describe` writes through a locked stdout; a pipe whose reader
+   has gone gives `error: <path>: Broken pipe (os error 32)` and exit 2
+   (ADR-0010 decision 1), not a panic with exit 101. The same bare `println!` or
+   `print!` in `ridl diff --explain`, three other places in `main.rs`, and in
+   `lock.rs` and `property.rs` predates D7 and is on #697. Cost if wrong: an
+   error message that names the input path for an output failure; the plan's
+   form `error: <path>: <cause>` was kept for every cause.
+3. **The book's `json` fence under `### ridl describe` is an abridged copy of
+   the snapshot**, not its first twenty lines as the plan said. Reason: with
+   alphabetical keys, the first twenty lines hold the snapshot header, the
+   opening lines and 14 of the 32 hash bytes, and no interface. Every kept line
+   is copied from the snapshot, and the text says the fence is abridged. Cost if
+   wrong: one fence, kept current by hand.
+4. **The snapshot replaces `toolchain` with `[version]`** after asserting that
+   it equals the crate version. Reason: a literal version fails the snapshot at
+   every release bump. Cost if wrong: none found.
+5. **The foreign-file test uses 12 bytes, not the plan's 7.** Reason: `verify`
+   rejects fewer than 8 bytes as too short before it reads the identifier, so
+   the plan's buffer never reached "not a catalog descriptor". Cost if wrong:
+   none.
+6. **The `ridl describe` exit-code row leaves its exit-1 cell empty**, as the
+   `ridl lsp` and `ridl mcp` rows do, and not `—` as the plan wrote. Cost if
+   wrong: one cell in ADR-0010 and one in the book.
+7. **D7 also added the `codegen-model` row to the getting-started emit table and
+   corrected the "one file per package per `--emit` target" sentence**, which
+   the plan left out; the stage brief asked for all three book fixes D6 found.
+   Cost if wrong: none; both describe the code as built.
+8. **The stdout-pipe test runs on Unix only.** Its expected cause is built from
+   EPIPE, which is 32 on Linux and macOS and means something else on Windows. CI
+   runs on Linux only. Cost if wrong: a Windows contributor does not run that
+   one test.
+9. **The `/review` passes replaced the plan skill's final whole-branch review**,
+   as in D6, and Task 12's docs diff had no separate task review: the controller
+   checked it against the code, and pass 1's docs and tests seats reviewed it.
+   Cost if wrong: one review seat fewer on a docs diff.
+10. **Pass 2's two Important findings were fixed after pass 2, and a tests-seat
+    quick pass reviewed the fix.** Both were a test assertion and an exit-code
+    list in the docs. The quick pass ran mutations that the changed tests
+    caught; its two Minor findings were fixed in 5dfdb445 without another pass.
+    The quick pass is advisory and has no ledger, so its report is not on the
+    PR. Cost if wrong: about ten lines of prose and one `cfg` that no seat
+    reviewed.
+11. **No open pull request touched the shared files**
+    (`crates/ridl/src/main.rs`, `docs/book/cli-reference.md`, ADR-0010) when D7
+    started; the only open pull request was #694, which touched `docs/wip/` only
+    and merged during D7. The Spec 0 lint-foundation work had no open pull
+    request. Cost if wrong: none.
