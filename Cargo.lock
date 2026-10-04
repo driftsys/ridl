@@ -2195,6 +2195,7 @@ version = "0.5.1"
 dependencies = [
  "clap",
  "insta",
+ "pulldown-cmark",
  "ridl-backend-flatbuffers",
  "ridl-backend-proto",
  "ridl-backend-rust",
