@@ -790,14 +790,14 @@ named.
    changed.** `run_describe` writes through a locked stdout; a pipe whose reader
    has gone gives `error: <path>: Broken pipe (os error 32)` and exit 2
    (ADR-0010 decision 1), not a panic with exit 101. The same bare `println!` or
-   `print!` in `ridl diff --explain` and three other places predates D7 and is
-   on #697. Cost if wrong: an error message that names the input path for an
-   output failure; the plan's form `error: <path>: <cause>` was kept for every
-   cause.
+   `print!` in `ridl diff --explain`, three other places in `main.rs`, and in
+   `lock.rs` and `property.rs` predates D7 and is on #697. Cost if wrong: an
+   error message that names the input path for an output failure; the plan's
+   form `error: <path>: <cause>` was kept for every cause.
 3. **The book's `json` fence under `### ridl describe` is an abridged copy of
    the snapshot**, not its first twenty lines as the plan said. Reason: with
    alphabetical keys, the first twenty lines hold the snapshot header, the
-   opening lines and 18 of the 32 hash bytes, and no interface. Every kept line
+   opening lines and 14 of the 32 hash bytes, and no interface. Every kept line
    is copied from the snapshot, and the text says the fence is abridged. Cost if
    wrong: one fence, kept current by hand.
 4. **The snapshot replaces `toolchain` with `[version]`** after asserting that
