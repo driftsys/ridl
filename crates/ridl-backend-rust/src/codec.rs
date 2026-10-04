@@ -1,5 +1,5 @@
 //! The FlatBuffers payload codec, emitted into [`crate::generate`]'s output
-//! (design note D-1 as amended, plan Task 4, stage K5).
+//! (design note D-1 as amended).
 //!
 //! The codec as built, including what it does not promise and what is not
 //! built, is `docs/design/flatbuffers-codec.md`. The design note this
@@ -46,7 +46,7 @@
 //! error, or an aggregate overflow — is a [`GenerateError`]. A cause it
 //! cannot judge — a cross-package reference it does not resolve, or a
 //! same-package cycle — withholds that one type's codec and nothing else,
-//! which is the exemption stage K4 built and §4a of the design note records.
+//! which is the exemption §4a of the design note records.
 //!
 //! # The inline layout
 //!
@@ -174,7 +174,7 @@ impl Wire {
 struct NamedScalar {
     name: String,
     /// `new_unchecked` for a constrained type, `new` for a vacuous one whose
-    /// `new` is infallible and `const` (Epic 10 Task 4, `crate::scalar_ctor`).
+    /// `new` is infallible and `const` (`crate::scalar_ctor`).
     ctor: &'static str,
 }
 
@@ -707,7 +707,7 @@ fn verify_field(field: &TokenStream, present: &TokenStream, absent: &TokenStream
 }
 
 /// The typl constraint check for a named scalar's value, over a borrow
-/// (design note D-4, plan Task 5, stage K6). `value` is an expression
+/// (design note D-4). `value` is an expression
 /// already of `check`'s own parameter type — `&f64`/`&i64`/`&bool` for a
 /// numeric or boolean backing, `&str` for a string backing, `&[u8]` for a
 /// bytes backing (`crate::check_param_type`).

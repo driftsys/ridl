@@ -1,5 +1,5 @@
-//! The interaction-face round trip (Lane M stage M3, Task 5,
-//! `docs/design/interaction-face.md`; the approved design is
+//! The interaction-face round trip
+//! (`docs/design/interaction-face.md`; the approved design is
 //! `docs/archive/2026-09-16-interaction-face-v0-design.md` §7).
 //!
 //! It brings in the checked-in generated face of `tests/generated/` and runs
@@ -131,11 +131,12 @@ fn send_level_raw(port: &mut Loopback, level: i64) -> Correlation {
 )]
 #[allow(
     clippy::derivable_impls,
-    reason = "the domain-type Default emission (crate::defaults, predating M3) writes a manual \
-              impl rather than #[derive(Default)]; this is the first place that output is \
-              compiled in-tree, so it is the first place this lint sees it. Fixing the emitter \
-              is outside Lane M stage M3's scope: it is baseline domain-type emission every \
-              backend consumer shares, not face- or descriptor-specific."
+    reason = "the domain-type Default emission (crate::defaults, predating the face) \
+              writes a manual impl rather than #[derive(Default)]; this is the first \
+              place that output is compiled in-tree, so it is the first place this \
+              lint sees it. Fixing the emitter is outside the scope of the \
+              interaction face: it is baseline domain-type emission every backend \
+              consumer shares, not face- or descriptor-specific."
 )]
 mod generated {
     include!("generated/interaction_face.rs");

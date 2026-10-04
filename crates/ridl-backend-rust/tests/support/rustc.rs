@@ -3,9 +3,9 @@
 //!
 //! This is the twin of `ridl_rt_rlib` in `crates/ridl-backend-rust/src/tests.rs`
 //! and of the helper in `crates/ridlc/tests/support/mod.rs`, and it carries
-//! the same `--cfg` arguments for the same reason: stage K3 settled
-//! `--cfg feature="<encoding>"` on the existing bare-`rustc` helpers as this
-//! lane's proof mechanism, because a generated `Payload<E>` implementation
+//! the same `--cfg` arguments for the same reason: the project settled
+//! `--cfg feature="<encoding>"` on the existing bare-`rustc` helpers as the
+//! proof mechanism, because a generated `Payload<E>` implementation
 //! names items a cargo feature gates and every proof links `ridl-rt`'s source
 //! rather than a release. All three encoding features are enabled so that
 //! the other encodings inherit a working proof without editing a helper again.
@@ -206,7 +206,7 @@ pub fn run_program_capturing_stdout(name: &str, source: &str) -> String {
 /// workspace packages, and generated code is on no such list: it is text
 /// this crate emits, which a test `include!`s or compiles as a program, with
 /// no manifest of its own. `--emit=metadata` is what `cargo check` runs per
-/// unit, so this performs the recipe's check through stage K3's proof
+/// unit, so this performs the recipe's check through the bare-`rustc` proof
 /// mechanism — a bare `rustc` over the emitted source, linking a `ridl-rt`
 /// built the same way — rather than through a manifest that does not exist.
 ///

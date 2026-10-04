@@ -1,5 +1,5 @@
-//! The generated interaction-face descriptor layer (Lane M stage M3, Task 1,
-//! `docs/design/interaction-face.md`; the approved design is
+//! The generated interaction-face descriptor layer
+//! (`docs/design/interaction-face.md`; the approved design is
 //! `docs/archive/2026-09-16-interaction-face-v0-design.md` §6).
 //!
 //! For each named interface in a package this module emits, over the
@@ -33,7 +33,7 @@ use ridl_ir::codegen::v1;
 /// enumerated here is never accidentally the incomplete `Package::interfaces`
 /// field (the shape-walk guard). A service's inline shape is skipped: its
 /// identity name is the dotted service name, which is not a single Rust
-/// identifier, and descriptors for an inline shape are a follow-up beyond M3.
+/// identifier, and descriptors for an inline shape are not emitted.
 pub(crate) fn interface_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
     let mut items = Vec::new();
     for interface in &ctx.model.interfaces {
@@ -70,7 +70,7 @@ pub(crate) fn interactions(interface: &v1::Interface) -> Vec<(u32, &v1::Interact
 }
 
 /// The descriptor items of one interface, for the pipeline's per-interface
-/// walk (interaction-face decision 2). [`interface_items`] is the whole-package walk;
+/// walk (interaction-face design rule 2). [`interface_items`] is the whole-package walk;
 /// this is one shape of it, so a caller that means to skip a refusing
 /// interface can catch the refusal at the interface it belongs to.
 pub(crate) fn one_interface_items(
@@ -515,9 +515,9 @@ fn payload_reference(payload: Option<&v1::Payload>) -> &str {
         .unwrap_or_default()
 }
 
-/// The single declared parameter's named type. M3 emits no induced argument
-/// struct, so a call with any other parameter shape is refused (a recorded
-/// follow-up).
+/// The single declared parameter's named type. The face emits no induced
+/// argument struct, so a call with any other parameter shape is refused
+/// (driftsys/ridl#713).
 ///
 /// The lowering states the request payload exactly when the call has that
 /// shape, so its absence is the refusal, and the parameters say which of the
@@ -589,8 +589,8 @@ fn no_single_param(params: &[v1::Param], member: &str) -> GenerateError {
     if params.len() != 1 {
         return GenerateError {
             message: format!(
-                "interaction `{member}` must declare exactly one parameter (M3 emits no \
-                 induced argument struct)"
+                "interaction `{member}` must declare exactly one parameter (the face emits no \
+                 induced argument struct, driftsys/ridl#713)"
             ),
         };
     }
@@ -599,7 +599,7 @@ fn no_single_param(params: &[v1::Param], member: &str) -> GenerateError {
     }
 }
 
-/// A query's reply named type. M3 replies with one declared type, so an inline
+/// A query's reply named type. The face replies with one declared type, so an inline
 /// fallible or non-named return is refused.
 pub(crate) fn query_reply_type<'a>(
     query: &'a v1::QueryShape,
@@ -626,7 +626,7 @@ fn query_reply_payload<'a>(
     }
 }
 
-/// A `fixed`'s payload, a named type. M3 provisions a named type.
+/// A `fixed`'s payload, a named type, which is the only form the face carries.
 fn fixed_payload<'a>(
     fixed: &'a v1::FixedShape,
     member: &str,

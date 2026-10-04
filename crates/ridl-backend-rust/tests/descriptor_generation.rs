@@ -1,8 +1,8 @@
-//! Descriptor-layer generation over the interaction-face fixture (Lane M stage
-//! M3, Task 1). Asserts that `generate_face` emits the `Interface` and
-//! `Interaction` descriptors and the interaction-kind traits over the runtime
-//! crate, that the buffer constants are sized from the right payloads, and
-//! that the pipeline `generate` stays clean of the face.
+//! Descriptor-layer generation over the interaction-face fixture. Asserts that
+//! `generate_face` emits the `Interface` and `Interaction` descriptors and the
+//! interaction-kind traits over the runtime crate, that the buffer constants
+//! are sized from the right payloads, and that the pipeline `generate` stays
+//! clean of the face.
 
 use ridl_backend_rust::{generate, generate_face};
 use ridl_ir::codegen::v1;
@@ -379,7 +379,7 @@ fn the_event_source_constant_is_the_max_event_size() {
 /// nothing of the interaction face.
 ///
 /// It used to name no runtime path at all outside a named scalar's
-/// constructor. Stage K5 changed that deliberately: design note D-1, as
+/// constructor. That changed deliberately: design note D-1, as
 /// amended, puts the `Payload<FlatBuffers>` implementations in `generate`'s
 /// own output, because a consumer of a generated package needs the codec
 /// whether or not it ever dispatches. So the assertion is no longer "no
@@ -401,7 +401,7 @@ fn the_pipeline_generate_stays_clean_of_the_face() {
     // dozen reading and writing helpers from it and enumerating them here
     // would pin the helper set rather than the boundary this test is about.
     //
-    // This is weaker than what the test asserted before stage K5, when the
+    // This is weaker than what the test once asserted, when the
     // only permitted items were `Violation` and `Rule`. It has to be: the
     // codec names `Payload`, `Ref`, `Encoded` and the two error types, and
     // `Ref` is the face's as well, so no list of `payload` items can
