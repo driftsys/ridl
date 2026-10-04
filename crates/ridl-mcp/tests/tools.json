@@ -1,6 +1,6 @@
 [
   {
-    "description": "Pass the workspace root as `path` to check its files, with optional unsaved-text overlays. Read-only and offline. Alternatively, type-check one typl, ridl or rsdl source text against the embedded ridl.std. Returns the compiler's coded diagnostics with their spans and fix-its, verbatim. In source mode every span reports the path `input.typl`, `input.ridl` or `input.rsdl`, a fixed synthetic name for the text you supplied rather than a file on disk. In source mode the text is checked as a workspace of one file, so the workspace-wide checks run over it as `ridl check` runs them, the rsdl system checks included. Source mode does not check files beside the input, such as `interfaces.lock` and `.ridl/baseline/`. Path mode checks `interfaces.lock` and reports real source paths. It omits remote fetching, the `ridl.lock` round trip and baseline checks.",
+    "description": "Pass the workspace root as `path` to check its files, with optional unsaved-text overlays. Read-only and offline. Alternatively, type-check one typl, ridl or rsdl source text against the embedded ridl.std. Returns the compiler's coded diagnostics with their spans and fix-its, verbatim. In source mode every span reports the path `input.typl`, `input.ridl` or `input.rsdl`, a fixed synthetic name for the text you supplied rather than a file on disk. In source mode the text is checked as a workspace of one file, so the workspace-wide checks run over it as `ridl check` runs them, the rsdl system checks included. Source mode does not check files beside the input, such as `interfaces.lock` and `.ridl/baseline/`. Path mode checks `interfaces.lock` and reports real source paths. Path mode applies the workspace's `[lints]` levels, so a lint's severity follows ridl.toml and a lint at `allow` is not reported. It omits remote fetching, the `ridl.lock` round trip and baseline checks.",
     "inputSchema": {
       "$defs": {
         "OverlayInput": {
@@ -490,7 +490,7 @@
               "type": "string"
             },
             "lint": {
-              "description": "The lint name, when the code is a lint: the key that sets its level\nin `[lints]` in ridl.toml.",
+              "description": "The lint name, when the code is a lint: its key in `[lints]` in ridl.toml.",
               "type": [
                 "string",
                 "null"

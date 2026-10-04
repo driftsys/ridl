@@ -244,6 +244,25 @@ pub(crate) mod tests {
         assert_eq!(snapshot.status().errors, 1);
         assert_eq!(snapshot.status().warnings, 1);
     }
+    // `snapshot` does not apply the `[lints]` levels (lint foundation spec
+    // D-8): the lookup tools share it and keep the emitted severities. The
+    // fixture's root manifest sets `missing-timing = "deny"`, which only
+    // `ridl_check` applies, so here RIDL-100 is still the Warning it was
+    // emitted as.
+    #[test]
+    fn snapshot_keeps_the_emitted_severities() {
+        let snapshot = snapshot(&fixture("ws-lints"), &[]).unwrap();
+        let ridl_100 = snapshot
+            .output
+            .diagnostics
+            .iter()
+            .filter(|d| d.code.as_str() == "RIDL-100")
+            .collect::<Vec<_>>();
+        assert_eq!(ridl_100.len(), 1, "{:?}", snapshot.output.diagnostics);
+        assert_eq!(ridl_100[0].severity, Severity::Warning);
+        assert_eq!(snapshot.status().errors, 0);
+        assert_eq!(snapshot.status().warnings, 1);
+    }
     #[tokio::test]
     async fn a_remote_import_is_reported_and_not_fetched() {
         let copy = TempWorkspace::copy();

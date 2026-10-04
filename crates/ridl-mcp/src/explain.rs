@@ -18,8 +18,7 @@ pub enum ExplainOutput {
         code: String,
         severity: String,
         summary: String,
-        /// The lint name, when the code is a lint: the key that sets its level
-        /// in `[lints]` in ridl.toml.
+        /// The lint name, when the code is a lint: its key in `[lints]` in ridl.toml.
         #[serde(skip_serializing_if = "Option::is_none")]
         lint: Option<String>,
         /// The lint's default level, `warn` or `info`; present when `lint` is.
