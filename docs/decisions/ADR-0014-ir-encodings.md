@@ -470,16 +470,29 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     **What is hashed.** `ridl_ir::v2::to_binary` of the package that
     `ridl_ir::catalog_hash::reduced_package` returns, which holds:
     - the package name;
-    - every interface shape, in `Package::shapes()` order, under its identity
-      name (a declared interface's own name, or the owning service's dotted
-      global name for an inline shape), with `InterfaceShape::visibility()`, the
-      IR's `number` and `provisional`, and its interactions;
+    - every interface shape, in (number, name) order, because the lock makes the
+      number an interface's identity, under its identity name (a declared
+      interface's own name, or the owning service's dotted global name for an
+      inline shape), with `InterfaceShape::visibility()`, the IR's `number` and
+      `provisional`, and its interactions;
     - every declaration those interfaces reach, transitively and in any package
       of the build, under its canonical name (bare in this package, `pkg.Name`
       in another), in canonical-name order. A bare reference inside a
       declaration of another package names that package's declaration, and every
       type reference inside a reduced declaration is rewritten to its canonical
       name, so the bytes show which declaration each reference means;
+    - the declarations named inside expression strings: a contract clause's
+      `source` and a constant's `value`. Each chain of identifiers joined by `.`
+      in such a string, and each dotted prefix of the chain, is followed to the
+      declaration it resolves to in the declaring package, and that declaration
+      is reached like a referenced type. A string literal and a number inside
+      the expression are skipped. The strings themselves are hashed as written,
+      never rewritten. A name that only happens to match a declaration, such as
+      a parameter named like a type, also reaches it, which widens what the hash
+      covers and never narrows it. The IR's other value strings — declared and
+      resolved inits, range bounds and steps, timing bounds — hold resolved
+      values, so a change to a constant they were written with already changes
+      them;
     - every doc string blank, the doc tags `@labels` and `@deprecated` (the
       `labels` and `deprecated` fields) blank, and `services` and `retired`
       empty.
@@ -523,13 +536,18 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     the catalog descriptor, whose crate `ridl-descriptor` re-exports the
     functions as `ridl_descriptor::hash`.
 
-    **The golden-hash test.** `crates/ridl-descriptor/tests/golden_hash.rs` pins
-    the hash of the corpus package's checked-in IR snapshot, and `just test`
-    runs it in the gate. A change that moves the pinned value — a new IR field
-    set on a reached declaration, a change to `reduced_package`, a `prost`
-    release that encodes differently — fails the gate. The pinned value moves
-    only in a commit that changes the IR schema or this decision, and that
-    commit's message names the cause.
+    **The golden-hash test.** `crates/ridl-descriptor/tests/golden_hash.rs`
+    hashes the corpus package's checked-in IR snapshot, read with `from_json`,
+    its shapes numbered 1.. by the test because the snapshot predates the lock,
+    and `just test` runs it in the gate. It fails when `reduced_package`, the
+    closure, or the binary encoding changes. A compiler change that sets a new
+    IR field on a reached declaration does not reach it, because the snapshot is
+    read, not compiled. The guard for that is the codegen-model corpus snapshots
+    (`crates/ridlc/tests/snapshots/corpus__codegen@*.snap`), which carry the
+    hash of each corpus package as the compiler builds it. A pinned value in
+    either place moves only in a commit that changes the IR schema, the
+    compiler's lowering, or this decision, and that commit's message names the
+    cause.
 
 ## Alternatives considered
 
