@@ -86,6 +86,19 @@ pub fn snapshot(path: &str, overlays: &[OverlayInput]) -> Result<Snapshot, ToolE
         notes,
     })
 }
+/// The snapshot a lookup tool reads (`ridl_references`, `ridl_dependencies`,
+/// `ridl_resolve`, `ridl_describe_type`, `ridl_list_interactions`). These
+/// tools apply no lint levels (ADR-0024 decision 8), so a lint that is
+/// `allow` by default is left out of the diagnostics they count, as on every
+/// other path that applies no levels (ADR-0026 decision 8). Otherwise
+/// `workspace.warnings` would count a lint that no project turned on.
+/// `ridl_check` calls [`snapshot`] instead, because it applies the levels
+/// itself and must see such a lint when a project sets it.
+pub fn lookup_snapshot(path: &str, overlays: &[OverlayInput]) -> Result<Snapshot, ToolError> {
+    let mut snap = snapshot(path, overlays)?;
+    ridl_core::lint::drop_allowed_by_default(&mut snap.output.diagnostics);
+    Ok(snap)
+}
 impl Snapshot {
     pub fn status(&self) -> WorkspaceStatus {
         WorkspaceStatus {
