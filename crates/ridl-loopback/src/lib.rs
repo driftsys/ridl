@@ -61,9 +61,10 @@
 //!
 //! The loopback holds no catalog descriptor — story E16.5 (driftsys/ridl#381)
 //! writes the descriptor file, and giving the loopback one is not yet
-//! assigned to a story — so it has no member table, and there is no ordinal it can call unknown, no member it can call
-//! unowned, and no timing annotation it can measure a value's freshness or a
-//! call's remaining time against. What it therefore never returns:
+//! assigned to a story — so it has no member table, and there is no ordinal
+//! it can call unknown, no member it can call unowned, and no timing
+//! annotation it can measure a value's freshness or a call's remaining time
+//! against. What it therefore never returns:
 //! `WriteError::NotOwner`, `RaiseError::NotOwner`, `ServeError::NotOwner`, any
 //! port error's `Contract` variant except
 //! [`FixedReader::read_fixed`](ridl_rt::port::FixedReader::read_fixed)'s, and

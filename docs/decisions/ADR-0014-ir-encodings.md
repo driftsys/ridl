@@ -482,17 +482,30 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
       type reference inside a reduced declaration is rewritten to its canonical
       name, so the bytes show which declaration each reference means;
     - the declarations named inside expression strings: a contract clause's
-      `source` and a constant's `value`. Each chain of identifiers joined by `.`
-      in such a string, and each dotted prefix of the chain, is followed to the
-      declaration it resolves to in the declaring package, and that declaration
-      is reached like a referenced type. A string literal and a number inside
-      the expression are skipped. The strings themselves are hashed as written,
-      never rewritten. A name that only happens to match a declaration, such as
-      a parameter named like a type, also reaches it, which widens what the hash
-      covers and never narrows it. The IR's other value strings — declared and
-      resolved inits, range bounds and steps, timing bounds — hold resolved
-      values, so a change to a constant they were written with already changes
-      them;
+      `source`, and a constant's `value` when it holds a name. `lower_const`
+      stores a constant defined as another constant as the resolved value, and
+      keeps the written name only when the chain does not resolve to one: a
+      cycle (`const A : integer = B` with `const B : integer = A`, which
+      `ridl check` accepts) or an unknown name. Each chain of identifiers joined
+      by `.` in such a string, and each dotted prefix of the chain, is followed;
+      a string literal and a number inside the expression are skipped. A name
+      resolves first in the package that declares the string, then as a
+      qualified `pkg.Name`. A bare name that package does not hold is the name
+      an import binds — the contract checker accepts only that form for a
+      declaration of another package — and the IR records no imports, so it is
+      looked up in every other package of the build and every match is reached.
+      A name that matches a declaration it does not mean, such as a parameter
+      named like a type or a bare name two packages declare, also reaches that
+      declaration, which widens what the hash covers. A declaration named
+      through an import alias (typl §3.2) is not reached, because the alias is
+      no declaration's name. The strings themselves are hashed as written, while
+      type references are rewritten to canonical names: a type reference is a
+      field that holds one name, so it can be replaced whole, but an expression
+      string is source text, and rewriting the names inside it would need the
+      expression parser, which `ridl-ir` does not depend on. The IR's other
+      value strings — declared and resolved inits, range bounds and steps,
+      timing bounds — hold resolved values, so a change to a constant they were
+      written with already changes them;
     - every doc string blank, the doc tags `@labels` and `@deprecated` (the
       `labels` and `deprecated` fields) blank, and `services` and `retired`
       empty.
@@ -540,9 +553,12 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     hashes the corpus package's checked-in IR snapshot, read with `from_json`,
     its shapes numbered 1.. by the test because the snapshot predates the lock,
     and `just test` runs it in the gate. It fails when `reduced_package`, the
-    closure, or the binary encoding changes. A compiler change that sets a new
-    IR field on a reached declaration does not reach it, because the snapshot is
-    read, not compiled. The guard for that is the codegen-model corpus snapshots
+    closure for the corpus package's shapes, or the binary encoding changes. The
+    following of names inside expression strings is guarded by the unit tests in
+    `crates/ridl-ir/src/catalog_hash.rs` and by the codegen-model corpus
+    snapshots named below. A compiler change that sets a new IR field on a
+    reached declaration does not reach it, because the snapshot is read, not
+    compiled. The guard for that is the codegen-model corpus snapshots
     (`crates/ridlc/tests/snapshots/corpus__codegen@*.snap`), which carry the
     hash of each corpus package as the compiler builds it. A pinned value in
     either place moves only in a commit that changes the IR schema, the
