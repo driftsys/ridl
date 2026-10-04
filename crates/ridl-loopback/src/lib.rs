@@ -100,8 +100,8 @@
 //! `CatalogRef` the runtime was built with, unexamined. ADR-0021 decision 3
 //! places a check of it against the interface's own `CATALOG` in a generated
 //! face's constructor, once, when the face is built; the constructor the Rust
-//! backend emits today performs no such check (driftsys/ridl#448). Either way
-//! it is the face's check and not the runtime's: the loopback carries the
+//! backend emits makes that check and panics on a mismatch (ADR-0023 decision
+//! 8). It is the face's check and not the runtime's: the loopback carries the
 //! value and compares nothing.
 //!
 //! The crate's as-built design record, with the reasoning behind each of these

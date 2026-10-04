@@ -85,8 +85,9 @@ code a consumer compiles, not precomputed and trusted by the emitter.
   numbers and the types they reach
   ([ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15). Story E16.2
   (driftsys/ridl#378) replaced the `CatalogHash([0u8; 32])` placeholder the
-  emitter wrote before it. No generated code compares the hash yet: the catalog
-  check is story E16.5 (see "The catalog check is not emitted" below).
+  emitter wrote before it. Since story E16.5 (driftsys/ridl#381) the generated
+  `Bind::new` and `serve` compare the port's catalog with `CATALOG`, name and
+  hash (see "The catalog check" below).
 - `PayloadInfo.max_size` (`EncodedSizes { proto3, flatbuffers, repr_c }`) is
   filled one column at a time. Since story E16.4 (driftsys/ridl#380) the
   `flatbuffers` column is the codegen model's `Payload.flatbuffers_max_size`,
@@ -183,11 +184,12 @@ runtime before the client is built, which is what the round-trip tests do. A
 program that holds its faces for its whole run gives each face an aggregate of
 its own from `Loopback::attach` instead, and takes the handler from
 `Loopback::handler`, which is what `examples/cabin/consumer` does
-(driftsys/ridl#488). The constructor is still where the catalog check of
-[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 3
-belongs — **but no constructor performs one, and none ever has** (see "The
-catalog check is not emitted" below). This supersedes the M1 design's
-`Client<'a, P>` and `Publisher<'a, W>`;
+(driftsys/ridl#488). The constructor is where the catalog check of
+[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 3 is
+made: since story E16.5 `Bind::new` compares the port's catalog with the
+interface's `CATALOG` before it stores the port, and panics on a mismatch (see
+"The catalog check" below). This supersedes the M1 design's `Client<'a, P>` and
+`Publisher<'a, W>`;
 [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 5
 records it.
 
@@ -719,43 +721,52 @@ and return types. The expected order was Epic 10's Task 3 and Task 6 before
 E11.13; when that does not hold, the cost is a touch-up pass to the checked-in
 fixture, accepted as rework rather than a blocker.
 
-## The catalog check is not emitted (2026-09-21)
+## The catalog check
 
-`Client::new` and `Publisher::new` are `Client { port }` and nothing else. No
-`.catalog()` call exists under `crates/ridl-backend-rust/`, so a face built over
-a port bound to another catalog reads and writes the wrong interface's slots
-with no error. ADR-0021 decision 3 and ADR-0023 decision 5 both read as though
-the check were there; driftsys/ridl#448 recorded that it is not, and both
-records carry a 2026-09-21 amendment saying so in their own words.
+Each interface module carries a private `check_catalog(found: &CatalogRef)`,
+which compares `found` with the interface's `CATALOG`
+(`<super::Iface as ridl_rt::contract::Interface>::CATALOG`) as a whole
+`CatalogRef`, name and hash, and calls `::core::panic!` when they differ, so it
+compiles under `no_std`. The panic message names the interface, the catalog the
+face was generated from and the catalog the port is attached to, each by
+`CatalogRef`'s `Debug`.
 
-**The disposition is to wait, not to emit.** Until E16.2 (driftsys/ridl#378)
-computes a catalog hash, the descriptor emitter writes `CatalogHash([0u8; 32])`,
-and the comparison would hold two zero hashes against each other: it would pass
-for every port of every catalog, while reading as a guarantee. The story that
-emits the check also takes the one decision ADR-0021 decision 3 leaves open —
-what `new` does on a mismatch, which is an ADR-0023 amendment and a change to
-every generated constructor. Stage K7 of lane K took this disposition, on
-Sebastien's decision, rather than emitting a check in the same change that
-rewrites the constructors for the payload encoding.
+Three places call it, each once, through `ridl_rt::port::Attached::catalog`'s
+path so that a member named `catalog` cannot capture the call:
 
-Before E16.2, nothing in the tree depended on the check's absence:
-`ridl-loopback` is in-process and single-catalog, and the round trip's `CATALOG`
-constant named the same all-zero hash the face declared. Since E16.2 the two
-differ, so the round trips now depend on the check's absence (see the update
-below).
+- `Bind::new` of `Client` and of `Publisher`, before the port is stored. Every
+  port bound of either face — `SignalReader`, `EventSource`, `Caller`,
+  `SignalWriter`, `EventSink` — has `Attached` as its supertrait, and every
+  emitted `Client` or `Publisher` has at least one of them, so the bound the
+  face already carries is enough.
+- `serve`, on the handler port, before `Handler::serve` is called, so a handler
+  of another catalog never registers the members.
+- None in the `blocking` module: its `Client::new` builds the async client
+  through `Bind::new`, and its `serve` calls the async `serve`, so each makes
+  the comparison once, through that call.
 
-**Update (2026-10-04).** E16.2 (driftsys/ridl#378) now computes the catalog hash
-([ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15), and the face's
-`CATALOG` carries it, so the comparison would no longer be two zeros. The check
-is still not emitted: story E16.5 (driftsys/ridl#381) emits it and takes the
-mismatch decision, as an ADR-0023 amendment. E16.5 is the story after which the
-hash is in both artifacts a pair can be built from — the generated face and the
-catalog descriptor an engine reads — and the mismatch behaviour changes every
-generated `new`, so it was kept out of E16.2. The runtimes the round trips build
-still name an all-zero hash (`tests/interaction_face.rs`,
-`examples/cabin/consumer/src/main.rs`), which no longer equals the face's
-`CATALOG`. That is sound only while nothing compares the two; when E16.5 emits
-the check, those runtimes need the computed hash.
+No member method compares anything: the comparison is made once per binding. The
+rustdoc of each `new` and each `serve` states the panic under `# Panics` and
+names the comparison a program makes first to avoid it,
+`port.catalog() == <Iface as Interface>::CATALOG`.
+[ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 8
+records why a mismatch panics rather than returning an error.
+
+`tests/interaction_face.rs` binds a `Client`, a blocking `Client`, a
+`Publisher`, `serve` and `blocking::serve` over a runtime attached to a catalog
+whose hash differs from the face's, and a `Client` over one whose package name
+differs, and each panics with that message; every other round trip runs over a
+runtime attached to the face's own `CATALOG`. `tests/face_generation.rs` pins
+the comparison in the emitted `Bind::new` and `serve`, and its order before
+`Handler::serve`. `examples/cabin/consumer` attaches its runtime to the
+generated `CATALOG`.
+
+**History.** Until story E16.5 (driftsys/ridl#381) no generated constructor
+compared anything, which driftsys/ridl#448 recorded on 2026-09-21. The check
+waited first for a computed catalog hash, story E16.2 (driftsys/ridl#378),
+because a comparison of two `CatalogHash([0u8; 32])` placeholders passes for
+every port, and then for the decision on what a mismatch does, which ADR-0023
+decision 8 took on 2026-10-04.
 
 ## E11.14: the face is emitted by `ridl build` (2026-09-21)
 
@@ -885,7 +896,6 @@ decision 7 and ADR-0021 decision 19 record it; the design note is archived as
 
 | Placeholder                                                                                                                              | Replaced by                                  |
 | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| The unemitted catalog check (the zero `CatalogHash` was replaced by E16.2)                                                               | E16.5 (driftsys/ridl#381)                    |
 | The `None` `EncodedSizes.repr_c` column (`flatbuffers` was filled by E16.4; `proto3` is `None` because this backend has no proto3 codec) | E11.12 (driftsys/ridl#317)                   |
 | The narrow contract-clause translator (`src/clauses.rs`)                                                                                 | E5.1                                         |
 | One declared parameter per call, no induced argument struct                                                                              | a recorded follow-up story                   |
@@ -930,14 +940,15 @@ ports" above.
   to 18 for the items the futures poll;
   [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) — the
   generation decisions specific to this face, decision 6 for the call surface
+  and decision 8 for the catalog check
 - Depends on: `crates/ridl-rt` 0.4.0 (`Wakeable`, `Interest`, `ClientError`,
   `ProviderError`, the `std` feature's `block_on`, and since 0.4.0 the `face`
   traits, ADR-0021 decision 19); the IR's provisional interface numbering (the
   lock design's L4, driftsys/ridl#391)
-- Replaced later by: E11.12 (the `repr_c` size column), E16.5 (the catalog
-  check), E5.1 (the clause translator). E11.7 replaced the payload stand-in,
-  E11.15 the test-only ports, E16.2 the zero catalog hash, and E16.4 the `None`
-  `flatbuffers` size column; all four have landed
+- Replaced later by: E11.12 (the `repr_c` size column), E5.1 (the clause
+  translator). E11.7 replaced the payload stand-in, E11.15 the test-only ports,
+  E16.2 the zero catalog hash, E16.4 the `None` `flatbuffers` size column, and
+  E16.5 the unemitted catalog check; all five have landed
 - Reasoning trail (archived):
   [`2026-09-15-lane-m-driver.md`](../archive/2026-09-15-lane-m-driver.md),
   [`2026-09-16-interaction-face-v0-design.md`](../archive/2026-09-16-interaction-face-v0-design.md),
