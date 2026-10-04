@@ -126,11 +126,13 @@ D6 landed as PR #692 (a8ad508e) on 2026-10-04 and closed #381. Facts D7 needs:
   I/O error with exit 2.
 - `Emit::Catalog` is the ninth emit value. The `--emit` summary line in
   `crates/ridlc/src/main.rs` and the help census test in
-  `crates/ridlc/tests/cli.rs` already name `catalog`. The book does not:
-  `docs/book/cli-reference.md` still shows eight values in its `ridl build` and
-  `ridlc build` help transcripts and in its emit table, and says "one file per
-  package per `--emit` target", which is not true for `catalog`. Task 11's
-  census covers these.
+  `crates/ridlc/tests/cli.rs` already name `catalog`. The book does not.
+  `docs/book/cli-reference.md` shows eight values in its `ridl build` and
+  `ridlc build` help transcripts, which Task 11's census covers. It also says
+  "one file per package per `--emit` target", which is not true for `catalog`,
+  and `docs/book/getting-started.md` has an emit table of seven rows ("Seven
+  emit targets exist today", without `codegen-model`). Neither of these two is
+  in Task 11 or #382; D7 adds them to its census.
 - `Emit::Catalog` is classed as a code emit, so a build with `--emit catalog`
   alone keeps `ridl.std` in `others` and hashes as the Rust face does. A test
   pins it. The cost is a codegen request that nothing reads (#693).
@@ -740,11 +742,11 @@ named.
    would review the same diff twice. Cost if wrong: one review seat fewer.
 10. **Pass 2's Important finding was fixed after pass 2. A tests-seat quick pass
     reviewed that fix.** The finding was a missing test for the `ridl.std` hash
-    dependency. Reason: the stage instructions. The quick pass caught every
-    mutation it ran, and its one Minor finding is on #693. Cost if wrong: none
-    found.
+    dependency. Reason: the lane driver's instruction for this stage. The quick
+    pass caught every mutation it ran, and its one Minor finding is on #693.
+    Cost if wrong: none found.
 11. **One failure of `descriptor_hash_equals_the_rust_face_hash` was treated as
-    interference, not a flaky test.** It failed once during pass 1 and passed in
-    90 runs after. During that run the tests seat was mutating the shared
-    worktree in place. Cost if wrong: an intermittent CI failure, which would
-    show in CI.
+    interference, not a flaky test.** It failed once on pass 1's first run. It
+    did not fail in 32 later runs by the review seat or in 90 runs by the fix
+    implementer. During pass 1, review seats were mutating the shared worktree
+    in place. Cost if wrong: an intermittent CI failure, which would show in CI.
