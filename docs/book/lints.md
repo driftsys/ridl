@@ -59,10 +59,14 @@ replaces an earlier one:
 3. the package's own `[lints]` table.
 
 A diagnostic takes the levels of the package whose directory contains the file
-of its primary span. A file that no package of the workspace owns uses the
-default levels, so a project's `[lints]` never applies to code it does not own.
-When there is no manifest at all, for example `ridl check` on a single file
-outside any package, the default levels apply.
+of its primary span. In a workspace, the root's `[lints]` table covers the
+whole directory tree of the root: a file under the workspace root that no
+member contains, and the root `ridl.toml` itself, take the root's levels. A
+file outside the directory tree of the entry point (the standard library, a
+fetched import, an editor buffer outside the project) uses the default levels,
+so a project's `[lints]` never applies to code outside its directory. When there
+is no manifest at all, for example `ridl check` on a single file outside any
+package, the default levels apply.
 
 **The levels follow the entry point.** Running `ridl check` on a workspace
 member or on a file inside a member, opening an editor on a member, or passing
@@ -70,6 +74,13 @@ a member as the `path` of the MCP tool `ridl_check` loads the member as a
 standalone package. The workspace root's `[lints]` table does not apply in that
 case; only the member's own table does. Check from the workspace root to get
 the root's levels. `[defaults].timing` and `[imports]` behave the same way.
+
+**Known limitations of the language server.** The language server reads the
+`[lints]` tables once, when it loads the workspace: at start, or when the first
+file is opened. An edit to a `[lints]` table takes effect in the editor after
+the server restarts. An editor opened on
+a workspace member loads the member alone, as described above; this is part of
+the language server gap tracked in issue #529, which stays open.
 
 ## Where levels apply
 
@@ -82,7 +93,7 @@ Levels apply where diagnostics are reported to a person or an agent:
 - the language server;
 - the MCP tool `ridl_check`.
 
-Every other command compiles with the default severities: `ridl diff`,
+Every other command reports the severities the emit sites chose: `ridl diff`,
 `ridl test`, `ridl baseline`, `ridl lock`, the MCP tool `ridl_diff` and the MCP
 lookup tools. A lint at `deny` never makes one of them fail. The text note that
 names the lint still appears in their output.
@@ -93,7 +104,7 @@ A mistake in the table never stops a check. Each of these raises MANI-010
 (`unknown-lint`, a warning) on the entry, and the entry is ignored:
 
 - the key is not a lint name, which includes a diagnostic code written as a key
-  (`RIDL-100 = "deny"`) and the catalogue name of an error code;
+  (`RIDL-100 = "deny"`) and the name of an error code, which has none;
 - the value is not a string;
 - the value is a string other than `allow`, `info`, `warn` or `deny`, which
   includes a level with the wrong case (`"Deny"`);

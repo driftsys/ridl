@@ -223,17 +223,21 @@ The result is a `LintLevels` value: the default levels with the overrides
 applied.
 
 The package that owns a diagnostic decides its level: the package whose
-directory contains the file of the diagnostic's primary span. A file that no
-workspace package owns (the standard library, a fetched remote import) uses the
-registry defaults. No default is `deny`, so a dependency can never fail a
-project's check, and a project's `[lints]` never applies to code it does not
-own. Today `ridl check` reports no diagnostic in a file that a workspace package
-does not own: no package is loaded as a remote package (`PackageOrigin::Remote`
-is never constructed outside tests), remote imports are only fetched and pinned
-by `materialize_and_lock` in `ridlc` after the check, which returns manifest and
-lockfile diagnostics only, and the diagnostics of `ridl.std` are not merged into
-the workspace output (`WorkspaceOutput::std_ir`). The rule holds for any such
-file a later change adds.
+directory contains the file of the diagnostic's primary span. In a workspace,
+the root `[lints]` table configures the whole directory tree of the root: a file
+under the workspace root that no member contains, and the root `ridl.toml`
+itself, get the root's levels (§6.1). A file outside the directory tree of the
+entry point (the standard library, a fetched remote import, an editor overlay
+outside the project) uses the registry defaults. No default is `deny`, so a
+dependency can never fail a project's check, and a project's `[lints]` never
+applies to code outside its directory. Today `ridl check` reports no diagnostic
+in a file outside the directory tree of the entry point: no package is loaded as
+a remote package (`PackageOrigin::Remote` is never constructed outside tests),
+remote imports are only fetched and pinned by `materialize_and_lock` in `ridlc`
+after the check, which returns manifest and lockfile diagnostics only, and the
+diagnostics of `ridl.std` are not merged into the workspace output
+(`WorkspaceOutput::std_ir`). The rule holds for any such file a later change
+adds.
 
 The levels follow the entry point (D-9). When the entry is a workspace member,
 or a file inside one, the loader stops at the member's own `ridl.toml` and loads
@@ -439,8 +443,8 @@ fields is a compatible change to the tool surface.
   §5.3, with its span; the root-then-member resolution, including a key set at
   the root and overridden by the member.
 - **`apply_lint_levels` unit tests**: each level on a lint code; an Error code
-  and an uncoded diagnostic left unchanged; a diagnostic in a file no package
-  owns uses the defaults even when the project sets `deny`.
+  and an uncoded diagnostic left unchanged; a diagnostic in a file outside every
+  scope uses the defaults even when the project sets `deny`.
 - **CLI tests** in `crates/ridl/tests/`, over a fixture workspace with a root
   and a member `[lints]`:
   - a lint at `deny` makes `ridl check` exit 1 and shows as an error, in text,

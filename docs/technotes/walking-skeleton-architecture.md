@@ -71,15 +71,29 @@ that.
   come out of the same line (ADR-0008 decision 21). For the codes themselves,
   the `FORM-` and `MANI-` tables are in the family overview §7, the `TYPL-`
   tables in typl §16, and the `RIDL-` tables in ridl §16 — this note says where
-  the namespaces live, not what is in them. (3) The "ns" core: `ridl.toml`
-  manifest parsing (standalone + workspace modes), the package model with
-  per-package `[imports]` (ADR-0007 decision 17), workspace loading, the
-  lockfile, the content-addressed cache, and `ureq` fetch of uncompressed tar
-  artifacts (ADR-0007 decision 12). `ridl.std` is embedded via `include_str!`
-  (ADR-0007 decision 15). Filesystem discovery sits behind the `fs` feature and
-  network fetch behind `fetch` (which pulls `ureq`, `sha2`, `tar` and implies
-  `fs`), so the compiler crates build for `wasm32-unknown-unknown` with
-  `--no-default-features` (ADR-0007 decision 5).
+  the namespaces live, not what is in them. Every Warning and Info row also
+  carries a lint name, declared on the same catalogue line. `diag::sarif`
+  projects a diagnostic list to a SARIF 2.1.0 log for
+  `ridl check --format sarif`. (3) The "ns" core: `ridl.toml` manifest parsing
+  (standalone + workspace modes), the package model with per-package `[imports]`
+  (ADR-0007 decision 17), workspace loading, the lockfile, the content-addressed
+  cache, and `ureq` fetch of uncompressed tar artifacts (ADR-0007 decision 12).
+  `ridl.std` is embedded via `include_str!` (ADR-0007 decision 15). Filesystem
+  discovery sits behind the `fs` feature and network fetch behind `fetch` (which
+  pulls `ureq`, `sha2`, `tar` and implies `fs`), so the compiler crates build
+  for `wasm32-unknown-unknown` with `--no-default-features` (ADR-0007 decision
+  5).
+
+  The `lint` module looks lint names up in the catalogue, defines the four
+  levels (`allow`, `info`, `warn`, `deny`), holds the effective levels of each
+  directory the loader resolved (`LintScopes`), and applies them to a diagnostic
+  list (`apply_lint_levels`). The manifest parser reads the `[lints]` table of a
+  package or a workspace manifest, and the workspace loader builds the scopes
+  from it: the root's levels for the root directory, and the root's levels
+  overlaid with a member's own table for each member directory. The levels are
+  applied by the callers that report diagnostics — `ridl check`, `ridl build`,
+  `ridlc check`, `ridlc build`, the language server and the MCP tool
+  `ridl_check` — and not inside `ridl-sem`.
 
 - **`crates/ridl-sem`** — the semantic passes, carved out of `ridl-core` at the
   start of E1 (ADR-0007 decision 4). `resolve` implements the ADR-0002 §5
@@ -106,8 +120,9 @@ that.
   single defined fault — it is the engine behind `ridl test` today and the E5
   reference oracle later. `lint` is four advisory codes (RIDL-404, RIDL-405,
   RIDL-406, RIDL-308) run from `check_package` once lowering has finished, on
-  the ordinary diagnostic channel, with no lint driver and no configuration
-  surface.
+  the ordinary diagnostic channel. Each emits at its catalogue severity; a
+  project changes that severity through the `[lints]` table, which
+  `ridl_core::lint` applies after the check.
 
 - **`crates/ridl-ir`** — the IR schema, compiled by `build.rs` with `protox` +
   `prost-build` (no system `protoc`). `proto/ridl/ir/` holds **`v2` alone**: E2

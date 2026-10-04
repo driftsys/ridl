@@ -281,7 +281,11 @@ silent skip the two paragraphs above do not touch.
 root — written by [`ridl baseline`](#ridl-baseline) — `ridl check` compares
 the workspace against it and warns (RIDL-407) on every interaction whose
 declaration order moved, and every struct field or union arm change `ridl
-diff` gates on that concerns an ordinal, without moving the exit code. The warning for a field or arm
+diff` gates on that concerns an ordinal. At its default level the warning does
+not change the exit code; RIDL-407 is the lint `ordinal-changed`, so
+`ordinal-changed = "deny"` in [`[lints]`](lints.md) reports it as an error,
+which makes the run exit 1, and `ordinal-changed = "allow"` removes it. The
+warning for a field or arm
 follows the verdict the gate reads, so the two agree: a member inserted, one
 removed, one moved in an edit that added or removed no member, and one
 appended beside such a change each draw one warning, and an append alone
@@ -320,9 +324,10 @@ warning[RIDL-407]: `doorClosed` has moved in `VehicleStatus` since the published
 That run exits 0: two RIDL-407 warnings and an otherwise clean compile stay
 clean. The desk check runs only after a compile with no error diagnostic other
 than RIDL-409 — a live `interfaces.lock` entry with no declaration, which
-leaves nothing out of the IR the desk check compares. A workspace with any
-other error draws no RIDL-407 warning in addition to that error: it exits 1,
-exactly as it would with no baseline present. A workspace whose only errors
+leaves nothing out of the IR the desk check compares — and other than a lint
+raised to `deny`. A workspace with any other error draws no RIDL-407 warning in
+addition to that error: it exits 1, exactly as it would with no baseline
+present. A workspace whose only errors
 are RIDL-409 still exits 1, and the desk check runs over it: when exactly one
 declaration without an entry has the published shape of the orphan entry's
 interface, the desk check adds a label to that RIDL-409 naming the
