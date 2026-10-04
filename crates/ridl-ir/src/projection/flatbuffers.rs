@@ -306,9 +306,11 @@ impl<'a> Packages<'a> {
     /// A same-package bare `Name` or a cross-package fully qualified
     /// `pkg.Name`, resolved to its declaration and the package that holds it —
     /// the package a bare reference *inside* that declaration then resolves
-    /// against. `home` is the package the reference was written in. This is
-    /// the one name rule of the projection; `ridl-descriptor` resolves
-    /// through it too, so both agree on which names resolve.
+    /// against. `home` is the package the reference was written in. The
+    /// projection resolves every name through this, and so does
+    /// `ridl-descriptor`, so the two agree on which names resolve;
+    /// `codegen::resolve::Scope::resolve` and the wire backends'
+    /// `resolve_reference` are still separate copies of the same walk.
     pub fn resolve(
         self,
         home: &'a v2::Package,
