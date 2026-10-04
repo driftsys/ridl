@@ -387,7 +387,7 @@ pub fn compile_workspace_with(
     // drivers, which never look at its IR, do not pay for the pass.
     let std_ir = check_package(&*db, workspace, std, std).ir;
     let packages: Vec<&ridl_ir::v2::Package> = checked.iter().map(|package| &package.ir).collect();
-    let system = lower_system(&system, &packages);
+    let system = lower_workspace_system(&system, &packages, &std_ir);
     Ok(WorkspaceOutput {
         checked,
         resolutions,
@@ -809,9 +809,9 @@ pub fn run_build_with(
         // once, ahead of the per-package loop below, because the proto
         // backend needs it too (next paragraph) and this is the one
         // `check_package` call either use pays for.
-        let references_std = checked
-            .iter()
-            .any(|package| ridl_ir::v2::referenced_packages(&package.ir).contains("ridl.std"));
+        let packages: Vec<&ridl_ir::v2::Package> =
+            checked.iter().map(|package| &package.ir).collect();
+        let references_std = references_std(&packages);
         // Every emit kind except the direct IR dumps. The reasoning, and the
         // exhaustive classification ADR-0014 decision 10 requires, live on
         // `Emit::is_ir_dump`.
@@ -832,12 +832,11 @@ pub fn run_build_with(
         // present. The proto3, FlatBuffers and — since E11.14 — Rust
         // backends each resolve a foreign reference themselves rather than
         // leaving it to the target language's own import statement, so each
-        // reads this (`write_emits`'s doc comment).
-        let others: Vec<&ridl_ir::v2::Package> = checked
-            .iter()
-            .map(|package| &package.ir)
-            .chain(std_ir.iter())
-            .collect();
+        // reads this (`write_emits`'s doc comment). `Emit::Catalog` is a code
+        // emit, so for the catalog descriptor `ridl.std` is here exactly when
+        // `references_std` holds, the set `embed_catalog_hashes` hashes each
+        // region over.
+        let others = catalog_scope(&packages, std_ir.as_ref());
 
         for package in &checked {
             let base = if single_file {
@@ -894,12 +893,23 @@ pub fn run_build_with(
 
         // The lowered system, beside the package IR, for each IR dump emit
         // (rsdl reference §13). An error in the closure has already stopped
-        // the build above, so `lower_system` is `None` here only when the
-        // workspace declares no `system`.
+        // the build above, so the lowering is `None` here only when the
+        // workspace declares no `system`. The region hashes must equal the
+        // hashes a `--emit catalog` build writes, so `ridl.std` is in their
+        // scope whenever a package references it: the `std_ir` above when a
+        // code emit computed it, otherwise checked here.
         if emits.iter().any(|emit| emit.system_dump_suffix().is_some()) {
-            let packages: Vec<&ridl_ir::v2::Package> =
-                checked.iter().map(|package| &package.ir).collect();
-            if let Some(lowered) = lower_system(&system, &packages) {
+            let checked_std;
+            let hash_std = match &std_ir {
+                Some(std_ir) => Some(std_ir),
+                None if references_std => {
+                    checked_std = check_package(&db, workspace, std, std).ir;
+                    Some(&checked_std)
+                }
+                None => None,
+            };
+            if let Some(mut lowered) = lower_system(&system, &packages) {
+                embed_catalog_hashes(&mut lowered, &packages, &catalog_scope(&packages, hash_std));
                 write_system_emits(out_dir, &lowered, emits, &mut diagnostics)?;
             }
         }
@@ -1200,6 +1210,65 @@ fn render_lib_rs(package_names: &[String]) -> String {
     let mut out = format!("{LIB_RS_MARKER}\n\n");
     render(&root, 0, &mut out);
     out
+}
+
+/// Lowers the workspace's system (rsdl reference §13) and embeds in each region
+/// the catalog hash of its catalog. The hash is an input to the rsdl lowering,
+/// which leaves it empty, so the driver fills it in.
+///
+/// The hash is `ridl_ir::catalog_hash::catalog_hash` over the region's package
+/// and [`catalog_scope`], the same packages [`run_build`] gives
+/// `ridl_descriptor::lower` for `--emit catalog`, so each region carries the
+/// hash the catalog's descriptor carries (driftsys/ridl#367).
+///
+/// `packages` is every checked package of the workspace and `std_ir` the
+/// lowered `ridl.std`. `None` when [`lower_system`] is.
+pub fn lower_workspace_system(
+    system: &CheckedSystem,
+    packages: &[&ridl_ir::v2::Package],
+    std_ir: &ridl_ir::v2::Package,
+) -> Option<ridl_ir::v2::System> {
+    let mut lowered = lower_system(system, packages)?;
+    let others = catalog_scope(packages, references_std(packages).then_some(std_ir));
+    embed_catalog_hashes(&mut lowered, packages, &others);
+    Some(lowered)
+}
+
+/// Sets each region's hash of `lowered` to the catalog hash of its package,
+/// computed over `others`, which [`catalog_scope`] builds.
+fn embed_catalog_hashes(
+    lowered: &mut ridl_ir::v2::System,
+    packages: &[&ridl_ir::v2::Package],
+    others: &[&ridl_ir::v2::Package],
+) {
+    for region in &mut lowered.regions {
+        let package = packages
+            .iter()
+            .find(|package| package.name == region.catalog)
+            .expect("a region's catalog is a package of the workspace");
+        region.hash = ridl_ir::catalog_hash::catalog_hash(package, others).to_vec();
+    }
+}
+
+/// Whether any package of the workspace names a declaration of `ridl.std`.
+/// When it does, `ridl.std` is part of the build's [`catalog_scope`].
+fn references_std(packages: &[&ridl_ir::v2::Package]) -> bool {
+    packages
+        .iter()
+        .any(|package| ridl_ir::v2::referenced_packages(package).contains("ridl.std"))
+}
+
+/// The packages a package of the build is resolved against when the build
+/// writes it: every checked package of the workspace, then `ridl.std` when
+/// it is given. A backend and the catalog descriptor read it as `others`, and
+/// the catalog hash is computed over it. The descriptor's hash and a region's
+/// hash are computed over the same set of packages. The order of the list does
+/// not change the hash, which keys every declaration by its qualified name.
+fn catalog_scope<'a>(
+    packages: &[&'a ridl_ir::v2::Package],
+    std_ir: Option<&'a ridl_ir::v2::Package>,
+) -> Vec<&'a ridl_ir::v2::Package> {
+    packages.iter().copied().chain(std_ir).collect()
 }
 
 /// Whether `diagnostic` stops [`run_build`] writing any artifact: every error

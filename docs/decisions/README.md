@@ -266,11 +266,11 @@ other entry below is Accepted.
   written by the three IR dump emits. Also which facts of rsdl §13 the IR states
   and which it does not (`tier` and `deprecated` are not lowered; producers are
   stated once for the closure; a `reserved` tombstone has no route; the catalog
-  hash is not carried until story E6.17), that `ridl build` writes every
-  artifact when the only errors are RSDL-7xx and still exits 1, and that
-  `ridl diff` lists system changes under two headings with no verdict and only
-  when both sides are source trees. Binds the IR every later consumer reads, the
-  `ridl build` contract, and `ridl diff`.
+  hash is embedded by the driver, never computed by the lowering, since story
+  E6.17), that `ridl build` writes every artifact when the only errors are
+  RSDL-7xx and still exits 1, and that `ridl diff` lists system changes under
+  two headings with no verdict and only when both sides are source trees. Binds
+  the IR every later consumer reads, the `ridl build` contract, and `ridl diff`.
 
 - **ADR-0023 — The generated interaction face: entry point, clause translator,
   and call signatures.** Six decisions: four taken while implementing story

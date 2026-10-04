@@ -74,8 +74,7 @@ use ridl_core::diag::{
 use ridl_core::package::Package;
 use ridl_core::{RidlDatabase, load_workspace, parse_file, std_package};
 use ridl_sem::{
-    CheckedWorkspace, check_package, check_workspace, lower_system, resolve_package,
-    unclaimed_backend_keys,
+    CheckedWorkspace, check_package, check_workspace, resolve_package, unclaimed_backend_keys,
 };
 
 mod support;
@@ -267,14 +266,16 @@ fn compile_entry(entry: &Path) -> Compiled {
             .join("\n\n");
         (ir, rust, typescript, codegen)
     };
-    // The lowered system, read from the same package IR the pipeline built
-    // (rsdl reference §13). An entry with an error diagnostic gets none, for
-    // the reason the IR and code artifacts above get none.
+    // The lowered system with its catalog hashes, read from the same package
+    // IR the pipeline built (rsdl reference §13, `ridlc::run_build`). An entry
+    // with an error diagnostic gets none, for the reason the IR and code
+    // artifacts above get none.
     let system_json = if has_errors {
         None
     } else {
         let irs: Vec<&ridl_ir::v2::Package> = checked_irs.iter().map(|(_, ir)| ir).collect();
-        lower_system(&system, &irs).map(|lowered| {
+        let std_ir = check_package(&db, workspace, std, std).ir;
+        ridlc::lower_workspace_system(&system, &irs, &std_ir).map(|lowered| {
             ridl_ir::v2::system_to_json_pretty(&lowered)
                 .expect("a clean entry's system serializes as IR JSON")
         })

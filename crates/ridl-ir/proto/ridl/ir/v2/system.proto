@@ -15,10 +15,9 @@ syntax = "proto3";
 // `.system.binpb` (ADR-0014 decision 4), written by the same `--emit` value
 // that writes the package IR in that encoding.
 //
-// Every fact of rsdl §13 has a field here except the catalog hash per region,
-// which story E6.17 adds once ridl can compute it (ADR-0022 decision 7), and
-// nothing else does. The closure-level facts are stated once rather than per
-// deployment:
+// Every fact of rsdl §13 has a field here, the catalog hash per region
+// included (story E6.17, ADR-0022 decision 7), and nothing else does. The
+// closure-level facts are stated once rather than per deployment:
 //
 //   closure     components with their lines, the system's member lines,
 //               producers, the permission list, the region map,
@@ -188,6 +187,11 @@ message Region {
   // The interfaces of this catalog that closure services list, in interface
   // number order.
   repeated RegionInterface interfaces = 2;
+  // The catalog hash, as received from ridl (rsdl §13): 32 bytes, computed
+  // over the catalog's interfaces, their numbers and every type they reach,
+  // equal to the hash in the catalog's descriptor. The rsdl lowering leaves it
+  // empty and never computes it; the driver (`ridlc`) embeds it.
+  bytes hash = 3;
 }
 
 // One interface of a region, with the identity the routing key uses.

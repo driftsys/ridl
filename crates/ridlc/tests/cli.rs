@@ -764,6 +764,113 @@ fn build_ir_emits_write_the_lowered_system() {
     assert!(system_artifacts(rust_out.path()).is_empty());
 }
 
+/// Builds `entry` with `--emit <emits>` into a fresh directory and returns the
+/// lowered system it writes as `<system>.system.json`, and the directory.
+fn build_system(entry: &Path, system: &str, emits: &str) -> (ridl_ir::v2::System, TempDir) {
+    let out = TempDir::new("system-hash-out");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        entry.as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        emits.as_ref(),
+    ]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    let json = std::fs::read_to_string(out.path().join(format!("{system}.system.json")))
+        .expect("the system is written");
+    let system = ridl_ir::v2::system_from_json(&json).expect("the JSON artifact parses");
+    (system, out)
+}
+
+/// The catalog hash in the catalog descriptor `<catalog>.catalog.binfb` that
+/// a build wrote into `out`.
+fn descriptor_hash(out: &Path, catalog: &str) -> Vec<u8> {
+    let bytes = std::fs::read(out.join(format!("{catalog}{}", ridl_descriptor::FILE_SUFFIX)))
+        .expect("the catalog descriptor is written");
+    let descriptor = ridl_descriptor::verify(&bytes).expect("the descriptor verifies");
+    descriptor.hash().expect("the hash reads").to_vec()
+}
+
+/// rsdl reference §13 and roadmap E6.17 (driftsys/ridl#367): each region of
+/// the lowered system carries the catalog hash of its catalog, 32 bytes, equal
+/// to the hash in the catalog descriptor the same build writes. The build
+/// writes the same system `compile_workspace` returns.
+#[test]
+fn each_region_carries_its_catalog_hash() {
+    let entry = Path::new("tests/corpus/rsdl-appendix-a");
+    let (written, out) = build_system(entry, "veh.topology.Vehicle", "ir-json,catalog");
+    let catalogs: Vec<&str> = written
+        .regions
+        .iter()
+        .map(|region| region.catalog.as_str())
+        .collect();
+    assert_eq!(catalogs, ["veh.adas", "veh.diag"]);
+    for region in &written.regions {
+        assert_eq!(region.hash.len(), 32, "`{}`", region.catalog);
+        assert_eq!(
+            region.hash,
+            descriptor_hash(out.path(), &region.catalog),
+            "`{}`",
+            region.catalog
+        );
+    }
+    assert_ne!(written.regions[0].hash, written.regions[1].hash);
+
+    let mut db = ridl_core::RidlDatabase::default();
+    let output = ridlc::compile_workspace(&mut db, entry).expect("the corpus entry loads");
+    assert_eq!(output.system.expect("Appendix A lowers"), written);
+}
+
+/// A region whose catalog reaches a `ridl.std` type: the region hash is the
+/// descriptor's, which covers that type, and a build that emits only the IR
+/// (no code emit, so only the system write checks `ridl.std`) writes the same
+/// hash.
+#[test]
+fn a_region_hash_covers_the_standard_types_its_catalog_reaches() {
+    let dir = TempDir::new("system-hash-std");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"veh.demo\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "lane.ridl",
+        "package veh.demo\n\n\
+         interface LaneAssist {\n  command choose(id: Uuid) @[..50ms]\n}\n\n\
+         service veh.demo.lane : LaneAssist\n",
+    );
+    dir.write(
+        "topology.rsdl",
+        "package veh.demo\n\n\
+         component Lane { offers veh.demo.lane }\n\
+         component Panel { requires LaneAssist }\n\
+         system Vehicle { Lane, Panel }\n\
+         deployment Good for Vehicle { machine A { Lane, Panel } }\n",
+    );
+
+    let (with_catalog, out) = build_system(dir.path(), "veh.demo.Vehicle", "ir-json,catalog");
+    let [region] = with_catalog.regions.as_slice() else {
+        panic!("one region, got {:?}", with_catalog.regions);
+    };
+    assert_eq!(region.catalog, "veh.demo");
+    assert_eq!(region.hash, descriptor_hash(out.path(), "veh.demo"));
+
+    let (ir_only, _out) = build_system(dir.path(), "veh.demo.Vehicle", "ir-json");
+    assert_eq!(ir_only.regions[0].hash, region.hash);
+
+    let mut db = ridl_core::RidlDatabase::default();
+    let output = ridlc::compile_workspace(&mut db, dir.path()).expect("the workspace loads");
+    assert_eq!(output.system.expect("the system lowers"), with_catalog);
+
+    // Without `ridl.std` the hash would differ, so the test above pins it.
+    let package = &output.checked[0].ir;
+    assert_ne!(
+        region.hash,
+        ridl_ir::catalog_hash::catalog_hash(package, &[]).to_vec(),
+        "LaneAssist reaches ridl.std.Uuid"
+    );
+}
+
 /// A package holding a contract and a topology whose deployment `Bad` leaves
 /// `Panel` unplaced (RSDL-701), or, with `closure` replacing the system line,
 /// a closure error.

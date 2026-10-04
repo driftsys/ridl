@@ -188,16 +188,18 @@ Two conventions worth keeping, both learned from the earlier reconciliation:
 
 **The lock is first.** Epic 15 records each interface's number in its package,
 so an interface's identity stops depending on where its declaration sits. Three
-scheduled pieces of work wait on it: the catalog hash of Epic 16, which covers
+scheduled pieces of work waited on it: the catalog hash of Epic 16, which covers
 every number and its provisional flag; E6.17, which embeds that hash in each
-region; and E14.2, because the lock retires three diagnostics and amends
-ADR-0015, which the ridl open questions cite. Anything that writes a hash or a
-golden file before the lock lands would be written twice.
+region and landed on 2026-10-04; and E14.2, because the lock retires three
+diagnostics and amends ADR-0015, which the ridl open questions cite. Anything
+that writes a hash or a golden file before the lock lands would be written
+twice.
 
 **rsdl is finalized beside it.** The language is rewritten around the
 topology-vocabulary note's nouns and lowered to the IR the way ridl is, and its
-specification is the rsdl reference v0.2.0. Only E6.17 waits for the lock and
-for the catalog descriptor; the rest of Epic 6 runs beside them.
+specification is the rsdl reference v0.2.0. Only E6.17 waited for the lock and
+for the catalog descriptor, and it landed on 2026-10-04; the rest of Epic 6 ran
+beside them.
 
 **The runtime library ran beside both, and its story has landed.** `ridl-rt` —
 identity, the envelope, provenance, freshness and the sample, the payload
@@ -215,7 +217,7 @@ shape of ADR-0017 and ADR-0019, written when the backend is.
 **Sequence.**
 
 ```text
-E15 the lock ─┬─→ E16 the catalog descriptor ─→ E6.17 the catalog hash per region
+E15 the lock ─┬─→ E16 the catalog descriptor ─→ E6.17 the catalog hash per region, landed
               └─→ E14.2 ridl §17 dispositions ─┐
                                                │
 E14.1 typl §17 dispositions ───────────────────┼─→ E14.3 both references
@@ -225,7 +227,7 @@ E14.1 · E10, the typl debt ─→ Rust codegen finalized
       ─→ E11.7 FlatBuffers ─→ E4.5a IR stability ─→ E4.5b plugin protocol
                                                  ─→ E11.8 proto3 · E11.12 repr(C)
 
-E6 rsdl finalized and lowered to the IR — beside the lock; only E6.17 waits
+E6 rsdl finalized and lowered to the IR — beside the lock; E6.17 last, landed
 E11.0 ridl-rt, landed ─┬─→ E11.1 frame spec ─→ E11.9 ridl-transport-ws
                        └─→ E11.15 ridl-loopback — no frame, no socket
 E11.13 interaction face MVP — deliberately out of sequence, before E11.1 and E11.9
@@ -378,8 +380,12 @@ registries and are no longer legal identifiers in any profile.
 
 **The catalog hash is received, not computed.** The lowering embeds each
 catalog's hash (rsdl §13); Epic 16 computes it, after Epic 15 has given every
-interface its number. E6.16 lowers every other fact and E6.17 adds the hash once
-both have landed.
+interface its number. E6.16 lowers every other fact, and E6.17 adds the hash.
+
+**E6.17 landed on 2026-10-04** (driftsys/ridl#367). `Region` carries
+`bytes hash = 3`; `ridlc` embeds in each region the hash the catalog descriptor
+writes for that catalog, and the rsdl lowering leaves the field empty
+([ADR-0022](decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 7).
 
 | ID    | Story                                                                                                                                                                                                                                                                                                                      | Done when                                                                                                             | Size |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---- |
