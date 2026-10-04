@@ -302,6 +302,42 @@ pub struct Packages<'a> {
     pub others: &'a [&'a v2::Package],
 }
 
+impl<'a> Packages<'a> {
+    /// A same-package bare `Name` or a cross-package fully qualified
+    /// `pkg.Name`, resolved to its declaration and the package that holds it —
+    /// the package a bare reference *inside* that declaration then resolves
+    /// against. `home` is the package the reference was written in. The
+    /// projection resolves every name through this, and so does
+    /// `ridl-descriptor`, so the two agree on which names resolve;
+    /// `codegen::resolve::Scope::resolve` and
+    /// `ridl-backend-flatbuffers`'s `resolve_reference` are still separate
+    /// walks. The backend's takes no home, and it looks up a qualified name
+    /// only in the other packages.
+    pub fn resolve(
+        self,
+        home: &'a v2::Package,
+        reference: &str,
+    ) -> Option<(&'a v2::Decl, &'a v2::Package)> {
+        match reference.rsplit_once('.') {
+            Some((referenced_package, member)) => std::iter::once(self.package)
+                .chain(self.others.iter().copied())
+                .find(|candidate| candidate.name == referenced_package)
+                .and_then(|candidate| {
+                    candidate
+                        .decls
+                        .iter()
+                        .find(|decl| decl.name == member)
+                        .map(|decl| (decl, candidate))
+                }),
+            None => home
+                .decls
+                .iter()
+                .find(|decl| decl.name == reference)
+                .map(|decl| (decl, home)),
+        }
+    }
+}
+
 /// Which table a declaration is rooted in, or `None` when it projects no type
 /// at all (ADR-0019 decision 8).
 ///
@@ -500,34 +536,6 @@ struct Sizer<'a> {
 }
 
 impl<'a> Sizer<'a> {
-    /// A same-package bare `Name` or a cross-package fully qualified
-    /// `pkg.Name`, resolved to its declaration and the package that holds it —
-    /// the package a bare reference *inside* that declaration then resolves
-    /// against.
-    fn resolve(
-        &self,
-        home: &'a v2::Package,
-        reference: &str,
-    ) -> Option<(&'a v2::Decl, &'a v2::Package)> {
-        match reference.rsplit_once('.') {
-            Some((referenced_package, member)) => std::iter::once(self.packages.package)
-                .chain(self.packages.others.iter().copied())
-                .find(|candidate| candidate.name == referenced_package)
-                .and_then(|candidate| {
-                    candidate
-                        .decls
-                        .iter()
-                        .find(|decl| decl.name == member)
-                        .map(|decl| (decl, candidate))
-                }),
-            None => home
-                .decls
-                .iter()
-                .find(|decl| decl.name == reference)
-                .map(|decl| (decl, home)),
-        }
-    }
-
     /// The bound of the named composite `key`: the one already derived if
     /// there is one, `None` when `key` is already on the visiting stack — a
     /// composite that reaches itself — and otherwise whatever `body` derives,
@@ -617,7 +625,7 @@ impl<'a> Sizer<'a> {
     /// referenced table itself; anything else is isolated in a box table
     /// (ADR-0019 decision 2) and pays that table too.
     fn union_arm_bound(&mut self, home: &'a v2::Package, arm: &v2::UnionArm) -> Option<u64> {
-        let (decl, declaring) = self.resolve(home, &arm.type_ref)?;
+        let (decl, declaring) = self.packages.resolve(home, &arm.type_ref)?;
         match &decl.kind {
             Some(v2::decl::Kind::StructDef(def)) => {
                 self.struct_table_bound(declaring, &decl.name, def)
@@ -734,7 +742,7 @@ impl<'a> Sizer<'a> {
     }
 
     fn named_charge(&mut self, home: &'a v2::Package, reference: &str) -> Option<Charge> {
-        let (decl, declaring) = self.resolve(home, reference)?;
+        let (decl, declaring) = self.packages.resolve(home, reference)?;
         match &decl.kind {
             Some(v2::decl::Kind::TypeDef(td)) => self.scalar_charge(td),
             Some(v2::decl::Kind::StructDef(def)) => Some(Charge {

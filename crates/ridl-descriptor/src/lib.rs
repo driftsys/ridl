@@ -11,6 +11,7 @@
 pub mod generated;
 pub mod hash;
 pub mod number;
+pub mod size;
 
 use planus::ReadAsRoot;
 

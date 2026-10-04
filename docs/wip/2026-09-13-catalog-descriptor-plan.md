@@ -121,6 +121,27 @@ decision 15 is current where Task 4 differs from it. Stage D6 also emits the
 port's catalog check in the Rust backend's generated constructors, outside Tasks
 8 and 9 (driver §3 D6).
 
+Stage D4 (PR #681, 2026-10-04) implemented Task 5 with an interface this plan
+now shows as built, and Tasks 6 and 7 code against it: `Ctx::resolve` takes the
+home package and returns the declaration with its declaring package, through
+`ridl_ir::projection::flatbuffers::Packages::resolve`, made public so that the
+two columns share one name rule; `Ctx::packages_for(declaring)` gives the
+`Packages` rooted at a declaring package, which Task 7 hands `max_size` for a
+declaration from an imported package; `leaf_of_name` and `leaf_of_field_type`
+take the home package, and the composite leaves (`Struct`, `Union`, `Tuple`,
+`Array`, `Map`) are struct variants that carry the package their inner names
+resolve against; `string_max_bytes` returns `Option<u64>`, `None` without a
+`len_max`, and a bare or unbounded `string` or `bytes` has no leaf, so for an
+unbounded `string` or `bytes` the leaf model answers `None` wherever `max_size`
+does for the same shape (it does not elsewhere: an unspecified integer or float
+width, `EnumSet(Unspecified)`, and a `string` or `bytes` whose bound exceeds the
+projection's `MAX_ENCODABLE` have a leaf while `max_size` answers `None`); a
+named scalar is projected by its width first, as the backends do; an integer or
+float backing without a width is a bounded `Scalar` of unspecified width, where
+`proto_scalar` gives `string` and `scalar_charge` gives `None`; a unit backing
+without a width has no leaf. The proto3 and FlatBuffers placeholders panic until
+Tasks 6 and 7 replace them.
+
 Changes the review of PR #667 added (pass 1, 2026-10-03):
 
 - The golden-hash test numbers the corpus snapshot's shapes (1.., provisional)
@@ -327,13 +348,13 @@ pub fn reachable_decls<'a>(package: &'a Package, others: &[&'a Package]) -> BTre
 pub fn reduced_package(package: &Package, others: &[&Package]) -> Package;
 pub fn catalog_hash(package: &Package, others: &[&Package]) -> [u8; 32];
 // ridl_descriptor::size
-pub struct Ctx<'a> { /* private: wraps ridl_ir::projection::flatbuffers::Packages<'a> */ }
-impl<'a> Ctx<'a> { pub fn new(package: &'a Package, others: &'a [&'a Package]) -> Self; pub fn resolve(&self, name: &str) -> Option<&'a Decl>; pub fn packages(&self) -> Packages<'a>; }
+pub struct Ctx<'a> { /* private: wraps the root `Packages<'a>` and the per-package views `packages_for` hands out */ }
+impl<'a> Ctx<'a> { pub fn new(package: &'a Package, others: &'a [&'a Package]) -> Self; pub fn resolve(&self, home: &'a Package, name: &str) -> Option<(&'a Decl, &'a Package)>; pub fn packages(&self) -> Packages<'a>; pub fn packages_for(&self, declaring: &Package) -> Option<Packages<'_>>; }
 pub enum PayloadShape<'a> { Named(&'a str), Field(&'a FieldType), Params(&'a [Param]), Return(&'a ReturnType) }
 pub fn named_payload<'a>(shape: &PayloadShape<'a>) -> Option<&'a str>;
 pub enum SizeState { Bounded(u32), Unbounded(UnboundedCause) }
 pub fn size_state(type_name: &str, ctx: &Ctx<'_>, encoding: Encoding) -> Option<SizeState>;
-pub fn string_max_bytes(constraint: Option<&Constraint>) -> u64;
+pub fn string_max_bytes(constraint: Option<&Constraint>) -> Option<u64>;
 // ridl_descriptor::lower
 pub enum LowerError { ZeroNumber(String) }
 pub fn lower(package: &Package, others: &[&Package]) -> Result<Vec<u8>, LowerError>;
@@ -1806,7 +1827,8 @@ projection's `Packages`; a payload is sized only when it is one named type
   `backing::Kind`, `type_def::Width`, and
   `ridl_ir::projection::flatbuffers::Packages`
   (`crates/ridl-ir/src/projection/flatbuffers.rs:300`, two public fields).
-- Produces: `pub struct Ctx<'a>` with `new`, `resolve` and `packages`;
+- Produces: `pub struct Ctx<'a>` with `new`, `resolve`, `packages` and
+  `packages_for`;
   `pub enum PayloadShape<'a>`; `pub fn named_payload`; `pub enum SizeState`;
   `pub fn size_state`; `pub fn string_max_bytes`; and, `pub(crate)`, the
   shared leaf model `Scalar`, `Leaf`, `leaf_of_field_type`, `leaf_of_name`,
@@ -1836,10 +1858,10 @@ mod tests {
 
     #[test]
     fn a_string_counts_four_bytes_per_scalar_value_whatever_its_pattern() {
-        assert_eq!(string_max_bytes(None), 1024);
-        assert_eq!(string_max_bytes(Some(&constraint(Some(17), None))), 68);
+        assert_eq!(string_max_bytes(None), None);
+        assert_eq!(string_max_bytes(Some(&constraint(Some(17), None))), Some(68));
         // No `match` narrowing in E16 (driver §4 answer 7; driftsys/ridl#665).
-        assert_eq!(string_max_bytes(Some(&constraint(Some(17), Some("^[A-Z0-9]{17}$")))), 68);
+        assert_eq!(string_max_bytes(Some(&constraint(Some(17), Some("^[A-Z0-9]{17}$")))), Some(68));
     }
 
     #[test]
@@ -1883,8 +1905,10 @@ mod tests {
             Some(Leaf::Scalar(s)) => assert_eq!(s.proto_max(), 10),
             other => panic!("integer is a scalar leaf, got {other:?}"),
         }
-        assert!(matches!(leaf_of_primitive(PrimitiveType::String as i32), Some(Leaf::Blob(1024))));
-        assert!(matches!(leaf_of_primitive(PrimitiveType::Bytes as i32), Some(Leaf::Blob(256))));
+        // A bare `string` or `bytes` has no bound, so no leaf (the projection
+        // answers `None` for the type that holds one).
+        assert!(leaf_of_primitive(PrimitiveType::String as i32).is_none());
+        assert!(leaf_of_primitive(PrimitiveType::Bytes as i32).is_none());
     }
 
     #[test]
@@ -1925,8 +1949,6 @@ Module body above the tests:
 pub(crate) mod flatbuffers;
 pub(crate) mod proto3;
 
-use std::collections::BTreeMap;
-
 use ridl_ir::projection::flatbuffers::Packages;
 use ridl_ir::v2::{
     backing, decl, field_type, return_type, type_def, ArrayType, Constraint, Decl, FieldType,
@@ -1940,32 +1962,49 @@ use crate::{Encoding, UnboundedCause};
 /// projection's view of the same scope.
 pub struct Ctx<'a> {
     packages: Packages<'a>,
-    index: BTreeMap<String, &'a Decl>,
+    /// Every package of the scope, the root first, then `others` in order.
+    scope: Vec<&'a Package>,
+    /// For each package of `scope`, at the same position, the packages
+    /// beside it: what `packages_for` roots a `Packages` with.
+    others_of: Vec<Vec<&'a Package>>,
 }
 
 impl<'a> Ctx<'a> {
     pub fn new(package: &'a Package, others: &'a [&'a Package]) -> Self {
-        let mut index = BTreeMap::new();
-        for decl in &package.decls {
-            index.insert(decl.name.clone(), decl);
-        }
-        for other in others {
-            for decl in &other.decls {
-                index.insert(format!("{}.{}", other.name, decl.name), decl);
-            }
-        }
-        Self { packages: Packages { package, others }, index }
+        let scope: Vec<&'a Package> = std::iter::once(package).chain(others.iter().copied()).collect();
+        let others_of = scope
+            .iter()
+            .map(|home| scope.iter().copied().filter(|candidate| candidate.name != home.name).collect())
+            .collect();
+        Self { packages: Packages { package, others }, scope, others_of }
     }
 
-    /// The declaration a canonical name refers to: bare for this package,
-    /// `pkg.Name` for another.
-    pub fn resolve(&self, name: &str) -> Option<&'a Decl> {
-        self.index.get(name).copied()
+    /// The declaration `name` refers to, read from `home`, and the package
+    /// that declares it — the package a bare name inside that declaration
+    /// then resolves against. This is the projection's own name rule
+    /// (`Packages::resolve`, public since stage D4): a bare `Name` is looked
+    /// up in `home`, a `pkg.Name` in the package called `pkg`, whichever
+    /// package that is.
+    pub fn resolve(&self, home: &'a Package, name: &str) -> Option<(&'a Decl, &'a Package)> {
+        self.packages.resolve(home, name)
     }
 
-    /// The projection's view of the scope, for `max_size`.
+    /// The projection's view of the scope, rooted at the package the catalog
+    /// is built for: the home of a payload's type name.
     pub fn packages(&self) -> Packages<'a> {
         self.packages
+    }
+
+    /// The projection's view of the scope rooted at `declaring`, the package
+    /// `resolve` returned a declaration with. `max_size` resolves a bare name
+    /// inside a declaration against the `package` of the `Packages` it is
+    /// given, so a declaration from an imported package is sized with this,
+    /// not with `packages()` — the way the codegen lowering roots its bound
+    /// (`Lowering::payload` in `ridl-ir`). `None` when `declaring` is not a
+    /// package of this scope.
+    pub fn packages_for(&self, declaring: &Package) -> Option<Packages<'_>> {
+        let position = self.scope.iter().position(|candidate| candidate.name == declaring.name)?;
+        Some(Packages { package: self.scope[position], others: &self.others_of[position] })
     }
 }
 
@@ -2022,11 +2061,15 @@ pub fn size_state(type_name: &str, ctx: &Ctx<'_>, encoding: Encoding) -> Option<
     }
 }
 
-/// The byte capacity of a `string`: the bound in scalar values (default 256,
-/// typl §4.4) times four (design note §3.11; the FlatBuffers projection
-/// charges the same). No `match` narrowing (driver §4 answer 7; #665).
-pub fn string_max_bytes(constraint: Option<&Constraint>) -> u64 {
-    constraint.and_then(|c| c.len_max).unwrap_or(256).saturating_mul(4)
+/// The byte capacity of a `string`: its bound in scalar values times four
+/// (release-scope design §3.11). `None` when the constraint carries no
+/// `len_max`: the FlatBuffers projection answers `None` for a whole type that
+/// holds a string without a bound, and this function agrees with it on both
+/// the multiplier and the absence. The compiler writes typl §4.4's `[0..256]`
+/// default into `len_max`, so a compiled package never reaches the `None`.
+/// No `match` narrowing (driver §4 answer 7; #665).
+pub fn string_max_bytes(constraint: Option<&Constraint>) -> Option<u64> {
+    constraint?.len_max?.checked_mul(4)
 }
 
 /// A scalar as the proto3 projection spells it (`proto_scalar` in the proto
@@ -2053,40 +2096,49 @@ impl Scalar {
     }
 }
 
-/// A type resolved to what the projections size.
+/// A type resolved to what the projections size. A composite carries `home`,
+/// the package a bare name inside it resolves against: the declaring package
+/// of a named struct or union, the package of the field for an inline tuple,
+/// array or map.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Leaf<'a> {
     Scalar(Scalar),
-    /// A string or bytes value: its maximum byte length.
+    /// A string or bytes value: its maximum byte length. The leaf model
+    /// counts in `u64`, as the projection does; the descriptor's sizes are
+    /// `u32` (driver §4 answer 5), and Tasks 6 and 7 narrow the value when
+    /// they write a row.
     Blob(u64),
     /// An enum: whether a member is negative, and the largest magnitude.
     Enum { negative: bool, max_magnitude: u64 },
     EnumSet(IntWidth),
-    Struct(&'a StructDef),
-    Union(&'a UnionDef),
-    Tuple(&'a TupleType),
-    Array(&'a ArrayType),
-    Map(&'a MapType),
+    Struct { def: &'a StructDef, home: &'a Package },
+    Union { def: &'a UnionDef, home: &'a Package },
+    Tuple { def: &'a TupleType, home: &'a Package },
+    Array { def: &'a ArrayType, home: &'a Package },
+    Map { def: &'a MapType, home: &'a Package },
 }
 
-pub(crate) fn leaf_of_field_type<'a>(ty: &'a FieldType, ctx: &Ctx<'a>) -> Option<Leaf<'a>> {
+/// The leaf of a field type written in `home`.
+pub(crate) fn leaf_of_field_type<'a>(ty: &'a FieldType, home: &'a Package, ctx: &Ctx<'a>) -> Option<Leaf<'a>> {
     match ty.kind.as_ref()? {
-        field_type::Kind::Named(name) => leaf_of_name(name, ctx),
+        field_type::Kind::Named(name) => leaf_of_name(name, home, ctx),
         field_type::Kind::Primitive(primitive) => leaf_of_primitive(*primitive),
         field_type::Kind::InlineScalar(def) => leaf_of_type_def(def),
-        field_type::Kind::Tuple(tuple) => Some(Leaf::Tuple(tuple)),
-        field_type::Kind::Array(array) => Some(Leaf::Array(array)),
-        field_type::Kind::Map(map) => Some(Leaf::Map(map)),
+        field_type::Kind::Tuple(def) => Some(Leaf::Tuple { def, home }),
+        field_type::Kind::Array(def) => Some(Leaf::Array { def, home }),
+        field_type::Kind::Map(def) => Some(Leaf::Map { def, home }),
         // A stream has absent sizes (driver §4 answer 10).
         field_type::Kind::Stream(_) => None,
     }
 }
 
-pub(crate) fn leaf_of_name<'a>(name: &str, ctx: &Ctx<'a>) -> Option<Leaf<'a>> {
-    match ctx.resolve(name)?.kind.as_ref()? {
+/// The leaf of a name written in `home`.
+pub(crate) fn leaf_of_name<'a>(name: &str, home: &'a Package, ctx: &Ctx<'a>) -> Option<Leaf<'a>> {
+    let (decl, declaring) = ctx.resolve(home, name)?;
+    match decl.kind.as_ref()? {
         decl::Kind::TypeDef(def) => leaf_of_type_def(def),
-        decl::Kind::StructDef(def) => Some(Leaf::Struct(def)),
-        decl::Kind::UnionDef(def) => Some(Leaf::Union(def)),
+        decl::Kind::StructDef(def) => Some(Leaf::Struct { def, home: declaring }),
+        decl::Kind::UnionDef(def) => Some(Leaf::Union { def, home: declaring }),
         decl::Kind::EnumDef(def) => Some(Leaf::Enum {
             negative: def.values.iter().any(|v| v.value < 0),
             max_magnitude: def.values.iter().map(|v| v.value.unsigned_abs()).max().unwrap_or(0),
@@ -2104,60 +2156,74 @@ pub(crate) fn leaf_of_name<'a>(name: &str, ctx: &Ctx<'a>) -> Option<Leaf<'a>> {
     }
 }
 
+/// A bare primitive at a field position. A bare `string` or `bytes` carries
+/// no length bound, and the FlatBuffers projection answers `None` for a whole
+/// type that holds one, so neither has a leaf. The compiler keeps both out of
+/// a field position (TYPL-208); a map key gets typl §4.4–§4.5's `[0..256]`
+/// default as an inline scalar, which `leaf_of_type_def` sizes.
 pub(crate) fn leaf_of_primitive<'a>(primitive: i32) -> Option<Leaf<'a>> {
     match PrimitiveType::try_from(primitive).ok()? {
         PrimitiveType::Boolean => Some(Leaf::Scalar(Scalar::Bool)),
         PrimitiveType::Integer => Some(Leaf::Scalar(Scalar::Int(IntWidth::Unspecified))),
         PrimitiveType::Float => Some(Leaf::Scalar(Scalar::Float(FloatWidth::Unspecified))),
-        PrimitiveType::String => Some(Leaf::Blob(256 * 4)),
-        PrimitiveType::Bytes => Some(Leaf::Blob(256)),
-        PrimitiveType::Unspecified => None,
+        PrimitiveType::String | PrimitiveType::Bytes | PrimitiveType::Unspecified => None,
     }
 }
 
+/// A named or inline scalar. The backends project it by its width when one
+/// is set (`proto_scalar` in the proto backend, `scalar_charge` in the
+/// FlatBuffers projection), and by its backing otherwise.
 fn leaf_of_type_def<'a>(def: &'a TypeDef) -> Option<Leaf<'a>> {
-    let int_width = match def.width {
-        Some(type_def::Width::IntWidth(w)) => IntWidth::try_from(w).unwrap_or(IntWidth::Unspecified),
-        _ => IntWidth::Unspecified,
+    let width = match def.width {
+        Some(type_def::Width::IntWidth(w)) => Some(Scalar::Int(IntWidth::try_from(w).unwrap_or(IntWidth::Unspecified))),
+        Some(type_def::Width::FloatWidth(w)) => Some(Scalar::Float(FloatWidth::try_from(w).unwrap_or(FloatWidth::Unspecified))),
+        None => None,
     };
-    let float_width = match def.width {
-        Some(type_def::Width::FloatWidth(w)) => FloatWidth::try_from(w).unwrap_or(FloatWidth::Unspecified),
-        _ => FloatWidth::Unspecified,
-    };
+    if let Some(scalar) = width {
+        return Some(Leaf::Scalar(scalar));
+    }
     match def.backing.as_ref()?.kind.as_ref()? {
         backing::Kind::Primitive(primitive) => match PrimitiveType::try_from(*primitive).ok()? {
             PrimitiveType::Boolean => Some(Leaf::Scalar(Scalar::Bool)),
-            PrimitiveType::Integer => Some(Leaf::Scalar(Scalar::Int(int_width))),
-            PrimitiveType::Float => Some(Leaf::Scalar(Scalar::Float(float_width))),
-            PrimitiveType::String => Some(Leaf::Blob(string_max_bytes(def.constraint.as_ref()))),
-            PrimitiveType::Bytes => {
-                Some(Leaf::Blob(def.constraint.as_ref().and_then(|c| c.len_max).unwrap_or(256)))
-            }
+            PrimitiveType::Integer => Some(Leaf::Scalar(Scalar::Int(IntWidth::Unspecified))),
+            PrimitiveType::Float => Some(Leaf::Scalar(Scalar::Float(FloatWidth::Unspecified))),
+            PrimitiveType::String => string_max_bytes(def.constraint.as_ref()).map(Leaf::Blob),
+            // Like a string, a `bytes` without a `len_max` is unsizable, as
+            // the FlatBuffers projection answers for the same type.
+            PrimitiveType::Bytes => def.constraint.as_ref()?.len_max.map(Leaf::Blob),
             PrimitiveType::Unspecified => None,
         },
-        // A unit-backed scalar carries its own width; the backends project it
-        // by that width, integer when an integer width is set, float otherwise.
-        backing::Kind::Unit(_) => Some(match def.width {
-            Some(type_def::Width::IntWidth(_)) => Leaf::Scalar(Scalar::Int(int_width)),
-            _ => Leaf::Scalar(Scalar::Float(float_width)),
-        }),
+        // A unit-backed scalar carries a derived width (typl §5.1), handled
+        // above. Without a width the proto backend falls back to `string`,
+        // which has no bound, so there is no leaf.
+        backing::Kind::Unit(_) => None,
     }
 }
 ```
 
 Create `crates/ridl-descriptor/src/size/proto3.rs` and
 `crates/ridl-descriptor/src/size/flatbuffers.rs` each holding a module doc
-line for now (`//! proto3 states — Task 6.` / `//! FlatBuffers states — Task
-7.`) plus a `state` that the `size_state` arms above compile against:
+that names the task that replaces it, plus a `state` that panics when reached,
+so a routing error in `size_state` fails a test instead of reading as an absent
+row. `proto3.rs`:
 
 ```rust
+//! proto3 states — a placeholder until Task 6 of the catalog descriptor plan
+//! (driftsys/ridl#380) replaces this body. It panics when reached, so a
+//! routing error in `size_state` fails a test instead of reading as an absent
+//! row.
+
 use super::{Ctx, SizeState};
 
-pub(crate) fn state(type_name: &str, ctx: &Ctx<'_>) -> Option<SizeState> {
-    let _ = (type_name, ctx);
-    None
+pub(crate) fn state(_type_name: &str, _ctx: &Ctx<'_>) -> Option<SizeState> {
+    unimplemented!(
+        "proto3 size states are Task 6 of the catalog descriptor plan (driftsys/ridl#380)"
+    )
 }
 ```
+
+`flatbuffers.rs` has the same shape, with Task 7 and the message
+`FlatBuffers size states are Task 7 of the catalog descriptor plan`.
 
 Tasks 6 and 7 replace these bodies; the `size_state` signature is what Task 8
 codes against, so it exists from here.
@@ -2166,7 +2232,7 @@ Add `pub mod size;` to `lib.rs`.
 
 - [ ] **Step 4: Run the tests**
 
-Run: `cargo test -p ridl-descriptor --locked size` Expected: 4 tests PASS.
+Run: `cargo test -p ridl-descriptor --locked size` Expected: 15 tests PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -2475,22 +2541,22 @@ fn delimited(number: u32, payload: u64) -> u64 {
 /// does not resolve, for a member the projection refuses, and for a bound
 /// above `u32::MAX`.
 pub(crate) fn state(type_name: &str, ctx: &Ctx<'_>) -> Option<SizeState> {
-    let bytes = match leaf_of_name(type_name, ctx)? {
-        Leaf::Struct(def) => struct_size(def, ctx, 0)?,
-        Leaf::Union(def) => union_size(def, ctx, 0)?,
+    let bytes = match leaf_of_name(type_name, ctx.packages().package, ctx)? {
+        Leaf::Struct { def, home } => struct_size(def, home, ctx, 0)?,
+        Leaf::Union { def, home } => union_size(def, home, ctx, 0)?,
         Leaf::Scalar(_)
         | Leaf::Blob(_)
         | Leaf::Enum { .. }
         | Leaf::EnumSet(_)
-        | Leaf::Tuple(_)
-        | Leaf::Array(_)
-        | Leaf::Map(_) => return None,
+        | Leaf::Tuple { .. }
+        | Leaf::Array { .. }
+        | Leaf::Map { .. } => return None,
     };
     Some(SizeState::Bounded(u32::try_from(bytes).ok()?))
 }
 
-fn field_size(number: u32, ty: &FieldType, ctx: &Ctx<'_>, depth: u32) -> Option<u64> {
-    leaf_field(number, leaf_of_field_type(ty, ctx)?, ctx, depth)
+fn field_size<'a>(number: u32, ty: &'a FieldType, home: &'a Package, ctx: &Ctx<'a>, depth: u32) -> Option<u64> {
+    leaf_field(number, leaf_of_field_type(ty, home, ctx)?, ctx, depth)
 }
 
 fn leaf_field(number: u32, leaf: Leaf<'_>, ctx: &Ctx<'_>, depth: u32) -> Option<u64> {
@@ -2504,48 +2570,48 @@ fn leaf_field(number: u32, leaf: Leaf<'_>, ctx: &Ctx<'_>, depth: u32) -> Option<
             tag_len(number) + if negative { 10 } else { varint_len(max_magnitude) }
         }
         Leaf::EnumSet(width) => tag_len(number) + Scalar::Int(width).proto_max(),
-        Leaf::Struct(def) => delimited(number, struct_size(def, ctx, depth + 1)?),
-        Leaf::Union(def) => delimited(number, union_size(def, ctx, depth + 1)?),
-        Leaf::Tuple(tuple) => delimited(number, tuple_size(tuple, ctx, depth + 1)?),
-        Leaf::Array(array) => array_field(number, array, ctx, depth + 1)?,
-        Leaf::Map(map) => map_field(number, map, ctx, depth + 1)?,
+        Leaf::Struct { def, home } => delimited(number, struct_size(def, home, ctx, depth + 1)?),
+        Leaf::Union { def, home } => delimited(number, union_size(def, home, ctx, depth + 1)?),
+        Leaf::Tuple { def, home } => delimited(number, tuple_size(def, home, ctx, depth + 1)?),
+        Leaf::Array { def, home } => array_field(number, def, home, ctx, depth + 1)?,
+        Leaf::Map { def, home } => map_field(number, def, home, ctx, depth + 1)?,
     })
 }
 
-fn struct_size(def: &StructDef, ctx: &Ctx<'_>, depth: u32) -> Option<u64> {
+fn struct_size<'a>(def: &'a StructDef, home: &'a Package, ctx: &Ctx<'a>, depth: u32) -> Option<u64> {
     def.members
         .iter()
         .map(|member| match &member.member {
-            Some(struct_member::Member::Field(field)) => field_size(field.ordinal, field.r#type.as_ref()?, ctx, depth),
+            Some(struct_member::Member::Field(field)) => field_size(field.ordinal, field.r#type.as_ref()?, home, ctx, depth),
             Some(struct_member::Member::Reserved(_)) | None => Some(0),
         })
         .sum()
 }
 
 /// The largest arm, as a field of the `oneof` at the arm's ordinal.
-fn union_size(def: &UnionDef, ctx: &Ctx<'_>, depth: u32) -> Option<u64> {
+fn union_size<'a>(def: &'a UnionDef, home: &'a Package, ctx: &Ctx<'a>, depth: u32) -> Option<u64> {
     let mut largest = 0;
     for arm in &def.arms {
-        largest = largest.max(leaf_field(arm.ordinal, leaf_of_name(&arm.type_ref, ctx)?, ctx, depth)?);
+        largest = largest.max(leaf_field(arm.ordinal, leaf_of_name(&arm.type_ref, home, ctx)?, ctx, depth)?);
     }
     Some(largest)
 }
 
 /// A tuple is an induced message with positional fields 1..n.
-fn tuple_size(tuple: &TupleType, ctx: &Ctx<'_>, depth: u32) -> Option<u64> {
+fn tuple_size<'a>(tuple: &'a TupleType, home: &'a Package, ctx: &Ctx<'a>, depth: u32) -> Option<u64> {
     tuple
         .fields
         .iter()
         .enumerate()
-        .map(|(i, f)| field_size(i as u32 + 1, f.r#type.as_ref()?, ctx, depth))
+        .map(|(i, f)| field_size(i as u32 + 1, f.r#type.as_ref()?, home, ctx, depth))
         .sum()
 }
 
 /// `repeated`: scalars are packed (one tag, one length, the values); every
 /// other element repeats tag and length. A nested array or map is refused
 /// by the projection (`resolve_field_type` in the proto backend).
-fn array_field(number: u32, array: &ArrayType, ctx: &Ctx<'_>, depth: u32) -> Option<u64> {
-    let element = leaf_of_field_type(array.element.as_ref()?, ctx)?;
+fn array_field<'a>(number: u32, array: &'a ArrayType, home: &'a Package, ctx: &Ctx<'a>, depth: u32) -> Option<u64> {
+    let element = leaf_of_field_type(array.element.as_ref()?, home, ctx)?;
     let n = array.max;
     Some(match element {
         Leaf::Scalar(s) => delimited(number, n.checked_mul(s.proto_max())?),
@@ -2553,14 +2619,14 @@ fn array_field(number: u32, array: &ArrayType, ctx: &Ctx<'_>, depth: u32) -> Opt
             delimited(number, n.checked_mul(if negative { 10 } else { varint_len(max_magnitude) })?)
         }
         Leaf::EnumSet(width) => delimited(number, n.checked_mul(Scalar::Int(width).proto_max())?),
-        Leaf::Array(_) | Leaf::Map(_) => return None,
+        Leaf::Array { .. } | Leaf::Map { .. } => return None,
         other => n.checked_mul(leaf_field(number, other, ctx, depth)?)?,
     })
 }
 
 /// `map<K, V>`: `max` entries, each a message with the key at 1 and the value at 2.
-fn map_field(number: u32, map: &MapType, ctx: &Ctx<'_>, depth: u32) -> Option<u64> {
-    let entry = field_size(1, map.key.as_ref()?, ctx, depth)? + field_size(2, map.value.as_ref()?, ctx, depth)?;
+fn map_field<'a>(number: u32, map: &'a MapType, home: &'a Package, ctx: &Ctx<'a>, depth: u32) -> Option<u64> {
+    let entry = field_size(1, map.key.as_ref()?, home, ctx, depth)? + field_size(2, map.value.as_ref()?, home, ctx, depth)?;
     map.max.checked_mul(delimited(number, entry))
 }
 ```
@@ -2604,7 +2670,8 @@ them, are gone; the projection's source and the codec record hold the charges.
 
 **Interfaces:**
 
-- Consumes: `Ctx::resolve`, `Ctx::packages()`, `SizeState` (Task 5);
+- Consumes: `Ctx::resolve`, `Ctx::packages()`, `Ctx::packages_for()`,
+  `SizeState` (Task 5);
   `ridl_ir::projection::flatbuffers::{max_size, root_table, MAX_ENCODABLE}`;
   `ridl_ir::codegen::v1::{FbUnbounded, FbUnboundedCause}`.
 - Produces:
@@ -2617,18 +2684,20 @@ them, are gone; the projection's source and the codec record hold the charges.
 
 The rule, from the projection's own contract:
 
-1. `ctx.resolve(type_name)` is `None`, or `root_table(decl)` is `None` (a
+1. `ctx.resolve(ctx.packages().package, type_name)` is `None`, or
+   `root_table(decl)` is `None` (a
    constant — ADR-0013 decision 5 — or an interaction: no FlatBuffers root)
    → absent.
-2. `max_size(ctx.packages(), decl)` is `Some(n)` → `Bounded(n as u32)`. The
+2. `max_size(ctx.packages_for(declaring)?, decl)` — the `Packages` rooted at
+   the declaring package `resolve` returned, so a bare name inside an imported
+   declaration resolves in its own package — is `Some(n)` → `Bounded(n as u32)`. The
    projection refuses any bound above `MAX_ENCODABLE`, which is `u32::MAX`, so
    the conversion cannot fail; `expect` it with that reason.
 3. `max_size` is `None` → `Unbounded(cause)`, where `cause` is
-   `fb_unbounded(declaring_package, decl).cause` mapped member by member onto
-   the schema's `UnboundedCause` (same members, same values; an unknown value
-   maps to `Unspecified`). `fb_unbounded` takes the declaring package: for a
-   canonical name with a `pkg.` prefix, find that package in
-   `ctx.packages().others` by name.
+   `fb_unbounded(declaring, decl).cause` mapped member by member onto the
+   schema's `UnboundedCause` (same members, same values; an unknown value
+   maps to `Unspecified`). `fb_unbounded` takes the declaring package, which
+   `ctx.resolve` returned with the declaration.
 
 The projection answers `None` for an unresolved reference, a cycle, a `u64`
 overflow and a bound above `MAX_ENCODABLE`; every one of them reaches the
@@ -2664,7 +2733,7 @@ mod tests {
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
         for name in ["Point", "Vin", "Coord", "Bag", "Shape"] {
-            let decl = ctx.resolve(name).unwrap();
+            let (decl, _) = ctx.resolve(&package, name).unwrap();
             let expected = max_size(Packages { package: &package, others: &[] }, decl)
                 .unwrap_or_else(|| panic!("{name} is bounded in the fixture"));
             assert_eq!(
@@ -2754,34 +2823,22 @@ tests:
 use ridl_ir::codegen::fb_unbounded;
 use ridl_ir::codegen::v1::FbUnboundedCause;
 use ridl_ir::projection::flatbuffers::{max_size, root_table, MAX_ENCODABLE};
-use ridl_ir::v2::Package;
 
 use super::{Ctx, SizeState};
 use crate::UnboundedCause;
 
 pub(crate) fn state(type_name: &str, ctx: &Ctx<'_>) -> Option<SizeState> {
-    let decl = ctx.resolve(type_name)?;
+    let (decl, declaring) = ctx.resolve(ctx.packages().package, type_name)?;
     root_table(decl)?;
-    let packages = ctx.packages();
-    Some(match max_size(packages, decl) {
+    // Rooted at the declaring package: a bare name inside an imported
+    // declaration resolves in that package, as the codegen lowering does.
+    Some(match max_size(ctx.packages_for(declaring)?, decl) {
         Some(bytes) => {
             debug_assert!(bytes <= MAX_ENCODABLE);
             SizeState::Bounded(u32::try_from(bytes).expect("max_size refuses a bound above MAX_ENCODABLE"))
         }
-        None => {
-            let declaring = declaring_package(type_name, packages.package, packages.others)?;
-            SizeState::Unbounded(cause_of(fb_unbounded(declaring, decl).cause))
-        }
+        None => SizeState::Unbounded(cause_of(fb_unbounded(declaring, decl).cause)),
     })
-}
-
-/// The package a canonical name was declared in: this one for a bare name,
-/// the import named by the `pkg.` prefix otherwise.
-fn declaring_package<'a>(name: &str, package: &'a Package, others: &'a [&'a Package]) -> Option<&'a Package> {
-    match name.rsplit_once('.') {
-        None => Some(package),
-        Some((pkg, _)) => others.iter().copied().find(|other| other.name == pkg),
-    }
 }
 
 /// The schema's enum mirrors the model's, member for member.

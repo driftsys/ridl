@@ -828,3 +828,56 @@ fn a_declaration_that_projects_no_type_has_no_bound() {
 
     assert_eq!(bound(&[&pkg], "MAX_SPEED"), None);
 }
+
+#[test]
+fn a_bare_name_resolves_in_the_home_package_not_the_root() {
+    // Both packages declare `Inner`; which one a bare `Inner` names depends
+    // on the home it was written in, not on the package the bundle is
+    // rooted at.
+    let root = package(
+        "p",
+        vec![
+            decl("Inner", int_type(v2::IntWidth::U8)),
+            decl("RootOnly", int_type(v2::IntWidth::U8)),
+        ],
+    );
+    let imported = package(
+        "q",
+        vec![
+            decl("Inner", int_type(v2::IntWidth::U64)),
+            decl("OtherOnly", int_type(v2::IntWidth::U64)),
+        ],
+    );
+    let others = [&imported];
+    let packages = Packages {
+        package: &root,
+        others: &others,
+    };
+
+    let (decl, declaring) = packages
+        .resolve(&imported, "Inner")
+        .expect("q declares Inner");
+    assert_eq!(declaring.name, "q");
+    assert!(matches!(
+        &decl.kind,
+        Some(v2::decl::Kind::TypeDef(td))
+            if td.width == Some(v2::type_def::Width::IntWidth(v2::IntWidth::U64 as i32))
+    ));
+    let (_, declaring) = packages.resolve(&root, "Inner").expect("p declares Inner");
+    assert_eq!(declaring.name, "p");
+
+    // A `pkg.Name` resolves in the package called `pkg` from either home,
+    // the root included; an unknown package resolves nowhere.
+    assert_eq!(packages.resolve(&imported, "p.Inner").unwrap().1.name, "p");
+    assert_eq!(packages.resolve(&root, "q.Inner").unwrap().1.name, "q");
+    assert!(packages.resolve(&root, "r.Inner").is_none());
+    assert!(packages.resolve(&root, "q.Nowhere").is_none());
+
+    // A bare name is looked up only in the home package: a name that only
+    // the other package declares is not found from the root home, and a name
+    // that only the root declares is not found from the other home.
+    assert!(packages.resolve(&root, "OtherOnly").is_none());
+    assert!(packages.resolve(&imported, "RootOnly").is_none());
+    assert!(packages.resolve(&root, "RootOnly").is_some());
+    assert!(packages.resolve(&imported, "OtherOnly").is_some());
+}
