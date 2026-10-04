@@ -570,6 +570,68 @@ fn published_package(dir: &TempDir, lints: &str, source: &str) -> (PathBuf, Path
 }
 
 const ALLOW_ORDINAL: &str = "\n[lints]\nordinal-changed = \"allow\"\n";
+const DENY_ORDINAL: &str = "\n[lints]\nordinal-changed = \"deny\"\n";
+
+/// `ordinal-changed = "deny"` reports RIDL-407 as an error, which exits 1
+/// (cli-reference, "The baseline desk check").
+#[test]
+fn ordinal_changed_deny_fails_baseline() {
+    let dir = TempDir::new("ordinal-deny");
+    let (root, baseline) = published_package(&dir, DENY_ORDINAL, BASE);
+    dir.write("cluster.ridl", REORDERED);
+
+    let (code, _, stderr) = ridl(&[
+        "check".as_ref(),
+        "--baseline".as_ref(),
+        baseline.as_os_str(),
+        root.as_os_str(),
+    ]);
+
+    assert_eq!(
+        code, 1,
+        "the denied desk warning moves the exit code:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("error[RIDL-407]"),
+        "`ordinal-changed = \"deny\"` reports the desk warning as an error:\n{stderr}"
+    );
+}
+
+/// The entry names one file of the package, and the moved interaction is in
+/// another. The compile covers the whole package, so the declaration index
+/// must too: the RIDL-407 points at `cluster.ridl`, and the package's
+/// `[lints]` scope reaches it. With a detached span the registry default
+/// would apply instead, and `deny` would not change the exit code.
+#[test]
+fn ordinal_changed_deny_applies_through_a_file_entry() {
+    let dir = TempDir::new("ordinal-deny-file-entry");
+    let other = dir.write(
+        "other.ridl",
+        "package veh.cluster\ntype Other: integer [0..1]\n",
+    );
+    let (_, baseline) = published_package(&dir, DENY_ORDINAL, BASE);
+    dir.write("cluster.ridl", REORDERED);
+
+    let (code, _, stderr) = ridl(&[
+        "check".as_ref(),
+        "--baseline".as_ref(),
+        baseline.as_os_str(),
+        other.as_os_str(),
+    ]);
+
+    assert_eq!(
+        code, 1,
+        "the denied desk warning moves the exit code:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("error[RIDL-407]"),
+        "the package's `[lints]` scope reaches the desk warning:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("cluster.ridl:6:3"),
+        "the desk warning points at the moved declaration:\n{stderr}"
+    );
+}
 
 /// RIDL-407 is raised by the CLI after `ridlc` returns, with its span
 /// interned into the source map at that point. The levels are applied once

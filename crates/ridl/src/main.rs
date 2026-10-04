@@ -2247,8 +2247,9 @@ struct DeclIndex {
 }
 
 impl DeclIndex {
-    /// Indexes every `.typl`, `.ridl` and `.rsdl` file under `entry` (an
-    /// `.rsdl` file declares no shape and no service, so it adds nothing). A
+    /// Indexes every `.typl`, `.ridl` and `.rsdl` file under
+    /// [`index_root`]`(entry)` (an `.rsdl` file declares no shape and no
+    /// service, so it adds nothing). A
     /// file that cannot be read is skipped rather than reported: the compile
     /// already ran clean over this tree, so anything unreadable here is outside
     /// what any caller of this index reports — neither the desk check nor the
@@ -2260,7 +2261,7 @@ impl DeclIndex {
     /// reported here either.
     fn build(entry: &Path) -> Self {
         let mut index = Self::default();
-        for file in collect_source_files(entry).unwrap_or_default() {
+        for file in collect_source_files(&index_root(entry)).unwrap_or_default() {
             let Ok(text) = std::fs::read_to_string(&file) else {
                 continue;
             };
@@ -2493,6 +2494,22 @@ impl DeclIndex {
             range: *range,
         }
     }
+}
+
+/// The directory tree [`DeclIndex::build`] indexes for `entry`: the manifest
+/// root at or above it, the root [`ridl_core::load_workspace`] compiles from.
+/// The compile covers the whole root whatever entry names it, so an entry at
+/// a file or a subdirectory would otherwise leave a change in a file above or
+/// beside it with a detached span, which no `[lints]` scope reaches. A file
+/// with no manifest above it (single-file mode) is indexed alone.
+fn index_root(entry: &Path) -> PathBuf {
+    let dir = if entry.is_file() {
+        entry.parent()
+    } else {
+        Some(entry)
+    };
+    dir.and_then(ridl_core::find_manifest_root)
+        .unwrap_or_else(|| entry.to_path_buf())
 }
 
 /// A span pointing at no file at all.
