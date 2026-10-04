@@ -1,4 +1,4 @@
-//! Integration tests for `ridl diff` (docs/ROADMAP.md epic E2.8a): the exit
+//! Integration tests for `ridl diff`: the exit
 //! contract (0 compatible/identical, 1 breaking, 2 error), source and
 //! `.ir.json` inputs, in-process compilation via `ridlc::compile_workspace`,
 //! and the stable machine-readable JSON schema.
@@ -602,7 +602,7 @@ fn placed_workspace(dir: &TempDir, root: &str, machine: &str) -> PathBuf {
     dir.path().join(root)
 }
 
-/// rsdl reference §14 (roadmap E6.18): moving an instance to another machine
+/// rsdl reference §14: moving an instance to another machine
 /// leaves the contracts untouched, so the verdict is `identical` and the exit
 /// code 0, and the move is listed under "placement changed" with no verdict.
 #[test]

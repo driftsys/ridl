@@ -1,4 +1,4 @@
-//! Name resolution (docs/ROADMAP.md epic E1.4).
+//! Name resolution.
 //!
 //! [`resolve_package`] builds a package's local view of names (its own
 //! declarations, the implicit `ridl.std` names, and the alias-aware imports)
@@ -9,8 +9,8 @@
 //! package references in the fixed order of ADR-0002 §5: workspace member →
 //! the package's own `[imports]` → the workspace `[imports]` → error.
 //!
-//! The E0.5 single-file resolver lived here until the checker moved onto the
-//! package model (E1.7a); the package checker (`check`) is its replacement.
+//! The single-file resolver lived here until the checker moved onto the
+//! package model; the package checker (`check`) is its replacement.
 //!
 //! Reads the `family.ungram`-generated typed AST (`ridl_syntax::ast`).
 
@@ -28,7 +28,7 @@ use ridl_syntax::{SyntaxKind, SyntaxNode};
 use rowan::TextRange;
 
 /// The kind of a declared name — one variant per typl definition keyword,
-/// plus the ridl `interface` declaration (E2.1b).
+/// plus the ridl `interface` declaration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SymbolKind {
     Type,
@@ -41,7 +41,7 @@ pub enum SymbolKind {
 }
 
 // ==========================================================================
-// The E1.4 package resolver
+// The package resolver
 // ==========================================================================
 
 /// One name visible inside a package, resolved to its defining declaration.
@@ -50,7 +50,7 @@ pub enum SymbolKind {
 /// an aliased import the map key is the local alias while `name`/`package`
 /// still point at the original declaration, so an editor can jump to the real
 /// source. `file`/`range` are that declaration's site. `internal` records the
-/// `internal` modifier (TYPL-005 exposure is enforced by the checker in E1.7);
+/// `internal` modifier (TYPL-005 exposure is enforced by the checker);
 /// `is_error` records the `error` modifier.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Symbol {
@@ -171,7 +171,7 @@ struct ImportRecord {
     bound: Option<Symbol>,
     /// The workspace member the path resolves to (for cycle detection).
     member: Option<Package>,
-    /// The URL a remote import resolves to (not materialized until E1.6).
+    /// The URL a remote import resolves to (remote imports are not materialized yet).
     remote_url: Option<String>,
     /// The path resolves nowhere (ADR-0002 §5 step 4).
     unknown: bool,
@@ -251,7 +251,7 @@ fn collect_imports(
 
 /// Analyses the collected imports: binds the winners, and raises the
 /// collision (TYPL-006), needless-alias (TYPL-008), unused (TYPL-007),
-/// unresolved-remote (E1.6 pending), and unresolved-package (§5 step 4)
+/// unresolved-remote (remote imports are not materialized yet), and unresolved-package (§5 step 4)
 /// diagnostics.
 fn apply_imports(
     records: &[ImportRecord],
@@ -919,7 +919,7 @@ mod package_tests {
         let package_import = resolve_package(&db, ws, app, std);
         assert!(
             !package_import.symbols.contains_key("Speed"),
-            "a remote import binds nothing until E1.6",
+            "a remote import binds nothing in this build",
         );
         assert!(
             package_import

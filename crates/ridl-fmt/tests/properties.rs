@@ -1,5 +1,5 @@
 //! Formatter properties checked over the whole `ridl-syntax` parser `ok`
-//! corpus (docs/ROADMAP.md epic E1.14):
+//! corpus:
 //!
 //! - **idempotence** — `format(format(x)) == format(x)` for every file;
 //! - **structure preservation** — node entry and exit and non-trivia tokens;

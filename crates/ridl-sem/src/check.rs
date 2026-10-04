@@ -1,6 +1,6 @@
 //! The package checker: lowers every declaration of a resolved package to IR
 //! v2 and runs the typl composite and scalar checks plus the ridl interaction
-//! checks (docs/ROADMAP.md epics E1.7a, E2.1b–c; typl language reference
+//! checks (E2.1b–c; typl language reference
 //! §4–§12, §16; ridl language reference §3–§14, §16).
 //!
 //! Diagnostics accumulate; lowering continues past errors — the checker never
@@ -20,7 +20,7 @@
 //! - doc-comment semantics (`Decl::doc`, `labels`, `deprecated`) land with the
 //!   task 14 doc scanner — this pass leaves them empty;
 //! - every lowered `TypeDef` and `Field` carries a populated `InitValue`
-//!   (typl §5.8, E1.9): the **declared** `= value` init (validated as TYPL-109)
+//!   (typl §5.8): the **declared** `= value` init (validated as TYPL-109)
 //!   when present, otherwise the value derived from the §5.8 table by
 //!   [`crate::init`]. A named type whose init is neither declared nor derivable
 //!   is marked `{ derivable: false }` and reported as TYPL-115 (info).
@@ -182,7 +182,7 @@ pub fn check_package(
             }
             interfaces.push(checker.lower_interface(&interface));
         }
-        // Services (E2.13): the global published declarations. Their dotted
+        // Services: the global published declarations. Their dotted
         // names live in the workspace catalog namespace, not the type
         // namespace, so the resolver's `is_winner` does not apply — uniqueness
         // across the workspace is `service_catalog`'s job (RIDL-140). A
@@ -216,7 +216,7 @@ pub fn check_package(
 
     checker.check_recursion(&composite_starts);
 
-    // The ridl lint pass (E2.10a): four advisory codes over the interaction
+    // The ridl lint pass: four advisory codes over the interaction
     // declarations, emitted as ordinary diagnostics once lowering has settled.
     lint::lint_package(&mut checker, &files);
 
@@ -513,7 +513,7 @@ pub(crate) struct Checker<'db> {
     /// cleared after; empty everywhere else.
     interface_signals: Vec<(String, ExprType)>,
     /// The name the observer stubs of the interface being lowered are scoped
-    /// to (E2.5): the declared interface name, or a service's dotted global
+    /// to: the declared interface name, or a service's dotted global
     /// name for an inline shape, which has no name of its own. Set and cleared
     /// alongside [`Checker::interface_signals`].
     interface_name: String,
@@ -1197,7 +1197,7 @@ impl Checker<'_> {
             init: declared,
             width: parts.width,
         };
-        // E1.9: a type without a declared `= value` derives its init from the
+        // A type without a declared `= value` derives its init from the
         // §5.8 table. A named type whose init is not derivable (a string/bytes
         // type forbidding length 0, a `match`-typed one, or a float whose grid
         // has no finite derived value) is reported as TYPL-115 (info).
@@ -2062,7 +2062,7 @@ impl Checker<'_> {
     /// Pattern conformance uses ECMA-262 `test` semantics — a match anywhere in
     /// the string; typl patterns are anchored with `^`…`$`. An invalid pattern
     /// is skipped here (TYPL-106 reports it at the pattern's own site). Reached
-    /// with a populated `constraint` for a named `type` and, since E1.9, for a
+    /// with a populated `constraint` for a named `type` and, for a
     /// struct field too: the length bound and `match` pattern flow into the
     /// field's `ScalarParts` whether the field is an inline string/bytes scalar
     /// or is typed by a named string/bytes `type` (see [`Checker::lower_field`]).
@@ -2133,7 +2133,7 @@ impl Checker<'_> {
 
         // RIDL-149: two field names that collide after the pinned name
         // transform (ADR-0016 decisions 3 and 4). Struct fields joined this
-        // check when E9.8 started projecting them onto proto3, whose field
+        // check when the proto3 backend started projecting them onto proto3, whose field
         // namespace is snake_case. Keyed on the projection, holding the first
         // field's source name and span for the label.
         let mut projected: HashMap<String, (String, TextRange)> = HashMap::new();
@@ -2245,7 +2245,7 @@ impl Checker<'_> {
             &target,
             DiagCode::TYPL_109,
         );
-        // E1.9: a field without a declared init derives one from the §5.8 table
+        // A field without a declared init derives one from the §5.8 table
         // (a named reference resolves to the referenced type's own init).
         let init = match declared {
             Some(init) => Some(init),
@@ -3337,7 +3337,7 @@ impl Checker<'_> {
 
     /// Records one `reserved` entry into the name/value sets, warning on a
     /// duplicate (TYPL-211). The "dangling" half of the §16.3 rule needs the
-    /// previous IR snapshot and belongs to `ridl-diff` (E2.8).
+    /// previous IR snapshot and belongs to `ridl-diff`.
     fn record_reserved(
         &mut self,
         entry: &ast::ReservedEntry,
@@ -3383,7 +3383,7 @@ impl Checker<'_> {
     // - a return type parses on `command` → RIDL-104;
     // - timing parses on `fixed` → RIDL-106: `fixed` is the one kind that
     //   carries none since ADR-0015 decision 2 admitted the range form on
-    //   `command` and `query` (E9.4); a strict period on those two is
+    //   `command` and `query`; a strict period on those two is
     //   RIDL-103, resolved in the timing pass rather than here;
     // - an attr block parses on `signal`/`event`/`fixed` → RIDL-106 on
     //   `fixed`; predicates draw RIDL-301/-302, keys the gf §4.3 allow-list
@@ -3398,7 +3398,7 @@ impl Checker<'_> {
     // - timing and attrs parse in either order → no separate order rule: a
     //   command or query legally carries both since ADR-0015 decision 2, the
     //   AST accessors read each child wherever it sits, and the postfix-order
-    //   question is recorded as roadmap story E9.12.
+    //   question is recorded in the tracker.
 
     /// RIDL-401: an interaction re-declaring a name a `reserved` tombstone
     /// retired. The secondary label points at the tombstone, so the reader does
@@ -3688,7 +3688,7 @@ impl Checker<'_> {
     /// interactions.
     fn lower_interaction(&mut self, member: &ast::InterfaceMember, ordinal: u32) -> v2::Decl {
         // The interaction name is half of the observer id its contracts carry
-        // (E2.5), so it is read before the member lowers.
+        // so it is read before the member lowers.
         let interaction_name = member_name(member.name()).unwrap_or_default();
         let kind = match member {
             ast::InterfaceMember::Signal(signal) => {
@@ -3727,7 +3727,7 @@ impl Checker<'_> {
         }
     }
 
-    // --- service lowering (E2.13, ridl reference §14.5) ------------------
+    // --- service lowering (ridl reference §14.5) ------------------
     //
     // Kept in their own functions so a rebase against a concurrently edited
     // check.rs stays clean: `lower_service` and its two helpers reuse the
@@ -4141,7 +4141,7 @@ impl Checker<'_> {
         // see [`Checker::lower_interface`].
 
         // An inline shape has no name of its own, so its observer stubs are
-        // scoped to the service's dotted global name (E2.5). A service takes no
+        // scoped to the service's dotted global name. A service takes no
         // `internal` modifier (ridl §14.5), so its shape is always public.
         self.interface_internal = false;
         self.interface_name = service
@@ -4593,7 +4593,7 @@ impl Checker<'_> {
     /// `ErrorNode` inside the attribute — is skipped too: it is not checked,
     /// not lowered, and takes no observer id index.
     ///
-    /// Every lowered clause is also an **observer stub** (E2.5): the reads it
+    /// Every lowered clause is also an **observer stub**: the reads it
     /// resolves ([`expr::collect_refs`]) — signals as canonical
     /// `Interface.signalName`, parameters by name, `result` as a flag — plus
     /// `observer_id`, the handle the E5/E7 observer tooling is expected to
@@ -5024,8 +5024,8 @@ impl Checker<'_> {
     ///
     /// The grammar accepts `@` on all five kinds so that the narrowing is a
     /// semantic rule with a semantic message. `command` and `query` were in
-    /// this rule until ADR-0015 decision 2 admitted the range form on both
-    /// (E9.4); their timing now resolves in the timing pass, and `fixed`
+    /// this rule until ADR-0015 decision 2 admitted the range form on both;
+    /// their timing now resolves in the timing pass, and `fixed`
     /// remains the only kind whose annotation is rejected here.
     fn reject_timing(&mut self, timing: &ast::Timing) {
         self.error(
@@ -6400,7 +6400,7 @@ mod tests {
     }
 
     /// A valid declared init lowers into `InitValue`; a declaration without one
-    /// derives its init from the §5.8 table (E1.9) while keeping
+    /// derives its init from the §5.8 table while keeping
     /// `declared_init` absent.
     #[test]
     fn declared_init_lowers_and_underived_init_is_derived() {
@@ -7930,7 +7930,7 @@ mod tests {
     // --- RIDL-149 over struct fields (ADR-0016 decision 4) ----------------
 
     /// ADR-0016 decision 4: struct fields join the transform and RIDL-149 in
-    /// the commit that starts projecting them, which is E9.8's proto backend.
+    /// the commit that starts projecting them, which is the proto3 backend.
     #[test]
     fn ridl_149_two_struct_fields_colliding_after_the_transform_are_refused() {
         let checked = check_source(
@@ -9670,7 +9670,7 @@ mod tests {
         );
     }
 
-    // --- E1.9: init derivation (§5.8) and TYPL-115 ------------------------
+    // --- init derivation (§5.8) and TYPL-115 ------------------------
 
     /// A scalar `InitValue`.
     fn iv(derivable: bool, value: Option<&str>) -> v2::InitValue {
@@ -10166,7 +10166,7 @@ mod tests {
     }
 
     /// The T14 field-init obligation: a too-long string field init through a
-    /// named string `type` now fires TYPL-109 (it passed silently before E1.9).
+    /// named string `type` now fires TYPL-109 (it passed silently before init derivation).
     #[test]
     fn typl_109_string_field_init_too_long_via_named_type() {
         let checked = check_source(
@@ -10220,7 +10220,7 @@ mod tests {
 
     /// The minor T14 obligation: a `const = const` init whose resolved numeric
     /// value violates the const's declared range is TYPL-108 (only direct
-    /// numeric literals reached the check before E1.9).
+    /// numeric literals reached the check before init derivation).
     #[test]
     fn typl_108_constref_init_out_of_range() {
         let checked = check_source(
@@ -11516,7 +11516,7 @@ enum GearPosition {\n  PARK  = 0\n  DRIVE = 1\n}\n";
     #[test]
     fn ridl_306_unknown_enum_member() {
         // An unknown member is as broken a reference as an unknown identifier:
-        // the task 12 observers and the E2.11 property runner have no value to
+        // the observers and the property runner have no value to
         // bind to it.
         let checked = check_ridl(
             "app",
@@ -13001,7 +13001,7 @@ interface VehicleStatus {
         assert_eq!(fallible.err, "DiagError");
     }
 
-    // --- E2.3 errors-as-data: inline `T | E` semantics (task 10) ----------
+    // --- errors-as-data: inline `T | E` semantics (task 10) ----------
 
     /// A clean fallible-return vocabulary: a success struct, an error enum, a
     /// param type, and a non-error scalar for the arm-rule tests.
@@ -13625,7 +13625,7 @@ interface VehicleStatus {
         assert_eq!(names, ["veh.a.b"]);
     }
 
-    // --- services (E2.13, ridl reference §14.5) --------------------------
+    // --- services (ridl reference §14.5) --------------------------
 
     #[test]
     fn service_naming_an_interface_lowers_to_the_ir() {
@@ -13668,7 +13668,7 @@ interface VehicleStatus {
         );
     }
 
-    // --- the shape list (E9.6, ADR-0015 decisions 12 to 18) ---------------
+    // --- the shape list (ADR-0015 decisions 12 to 18) ---------------
 
     /// RIDL-141 applies per shape in the list (ADR-0015 decision 18): two
     /// non-interface references draw two diagnostics, each spanning its own

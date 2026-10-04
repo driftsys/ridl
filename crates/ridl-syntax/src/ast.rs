@@ -1,4 +1,4 @@
-//! The typed AST over the rowan tree (docs/ROADMAP.md epic E1.2a, ADR-0007
+//! The typed AST over the rowan tree (ADR-0007
 //! decision 1).
 //!
 //! The node structs and their mechanical accessors live in the `generated`
@@ -280,7 +280,7 @@ impl AstNode for ParamType {
 }
 
 /// One expression of the guaranteed subset — the `Expr` alternation
-/// (expr-core specification §3.1, ridl reference §13, epic E2.4).
+/// (expr-core specification §3.1, ridl reference §13).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Expr {
     Binary(BinaryExpr),
@@ -1186,7 +1186,7 @@ mod tests {
         );
     }
 
-    /// The attribute and expression accessors (E2.4) over a parsed tree:
+    /// The attribute and expression accessors over a parsed tree:
     /// the surface tasks 5, 11, 12, and 21 consume.
     #[test]
     fn attribute_and_expr_accessors_read_a_parsed_contract() {

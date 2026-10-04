@@ -1262,7 +1262,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
 }
 /**Descriptor for interface `Cabin`.
 
-Each `PayloadInfo.max_size.flatbuffers` is the payload's FlatBuffers bound as the codegen model carries it (`Payload.flatbuffers_max_size`, computed by `ridl_ir::projection::flatbuffers::max_size`), or `None` when the projection has none. `proto3` is `None`: this backend emits no proto3 codec. `repr_c` is `None` until E11.12 defines the layout.*/
+Each `PayloadInfo.max_size.flatbuffers` is the payload's FlatBuffers bound as the codegen model carries it (`Payload.flatbuffers_max_size`, computed by `ridl_ir::projection::flatbuffers::max_size`), or `None` when the projection has none. `proto3` is `None`: this backend emits no proto3 codec. `repr_c` is `None` until the layout is defined (driftsys/ridl#317).*/
 pub struct Cabin;
 impl ::ridl_rt::contract::Interface for Cabin {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -1434,7 +1434,7 @@ impl ::ridl_rt::contract::Interaction for CabinSetLevel {
 }
 impl ::ridl_rt::contract::Command for CabinSetLevel {
     type Args = Level;
-    ///Evaluates the `require` clauses. This translation covers one clause form — `<subject> <comparison> <numeric literal>` — and E5.1 replaces it with one driven by the structured expression tree.
+    ///Evaluates the `require` clauses. This translation covers one clause form — `<subject> <comparison> <numeric literal>` — and driftsys/ridl#704 replaces it with one driven by the structured expression tree.
     fn require(args: &Self::Args) -> ::core::result::Result<(), ()> {
         if args.0 < 100 {
             ::core::result::Result::Ok(())
@@ -1451,7 +1451,7 @@ impl ::ridl_rt::contract::Interaction for CabinAverage {
 impl ::ridl_rt::contract::Query for CabinAverage {
     type Args = Window;
     type Reply = Average;
-    ///Evaluates the `require` clauses. This translation covers one clause form — `<subject> <comparison> <numeric literal>` — and E5.1 replaces it with one driven by the structured expression tree.
+    ///Evaluates the `require` clauses. This translation covers one clause form — `<subject> <comparison> <numeric literal>` — and driftsys/ridl#704 replaces it with one driven by the structured expression tree.
     fn require(args: &Self::Args) -> ::core::result::Result<(), ()> {
         if args.0 > 0 {
             ::core::result::Result::Ok(())
@@ -1459,7 +1459,7 @@ impl ::ridl_rt::contract::Query for CabinAverage {
             ::core::result::Result::Err(())
         }
     }
-    ///Evaluates the `ensure` clauses. This translation covers one clause form — `<subject> <comparison> <numeric literal>` — and E5.1 replaces it with one driven by the structured expression tree.
+    ///Evaluates the `ensure` clauses. This translation covers one clause form — `<subject> <comparison> <numeric literal>` — and driftsys/ridl#704 replaces it with one driven by the structured expression tree.
     fn ensure(
         _args: &Self::Args,
         reply: &Self::Reply,
@@ -1473,7 +1473,7 @@ impl ::ridl_rt::contract::Query for CabinAverage {
 }
 /**Descriptor for interface `Horn`.
 
-Each `PayloadInfo.max_size.flatbuffers` is the payload's FlatBuffers bound as the codegen model carries it (`Payload.flatbuffers_max_size`, computed by `ridl_ir::projection::flatbuffers::max_size`), or `None` when the projection has none. `proto3` is `None`: this backend emits no proto3 codec. `repr_c` is `None` until E11.12 defines the layout.*/
+Each `PayloadInfo.max_size.flatbuffers` is the payload's FlatBuffers bound as the codegen model carries it (`Payload.flatbuffers_max_size`, computed by `ridl_ir::projection::flatbuffers::max_size`), or `None` when the projection has none. `proto3` is `None`: this backend emits no proto3 codec. `repr_c` is `None` until the layout is defined (driftsys/ridl#317).*/
 pub struct Horn;
 impl ::ridl_rt::contract::Interface for Horn {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -1528,7 +1528,7 @@ impl ::ridl_rt::contract::Signal for HornActive {
 }
 /**Descriptor for interface `Siren`.
 
-Each `PayloadInfo.max_size.flatbuffers` is the payload's FlatBuffers bound as the codegen model carries it (`Payload.flatbuffers_max_size`, computed by `ridl_ir::projection::flatbuffers::max_size`), or `None` when the projection has none. `proto3` is `None`: this backend emits no proto3 codec. `repr_c` is `None` until E11.12 defines the layout.*/
+Each `PayloadInfo.max_size.flatbuffers` is the payload's FlatBuffers bound as the codegen model carries it (`Payload.flatbuffers_max_size`, computed by `ridl_ir::projection::flatbuffers::max_size`), or `None` when the projection has none. `proto3` is `None`: this backend emits no proto3 codec. `repr_c` is `None` until the layout is defined (driftsys/ridl#317).*/
 pub struct Siren;
 impl ::ridl_rt::contract::Interface for Siren {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -1595,7 +1595,7 @@ impl ::ridl_rt::contract::Event for SirenTripped {
 }
 /**Descriptor for interface `Valve`.
 
-Each `PayloadInfo.max_size.flatbuffers` is the payload's FlatBuffers bound as the codegen model carries it (`Payload.flatbuffers_max_size`, computed by `ridl_ir::projection::flatbuffers::max_size`), or `None` when the projection has none. `proto3` is `None`: this backend emits no proto3 codec. `repr_c` is `None` until E11.12 defines the layout.*/
+Each `PayloadInfo.max_size.flatbuffers` is the payload's FlatBuffers bound as the codegen model carries it (`Payload.flatbuffers_max_size`, computed by `ridl_ir::projection::flatbuffers::max_size`), or `None` when the projection has none. `proto3` is `None`: this backend emits no proto3 codec. `repr_c` is `None` until the layout is defined (driftsys/ridl#317).*/
 pub struct Valve;
 impl ::ridl_rt::contract::Interface for Valve {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -1685,7 +1685,7 @@ impl ::ridl_rt::contract::Interaction for ValveOpen {
 }
 impl ::ridl_rt::contract::Command for ValveOpen {
     type Args = Level;
-    ///Evaluates the `require` clauses. This translation covers one clause form — `<subject> <comparison> <numeric literal>` — and E5.1 replaces it with one driven by the structured expression tree.
+    ///Evaluates the `require` clauses. This translation covers one clause form — `<subject> <comparison> <numeric literal>` — and driftsys/ridl#704 replaces it with one driven by the structured expression tree.
     fn require(_args: &Self::Args) -> ::core::result::Result<(), ()> {
         ::core::result::Result::Ok(())
     }
@@ -1698,11 +1698,11 @@ impl ::ridl_rt::contract::Interaction for ValvePressure {
 impl ::ridl_rt::contract::Query for ValvePressure {
     type Args = Window;
     type Reply = Average;
-    ///Evaluates the `require` clauses. This translation covers one clause form — `<subject> <comparison> <numeric literal>` — and E5.1 replaces it with one driven by the structured expression tree.
+    ///Evaluates the `require` clauses. This translation covers one clause form — `<subject> <comparison> <numeric literal>` — and driftsys/ridl#704 replaces it with one driven by the structured expression tree.
     fn require(_args: &Self::Args) -> ::core::result::Result<(), ()> {
         ::core::result::Result::Ok(())
     }
-    ///Evaluates the `ensure` clauses. This translation covers one clause form — `<subject> <comparison> <numeric literal>` — and E5.1 replaces it with one driven by the structured expression tree.
+    ///Evaluates the `ensure` clauses. This translation covers one clause form — `<subject> <comparison> <numeric literal>` — and driftsys/ridl#704 replaces it with one driven by the structured expression tree.
     fn ensure(
         _args: &Self::Args,
         _reply: &Self::Reply,

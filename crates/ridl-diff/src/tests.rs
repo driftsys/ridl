@@ -709,7 +709,7 @@ fn a_fresh_tombstone_at_the_end_is_compatible() {
 /// `snake_case` specifically. The transform's own behaviour is pinned
 /// separately, by the unit tests in `crates/ridl-ir/src/name.rs`.
 ///
-/// Names are the only identity E9.7 assigns. E9.8 extends this test to the
+/// Names are the only identity the name transform assigns. The proto3 projection extends this test to the
 /// numbers a projection assigns, where the arm gains real content: a
 /// projection can assign a number that a compatible delta moves
 /// independently of the name it numbers.

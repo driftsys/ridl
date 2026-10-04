@@ -13,7 +13,7 @@
 //!   items, `type Iface` and `const MEMBER`) and the kind's trait — `Signal`,
 //!   `Event`, `Command`, `Query` or `Fixed`.
 //!
-//! Since E11.14 it is reached from [`crate::generate_pipeline`], which is
+//! It is reached from [`crate::generate_pipeline`], which is
 //! what `ridl build --emit rust` calls, as well as from
 //! [`crate::generate_face`]. It is not reached from [`crate::generate`],
 //! whose output is unchanged and carries neither the descriptors nor the
@@ -70,7 +70,7 @@ pub(crate) fn interactions(interface: &v1::Interface) -> Vec<(u32, &v1::Interact
 }
 
 /// The descriptor items of one interface, for the pipeline's per-interface
-/// walk (E11.14 decision 2). [`interface_items`] is the whole-package walk;
+/// walk (interaction-face decision 2). [`interface_items`] is the whole-package walk;
 /// this is one shape of it, so a caller that means to skip a refusing
 /// interface can catch the refusal at the interface it belongs to.
 pub(crate) fn one_interface_items(
@@ -125,7 +125,7 @@ fn one_interface(
          bound as the codegen model carries it (`Payload.flatbuffers_max_size`, \
          computed by `ridl_ir::projection::flatbuffers::max_size`), or `None` \
          when the projection has none. `proto3` is `None`: this backend emits no \
-         proto3 codec. `repr_c` is `None` until E11.12 defines the layout."
+         proto3 codec. `repr_c` is `None` until the layout is defined (driftsys/ridl#317)."
     );
 
     items.push(quote! {
@@ -385,7 +385,7 @@ fn interaction_item(
 /// recomputed, because a plugin receives only the model; `None` when the
 /// projection has none. `proto3` is `None` because this backend emits no
 /// proto3 codec (the `EncodedSizes` doc in `ridl-rt`: a backend writes `None`
-/// for a codec it does not emit). `repr_c` is `None` until E11.12
+/// for a codec it does not emit). `repr_c` is `None` until the layout is defined (driftsys/ridl#317)
 /// (driftsys/ridl#317) defines the layout.
 fn payload_info(payload: Option<&v1::Payload>) -> TokenStream {
     let type_name = payload_reference(payload);
@@ -502,7 +502,7 @@ fn binding(name: &str, used: bool) -> TokenStream {
 fn clause_doc(kind: &str) -> String {
     format!(
         "Evaluates the `{kind}` clauses. This translation covers one clause \
-         form — `<subject> <comparison> <numeric literal>` — and E5.1 replaces \
+         form — `<subject> <comparison> <numeric literal>` — and driftsys/ridl#704 replaces \
          it with one driven by the structured expression tree."
     )
 }

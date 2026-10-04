@@ -29,8 +29,8 @@ and nothing about the runtime.
 
 **`ridl-rt` is a library, not a runtime.** It defines the vocabulary and the
 port traits and contains no implementation of them (ADR-0020 decision 6). The
-one runtime in this workspace is `ridl-loopback` (story E11.15,
-[its design record](../design/ridl-loopback.md)), which the examples below run
+one runtime in this workspace is `ridl-loopback`
+([its design record](../design/ridl-loopback.md)), which the examples below run
 against: it holds every value in a map behind one lock, in one process, and its
 clock is a counter a test advances by hand. It carries no frame and opens no
 socket, so everything in this note that describes delivery over a transport,
@@ -373,9 +373,9 @@ naming the type, because a legal value cannot exceed its own `MAX_SIZE`.
 
 > `FlatBuffers` is `ridl_rt::encoding::FlatBuffers`, the payload encoding of the
 > generated package, which the generated code names by that path at each site
-> (E11.7's D-11; the `Wire` alias it once carried was removed on 2026-09-29).
-> The `Payload` implementations behind it are generated, not hand-written: the
-> round-trip test runs over the emitted codec.
+> (design note D-11 of the FlatBuffers codec; the `Wire` alias it once carried
+> was removed on 2026-09-29). The `Payload` implementations behind it are
+> generated, not hand-written: the round-trip test runs over the emitted codec.
 
 ## Step 4 — an event
 
@@ -734,7 +734,8 @@ carries the reply.
 > This ordering is currently pinned by an assertion on the generated source
 > text, not by a behavioural test. Nothing in the in-process test double has a
 > side effect that reordering would change, so no test can observe the
-> difference today. E11.9 is what would make it observable.
+> difference today. A real transport (driftsys/ridl#265) would make it
+> observable.
 
 ### The blocking provider loop
 
@@ -889,17 +890,17 @@ variant compiles without a `_` arm. That split is pinned by doctests in
 Everything in this note is real code that compiles and runs. Several pieces of
 what it stands on are placeholders with a named replacement.
 
-| Placeholder                                                                                                                                                              | Replaced by                |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------- |
-| The transport under the in-process runtime the examples run against                                                                                                      | E11.9                      |
-| `PayloadInfo.max_size.repr_c`, which is `None` (`flatbuffers` was filled by E16.4, driftsys/ridl#380; `proto3` is `None` because the Rust backend emits no proto3 codec) | E11.12 (driftsys/ridl#317) |
-| The contract-clause translator                                                                                                                                           | E5.1                       |
+| Placeholder                                                                                                                                                     | Replaced by       |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| The transport under the in-process runtime the examples run against                                                                                             | driftsys/ridl#265 |
+| `PayloadInfo.max_size.repr_c`, which is `None` (`flatbuffers` is filled (driftsys/ridl#380); `proto3` is `None` because the Rust backend emits no proto3 codec) | driftsys/ridl#317 |
+| The contract-clause translator                                                                                                                                  | driftsys/ridl#704 |
 
 One further limit is not a placeholder but scope. A second, that
-`ridl --emit rust` did not emit the face at all, closed on 2026-09-21: story
-E11.14 gave the pipeline `generate_pipeline`, which emits the face and the
-descriptors beside the domain types and the codec, so a package built from the
-command line carries one. `generate` is unchanged and still emits neither.
+`ridl --emit rust` did not emit the face at all, closed on 2026-09-21: the
+pipeline gained `generate_pipeline`, which emits the face and the descriptors
+beside the domain types and the codec, so a package built from the command line
+carries one. `generate` is unchanged and still emits neither.
 
 **Every command and query takes exactly one parameter.** Multi-parameter calls
 need induced argument structs, which the Rust backend does not emit from an
@@ -912,8 +913,8 @@ tree, so the translator accepts exactly one form —
 interaction's single declared parameter or `result` on an `ensure` — and
 **refuses every other form with a `GenerateError` rather than dropping it**. A
 dropped clause would generate a provider that accepts arguments its own contract
-forbids, which is worse than refusing to generate. E5.1 replaces it with one
-driven by the structured expression tree.
+forbids, which is worse than refusing to generate. driftsys/ridl#704 replaces it
+with one driven by the structured expression tree.
 
 ## Where to look next
 

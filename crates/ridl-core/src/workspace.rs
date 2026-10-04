@@ -1,5 +1,5 @@
 //! Filesystem discovery: from an entry path to a loaded [`Workspace`]
-//! (docs/ROADMAP.md epic E1.3, ADR-0002 §1, §4–5).
+//! (ADR-0002 §1, §4–5).
 //!
 //! This is the only module in the crate that touches the filesystem, and it
 //! sits behind the default-on `fs` feature (ADR-0007 decision 5) so the crate

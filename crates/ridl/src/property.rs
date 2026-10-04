@@ -1,9 +1,9 @@
-//! `ridl test` — the property runner (epic E2 story E2.11a, roadmap E2.11).
+//! `ridl test` — the property runner.
 //!
 //! ridl §13 gives one contract clause four executions; this is the third,
 //! "property test in CI". A typl range is a specification of a value domain, so
 //! it is also a specification of how to sample that domain (ADR-0004 §9) — the
-//! E1.18 strategies in `ridl_sem::testgen` turn a checked range into draws, and
+//! range strategies in `ridl_sem::testgen` turn a checked range into draws, and
 //! this module spends them on the contract plane.
 //!
 //! Three sections per package, in report order:
@@ -308,14 +308,14 @@ fn run_package(home: &Home, names: &Names, samples: usize) -> PackageReport {
 ///
 /// Returns `None` for a type this section does not cover: a range needs both
 /// bounds and a derived numeric width, which is exactly the set of types the
-/// E1.18 generators sample. A string's length bounds and pattern are a
+/// range generators sample. A string's length bounds and pattern are a
 /// different constraint shape with no value corpus behind them.
 fn check_range(type_def: &v2::TypeDef) -> Option<RangeStatus> {
     let constraint = type_def.constraint.as_ref()?;
     let min = ExactValue::parse(constraint.min.as_deref()?)?;
     let max = ExactValue::parse(constraint.max.as_deref()?)?;
 
-    // Both corpora come from the E1.18 generators rather than being built here:
+    // Both corpora come from the range generators rather than being built here:
     // the point of the section is that the generators and the checker agree, so
     // a corpus this file computed for itself would only ever confirm its own
     // arithmetic.
@@ -642,7 +642,7 @@ impl Generator {
 }
 
 /// Draws one value, exactly. An integer draw is exact already; a float draw
-/// comes back as `f64` from the E1.18 strategy and is carried into the exact
+/// comes back as `f64` from the range strategy and is carried into the exact
 /// domain through its shortest round-tripping decimal, which is a finite
 /// decimal and therefore an exact rational.
 ///

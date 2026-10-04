@@ -3,8 +3,8 @@
 /// The kinds of syntax tokens and nodes the family grammar produces.
 ///
 /// The token variants are the full family token set the lexer recognises
-/// (docs/ROADMAP.md epic E1.1, typl reference §1.4 and §2). The node variants
-/// are the typl grammar's node inventory (epic E1.2a) — one variant per rule
+/// (typl reference §1.4 and §2). The node variants
+/// are the typl grammar's node inventory — one variant per rule
 /// in `family.ungram`, plus [`ErrorNode`](SyntaxKind::ErrorNode) for recovery.
 /// [`RidlLanguage`] maps between this enum and rowan's raw kind through the
 /// `#[repr(u16)]` discriminants, so the node variants stay grouped at the end
@@ -112,7 +112,7 @@ pub enum SyntaxKind {
     DocComment,
     Error,
     // Nodes — the typl grammar's node inventory (`family.ungram`, epic E1.2a).
-    // The full parser (task E1.2b) produces them; until it lands, the
+    // The full parser produces them; until it lands, the
     // generated typed AST casts over trees built directly in tests.
     SourceFile,
     PackageDecl,
@@ -159,7 +159,7 @@ pub enum SyntaxKind {
     TimingRange,
     AttrBlock,
     // Nodes of the attribute and guaranteed-subset expression grammar
-    // (`family.ungram`, epic E2.4 — general form §4.2, expr-core
+    // (`family.ungram`, general form §4.2, expr-core
     // specification §3.1).
     Attribute,
     AttrValue,
@@ -169,9 +169,8 @@ pub enum SyntaxKind {
     PathExpr,
     ParenExpr,
     LiteralExpr,
-    // Nodes of the ridl service grammar (`family.ungram`, epic E2.13 — ridl
-    // reference §14.5). `service_def` is authored by E2 task 8 (absent from
-    // Appendix C).
+    // Nodes of the ridl service grammar (`family.ungram`, ridl reference §14.5). `service_def` is not in
+    // Appendix C.
     ServiceDef,
     DottedName,
     // Nodes of the rsdl grammar (`family.ungram` — rsdl reference §3, §4,

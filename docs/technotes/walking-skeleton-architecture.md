@@ -141,14 +141,13 @@ that.
   `ridl-diff`'s classifier both call (driftsys/ridl#598).
   `ridl_ir::catalog_hash` computes the catalog hash: SHA-256 over the protobuf
   binary of a reduced package that holds the interfaces, their numbers and the
-  types they reach (ADR-0014 decision 15, story E16.2). It is in this crate
-  because three artifacts carry the hash — the codegen model's `Catalog.hash`,
-  which the Rust backend writes into every generated `Interface::CATALOG`; the
-  catalog descriptor, whose crate `ridl-descriptor` depends on `ridl-ir`,
-  re-exports the hash as `ridl_descriptor::hash`, and copies the interface
-  numbers from the IR in `ridl_descriptor::number`; and each `Region` of the
-  lowered rsdl system, where `ridlc` embeds it (`embed_catalog_hashes`, story
-  E6.17).
+  types they reach (ADR-0014 decision 15). It is in this crate because three
+  artifacts carry the hash — the codegen model's `Catalog.hash`, which the Rust
+  backend writes into every generated `Interface::CATALOG`; the catalog
+  descriptor, whose crate `ridl-descriptor` depends on `ridl-ir`, re-exports the
+  hash as `ridl_descriptor::hash`, and copies the interface numbers from the IR
+  in `ridl_descriptor::number`; and each `Region` of the lowered rsdl system,
+  where `ridlc` embeds it (`embed_catalog_hashes`).
 
 - **`crates/ridl-backend-rust`** — one IR v2 package to
   `Generated { rust_source }`. Rust is built as a `quote` token stream and
@@ -209,8 +208,8 @@ that.
   function — the minimal ISO 26262 tool-qualification boundary (ADR-0008
   decision 9). `ridl baseline` publishes one `<pkg-name>.ir.json` per package
   into `.ridl/baseline/`; `ridl check --baseline` is the desk-time ordinal-drift
-  check over it; `property.rs` is the `ridl test` runner, which spends the E1.18
-  range strategies on the contract plane.
+  check over it; `property.rs` is the `ridl test` runner, which spends the range
+  strategies on the contract plane.
 
 - **`crates/ridl-fmt`** — the `ridl fmt` engine: CST-based and trivia-aware
   (comments are preserved and re-anchored), total (input with parse errors is
@@ -236,32 +235,32 @@ that.
   a runtime will implement: identity, time and the envelope, samples, the
   payload traits, the interaction descriptors, the ports, the contract and
   transport errors and the two errors a generated face returns, the caller-side
-  call table and waker registry a runtime keeps (`correlate`, story E11.18), and
-  the traits a generated face implements for its fixed methods (`face`,
-  driftsys/ridl#580, ADR-0021 decision 19) (epic E11 story E11.0, ADR-0020
-  decision 5). It has no dependency in any feature combination and links no
-  runtime: the store and the sans-IO session are `ridl-engine`'s, parked outside
-  this repository, and the three payload codecs (FlatBuffers, proto3, `repr(C)`)
-  are later Epic 11 stories. See [the design record](../design/ridl-rt.md) and
+  call table and waker registry a runtime keeps (`correlate`), and the traits a
+  generated face implements for its fixed methods (`face`, driftsys/ridl#580,
+  ADR-0021 decision 19) (ADR-0020 decision 5). It has no dependency in any
+  feature combination and links no runtime: the store and the sans-IO session
+  are `ridl-engine`'s, parked outside this repository, and the three payload
+  codecs (FlatBuffers, proto3, `repr(C)`) are not built yet. See
+  [the design record](../design/ridl-rt.md) and
   [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md).
 
 - **`crates/ridl-loopback`** — the in-process reference runtime, and the one
-  runtime implementing `ridl-rt`'s ports in this workspace (epic E11 story
-  E11.15, ADR-0020 decision 6). It carries values between a provider and a
-  consumer in one program, over one store behind one lock, with a clock a test
-  advances by hand; it has no frame, no socket and no wire format, and `ridl-rt`
-  is its only dependency. The Rust backend's round-trip tests build their
-  generated face over it, and it runs the suite of `ridl-rt-conformance`. See
+  runtime implementing `ridl-rt`'s ports in this workspace (ADR-0020 decision
+  6). It carries values between a provider and a consumer in one program, over
+  one store behind one lock, with a clock a test advances by hand; it has no
+  frame, no socket and no wire format, and `ridl-rt` is its only dependency. The
+  Rust backend's round-trip tests build their generated face over it, and it
+  runs the suite of `ridl-rt-conformance`. See
   [the design record](../design/ridl-loopback.md).
 
 - **`crates/ridl-rt-conformance`** — the port contract tests, test-only and
-  unpublished (epic E11 story E11.20): each test is a function generic over a
-  factory trait, which builds a runtime, makes a second event source, caller and
-  handler on it, states the size of its call table, and supplies a hand-driven
-  clock and a settlement fault injected once. A runtime runs the whole suite
-  from its own tests with the crate's `suite!` macro, naming the extensions it
-  implements — the two signal extensions and `Wakeable`; `ridl-loopback` is the
-  one runtime that does.
+  unpublished: each test is a function generic over a factory trait, which
+  builds a runtime, makes a second event source, caller and handler on it,
+  states the size of its call table, and supplies a hand-driven clock and a
+  settlement fault injected once. A runtime runs the whole suite from its own
+  tests with the crate's `suite!` macro, naming the extensions it implements —
+  the two signal extensions and `Wakeable`; `ridl-loopback` is the one runtime
+  that does.
 
 - **`crates/ridlc-gen-model`** — the reference codegen plugin, test-only and
   unpublished: `--emit codegen-model` as a process, over the backend contract

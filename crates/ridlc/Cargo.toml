@@ -21,8 +21,7 @@ ridl-syntax.workspace = true
 rowan.workspace = true
 
 [dev-dependencies]
-# The `glob` feature drives the full-pipeline corpus runner (tests/corpus.rs,
-# E1.18); `json` rides in from the workspace default.
+# The `glob` feature drives the full-pipeline corpus runner (tests/corpus.rs); `json` rides in from the workspace default.
 insta = { workspace = true, features = ["glob"] }
 # `cli_reference.rs` reads the book's fences and tables.
 pulldown-cmark.workspace = true

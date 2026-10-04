@@ -10,10 +10,10 @@ description = "The RIDL family per-profile semantic passes: the package resolver
 num-bigint.workspace = true
 num-rational.workspace = true
 # `testgen` ships proptest strategies derived from a checked range (the "typl
-# ranges are generators" feature, E1.18). proptest is an OPTIONAL dependency
+# ranges are generators" feature). proptest is an OPTIONAL dependency
 # gated behind the default-on `testgen` feature: proptest pulls in
 # `rand`/`getrandom`, which does not compile for wasm32-unknown-unknown, so the
-# E1.19 `--no-default-features` compiler-crate check must be able to drop it
+# `--no-default-features` compiler-crate check must be able to drop it
 # (ADR-0007 decision 5, the same discipline the fs/fetch gates follow). The
 # `std` feature is all the strategy builders and the test runner need.
 proptest = { workspace = true, features = ["std"], optional = true }
@@ -30,8 +30,7 @@ regex.workspace = true
 # which sit behind the fs/fetch features, so the default features (fetch,
 # which implies fs) are turned off here. Leaving the default on would pull
 # `ureq` (and transitively `ring`) into the wasm32-unknown-unknown build
-# even with `--no-default-features` on ridl-sem itself (ADR-0007 decision 5,
-# E1.19).
+# even with `--no-default-features` on ridl-sem itself (ADR-0007 decision 5).
 # Not `{ workspace = true, default-features = false }`: cargo refuses a
 # `default-features = false` override on a workspace-inherited dependency
 # outright, so this one dependency is declared directly instead. The version
@@ -56,7 +55,7 @@ insta.workspace = true
 # property tests, gated by `#[cfg(test)]` only) compile regardless of the
 # `testgen` feature — in particular under `--no-default-features`, where the
 # optional normal dependency above is turned off. Dev-dependencies are not
-# built by `cargo check`, so this does not re-enter the E1.19 wasm build. The
+# built by `cargo check`, so this does not re-enter the wasm build. The
 # workspace pins default-features off, so `std` is requested here explicitly.
 proptest = { workspace = true, features = ["std"] }
 # tests/manifest_version.rs reads this crate's own Cargo.toml and the

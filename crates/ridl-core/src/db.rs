@@ -1,5 +1,5 @@
 //! The salsa incremental database for the RIDL family (docs/ROADMAP.md epic
-//! E0.4, ADR-0004 §3).
+//! ADR-0004 §3).
 //!
 //! This crate is where "the compiler is a library first" becomes concrete: an
 //! [`InputFile`] input, a memoized [`parse_file`] query over
@@ -207,7 +207,7 @@ mod tests {
 
     /// The salsa spike's proof: editing one file's text re-parses only that
     /// file, and the other file's parse stays memoized (docs/ROADMAP.md epic
-    /// E0.4). The event callback records each executed query's `database_key`,
+    /// The event callback records each executed query's `database_key`,
     /// so the test asserts *which* query re-ran, not just how many (issue
     /// #102).
     #[test]

@@ -1,7 +1,7 @@
 # The FlatBuffers payload codec
 
-The generated `Payload<FlatBuffers>` implementation a package carries, story
-E11.7, as built. The binding choices are
+The generated `Payload<FlatBuffers>` implementation a package carries, as built.
+The binding choices are
 [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) (the
 projection this codec must agree with byte for byte),
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
@@ -71,7 +71,7 @@ The `Payload<FlatBuffers>` implementations are in `generate`'s own output, not
 behind a third entry point beside `generate_face`. A consumer of a generated
 package needs the codec whether or not it ever dispatches, and `generate`
 already names `ridl-rt`. `ridlc::run_build` calls `generate_pipeline`, whose
-output is `generate`'s plus the descriptors and the face (E11.14), so
+output is `generate`'s plus the descriptors and the face, so
 `ridl build --emit rust` carries the codec, and `crates/ridlc/src/lib.rs`
 renders `ridl-rt = { version = "0.4", features = ["flatbuffers"] }` in the
 manifest it writes (the version is a literal there, and moves with each
@@ -180,23 +180,23 @@ range, step, length and pattern constraints. Named scalar checks use a
 `fn check(value: &T)` emitted beside `new` in every constrained named scalar's
 `impl` block.
 
-**`check` is `pub(crate)` since E11.14 (2026-09-21); whether it becomes `pub` is
-still Epic 10's call.** It carried no visibility modifier while every caller was
-a function generated into the same module, or a child `pub mod` of it. That
-stopped being true when E11.14 closed driftsys/ridl#467: the codec of one
-package now resolves a reference into another package of the same build and
-calls that type's `check` through the emitted module tree, where a private item
-is unreachable. The emitted crate is one crate per build, so `pub(crate)`
-reaches every generated caller and adds nothing to the crate's public surface —
-which leaves open item 2 of the 2026-09-20 design note exactly where it was:
-making `check` `pub`, for a consumer validating a value it did not build, is a
-surface commitment Epic 10 takes, and `pub(crate)` does not take it. Every
-`__ridl_fb_*` function moved from a bare `fn` to `pub(crate)` in the same change
-and for the same reason. The named-scalar check hangs off the one `Codec::wire`
-site every position reaches, so it covers every position the projection admits a
-named scalar at — an inline field, a string's or a byte sequence's bytes, an
-array element, a map key, a map value, a tuple field, a nested table, a union's
-table arm and its boxed arm, and any of those behind an optional.
+**`check` is `pub(crate)` since 2026-09-21; whether it becomes `pub` is still
+Epic 10's call.** It carried no visibility modifier while every caller was a
+function generated into the same module, or a child `pub mod` of it. That
+stopped being true when driftsys/ridl#467 was closed: the codec of one package
+now resolves a reference into another package of the same build and calls that
+type's `check` through the emitted module tree, where a private item is
+unreachable. The emitted crate is one crate per build, so `pub(crate)` reaches
+every generated caller and adds nothing to the crate's public surface — which
+leaves open item 2 of the 2026-09-20 design note exactly where it was: making
+`check` `pub`, for a consumer validating a value it did not build, is a surface
+commitment Epic 10 takes, and `pub(crate)` does not take it. Every `__ridl_fb_*`
+function moved from a bare `fn` to `pub(crate)` in the same change and for the
+same reason. The named-scalar check hangs off the one `Codec::wire` site every
+position reaches, so it covers every position the projection admits a named
+scalar at — an inline field, a string's or a byte sequence's bytes, an array
+element, a map key, a map value, a tuple field, a nested table, a union's table
+arm and its boxed arm, and any of those behind an optional.
 
 **Amended 2026-10-02 (driftsys/ridl#469 and #421).** Anonymous inline
 constraints are retained by wire construction and checked at the same positions
@@ -354,9 +354,9 @@ Rust randomizes a `HashMap`'s iteration order per process.
 **Conformance is a round trip through a second implementation, not byte equality
 with one.** FlatBuffers fixes no canonical encoding: vtable sharing, field
 ordering and alignment slack are all writer choices, and two conforming writers
-differ. This is a weaker claim than E11.8 makes for proto3, where byte-level
-conformance against `protoc` is the story's own `Done when`; the difference is
-in the formats, not in the rigor of the two stories.
+differ. This is a weaker claim than the proto3 backend makes, where byte-level
+conformance against `protoc` is the acceptance check; the difference is in the
+formats, not in the rigor of the two checks.
 
 The second implementation is `planus`, already this repository's FlatBuffers
 oracle. `planus-codegen` turns the `.fbs` the schema backend emits for the
@@ -507,9 +507,9 @@ types against the new snapshot and the built-in `ridl.std`. The codec and the
 diff read one definition of "0 is legal", `ridl_ir::zero`: `zero_is_legal` in
 `codec.rs` calls `ridl_ir::zero::range_holds_zero`, and the lowering's enum zero
 member comes from `ridl_ir::zero::enum_zero_member`. Case 12 ties the two
-together over one fixture. E11.8 meets the same reader rule in proto3 terms,
-where it is forced: proto3 gives a non-optional scalar no presence, so an absent
-one is 0.
+together over one fixture. The proto3 side meets the same reader rule in proto3
+terms, where it is forced: proto3 gives a non-optional scalar no presence, so an
+absent one is 0.
 
 **A foreign reader does not refuse.** The emitted `.fbs` gives a field such as
 `c : Level [1..10]` no default annotation — FlatBuffers has no way to mark a
@@ -547,9 +547,9 @@ the test already performs over the emitter's live output.
 | -------------------------------------------------------------- | ----------------- |
 | A union-arm retirement would shift wire discriminants silently | driftsys/ridl#302 |
 
-**driftsys/ridl#467 is closed by E11.14 (2026-09-21).** It was the widest of
-these: ten of the corpus's fifteen payload types were withheld a codec, every
-type touching the prelude or an import, each getting a
+**driftsys/ridl#467 was closed on 2026-09-21.** It was the widest of these: ten
+of the corpus's fifteen payload types were withheld a codec, every type touching
+the prelude or an import, each getting a
 `const __RIDL_FB_NO_CODEC_<NAME>: () = ()` in the emitted source whose doc
 comment named the type, the member that could not be judged, the reason and the
 issue. The fix is the one the gap stated — `generate` is handed the other
@@ -570,7 +570,7 @@ above records. Its one remainder, driftsys/ridl#598, was decided on 2026-09-30:
 
 ## Trace
 
-- Roadmap: [`../ROADMAP.md`](../ROADMAP.md) — E11.7
+- Roadmap: [`../ROADMAP.md`](../ROADMAP.md)
 - Decisions: [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md),
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decisions 2, 5, 6, 7 and 9,

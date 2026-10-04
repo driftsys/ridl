@@ -4,7 +4,7 @@
 //! legal value of the payload encodes to at most that many bytes under the
 //! projection the wire backend emits (ADR-0017 for proto3, ADR-0019 for
 //! FlatBuffers). Envelope and framing are excluded (spec D-7). `repr(C)` has
-//! no state until E11.12 (driftsys/ridl#317) defines the layout.
+//! no state until the layout is defined (driftsys/ridl#317).
 //!
 //! The descriptor defines no wire shape (§4 answer 6): only a payload that is
 //! one named type is sized, through the projections —
@@ -147,7 +147,7 @@ pub enum SizeState {
 /// The state of the named type `type_name` under `encoding`: `None` when
 /// this toolchain computes no state. For every encoding: the name does not
 /// resolve, or the projection has no root form for the type. For `ReprC`:
-/// always, the layout is undefined until E11.12. For `Proto3`, where no
+/// always, the layout is undefined until it is defined (driftsys/ridl#317). For `Proto3`, where no
 /// unbounded state exists (`proto3::state`): the type is not a struct or a
 /// union; a member of its message is one the proto backend refuses, or one
 /// the backend accepts that no proto3 leaf bounds (a `string` or `bytes`

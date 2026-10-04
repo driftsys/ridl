@@ -3,7 +3,7 @@
 //! The family maintains one reserved-word registry across every profile: every
 //! family keyword is reserved in every profile, including keywords a profile
 //! does not accept. This module is the single source of truth the lexer maps
-//! identifiers against, and the source the E4.7 governance test will later read.
+//! identifiers against, and the source a governance test can read.
 //!
 //! An identifier that matches a keyword the active [`Profile`] uses lexes to
 //! that keyword's [`SyntaxKind`]; one that matches any other registry word lexes

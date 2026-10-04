@@ -1,5 +1,5 @@
-//! The FlatBuffers codec round trip — E11.7's own `Done when` (stage K5,
-//! plan Task 4 of `docs/archive/2026-09-20-flatbuffers-codec-plan.md`).
+//! The FlatBuffers codec round trip — the codec's own `Done when`
+//! (`docs/archive/2026-09-20-flatbuffers-codec-plan.md`).
 //!
 //! `generate` emits a `Payload<FlatBuffers>` implementation per root table
 //! (design note D-1 as amended). This target compiles that output as a
@@ -313,7 +313,7 @@ fn main() {
 /// alignment slack per vtable slot, so a bound short by one still holds every
 /// value the fixture can build, and `bound.saturating_sub(1)` passes every
 /// other case in this file. The constant is wire-visible — a consumer sizes a
-/// stack buffer from it, and E11.7's face sizes real buffers from the maximum
+/// stack buffer from it, and the face sizes real buffers from the maximum
 /// over these — so pinning the number is what the constant deserves. A
 /// deliberate change to the projection's charges changes these two literals
 /// in the same commit.

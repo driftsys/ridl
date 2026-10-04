@@ -466,7 +466,7 @@ interface XmlParser {
 
 /// X-8b of the design: two members equal under `camel_case` beside a call
 /// the face cannot carry. The pipeline skips the interface's face and
-/// descriptors (E11.14 decision 2), so neither `CabinXY` is emitted and the
+/// descriptors (interaction-face decision 2), so neither `CabinXY` is emitted and the
 /// claim table claims nothing for the interface (decision 13). The crate
 /// compiles, as it did before the claim tables; `name_collision_claims.rs`
 /// pins the refusal of the same members once the face is emitted (X-8c).

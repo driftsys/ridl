@@ -32,7 +32,7 @@ fn max_size_path(type_name: &str) -> String {
 /// Every `PayloadInfo.max_size` carries the model's own FlatBuffers bound
 /// (`Payload.flatbuffers_max_size`, which `max_size` computed) in its
 /// `flatbuffers` column and nothing else: `proto3` is `None` because this
-/// backend emits no proto3 codec, and `repr_c` is `None` until E11.12 defines
+/// backend emits no proto3 codec, and `repr_c` is `None` until the layout is defined (driftsys/ridl#317), which defines
 /// the layout. The payloads are read from the model the emitter reads, so
 /// the number asserted is the model's, not one this test derives.
 #[test]
@@ -41,8 +41,8 @@ fn encoded_sizes_carry_the_models_flatbuffers_bound() {
     let face = generate_face(&package).expect("generate_face").rust_source;
     let d = dense(&face);
     assert!(
-        !face.contains("E16.2"),
-        "the descriptor doc comment no longer defers the sizes to E16.2"
+        face.contains("FlatBuffers bound as the codegen model carries it"),
+        "the descriptor doc comment states the sizes as filled, not deferred"
     );
 
     let model = ridl_ir::codegen::lower(&package, &[]);

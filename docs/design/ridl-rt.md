@@ -34,11 +34,11 @@ decision 19), plus two that a cargo feature adds:
 | `sample`      | `Timestamp`, `Duration`, `Envelope`, `Provenance`, `Cause`, `Detection`, `Freshness`, `Sample`, `Occurrence`, `EventSeqTracker`, `Continuity`, `TrackerFull`                                                                                                         |
 | `contract`    | `Ordinal`, `InterfaceNo`, `CatalogHash`, `CatalogRef`, `Kind`, `Interface`, `Interaction`, `Signal`, `Event`, `Command`, `Query`, `Fixed`, `Member`, `Timing`, `TimingMode`, `PayloadInfo`, `EncodedSizes`, `table_budget`, `Unsized`                                |
 | `port`        | `Attached`, `Clock`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors |
-| `correlate`   | since story E11.18: `Table`, `Settled`, `Forgotten`, `Waiters`                                                                                                                                                                                                       |
+| `correlate`   | since the call-table move: `Table`, `Settled`, `Forgotten`, `Waiters`                                                                                                                                                                                                |
 | `error`       | `Contract`, `Transport`, `CallError`, `ClientError`, `ProviderError`                                                                                                                                                                                                 |
 | `face`        | since 2026-09-28 (driftsys/ridl#580): `Bind`, `Events`, `Publish`; `Timeout` under the `std` feature — the traits a generated face implements, the section "The face traits" below                                                                                   |
 | `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with stage K5                           |
-| `task`        | under the `std` feature, since 2026-09-25 (story E11.17): `block_on`, `noop_waker`; `flag_waker` and `WakeFlag` since 2026-09-28 (driftsys/ridl#568)                                                                                                                 |
+| `task`        | under the `std` feature, since 2026-09-25: `block_on`, `noop_waker`; `flag_waker` and `WakeFlag` since 2026-09-28 (driftsys/ridl#568)                                                                                                                                |
 
 Generated code names every item by its full path and imports none, because
 several names here — `Duration`, `Handler`, `Kind` — are also names in `core` or
@@ -183,18 +183,17 @@ decision 4.
 **An `EncodedSizes` field is `None` when the toolchain cannot size the payload
 for that encoding**, which covers both an encoding that cannot carry the payload
 and one whose size is not derivable yet. The `repr(C)` column is `None` for
-every payload until E11.12 defines the C-representable layout
+every payload until the C-representable layout is defined (driftsys/ridl#317)
 (`docs/archive/2026-09-13-catalog-descriptor-plan.md`, "Dispositions of the
 spec's open items, settled 2026-10-03", answer 5), and a backend that emits
 descriptors before its codec exists writes `None` for that codec's column as
-well. E11.13's MVP wrote `None` for all three; since E16.4 (driftsys/ridl#380)
-the Rust backend fills the `flatbuffers` column from the codegen model's bound
-and writes `None` for `proto3`, because it emits no proto3 codec, and for
-`repr_c`. The field's own documentation first read `None` as "that encoding
-cannot carry the payload" alone; that is the narrower of the two cases and it
-made a backend with no codec yet unable to say anything true. A consumer that
-needs to know which encodings a payload has asks the catalog descriptor, not
-this field.
+well. The first emitter wrote `None` for all three; since driftsys/ridl#380 the
+Rust backend fills the `flatbuffers` column from the codegen model's bound and
+writes `None` for `proto3`, because it emits no proto3 codec, and for `repr_c`.
+The field's own documentation first read `None` as "that encoding cannot carry
+the payload" alone; that is the narrower of the two cases and it made a backend
+with no codec yet unable to say anything true. A consumer that needs to know
+which encodings a payload has asks the catalog descriptor, not this field.
 
 Not carried by a descriptor: the toolchain version (not identity), retired
 interfaces and reserved ordinals (a runtime answers
@@ -263,15 +262,15 @@ is ADR-0021 decision 6.
 ## The helpers over the envelope and the descriptors
 
 Four computations every runtime needs are defined once here, so that two
-runtimes compute them the same way (story E11.19). Each is `no_std`, allocates
-nothing and sits behind no cargo feature. They live beside the types they read —
-the envelope helpers in `sample`, the descriptor helpers in `contract` — rather
-than in a new module; the one module added after them, `correlate`, holds
-storage rather than a computation over an existing type. `sample` now imports
-`InterfaceNo`, `Ordinal` and `Timing` from `contract`, which already imported
-`Duration` from `sample`, so the two modules depend on each other; Rust accepts
-a dependency cycle between modules of one crate. `encoding` likewise imports
-`EncodedSizes` from `contract`, which imports `Encoding`.
+runtimes compute them the same way. Each is `no_std`, allocates nothing and sits
+behind no cargo feature. They live beside the types they read — the envelope
+helpers in `sample`, the descriptor helpers in `contract` — rather than in a new
+module; the one module added after them, `correlate`, holds storage rather than
+a computation over an existing type. `sample` now imports `InterfaceNo`,
+`Ordinal` and `Timing` from `contract`, which already imported `Duration` from
+`sample`, so the two modules depend on each other; Rust accepts a dependency
+cycle between modules of one crate. `encoding` likewise imports `EncodedSizes`
+from `contract`, which imports `Encoding`.
 
 ```rust
 impl Freshness {
@@ -346,7 +345,7 @@ These public items, and `Encoding::max_size`, are recorded in ADR-0021 decision
 mod sealed { pub trait Sealed {} }
 pub trait Encoding: sealed::Sealed + 'static {
     const NAME: &'static str;
-    fn max_size(sizes: &EncodedSizes) -> Option<u32>; // this encoding's field of `sizes` (E11.19)
+    fn max_size(sizes: &EncodedSizes) -> Option<u32>; // this encoding's field of `sizes`
 }
 pub struct FlatBuffers; // NAME = "flatbuffers"
 pub struct Proto3;      // NAME = "proto3"
@@ -418,19 +417,19 @@ combination — decided in ADR-0021 decision 8. `just wasm-check` covers
 `-p ridl-rt`, because a package's generated Rust links this crate and is
 compiled to `wasm32` (ADR-0020 decisions 6 and 7).
 
-**Since 2026-09-20 (story E11.7, stage K3) `flatbuffers` is no longer empty.**
-It gates the `flatbuffers` module: the byte-order reads, the vtable walk, and
-the tail builder that a generated `Payload<FlatBuffers>` implementation calls.
-The module decides no layout: it is handed a slot, an offset and a table size
-and writes the bytes they describe. It still takes no dependency: the
-FlatBuffers runtime crate ADR-0020 decision 5 permits under this feature is not
-used, and since that decision's 2026-10-03 amendment it cannot be planus: the
-toolchain may depend on planus, and `ridl-rt` and every generated package must
-not. `proto3` and `repr-c` remain empty.
+**Since 2026-09-20 `flatbuffers` is no longer empty.** It gates the
+`flatbuffers` module: the byte-order reads, the vtable walk, and the tail
+builder that a generated `Payload<FlatBuffers>` implementation calls. The module
+decides no layout: it is handed a slot, an offset and a table size and writes
+the bytes they describe. It still takes no dependency: the FlatBuffers runtime
+crate ADR-0020 decision 5 permits under this feature is not used, and since that
+decision's 2026-10-03 amendment it cannot be planus: the toolchain may depend on
+planus, and `ridl-rt` and every generated package must not. `proto3` and
+`repr-c` remain empty.
 
-**Since 2026-09-25 (story E11.17) a fourth feature, `std`, exists, off by
-default.** It is not an encoding: it links the standard library and gates the
-`task` module, whose two functions are
+**Since 2026-09-25 a fourth feature, `std`, exists, off by default.** It is not
+an encoding: it links the standard library and gates the `task` module, whose
+two functions are
 `block_on(fut, deadline: Option<Instant>)
 -> Option<F::Output>` — a waker that
 unparks the current thread through `std::task::Wake` on an `Arc`,
@@ -627,8 +626,8 @@ Semantics each implementation presents:
 describe mechanisms some runtimes have, not interaction semantics every runtime
 must present, so a runtime may omit any of them.
 
-**`Wakeable` is the extension a face that waits is built on** (story E11.16,
-[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 13).
+**`Wakeable` is the extension a face that waits is built on**
+([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 13).
 No port method waits, so a task calls `wake_on(what, waker)`, reads the port,
 and returns when the read finds nothing; the runtime wakes it when the thing
 `what` names may have changed, and the task reads again. `Interest` is the key:
@@ -706,18 +705,18 @@ supertrait, so a single-threaded `no_std` runtime whose handles use `Cell` or
 compile-time assertion, `fn assert_sync<T: Sync>()` applied to a reader handle.
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 12
 records the reasoning and the alternative it rejects, one runtime struct behind
-a mutex. Story E11.15 built the first runtime to this shape,
-[`ridl-loopback`](ridl-loopback.md): six handles, a `Send + Sync` reader handle,
-and an aggregate implementing all twelve traits by delegation.
+a mutex. The first runtime to this shape is [`ridl-loopback`](ridl-loopback.md):
+six handles, a `Send + Sync` reader handle, and an aggregate implementing all
+twelve traits by delegation.
 
 ## The correlation table
 
 `correlate` holds the two pieces of storage every runtime with asynchronous
-replies would otherwise write alone (story E11.18, ADR-0021 decision 15): the
-caller-side call table and the waiter registry a handle keeps behind `Wakeable`.
-Both are pure data structures — `no_std`, allocation-free, behind no feature,
-holding no lock — and neither wakes anything: every operation that would wake a
-task returns the waker, and the runtime wakes it after releasing its own lock.
+replies would otherwise write alone (ADR-0021 decision 15): the caller-side call
+table and the waiter registry a handle keeps behind `Wakeable`. Both are pure
+data structures — `no_std`, allocation-free, behind no feature, holding no lock
+— and neither wakes anything: every operation that would wake a task returns the
+waker, and the runtime wakes it after releasing its own lock.
 
 ```rust
 // correlate::
@@ -849,8 +848,8 @@ and the seven port error enums stay `#[non_exhaustive]` is ADR-0021 decision 9.
 Every error type here is `Copy` and owns nothing.
 
 `ClientError` and `ProviderError` compose these into one error per side of a
-call (story E11.18, ADR-0021 decision 16, note F-1): a generated client call
-returns `Result<T, ClientError>`, and a generated `serve` resolves to
+call (ADR-0021 decision 16, note F-1): a generated client call returns
+`Result<T, ClientError>`, and a generated `serve` resolves to
 `Result<Infallible, ProviderError>`. Each has a `From` impl for each inner type,
 so `?` lands a port error or a call outcome in the variant for its side.
 `ClientError::Send` is here rather than in `CallError`, because a send failure
@@ -859,8 +858,8 @@ is the reply read's port failure; only `ReadError::Detached` reaches it, because
 the reply buffer is sized from `MAX_SIZE`, and it is kept as what it is rather
 than mapped onto a `Transport` variant, which would give a local failure a
 frame-level meaning. Both are `#[non_exhaustive]` under decision 9 and `Copy`.
-Generated code returns both since story E11.21's first half: a call future's
-output is `Result<T, ClientError>`, and `serve`'s future resolves to
+Generated code returns both since the async client: a call future's output is
+`Result<T, ClientError>`, and `serve`'s future resolves to
 `Result<Infallible, ProviderError>`.
 
 ## What 0.1 leaves out
@@ -868,14 +867,13 @@ output is `Result<T, ClientError>`, and `serve`'s future resolves to
 Streams (`stream`-typed fields) and `Inline` payloads; `Constrained` (nothing
 calls it in 0.1); `Family` (the IR carries no family field yet); `ServiceId`
 (dropped, ADR-0021 decision 1); `Encoding::FORMAT` (the frame specification's
-wire tag values — story E11.1 landed as a specification and fixed the values, 1
-FlatBuffers, 2 proto3, 3 `repr(C)`; the constant itself is a later 0.x minor);
-`Access` (the trust constant the Rust codegen generates once the rsdl lowering
-exists); the three payload codecs (stories E11.7, E11.8 and E11.12); the
-runtimes — `ridl-loopback` is its own crate (story E11.15,
-[its design record](ridl-loopback.md)) and `ridl-transport-ws` is story E11.9;
-and the engine. `Family` returns as a `Member` field, which is a breaking change
-(ADR-0021 decision 10); streams have no story yet.
+wire tag values — the frame specification fixed the values, 1 FlatBuffers, 2
+proto3, 3 `repr(C)`; the constant itself is a later 0.x minor); `Access` (the
+trust constant the Rust codegen generates once the rsdl lowering exists); the
+three payload codecs; the runtimes — `ridl-loopback` is its own crate
+([its design record](ridl-loopback.md)) and `ridl-transport-ws` is
+driftsys/ridl#265; and the engine. `Family` returns as a `Member` field, which
+is a breaking change (ADR-0021 decision 10); streams have no story yet.
 
 ## Versioning
 

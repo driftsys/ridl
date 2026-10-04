@@ -25,8 +25,7 @@
 //! offset inside its table and the table's size are the codec emitter's,
 //! because no other emitter can observe them — a `.fbs` schema states no
 //! offsets — and the bound charges enough alignment slack per slot to hold
-//! whatever order that emitter writes a table's fields in (E11.7 stage K5;
-//! this paragraph corrected what stage K3 wrote here).
+//! whatever order that emitter writes a table's fields in.
 //!
 //! [`Builder::push_offset_vector`] arrived with that emitter, for a vector of
 //! strings and of tables. A helper for a union has not been needed: a union's

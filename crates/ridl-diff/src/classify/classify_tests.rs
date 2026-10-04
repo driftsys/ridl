@@ -1611,7 +1611,7 @@ fn reordering_a_services_list_is_identical() {
 /// Two references with one final segment are two members of the set: the set
 /// is keyed on the canonical reference, so retargeting one to the other is a
 /// removal plus an addition, both compatible, and never `identical` (the
-/// E9.6 regression of ADR-0015 decision 24 stays covered).
+/// regression of ADR-0015 decision 24 stays covered).
 #[test]
 fn a_retargeted_reference_with_the_same_final_name_is_a_removal_plus_an_addition() {
     let old = service_pkg(vec![service_shapes(

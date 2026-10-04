@@ -1,4 +1,4 @@
-//! The full-pipeline corpus (docs/ROADMAP.md epics E1.18 and E2.11b, ADR-0007
+//! The full-pipeline corpus (ADR-0007
 //! decision 3).
 //!
 //! Each directory under `corpus/` is a real package (or workspace) with its own
@@ -25,7 +25,7 @@
 //! - `diag-showcase/` — a package crafted so its compile emits one instance of
 //!   every typl-layer diagnostic that a single package's source and manifest
 //!   can trigger. Its diagnostics snapshot is the de-facto typl diagnostic
-//!   index until the error index website (E4.2). The codes that need more than
+//!   index until the error index website. The codes that need more than
 //!   one package, a broken or workspace manifest, or the network are listed in
 //!   `diag-showcase/NOTES` and are not exercised there.
 //! - `workspace-two-members/` — a two-member workspace with a cross-member
@@ -1985,8 +1985,8 @@ fn tombstones_hold_their_ordinals_in_both_interaction_stores() {
 /// The guaranteed expression subset (ridl §13) is exercised end to end.
 /// Comparison, boolean connectives, enum access, tuple-field access and
 /// duration comparison were already in the corpus; conjunction, arithmetic and
-/// a reference to a declared `const` were not. E5.1 restructures
-/// `Contract.source` from canonical text into an expression tree with this
+/// a reference to a declared `const` were not. A change that restructures
+/// `Contract.source` from canonical text into an expression tree has this
 /// corpus as its regression set, so a form with no instance here is a form that
 /// restructure would land without ever having been exercised.
 #[test]

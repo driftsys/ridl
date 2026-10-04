@@ -785,7 +785,7 @@ impl Store {
     /// again, and no `Claim` waiter is woken for it (decision 2 of the pass-1
     /// dispositions on driftsys/ridl#557). The loopback enforces
     /// no deadline on the returned call: what bounds the caller's wait is the
-    /// generated async client's deadline (story E11.21, ADR-0023 decision 6).
+    /// generated async client's deadline (ADR-0023 decision 6).
     ///
     /// Returns the handler's waiters, for the handle to drop after the lock is
     /// released, as `close_source` explains.

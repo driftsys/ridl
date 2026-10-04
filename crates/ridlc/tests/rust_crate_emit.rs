@@ -433,7 +433,7 @@ fn the_emitted_manifest_parses_and_carries_the_declared_structure() {
         features["std"],
         vec!["ridl-rt/std".to_string()],
         "`std` gates the generated `blocking` module, which is `block_on` over the async \
-         face, and `block_on` is what `ridl-rt`'s `std` feature carries (story E11.21)"
+         face, and `block_on` is what `ridl-rt`'s `std` feature carries"
     );
 
     let dependencies = manifest.dependencies;
@@ -1110,7 +1110,7 @@ fn ridl_rt_version_requirement_matches_the_crate() {
         .next()
         .expect("a semver version has a minor segment");
     // The requirement now carries the `flatbuffers` feature, because
-    // `generate`'s output includes the payload codec (E11.7 stage K5). Only
+    // `generate`'s output includes the payload codec. Only
     // the version half is what this test guards, so it matches the version
     // string inside the dependency table rather than the whole line.
     let expected = format!("ridl-rt = {{ version = \"{major}.{minor}\"");
@@ -1279,7 +1279,7 @@ fn a_cross_package_struct_or_union_reference_compiles() {
 /// An **interface** named `Wire` builds and the emitted crate compiles.
 ///
 /// The descriptor emitter writes `pub struct <Interface>;` at package scope,
-/// which is where the `pub type Wire` alias used to land, so E11.14 decision 5
+/// which is where the `pub type Wire` alias used to land, so interaction-face decision 5
 /// refused this package. The alias is gone (`docs/technotes/rust-backend-name-collisions.md`, decision 5, driftsys/ridl#588): every site that named it writes
 /// `::ridl_rt::encoding::FlatBuffers`, so the interface's identity struct
 /// collides with nothing and no name is reserved.
@@ -1323,7 +1323,7 @@ fn an_interface_named_wire_compiles() {
 }
 
 /// An interface the face cannot carry is skipped with a note, and the rest of
-/// the package is still emitted and still compiles (E11.14 decision 2).
+/// the package is still emitted and still compiles (interaction-face decision 2).
 ///
 /// The corpus's `veh-cluster` is the fixture that exercises this without one
 /// being written for it: two of its interfaces carry a contract clause the
@@ -1385,7 +1385,7 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
         "this interface is skipped for a clause, got:\n{note}"
     );
     assert!(
-        note.contains("Story E5.1") && !note.contains("lane M's"),
+        note.contains("driftsys/ridl#704") && !note.contains("lane M's"),
         "the owner line must name the clause story, not the multi-parameter \
          one, got:\n{note}"
     );

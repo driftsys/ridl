@@ -1,4 +1,4 @@
-//! Inlay hints (docs/ROADMAP.md epic E1.16, general form §6.3).
+//! Inlay hints (general form §6.3).
 //!
 //! Two families of hint make hidden semantics visible at the desk, so the
 //! author never has to open the IR to read them:

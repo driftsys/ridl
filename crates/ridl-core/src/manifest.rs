@@ -1,4 +1,4 @@
-//! The `ridl.toml` manifest parser (docs/ROADMAP.md epic E1.5, ADR-0002 §4).
+//! The `ridl.toml` manifest parser (ADR-0002 §4).
 //!
 //! A manifest has one file shape and two mutually exclusive modes: a standalone
 //! [`ManifestKind::Package`] or a [`ManifestKind::Workspace`] (ADR-0002 §4).
@@ -14,7 +14,7 @@
 //! `MANI-007` invalid import URL, `MANI-010` a `[lints]` entry that names no
 //! lint or whose value is not a level (warning, ADR-0024 decision 11).
 //! `MANI-004` (nested workspace) is defined in
-//! the catalogue but emitted by the package loader (E1.3, task 8), not here: a
+//! the catalogue but emitted by the package loader, not here: a
 //! manifest read in isolation cannot know it is a workspace member, so a valid
 //! `[workspace]` manifest parses clean.
 //!
@@ -379,7 +379,7 @@ fn is_valid_name_segment(segment: &str) -> bool {
 /// A deliberately minimal import-URL check: the value must use the `http` or
 /// `https` scheme and name a non-empty host (the run up to the first `/`, `?`,
 /// or `#`). Full URL, version-suffix, and registry validation is the fetch
-/// layer's job (E1.6); this only rejects values that are plainly not URLs.
+/// layer's job; this only rejects values that are plainly not URLs.
 fn is_valid_import_url(url: &str) -> bool {
     let Some(rest) = url
         .strip_prefix("https://")
@@ -570,7 +570,7 @@ members = [\"a\"]
 
     #[test]
     fn mani_004_workspace_manifest_parses_clean_in_isolation() {
-        // Nested-workspace detection is the loader's job (E1.3, task 8). Parsed
+        // Nested-workspace detection is the loader's job. Parsed
         // in isolation a `[workspace]` manifest is a valid workspace, never
         // MANI-004.
         let (manifest, diags) = parse(WORKSPACE);

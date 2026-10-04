@@ -4,7 +4,7 @@
 //!
 //! For each named interface this module emits one `pub mod`, named after the
 //! interface, holding what the design note's §8 calls the face, as story
-//! E11.21 reshaped it (`docs/archive/2026-09-25-async-face-design.md`, notes
+//! The async face reshaped it (`docs/archive/2026-09-25-async-face-design.md`, notes
 //! F-2 to F-7, F-10 and F-11):
 //!
 //! - `Client<P>`, the consumer face, generic over exactly the ports the
@@ -70,7 +70,7 @@
 //! `blocking` module, which is the library's and not generated. No method is
 //! bounded on `CoherentSignals`.
 //!
-//! Since E11.14 the face is reached from [`crate::generate_pipeline`], which
+//! The face is reached from [`crate::generate_pipeline`], which
 //! is what `ridl build --emit rust` calls, as well as from
 //! [`crate::generate_face`]. It is not reached from [`crate::generate`],
 //! which still emits no face.
@@ -153,7 +153,7 @@ struct Call<'a> {
 
 /// The face module of one interface, or `None` when the interface declares
 /// nothing the face carries. Reachable from the crate for the pipeline's
-/// per-interface walk (E11.14 decision 2).
+/// per-interface walk (interaction-face decision 2).
 ///
 /// The module is named by the interface's `snake_case`, so an interface
 /// `Climate` of package `veh` beside a package `veh.climate` gives a face

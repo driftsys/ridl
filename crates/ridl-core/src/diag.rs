@@ -1,5 +1,5 @@
 //! The coded diagnostic model every compiler pass emits (docs/ROADMAP.md epic
-//! E1.10, ADR-0004 §5, ADR-0007 decision 2).
+//! ADR-0004 §5, ADR-0007 decision 2).
 //!
 //! A [`Diagnostic`] is a first-class homegrown value — a stable [`DiagCode`], a
 //! [`Severity`], a message, a primary source [`Span`], secondary [`Label`]s, and
@@ -25,9 +25,9 @@
 //! - `RSDL-…` — rsdl system rules, defined by the rsdl reference §16.
 //!   [`RSDL_CATALOG`].
 //! - `MANI-…` — manifest, lockfile, cache, and fetch: the manifest `0xx` codes
-//!   (E1.5) and the distribution `1xx` codes (E1.6). [`MANI_CATALOG`].
+//!   and the distribution `1xx` codes. [`MANI_CATALOG`].
 //!
-//! This module is the SSOT the error index (E4.2) reads. Every code is declared
+//! This module is the SSOT the error index reads. Every code is declared
 //! once, by [`diag_codes!`], which expands one entry into both the `DiagCode`
 //! constant and its catalogue row — a code with no entry cannot be written
 //! (ADR-0008 decision 21). A catalogue lists a code even when no pass emits it
@@ -145,7 +145,7 @@ macro_rules! diag_codes {
         )+
 
         /// Every catalogue this module declares, each paired with its constant's
-        /// name. The error index (E4.2) reads this rather than naming the
+        /// name. The error index reads this rather than naming the
         /// catalogues one at a time, and so do the guards below.
         pub const ALL_CATALOGS: &[(&str, &[CatalogEntry])] = &[
             $((stringify!($catalog), $catalog),)+
@@ -249,29 +249,29 @@ diag_codes! {
     /// is a change to what the compiler declares, not a catalogue edit.
     TYPL_CATALOG {
         /// More than one `package` declaration in a single file (typl §16.1).
-        /// Emitted by the package loader (E1.3).
+        /// Emitted by the package loader.
         TYPL_001 = "TYPL-001", Error,
             "more than one `package` declaration in a file";
 
         /// Package name does not mirror the directory path relative to the
-        /// manifest root (typl §16.1, ADR-0002 §1). Emitted by the package loader
-        /// (E1.3); single-file mode is exempt.
+        /// manifest root (typl §16.1, ADR-0002 §1). Emitted by the package loader.
+        /// Single-file mode is exempt.
         TYPL_002 = "TYPL-002", Error,
             "package name does not mirror the directory path";
 
         /// Wildcard, relative, or re-exporting import (typl §16.1, ADR-0002 §2).
-        /// Emitted by the resolver (E1.4).
+        /// Emitted by the resolver.
         TYPL_003 = "TYPL-003", Error,
             "wildcard, relative, or re-exporting import";
 
         /// Circular package imports (typl §16.1, ADR-0002 §6). Emitted by the
-        /// resolver (E1.4) from a depth-first walk over package import edges.
+        /// resolver from a depth-first walk over package import edges.
         TYPL_004 = "TYPL-004", Error,
             "circular package imports";
 
         /// A public declaration exposes an `internal` type in its fields, arms,
         /// backing, or a range-bound constant (typl §3.3, §16.1). Emitted by the
-        /// checker (E1.7b) over every top-level declaration, the ridl `interface`
+        /// checker over every top-level declaration, the ridl `interface`
         /// and `service` included: an interaction payload, parameter, return arm,
         /// or stream element is an exposure position exactly as a struct field is.
         /// A `service` naming an `internal` interface is RIDL-143 instead.
@@ -279,16 +279,16 @@ diag_codes! {
             "a public declaration exposes an `internal` type";
 
         /// Conflicting imports without an alias (typl §16.1, ADR-0002 §2).
-        /// Emitted by the resolver (E1.4).
+        /// Emitted by the resolver.
         TYPL_006 = "TYPL-006", Error,
             "conflicting imports without an alias";
 
-        /// Unused import (typl §16.1). Emitted by the resolver (E1.4) as a warning.
+        /// Unused import (typl §16.1). Emitted by the resolver as a warning.
         TYPL_007 = "TYPL-007", Warning,
             "unused import", lint = "unused-import";
 
         /// Import alias without an actual collision (typl §16.1, ADR-0002 §2).
-        /// Emitted by the resolver (E1.4) as a warning.
+        /// Emitted by the resolver as a warning.
         TYPL_008 = "TYPL-008", Warning,
             "import alias without an actual collision", lint = "unneeded-import-alias";
 
@@ -341,7 +341,7 @@ diag_codes! {
             "range `min > max`";
 
         /// `step` type mismatch, non-positive, or larger than the range
-        /// (typl §16.2). Also borrowed by the checker (E1.7b) for a range bound
+        /// (typl §16.2). Also borrowed by the checker for a range bound
         /// that references a non-numeric constant, a malformed bound const for
         /// which §16.2 defines no dedicated code.
         TYPL_105 = "TYPL-105", Error,
@@ -350,7 +350,7 @@ diag_codes! {
         /// Invalid regex syntax in a `match` constraint or a regex `const`
         /// (typl §16.2). Validated with the `regress` ECMA-262 engine (ADR-0007
         /// decision 10). A pattern `regress` accepts and the Rust `regex`
-        /// crate refuses is TYPL-220. Emitted by the checker (E1.7b).
+        /// crate refuses is TYPL-220. Emitted by the checker.
         TYPL_106 = "TYPL-106", Error,
             "invalid regex syntax in `match` or a regex `const`";
 
@@ -417,7 +417,7 @@ diag_codes! {
 
         /// Duplicate `reserved` entry (typl §16.3). Warning. The "dangling"
         /// half of the §16.3 rule (a name/value never previously used) needs the
-        /// previous IR snapshot and belongs to `ridl-diff` (E2.8).
+        /// previous IR snapshot and belongs to `ridl-diff`.
         TYPL_211 = "TYPL-211", Warning,
             "duplicate `reserved` entry", lint = "duplicate-reserved";
 
@@ -519,12 +519,12 @@ diag_codes! {
             "interaction declaration in a typl context";
 
         /// Blank line between a doc comment and its definition (typl §14, §16.5).
-        /// Warning. Emitted by the checker (E1.7b).
+        /// Warning. Emitted by the checker.
         TYPL_404 = "TYPL-404", Warning,
             "blank line between a doc comment and its definition", lint = "detached-doc-comment";
 
         /// `@deprecated` doc tag without a reason string (typl §14.2, §16.5).
-        /// Warning. Emitted by the checker (E1.7b).
+        /// Warning. Emitted by the checker.
         TYPL_405 = "TYPL-405", Warning,
             "`@deprecated` doc tag without a reason string", lint = "deprecated-without-reason";
     }
@@ -567,7 +567,7 @@ diag_codes! {
         /// A strict-periodic `@Xms` annotation on a kind other than `signal` —
         /// the isochronous mode belongs to state alone (ridl §9.2, §16.1).
         /// Widened from "on an `event`" by ADR-0015 decision 6 when `command`
-        /// and `query` gained the range form (E9.4): the same rule, stated
+        /// and `query` gained the range form: the same rule, stated
         /// over the three kinds it excludes instead of one. Emitted by the
         /// checker (E2 task 9).
         RIDL_103 = "RIDL-103", Error,
@@ -587,7 +587,7 @@ diag_codes! {
         /// or an attribute block on `fixed` (ridl §8, §9, §16.1). Emitted by
         /// the checker (E2 task 5).
         ///
-        /// Narrowed by ADR-0015 decision 6 (E9.4): `command` and `query` admit
+        /// Narrowed by ADR-0015 decision 6: `command` and `query` admit
         /// the range form now, so the two RPC kinds left this rule and only
         /// `fixed` remains in both halves. The callables drew FORM-102 until
         /// the E2 close-out, so one rule sat under two codes and one of them
@@ -639,7 +639,7 @@ diag_codes! {
         /// a default having been applied, which is exactly what an RPC never
         /// gets — absent means undeclared in the IR. RIDL-111 is reserved for
         /// the interface-used-as-a-type error (ADR-0008 decision 21), so 112
-        /// is the first free code in the band. Emitted by the checker (E9.4).
+        /// is the first free code in the band. Emitted by the checker.
         RIDL_112 = "RIDL-112", Warning,
             "`command` or `query` with no declared response bound", lint = "missing-response-bound";
 
@@ -655,7 +655,7 @@ diag_codes! {
         /// shape (ridl §14.5, §16.4). Emitted per-package by the checker (E2 task
         /// 8). Kept in the 1xx band per ADR-0008 decision 6 (see RIDL-140).
         /// Applies per shape in the service's shape list since ADR-0015
-        /// decision 18 (E9.6): the rule is unchanged, the span reports against
+        /// decision 18: the rule is unchanged, the span reports against
         /// the offending list element.
         RIDL_141 = "RIDL-141", Error,
             "`service` names a type that is not an `interface`";
@@ -669,7 +669,7 @@ diag_codes! {
         /// RIDL-142 are reserved by decision 21 and not yet implemented, so 143 is
         /// the next free code; decision 13's allocation ledger needs the ninth
         /// entry (issue #169). Applies per shape in the service's shape list
-        /// since ADR-0015 decision 18 (E9.6): the rule is unchanged, the span
+        /// since ADR-0015 decision 18: the rule is unchanged, the span
         /// reports against the offending list element.
         RIDL_143 = "RIDL-143", Error,
             "`service` publishes an `internal` interface";
@@ -678,7 +678,7 @@ diag_codes! {
         /// §16.4; ADR-0015 decisions 16 and 18): two composed interfaces both
         /// declaring `status` would give `service.status` two referents, which
         /// flat addressing cannot express. Emitted per-package by the checker
-        /// (E9.6). The service codes sit in the 1xx band (see RIDL-140);
+        /// The service codes sit in the 1xx band (see RIDL-140);
         /// RIDL-112 is minted by ADR-0015 decision 6, so 144 is the first free
         /// code.
         RIDL_144 = "RIDL-144", Error,
@@ -688,7 +688,7 @@ diag_codes! {
         /// ADR-0015 decision 18). Its own code rather than a fall-through to
         /// RIDL-144: listing a shape twice makes every member collide, so
         /// RIDL-144 alone would emit one diagnostic per member and bury the
-        /// actual mistake. Emitted per-package by the checker (E9.6); lowering
+        /// actual mistake. Emitted per-package by the checker; lowering
         /// keeps the first listing only, which holds the slot, and the
         /// diagnostic's secondary label points at it.
         RIDL_145 = "RIDL-145", Error,
@@ -708,7 +708,7 @@ diag_codes! {
         /// names are distinct in source and only their projections collide.
         /// Scoped to the members of one interface, the parameters of one
         /// interaction (decision 4), the fields of one struct, which joined
-        /// in the commit where E9.8 started projecting them onto proto3, the
+        /// in the commit where the proto3 backend started projecting them onto proto3, the
         /// arms of one union, which joined with the ADR-0016 amendment of
         /// 2026-09-20, and the values of one enum, which joined with the
         /// amendment of 2026-09-26. The first three namespaces are checked
@@ -717,7 +717,7 @@ diag_codes! {
         /// both namespaces and the two collision sets are incomparable; an
         /// enum's values are checked under `pascal_case` alone, because its
         /// collision set contains `snake_case`'s. The message names the
-        /// transform that collided. Emitted per-package by the checker (E9.7).
+        /// transform that collided. Emitted per-package by the checker.
         RIDL_149 = "RIDL-149", Error,
             "two names in one scope collide after a pinned name transform";
 
@@ -1128,10 +1128,10 @@ diag_codes! {
     }
 
     /// The manifest catalogue (ADR-0007 decision 2): the manifest `0xx` codes the
-    /// `ridl.toml` parser (E1.5) and the package loader (E1.3) emit, and the
-    /// distribution `1xx` codes the import materializer (E1.6) emits. Listed here
+    /// `ridl.toml` parser and the package loader emit, and the
+    /// distribution `1xx` codes the import materializer emits. Listed here
     /// even for `MANI-004`, whose emission site is the loader rather than the
-    /// standalone parser, so the error index (E4.2) has one authoritative source.
+    /// standalone parser, so the error index has one authoritative source.
     MANI_CATALOG {
         /// The `ridl.toml` text is not valid TOML.
         MANI_001 = "MANI-001", Error,
@@ -1148,7 +1148,7 @@ diag_codes! {
 
         /// A workspace member's own manifest declares `[workspace]`; nested
         /// workspaces are forbidden (ADR-0002 §4). Defined here, but emitted by the
-        /// package loader (E1.3, task 8) when a member manifest is read — a single
+        /// package loader when a member manifest is read — a single
         /// manifest parsed in isolation cannot know it is a member.
         MANI_004 = "MANI-004", Error,
             "nested workspace: a member manifest declares `[workspace]`";
@@ -1166,7 +1166,7 @@ diag_codes! {
             "invalid import URL";
 
         /// A workspace member directory is missing or has no `ridl.toml`. Emitted
-        /// by the package loader (E1.3), which is where member paths are resolved
+        /// by the package loader, which is where member paths are resolved
         /// against the filesystem.
         MANI_008 = "MANI-008", Error,
             "workspace member directory has no `ridl.toml`";
@@ -1208,7 +1208,7 @@ diag_codes! {
 }
 
 /// A diagnostic's severity. Warnings and info diagnostics arrive with later
-/// passes; every code the E1.10 pipeline emits is an [`Error`](Severity::Error).
+/// passes; every code the pipeline emits is an [`Error`](Severity::Error).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum Severity {
     Error,
@@ -1496,7 +1496,7 @@ pub fn remap_diagnostics(
 }
 
 /// One row of a diagnostic catalogue: a code, its default severity, and a short
-/// human summary. The catalogue is the static SSOT the error index (E4.2) reads;
+/// human summary. The catalogue is the static SSOT the error index reads;
 /// the per-diagnostic [`Severity`] a pass emits is set independently.
 #[derive(Debug, Clone, Copy)]
 pub struct CatalogEntry {
@@ -2071,7 +2071,7 @@ mod tests {
         assert!(
             uncatalogued.is_empty(),
             "these code strings are written in Rust sources but no catalogue \
-             lists them, so the error index (E4.2) has nothing to key them on \
+             lists them, so the error index has nothing to key them on \
              and nothing connects them to a `DiagCode`. Declare each one in \
              `diag_codes!`:\n{}",
             uncatalogued.join("\n"),

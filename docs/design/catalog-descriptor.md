@@ -1,10 +1,9 @@
 # The catalog descriptor
 
 The FlatBuffers file per package that an engine reads without decoding the IR,
-epic E16 (stories E16.1 to E16.6) and story E6.17, as built. The binding choices
-are [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15 (the catalog
-hash: its input, its determinism rule, where it is computed, and its golden
-test),
+as built. The binding choices are
+[ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15 (the catalog hash:
+its input, its determinism rule, where it is computed, and its golden test),
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 5 as amended 2026-10-03 (the toolchain may depend on planus; `ridl-rt`
 and every generated package must not),
@@ -169,7 +168,7 @@ carry it and `ridl-ir` is below all of them:
 - the codegen model's `Catalog.hash`, which the Rust backend writes into the
   `CATALOG` of every generated interface descriptor type. The Rust backend
   refuses a model whose hash is missing or is not 32 bytes long;
-- each `Region` of the lowered system (`bytes hash = 3`, story E6.17).
+- each `Region` of the lowered system (`bytes hash = 3`).
   `ridl_sem::lower_system` leaves it empty and does not depend on
   `ridl-descriptor`. `ridlc` fills it in `embed_catalog_hashes`, called by
   `lower_workspace_system` (which `compile_workspace`, and so `ridl diff`, uses)
@@ -232,7 +231,7 @@ is sized (`named_payload`), through the projection the wire backend emits:
   full list. The proto3 sizer counts tags and varint widths at their maximum,
   and remembers each named struct and union it has sized within one call, so a
   type that several paths share is walked once.
-- **repr(C)** has no row until E11.12 (driftsys/ridl#317) defines the layout.
+- **repr(C)** has no row until driftsys/ridl#317 defines the layout.
 
 **Absent by shape.** A stream payload (`<T>`), a request of zero or of several
 parameters, and an inline `T | E` reply have no rows in any column, until a
@@ -389,19 +388,19 @@ For these, the archived design note is the record of the agreed direction.
 | ---------------------------------------------------------------------------------------------------------- | ----------------- |
 | Narrow a string's byte capacity from an ASCII-only match pattern, after #597                               | driftsys/ridl#665 |
 | ridl-rt: streams (ridl §12) have no port; the stream flag and per-element bound follow it                  | driftsys/ridl#336 |
-| E11.12 — the repr(C) payload codec, which gives the `ReprC` column its rows                                | driftsys/ridl#317 |
-| debt(ridl-descriptor): Windows schema paths and an unpinned guard in the E16.1 tooling                     | driftsys/ridl#670 |
-| debt(ridl-ir): catalog hash follow-ups deferred from the review of #676 (E16.2)                            | driftsys/ridl#679 |
-| debt: E16.3 review follow-ups — one name resolver, one proto3 width table                                  | driftsys/ridl#684 |
-| debt: E16.4 review follow-ups — shared proto3 refusal rules, agreement tests                               | driftsys/ridl#690 |
-| debt: deferred review items from PR #692 (E16.5, the lowering and the catalog check)                       | driftsys/ridl#693 |
-| debt: deferred review items from PR #696 (E16.6, ridl describe)                                            | driftsys/ridl#697 |
+| The repr(C) payload codec, which gives the `ReprC` column its rows                                         | driftsys/ridl#317 |
+| debt(ridl-descriptor): Windows schema paths and an unpinned guard in the schema tooling                    | driftsys/ridl#670 |
+| debt(ridl-ir): catalog hash follow-ups deferred from the review of #676                                    | driftsys/ridl#679 |
+| debt: review follow-ups — one name resolver, one proto3 width table                                        | driftsys/ridl#684 |
+| debt: review follow-ups — shared proto3 refusal rules, agreement tests                                     | driftsys/ridl#690 |
+| debt: deferred review items from PR #692 (the lowering and the catalog check)                              | driftsys/ridl#693 |
+| debt: deferred review items from PR #696 (ridl describe)                                                   | driftsys/ridl#697 |
 | ridl diff reports identical when ridl lock freezes a provisional number, although the catalog hash changes | driftsys/ridl#700 |
-| debt: deferred review items from PR #699 (E6.17, the catalog hash per region)                              | driftsys/ridl#701 |
+| debt: deferred review items from PR #699 (the catalog hash per region)                                     | driftsys/ridl#701 |
 
 ## Trace
 
-- Roadmap: [`../ROADMAP.md`](../ROADMAP.md) — E16.1 to E16.6, E6.17
+- Roadmap: [`../ROADMAP.md`](../ROADMAP.md)
 - Decisions: [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decisions 4 and
   15,
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)

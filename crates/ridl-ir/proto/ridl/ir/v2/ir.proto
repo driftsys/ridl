@@ -17,7 +17,7 @@ syntax = "proto3";
 // values, init values, timing bounds — is a canonical decimal string,
 // never a floating-point field. float64 cannot represent values such as
 // 0.1 exactly, and the checker's exact arithmetic must survive the IR
-// round trip so ridl-diff (E2.8) can compare honestly. Derived wire
+// round trip so ridl-diff can compare honestly. Derived wire
 // widths ride alongside the exact strings as enums. Timing bounds are
 // exact-decimal microsecond strings.
 //
@@ -135,7 +135,7 @@ enum PrimitiveType {
 
 // Derived integer wire width — the typl §4.2 table, plus enum-set widths
 // (typl §9.3). All eight widths stay distinct — in particular uint64 vs
-// int64 — so ridl-diff (E2.8) sees a width flip as a change (ADR-0007
+// int64 — so ridl-diff sees a width flip as a change (ADR-0007
 // decision 9).
 enum IntWidth {
   INT_WIDTH_UNSPECIFIED = 0;
@@ -611,8 +611,8 @@ enum ContractKind {
 }
 
 // One require/ensure clause (ridl §13), lowered as an observer stub
-// (E2.5; full expr checking is E5). source is the canonical expr text —
-// E5.1 replaces it with a structured expr tree.
+// (full expr checking is E5). source is the canonical expr text —
+// A structured expr tree replaces it later.
 message Contract {
   ContractKind kind = 1;
   string source = 2;
@@ -620,6 +620,6 @@ message Contract {
   repeated string signal_refs = 3;
   repeated string param_refs = 4;
   bool uses_result = 5;
-  // "<Interface>.<interaction>.<kind>[n]" (E2.5).
+  // "<Interface>.<interaction>.<kind>[n]".
   string observer_id = 6;
 }

@@ -2,8 +2,7 @@
 //!
 //! Two readers have to agree on the scalar a typl type projects to: the
 //! `.proto` schema `ridl-backend-proto` writes, and the size bound
-//! `ridl-descriptor` derives for the catalog descriptor's proto3 column
-//! (roadmap story E16.4). They share no emission code, so what they share is
+//! `ridl-descriptor` derives for the catalog descriptor's proto3 column. They share no emission code, so what they share is
 //! this table: one function from a width, or from a backing without a width,
 //! to the proto3 scalar, and the largest encoding of one value of that scalar.
 //!

@@ -16,7 +16,7 @@ syntax = "proto3";
 // that writes the package IR in that encoding.
 //
 // Every fact of rsdl §13 has a field here, the catalog hash per region
-// included (story E6.17, ADR-0022 decision 7), and nothing else does. The
+// included (ADR-0022 decision 7), and nothing else does. The
 // closure-level facts are stated once rather than per deployment:
 //
 //   closure     components with their lines, the system's member lines,

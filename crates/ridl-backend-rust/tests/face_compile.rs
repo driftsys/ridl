@@ -97,7 +97,7 @@ fn compile_face(
 }
 
 /// A ridl member or parameter may carry a name the emitter uses for a local
-/// of its own. Story E11.21's first half put `port`, `deadline`, `this` and
+/// of its own. The async face put `port`, `deadline`, `this` and
 /// `cx` beside a binding that carries the ridl parameter's name, in the call
 /// method, the call future's `poll` and the internal send; each of the four
 /// compiled before it. Those three bodies now rebind the ridl-named argument

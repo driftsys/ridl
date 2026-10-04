@@ -1,4 +1,4 @@
-# The RIDL language server (docs/ROADMAP.md epic E1.15, ADR-0004 §6):
+# The RIDL language server (ADR-0004 §6):
 # a synchronous `lsp-server` loop over the same salsa database `ridlc`
 # compiles with. The crate is a library; the `ridl` CLI hosts it as
 # `ridl lsp`. The integration tests in `tests/server.rs` drive

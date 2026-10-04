@@ -1,4 +1,4 @@
-//! IR v2 package to a FlatBuffers schema (roadmap story E9.9, ADR-0013
+//! IR v2 package to a FlatBuffers schema (ADR-0013
 //! decision 2).
 //!
 //! The second wire backend. The emit ceiling is two tiers — the typl surface

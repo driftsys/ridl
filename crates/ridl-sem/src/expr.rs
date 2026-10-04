@@ -1,6 +1,5 @@
 //! The contract-expression checker — the guaranteed subset of the `expr` core
-//! (`docs/specification/expr-core-specification.md`, ridl §13; epic E2 story
-//! E2.4).
+//! (`docs/specification/expr-core-specification.md`, ridl §13).
 //!
 //! Three things live here, over the task 4 expression AST:
 //!
@@ -478,7 +477,7 @@ fn infer_member(
         if let Some(declared) = enum_type_head(&base, scope) {
             // An unknown member is as much a broken reference as an unknown
             // identifier: nothing downstream — the task 12 observers, the
-            // E2.11 property runner — has a value to bind to it.
+            // property runner — has a value to bind to it.
             if !declared.has_member(&name) {
                 error(
                     out,
@@ -1374,7 +1373,7 @@ mod tests {
     /// author reads changed from "`+` over a duration, duration supports
     /// comparison only (§5.3)" to "`<` requires operands of one ordered domain
     /// (§5.2)": a different rule, a different span, and a fix suggestion that
-    /// sends the reader to the wrong operator. E5.1 extends this rule, so a
+    /// sends the reader to the wrong operator. A later extension of this rule makes a
     /// partial regression there is exactly the shape that would pass.
     ///
     /// Two things close it. The **message fragment** names the rule. The

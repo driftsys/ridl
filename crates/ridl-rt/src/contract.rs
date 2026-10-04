@@ -275,7 +275,7 @@ pub struct PayloadInfo {
 /// encoding. That covers two cases the reader does not have to tell apart: the
 /// encoding cannot carry the payload at all, and the encoding can carry it but
 /// the size is not derivable yet, because the story that defines the layout has
-/// not landed. The `repr(C)` column is `None` for every payload until E11.12
+/// not landed. The `repr(C)` column is `None` for every payload until the layout is defined (driftsys/ridl#317)
 /// defines the C-representable layout, and a backend that emits descriptors
 /// before its codec exists writes `None` for that codec's column too.
 ///

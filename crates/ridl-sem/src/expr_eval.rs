@@ -1,6 +1,6 @@
 //! The contract-expression evaluator — total evaluation of the guaranteed
 //! subset over the exact domains of `docs/specification/expr-core-specification.md`
-//! §7 (epic E2 story E2.11a).
+//! §7.
 //!
 //! This is the value half of the contract plane: [`crate::expr`] types a clause,
 //! this module runs it. It is the shared engine behind `ridl test`'s property
@@ -141,7 +141,7 @@ const MAX_DEPTH: u32 = 128;
 /// backing but not the named type it came from, so `speed + torque` over two
 /// distinct float-backed types evaluates happily here — the checker rejects it
 /// upstream as RIDL-306 (expr-core §5.2), which is where that rule lives. When
-/// E5.1 lifts rmdl §3.3 scalar multiplication and its unit discipline,
+/// a later change lifts rmdl §3.3 scalar multiplication and its unit discipline,
 /// [`Value::Num`] will need the type reference too; this shape is a way-station,
 /// not the terminal one.
 pub fn eval_expr(expr: &ast::Expr, env: &EvalEnv) -> Result<Value, EvalError> {
@@ -532,7 +532,7 @@ fn malformed(what: &str) -> EvalError {
 /// clause of a minimal `ridl` file.
 ///
 /// `v2::Contract` carries a clause as canonical text and not as a tree
-/// ([`crate::expr::canonical_expr_text`]; the structured form is E5.1), so a
+/// ([`crate::expr::canonical_expr_text`]; the structured form does not exist yet), so a
 /// consumer that wants to evaluate a lowered contract parses it back. The
 /// canonical rendering is idempotent, so this round-trips.
 ///

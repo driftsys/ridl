@@ -1,4 +1,4 @@
-//! The salsa package model (docs/ROADMAP.md epic E1.3, ADR-0002 §1).
+//! The salsa package model (ADR-0002 §1).
 //!
 //! A **package is a directory** (ADR-0002 §1): a named set of [`InputFile`]s
 //! loaded as one unit, carrying its own manifest's `[imports]`. A
@@ -29,7 +29,7 @@ pub enum PackageOrigin {
     /// Loaded from the local filesystem: a workspace member, a standalone
     /// package, or a single-file synthetic package.
     WorkspaceMember,
-    /// Fetched from a remote URL (E1.6).
+    /// Fetched from a remote URL.
     Remote,
     /// The embedded `ridl.std` (ADR-0007 decision 15).
     Std,
@@ -146,7 +146,7 @@ fn dotted_name(name: &ridl_syntax::ast::QualifiedName) -> String {
 }
 
 // ==========================================================================
-// The service catalog (E2.13, ridl reference §14.5)
+// The service catalog (ridl reference §14.5)
 // ==========================================================================
 
 /// One entry of the [`ServiceCatalog`]: the package that declared a service
@@ -427,7 +427,7 @@ mod tests {
         assert_eq!(decls[1].1, TextRange::new(19.into(), 36.into()));
     }
 
-    // --- the service catalog (E2.13, ridl reference §14.5) ---------------
+    // --- the service catalog (ridl reference §14.5) ---------------
 
     fn ridl_package(db: &RidlDatabase, name: &str, text: &str) -> Package {
         Package::new(

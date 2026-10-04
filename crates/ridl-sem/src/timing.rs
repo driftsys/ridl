@@ -980,7 +980,7 @@ mod tests {
         assert!(diags.is_empty(), "fixed produces no timing diagnostic");
     }
 
-    // --- RPC bounds (ADR-0015 decisions 2–6, E9.4) ------------------------
+    // --- RPC bounds (ADR-0015 decisions 2–6) ------------------------
 
     /// The range form resolves on a command and a query exactly as it does on
     /// a signal: `min` is the call throttle, `max` the response bound, and

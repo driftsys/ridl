@@ -1,5 +1,5 @@
 //! Integration tests driving the server over an in-memory
-//! `lsp_server::Connection` (docs/ROADMAP.md epic E1.15a): the full
+//! `lsp_server::Connection`: the full
 //! initialize → didOpen → publishDiagnostics → didChange → shutdown
 //! conversation, with the client side scripted by the test.
 
@@ -1594,7 +1594,7 @@ fn a_std_symbol_is_not_renameable() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
-// --- inlay hints (E1.16) -------------------------------------------------
+// --- inlay hints -------------------------------------------------
 
 /// Sends an inlay-hint range request and returns the parsed hints.
 fn inlay_hints_at(
@@ -1643,7 +1643,7 @@ fn whole_file() -> lt::Range {
     range((0, 0), (1_000, 0))
 }
 
-/// The server advertises the inlay-hint capability, closing the E1.16 LSP
+/// The server advertises the inlay-hint capability, closing the LSP
 /// feature set.
 #[test]
 fn advertises_the_inlay_hint_capability() {
@@ -1827,7 +1827,7 @@ fn inlay_hint_renders_union_arm_ordinals_within_the_requested_range() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
-// --- the ridl interaction layer (E2.10b) ---------------------------------
+// --- the ridl interaction layer ---------------------------------
 
 /// The typl vocabulary the ridl fixture contract imports.
 const RIDL_VOCAB: &str = "package veh.common\n\
@@ -2630,7 +2630,7 @@ fn hover_on_a_payload_after_a_multibyte_comment_uses_utf16_columns() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
-// --- the rsdl system layer (E6.15) ----------------------------------------
+// --- the rsdl system layer ----------------------------------------
 
 /// The contracts the rsdl fixture's system is built from: two interfaces, a
 /// named-shape service for each, and an inline-shape service.

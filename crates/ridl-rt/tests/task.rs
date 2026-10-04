@@ -1,5 +1,4 @@
-//! `block_on`, `noop_waker` and `flag_waker` under the `std` feature (story E11.17,
-//! driftsys/ridl#568).
+//! `block_on`, `noop_waker` and `flag_waker` under the `std` feature (driftsys/ridl#568).
 //!
 //! The whole file is gated on the feature, because `just test` builds the
 //! workspace with default features and the module does not exist there. The

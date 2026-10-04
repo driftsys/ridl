@@ -1,5 +1,4 @@
-//! The `ridl` toolchain facade — the porcelain layer (concept note §8.1,
-//! docs/ROADMAP.md epic E1.13). The cargo/deno-style front door with humane
+//! The `ridl` toolchain facade — the porcelain layer (concept note §8.1). The cargo/deno-style front door with humane
 //! defaults: `PATH` defaults to the current directory.
 //!
 //! `ridl check` and `ridl build` delegate to the `ridlc` library face;
@@ -9,17 +8,17 @@
 //! would change), and 2 on an input/output or usage error.
 //!
 //! `ridl diff` compares two IR snapshots or source trees through the
-//! `ridl-diff` engine (E2.8a). It carries its own exit contract — 0 compatible
+//! `ridl-diff` engine. It carries its own exit contract — 0 compatible
 //! or identical, 1 breaking, 2 error (concept note §9.1, ADR-0008 decision 9) —
 //! and never touches `ridlc`'s source→IR boundary beyond compiling each side.
 //!
-//! `ridl test` runs the property suite over a workspace (E2.11a): the range
-//! self-corpora derived from the E1.18 generators, and satisfiability sampling
+//! `ridl test` runs the property suite over a workspace: the range
+//! self-corpora derived from the range generators, and satisfiability sampling
 //! of every `require` clause. It carries the same 0/1/2 exit contract, with 1
 //! reserved for a self-corpus failure or an evaluation error.
 //!
 //! `ridl baseline` and `ridl check --baseline` are the desk-time half of that
-//! engine (E2.9, general form §6.3): `baseline` publishes one `.ir.json`
+//! engine (general form §6.3): `baseline` publishes one `.ir.json`
 //! snapshot per package, and `check` compares the workspace against those
 //! snapshots and warns (RIDL-407) when the ordinal of an interaction, a struct
 //! field or a union arm moved. Both live here rather than in
@@ -499,7 +498,7 @@ fn report_diff_side_error(error: ridlc::DiffSideError) -> ExitCode {
 }
 
 // ==========================================================================
-// The baseline-aware desk check (E2.9, general form §6.3, ADR-0008 decision 9)
+// The baseline-aware desk check (general form §6.3, ADR-0008 decision 9)
 // ==========================================================================
 
 /// The interaction change categories the desk check reports: the four that

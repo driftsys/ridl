@@ -1,7 +1,7 @@
 //! IR v2 package to Rust source plus an extern-C header (ADR-0004 section 7,
 //! ADR-0007 decision 13).
 //!
-//! The full E1.12 backend over the typl surface. Each declaration in a
+//! The full backend over the typl surface. Each declaration in a
 //! [`v2::Package`] is realized twice: once as idiomatic Rust (the language
 //! layer of typl reference Appendix D — every integer is `i64`, every float is
 //! `f64`) and once, where the C ABI admits it, as an entry in a companion C
@@ -64,7 +64,7 @@ pub struct GenerateError {
 /// objects, Task 3) and an enum's or enum set's `TryFrom<i64>` (Task 5) name;
 /// it emits no interaction face.
 ///
-/// The compiler corpus runs this. The pipeline ran it too until E11.14, which
+/// The compiler corpus runs this. The pipeline ran it too until the face was emitted by the pipeline, which
 /// gave the pipeline [`generate_pipeline`] — `ridl build --emit rust` calls
 /// that, and this output is a subset of it. The face is emitted by
 /// [`generate_face`] and [`generate_pipeline`], not from here, for the reason the Lane M plan records ("Where the face is
@@ -127,7 +127,7 @@ pub fn generate_face(package: &v2::Package) -> Result<Generated, GenerateError> 
 /// Until `docs/technotes/rust-backend-name-collisions.md` (2026-09-29, driftsys/ridl#588)
 /// the encoding reached the output as one alias, `pub type Wire`, emitted
 /// here at package scope, and a declaration or an interface named `Wire`
-/// was refused (E11.14 decision 5). The alias is gone and no name is
+/// was refused (interaction-face decision 5). The alias is gone and no name is
 /// reserved: a name the backend chose never refuses a package.
 pub fn generate_face_with(
     package: &v2::Package,
@@ -166,7 +166,7 @@ pub fn generate_with(
 
 /// The pipeline's entry point: everything [`generate_face_with`] emits, over
 /// the whole build, with an interface the face cannot carry skipped rather
-/// than refused (E11.14 decisions 1, 2 and 4).
+/// than refused (interaction-face decisions 1, 2 and 4).
 ///
 /// **Why the pipeline calls this and not [`generate`]** (decision 1): a
 /// consumer of `ridl build --emit rust` needs the face as much as the domain
@@ -183,7 +183,7 @@ pub fn generate_with(
 /// **Why an interface is skipped and not refused** (decision 2): the clause
 /// translator accepts one narrow form, and a multi-parameter call and a stream
 /// have no face at all. Refusing would make `--emit rust` reject legal ridl
-/// over a gap two named stories own — E5.1 replaces the translator, and the
+/// over a gap two tracked follow-ups own — driftsys/ridl#704 replaces the translator, and the
 /// multi-parameter argument struct is lane M's parked follow-up — and would
 /// put a codegen error where a source diagnostic belongs. So the package keeps
 /// its domain types and its codec, the interface loses its `Client`,
@@ -284,7 +284,7 @@ fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> Tok
         FaceGap::Clause => {
             " A contract clause outside the form the narrow translator accepts — \
              `<subject> <comparison> <numeric literal>`, conjoined with `&&`. \
-             Story E5.1 replaces the translator and removes this."
+             driftsys/ridl#704 replaces the translator and removes this."
         }
         FaceGap::Other => " No story below owns this one: the reason above is the whole of it.",
     };
@@ -299,7 +299,7 @@ fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> Tok
         /// raised by the descriptor emitter, which the face is built on. The
         /// rest of this package — its domain types, its codec, and every
         /// other interface — is unaffected, which is why the build succeeded
-        /// (E11.14 decision 2).
+        /// (interaction-face decision 2).
         #[allow(dead_code, non_upper_case_globals)]
         const #name: () = ();
     }
@@ -387,9 +387,9 @@ fn package_items(
 /// every impl, for a choice made once per generated package.
 ///
 /// One variant today. `ridl-backend-rust` emits a `Payload` implementation for
-/// one encoding — the FlatBuffers codec of story E11.7 — so naming another
+/// one encoding — the FlatBuffers codec — so naming another
 /// here would emit a face over implementations that do not exist. `repr(C)`
-/// and proto3 join when E11.12 and E11.8 emit their codecs, which is what
+/// and proto3 join when the Rust backend emits their codecs, which is what
 /// `#[non_exhaustive]` says to a caller that matches on this.
 ///
 /// The encoding reaches the output as the full path
@@ -401,7 +401,7 @@ fn package_items(
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum WireEncoding {
-    /// The FlatBuffers codec of story E11.7, which [`generate`] emits into
+    /// The FlatBuffers codec, which [`generate`] emits into
     /// every package's own output.
     #[default]
     FlatBuffers,

@@ -21,7 +21,7 @@
 //! repeated here as an automated check, because reproducing it would mean
 //! shipping the very promotion this guard exists to prevent).
 //!
-//! E11.7 stage K8 widened this guard past the two schema compilers.
+//! This guard also covers the two schema compilers.
 //! `ridl-backend-rust`'s FlatBuffers conformance test drives planus's
 //! runtime and code generator, and emits the `.fbs` it feeds them with
 //! `ridl-backend-flatbuffers`. All four edges are test-time only, for the
@@ -29,7 +29,7 @@
 //! executable rather than a library other crates link.
 //!
 //! **Which record each rule rests on.** The test-time-only rule for
-//! `ridl-backend-rust`'s four edges rests on ADR-0020 decision 9. The E11.7
+//! `ridl-backend-rust`'s four edges rests on ADR-0020 decision 9. The FlatBuffers
 //! design note's D-12 says that `ridl-rt`'s `flatbuffers` feature takes no
 //! external dependency, so the FlatBuffers runtime crate ADR-0020 decision 5
 //! permits there is not used and ADR-0020's RA-01 dependency ceiling stays
@@ -86,7 +86,7 @@ const BOUNDARIES: &[Boundary] = &[
         package: "ridl-backend-proto",
         oracle: "protox",
     },
-    // E11.7 stage K8 added planus's runtime and code generator to
+    // The FlatBuffers conformance test uses planus's runtime and code generator to
     // `ridl-backend-rust` for the FlatBuffers codec's conformance test. They
     // are the same kind of oracle: this crate emits the codec rather than
     // linking one, so its own use of planus is test-time only. The toolchain

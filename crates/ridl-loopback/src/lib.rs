@@ -59,7 +59,7 @@
 //!
 //! # What it reports, and what it cannot
 //!
-//! The loopback holds no catalog descriptor — story E16.5 (driftsys/ridl#381)
+//! The loopback holds no catalog descriptor — (driftsys/ridl#381)
 //! writes the descriptor file, and giving the loopback one is not yet
 //! assigned to a story — so it has no member table, and there is no ordinal
 //! it can call unknown, no member it can call unowned, and no timing
@@ -184,11 +184,11 @@ impl Loopback {
     /// sends and a program that never forgets a call finds out at once rather
     /// than after its memory grows. The loopback has no catalog descriptor to
     /// size a byte budget from: the descriptor file is written from story
-    /// E16.5 (`--emit catalog`, driftsys/ridl#381), and no story yet wires
+    /// `--emit catalog` (driftsys/ridl#381), and no story yet wires
     /// the loopback to read one. So the slot count is its only bound (note
     /// F-9 of the async face design).
     ///
-    /// The generated async client's future (story E11.21) forgets its call
+    /// The generated async client's future forgets its call
     /// when it leaves the waiting phase: in the poll that takes the outcome,
     /// at the call's deadline, and on drop while the call is still waiting.
     /// So a program that calls through the generated face holds one slot per

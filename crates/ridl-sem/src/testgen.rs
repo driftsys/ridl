@@ -1,6 +1,5 @@
 //! Property-test value generators derived from a checked range — the shipped
-//! "typl ranges are generators" feature (ADR-0004 §9, docs/ROADMAP.md epic
-//! E1.18).
+//! "typl ranges are generators" feature (ADR-0004 §9).
 //!
 //! A typl range is a specification of a value domain, so it is also a
 //! specification of how to sample that domain. This module turns a checked
@@ -17,8 +16,8 @@
 //! - [`violations`] — the two just-outside samples `min-1` and `max+1`, the
 //!   values a range must reject.
 //!
-//! This is the seed the E2.11 conformance-corpus generator grows from. The
-//! strategies here draw values; running them against generated code is E2.11's
+//! This is the seed a conformance-corpus generator can grow from. The
+//! strategies here draw values; running them against generated code is that generator's
 //! work.
 
 use num_bigint::{BigInt, Sign};
@@ -500,7 +499,7 @@ mod properties {
         }
 
         /// Boundary samples are always inside the range; violation samples are
-        /// always outside it. This is the property the E2.11 conformance corpus
+        /// always outside it. This is the property a conformance corpus
         /// relies on.
         #[test]
         fn boundary_inside_and_violations_outside(a in -100_000i64..=100_000, b in -100_000i64..=100_000) {

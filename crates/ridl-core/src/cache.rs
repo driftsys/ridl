@@ -1,4 +1,4 @@
-//! The content-addressed package cache (docs/ROADMAP.md epic E1.6, ADR-0002
+//! The content-addressed package cache (ADR-0002
 //! §7).
 //!
 //! The cache lives at `~/.ridl/cache` (ADR-0002 §7), indexed by URL and by the
@@ -13,7 +13,7 @@
 //! (ADR-0002 §7); the artifact hash is the second segment so the same URL can
 //! hold more than one pinned version. The fetched artifact is an uncompressed
 //! tar archive of one package directory (ADR-0007 decision 12, provisional
-//! until the registry spec E7.4); [`Cache::store`] unpacks it into the entry
+//! until the registry spec is written); [`Cache::store`] unpacks it into the entry
 //! directory.
 //!
 //! This module sits behind the `fetch` feature: it hashes with `sha2` and
