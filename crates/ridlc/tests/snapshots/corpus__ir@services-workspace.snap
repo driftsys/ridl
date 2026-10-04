@@ -14,6 +14,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "primitive": "PRIMITIVE_TYPE_INTEGER"
@@ -36,6 +39,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "unit": "%"
@@ -59,6 +65,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "primitive": "PRIMITIVE_TYPE_INTEGER"
@@ -81,17 +90,26 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "enumDef": {
         "values": [
           {
             "name": "UNLOCKED",
             "value": "0",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "LOCKED",
             "value": "1",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           }
         ],
         "reserved": []
@@ -104,6 +122,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -119,7 +140,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -135,7 +159,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],
@@ -149,17 +176,26 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "enumDef": {
         "values": [
           {
             "name": "JAMMED",
             "value": "0",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "UNPOWERED",
             "value": "1",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           }
         ],
         "reserved": []
@@ -180,6 +216,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 1,
+          "links": [],
+          "see": [],
+          "since": [],
           "signalDef": {
             "payload": "LockState",
             "init": {
@@ -201,6 +240,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 2,
+          "links": [],
+          "see": [],
+          "since": [],
           "eventDef": {
             "payload": "DoorReport",
             "timing": {
@@ -218,6 +260,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 3,
+          "links": [],
+          "see": [],
+          "since": [],
           "commandDef": {
             "params": [
               {
@@ -225,7 +270,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "type": {
                   "optional": false,
                   "named": "DoorId"
-                }
+                },
+                "doc": "",
+                "links": [],
+                "see": [],
+                "since": []
               }
             ],
             "contracts": [],
@@ -243,6 +292,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 4,
+          "links": [],
+          "see": [],
+          "since": [],
           "queryDef": {
             "params": [
               {
@@ -250,7 +302,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "type": {
                   "optional": false,
                   "named": "DoorId"
-                }
+                },
+                "doc": "",
+                "links": [],
+                "see": [],
+                "since": []
               }
             ],
             "returnType": {
@@ -274,6 +330,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 5,
+          "links": [],
+          "see": [],
+          "since": [],
           "fixedDef": {
             "payload": {
               "optional": false,
@@ -283,7 +342,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         }
       ],
       "number": 1,
-      "provisional": true
+      "provisional": true,
+      "links": [],
+      "see": [],
+      "since": []
     },
     {
       "name": "Telemetry",
@@ -298,6 +360,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 1,
+          "links": [],
+          "see": [],
+          "since": [],
           "signalDef": {
             "payload": "Odometer",
             "init": {
@@ -319,6 +384,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 2,
+          "links": [],
+          "see": [],
+          "since": [],
           "queryDef": {
             "params": [],
             "returnType": {
@@ -346,7 +414,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         }
       ],
       "number": 2,
-      "provisional": true
+      "provisional": true,
+      "links": [],
+      "see": [],
+      "since": []
     }
   ],
   "services": [],
@@ -364,17 +435,26 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "doc": "The M1 fleet's door failure set, kept for contracts still on the old wire.",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "enumDef": {
         "values": [
           {
             "name": "STUCK",
             "value": "0",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "NO_POWER",
             "value": "1",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           }
         ],
         "reserved": []
@@ -397,6 +477,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "Two services over one imported shape: the front and rear door controllers\nare separate system-wide addresses realizing the same contract.",
       "labels": [],
+      "links": [],
+      "see": [],
+      "since": [],
       "shapes": [
         {
           "interfaceRef": "fleet.contracts.DoorControl"
@@ -408,6 +491,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "",
       "labels": [],
+      "links": [],
+      "see": [],
+      "since": [],
       "shapes": [
         {
           "interfaceRef": "fleet.contracts.DoorControl"
@@ -419,6 +505,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "A second imported shape.",
       "labels": [],
+      "links": [],
+      "see": [],
+      "since": [],
       "shapes": [
         {
           "interfaceRef": "fleet.contracts.Telemetry"
@@ -430,6 +519,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "One address composing both shapes (ADR-0015 decision 12): the interface\nstays the generation unit, the service the addressing unit, so this\ndeclaration generates nothing new — it gives the two contracts one more\nglobal name.",
       "labels": [],
+      "links": [],
+      "see": [],
+      "since": [],
       "shapes": [
         {
           "interfaceRef": "fleet.contracts.DoorControl"
@@ -444,6 +536,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "An inline shape in a package that owns none of its vocabulary: every\npayload, parameter and return type here is a cross-package reference\nresolved through the workspace members above.",
       "labels": [],
+      "links": [],
+      "see": [],
+      "since": [],
       "shapes": [
         {
           "inline": {
@@ -459,6 +554,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "doc": "",
                 "labels": [],
                 "ordinal": 1,
+                "links": [],
+                "see": [],
+                "since": [],
                 "signalDef": {
                   "payload": "fleet.contracts.Percent",
                   "init": {
@@ -480,6 +578,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "doc": "",
                 "labels": [],
                 "ordinal": 2,
+                "links": [],
+                "see": [],
+                "since": [],
                 "commandDef": {
                   "params": [
                     {
@@ -487,7 +588,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                       "type": {
                         "optional": false,
                         "named": "fleet.contracts.DoorId"
-                      }
+                      },
+                      "doc": "",
+                      "links": [],
+                      "see": [],
+                      "since": []
                     }
                   ],
                   "contracts": [],
@@ -505,6 +610,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "doc": "",
                 "labels": [],
                 "ordinal": 3,
+                "links": [],
+                "see": [],
+                "since": [],
                 "queryDef": {
                   "params": [
                     {
@@ -512,7 +620,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                       "type": {
                         "optional": false,
                         "named": "fleet.contracts.DoorId"
-                      }
+                      },
+                      "doc": "",
+                      "links": [],
+                      "see": [],
+                      "since": []
                     }
                   ],
                   "returnType": {
@@ -555,6 +667,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "doc": "",
                 "labels": [],
                 "ordinal": 4,
+                "links": [],
+                "see": [],
+                "since": [],
                 "fixedDef": {
                   "payload": {
                     "optional": false,
@@ -569,6 +684,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "doc": "Cross-package `T | E`: both arms live in `fleet.contracts`, so the\nsynthesized transport identity carries their fully qualified names.",
                 "labels": [],
                 "ordinal": 5,
+                "links": [],
+                "see": [],
+                "since": [],
                 "queryDef": {
                   "params": [
                     {
@@ -576,7 +694,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                       "type": {
                         "optional": false,
                         "named": "fleet.contracts.DoorId"
-                      }
+                      },
+                      "doc": "",
+                      "links": [],
+                      "see": [],
+                      "since": []
                     }
                   ],
                   "returnType": {
@@ -600,6 +722,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "doc": "The same, with the error arm reached through an import alias. The alias\nis a source-level convenience; the transport identity must show the\ncanonical `fleet.legacy.DoorFault`, because a registry keying on it has\nto be stable against how a consumer chose to spell its imports.",
                 "labels": [],
                 "ordinal": 6,
+                "links": [],
+                "see": [],
+                "since": [],
                 "queryDef": {
                   "params": [
                     {
@@ -607,7 +732,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                       "type": {
                         "optional": false,
                         "named": "fleet.contracts.DoorId"
-                      }
+                      },
+                      "doc": "",
+                      "links": [],
+                      "see": [],
+                      "since": []
                     }
                   ],
                   "returnType": {
@@ -626,7 +755,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               }
             ],
             "number": 1,
-            "provisional": true
+            "provisional": true,
+            "links": [],
+            "see": [],
+            "since": []
           }
         }
       ]

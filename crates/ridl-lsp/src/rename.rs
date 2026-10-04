@@ -18,10 +18,16 @@
 //!    skips import lines (they are not references the resolver walks), so
 //!    renaming would leave `import pkg.OldName` dangling. This pass walks every
 //!    importing package's `import` declarations and rewrites the imported-name
-//!    segment — never the alias (`import pkg.OldName as Alias` keeps `Alias`).
+//!    segment — never the alias (`import pkg.OldName as Alias` keeps `Alias`);
+//! 4. every doc link and `@see` target that resolves to the symbol, via
+//!    [`nav::doc_link_references`] (ADR-0026) — the segment that names the
+//!    symbol, so `[veh.common.Gear.PARK]` keeps its path and its member.
 //!
 //! A rename can also be invoked *from* an import line, where [`nav::symbol_at`]
-//! finds nothing; [`nav::import_at`] is the fallback entry point for that.
+//! finds nothing; [`nav::import_at`] is the fallback entry point for that. From
+//! a doc link, [`nav::resolve_doc_link_at`] is the entry point: the cursor must
+//! sit on the segment that names the declaration, and that declaration is what
+//! is renamed.
 //!
 //! Three rejections, each surfaced to the client as an error (or a null
 //! `prepareRename`): the new name is a reserved word, it violates the case
@@ -84,15 +90,15 @@ pub fn prepare(
     file: InputFile,
     offset: TextSize,
 ) -> Option<TextRange> {
-    let located = locate(db, ws, std, pkg, file, offset)?;
+    let (symbol, span) = locate(db, ws, std, pkg, file, offset)?;
     // A symbol declared in the embedded `ridl.std` cannot be renamed — the
     // built-in source has no editable file, so any edit would be partial (the
     // declaration is dropped while user references are rewritten). Green-lighting
     // it here would let a rename silently corrupt the user's file, so refuse.
-    if is_builtin(db, std, &located.symbol) {
+    if is_builtin(db, std, &symbol) {
         return None;
     }
-    Some(nav::final_segment_range(db, file, located.reference))
+    Some(span)
 }
 
 /// The workspace edit renaming the symbol under the cursor to `new_name`, or a
@@ -111,8 +117,7 @@ pub fn rename(
     packages: &[Package],
     new_name: &str,
 ) -> Result<Vec<Edit>, RenameError> {
-    let located = locate(db, ws, std, pkg, file, offset).ok_or(RenameError::NotRenameable)?;
-    let target = located.symbol;
+    let (target, _) = locate(db, ws, std, pkg, file, offset).ok_or(RenameError::NotRenameable)?;
 
     // Reject: a symbol declared in the embedded `ridl.std`. Its declaration
     // lives in a built-in source with no editable file, so the declaration edit
@@ -167,6 +172,21 @@ pub fn rename(
         });
     }
 
+    // Every doc link and `@see` target that resolves to the target, at the
+    // segment that names it. The same alias rule applies: a link written with
+    // an alias is left as written.
+    for (link_file, segment) in nav::doc_link_references(db, ws, std, packages, &target) {
+        let text = link_file.text(db);
+        let segment_text = &text[usize::from(segment.start())..usize::from(segment.end())];
+        if segment_text != target.name {
+            continue;
+        }
+        edits.push(Edit {
+            file: link_file,
+            range: segment,
+        });
+    }
+
     // The separate import-statement pass, with its own collision check: an
     // importing package that already declares the new name would then have the
     // rewritten import clash with that declaration.
@@ -216,8 +236,10 @@ fn dedup(edits: Vec<Edit>) -> Vec<Edit> {
     unique
 }
 
-/// Resolves the cursor to a symbol, trying a reference/declaration first and
-/// falling back to an import line (where [`nav::symbol_at`] finds nothing).
+/// Resolves the cursor to a symbol and the name span rename rewrites at the
+/// cursor (the `prepareRename` answer): a reference or declaration first,
+/// then an import line (where [`nav::symbol_at`] finds nothing), then a doc
+/// link whose declaration-naming segment the cursor sits on.
 fn locate(
     db: &dyn salsa::Database,
     ws: Workspace,
@@ -225,9 +247,17 @@ fn locate(
     pkg: Package,
     file: InputFile,
     offset: TextSize,
-) -> Option<nav::Located> {
-    nav::symbol_at(db, ws, std, pkg, file, offset)
+) -> Option<(Symbol, TextRange)> {
+    if let Some(located) = nav::symbol_at(db, ws, std, pkg, file, offset)
         .or_else(|| nav::import_at(db, ws, std, pkg, file, offset))
+    {
+        let span = nav::final_segment_range(db, file, located.reference);
+        return Some((located.symbol, span));
+    }
+    let link = nav::resolve_doc_link_at(db, ws, std, pkg, file, offset)?;
+    let span = nav::symbol_segment(&link.candidate, &link.target, file.text(db))?;
+    span.contains_inclusive(offset)
+        .then_some((link.target.symbol, span))
 }
 
 /// Rejects a new name that breaks the case convention for the symbol's kind:

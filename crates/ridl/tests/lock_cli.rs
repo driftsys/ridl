@@ -412,6 +412,20 @@ fn rename_over_more_than_one_package_exits_two() {
     assert_eq!(stdout, "renamed Legacy Zone 2\n");
 }
 
+/// A member path loads the whole workspace, and plain `ridl lock` allocates
+/// in that member only: the sibling member's lock is not written.
+#[test]
+fn lock_on_a_member_allocates_in_that_member_only() {
+    let dir = TempDir::new("member-allocate");
+    let root = two_member_workspace(&dir, ZONE_AND_CABIN, DOOR);
+
+    let (code, stdout, stderr) = lock(&root.join("hvac"), &[]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(stdout.contains("allocated"), "stdout:\n{stdout}");
+    assert!(root.join("hvac/interfaces.lock").exists());
+    assert!(!root.join("door/interfaces.lock").exists());
+}
+
 /// Whether `chmod 0o555` actually denies this process a write.
 ///
 /// uid 0 and `CAP_DAC_OVERRIDE` both bypass the permission bits, so a test

@@ -146,6 +146,9 @@ fn decl(name: &str, visibility: v2::Visibility, kind: v2::decl::Kind) -> v2::Dec
         deprecated: None,
         ordinal: 0,
         kind: Some(kind),
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 
@@ -159,6 +162,9 @@ fn field(name: &str, ordinal: u32, field_type: v2::FieldType) -> v2::Field {
         doc: String::new(),
         labels: Vec::new(),
         deprecated: None,
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 
@@ -178,7 +184,7 @@ fn named_type(reference: &str) -> v2::FieldType {
 
 fn live_member(field: v2::Field) -> v2::StructMember {
     v2::StructMember {
-        member: Some(v2::struct_member::Member::Field(field)),
+        member: Some(v2::struct_member::Member::Field(Box::new(field))),
     }
 }
 
@@ -192,6 +198,9 @@ fn interaction(name: &str, ordinal: u32, kind: v2::decl::Kind) -> v2::Decl {
         deprecated: None,
         ordinal,
         kind: Some(kind),
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 
@@ -212,6 +221,9 @@ fn interaction_tombstone(name: &str, ordinal: u32) -> v2::Decl {
             name: Some(name.to_string()),
             value: None,
         })),
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 
@@ -265,6 +277,9 @@ fn base_package(shape: &BaseShape) -> v2::Package {
                 name: format!("V{value}"),
                 value,
                 doc: String::new(),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             })
             .collect(),
         reserved: if shape.enum_retired {
@@ -285,6 +300,9 @@ fn base_package(shape: &BaseShape) -> v2::Package {
                 name: format!("B{value}"),
                 value,
                 doc: String::new(),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             })
             .collect(),
         width: v2::IntWidth::U32 as i32,
@@ -297,12 +315,18 @@ fn base_package(shape: &BaseShape) -> v2::Package {
                 ordinal: 1,
                 type_ref: "Data".to_string(),
                 doc: String::new(),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             },
             v2::UnionArm {
                 name: "second".to_string(),
                 ordinal: 2,
                 type_ref: "Mode".to_string(),
                 doc: String::new(),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             },
         ],
         is_result: false,
@@ -373,6 +397,10 @@ fn base_package(shape: &BaseShape) -> v2::Package {
             params: vec![v2::Param {
                 name: "amount".to_string(),
                 r#type: Some(named_type("Bound")),
+                doc: String::new(),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             }],
             contracts: vec![v2::Contract {
                 kind: v2::ContractKind::Require as i32,
@@ -394,6 +422,9 @@ fn base_package(shape: &BaseShape) -> v2::Package {
         interactions,
         number: 0,
         provisional: false,
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     };
 
     v2::Package {
@@ -540,6 +571,9 @@ fn apply_mutation(old: &v2::Package, index: usize) -> v2::Package {
                 name: "VFRESH".to_string(),
                 value: next,
                 doc: String::new(),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             });
         }
         // DeclAdded, composite append: a union arm at the next ordinal, on a
@@ -554,6 +588,9 @@ fn apply_mutation(old: &v2::Package, index: usize) -> v2::Package {
                 ordinal: next,
                 type_ref: "Mode".to_string(),
                 doc: String::new(),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             });
         }
         // DeclAdded, composite append: an enum-set bit above every live one.
@@ -567,6 +604,9 @@ fn apply_mutation(old: &v2::Package, index: usize) -> v2::Package {
                 name: "BFRESH".to_string(),
                 value: next,
                 doc: String::new(),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             });
         }
         // DeclAdded, package level: a whole new declaration.

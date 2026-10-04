@@ -20,7 +20,7 @@ use rmcp::service::QuitReason;
 use rmcp::transport::stdio;
 use rmcp::{ErrorData, ServerHandler, ServiceExt, tool, tool_handler, tool_router};
 use serde::{Deserialize, Serialize};
-use snapshot::{ToolError, snapshot};
+use snapshot::{ToolError, lookup_snapshot, snapshot};
 use types::{OverlayInput, WorkspaceStatus};
 
 // This enum is the only gate on the profile, and its doc comment is the
@@ -176,7 +176,7 @@ impl RidlMcp {
         Parameters(input): Parameters<query::NameInput>,
     ) -> Result<CallToolResult, ErrorData> {
         let output = tokio::task::spawn_blocking(move || {
-            let snap = snapshot(&input.path, input.overlays.as_deref().unwrap_or_default())?;
+            let snap = lookup_snapshot(&input.path, input.overlays.as_deref().unwrap_or_default())?;
             refs::references(&snap, &input)
         })
         .await
@@ -196,7 +196,7 @@ impl RidlMcp {
         Parameters(input): Parameters<refs::DependenciesInput>,
     ) -> Result<CallToolResult, ErrorData> {
         let output = tokio::task::spawn_blocking(move || {
-            let snap = snapshot(&input.path, input.overlays.as_deref().unwrap_or_default())?;
+            let snap = lookup_snapshot(&input.path, input.overlays.as_deref().unwrap_or_default())?;
             refs::dependencies(&snap, &input)
         })
         .await
@@ -216,7 +216,7 @@ impl RidlMcp {
         Parameters(input): Parameters<query::NameInput>,
     ) -> Result<CallToolResult, ErrorData> {
         let output = tokio::task::spawn_blocking(move || {
-            let snap = snapshot(&input.path, input.overlays.as_deref().unwrap_or_default())?;
+            let snap = lookup_snapshot(&input.path, input.overlays.as_deref().unwrap_or_default())?;
             query::resolve(&snap, &input)
         })
         .await
@@ -236,7 +236,7 @@ impl RidlMcp {
         Parameters(input): Parameters<query::NameInput>,
     ) -> Result<CallToolResult, ErrorData> {
         let output = tokio::task::spawn_blocking(move || {
-            let snap = snapshot(&input.path, input.overlays.as_deref().unwrap_or_default())?;
+            let snap = lookup_snapshot(&input.path, input.overlays.as_deref().unwrap_or_default())?;
             query::describe_type(&snap, &input)
         })
         .await
@@ -257,7 +257,7 @@ impl RidlMcp {
     ) -> Result<CallToolResult, ErrorData> {
         let input: query::NameInput = input.into();
         let output = tokio::task::spawn_blocking(move || {
-            let snap = snapshot(&input.path, input.overlays.as_deref().unwrap_or_default())?;
+            let snap = lookup_snapshot(&input.path, input.overlays.as_deref().unwrap_or_default())?;
             query::list_interactions(&snap, &input)
         })
         .await
@@ -493,9 +493,61 @@ mod tests {
                 .unwrap()
                 .iter()
                 .map(|d| d["code"].as_str().unwrap())
+                // TYPL-406 (`missing-docs`) is left out: the fixture has no docs.
+                .filter(|code| *code != "TYPL-406")
                 .collect::<Vec<_>>(),
             ["TYPL-103", "TYPL-011"]
         );
+    }
+
+    // TYPL-410 (`doc-comment-style`) is `allow` by default (ADR-0026 decision
+    // 8). A lookup tool applies no lint levels, so it leaves the lint out of
+    // `workspace.warnings`; `ridl_check` applies the levels and reports the
+    // lint once the project sets it to `warn`.
+    #[tokio::test]
+    async fn an_allow_by_default_lint_is_counted_only_where_a_project_sets_it() {
+        let copy = snapshot::tests::TempWorkspace::copy("ws");
+        let path = copy.0.to_str().unwrap().to_string();
+        let b = copy.0.join("b/b.ridl");
+        let resolve = |path: String| async move {
+            let input =
+                serde_json::from_value(json!({"path": path, "name": "fx.b.Level"})).unwrap();
+            let result = RidlMcp::new()
+                .ridl_resolve(Parameters(input))
+                .await
+                .unwrap();
+            result.structured_content.unwrap()["workspace"]["warnings"].clone()
+        };
+        let with_line_doc = resolve(path.clone()).await;
+        let text = std::fs::read_to_string(&b).unwrap();
+        let line_doc = "/// A window size, local to this package.";
+        assert!(text.contains(line_doc));
+        std::fs::write(
+            &b,
+            text.replace(line_doc, "/** A window size, local to this package. */"),
+        )
+        .unwrap();
+        assert_eq!(resolve(path.clone()).await, with_line_doc);
+
+        let check = |path: String| async move {
+            let params = serde_json::from_value(json!({"path": path})).unwrap();
+            let result = RidlMcp::new().ridl_check(Parameters(params)).await.unwrap();
+            let value = result.structured_content.unwrap();
+            value["diagnostics"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|d| d["code"] == "TYPL-410")
+                .map(|d| d["severity"].as_str().unwrap().to_string())
+                .collect::<Vec<_>>()
+        };
+        assert!(check(path.clone()).await.is_empty());
+        let manifest = copy.0.join("ridl.toml");
+        let mut root = std::fs::read_to_string(&manifest).unwrap();
+        root.push_str("\n[lints]\ndoc-comment-style = \"warn\"\n");
+        std::fs::write(&manifest, root).unwrap();
+        assert_eq!(check(path.clone()).await, ["warning"]);
+        assert_eq!(resolve(path).await, with_line_doc);
     }
 
     // Path mode applies the project's `[lints]` levels (ADR-0024 decisions 6

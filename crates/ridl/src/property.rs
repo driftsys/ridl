@@ -197,13 +197,16 @@ pub fn run(path: &Path, samples: usize, format: TestFormat) -> ExitCode {
     }
 
     let mut db = ridl_core::RidlDatabase::default();
-    let output = match ridlc::compile_workspace(&mut db, path) {
+    let mut output = match ridlc::compile_workspace(&mut db, path) {
         Ok(output) => output,
         Err(err) => {
             eprintln!("error: {}: {err}", path.display());
             return ExitCode::from(2);
         }
     };
+    // `ridl test` applies no `[lints]` levels (ADR-0024 decision 8), so a lint
+    // that is `allow` by default is left out of what it renders.
+    ridl_core::lint::drop_allowed_by_default(&mut output.diagnostics);
     if output
         .diagnostics
         .iter()

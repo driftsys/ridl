@@ -11,8 +11,8 @@
 use ridl_core::db::{InputFile, profile_of_path};
 use ridl_core::diag::DiagCode;
 use ridl_core::package::Workspace;
-use ridl_syntax::Profile;
-use ridl_syntax::ast::{self, AstNode, ComponentLineKind};
+use ridl_syntax::ast::{self, AstNode, ComponentLineKind, HasDocComments};
+use ridl_syntax::{Profile, SyntaxToken};
 use rowan::TextSize;
 
 use super::attrs::{self, AttrSite};
@@ -21,6 +21,7 @@ use super::{
     Reference, ReferenceForm, Reporter, Site, SystemDecl, UNIT_INSTANCE, is_lower_camel,
     is_lowercase_segment, is_upper_camel,
 };
+use crate::docs;
 use crate::resolve::{
     Declaration, declarations, declared_name, name_range, qualified_segments, source_file,
 };
@@ -195,13 +196,24 @@ fn system_decl(
     let read = attrs::read(decl.attr_block(), AttrSite::System, file, reporter);
     let members = decl
         .lines()
-        .filter_map(|line| member_ref(line.reference(), line.attr_block(), file, reporter))
+        .filter_map(|line| {
+            member_ref(
+                line.reference(),
+                line.attr_block(),
+                &line.doc_comments(),
+                file,
+                reporter,
+            )
+        })
         .collect();
     Some(SystemDecl {
         name,
         package: package.to_string(),
         members,
         attrs: read.attrs,
+        doc: docs::scan(&decl.doc_comments()),
+        links: Vec::new(),
+        see: Vec::new(),
     })
 }
 
@@ -216,7 +228,13 @@ fn component_decl(
     let mut offers = Vec::new();
     let mut requires = Vec::new();
     for line in decl.lines() {
-        let Some(member) = member_ref(line.reference(), line.attr_block(), file, reporter) else {
+        let Some(member) = member_ref(
+            line.reference(),
+            line.attr_block(),
+            &line.doc_comments(),
+            file,
+            reporter,
+        ) else {
             continue;
         };
         match line.kind() {
@@ -233,6 +251,9 @@ fn component_decl(
         instances: read.instances,
         external: read.external,
         attrs: read.attrs,
+        doc: docs::scan(&decl.doc_comments()),
+        links: Vec::new(),
+        see: Vec::new(),
     })
 }
 
@@ -246,7 +267,15 @@ fn distribution_decl(
     let read = attrs::read(decl.attr_block(), AttrSite::Distribution, file, reporter);
     let members = decl
         .lines()
-        .filter_map(|line| member_ref(line.reference(), line.attr_block(), file, reporter))
+        .filter_map(|line| {
+            member_ref(
+                line.reference(),
+                line.attr_block(),
+                &line.doc_comments(),
+                file,
+                reporter,
+            )
+        })
         .collect();
     Some(DistributionDecl {
         name,
@@ -254,6 +283,9 @@ fn distribution_decl(
         members,
         tier: read.tier,
         attrs: read.attrs,
+        doc: docs::scan(&decl.doc_comments()),
+        links: Vec::new(),
+        see: Vec::new(),
     })
 }
 
@@ -278,6 +310,9 @@ fn deployment_decl(
         system,
         machines,
         attrs: read.attrs,
+        doc: docs::scan(&decl.doc_comments()),
+        links: Vec::new(),
+        see: Vec::new(),
     })
 }
 
@@ -290,13 +325,24 @@ fn machine_decl(
     let read = attrs::read(decl.attr_block(), AttrSite::Machine, file, reporter);
     let members = decl
         .lines()
-        .filter_map(|line| member_ref(line.reference(), line.attr_block(), file, reporter))
+        .filter_map(|line| {
+            member_ref(
+                line.reference(),
+                line.attr_block(),
+                &line.doc_comments(),
+                file,
+                reporter,
+            )
+        })
         .collect();
     Some(MachineDecl {
         name,
         members,
         external: read.external,
         attrs: read.attrs,
+        doc: docs::scan(&decl.doc_comments()),
+        links: Vec::new(),
+        see: Vec::new(),
     })
 }
 
@@ -314,10 +360,12 @@ fn named(name: Option<ast::Name>, file: InputFile) -> Option<Named> {
     })
 }
 
-/// One body line: its reference and the backend keys of its attribute block.
+/// One body line: its reference, the backend keys of its attribute block, and
+/// its doc comment.
 fn member_ref(
     reference: Option<ast::Reference>,
     block: Option<ast::AttrBlock>,
+    docs: &[SyntaxToken],
     file: InputFile,
     reporter: &mut Reporter,
 ) -> Option<MemberRef> {
@@ -328,6 +376,9 @@ fn member_ref(
     Some(MemberRef {
         reference,
         backend_keys,
+        doc: docs::scan(docs),
+        links: Vec::new(),
+        see: Vec::new(),
     })
 }
 

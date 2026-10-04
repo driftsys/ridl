@@ -86,6 +86,12 @@ impl DiagCode {
 /// `lint_names_are_present_exactly_on_warnings_and_infos_and_unique` checks
 /// which rows carry a name.
 ///
+/// A lint row may follow its name with `default = allow`, which sets
+/// [`CatalogEntry::allow_by_default`] (ADR-0024 decision 1). `allow` is the
+/// only default a row can declare: any other word is a compile error. The
+/// guard `allow_by_default_is_only_on_warning_or_info_rows` checks that only a
+/// lint row declares it.
+///
 /// The macro also generates [`ALL_CATALOGS`], which the guards read to find
 /// every catalogue. That makes it invocable only once **per module** — a second
 /// invocation beside this one redefines the constant and the crate stops
@@ -112,6 +118,8 @@ impl DiagCode {
 macro_rules! diag_codes {
     (@lint) => { None };
     (@lint $lint:literal) => { Some($lint) };
+    (@allow) => { false };
+    (@allow allow) => { true };
     (
         $(
             $(#[$catalog_doc:meta])*
@@ -119,7 +127,7 @@ macro_rules! diag_codes {
                 $(
                     $(#[$code_doc:meta])*
                     $konst:ident = $code:literal, $severity:ident,
-                        $summary:literal $(, lint = $lint:literal)?;
+                        $summary:literal $(, lint = $lint:literal $(, default = $default:ident)?)?;
                 )+
             }
         )+
@@ -139,6 +147,7 @@ macro_rules! diag_codes {
                     severity: Severity::$severity,
                     summary: $summary,
                     lint: diag_codes!(@lint $($lint)?),
+                    allow_by_default: diag_codes!(@allow $($($default)?)?),
                 },)+
             ];
         )+
@@ -241,9 +250,10 @@ diag_codes! {
 
     /// The typl catalogue (ADR-0008 decision 21): every `TYPL-` code declared in
     /// this module, with the severity the typl reference §16 tables classify it
-    /// at. Six codes the reference documents are absent because no constant
+    /// at. Five codes the reference documents are absent because no constant
     /// declares them and no pass emits them — TYPL-107, TYPL-112, TYPL-205, and
-    /// the three `@labels` assurance codes TYPL-401 to TYPL-403. That inventory
+    /// the two `@labels` assurance codes TYPL-402 and TYPL-403 (TYPL-401 is
+    /// declared, as `broken-doc-link`, under ADR-0026). That inventory
     /// is recorded in issue #172; closing it means minting the constants, which
     /// is a change to what the compiler declares, not a catalogue edit.
     TYPL_CATALOG {
@@ -517,15 +527,54 @@ diag_codes! {
         TYPL_304 = "TYPL-304", Error,
             "interaction declaration in a typl context";
 
-        /// Blank line between a doc comment and its definition (typl §14, §16.5).
-        /// Warning. Emitted by the checker.
+        /// A doc link or an `@see` target that does not resolve (typl §14,
+        /// §16.5; ADR-0026): the name is unknown, is `internal` in another
+        /// package, or names no member of the declaration. Warning. Emitted by
+        /// the checker, which resolves every link candidate.
+        TYPL_401 = "TYPL-401", Warning,
+            "doc link or `@see` target that does not resolve", lint = "broken-doc-link";
+
+        /// Blank line between a doc comment and its carrier (typl §14, §16.5;
+        /// ADR-0026 extends it from declarations to every carrier). Warning.
+        /// Emitted by the doc lints (`ridl_sem::doc_lint`).
         TYPL_404 = "TYPL-404", Warning,
-            "blank line between a doc comment and its definition", lint = "detached-doc-comment";
+            "blank line between a doc comment and its carrier", lint = "detached-doc-comment";
 
         /// `@deprecated` doc tag without a reason string (typl §14.2, §16.5).
         /// Warning. Emitted by the checker.
         TYPL_405 = "TYPL-405", Warning,
             "`@deprecated` doc tag without a reason string", lint = "deprecated-without-reason";
+
+        /// A covered item with no doc (ADR-0026): a declaration that is not
+        /// `internal`, a member of one, or an rsdl declaration. A doc made only
+        /// of tags counts as missing. Warning. Emitted by the doc lints
+        /// (`ridl_sem::doc_lint`).
+        TYPL_406 = "TYPL-406", Warning,
+            "item without a doc comment", lint = "missing-docs";
+
+        /// Doc comment in a position that is not a carrier (ADR-0026): before
+        /// `package`, an `import`, a return type or an attribute block, or at
+        /// the end of a file or a body. Warning. Emitted by the doc lints
+        /// (`ridl_sem::doc_lint`).
+        TYPL_407 = "TYPL-407", Warning,
+            "doc comment in a position that is not a carrier", lint = "misplaced-doc-comment";
+
+        /// A doc tag other than `@see`, `@since`, `@deprecated` and `@labels`
+        /// (typl §14.2, ADR-0026). Warning. Emitted by the doc lints
+        /// (`ridl_sem::doc_lint`).
+        TYPL_408 = "TYPL-408", Warning,
+            "doc tag other than `@see`, `@since`, `@deprecated` and `@labels`", lint = "unknown-doc-tag";
+
+        /// `@see` or `@since` with a missing or malformed value (ADR-0026).
+        /// Warning. Emitted by the doc lints (`ridl_sem::doc_lint`).
+        TYPL_409 = "TYPL-409", Warning,
+            "`@see` or `@since` with a missing or malformed value", lint = "malformed-doc-tag";
+
+        /// Doc comment written as `/** */` (ADR-0026). Warning, `allow` by
+        /// default, so a project opts in to requiring `///`. Emitted by the
+        /// doc lints (`ridl_sem::doc_lint`).
+        TYPL_410 = "TYPL-410", Warning,
+            "doc comment written as `/** */`", lint = "doc-comment-style", default = allow;
     }
 
     /// The ridl catalogue (ADR-0008 decision 21): every `RIDL-` code declared in
@@ -1504,8 +1553,12 @@ pub struct CatalogEntry {
     pub summary: &'static str,
     /// The lint name, present exactly when `severity` is Warning or Info
     /// (ADR-0024 decision 1). The catalogue severity is the lint's default
-    /// level. A released name is never renamed or reused.
+    /// level, unless `allow_by_default` is set. A released name is never
+    /// renamed or reused.
     pub lint: Option<&'static str>,
+    /// Whether the lint's default level is `allow` rather than the level of
+    /// its severity (ADR-0024 decision 1). Only a lint row sets it.
+    pub allow_by_default: bool,
 }
 
 /// Polishes a raw parser message into the house diagnostic style —
@@ -1836,6 +1889,18 @@ mod tests {
         );
     }
 
+    /// A row may declare `allow` as its default level (ADR-0024 decision 1),
+    /// and only a lint row may: an Error row has no level to declare.
+    #[test]
+    fn allow_by_default_is_only_on_warning_or_info_rows() {
+        for entry in ALL_CATALOGS.iter().flat_map(|(_, c)| c.iter()) {
+            if entry.allow_by_default {
+                assert_ne!(entry.severity, Severity::Error, "{}", entry.code.as_str());
+                assert!(entry.lint.is_some(), "{}", entry.code.as_str());
+            }
+        }
+    }
+
     /// Every Warning and Info row carries a lint name and no Error row does;
     /// each name is lowercase words joined by `-`; no two rows share a name;
     /// and the `(code, name)` pairs are the expected list below, which mirrors
@@ -1890,8 +1955,14 @@ mod tests {
             ("TYPL-103", "unbounded-length"),
             ("TYPL-115", "no-init-value"),
             ("TYPL-211", "duplicate-reserved"),
+            ("TYPL-401", "broken-doc-link"),
             ("TYPL-404", "detached-doc-comment"),
             ("TYPL-405", "deprecated-without-reason"),
+            ("TYPL-406", "missing-docs"),
+            ("TYPL-407", "misplaced-doc-comment"),
+            ("TYPL-408", "unknown-doc-tag"),
+            ("TYPL-409", "malformed-doc-tag"),
+            ("TYPL-410", "doc-comment-style"),
             ("RIDL-100", "missing-timing"),
             ("RIDL-108", "degenerate-timing-range"),
             ("RIDL-112", "missing-response-bound"),
@@ -2014,8 +2085,8 @@ mod tests {
     ///   in made this file report its own prose about reserved and absent
     ///   codes;
     /// - a code written only in Markdown, in a `.typl`/`.ridl` fixture, or in a
-    ///   snapshot. The typl reference §16 documents six codes no constant
-    ///   declares — TYPL-107, TYPL-112, TYPL-205, and TYPL-401 to TYPL-403 — so
+    ///   snapshot. The typl reference §16 documents five codes no constant
+    ///   declares — TYPL-107, TYPL-112, TYPL-205, TYPL-402 and TYPL-403 — so
     ///   widening the scan to `.md` would fail today. That inventory belongs to
     ///   issue #172, not to this guard;
     /// - a catalogued code that nothing emits. FORM-001 to FORM-004 are declared

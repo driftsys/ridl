@@ -1,0 +1,38 @@
+package veh.adas
+
+import veh.common.Speed
+import veh.common.Gear
+import veh.common.Pose
+
+/// Cruise control; [CruiseControl.setLever] takes a [Gear].
+/// @see veh.common.Speed
+/// @since 1.0
+/// @labels ASIL_B
+interface CruiseControl {
+  /// The target speed, a [Speed].
+  /// @since 1.0
+  signal target : Speed @[100ms..1s]
+  /// Raised when the lever moves, carrying a [Pose].
+  event moved : Pose @[50ms..500ms]
+  /// Sets the lever, see [Gear.PARK].
+  /// @see veh.common.Gear
+  /// @deprecated "use setGear"
+  command setLever(
+    /// The gear to select, one of [Gear].
+    /// @since 1.2
+    gear: Gear
+    /// The speed limit to keep, a [Speed].
+    limit: Speed
+  ) @[..50ms]
+  /// Reads the pose, see [CruiseControl.target].
+  query pose(): Pose @[..100ms]
+  /// The speed the controller never exceeds, a [`veh.common.Speed`].
+  fixed maxSpeed : Speed
+  /// Retired, see [Pose].
+  reserved oldLever
+}
+
+/// The published cruise service, over [CruiseControl].
+/// @see veh.common.Gear
+/// @since 1.0
+service veh.adas.cruise : CruiseControl

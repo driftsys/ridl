@@ -1,8 +1,10 @@
 package fx.sensor
 
+/// A speed reading.
 type Speed: integer [0..300]
 
 /// A sensor whose signal has no timing annotation, which draws RIDL-100.
 interface Sensor {
+  /// The current speed.
   signal speed: Speed
 }

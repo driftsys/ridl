@@ -35,8 +35,10 @@ fn a_lock_in_an_earlier_package_does_not_move_the_workspace_diagnostics() {
 
     let run = ridlc::run_check(dir.path(), Frozen::Yes).expect("the workspace loads");
     let json = to_json(&run.diagnostics, &run.sources);
+    // TYPL-406 (`missing-docs`) is left out: the fixture has no docs.
     let found: Vec<(&str, &str, &str)> = json
         .iter()
+        .filter(|diagnostic| diagnostic.code != "TYPL-406")
         .map(|diagnostic| {
             let label = diagnostic
                 .labels

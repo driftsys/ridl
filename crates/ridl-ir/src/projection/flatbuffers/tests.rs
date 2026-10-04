@@ -6,12 +6,12 @@ use super::*;
 
 fn field(name: &str, ordinal: u32, ty: v2::FieldType) -> v2::StructMember {
     v2::StructMember {
-        member: Some(v2::struct_member::Member::Field(v2::Field {
+        member: Some(v2::struct_member::Member::Field(Box::new(v2::Field {
             name: name.to_string(),
             ordinal,
             r#type: Some(ty),
             ..Default::default()
-        })),
+        }))),
     }
 }
 

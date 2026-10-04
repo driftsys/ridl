@@ -199,8 +199,12 @@ pub fn load_diff_side(
         .iter()
         .any(|d| d.severity == ridl_core::Severity::Error)
     {
+        // `ridl diff` applies no `[lints]` levels (ADR-0024 decision 8), so a
+        // lint that is `allow` by default is left out here.
+        let mut diagnostics = output.diagnostics;
+        ridl_core::lint::drop_allowed_by_default(&mut diagnostics);
         return Err(DiffSideError::Compile {
-            diagnostics: output.diagnostics,
+            diagnostics,
             sources: output.sources,
         });
     }

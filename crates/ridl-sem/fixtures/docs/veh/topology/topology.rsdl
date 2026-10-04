@@ -1,0 +1,46 @@
+package veh.topology
+
+import veh.adas.CruiseControl
+
+/// The cruise component, over [CruiseControl].
+/// @see veh.common.Speed
+/// @since 1.0
+component Cruise {
+  /// Lists [CruiseControl.target].
+  offers veh.adas.cruise
+}
+
+/// The panel component.
+component Panel {
+  /// Needs [CruiseControl].
+  /// @see veh.adas.CruiseControl.setLever
+  requires CruiseControl
+}
+
+/// The vehicle, which selects a [veh.common.Gear].
+/// @since 1.0
+system Vehicle {
+  /// Drives, through [CruiseControl].
+  Cruise
+  /// Shows the state.
+  Panel
+}
+
+/// Every component, see [veh.common.Pose].
+distribution All {
+  /// The cruise, over [CruiseControl].
+  Cruise
+  Panel
+}
+
+/// Production, see [veh.adas.CruiseControl].
+/// @see veh.common.Speed
+deployment Prod for Vehicle {
+  /// The one box, see [CruiseControl].
+  /// @since 1.0
+  machine Box {
+    /// Placed here, see [CruiseControl].
+    Cruise
+    Panel
+  }
+}

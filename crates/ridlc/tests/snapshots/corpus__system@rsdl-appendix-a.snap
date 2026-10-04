@@ -11,23 +11,43 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   "members": [
     {
       "component": "veh.topology.Cruise",
-      "attributes": []
+      "attributes": [],
+      "doc": "",
+      "links": [],
+      "see": [],
+      "since": []
     },
     {
       "component": "veh.topology.Lane",
-      "attributes": []
+      "attributes": [],
+      "doc": "",
+      "links": [],
+      "see": [],
+      "since": []
     },
     {
       "component": "veh.topology.Panel",
-      "attributes": []
+      "attributes": [],
+      "doc": "",
+      "links": [],
+      "see": [],
+      "since": []
     },
     {
       "component": "veh.topology.Backend",
-      "attributes": []
+      "attributes": [],
+      "doc": "",
+      "links": [],
+      "see": [],
+      "since": []
     },
     {
       "component": "veh.diag.access",
-      "attributes": []
+      "attributes": [],
+      "doc": "",
+      "links": [],
+      "see": [],
+      "since": []
     }
   ],
   "components": [
@@ -43,7 +63,11 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "offers": [
         {
           "service": "veh.adas.cruise",
-          "attributes": []
+          "attributes": [],
+          "doc": "",
+          "links": [],
+          "see": [],
+          "since": []
         }
       ],
       "requires": [
@@ -55,13 +79,21 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           },
           "service": "veh.adas.lane",
           "producer": "veh.topology.Lane",
-          "attributes": []
+          "attributes": [],
+          "doc": "",
+          "links": [],
+          "see": [],
+          "since": []
         }
       ],
       "labels": [
         "ASIL_B"
       ],
-      "attributes": []
+      "attributes": [],
+      "doc": "Adaptive cruise, two copies: one per compute node.",
+      "links": [],
+      "see": [],
+      "since": []
     },
     {
       "name": "Lane",
@@ -74,12 +106,20 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "offers": [
         {
           "service": "veh.adas.lane",
-          "attributes": []
+          "attributes": [],
+          "doc": "",
+          "links": [],
+          "see": [],
+          "since": []
         }
       ],
       "requires": [],
       "labels": [],
-      "attributes": []
+      "attributes": [],
+      "doc": "",
+      "links": [],
+      "see": [],
+      "since": []
     },
     {
       "name": "Panel",
@@ -99,7 +139,11 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           },
           "service": "veh.adas.cruise",
           "producer": "veh.topology.Cruise",
-          "attributes": []
+          "attributes": [],
+          "doc": "",
+          "links": [],
+          "see": [],
+          "since": []
         },
         {
           "interface": {
@@ -109,11 +153,19 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           },
           "service": "veh.adas.lane",
           "producer": "veh.topology.Lane",
-          "attributes": []
+          "attributes": [],
+          "doc": "",
+          "links": [],
+          "see": [],
+          "since": []
         }
       ],
       "labels": [],
-      "attributes": []
+      "attributes": [],
+      "doc": "",
+      "links": [],
+      "see": [],
+      "since": []
     },
     {
       "name": "Backend",
@@ -133,7 +185,11 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           },
           "service": "veh.adas.cruise",
           "producer": "veh.topology.Cruise",
-          "attributes": []
+          "attributes": [],
+          "doc": "",
+          "links": [],
+          "see": [],
+          "since": []
         },
         {
           "interface": {
@@ -143,11 +199,19 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           },
           "service": "veh.diag.access",
           "producer": "veh.diag.access",
-          "attributes": []
+          "attributes": [],
+          "doc": "",
+          "links": [],
+          "see": [],
+          "since": []
         }
       ],
       "labels": [],
-      "attributes": []
+      "attributes": [],
+      "doc": "The fleet backend. No implementation in this workspace.",
+      "links": [],
+      "see": [],
+      "since": []
     },
     {
       "name": "veh.diag.access",
@@ -160,12 +224,20 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "offers": [
         {
           "service": "veh.diag.access",
-          "attributes": []
+          "attributes": [],
+          "doc": "",
+          "links": [],
+          "see": [],
+          "since": []
         }
       ],
       "requires": [],
       "labels": [],
-      "attributes": []
+      "attributes": [],
+      "doc": "",
+      "links": [],
+      "see": [],
+      "since": []
     }
   ],
   "producers": [
@@ -271,20 +343,36 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "members": [
         {
           "component": "veh.topology.Cruise",
-          "attributes": []
+          "attributes": [],
+          "doc": "",
+          "links": [],
+          "see": [],
+          "since": []
         },
         {
           "component": "veh.topology.Lane",
-          "attributes": []
+          "attributes": [],
+          "doc": "",
+          "links": [],
+          "see": [],
+          "since": []
         },
         {
           "component": "veh.diag.access",
-          "attributes": []
+          "attributes": [],
+          "doc": "",
+          "links": [],
+          "see": [],
+          "since": []
         }
       ],
       "dependsOn": [],
       "labels": [],
-      "attributes": []
+      "attributes": [],
+      "doc": "",
+      "links": [],
+      "see": [],
+      "since": []
     },
     {
       "name": "Hmi",
@@ -292,14 +380,22 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "members": [
         {
           "component": "veh.topology.Panel",
-          "attributes": []
+          "attributes": [],
+          "doc": "",
+          "links": [],
+          "see": [],
+          "since": []
         }
       ],
       "dependsOn": [
         "veh.topology.Adas"
       ],
       "labels": [],
-      "attributes": []
+      "attributes": [],
+      "doc": "",
+      "links": [],
+      "see": [],
+      "since": []
     }
   ],
   "deployments": [
@@ -313,7 +409,11 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "name": "DevBox",
           "external": false,
           "labels": [],
-          "attributes": []
+          "attributes": [],
+          "doc": "",
+          "links": [],
+          "see": [],
+          "since": []
         }
       ],
       "placements": [
@@ -681,7 +781,11 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "DevBox"
           ]
         }
-      ]
+      ],
+      "doc": "",
+      "docLinks": [],
+      "see": [],
+      "since": []
     },
     {
       "name": "Production",
@@ -695,19 +799,31 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "labels": [
             "ASIL_B"
           ],
-          "attributes": []
+          "attributes": [],
+          "doc": "",
+          "links": [],
+          "see": [],
+          "since": []
         },
         {
           "name": "Cockpit",
           "external": false,
           "labels": [],
-          "attributes": []
+          "attributes": [],
+          "doc": "",
+          "links": [],
+          "see": [],
+          "since": []
         },
         {
           "name": "Cloud",
           "external": true,
           "labels": [],
-          "attributes": []
+          "attributes": [],
+          "doc": "",
+          "links": [],
+          "see": [],
+          "since": []
         }
       ],
       "placements": [
@@ -1093,7 +1209,15 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "Cockpit"
           ]
         }
-      ]
+      ],
+      "doc": "",
+      "docLinks": [],
+      "see": [],
+      "since": []
     }
-  ]
+  ],
+  "doc": "",
+  "links": [],
+  "see": [],
+  "since": []
 }

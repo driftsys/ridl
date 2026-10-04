@@ -12,6 +12,9 @@ expression: "ridl_ir::v2::to_json_pretty(&output.package).expect(\"the fixture p
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "unit": "km/h"
@@ -35,6 +38,9 @@ expression: "ridl_ir::v2::to_json_pretty(&output.package).expect(\"the fixture p
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "constDef": {
         "typeRef": "Speed",
         "value": "250"

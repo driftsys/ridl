@@ -55,12 +55,12 @@ fn interaction(name: &str, ordinal: u32, kind: decl::Kind) -> Decl {
 /// timing, so every kind that carries timing carries one here.
 fn package() -> Package {
     let field = |name: &str, ordinal: u32| StructMember {
-        member: Some(struct_member::Member::Field(Field {
+        member: Some(struct_member::Member::Field(Box::new(Field {
             name: name.to_owned(),
             ordinal,
             r#type: Some(named("Coord")),
             ..Default::default()
-        })),
+        }))),
     };
     Package {
         name: "veh.cluster".to_owned(),
@@ -113,6 +113,7 @@ fn package() -> Package {
                         params: vec![Param {
                             name: "to".to_owned(),
                             r#type: Some(named("Point")),
+                            ..Default::default()
                         }],
                         timing: Some(range(None, Some("50000"))),
                         ..Default::default()
@@ -125,6 +126,7 @@ fn package() -> Package {
                         params: vec![Param {
                             name: "from".to_owned(),
                             r#type: Some(named("Point")),
+                            ..Default::default()
                         }],
                         return_type: Some(ReturnType {
                             kind: Some(return_type::Kind::Value(named("Point"))),
@@ -172,10 +174,12 @@ fn package() -> Package {
                             Param {
                                 name: "a".to_owned(),
                                 r#type: Some(named("Point")),
+                                ..Default::default()
                             },
                             Param {
                                 name: "b".to_owned(),
                                 r#type: Some(named("Point")),
+                                ..Default::default()
                             },
                         ],
                         ..Default::default()
@@ -188,6 +192,7 @@ fn package() -> Package {
                         params: vec![Param {
                             name: "from".to_owned(),
                             r#type: Some(named("Point")),
+                            ..Default::default()
                         }],
                         return_type: Some(ReturnType {
                             kind: Some(return_type::Kind::Fallible(ridl_ir::v2::FallibleType {

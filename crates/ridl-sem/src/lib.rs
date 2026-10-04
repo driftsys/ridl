@@ -4,6 +4,8 @@
 //! (ADR-0006 decision 2).
 
 pub mod check;
+/// The doc lints (ADR-0026) — checks over the doc comments of a file.
+pub mod doc_lint;
 pub mod docs;
 pub mod expr;
 /// Total evaluation of the guaranteed subset over the exact domains
@@ -27,6 +29,9 @@ pub mod ucum;
 pub mod workspace;
 
 pub use check::{CheckedPackage, ConstValue, check_package, const_value};
-pub use resolve::{Resolution, Symbol, SymbolKind, resolve_package};
+pub use resolve::{
+    LinkError, LinkTarget, Resolution, Symbol, SymbolKind, doc_link_members, resolve_doc_link,
+    resolve_package,
+};
 pub use rsdl::{CheckedSystem, check_system, lower_system, unclaimed_backend_keys};
 pub use workspace::{CheckedWorkspace, check_workspace};

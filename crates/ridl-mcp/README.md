@@ -24,9 +24,9 @@ actionable message. A compiler panic returns an MCP internal error.
 
 Pass the workspace root (the directory that holds its `ridl.toml`) as `path`. A
 package directory or source file is also accepted. Relative paths resolve
-against the server's working directory. With a package manifest beneath a
-workspace manifest, the member is loaded alone: sibling imports do not resolve
-(driftsys/ridl#529). `workspace.notes` names the workspace root to pass instead.
+against the server's working directory. A path inside a workspace member loads
+the whole workspace that lists the member, so sibling imports resolve, and
+`ridl_check` reports only the diagnostics of files under the member.
 
 Optional `overlays: [{path, source}]` replace unsaved text inside the loader.
 Paths match by canonical parent plus file name. Only `.typl`, `.ridl` and

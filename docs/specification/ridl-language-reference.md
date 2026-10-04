@@ -87,6 +87,16 @@ Exactly four things, each owned by a family core:
 Everything else — types, units, ranges, constants, composites, packages,
 visibility, doc comments, diagnostic-code practice — is typl, unchanged.
 
+Doc comments follow typl §14 in every ridl file. ridl adds carriers: an
+`interface`, a `service`, each interaction, and each parameter of a `command` or
+`query`. An interface's doc states the interface's responsibility and does not
+list its members; each interaction is documented on its own line, and
+`missing-docs` (TYPL-406) covers the interface and each interaction. A parameter
+doc is allowed and never required, because a parameter's type is a named type
+with its own doc (typl §14.4). A doc link can name an interaction as a member,
+`[CruiseControl.setLever]`. A doc comment before a return type, before an arm of
+an inline `T | E` return, or before an attribute block is misplaced (TYPL-407).
+
 ### 1.3 ridl describes every boundary
 
 The five interaction kinds are named, typed, directed interactions on a contract
@@ -2190,7 +2200,7 @@ fixed_def     = doc_comment? "fixed"   camelCase_id ":" fixed_type ;
               (* no error syntax — a fallible_type return makes a query fallible, §10.1 *)
 
 param_list    = "" | param { "," param } ;
-param         = camelCase_id ":" param_type ;
+param         = doc_comment? camelCase_id ":" param_type ;
 param_type    = type_ref | stream_type ;
 return_type   = type_ref | tuple_type | fallible_type | stream_type ;
 fallible_type = type_ref "|" type_ref ;             (* inline T | E — §10.1, gf §6.1;

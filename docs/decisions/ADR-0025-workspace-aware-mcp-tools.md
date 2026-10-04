@@ -28,6 +28,12 @@ are described in
 inputs and outputs of each tool are in
 [the `ridl-mcp` README](../../crates/ridl-mcp/README.md).
 
+Amended 2026-10-04 by [ADR-0026](ADR-0026-doc-comments.md) (documentation in the
+source, issue #529): root discovery now walks from a workspace member to its
+workspace for every entry point (ADR-0002 §4). Decision 2 is edited in place to
+that rule: the note for a member path is gone, and the path mode reports only
+the diagnostics of files under the member.
+
 ## Context
 
 Before this work `ridl mcp` exposed one tool, `ridl_check(source, profile)`. It
@@ -50,13 +56,16 @@ pasted-source form.
    cache can be added behind `snapshot` without a schema change. Measured on
    2026-10-03, `ridl check examples/cabin` takes less than 10 ms. **A real
    workspace whose snapshot takes more than 500 ms reopens this decision.**
-2. **Root discovery is unchanged** (design D-2). A `path` resolves to a
-   workspace exactly as `ridl check <path>` resolves it, through
-   `ridl_core::find_manifest_root` and the nearest `ridl.toml`. A file inside a
-   workspace member therefore loads that member alone, and its sibling members
-   do not resolve (driftsys/ridl#529). The tools report this as a note in
-   `workspace.notes` and name the workspace root to pass instead. The fix for
-   the command line, the language server and the MCP server together is #529's.
+2. **Root discovery is the command line's** (design D-2; amended by ADR-0026,
+   see Status). A `path` resolves to a workspace exactly as `ridl check <path>`
+   resolves it, through `ridl_core::find_root` (ADR-0002 §4). A path inside a
+   workspace member loads the workspace whose `members` names the member, so
+   imports of sibling members resolve and the root's `[lints]` apply.
+   `ridl_check` in path mode then reports only the diagnostics of files under
+   the member, and `workspace.errors` and `workspace.warnings` count only those.
+   No note is added for a member path. As designed, the tools loaded the member
+   alone and reported that in `workspace.notes` (driftsys/ridl#529); ADR-0026
+   fixed the loader for every entry point together.
 3. **The lookup tools read the checked IR, not the language server** (design
    D-3). The lookup logic is a `query` module in `ridl-mcp` over `ridlc`'s
    `WorkspaceOutput`, and it returns structured JSON. `ridl-lsp` is not changed
@@ -157,9 +166,9 @@ From the design's §10. The numbers are the decisions that reject them.
 
 - A tool that takes `path` costs one cold compile of the workspace for each
   call. This is accepted until decision 1's measurement condition is met.
-- An agent that passes a file inside a workspace member checks that member
-  alone, and `workspace.notes` is the only signal; #529 fixes it for every entry
-  point.
+- An agent that passes a file inside a workspace member checks the member inside
+  its workspace, and sees the diagnostics of the member's files only (decision
+  2, as ADR-0026 amends it).
 - `ridl_references` and `ridl_dependencies` see rsdl uses only for the
   components that the workspace's `system` lists, which is also the set
   `ridl diff` and the IR dump see. A workspace with no lowered system gets the
@@ -180,5 +189,7 @@ From the design's §10. The numbers are the decisions that reject them.
   do not.
 - [ADR-0010](ADR-0010-cli-conventions.md) — the CLI conventions that `ridl diff`
   keeps through the move of its loader into `ridlc`.
+- [ADR-0026](ADR-0026-doc-comments.md) decision 10 — root discovery from a
+  workspace member; amends decision 2.
 - [The MCP workspace tools design record](../design/mcp-workspace-tools.md) and
   [the `ridl-mcp` README](../../crates/ridl-mcp/README.md).

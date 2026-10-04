@@ -64,6 +64,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         // recursive, so they are boxed explicitly.
         .boxed(".ridl.codegen.v1.Slot.occupant.field")
         .boxed(".ridl.codegen.v1.InteractionSlot.occupant.interaction")
+        // A struct field, for the same reason: with the doc links, `see` and
+        // `since` (ADR-0026) a `Field` is far larger than the tombstone beside
+        // it in a struct body, and clippy's `large_enum_variant` rejects the
+        // unboxed oneof.
+        .boxed(".ridl.ir.v2.StructMember.member.field")
         .compile_fds(file_descriptors)?;
 
     // The canonical protobuf JSON serde impls (ADR-0014 decision 14), written

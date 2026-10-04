@@ -208,3 +208,110 @@ fn build_without_levels_writes_artifacts() {
             .collect::<Vec<_>>())
     );
 }
+
+/// A two-member workspace entered at member `a`, which is clean: `b` holds
+/// the signal with no timing (RIDL-100), and the root manifest ends with
+/// `root_tail` — a `[lints]` or an `[imports]` table, or an empty string.
+struct SiblingFixture {
+    root: tempfile::TempDir,
+}
+
+impl SiblingFixture {
+    fn new(root_tail: &str) -> Self {
+        let root = tempfile::tempdir().expect("a temp dir");
+        let write = |relative: &str, text: &str| {
+            let path = root.path().join(relative);
+            std::fs::create_dir_all(path.parent().expect("a parent")).expect("create the dir");
+            std::fs::write(path, text).expect("the file is written");
+        };
+        write(
+            "ridl.toml",
+            &format!("[workspace]\nmembers = [\"a\", \"b\"]\n{root_tail}"),
+        );
+        write(
+            "a/ridl.toml",
+            "[package]\nname = \"a\"\nversion = \"1.0.0\"\n",
+        );
+        write(
+            "a/a.typl",
+            "package a\n\n/// A level.\ntype Level: integer [0..3]\n",
+        );
+        write(
+            "b/ridl.toml",
+            "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n",
+        );
+        write("b/sensor.ridl", SOURCE);
+        Self { root }
+    }
+
+    fn member_a(&self) -> PathBuf {
+        self.root.path().join("a")
+    }
+}
+
+/// The files `out` holds, for an assertion message.
+fn written(out: &Path) -> Vec<PathBuf> {
+    std::fs::read_dir(out)
+        .expect("the out dir is readable")
+        .map(|entry| entry.expect("a readable entry").path())
+        .collect()
+}
+
+/// A build entered at a clean member, while a sibling member holds a lint
+/// the root sets to `deny`: the root's levels apply to the sibling's
+/// diagnostics too, so the lint is an error there, the build writes
+/// nothing, and the one reported error says that another member has one.
+#[test]
+fn a_member_build_fails_on_a_sibling_lint_the_root_denies() {
+    let fixture = SiblingFixture::new(DENY);
+    let out = tempfile::tempdir().expect("a temp dir");
+    let run = ridlc::run_build(&fixture.member_a(), out.path(), &[Emit::IrJson], Frozen::No)
+        .expect("the build runs");
+    assert!(run.has_error(), "{:?}", run.diagnostics);
+    assert!(
+        run.diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("another member")),
+        "{:?}",
+        run.diagnostics
+    );
+    assert_eq!(
+        ridl_100(&run.diagnostics),
+        Vec::<&Diagnostic>::new(),
+        "the sibling's own diagnostic is not reported"
+    );
+    let files = written(out.path());
+    assert!(files.is_empty(), "the build wrote: {files:?}");
+}
+
+/// A diagnostic on the workspace root's `ridl.toml` is in the report scope
+/// of every member: the root's tables govern the member, and nothing else
+/// would show it. `ridl check a` reports the MANI-007, and `ridl build a`
+/// reports it as its own error, not as another member's.
+#[test]
+fn a_member_entry_reports_the_root_manifest_diagnostics() {
+    let fixture = SiblingFixture::new("\n[imports]\nveh = \"not a url\"\n");
+    let mani_007 = |diagnostics: &[Diagnostic]| {
+        diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code.as_str() == "MANI-007")
+            .count()
+    };
+
+    let run = ridlc::run_check(&fixture.member_a(), Frozen::No).expect("the check runs");
+    assert_eq!(mani_007(&run.diagnostics), 1, "{:?}", run.diagnostics);
+
+    let out = tempfile::tempdir().expect("a temp dir");
+    let run = ridlc::run_build(&fixture.member_a(), out.path(), &[Emit::IrJson], Frozen::No)
+        .expect("the build runs");
+    assert_eq!(mani_007(&run.diagnostics), 1, "{:?}", run.diagnostics);
+    assert!(
+        !run.diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("another member")),
+        "the root manifest's error is the member's own: {:?}",
+        run.diagnostics
+    );
+    let files = written(out.path());
+    assert!(files.is_empty(), "the build wrote: {files:?}");
+}

@@ -14,6 +14,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "Vehicle speed over ground",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "unit": "km/h"
@@ -37,6 +40,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "Coolant / ambient temperature",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "unit": "Cel"
@@ -60,6 +66,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "Engine crankshaft speed",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "unit": "/min"
@@ -83,6 +92,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "Normalised ratio",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "unit": "%"
@@ -106,6 +118,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "primitive": "PRIMITIVE_TYPE_INTEGER"
@@ -128,6 +143,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "primitive": "PRIMITIVE_TYPE_FLOAT"
@@ -151,6 +169,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "constDef": {
         "typeRef": "Speed",
         "value": "250"
@@ -163,6 +184,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "constDef": {
         "typeRef": "Speed",
         "value": "130"
@@ -175,6 +199,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "constDef": {
         "typeRef": "integer",
         "value": "6"
@@ -187,6 +214,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "constDef": {
         "typeRef": "RPM",
         "value": "800"
@@ -199,27 +229,42 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "enumDef": {
         "values": [
           {
             "name": "PARK",
             "value": "0",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "DRIVE",
             "value": "1",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "REVERSE",
             "value": "2",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "NEUTRAL",
             "value": "3",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           }
         ],
         "reserved": []
@@ -232,27 +277,42 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "enumDef": {
         "values": [
           {
             "name": "LOW_FUEL",
             "value": "0",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "CHECK_ENGINE",
             "value": "1",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "DOOR_OPEN",
             "value": "2",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "SEATBELT",
             "value": "3",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           }
         ],
         "reserved": []
@@ -265,28 +325,43 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "enumSetDef": {
         "backingEnum": "Warning",
         "bits": [
           {
             "name": "LOW_FUEL",
             "value": "0",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "CHECK_ENGINE",
             "value": "1",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "DOOR_OPEN",
             "value": "2",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "SEATBELT",
             "value": "3",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           }
         ],
         "width": "INT_WIDTH_U8"
@@ -299,6 +374,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -314,7 +392,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -330,7 +411,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],
@@ -344,6 +428,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -358,7 +445,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "derivable": false
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -374,7 +464,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -389,7 +482,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "derivable": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -415,7 +511,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": "6"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],
@@ -429,6 +528,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -460,7 +562,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "derivable": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -482,7 +587,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "derivable": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -504,7 +612,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "derivable": false
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -530,7 +641,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "derivable": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],
@@ -544,19 +658,28 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "unionDef": {
         "arms": [
           {
             "name": "ok",
             "ordinal": 1,
             "typeRef": "SensorReading",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "err",
             "ordinal": 2,
             "typeRef": "SensorFault",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           }
         ],
         "isResult": true,
@@ -570,6 +693,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -585,7 +711,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -601,7 +730,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],
@@ -615,6 +747,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -630,7 +765,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -645,7 +783,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "derivable": false
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],
@@ -659,6 +800,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -674,7 +818,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -697,7 +844,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "derivable": false
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],
@@ -721,6 +871,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -745,7 +898,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -761,7 +917,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": "false"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],
@@ -775,6 +934,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -799,7 +961,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -814,7 +979,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "derivable": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],
@@ -828,6 +996,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -852,7 +1023,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -867,7 +1041,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "derivable": false
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -883,7 +1060,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],
@@ -897,22 +1077,34 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "enumDef": {
         "values": [
           {
             "name": "FILTER_INVALID",
             "value": "0",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "STORAGE_BUSY",
             "value": "1",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "ACCESS_DENIED",
             "value": "2",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           }
         ],
         "reserved": []
@@ -925,6 +1117,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -946,7 +1141,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "derivable": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],
@@ -960,6 +1158,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "A package-private payload type, so the interaction layer's legal\n`internal`-over-`internal` case is exercised inside one package. The\ncross-package counterpart is impossible by construction: a foreign\n`internal` name never resolves (typl §3.3).",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "primitive": "PRIMITIVE_TYPE_INTEGER"
@@ -982,6 +1183,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "The window of raw tick counts a wheel diagnostic covers.",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -1013,7 +1217,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "derivable": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -1052,7 +1259,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "derivable": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],
@@ -1066,6 +1276,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "primitive": "PRIMITIVE_TYPE_INTEGER"
@@ -1088,6 +1301,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -1112,7 +1328,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -1128,7 +1347,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": "false"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],
@@ -1142,6 +1364,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -1157,7 +1382,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -1173,7 +1401,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -1189,7 +1420,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],
@@ -1203,17 +1437,26 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "enumDef": {
         "values": [
           {
             "name": "COMPRESSOR_OFF",
             "value": "0",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "SENSOR_FAULT",
             "value": "1",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           }
         ],
         "reserved": []
@@ -1226,6 +1469,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "A declared constant, so a contract clause can reference one. The guaranteed\nexpression subset admits constants (ridl §13) and nothing in the corpus\nexercised that until these members were added.",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "constDef": {
         "typeRef": "FanLevel",
         "value": "7"
@@ -1238,6 +1484,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "The ceiling a fan request is clamped to.",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "constDef": {
         "typeRef": "FanLevel",
         "value": "7"
@@ -1250,6 +1499,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "The same ceiling, one hop further along the chain.",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "constDef": {
         "typeRef": "FanLevel",
         "value": "7"
@@ -1262,6 +1514,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "The label a cabin fan reports itself under.",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "primitive": "PRIMITIVE_TYPE_STRING"
@@ -1284,6 +1539,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "The cabin fan's label.",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "constDef": {
         "typeRef": "FanTag",
         "value": "cabin-fan"
@@ -1296,6 +1554,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "doc": "The same label, reached through the constant above.",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "constDef": {
         "typeRef": "FanTag",
         "value": "cabin-fan"
@@ -1320,6 +1581,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "Current vehicle speed — isochronous, drives rmdl clocks downstream",
           "labels": [],
           "ordinal": 1,
+          "links": [],
+          "see": [],
+          "since": [],
           "signalDef": {
             "payload": "veh.common.Speed",
             "init": {
@@ -1341,6 +1605,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "Engine temperature — change-driven, 100ms freshness SLO",
           "labels": [],
           "ordinal": 2,
+          "links": [],
+          "see": [],
+          "since": [],
           "signalDef": {
             "payload": "veh.common.Temperature",
             "init": {
@@ -1362,6 +1629,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "Active warnings — last-value delivered on subscribe (§4.4)",
           "labels": [],
           "ordinal": 3,
+          "links": [],
+          "see": [],
+          "since": [],
           "signalDef": {
             "payload": "veh.common.WarningFlags",
             "init": {
@@ -1383,6 +1653,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "Raised on every door state change; stale after 500ms",
           "labels": [],
           "ordinal": 4,
+          "links": [],
+          "see": [],
+          "since": [],
           "eventDef": {
             "payload": "DoorPayload",
             "timing": {
@@ -1400,6 +1673,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "Request a gear change — outcome observed via currentGear, not returned;\ncallers throttle to one request per 20ms, acceptance within 200ms (§9)",
           "labels": [],
           "ordinal": 5,
+          "links": [],
+          "see": [],
+          "since": [],
           "commandDef": {
             "params": [
               {
@@ -1407,7 +1683,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "type": {
                   "optional": false,
                   "named": "veh.common.GearPosition"
-                }
+                },
+                "doc": "",
+                "links": [],
+                "see": [],
+                "since": []
               }
             ],
             "contracts": [
@@ -1439,6 +1719,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 6,
+          "links": [],
+          "see": [],
+          "since": [],
           "reservedSlot": {
             "ordinal": 6,
             "name": "resetCounters"
@@ -1451,6 +1734,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "Sliding-window average — replied within 50ms (§9)",
           "labels": [],
           "ordinal": 7,
+          "links": [],
+          "see": [],
+          "since": [],
           "queryDef": {
             "params": [
               {
@@ -1458,7 +1744,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "type": {
                   "optional": false,
                   "named": "ridl.std.Duration"
-                }
+                },
+                "doc": "",
+                "links": [],
+                "see": [],
+                "since": []
               }
             ],
             "returnType": {
@@ -1502,6 +1792,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "Fault history as a finite stream",
           "labels": [],
           "ordinal": 8,
+          "links": [],
+          "see": [],
+          "since": [],
           "queryDef": {
             "params": [
               {
@@ -1509,7 +1802,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "type": {
                   "optional": false,
                   "named": "DiagFilter"
-                }
+                },
+                "doc": "",
+                "links": [],
+                "see": [],
+                "since": []
               }
             ],
             "returnType": {
@@ -1535,6 +1832,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "Paged fault snapshot — fallible query via inline `T | E` (§10.1)",
           "labels": [],
           "ordinal": 9,
+          "links": [],
+          "see": [],
+          "since": [],
           "queryDef": {
             "params": [
               {
@@ -1542,7 +1842,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "type": {
                   "optional": false,
                   "named": "DiagFilter"
-                }
+                },
+                "doc": "",
+                "links": [],
+                "see": [],
+                "since": []
               }
             ],
             "returnType": {
@@ -1566,6 +1870,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 10,
+          "links": [],
+          "see": [],
+          "since": [],
           "fixedDef": {
             "payload": {
               "optional": false,
@@ -1580,6 +1887,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 11,
+          "links": [],
+          "see": [],
+          "since": [],
           "fixedDef": {
             "payload": {
               "optional": false,
@@ -1596,7 +1906,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         }
       ],
       "number": 1,
-      "provisional": true
+      "provisional": true,
+      "links": [],
+      "see": [],
+      "since": []
     },
     {
       "name": "WheelHistory",
@@ -1611,6 +1924,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 1,
+          "links": [],
+          "see": [],
+          "since": [],
           "signalDef": {
             "payload": "FanLevel",
             "init": {
@@ -1632,6 +1948,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 2,
+          "links": [],
+          "see": [],
+          "since": [],
           "reservedSlot": {
             "ordinal": 2,
             "name": "legacyWheelPhase"
@@ -1644,6 +1963,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 3,
+          "links": [],
+          "see": [],
+          "since": [],
           "signalDef": {
             "payload": "veh.common.Temperature",
             "init": {
@@ -1665,6 +1987,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 4,
+          "links": [],
+          "see": [],
+          "since": [],
           "reservedSlot": {
             "ordinal": 4,
             "value": "4"
@@ -1677,6 +2002,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 5,
+          "links": [],
+          "see": [],
+          "since": [],
           "signalDef": {
             "payload": "veh.common.Ratio",
             "init": {
@@ -1693,7 +2021,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         }
       ],
       "number": 3,
-      "provisional": true
+      "provisional": true,
+      "links": [],
+      "see": [],
+      "since": []
     },
     {
       "name": "WheelDiagnostics",
@@ -1708,6 +2039,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 1,
+          "links": [],
+          "see": [],
+          "since": [],
           "signalDef": {
             "payload": "RawTickCount",
             "init": {
@@ -1729,6 +2063,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 2,
+          "links": [],
+          "see": [],
+          "since": [],
           "eventDef": {
             "payload": "FilterState",
             "timing": {
@@ -1746,6 +2083,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 3,
+          "links": [],
+          "see": [],
+          "since": [],
           "queryDef": {
             "params": [],
             "returnType": {
@@ -1769,6 +2109,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 4,
+          "links": [],
+          "see": [],
+          "since": [],
           "commandDef": {
             "params": [
               {
@@ -1776,7 +2119,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "type": {
                   "optional": false,
                   "named": "RawTickCount"
-                }
+                },
+                "doc": "",
+                "links": [],
+                "see": [],
+                "since": []
               }
             ],
             "contracts": [],
@@ -1794,6 +2141,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 5,
+          "links": [],
+          "see": [],
+          "since": [],
           "queryDef": {
             "params": [],
             "returnType": {
@@ -1834,6 +2184,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 6,
+          "links": [],
+          "see": [],
+          "since": [],
           "fixedDef": {
             "payload": {
               "optional": false,
@@ -1867,7 +2220,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         }
       ],
       "number": 2,
-      "provisional": true
+      "provisional": true,
+      "links": [],
+      "see": [],
+      "since": []
     },
     {
       "name": "WheelSummary",
@@ -1882,6 +2238,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "doc": "",
           "labels": [],
           "ordinal": 1,
+          "links": [],
+          "see": [],
+          "since": [],
           "signalDef": {
             "payload": "FanLevel",
             "init": {
@@ -1898,7 +2257,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         }
       ],
       "number": 4,
-      "provisional": true
+      "provisional": true,
+      "links": [],
+      "see": [],
+      "since": []
     }
   ],
   "services": [
@@ -1907,6 +2269,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "The same two forms inside a service's inline shape.",
       "labels": [],
+      "links": [],
+      "see": [],
+      "since": [],
       "shapes": [
         {
           "inline": {
@@ -1922,6 +2287,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "",
                 "labels": [],
                 "ordinal": 1,
+                "links": [],
+                "see": [],
+                "since": [],
                 "signalDef": {
                   "payload": "FanLevel",
                   "init": {
@@ -1943,6 +2311,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "",
                 "labels": [],
                 "ordinal": 2,
+                "links": [],
+                "see": [],
+                "since": [],
                 "reservedSlot": {
                   "ordinal": 2,
                   "name": "legacyTicks"
@@ -1955,6 +2326,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "",
                 "labels": [],
                 "ordinal": 3,
+                "links": [],
+                "see": [],
+                "since": [],
                 "reservedSlot": {
                   "ordinal": 3,
                   "value": "3"
@@ -1967,6 +2341,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "",
                 "labels": [],
                 "ordinal": 4,
+                "links": [],
+                "see": [],
+                "since": [],
                 "eventDef": {
                   "payload": "FilterState",
                   "timing": {
@@ -1979,7 +2356,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               }
             ],
             "number": 5,
-            "provisional": true
+            "provisional": true,
+            "links": [],
+            "see": [],
+            "since": []
           }
         }
       ]
@@ -1989,6 +2369,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "The cluster's published vehicle-status contract.",
       "labels": [],
+      "links": [],
+      "see": [],
+      "since": [],
       "shapes": [
         {
           "interfaceRef": "VehicleStatus"
@@ -2000,6 +2383,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "A redundant twin over the same interface shape — one interface, many\nservices (ridl §14.0). Both services carry the identical member set; only\nthe global address differs.",
       "labels": [],
+      "links": [],
+      "see": [],
+      "since": [],
       "shapes": [
         {
           "interfaceRef": "VehicleStatus"
@@ -2014,6 +2400,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "QM",
         "PRIVATE"
       ],
+      "links": [],
+      "see": [],
+      "since": [],
       "shapes": [
         {
           "inline": {
@@ -2029,6 +2418,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "Strict periodic — signal only (ridl §9).",
                 "labels": [],
                 "ordinal": 1,
+                "links": [],
+                "see": [],
+                "since": [],
                 "signalDef": {
                   "payload": "veh.common.Temperature",
                   "init": {
@@ -2050,6 +2442,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "Range with both bounds.",
                 "labels": [],
                 "ordinal": 2,
+                "links": [],
+                "see": [],
+                "since": [],
                 "signalDef": {
                   "payload": "veh.common.Temperature",
                   "init": {
@@ -2071,6 +2466,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "Range, lower bound only — no staleness bound declared.",
                 "labels": [],
                 "ordinal": 3,
+                "links": [],
+                "see": [],
+                "since": [],
                 "signalDef": {
                   "payload": "veh.common.Ratio",
                   "init": {
@@ -2091,6 +2489,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "Range, upper bound only — no rate floor declared.",
                 "labels": [],
                 "ordinal": 4,
+                "links": [],
+                "see": [],
+                "since": [],
                 "signalDef": {
                   "payload": "FanLevel",
                   "init": {
@@ -2111,6 +2512,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "Microsecond resolution, and an init override for the channel (ridl §4.4).",
                 "labels": [],
                 "ordinal": 5,
+                "links": [],
+                "see": [],
+                "since": [],
                 "signalDef": {
                   "payload": "veh.common.Ratio",
                   "declaredInit": "12.5",
@@ -2133,6 +2537,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "Untimed: the package `[defaults].timing` is resolved at compile time and\nlands in the IR as concrete bounds with `default_applied` set (ridl §9.1).",
                 "labels": [],
                 "ordinal": 6,
+                "links": [],
+                "see": [],
+                "since": [],
                 "eventDef": {
                   "payload": "FilterState",
                   "timing": {
@@ -2150,6 +2557,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "Fire-and-forget, with a precondition over its own parameter and over\nthis shape's own signal (ridl §13).",
                 "labels": [],
                 "ordinal": 7,
+                "links": [],
+                "see": [],
+                "since": [],
                 "commandDef": {
                   "params": [
                     {
@@ -2157,7 +2567,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                       "type": {
                         "optional": false,
                         "named": "veh.common.Temperature"
-                      }
+                      },
+                      "doc": "",
+                      "links": [],
+                      "see": [],
+                      "since": []
                     }
                   ],
                   "contracts": [
@@ -2196,6 +2610,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "A retired member. The tombstone holds its ordinal for ever, so every\nordinal after it carries the gap (ridl §11).",
                 "labels": [],
                 "ordinal": 8,
+                "links": [],
+                "see": [],
+                "since": [],
                 "reservedSlot": {
                   "ordinal": 8,
                   "name": "setEcoMode"
@@ -2208,6 +2625,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "Client-produced stream on a parameter (ridl §12.1).",
                 "labels": [],
                 "ordinal": 9,
+                "links": [],
+                "see": [],
+                "since": [],
                 "commandDef": {
                   "params": [
                     {
@@ -2217,7 +2637,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                         "stream": {
                           "named": "FilterState"
                         }
-                      }
+                      },
+                      "doc": "",
+                      "links": [],
+                      "see": [],
+                      "since": []
                     }
                   ],
                   "contracts": [],
@@ -2235,6 +2659,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "Provider-produced stream in return position.",
                 "labels": [],
                 "ordinal": 10,
+                "links": [],
+                "see": [],
+                "since": [],
                 "queryDef": {
                   "params": [
                     {
@@ -2242,7 +2669,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                       "type": {
                         "optional": false,
                         "named": "FanLevel"
-                      }
+                      },
+                      "doc": "",
+                      "links": [],
+                      "see": [],
+                      "since": []
                     }
                   ],
                   "returnType": {
@@ -2268,6 +2699,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "Bidirectional — a stream in both positions at once.",
                 "labels": [],
                 "ordinal": 11,
+                "links": [],
+                "see": [],
+                "since": [],
                 "queryDef": {
                   "params": [
                     {
@@ -2277,7 +2711,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                         "stream": {
                           "named": "FilterState"
                         }
-                      }
+                      },
+                      "doc": "",
+                      "links": [],
+                      "see": [],
+                      "since": []
                     }
                   ],
                   "returnType": {
@@ -2303,6 +2741,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "A postcondition that reads `result` — tuple-field access is the widest\n`result` shape the guaranteed expression subset admits (ridl §13).",
                 "labels": [],
                 "ordinal": 12,
+                "links": [],
+                "see": [],
+                "since": [],
                 "queryDef": {
                   "params": [],
                   "returnType": {
@@ -2360,6 +2801,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "Inline fallible return `T | E` — the canonical spelling in return\nposition (general form §6.1). Its transport identity is synthesized from\nthe enclosing shape and the ordinal, which is exactly what an inline\nshape has to get right without an interface name to borrow.",
                 "labels": [],
                 "ordinal": 13,
+                "links": [],
+                "see": [],
+                "since": [],
                 "queryDef": {
                   "params": [
                     {
@@ -2367,7 +2811,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                       "type": {
                         "optional": false,
                         "named": "FanLevel"
-                      }
+                      },
+                      "doc": "",
+                      "links": [],
+                      "see": [],
+                      "since": []
                     }
                   ],
                   "returnType": {
@@ -2391,6 +2839,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "A plain named-type return.",
                 "labels": [],
                 "ordinal": 14,
+                "links": [],
+                "see": [],
+                "since": [],
                 "queryDef": {
                   "params": [],
                   "returnType": {
@@ -2415,6 +2866,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "labels": [],
                 "deprecated": "use getClimate — this returns only the cabin reading",
                 "ordinal": 15,
+                "links": [],
+                "see": [],
+                "since": [],
                 "queryDef": {
                   "params": [],
                   "returnType": {
@@ -2438,6 +2892,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "Provisioned, immutable for the software-instance lifetime (ridl §8).",
                 "labels": [],
                 "ordinal": 16,
+                "links": [],
+                "see": [],
+                "since": [],
                 "fixedDef": {
                   "payload": {
                     "optional": false,
@@ -2452,6 +2909,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "A collection-typed fixed.",
                 "labels": [],
                 "ordinal": 17,
+                "links": [],
+                "see": [],
+                "since": [],
                 "fixedDef": {
                   "payload": {
                     "optional": false,
@@ -2473,6 +2933,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "Boolean conjunction.",
                 "labels": [],
                 "ordinal": 18,
+                "links": [],
+                "see": [],
+                "since": [],
                 "commandDef": {
                   "params": [
                     {
@@ -2480,7 +2943,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                       "type": {
                         "optional": false,
                         "named": "FanLevel"
-                      }
+                      },
+                      "doc": "",
+                      "links": [],
+                      "see": [],
+                      "since": []
                     }
                   ],
                   "contracts": [
@@ -2509,6 +2976,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "Arithmetic over a parameter, and a reference to a declared `const`.",
                 "labels": [],
                 "ordinal": 19,
+                "links": [],
+                "see": [],
+                "since": [],
                 "commandDef": {
                   "params": [
                     {
@@ -2516,7 +2986,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                       "type": {
                         "optional": false,
                         "named": "FanLevel"
-                      }
+                      },
+                      "doc": "",
+                      "links": [],
+                      "see": [],
+                      "since": []
                     }
                   ],
                   "contracts": [
@@ -2555,6 +3029,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "doc": "Arithmetic over `result`.",
                 "labels": [],
                 "ordinal": 20,
+                "links": [],
+                "see": [],
+                "since": [],
                 "queryDef": {
                   "params": [],
                   "returnType": {
@@ -2582,7 +3059,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               }
             ],
             "number": 6,
-            "provisional": true
+            "provisional": true,
+            "links": [],
+            "see": [],
+            "since": []
           }
         }
       ]

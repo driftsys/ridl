@@ -741,6 +741,9 @@ mod tests {
                 }),
                 width: Some(v2::type_def::Width::IntWidth(v2::IntWidth::U16 as i32)),
             })),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         };
 
         let fixed = v2::Decl {
@@ -757,6 +760,9 @@ mod tests {
                     kind: Some(v2::field_type::Kind::Named("Provisioned".to_string())),
                 }),
             })),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         };
 
         let interface = v2::Interface {
@@ -768,6 +774,9 @@ mod tests {
             interactions: vec![fixed],
             number: 7,
             provisional: true,
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         };
 
         let package = v2::Package {

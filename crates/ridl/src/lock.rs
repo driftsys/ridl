@@ -38,6 +38,7 @@ use std::process::ExitCode;
 
 use ridl_core::diag::{DiagCode, Diagnostic, Severity, render};
 use ridl_core::interface_lock::{self, InterfaceLock, InvalidLockKey, LockKey, MergeOutcome};
+use ridl_core::lint::drop_allowed_by_default;
 use ridl_core::{RidlDatabase, load_workspace};
 use ridl_ir::v2;
 use rowan::TextRange;
@@ -80,13 +81,24 @@ pub fn run_lock(path: &Path, renames: &[String], retires: &[String]) -> ExitCode
     let editing = !renames.is_empty() || !retires.is_empty();
 
     let mut db = RidlDatabase::default();
-    let output = match ridlc::compile_workspace(&mut db, path) {
+    let mut output = match ridlc::compile_workspace(&mut db, path) {
         Ok(output) => output,
         Err(err) => {
             eprintln!("error: {err}");
             return ExitCode::from(2);
         }
     };
+    // A path inside a workspace member loads the whole workspace, and the
+    // command reports on, allocates in and edits that member only (ADR-0024
+    // decision 9, as ADR-0026 amends it).
+    ridlc::retain_in_report_scope(
+        &mut output.diagnostics,
+        &output.sources,
+        output.report_scope.as_deref(),
+    );
+    // `ridl lock` applies no `[lints]` levels (ADR-0024 decision 8), so a lint
+    // that is `allow` by default is left out of what it renders.
+    drop_allowed_by_default(&mut output.diagnostics);
     let has_error = output
         .diagnostics
         .iter()
@@ -101,7 +113,7 @@ pub fn run_lock(path: &Path, renames: &[String], retires: &[String]) -> ExitCode
         .into_iter()
         .map(|checked| checked.ir)
         .collect();
-    let mut packages = match locked_packages(path, irs) {
+    let mut packages = match locked_packages(path, irs, output.report_scope.as_deref()) {
         Ok(packages) => packages,
         Err(err) => {
             eprintln!("error: {err}");
@@ -157,8 +169,14 @@ fn usage_error(message: &str) -> ExitCode {
 
 /// Pairs every checked package with its directory and its lock as loaded.
 /// The loader is deterministic over one tree, so the packages come back in
-/// the order `compile_workspace` checked them.
-fn locked_packages(entry: &Path, irs: Vec<v2::Package>) -> std::io::Result<Vec<LockedPackage>> {
+/// the order `compile_workspace` checked them. With a `scope` (the member
+/// directory a path inside a workspace member names), only the packages
+/// under it are kept.
+fn locked_packages(
+    entry: &Path,
+    irs: Vec<v2::Package>,
+    scope: Option<&Path>,
+) -> std::io::Result<Vec<LockedPackage>> {
     let mut db = RidlDatabase::default();
     let loaded = load_workspace(&mut db, entry)?;
     let handles = loaded.workspace.packages(&db).clone();
@@ -186,6 +204,7 @@ fn locked_packages(entry: &Path, irs: Vec<v2::Package>) -> std::io::Result<Vec<L
                 .map_or_else(InterfaceLock::default, |lock| lock.lock.clone());
             LockedPackage { dir, lock, ir }
         })
+        .filter(|package| scope.is_none_or(|scope| package.dir.starts_with(scope)))
         .collect())
 }
 

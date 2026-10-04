@@ -113,7 +113,14 @@ Options:
 ```
 
 `PATH` is a `.typl`/`.ridl` file, a package directory, or a workspace root, and
-defaults to the current directory. `--frozen` is the same flag
+defaults to the current directory. A `PATH` inside a workspace member loads the
+whole workspace whose `members` lists the member (ADR-0002 §4): the root's
+`[lints]`, `[defaults].timing` and `[imports]` apply, imports of sibling members
+resolve, and the report holds only the diagnostics of files under the member.
+`ridl build` on a member also writes the whole workspace. An error in another
+member makes it exit 1 with one error that says so; it then writes nothing, or,
+for an RSDL-7xx error, leaves that deployment out of the system. The workspace
+root's `.ridl/baseline/` and `ridl.lock` serve a member entry too. `--frozen` is the same flag
 [`ridlc check --frozen`](#ridlc-check) documents, forwarded unchanged; the two
 commands share one implementation and render byte-identical diagnostics on the
 same input. It now carries this description word for word under `ridl` too —
@@ -334,7 +341,12 @@ than RIDL-409 — a live `interfaces.lock` entry with no declaration, which
 leaves nothing out of the IR the desk check compares — and other than a lint
 raised to `deny`. A workspace with any other error draws no RIDL-407 warning in
 addition to that error: it exits 1, exactly as it would with no baseline
-present. A workspace whose only errors
+present. Entered at a workspace member, the run reports only the diagnostics of
+files under the member (ADR-0026 decision 10), and the desk check compares the
+whole workspace: an error in another member is not reported, the desk check
+does not run, and the run exits 0, exactly as it would with no baseline
+present. Run `ridl check` at the workspace root to see that error and, once it
+is fixed, the member's RIDL-407 warnings. A workspace whose only errors
 are RIDL-409 still exits 1, and the desk check runs over it: when exactly one
 declaration without an entry has the published shape of the orphan entry's
 interface, the desk check adds a label to that RIDL-409 naming the
@@ -1400,8 +1412,10 @@ Zone 2
 Run again with nothing to allocate, it prints nothing, writes nothing and
 exits 0. Over a workspace it writes each package's own file, and each output
 line is prefixed with the package directory relative to `PATH` and a colon:
-`hvac: allocated Cabin 1`. Until `ridl lock` has run, a declaration with no
-entry compiles with a provisional number, which carries no identity.
+`hvac: allocated Cabin 1`. A `PATH` inside a workspace member compiles the
+whole workspace and allocates in, edits and reports on that member only.
+Until `ridl lock` has run, a declaration with no entry compiles with a
+provisional number, which carries no identity.
 
 The reverse case — a live entry whose interface is gone from the source — is
 RIDL-409 from the compiler, and plain `ridl lock` refuses to allocate over it:

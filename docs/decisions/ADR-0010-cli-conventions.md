@@ -345,7 +345,8 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
      scenario (a) all five report
      `` error: no `ridl.toml` found at or
      above `<path>` `` — exit 2 is
-     right, the cause is wrong: `find_manifest_root` cannot distinguish "no
+     right, the cause is wrong: `ridl_core::find_root` (named
+     `find_manifest_root` when this record was written) cannot distinguish "no
      manifest here" from "cannot read this directory to look for one," and
      reports the former unconditionally. In scenario (b) all five report a bare
      `error: Permission denied (os error 13)`, naming no path at all.

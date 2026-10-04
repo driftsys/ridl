@@ -20,6 +20,9 @@ fn public_decl(name: &str, kind: v2::decl::Kind) -> v2::Decl {
         deprecated: None,
         ordinal: 0,
         kind: Some(kind),
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 
@@ -99,12 +102,15 @@ fn named_field(
         doc: String::new(),
         labels: Vec::new(),
         deprecated: None,
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 
 fn field_member(field: v2::Field) -> v2::StructMember {
     v2::StructMember {
-        member: Some(v2::struct_member::Member::Field(field)),
+        member: Some(v2::struct_member::Member::Field(Box::new(field))),
     }
 }
 
@@ -123,6 +129,9 @@ fn enum_value(name: &str, value: i64) -> v2::EnumValue {
         name: name.to_string(),
         value,
         doc: String::new(),
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 
@@ -446,12 +455,18 @@ fn result_union() {
                 ordinal: 1,
                 type_ref: "SensorReading".to_string(),
                 doc: "Successful reading".to_string(),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             },
             v2::UnionArm {
                 name: "err".to_string(),
                 ordinal: 2,
                 type_ref: "SensorFault".to_string(),
                 doc: String::new(),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             },
         ],
         is_result: true,
@@ -1256,12 +1271,18 @@ fn appendix_b() -> v2::Package {
                     ordinal: 1,
                     type_ref: "SensorReading".to_string(),
                     doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 },
                 v2::UnionArm {
                     name: "err".to_string(),
                     ordinal: 2,
                     type_ref: "SensorFault".to_string(),
                     doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 },
             ],
             is_result: true,

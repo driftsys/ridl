@@ -16,8 +16,12 @@
 //! root. When that load fails, the server shows the error with
 //! `window/showMessage`; when it fails or the client sent no root, the server
 //! loads instead from the first opened file that has a `ridl.toml` at or above
-//! it (issue #384). The nearest `ridl.toml` wins, so a file inside a member of
-//! a `[workspace]` loads that member's package only.
+//! it (issue #384). Both loads find the root with [`find_root`], so a file
+//! inside a member of a `[workspace]` loads the whole workspace and its
+//! imports of sibling members resolve (ADR-0002 §4). The server publishes the
+//! diagnostics of every loaded member; it does not narrow them to the member
+//! the editor was opened at. One load failure is shown once, whether the
+//! initialize load or the first `didOpen` meets it first.
 //!
 //! The `[lints]` levels the load resolved apply to every published
 //! diagnostic (ADR-0024 decision 6): to the loader's findings once, at
@@ -50,9 +54,7 @@ use ridl_core::diag::{
 };
 use ridl_core::lint::{LintScopes, apply_lint_levels};
 use ridl_core::package::{Package, PackageOrigin, Workspace};
-use ridl_core::{
-    LoadedWorkspace, find_manifest_root, load_workspace, profile_of_path, std_package,
-};
+use ridl_core::{LoadedWorkspace, find_root, load_workspace, profile_of_path, std_package};
 use ridl_sem::{
     CheckedWorkspace, check_package, check_workspace, resolve_package, unclaimed_backend_keys,
 };
@@ -102,6 +104,11 @@ pub fn run_with_version(connection: Connection, version: Option<&str>) -> Result
     if let Some(root) = workspace_root(&params)
         && let Err(err) = state.load(&root)
     {
+        // The first `didOpen` under the same manifest meets the same error;
+        // recording it here keeps that `didOpen` from showing it again.
+        if let Some(manifest_dir) = find_root(&root) {
+            state.shown_load_error = Some(load_error_key(&manifest_dir, &err));
+        }
         show_message(
             &connection,
             lt::MessageType::WARNING,
@@ -142,9 +149,16 @@ fn server_capabilities() -> lt::ServerCapabilities {
         definition_provider: Some(lt::OneOf::Left(true)),
         references_provider: Some(lt::OneOf::Left(true)),
         completion_provider: Some(lt::CompletionOptions {
-            // `.` completes an import path; `:` a type position. Identifier
-            // characters need not be listed — the client triggers on those.
-            trigger_characters: Some(vec![":".to_string(), ".".to_string()]),
+            // `.` completes an import path or a doc link's path; `:` a type
+            // position; `[` opens a doc link and `@` a doc tag (ADR-0026).
+            // Identifier characters need not be listed — the client triggers
+            // on those.
+            trigger_characters: Some(vec![
+                ":".to_string(),
+                ".".to_string(),
+                "[".to_string(),
+                "@".to_string(),
+            ]),
             ..Default::default()
         }),
         rename_provider: Some(lt::OneOf::Right(lt::RenameOptions {
@@ -240,9 +254,9 @@ struct ServerState {
     /// which is the form of the client's root URI; a `didOpen` path is in the
     /// form of its own URI. Neither side is canonicalised.
     lints: LintScopes,
-    /// The manifest directory and reason of the last load error a `didOpen`
-    /// showed, so the same error is not shown again on every later
-    /// `didOpen`.
+    /// The manifest directory and reason of the last load error shown, by the
+    /// initialize load or by a `didOpen`, so the same error is not shown
+    /// again on every later `didOpen`.
     shown_load_error: Option<String>,
     /// Every loaded workspace file, keyed by its load-time path string —
     /// the inputs `didOpen`/`didChange` overlay via `set_text`.
@@ -301,18 +315,38 @@ impl ServerState {
     /// cold, from-disk load in the server's lifetime; every later recompute
     /// reuses these inputs. On an error no field of the state changes; the
     /// salsa inputs the failed load created stay in the database, unused.
+    /// A load that reads no package and whose root `ridl.toml` draws an
+    /// error (a TOML syntax error, for example) is an error too, so it is
+    /// shown like a manifest that cannot be read.
     ///
     /// An open overlay whose path the loaded workspace contains (a file
     /// opened before its `ridl.toml` existed) moves its buffer onto the
     /// loaded input and stops being an overlay, so the file is analyzed once,
     /// as a member of its package.
     fn load(&mut self, dir: &Path) -> io::Result<()> {
+        // `report_scope` is not used: the server publishes the diagnostics of
+        // every loaded file.
         let LoadedWorkspace {
             workspace,
             mut diagnostics,
             sources,
             lints,
+            report_scope: _,
         } = load_workspace(&mut self.db, dir)?;
+        if workspace.packages(&self.db).is_empty()
+            && let Some(root) = find_root(dir)
+        {
+            let manifest = root.join("ridl.toml").to_string_lossy().into_owned();
+            if let Some(error) = diagnostics.iter().find(|diagnostic| {
+                diagnostic.severity == Severity::Error
+                    && sources.path(diagnostic.primary.file) == Some(manifest.as_str())
+            }) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("`{manifest}` is not a valid manifest: {}", error.message),
+                ));
+            }
+        }
         for package in workspace.packages(&self.db) {
             for file in package.files(&self.db) {
                 self.files.insert(file.path(&self.db).clone(), *file);
@@ -351,12 +385,13 @@ impl ServerState {
     }
 
     /// Before a `didOpen` with no workspace loaded yet: loads the workspace
-    /// of the nearest `ridl.toml` at or above the opened file (issue #384).
+    /// that [`find_root`] finds from the opened file (issue #384).
     /// No manifest there is not an error — the file becomes a standalone
     /// overlay, and the next `didOpen` tries again. A load from a manifest
     /// that fails is shown to the user. A manifest that stays unreadable
     /// fails again on each `didOpen`; its error is shown only when it differs
-    /// from the last one shown, by manifest directory or by reason.
+    /// from the last one shown, by the initialize load or by a `didOpen`, by
+    /// manifest directory or by reason.
     fn load_for_opened_file(&mut self, path: &str, connection: &Connection) -> Result<(), Error> {
         if self.loaded {
             return Ok(());
@@ -364,13 +399,13 @@ impl ServerState {
         let Some(dir) = Path::new(path).parent() else {
             return Ok(());
         };
-        let Some(root) = find_manifest_root(dir) else {
+        let Some(root) = find_root(dir) else {
             return Ok(());
         };
         let Err(err) = self.load(&root) else {
             return Ok(());
         };
-        let shown = format!("{}: {err}", root.display());
+        let shown = load_error_key(&root, &err);
         if self.shown_load_error.as_ref() == Some(&shown) {
             return Ok(());
         }
@@ -775,7 +810,20 @@ impl ServerState {
         let (file, package) = self.locate(&path)?;
         let offset = self.line_index_of(file).offset(position);
         let info = if profile_of_path(&path) == Profile::Rsdl {
-            rsdl::hover(&self.db, self.workspace, self.std, package, file, offset)?
+            // An rsdl declaration is a doc carrier too: a doc link in its
+            // doc shows the target's hover (ADR-0026).
+            rsdl::hover(&self.db, self.workspace, self.std, package, file, offset).or_else(
+                || {
+                    hover::doc_link_hover_at(
+                        &self.db,
+                        self.workspace,
+                        self.std,
+                        package,
+                        file,
+                        offset,
+                    )
+                },
+            )?
         } else {
             hover::hover(&self.db, self.workspace, self.std, package, file, offset)?
         };
@@ -790,7 +838,8 @@ impl ServerState {
     }
 
     /// `textDocument/definition`: the declaration site of the symbol the cursor
-    /// names, resolved through imports and qualified references.
+    /// names, resolved through imports and qualified references, or
+    /// the target of the doc link under the cursor (ADR-0026).
     ///
     /// In an `.rsdl` file, the declaration an rsdl reference names.
     fn goto_definition(
@@ -801,39 +850,75 @@ impl ServerState {
         let path = convert::uri_to_path(&params.text_document_position_params.text_document.uri)?;
         let (file, package) = self.locate(&path)?;
         let offset = self.line_index_of(file).offset(position);
-        let (target, range) = if profile_of_path(&path) == Profile::Rsdl {
-            rsdl::definition(&self.db, self.workspace, self.std, file, offset)?
+        let site = if profile_of_path(&path) == Profile::Rsdl {
+            rsdl::definition(&self.db, self.workspace, self.std, file, offset)
         } else {
-            let located =
-                nav::symbol_at(&self.db, self.workspace, self.std, package, file, offset)?;
-            (located.symbol.file, located.symbol.range)
+            nav::symbol_at(&self.db, self.workspace, self.std, package, file, offset)
+                .map(|located| (located.symbol.file, located.symbol.range))
         };
+        // In either profile, a doc link under the cursor leads to its target
+        // (ADR-0026).
+        let (target, range) = site.or_else(|| {
+            let link = nav::resolve_doc_link_at(
+                &self.db,
+                self.workspace,
+                self.std,
+                package,
+                file,
+                offset,
+            )?;
+            nav::canonical_site(
+                &self.db,
+                self.workspace,
+                self.std,
+                package,
+                &link.target.canonical(),
+            )
+        })?;
         let location = self.location(target, range)?;
         Some(lt::GotoDefinitionResponse::Scalar(location))
     }
 
     /// `textDocument/references`: every resolved reference to the symbol the
     /// cursor names, across every loaded package — the declaration itself
-    /// included when the client asks for it.
+    /// included when the client asks for it — and every doc link
+    /// that names the symbol (ADR-0026). The cursor may sit on a doc link to
+    /// the symbol; a link to one of its members names no symbol of its own.
     fn references(&mut self, params: &lt::ReferenceParams) -> Option<Vec<lt::Location>> {
         let position = params.text_document_position.position;
         let path = convert::uri_to_path(&params.text_document_position.text_document.uri)?;
         let (file, package) = self.locate(&path)?;
         let offset = self.line_index_of(file).offset(position);
-        let located = nav::symbol_at(&self.db, self.workspace, self.std, package, file, offset)?;
+        let symbol = match nav::symbol_at(&self.db, self.workspace, self.std, package, file, offset)
+        {
+            Some(located) => located.symbol,
+            None => {
+                let link = nav::resolve_doc_link_at(
+                    &self.db,
+                    self.workspace,
+                    self.std,
+                    package,
+                    file,
+                    offset,
+                )?;
+                link.target.member.is_none().then_some(link.target.symbol)?
+            }
+        };
 
         let packages = self.search_packages();
-        let references = nav::find_references(
+        let mut references =
+            nav::find_references(&self.db, self.workspace, self.std, &packages, &symbol);
+        references.extend(nav::doc_link_references(
             &self.db,
             self.workspace,
             self.std,
             &packages,
-            &located.symbol,
-        );
+            &symbol,
+        ));
 
         let mut locations = Vec::new();
         if params.context.include_declaration
-            && let Some(location) = self.location(located.symbol.file, located.symbol.range)
+            && let Some(location) = self.location(symbol.file, symbol.range)
         {
             locations.push(location);
         }
@@ -1032,6 +1117,12 @@ impl ServerState {
             range: index.range(range),
         })
     }
+}
+
+/// The key [`ServerState::shown_load_error`] compares: the manifest directory
+/// the load started from and the reason it failed.
+fn load_error_key(manifest_dir: &Path, err: &io::Error) -> String {
+    format!("{}: {err}", manifest_dir.display())
 }
 
 /// Sends a `window/showMessage` notification: the client shows `message` to
