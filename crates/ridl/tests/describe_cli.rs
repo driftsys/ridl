@@ -160,3 +160,28 @@ fn descriptor_hash_equals_the_rust_face_hash() {
         assert_eq!(face_hash.as_slice(), descriptor_hash);
     }
 }
+
+/// A package with no interface shape has no catalog: `--emit catalog`
+/// succeeds and writes no descriptor.
+#[test]
+fn build_writes_no_descriptor_for_a_package_without_an_interface_shape() {
+    let src = TempDir::new("no-shape-src");
+    let file = src.path().join("types.typl");
+    std::fs::write(&file, "package veh.types\ntype Level: integer [0..100]\n").unwrap();
+    let out = TempDir::new("no-shape-out");
+    let (code, _, stderr) = ridl(&[
+        "build".as_ref(),
+        file.as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "catalog".as_ref(),
+    ]);
+    assert_eq!(code, 0, "build failed: {stderr}");
+    let written: Vec<PathBuf> = std::fs::read_dir(out.path())
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.to_string_lossy().ends_with(".catalog.binfb"))
+        .collect();
+    assert!(written.is_empty(), "no catalog descriptor: {written:?}");
+}

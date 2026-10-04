@@ -479,7 +479,9 @@ pub enum Emit {
     /// The catalog descriptor an engine reads, written to
     /// `<base>.catalog.binfb` — only when the package carries at least one
     /// interface shape: a declared `interface`, or a `service` with an inline
-    /// body (docs/wip/2026-09-13-runtime-descriptors-design.md, D-1, D-9).
+    /// body. The descriptor is a FlatBuffers file of the package's interfaces,
+    /// their members and their catalog hash, lowered by the `ridl_descriptor`
+    /// crate (driftsys/ridl#381).
     Catalog,
 }
 
