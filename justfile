@@ -1348,9 +1348,11 @@ doc-path-check root="":
 # stale when the story lands, and nothing else reads it. State the fact, or
 # link the tracking issue (`driftsys/ridl#N`) when a gap is real.
 #
-# The pattern is an `E`, one or more digits, a dot and one or more digits, with
-# no letter, digit or underscore directly before or after it, so a number such
-# as `1E5.0` and a name such as `TYPE1.2` do not match. The check is a plain
+# The pattern is an `E`, one or more digits, a dot, one or more digits and an
+# optional lowercase letter (`E2.8b`), with no letter, digit or underscore
+# directly before or after it, so a number such as `1E5.0` and a name such as
+# `TYPE1.2` do not match. Stage and epic names (`epic E11`, `stage K3`) are not
+# matched; review reads those. The check is a plain
 # text match: it does not read the context, so a match that is not a story id
 # is reworded rather than exempted.
 #
@@ -1359,6 +1361,9 @@ doc-path-check root="":
 # because an id there is the record's own subject: docs/ROADMAP.md,
 # docs/BACKLOG.md, docs/decisions/ (a decision traces to the story it serves),
 # docs/specification/, docs/archive/, docs/wip/, CHANGELOG.md and AGENTS.md.
+# Files at the repository root, such as Cargo.toml, are outside the scanned
+# trees on purpose. The book includes some of docs/specification/, so an id
+# there can still render in the book.
 #
 # Given no argument, the gate runs over the repository this justfile is in, and
 # runs its own fixtures first, because a gate that cannot be shown to fail is
@@ -1372,7 +1377,7 @@ story-id-check root="":
     # The scanned trees. Each must match a tracked file, so a renamed tree
     # fails the gate instead of leaving it scanning nothing.
     scanned=(crates xtask examples editors/vscode/src docs/book docs/design docs/technotes)
-    id_re='(^|[^A-Za-z0-9_])E[0-9]+\.[0-9]+([^A-Za-z0-9_]|$)'
+    id_re='(^|[^A-Za-z0-9_])E[0-9]+\.[0-9]+[a-z]?([^A-Za-z0-9_]|$)'
     # A git call that ignores an inherited git environment. A hook exports
     # GIT_DIR, which `git -C` does not override; see doc-path-check.
     git_at() {
@@ -1390,7 +1395,7 @@ story-id-check root="":
             fi
         done
         found="$(git_at . -c core.quotePath=off ls-files -z -- "${scanned[@]}" \
-            | xargs -0 grep -InE -- "$id_re" || true)"
+            | xargs -0 grep -HInE -- "$id_re" || true)"
         if [ -n "$found" ]; then
             printf '%s\n' "$found" | sed 's/^\([^:]*:[0-9]*\):/story-id-check: \1: /' >&2
             count="$(printf '%s\n' "$found" | grep -c . || true)"
@@ -1402,49 +1407,78 @@ story-id-check root="":
     fixtures() (
         work="$(mktemp -d)"
         trap 'rm -rf "$work"' EXIT
-        # Ids are assembled with printf so this file stays free of a literal
-        # one, which keeps the recipe's own text from being a false match if
-        # the justfile is ever added to a scanned tree.
+        # Ids are assembled with printf so the fixture text does not depend on
+        # a literal one.
+        # The scanned list is stated again here, so removing a tree from it
+        # fails this recipe: the cases below build their trees from the list.
+        if [ "${scanned[*]}" != "crates xtask examples editors/vscode/src docs/book docs/design docs/technotes" ]; then
+            echo "story-id-check: the scanned trees changed; update the expectation in the fixtures with the list." >&2
+            exit 1
+        fi
         id="$(printf 'E%s.%s' 16 5)"
+        lettered="$(printf 'E%s.%sb' 2 8)"
         # Built from $d: this file is itself scanned by doc-path-check, and a
         # literal docs/… path that resolves nowhere would be reported here.
         d=docs
         root="$work/fixture"
-        for tree in "${scanned[@]}"; do
-            mkdir -p "$root/$tree"
-            printf '%s\n' "// driftsys/ridl#12 and 1E5.0 and TYPE1.2 are not story ids" > "$root/$tree/clean.txt"
-        done
-        # An id in a tree that is allowed to hold one.
-        mkdir -p "$root/docs/decisions"
-        printf '%s\n' "traces to $id" > "$root/docs/decisions/adr.md"
-        git_at "$root" -c init.defaultBranch=main -c init.templateDir= init -q
-        git_at "$root" -c core.excludesFile=/dev/null add -A
         report="$work/report"
+        clean_tree() {
+            for tree in "${scanned[@]}"; do
+                mkdir -p "$root/$tree"
+                printf '%s\n' "// driftsys/ridl#12 and 1E5.0 and TYPE1.2 are not story ids" > "$root/$tree/clean.txt"
+            done
+            git_at "$root" -c core.excludesFile=/dev/null add -A
+        }
+        mkdir -p "$root"
+        git_at "$root" -c init.defaultBranch=main -c init.templateDir= init -q
+        clean_tree
+        # An id in a tree that is allowed to hold one.
+        mkdir -p "$root/$d/decisions"
+        printf '%s\n' "traces to $id" > "$root/$d/decisions/adr.md"
+        git_at "$root" -c core.excludesFile=/dev/null add -A
         if ! "{{just_executable()}}" story-id-check "$root" >"$report" 2>&1; then
             echo "story-id-check: the gate did not pass over a fixture with no id in a scanned tree:" >&2
             cat "$report" >&2
             exit 1
         fi
-        # Two ids in scanned trees, two of them on one line.
-        printf '%s\n' "ok" "// lands with $id, until $(printf 'E%s.%s' 4 2)" > "$root/crates/clean.txt"
-        printf '%s\n' "since story $(printf 'E%s.%s' 11 14)." > "$root/$d/design/clean.txt"
+        # One id in every scanned tree. Each is reported with its own file and
+        # line, so dropping a tree from the list fails here.
+        for tree in "${scanned[@]}"; do
+            printf '%s\n' "ok" "// lands with $id, until $lettered" > "$root/$tree/clean.txt"
+        done
         git_at "$root" -c core.excludesFile=/dev/null add -A
         if "{{just_executable()}}" story-id-check "$root" >"$report" 2>&1; then
             echo "story-id-check: the gate returned 0 over a fixture naming story ids:" >&2
             cat "$report" >&2
             exit 1
         fi
-        if ! grep -q -- '^story-id-check: crates/clean.txt:2: ' "$report" \
-            || ! grep -q -- "^story-id-check: $d/design/clean.txt:1: " "$report" \
-            || ! grep -q -- '^story-id-check: 2 line(s) above' "$report"; then
-            echo "story-id-check: the gate no longer names file:line for each id in its fixture:" >&2
+        for tree in "${scanned[@]}"; do
+            if ! grep -q -- "^story-id-check: $tree/clean.txt:2: .*$lettered" "$report"; then
+                echo "story-id-check: the gate no longer names file:line, with a lettered id, for $tree:" >&2
+                cat "$report" >&2
+                exit 1
+            fi
+        done
+        if ! grep -q -- "^story-id-check: ${#scanned[@]} line(s) above" "$report"; then
+            echo "story-id-check: the gate no longer counts one line per scanned tree:" >&2
             cat "$report" >&2
             exit 1
         fi
-        # A scanned tree that has no tracked file fails the gate.
-        git_at "$root" rm -q -r -f --cached docs/technotes
+        # A lettered id alone is enough to fail the gate.
+        clean_tree
+        printf '%s\n' "// see $lettered" > "$root/crates/clean.txt"
+        git_at "$root" -c core.excludesFile=/dev/null add -A
+        if "{{just_executable()}}" story-id-check "$root" >"$report" 2>&1; then
+            echo "story-id-check: the gate returned 0 over a fixture naming only a lettered id:" >&2
+            cat "$report" >&2
+            exit 1
+        fi
+        # A scanned tree that has no tracked file fails the gate, with the ids
+        # gone so that the status can only come from the missing tree.
+        clean_tree
+        git_at "$root" rm -q -r -f --cached "$d/technotes"
         if "{{just_executable()}}" story-id-check "$root" >"$report" 2>&1 \
-            || ! grep -q -- "the scanned tree 'docs/technotes' matches no tracked file" "$report"; then
+            || ! grep -q -- "the scanned tree '$d/technotes' matches no tracked file" "$report"; then
             echo "story-id-check: the gate no longer fails when a scanned tree has no tracked file:" >&2
             cat "$report" >&2
             exit 1

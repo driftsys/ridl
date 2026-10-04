@@ -1,4 +1,4 @@
-//! The `ridl diff` gating contract (docs/ROADMAP.md epic E2.8b).
+//! The `ridl diff` gating contract.
 //!
 //! These tests run the real binary over real source trees, so the local merge
 //! gate exercises the CI gating contract itself (ADR-0008 decision 11): a

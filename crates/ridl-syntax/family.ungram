@@ -21,7 +21,7 @@
 //   (typl reference §14): consumers read them from the trivia immediately
 //   preceding a definition (ast::HasDocComments).
 // - `ErrorNode` is the one node kind with no rule here: error recovery
-//   (task E1.2c) wraps arbitrary skipped tokens in it, so it has no
+//   wraps arbitrary skipped tokens in it, so it has no
 //   describable shape. The generator appends its struct unconditionally.
 //
 // Separator discipline (typl reference §15.2): newline and comma are

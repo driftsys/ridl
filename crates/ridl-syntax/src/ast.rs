@@ -218,7 +218,7 @@ impl AstNode for FieldType {
 }
 
 /// One member of an `interface` body — the `InterfaceMember` alternation
-/// (ridl reference §14.0–§14.1, epic E2.1a).
+/// (ridl reference §14.0–§14.1).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InterfaceMember {
     Signal(SignalDef),
@@ -798,8 +798,7 @@ mod tests {
     }
 
     /// `/// Calibrated top speed.` + `internal type Speed: km/h [0.0..250.0
-    /// step 0.5] = 0.0`, built by hand — the full parser lands in task
-    /// E1.2b.
+    /// step 0.5] = 0.0`, built by hand — the full parser is a separate step.
     fn speed_source_file() -> SyntaxNode {
         let mut b = GreenNodeBuilder::new();
         b.start_node(SyntaxKind::SourceFile.into());

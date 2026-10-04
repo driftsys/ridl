@@ -111,7 +111,7 @@ pub enum SyntaxKind {
     BlockComment,
     DocComment,
     Error,
-    // Nodes — the typl grammar's node inventory (`family.ungram`, epic E1.2a).
+    // Nodes — the typl grammar's node inventory (`family.ungram`).
     // The full parser produces them; until it lands, the
     // generated typed AST casts over trees built directly in tests.
     SourceFile,
@@ -142,7 +142,7 @@ pub enum SyntaxKind {
     QualifiedName,
     Literal,
     InitValue,
-    // Nodes of the ridl interaction grammar (`family.ungram`, epic E2.1a —
+    // Nodes of the ridl interaction grammar (`family.ungram`,
     // ridl reference Appendix C, ADR-0008 decisions 1 and 2).
     InterfaceDef,
     SignalDef,

@@ -1,5 +1,4 @@
-//! The walking-skeleton golden test (the exit
-//! criterion): compile the fixture end to end, pin the generated Rust and the
+//! The walking-skeleton golden test: compile the fixture end to end, pin the generated Rust and the
 //! lowered IR against committed snapshots, and drive the same pipeline through
 //! the `ridlc` binary.
 

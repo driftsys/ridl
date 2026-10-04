@@ -11,7 +11,7 @@
 //!
 //! It exists because stage P4 of the lane P driver ported the Rust backend
 //! onto the lowered model: before that the backend read the raw IR, a
-//! plugin has none, and the exit test of story E4.5b could only be run over
+//! plugin has none, and the exit test could only be run over
 //! `ridlc-gen-model`.
 //!
 //! What a plugin owes the host, in order, and what this one does:

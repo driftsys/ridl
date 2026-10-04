@@ -171,7 +171,7 @@ struct ImportRecord {
     bound: Option<Symbol>,
     /// The workspace member the path resolves to (for cycle detection).
     member: Option<Package>,
-    /// The URL a remote import resolves to (remote imports are not materialized yet).
+    /// The URL a remote import resolves to (the compile path does not fetch remote imports).
     remote_url: Option<String>,
     /// The path resolves nowhere (ADR-0002 §5 step 4).
     unknown: bool,
@@ -251,7 +251,7 @@ fn collect_imports(
 
 /// Analyses the collected imports: binds the winners, and raises the
 /// collision (TYPL-006), needless-alias (TYPL-008), unused (TYPL-007),
-/// unresolved-remote (remote imports are not materialized yet), and unresolved-package (§5 step 4)
+/// unresolved-remote (the compile path does not fetch remote imports), and unresolved-package (§5 step 4)
 /// diagnostics.
 fn apply_imports(
     records: &[ImportRecord],
@@ -685,7 +685,7 @@ pub(crate) fn declared_symbols(
 }
 
 /// A named top-level declaration — a typl definition or a ridl interface
-/// (E2.1b). [`declarations`] yields them in source order, so the first-wins
+/// [`declarations`] yields them in source order, so the first-wins
 /// tiebreak (ADR-0007 decision 6) holds across the two shapes.
 pub(crate) enum Declaration {
     Definition(Definition),

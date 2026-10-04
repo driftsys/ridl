@@ -227,7 +227,7 @@ fn diff_type_def(path: &str, a: &v2::TypeDef, b: &v2::TypeDef, changes: &mut Vec
 /// means matching removals against the container's `reserved` entries — the IR
 /// carries everything needed (`Reserved.name` for struct and union bodies,
 /// `Reserved.value` for enum bodies). Recorded for a later epic rather than
-/// taken here, because E2.8b's normative table scopes its tombstone row to
+/// taken here, because the normative table scopes its tombstone row to
 /// interactions. Do not close this alone: driftsys/ridl#302 records a
 /// FlatBuffers union-discriminant coupling that must move with it.
 fn diff_composite(

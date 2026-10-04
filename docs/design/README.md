@@ -48,8 +48,7 @@ choices, see [`../decisions/`](../decisions/).
   in-tree backend, the process host behind `--plugin` (`ridlc-gen-<language>` on
   `PATH` or by path, the pipe, the timeout, the errors), the reference plugin
   `ridlc-gen-model`, and the parity test with what it does and does not prove —
-  roadmap story E4.5b's first half, as built. The decisions behind its choices
-  are
+  as built. The decisions behind its choices are
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decisions 8 to 12, with decision 11 as amended 2026-09-22.
 - **interaction-face.md** — the generated interaction face over `ridl-rt`: per

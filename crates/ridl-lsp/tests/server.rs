@@ -1024,7 +1024,7 @@ fn an_overlay_inside_a_lazily_loaded_workspace_joins_it() {
 }
 
 // ==========================================================================
-// E1.15c — completion and rename (task 24)
+// completion and rename
 // ==========================================================================
 
 /// Opens `text` as the buffer for `uri` (a workspace file or a standalone

@@ -122,9 +122,8 @@ generated async `Client` over an interface with a call is bound on `Caller`,
 `Clock` and `Wakeable` together
 ([ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 6),
 and a role handle that cannot build one is not a handle for that role. The Rust
-backend emits that client since the async client; the roles were here first, so
-that it could be built over this handle. Both handles read the one clock in the
-store.
+backend emits that client; the roles were here first, so that it could be built
+over this handle. Both handles read the one clock in the store.
 
 The split follows the receiver, as ADR-0021 decision 12 derives it: every method
 on the reader handle takes `&self`, so several threads may read one store at
@@ -709,7 +708,7 @@ Three more that are the runtime's own shape rather than the descriptor's:
   on drop while the call is still waiting. So a program that calls through the
   generated face holds one slot per call in flight, and a call future that is
   neither polled to its outcome nor dropped is the one way such a program keeps
-  a slot. Before that story nothing the Rust backend emitted called
+  a slot. Before the async client nothing the Rust backend emitted called
   `Caller::forget`, and a program over one `Loopback` found every send
   `SendError::Busy` from its seventeenth call on. This runtime holds the outcome
   because nothing else can know the caller has read it.
@@ -745,7 +744,7 @@ absences:
   with the interface's command and query ordinals when it is called
   (`crates/ridl-backend-rust/src/face/serve.rs`), so a handler under it is
   filtered from its first poll, and `blocking::serve` is `block_on` over it.
-  **The deviation is kept**, decided with that second half: a handler under
+  **The deviation is kept**, decided with the blocking client: a handler under
   either `serve` never has an empty served set, so the rule reaches only a
   handler driven through the port directly, which is what the tests of the
   settlement table's unknown-route rows do; retiring it would make those tests

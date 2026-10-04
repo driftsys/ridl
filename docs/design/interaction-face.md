@@ -3,7 +3,7 @@
 The Rust backend's generated face over `ridl-rt`: per interface, an async
 `Client`, a `Publisher`, a `Provider` trait, `serve`, and a `blocking` module
 holding the same client, and `serve` where there is one, as blocking calls. The
-first form of it was — an in-process-only MVP, ahead of the frame specification
+first form of it was an in-process-only MVP, ahead of the frame specification
 and the transport, so the team had a face to write against; ADR-0018 decision 15
 restores the face as the runtime layer's "phase 2". `ridl build --emit rust`
 then emitted it, and the call surface was reshaped: the poll face the MVP made

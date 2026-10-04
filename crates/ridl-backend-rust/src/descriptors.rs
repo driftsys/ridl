@@ -385,8 +385,8 @@ fn interaction_item(
 /// recomputed, because a plugin receives only the model; `None` when the
 /// projection has none. `proto3` is `None` because this backend emits no
 /// proto3 codec (the `EncodedSizes` doc in `ridl-rt`: a backend writes `None`
-/// for a codec it does not emit). `repr_c` is `None` until the layout is defined (driftsys/ridl#317)
-/// (driftsys/ridl#317) defines the layout.
+/// for a codec it does not emit). `repr_c` is `None` until the layout is defined
+/// (driftsys/ridl#317).
 fn payload_info(payload: Option<&v1::Payload>) -> TokenStream {
     let type_name = payload_reference(payload);
     let flatbuffers = match payload.and_then(|payload| payload.flatbuffers_max_size) {

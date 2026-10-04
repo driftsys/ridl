@@ -1,7 +1,6 @@
 //! The `ridl fmt` golden corpus: `input/*.{typl,ridl,rsdl}` in the old spaced/aligned
 //! style must format to the byte-identical `formatted/*.{typl,ridl,rsdl}` tight style, and
-//! every `formatted/*.{typl,ridl,rsdl}` file must be a fixed point (docs/ROADMAP.md epic
-//! general form §5).
+//! every `formatted/*.{typl,ridl,rsdl}` file must be a fixed point (general form §5).
 
 use std::fs;
 use std::path::{Path, PathBuf};

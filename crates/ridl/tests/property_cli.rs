@@ -1,4 +1,4 @@
-//! `ridl test` — the property runner over a workspace (E2.11a).
+//! `ridl test` — the property runner over a workspace.
 //!
 //! Drives the binary the way a user does and pins the three report sections
 //! (range self-corpora, `require` satisfiability sampling, `ensure` observer

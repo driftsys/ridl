@@ -1,6 +1,6 @@
 //! The package checker: lowers every declaration of a resolved package to IR
 //! v2 and runs the typl composite and scalar checks plus the ridl interaction
-//! checks (E2.1b–c; typl language reference
+//! checks (typl language reference
 //! §4–§12, §16; ridl language reference §3–§14, §16).
 //!
 //! Diagnostics accumulate; lowering continues past errors — the checker never
@@ -174,7 +174,7 @@ pub fn check_package(
                 decls.push(decl);
             }
         }
-        // The ridl interaction layer (E2.1b structural checks, E2.1c
+        // The ridl interaction layer (structural checks,
         // lowering): interfaces land in `Package.interfaces` in source order.
         for interface in source.interfaces() {
             if !checker.is_winner(*file, &interface) {
@@ -3370,7 +3370,7 @@ impl Checker<'_> {
         }
     }
 
-    // --- the E2.1b interaction structural pass ----------------------------
+    // --- the interaction structural pass ----------------------------
     //
     // Diagnostics only — the IR is untouched until task 6. The task 3 parser
     // over-approximates the interaction grammar deliberately; every
@@ -3536,8 +3536,8 @@ impl Checker<'_> {
 
     /// The structural rules of one interface (ridl §16, E2 task 5).
     /// Checks one interface and lowers it to its IR shape (ridl §14.0, §11;
-    /// E2.1b–c): the structural diagnostics accumulate exactly as in the
-    /// E2.1b pass, and every surviving member lowers to an interaction
+    /// the structural diagnostics accumulate exactly as in the
+    /// structural pass, and every surviving member lowers to an interaction
     /// `Decl` with its §11 ordinal — the same assignment
     /// [`Checker::lower_service_inline`] makes over a service's inline body.
     fn lower_interface(&mut self, def: &ast::InterfaceDef) -> v2::Interface {
@@ -5967,7 +5967,7 @@ fn kind_article(kind: SymbolKind) -> &'static str {
 }
 
 /// The negation of the shared range-membership rule ([`scalar::range_accepts`]),
-/// which the E2.11a property runner drives its corpora against. The rule lives
+/// which the property runner drives its corpora against. The rule lives
 /// in one place so that a bug in it surfaces there rather than being
 /// reimplemented identically on both sides.
 fn out_of_bounds(value: &ExactValue, min: Option<&ExactValue>, max: Option<&ExactValue>) -> bool {
@@ -10231,7 +10231,7 @@ mod tests {
         assert!(checked.diagnostics[0].message.contains("FAST"));
     }
 
-    // --- the E2.1b interaction structural pass ----------------------------
+    // --- the interaction structural pass ----------------------------
 
     /// A single-file workspace-member package whose one file is `.ridl`.
     fn ridl_package(db: &RidlDatabase, name: &str, text: &str) -> Package {
@@ -11880,7 +11880,7 @@ interface I {\n\
                 "{PRELUDE}interface I {{\n  reserved resetCounters\n  query resetCounters(w: Speed): Speed @[..50ms]\n}}\n"
             ),
         );
-        // `resetCounters` is also mutation-named, so the E2.10a lint fires
+        // `resetCounters` is also mutation-named, so the lint fires
         // alongside: the two rules are independent and both hold here.
         assert_eq!(codes(&checked), vec!["RIDL-401", "RIDL-404"]);
     }
@@ -12294,7 +12294,7 @@ interface I {\n\
     // `appendix_a_interactions_carry_the_worked_ordinals` and
     // `appendix_a_tombstone_stores_its_ordinal_twice_and_they_agree` below.
 
-    // --- the E2.1c lowering to IR v2 --------------------------------------
+    // --- the lowering to IR v2 --------------------------------------
 
     /// The veh.common vocabulary the Appendix A contract package imports.
     const APPENDIX_A_COMMON: &str = "\
@@ -12468,7 +12468,7 @@ interface VehicleStatus {
             checked.diagnostics,
         );
         // Appendix A draws no advisory. Its `query getFaultPage(…)` used to
-        // return the named union `FaultPageResult` and earn the E2.10a lint
+        // return the named union `FaultPageResult` and earn the lint
         // RIDL-308; the appendix now writes the inline `FaultPage | DiagError`
         // that general form §6.1 made canonical in return position (ADR-0008
         // decisions 1 and 19), so the lint no longer fires. RIDL-308 keeps a

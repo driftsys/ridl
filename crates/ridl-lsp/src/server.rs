@@ -1,12 +1,11 @@
-//! The synchronous server loop and its state (docs/ROADMAP.md epic E1.15a,
-//! ADR-0004 §6).
+//! The synchronous server loop and its state (ADR-0004 §6).
 //!
 //! [`run`] follows the rust-analyzer `lsp-server` pattern: an initialize
 //! handshake, then a plain loop that receives one message at a time and
 //! dispatches it — no async runtime. Because the loop is strictly
 //! sequential, a `$/cancelRequest` is dequeued only after older requests
 //! were already answered; the cancelled-set check before each dispatch is
-//! the hook the later, longer-running handlers (E1.15b–d) extend, and
+//! the hook the later, longer-running handlers extend, and
 //! salsa's own cancellation applies once queries run off-thread.
 //!
 //! The state model is the incremental overlay design described in the crate
@@ -120,7 +119,7 @@ pub fn run_with_version(connection: Connection, version: Option<&str>) -> Result
 
 /// The capability set: incremental text sync with open/close notifications,
 /// quick-fix code actions, hover, goto-definition, and find-references
-/// (E1.15b), completion and rename, and inlay hints. Rename
+/// completion and rename, and inlay hints. Rename
 /// advertises `prepareProvider` so the client validates the cursor and the new
 /// name before applying an edit. Inlay hints close the E1 LSP feature set.
 /// Whole-document formatting runs the `ridl fmt` engine.

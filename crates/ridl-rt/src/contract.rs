@@ -274,9 +274,8 @@ pub struct PayloadInfo {
 /// A field is `None` when the toolchain cannot size the payload for that
 /// encoding. That covers two cases the reader does not have to tell apart: the
 /// encoding cannot carry the payload at all, and the encoding can carry it but
-/// the size is not derivable yet, because the story that defines the layout has
-/// not landed. The `repr(C)` column is `None` for every payload until the layout is defined (driftsys/ridl#317)
-/// defines the C-representable layout, and a backend that emits descriptors
+/// the size is not derivable yet, because the layout is not defined yet
+/// (driftsys/ridl#317). The `repr(C)` column is `None` for every payload, and a backend that emits descriptors
 /// before its codec exists writes `None` for that codec's column too.
 ///
 /// So a consumer reads `None` as "no size is available here", never as "this

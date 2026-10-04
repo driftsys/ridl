@@ -1,4 +1,4 @@
-//! The parser ok-corpus (docs/ROADMAP.md epic E1.2b, ADR-0007 decision 3).
+//! The parser ok-corpus (ADR-0007 decision 3).
 //!
 //! Each `.typl` file under `test_data/parser/ok/` is parsed and its CST is
 //! snapshotted together with the error list. Every ok-corpus file must parse
@@ -48,7 +48,7 @@ fn ok_corpus_is_lossless_error_free_and_matches_snapshots() {
     });
 }
 
-/// The ridl half of the ok corpus (epic E2.1a): every `.ridl` file parses
+/// The ridl half of the ok corpus: every `.ridl` file parses
 /// under [`Profile::Ridl`] with the same lossless, zero-error contract.
 #[test]
 fn ridl_ok_corpus_is_lossless_error_free_and_matches_snapshots() {

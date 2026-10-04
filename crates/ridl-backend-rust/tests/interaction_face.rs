@@ -22,7 +22,7 @@
 //! through the raw port, with the encoder's own returned slice.
 //!
 //! The ports the round trip runs over are the aggregate handle of
-//! `ridl-loopback` (driftsys/ridl#445). Until that story landed
+//! `ridl-loopback` (driftsys/ridl#445). Before it
 //! they were a disposable double at `tests/support/loopback.rs`, exercised
 //! ahead of the face by a set of `support_*` tests; both the double and those
 //! tests are gone, the tests having moved to `crates/ridl-loopback/tests/`

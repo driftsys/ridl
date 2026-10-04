@@ -3,8 +3,8 @@
 //! `docs/archive/2026-09-16-interaction-face-v0-design.md` §6).
 //!
 //! For each named interface this module emits one `pub mod`, named after the
-//! interface, holding what the design note's §8 calls the face, as story
-//! The async face reshaped it (`docs/archive/2026-09-25-async-face-design.md`, notes
+//! interface, holding what the design note's §8 calls the face, as the async
+//! face reshaped it (`docs/archive/2026-09-25-async-face-design.md`, notes
 //! F-2 to F-7, F-10 and F-11):
 //!
 //! - `Client<P>`, the consumer face, generic over exactly the ports the

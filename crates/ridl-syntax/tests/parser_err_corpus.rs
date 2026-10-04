@@ -1,4 +1,4 @@
-//! The parser err-corpus (docs/ROADMAP.md epic E1.2c, ADR-0007 decision 3).
+//! The parser err-corpus (ADR-0007 decision 3).
 //!
 //! Each `.typl` file under `test_data/parser/err/` is broken input the parser
 //! must recover from. Every err-corpus file parses losslessly — the tree text
@@ -51,7 +51,7 @@ fn err_corpus_is_lossless_reports_errors_and_matches_snapshots() {
     });
 }
 
-/// The ridl half of the err corpus (epic E2.1a): broken `.ridl` input parsed
+/// The ridl half of the err corpus: broken `.ridl` input parsed
 /// under [`Profile::Ridl`], with the same lossless, at-least-one-diagnostic
 /// recovery contract.
 #[test]

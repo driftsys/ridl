@@ -1374,7 +1374,7 @@ mod tests {
     /// comparison only (§5.3)" to "`<` requires operands of one ordered domain
     /// (§5.2)": a different rule, a different span, and a fix suggestion that
     /// sends the reader to the wrong operator. A later extension of this rule makes a
-    /// partial regression there is exactly the shape that would pass.
+    /// partial regression exactly the shape that would pass.
     ///
     /// Two things close it. The **message fragment** names the rule. The
     /// **span** names the operator the rule fired on, which is what the masking

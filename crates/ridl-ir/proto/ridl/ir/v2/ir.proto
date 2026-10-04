@@ -611,8 +611,8 @@ enum ContractKind {
 }
 
 // One require/ensure clause (ridl §13), lowered as an observer stub
-// (full expr checking is E5). source is the canonical expr text —
-// A structured expr tree replaces it later.
+// (full expr checking is E5). source is the canonical expr text;
+// driftsys/ridl#704 tracks replacing it with a structured expr tree.
 message Contract {
   ContractKind kind = 1;
   string source = 2;

@@ -59,9 +59,9 @@
 //!
 //! # What it reports, and what it cannot
 //!
-//! The loopback holds no catalog descriptor — (driftsys/ridl#381)
+//! The loopback holds no catalog descriptor — driftsys/ridl#381
 //! writes the descriptor file, and giving the loopback one is not yet
-//! assigned to a story — so it has no member table, and there is no ordinal
+//! assigned — so it has no member table, and there is no ordinal
 //! it can call unknown, no member it can call unowned, and no timing
 //! annotation it can measure a value's freshness or a call's remaining time
 //! against. What it therefore never returns:
@@ -183,8 +183,8 @@ impl Loopback {
     /// Sixteen is a small bound, chosen so that a test reaches it in a few
     /// sends and a program that never forgets a call finds out at once rather
     /// than after its memory grows. The loopback has no catalog descriptor to
-    /// size a byte budget from: the descriptor file is written from story
-    /// `--emit catalog` (driftsys/ridl#381), and no story yet wires
+    /// size a byte budget from: the descriptor file is written by
+    /// `--emit catalog` (driftsys/ridl#381), and nothing yet wires
     /// the loopback to read one. So the slot count is its only bound (note
     /// F-9 of the async face design).
     ///

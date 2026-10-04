@@ -64,9 +64,8 @@ pub struct GenerateError {
 /// objects, Task 3) and an enum's or enum set's `TryFrom<i64>` (Task 5) name;
 /// it emits no interaction face.
 ///
-/// The compiler corpus runs this. The pipeline ran it too until the face was emitted by the pipeline, which
-/// gave the pipeline [`generate_pipeline`] — `ridl build --emit rust` calls
-/// that, and this output is a subset of it. The face is emitted by
+/// The compiler corpus runs this. The pipeline ran it too until it gained [`generate_pipeline`], which
+/// `ridl build --emit rust` calls, and this output is a subset of it. The face is emitted by
 /// [`generate_face`] and [`generate_pipeline`], not from here, for the reason the Lane M plan records ("Where the face is
 /// emitted from"): the corpus interfaces carry contract clauses the M3 clause
 /// translator must refuse. The plan's second reason, that the corpus proofs
@@ -183,7 +182,7 @@ pub fn generate_with(
 /// **Why an interface is skipped and not refused** (decision 2): the clause
 /// translator accepts one narrow form, and a multi-parameter call and a stream
 /// have no face at all. Refusing would make `--emit rust` reject legal ridl
-/// over a gap two tracked follow-ups own — driftsys/ridl#704 replaces the translator, and the
+/// over a gap with two follow-ups — driftsys/ridl#704 replaces the translator, and the
 /// multi-parameter argument struct is lane M's parked follow-up — and would
 /// put a codegen error where a source diagnostic belongs. So the package keeps
 /// its domain types and its codec, the interface loses its `Client`,

@@ -32,8 +32,8 @@ fn max_size_path(type_name: &str) -> String {
 /// Every `PayloadInfo.max_size` carries the model's own FlatBuffers bound
 /// (`Payload.flatbuffers_max_size`, which `max_size` computed) in its
 /// `flatbuffers` column and nothing else: `proto3` is `None` because this
-/// backend emits no proto3 codec, and `repr_c` is `None` until the layout is defined (driftsys/ridl#317), which defines
-/// the layout. The payloads are read from the model the emitter reads, so
+/// backend emits no proto3 codec, and `repr_c` is `None` until the layout is defined
+/// (driftsys/ridl#317). The payloads are read from the model the emitter reads, so
 /// the number asserted is the model's, not one this test derives.
 #[test]
 fn encoded_sizes_carry_the_models_flatbuffers_bound() {

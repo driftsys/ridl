@@ -1,4 +1,4 @@
-//! Completion (docs/ROADMAP.md epic E1.15c).
+//! Completion.
 //!
 //! Completion runs constantly, on text that is usually incomplete, so the
 //! context detection reads the parse tree defensively and degrades to an empty
@@ -15,7 +15,7 @@
 //!   keywords and the `internal` / `error` modifiers;
 //! - at an interaction-start position (directly inside an `interface` body or a
 //!   service's inline shape) → the five ridl interaction keywords plus
-//!   `reserved` (E2.10b).
+//!   `reserved`.
 //!
 //! The context is decided from the token to the left of the cursor and the
 //! identifier the cursor is completing, not from a well-formed tree — the same

@@ -1,4 +1,4 @@
-//! The RIDL language server (docs/ROADMAP.md epic E1.15a, ADR-0004 §6,
+//! The RIDL language server (ADR-0004 §6,
 //! concept note §8.1).
 //!
 //! The server is built on `lsp-server` — rust-analyzer's minimal synchronous

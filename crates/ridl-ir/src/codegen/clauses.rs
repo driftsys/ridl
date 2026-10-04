@@ -1,7 +1,7 @@
 //! The narrow contract-clause translation, as a model fact (design note D-9).
 //!
 //! The IR carries a clause only as canonical ridl text (`Contract.source`);
-//! A later change replaces the text with an expression tree. Until
+//! driftsys/ridl#704 replaces the text with an expression tree. Until
 //! then the accepted form is
 //! `<subject> <comparison> <numeric literal>`, and whether a clause has that
 //! form depends on the subject's resolved scalar class — a fact only a

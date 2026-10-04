@@ -686,8 +686,7 @@ The one plugin in this repository is `ridlc-gen-model`, built for the test
 suite and not installed by any release: it is `--emit codegen-model` as a
 process, and the test that runs it through this path proves the host, not a
 language. The Rust backend and the other three still run in process only; the
-Rust backend's own plugin follows its port onto the model (roadmap story
-E4.5b).
+Rust backend's own plugin follows its port onto the model.
 
 **It writes** one file per package per `--emit` target, under `--out-dir`
 (`out` by default), and — exactly like [`ridl check`](#ridl-check) —

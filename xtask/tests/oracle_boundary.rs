@@ -21,7 +21,7 @@
 //! repeated here as an automated check, because reproducing it would mean
 //! shipping the very promotion this guard exists to prevent).
 //!
-//! This guard also covers the two schema compilers.
+//! This guard also covers a third and a fourth edge.
 //! `ridl-backend-rust`'s FlatBuffers conformance test drives planus's
 //! runtime and code generator, and emits the `.fbs` it feeds them with
 //! `ridl-backend-flatbuffers`. All four edges are test-time only, for the
@@ -86,8 +86,8 @@ const BOUNDARIES: &[Boundary] = &[
         package: "ridl-backend-proto",
         oracle: "protox",
     },
-    // The FlatBuffers conformance test uses planus's runtime and code generator to
-    // `ridl-backend-rust` for the FlatBuffers codec's conformance test. They
+    // `ridl-backend-rust` uses planus's runtime and code generator for the
+    // FlatBuffers codec's conformance test. They
     // are the same kind of oracle: this crate emits the codec rather than
     // linking one, so its own use of planus is test-time only. The toolchain
     // may ship planus through `ridl-descriptor`; what must never reach planus

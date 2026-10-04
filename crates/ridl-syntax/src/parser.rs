@@ -190,7 +190,7 @@ fn ungrammatical_reserved_noun(kind: SyntaxKind) -> &'static str {
 /// Whether `kind` starts a top-level construct. These are the
 /// resynchronization points recovery falls back to, both at the file level
 /// and when a block body runs past an unclosed `}` into the next declaration.
-/// `interface` joins the set with E2.1a; under [`Profile::Typl`] it never
+/// `interface` joins the set under the ridl profile; under [`Profile::Typl`] it never
 /// occurs (the word lexes to `ReservedWord` there). The four top-level rsdl
 /// declaration keywords join it with the rsdl grammar; they occur only under
 /// [`Profile::Rsdl`]. `machine` is not among them: a machine is declared only

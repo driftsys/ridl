@@ -1,5 +1,4 @@
-//! The coded diagnostic model every compiler pass emits (docs/ROADMAP.md epic
-//! ADR-0004 §5, ADR-0007 decision 2).
+//! The coded diagnostic model every compiler pass emits (ADR-0004 §5, ADR-0007 decision 2).
 //!
 //! A [`Diagnostic`] is a first-class homegrown value — a stable [`DiagCode`], a
 //! [`Severity`], a message, a primary source [`Span`], secondary [`Label`]s, and
@@ -1208,7 +1207,7 @@ diag_codes! {
 }
 
 /// A diagnostic's severity. Warnings and info diagnostics arrive with later
-/// passes; every code the pipeline emits is an [`Error`](Severity::Error).
+/// passes; the codes of the first pipeline are all [`Error`](Severity::Error).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum Severity {
     Error,

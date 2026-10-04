@@ -1067,7 +1067,7 @@ fn refuse_overwrite(path: &Path, marker: &str) -> std::io::Result<Option<Diagnos
 ///
 /// The `std` feature, on by default, forwards to `ridl-rt/std`: the generated
 /// face's `blocking` module is under it and is `block_on` over the async
-/// face ), and `block_on` is what `ridl-rt`'s `std`
+/// face, and `block_on` is what `ridl-rt`'s `std`
 /// feature gates. A build with default features off has no `blocking` module
 /// and links `ridl-rt` as `no_std`.
 ///
