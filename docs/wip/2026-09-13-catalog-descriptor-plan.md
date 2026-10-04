@@ -138,9 +138,32 @@ width, `EnumSet(Unspecified)`, and a `string` or `bytes` whose bound exceeds the
 projection's `MAX_ENCODABLE` have a leaf while `max_size` answers `None`); a
 named scalar is projected by its width first, as the backends do; an integer or
 float backing without a width is a bounded `Scalar` of unspecified width, where
-`proto_scalar` gives `string` and `scalar_charge` gives `None`; a unit backing
-without a width has no leaf. The proto3 and FlatBuffers placeholders panic until
-Tasks 6 and 7 replace them.
+`proto_scalar` gives `string` and `scalar_charge` gives `None` (D5 changed this:
+such a type def has no leaf); a unit backing without a width has no leaf. The
+proto3 and FlatBuffers placeholders panic until Tasks 6 and 7 replace them.
+
+Stage D5 (2026-10-04) implemented Tasks 6 and 7 with changes this plan's task
+text does not show:
+
+- The proto3 scalar table moved to `ridl_ir::projection::proto3`, and the proto
+  backend's `proto_scalar` and `proto_primitive` use it (driftsys/ridl#684,
+  second item).
+- `Leaf::EnumSet` is folded into `Leaf::Scalar`: an enum set is the scalar of
+  its width. The shared table replaces `Scalar::proto_max`.
+- An integer or float type def with no width has no proto3 leaf. It follows
+  `proto_scalar`, which emits `string` for it.
+- Every `u64` addition and multiplication in the proto3 sizer is checked.
+- The proto3 sizer reproduces these refusals of the proto backend as an absent
+  state: a map key outside the integral and string scalars, a map value that is
+  an array or a map, an optional array or map field, an enum live or retired
+  value outside int32, and a field number that `check_field_number` refuses.
+- `ridl_ir::codegen::fb_unbounded` is public.
+- The Rust backend's `PayloadInfo.max_size.flatbuffers` is the codegen model's
+  `Payload.flatbuffers_max_size`. `proto3` stays `None`, because that backend
+  emits no proto3 codec, and `repr_c` stays `None` until E11.12.
+- `cargo publish -p ridl-descriptor --dry-run` passes only once the matching
+  `ridl-ir` is on crates.io, because the crate uses `ridl-ir` items that are not
+  published yet (publish order, driver §4 answer 9).
 
 Changes the review of PR #667 added (pass 1, 2026-10-03):
 
