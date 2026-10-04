@@ -221,6 +221,12 @@ and #677 landed.
   documentation (doc lints, language server, rules in generated facade docs),
   split into four specs over a shared lint foundation. Scope only; each spec
   starts its own design session from it.
+- **2026-10-04-design-lints-design.md** and **2026-10-04-design-lints-plan.md**
+  — the design and the fourteen-task plan of piece 1b: five candidate design
+  checks, a corpus of public interface sets ported into RIDL under `evals/`, the
+  precision rule that sets each check's default level and threshold from
+  labelled corpus findings, the `ridl_metrics` tool, and the format of the eval
+  tasks seeded for piece 1c.
 
 ridl-boundary-model-review.md, superseded by ADR-0012, is archived too — see
 [`../archive/README.md`](../archive/README.md). So is
