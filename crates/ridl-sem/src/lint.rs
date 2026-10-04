@@ -4,9 +4,9 @@
 //!
 //! The lints are **ordinary coded diagnostics** — warnings and infos on the
 //! same channel as every other check, so the CLI and the LSP surface them
-//! through the existing diagnostic pipeline. There is deliberately no lint
-//! driver and no configuration surface in E2: a lint that cannot be switched
-//! off is a lint whose message has to be worth reading.
+//! through the existing diagnostic pipeline. A project sets the levels of
+//! these lints in the `[lints]` table of `ridl.toml`; the lint names and the
+//! step that applies the levels live in `ridl_core::lint`, not in this pass.
 //!
 //! | Code     | Rule                                                     | Severity |
 //! | -------- | -------------------------------------------------------- | -------- |
