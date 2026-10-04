@@ -983,6 +983,15 @@ impl Checker<'_> {
         (resolved.links, resolved.see)
     }
 
+    /// Resolves the doc links of a struct, enum or union `reserved` entry for
+    /// the diagnostics alone (typl §14, ADR-0026): the entry is a carrier, but
+    /// the IR `Reserved` message has no doc field, so nothing is stored. An
+    /// interface tombstone lowers as a `Decl` and keeps its doc there.
+    fn reserved_doc_links(&mut self, entry: &ast::ReservedEntry) {
+        let doc_info = docs::scan(&entry.doc_comments());
+        self.doc_links(&doc_info);
+    }
+
     fn lower_definition(&mut self, definition: &Definition) -> Option<v2::Decl> {
         let name = declared_name(definition)?;
         let kind = match definition {
@@ -2180,6 +2189,7 @@ impl Checker<'_> {
                     // A tombstone implies evolution; an evolved struct is
                     // never emitted as a fixed inline layout.
                     fixed = false;
+                    self.reserved_doc_links(&entry);
                     members.push(v2::StructMember {
                         member: Some(v2::struct_member::Member::Reserved(lower_reserved(
                             &entry, ordinal,
@@ -3002,6 +3012,7 @@ impl Checker<'_> {
             if let Some(entry) = ast::ReservedEntry::cast(child.clone()) {
                 // The retired identity of an enum tombstone is the value, not
                 // an ordinal slot (§7.4).
+                self.reserved_doc_links(&entry);
                 reserved.push(lower_reserved(&entry, 0));
                 continue;
             }
@@ -3270,6 +3281,7 @@ impl Checker<'_> {
         for child in decl.syntax().children() {
             if let Some(entry) = ast::ReservedEntry::cast(child.clone()) {
                 ordinal += 1;
+                self.reserved_doc_links(&entry);
                 reserved.push(lower_reserved(&entry, ordinal));
                 continue;
             }
@@ -9991,6 +10003,25 @@ mod tests {
             panic!("`c` is a command");
         };
         assert_eq!(def.params[0].links[0].target, "app.F.X");
+    }
+
+    /// A `reserved` entry of a struct, an enum or a union is a carrier with no
+    /// IR doc field, so its links are resolved for the diagnostic only: a
+    /// broken link or `@see` there is TYPL-401, like everywhere else.
+    #[test]
+    fn broken_link_on_a_reserved_entry_is_typl_401() {
+        let text = "package app\n\
+                    struct S {\n  /// Replaced by [Nope].\n  reserved z\n  a: boolean\n}\n\
+                    enum E {\n  /// Gone, see [S].\n  /// @see Missing\n  reserved OLD\n  A = 1\n}\n\
+                    union U {\n  /// Was [Absent].\n  reserved w\n  s: S\n}\n";
+        let checked = check_source("app", text);
+        assert_eq!(codes(&checked), vec!["TYPL-401", "TYPL-401", "TYPL-401"]);
+        let spans: Vec<&str> = checked
+            .diagnostics
+            .iter()
+            .map(|diagnostic| primary_text(text, diagnostic))
+            .collect();
+        assert_eq!(spans, ["[Nope]", "Missing", "[Absent]"]);
     }
 
     /// `@deprecated` and `@labels` keep today's behaviour beside the new tags
