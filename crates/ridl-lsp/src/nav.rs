@@ -1,6 +1,5 @@
 //! Name-resolution navigation: the shared cursor-to-symbol lookup that hover,
-//! goto-definition, and find-references all consume (docs/ROADMAP.md epic
-//! E1.15b).
+//! goto-definition, and find-references all consume.
 //!
 //! [`symbol_at`] maps a byte offset in a file to the identifier token under it
 //! and resolves that token to its declared [`Symbol`] — through imports,

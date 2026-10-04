@@ -21,7 +21,7 @@
 //   (typl reference §14): consumers read them from the trivia immediately
 //   preceding a definition (ast::HasDocComments).
 // - `ErrorNode` is the one node kind with no rule here: error recovery
-//   (task E1.2c) wraps arbitrary skipped tokens in it, so it has no
+//   wraps arbitrary skipped tokens in it, so it has no
 //   describable shape. The generator appends its struct unconditionally.
 //
 // Separator discipline (typl reference §15.2): newline and comma are
@@ -263,7 +263,7 @@ Timing =
 TimingRange =
   min:'duration'? '..' max:'duration'?
 
-// ---------- ridl services (E2.13, ridl reference §14.5) ----------
+// ---------- ridl services (ridl reference §14.5) ----------
 //
 // `service_def` is absent from the ridl reference Appendix C; E2 task 8
 // authors it (recorded for the close-out doc sync). A `service` is the
@@ -376,7 +376,7 @@ MemberLine =
 Reference =
   QualifiedName
 
-// ---------- The guaranteed-subset expr grammar (E2.4) ----------
+// ---------- The guaranteed-subset expr grammar ----------
 //
 // The expr-core specification §3.1 productions (ridl reference §13,
 // ADR-0008 decision 10), collapsed to their tree shapes: the

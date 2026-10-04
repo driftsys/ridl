@@ -188,16 +188,18 @@ Two conventions worth keeping, both learned from the earlier reconciliation:
 
 **The lock is first.** Epic 15 records each interface's number in its package,
 so an interface's identity stops depending on where its declaration sits. Three
-scheduled pieces of work wait on it: the catalog hash of Epic 16, which covers
+scheduled pieces of work waited on it: the catalog hash of Epic 16, which covers
 every number and its provisional flag; E6.17, which embeds that hash in each
-region; and E14.2, because the lock retires three diagnostics and amends
-ADR-0015, which the ridl open questions cite. Anything that writes a hash or a
-golden file before the lock lands would be written twice.
+region and landed on 2026-10-04; and E14.2, because the lock retires three
+diagnostics and amends ADR-0015, which the ridl open questions cite. Anything
+that writes a hash or a golden file before the lock lands would be written
+twice.
 
 **rsdl is finalized beside it.** The language is rewritten around the
 topology-vocabulary note's nouns and lowered to the IR the way ridl is, and its
-specification is the rsdl reference v0.2.0. Only E6.17 waits for the lock and
-for the catalog descriptor; the rest of Epic 6 runs beside them.
+specification is the rsdl reference v0.2.0. Only E6.17 waited for the lock and
+for the catalog descriptor, and it landed on 2026-10-04; the rest of Epic 6 ran
+beside them.
 
 **The runtime library ran beside both, and its story has landed.** `ridl-rt` —
 identity, the envelope, provenance, freshness and the sample, the payload
@@ -215,7 +217,7 @@ shape of ADR-0017 and ADR-0019, written when the backend is.
 **Sequence.**
 
 ```text
-E15 the lock ─┬─→ E16 the catalog descriptor ─→ E6.17 the catalog hash per region
+E15 the lock ─┬─→ E16 the catalog descriptor, landed ─→ E6.17 the catalog hash per region, landed
               └─→ E14.2 ridl §17 dispositions ─┐
                                                │
 E14.1 typl §17 dispositions ───────────────────┼─→ E14.3 both references
@@ -225,7 +227,7 @@ E14.1 · E10, the typl debt ─→ Rust codegen finalized
       ─→ E11.7 FlatBuffers ─→ E4.5a IR stability ─→ E4.5b plugin protocol
                                                  ─→ E11.8 proto3 · E11.12 repr(C)
 
-E6 rsdl finalized and lowered to the IR — beside the lock; only E6.17 waits
+E6 rsdl finalized and lowered to the IR — beside the lock; E6.17 last, landed
 E11.0 ridl-rt, landed ─┬─→ E11.1 frame spec ─→ E11.9 ridl-transport-ws
                        └─→ E11.15 ridl-loopback — no frame, no socket
 E11.13 interaction face MVP — deliberately out of sequence, before E11.1 and E11.9
@@ -315,12 +317,17 @@ message), and absent for a shape no record has given an encoding (a request of
 zero or several parameters, an inline `T | E` reply, a stream, and on the proto3
 side a named scalar, an enum or an enum set).
 
-Design and plan of record:
-[`2026-09-13-runtime-descriptors-design.md`](wip/2026-09-13-runtime-descriptors-design.md)
+**Epic 16 landed on 2026-10-04**: E16.1 in driftsys/ridl#669 (2026-10-03), E16.2
+in #676, E16.3 in #681, E16.4 in #686, E16.5 in #692 and E16.6 in #696. The
+as-built record is
+[the catalog descriptor design record](design/catalog-descriptor.md).
+
+Design and plan of record, archived once the epic landed:
+[`2026-09-13-runtime-descriptors-design.md`](archive/2026-09-13-runtime-descriptors-design.md)
 and
-[`2026-09-13-catalog-descriptor-plan.md`](wip/2026-09-13-catalog-descriptor-plan.md)
+[`2026-09-13-catalog-descriptor-plan.md`](archive/2026-09-13-catalog-descriptor-plan.md)
 (driftsys/ridl#324), re-baselined on 2026-10-03 by stage D1 of the lane driver
-[`2026-10-03-lane-e16-catalog-descriptor-driver.md`](wip/2026-10-03-lane-e16-catalog-descriptor-driver.md),
+[`2026-10-03-lane-e16-catalog-descriptor-driver.md`](archive/2026-10-03-lane-e16-catalog-descriptor-driver.md),
 whose §4 holds the maintainer's eleven answers on the design's open items; the
 plan's first section lists every change.
 
@@ -338,14 +345,14 @@ layout. The encoding is present in the descriptor's enum from the start, and a
 payload with no entry for it means the toolchain cannot size that payload for
 that encoding.
 
-| ID    | Story                                                                                                                                                                                                                                                                            | Done when                                                                                                                                                                                                                                                                                                                                          | Size |
-| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| E16.1 | The `ridl-descriptor` crate: the hand-written `catalog.fbs`, the accessors generated by `cargo xtask descriptor-codegen` and committed with a drift test, and the verifier (plan Tasks 1, 2)                                                                                     | a catalog round-trips through the builder and the reader, and a buffer with a wrong identifier or version is rejected as a whole                                                                                                                                                                                                                   | L    |
-| E16.2 | The interface numbers copied from the IR, and the catalog hash over the reachable closure: SHA-256 over the protobuf binary of the reduced package, with its decision record and a golden-hash test (plan Tasks 3, 4; one identity with driftsys/ridl#275, which closes with it) | two packages with the same declarations and the same numbering hash alike, changing one number changes the hash, and the hash is the same whether a build emits proto3, FlatBuffers or both                                                                                                                                                        | M    |
-| E16.3 | The size context, the type leaves and the string byte capacity (plan Task 5)                                                                                                                                                                                                     | every type leaf yields a byte bound or is reported as unsizable                                                                                                                                                                                                                                                                                    | M    |
-| E16.4 | The proto3 and FlatBuffers size state per payload: the proto3 bound derived under ADR-0017, the FlatBuffers bound read from `ridl_ir::projection::flatbuffers::max_size` (plan Tasks 6, 7)                                                                                       | each payload carries a size state for both encodings: bounded or unbounded for a payload that is one named type the encoding's projection roots (every named type for FlatBuffers; a struct or a union for proto3), absent for a request of zero or several parameters, an inline `T \| E` reply, a stream, and a proto3 payload with no root form | M    |
-| E16.5 | The lowering from the IR and `ridlc build --emit catalog` (plan Tasks 8, 9); the port's catalog check in the Rust face, with what the generated `new` does on a mismatch recorded as an ADR-0023 amendment                                                                       | the corpus package writes a descriptor that verifies, and two runs write the same bytes; the generated face checks its port's catalog, the ADR-0023 amendment records the mismatch behaviour, and the runtimes built in tests and in `examples/cabin` take the generated `CATALOG` instead of a zero hash                                          | M    |
-| E16.6 | The JSON view, `ridl describe`, and the records: ADR-0010's exit-code row and the CLI reference entry (plan Tasks 10, 11, 12)                                                                                                                                                    | `ridl describe` prints a catalog's contents as JSON, and a rejected buffer exits 2 with its cause named                                                                                                                                                                                                                                            | M    |
+| ID    | Story                                                                                                                                                                                                                                                                                                            | Done when                                                                                                                                                                                                                                                                                                                                          | Size |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E16.1 | The `ridl-descriptor` crate: the hand-written `catalog.fbs`, the accessors generated by `cargo xtask descriptor-codegen` and committed with a drift test, and the verifier (plan Tasks 1, 2) **Landed (driftsys/ridl#669).**                                                                                     | a catalog round-trips through the builder and the reader, and a buffer with a wrong identifier or version is rejected as a whole                                                                                                                                                                                                                   | L    |
+| E16.2 | The interface numbers copied from the IR, and the catalog hash over the reachable closure: SHA-256 over the protobuf binary of the reduced package, with its decision record and a golden-hash test (plan Tasks 3, 4; one identity with driftsys/ridl#275, which closes with it) **Landed (driftsys/ridl#676).** | two packages with the same declarations and the same numbering hash alike, changing one number changes the hash, and the hash is the same whether a build emits proto3, FlatBuffers or both                                                                                                                                                        | M    |
+| E16.3 | The size context, the type leaves and the string byte capacity (plan Task 5) **Landed (driftsys/ridl#681).**                                                                                                                                                                                                     | every type leaf yields a byte bound or is reported as unsizable                                                                                                                                                                                                                                                                                    | M    |
+| E16.4 | The proto3 and FlatBuffers size state per payload: the proto3 bound derived under ADR-0017, the FlatBuffers bound read from `ridl_ir::projection::flatbuffers::max_size` (plan Tasks 6, 7) **Landed (driftsys/ridl#686).**                                                                                       | each payload carries a size state for both encodings: bounded or unbounded for a payload that is one named type the encoding's projection roots (every named type for FlatBuffers; a struct or a union for proto3), absent for a request of zero or several parameters, an inline `T \| E` reply, a stream, and a proto3 payload with no root form | M    |
+| E16.5 | The lowering from the IR and `ridlc build --emit catalog` (plan Tasks 8, 9); the port's catalog check in the Rust face, with what the generated `new` does on a mismatch recorded as an ADR-0023 amendment **Landed (driftsys/ridl#692).**                                                                       | the corpus package writes a descriptor that verifies, and two runs write the same bytes; the generated face checks its port's catalog, the ADR-0023 amendment records the mismatch behaviour, and the runtimes built in tests and in `examples/cabin` take the generated `CATALOG` instead of a zero hash                                          | M    |
+| E16.6 | The JSON view, `ridl describe`, and the records: ADR-0010's exit-code row and the CLI reference entry (plan Tasks 10, 11, 12) **Landed (driftsys/ridl#696).**                                                                                                                                                    | `ridl describe` prints a catalog's contents as JSON, and a rejected buffer exits 2 with its cause named                                                                                                                                                                                                                                            | M    |
 
 **Milestone:** a system is described in rsdl and lowered to the IR. **Value:**
 the IR then carries what a runtime derives its node descriptor from, so a
@@ -378,8 +385,12 @@ registries and are no longer legal identifiers in any profile.
 
 **The catalog hash is received, not computed.** The lowering embeds each
 catalog's hash (rsdl §13); Epic 16 computes it, after Epic 15 has given every
-interface its number. E6.16 lowers every other fact and E6.17 adds the hash once
-both have landed.
+interface its number. E6.16 lowers every other fact, and E6.17 adds the hash.
+
+**E6.17 landed on 2026-10-04** (driftsys/ridl#367). `Region` carries
+`bytes hash = 3`; `ridlc` embeds in each region the hash the catalog descriptor
+writes for that catalog, and the rsdl lowering leaves the field empty
+([ADR-0022](decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 7).
 
 | ID    | Story                                                                                                                                                                                                                                                                                                                      | Done when                                                                                                             | Size |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---- |
@@ -530,8 +541,8 @@ run these same four over `ridl-loopback`, but each runs the backend's own output
 or a checked-in fixture. This one runs what the CLI wrote, linked as a separate
 crate into a separate process. The limit that stood beside the one below closed
 with it: the story resolves a cross-package reference, so no type is withheld a
-codec for that reason any more. Its as-built record is the E11.14 section of
-[`interaction-face.md`](design/interaction-face.md).
+codec for that reason any more. Its as-built record is the section "The face is
+emitted by `ridl build`" of [`interaction-face.md`](design/interaction-face.md).
 
 **One limit on what that emitted codec covers**, not E11.14's to close. An
 interaction whose payload is a named scalar or an enum used to carry no
@@ -1013,7 +1024,7 @@ reopening is an observation rather than an argument.
 | E2   | ridl contract boundary          | landed — v0.x                                                                      |
 | E9   | wire SSOT                       | **step 1** — the hash over the IR and the R5 drift removed; the projections landed |
 | E15  | interface identity and the lock | **step 1** — an interface's number is recorded in its package                      |
-| E16  | the catalog descriptor          | **step 1** — an engine reads a catalog without decoding the IR                     |
+| E16  | the catalog descriptor          | **step 1**, landed — an engine reads a catalog without decoding the IR             |
 | E6   | rsdl, rewritten                 | **step 1** — a system is described and lowered to the IR                           |
 | E11  | the runtime library             | **step 1** — generated code links a library                                        |
 | E14  | typl and ridl finalization      | **step 1** — the references stop being drafts                                      |

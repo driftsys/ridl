@@ -3,7 +3,7 @@
 This package is crafted so its compile emits one instance of every diagnostic
 that a single package's source and manifest can trigger. The `@diag-showcase`
 diagnostics snapshot (`crates/ridlc/tests/snapshots/`) is the de-facto
-diagnostic index until the error-index website (E4.2).
+diagnostic index until the error-index website.
 
 The runner keeps this package's diagnostics snapshot to coded pipeline
 diagnostics only. Code generation over the deliberately broken IR is not
@@ -30,7 +30,7 @@ distinct/broken manifest, or the network. None is a defect in this corpus.
   The lexer emits `Error` tokens for these inputs, but the parser reports them
   as FORM-101/FORM-102 rather than the specific lexical code; an unterminated
   block comment likewise surfaces as FORM-102. The codes exist in
-  `ridl_core::diag::FORM_CATALOG` for the error index (E4.2) but no pass emits
+  `ridl_core::diag::FORM_CATALOG` for the error index but no pass emits
   them in E1. Recorded so the gap is visible.
 
 ### Need more than one package (resolver / cross-package)

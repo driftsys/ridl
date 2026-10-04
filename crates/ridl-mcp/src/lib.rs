@@ -1,4 +1,4 @@
-//! The RIDL MCP server (ADR-0005 Layer B; docs/ROADMAP.md epic E8.6).
+//! The RIDL MCP server (ADR-0005 Layer B).
 //!
 //! Nine read-only workspace tools expose checks, declarations, references,
 //! dependencies and compatibility comparisons over stdio behind `ridl mcp`.
@@ -30,7 +30,7 @@ use types::{OverlayInput, WorkspaceStatus};
 // `.ridl` or `.rsdl` as typl, so a profile name this enum did not reject
 // would be checked as typl rather than refused.
 /// Which language a source text is parsed as. These are the three profiles the
-/// compiler has; the `.rxdl` form does not exist yet (epic E3.5). An rsdl text
+/// compiler has; the `.rxdl` form does not exist yet. An rsdl text
 /// is checked as a workspace of one file, so the rsdl system checks run over
 /// it as `ridl check` runs them over the same text in a file. The checks of
 /// files beside a file on disk (an `interfaces.lock`, a `.ridl/baseline/`

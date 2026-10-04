@@ -1,0 +1,24 @@
+package vehicle.cabin.hvac.station
+
+// Modified VSS-to-RIDL translation; see the workspace PROVENANCE.md and LICENSE.
+// Licence repetition from spec/Cabin/HVAC.vspec for the Station branch translation.
+// Copyright (c) 2016 Contributors to COVESA
+//
+// This program and the accompanying materials are made available under the
+// terms of the Mozilla Public License 2.0 which is available at
+// https://www.mozilla.org/en-US/MPL/2.0/
+//
+// SPDX-License-Identifier: MPL-2.0
+// Source-site repetition: HVAC.vspec lines 13-19, represented here as Station.
+//Station:
+//  type: branch
+//  instances:
+//    - Row[1,4]
+//    - ["Driver","Passenger"]
+//  description: HVAC for single station in the vehicle
+//include SingleHVACStation.vspec Station
+// Instance expansion: Station.Row1.Driver, Station.Row1.Passenger,
+// Station.Row2.Driver, Station.Row2.Passenger, Station.Row3.Driver,
+// Station.Row3.Passenger, Station.Row4.Driver, Station.Row4.Passenger.
+interface Station {
+}

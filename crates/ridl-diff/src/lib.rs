@@ -1,4 +1,4 @@
-//! The `ridl diff` IR-snapshot compare engine (docs/ROADMAP.md epic E2.8a).
+//! The `ridl diff` IR-snapshot compare engine.
 //!
 //! The engine compares two resolved IR v2 snapshots and classifies every
 //! difference as a [`Change`] with a [`Category`] and a [`Verdict`]. It reads
@@ -10,7 +10,7 @@
 //!
 //! The comparison has two halves. The walk ([`walk`]) says *what* structurally
 //! differs, emitting one [`Change`] per difference with a [`Category`]; the
-//! classifier ([`classify`], E2.8b) says which *direction* that difference moved
+//! classifier ([`classify`]) says which *direction* that difference moved
 //! in and settles its [`Verdict`]. Splitting them is what lets a single
 //! structural category — an appended interaction, a changed timing — carry
 //! opposite verdicts depending on the direction, without the walk needing both
@@ -117,7 +117,7 @@ macro_rules! declare_categories {
 
 declare_categories! {
     /// The kind of a single difference. The walk emits the structural categories;
-    /// the E2.8b classifier (task 17) maps them to directional verdicts.
+    /// the classifier maps them to directional verdicts.
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
     pub enum Category {
         /// A package-level declaration, interface, or service present only in the

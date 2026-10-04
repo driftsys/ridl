@@ -108,7 +108,8 @@ jobs:
           # 64 KiB pipe buffer. `grep -vq` also returns the wrong status in
           # BSD grep, so the test reads grep's output instead of its status.
           rust_skip='^(docs/(wip|archive|decisions|design|technotes)/|docs/[^/]+\.md$|[A-Z_-]+\.md$|editors/|\.claude/|\.githooks/|\.git-std\.toml$|\.mcp\.json$)'
-          if [ -n "$(grep -vE "$rust_skip" <<< "$files" || true)" ]; then
+          # Corpus changes must run the guard even if the skip list expands.
+          if [ -n "$(grep -E '^evals/' <<< "$files" || true)" ] || [ -n "$(grep -vE "$rust_skip" <<< "$files" || true)" ]; then
             echo "rust=true" >> "$GITHUB_OUTPUT"
           else
             echo "rust=false" >> "$GITHUB_OUTPUT"
@@ -179,6 +180,7 @@ jobs:
       - run: just book-check
       - run: just link-check
       - run: just doc-path-check
+      - run: just story-id-check
 
   rust:
     name: rust

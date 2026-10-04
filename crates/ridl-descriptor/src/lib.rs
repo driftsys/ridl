@@ -1,5 +1,5 @@
 //! The catalog descriptor: the FlatBuffers file per package that an engine
-//! reads without decoding (`docs/wip/2026-09-13-runtime-descriptors-design.md`).
+//! reads without decoding (`docs/design/catalog-descriptor.md`).
 //!
 //! `schema/catalog.fbs` is the schema; `generated.rs` holds the accessors
 //! planus generates from it (`cargo xtask descriptor-codegen`). [`finish`]
@@ -8,6 +8,7 @@
 //! writes the bytes [`finish`] returns and passes the bytes it read to
 //! [`verify`].
 
+pub mod describe;
 pub mod generated;
 pub mod hash;
 pub mod lower;

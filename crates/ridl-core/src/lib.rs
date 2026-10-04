@@ -1,8 +1,8 @@
 //! The RIDL family compiler core: the salsa incremental database, the queries
-//! built on the syntax layer (docs/ROADMAP.md epic E0, ADR-0004 §3), the
-//! coded [`Diagnostic`] model every pass emits (E1.10,
-//! ADR-0004 §5), and the ns core — manifest, package model, and filesystem
-//! discovery (E1.3, E1.5, ADR-0002). The resolver and checker moved to
+//! built on the syntax layer (ADR-0004 §3), the
+//! coded [`Diagnostic`] model every pass emits
+//! (ADR-0004 §5), and the ns core — manifest, package model, and filesystem
+//! discovery (ADR-0002). The resolver and checker moved to
 //! `ridl-sem` (ADR-0007 decision 4).
 //!
 //! Filesystem discovery ([`workspace`]) and the lockfile ([`lock`]) sit behind

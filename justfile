@@ -1340,6 +1340,156 @@ doc-path-check root="":
     fi
     run_gate "$root"
 
+# Check that no story id (a dotted id such as `E16.5`) is named in shipped text.
+#
+# Shipped text describes the system as built. A story id such as `E16.5` in a
+# rustdoc comment, a book chapter or a design record is a reference to status,
+# and status lives in docs/ROADMAP.md and the issue tracker. The reference goes
+# stale when the story lands, and nothing else reads it. State the fact, or
+# link the tracking issue (`driftsys/ridl#N`) when a gap is real.
+#
+# The pattern is an `E`, one or more digits, a dot, one or more digits and an
+# optional lowercase letter (`E2.8b`), with no letter, digit or underscore
+# directly before or after it, so a number such as `1E5.0` and a name such as
+# `TYPE1.2` do not match. Stage and epic names (`epic E11`, `stage K3`) are not
+# matched; review reads those. The check is a plain
+# text match: it does not read the context, so a match that is not a story id
+# is reworded rather than exempted.
+#
+# Scanned, as tracked files: crates/, xtask/, examples/, editors/vscode/src/,
+# and the docs/book/, docs/design/ and docs/technotes/ trees. Not scanned,
+# because an id there is the record's own subject: docs/ROADMAP.md,
+# docs/BACKLOG.md, docs/decisions/ (a decision traces to the story it serves),
+# docs/specification/, docs/archive/, docs/wip/, CHANGELOG.md and AGENTS.md.
+# Files at the repository root, such as Cargo.toml, are outside the scanned
+# trees on purpose. The book includes some of docs/specification/, so an id
+# there can still render in the book.
+#
+# Given no argument, the gate runs over the repository this justfile is in, and
+# runs its own fixtures first, because a gate that cannot be shown to fail is
+# not a gate. Given a directory, it runs over the repository there and runs no
+# fixture: that is the form the fixtures invoke as a child process, and it is
+# what stops the recursion.
+story-id-check root="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export LC_ALL=C
+    # The scanned trees. Each must match a tracked file, so a renamed tree
+    # fails the gate instead of leaving it scanning nothing.
+    scanned=(crates xtask examples editors/vscode/src docs/book docs/design docs/technotes)
+    id_re='(^|[^A-Za-z0-9_])E[0-9]+\.[0-9]+[a-z]?([^A-Za-z0-9_]|$)'
+    # A git call that ignores an inherited git environment. A hook exports
+    # GIT_DIR, which `git -C` does not override; see doc-path-check.
+    git_at() {
+        env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE -u GIT_OBJECT_DIRECTORY \
+            -u GIT_COMMON_DIR -u GIT_NAMESPACE -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+            git -C "$@"
+    }
+    run_gate() (
+        root="$1"
+        cd "$root"
+        for tree in "${scanned[@]}"; do
+            if [ -z "$(git_at . -c core.quotePath=off ls-files -- "$tree")" ]; then
+                echo "story-id-check: the scanned tree '$tree' matches no tracked file; correct the list, or drop the tree if it is gone." >&2
+                exit 1
+            fi
+        done
+        found="$(git_at . -c core.quotePath=off ls-files -z -- "${scanned[@]}" \
+            | xargs -0 grep -HInE -- "$id_re" || true)"
+        if [ -n "$found" ]; then
+            printf '%s\n' "$found" | sed 's/^\([^:]*:[0-9]*\):/story-id-check: \1: /' >&2
+            count="$(printf '%s\n' "$found" | grep -c . || true)"
+            echo "story-id-check: $count line(s) above name a story id. Delete the id, or link the tracking issue as driftsys/ridl#N." >&2
+            exit 1
+        fi
+        echo "story-id-check: no story id in the scanned trees."
+    )
+    fixtures() (
+        work="$(mktemp -d)"
+        trap 'rm -rf "$work"' EXIT
+        # Ids are assembled with printf so the fixture text does not depend on
+        # a literal one.
+        # The scanned list is stated again here, so removing a tree from it
+        # fails this recipe: the cases below build their trees from the list.
+        if [ "${scanned[*]}" != "crates xtask examples editors/vscode/src docs/book docs/design docs/technotes" ]; then
+            echo "story-id-check: the scanned trees changed; update the expectation in the fixtures with the list." >&2
+            exit 1
+        fi
+        id="$(printf 'E%s.%s' 16 5)"
+        lettered="$(printf 'E%s.%sb' 2 8)"
+        # Built from $d: this file is itself scanned by doc-path-check, and a
+        # literal docs/… path that resolves nowhere would be reported here.
+        d=docs
+        root="$work/fixture"
+        report="$work/report"
+        clean_tree() {
+            for tree in "${scanned[@]}"; do
+                mkdir -p "$root/$tree"
+                printf '%s\n' "// driftsys/ridl#12, 1E5.0, TYPE1.2, $(printf 'E%s.%s' 2 8)bc, $(printf 'E%s.%s' 2 8)B, $(printf 'E%s.%s' 2 8)_1 and _$(printf 'E%s.%s' 1 2) are not story ids" > "$root/$tree/clean.txt"
+            done
+            git_at "$root" -c core.excludesFile=/dev/null add -A
+        }
+        mkdir -p "$root"
+        git_at "$root" -c init.defaultBranch=main -c init.templateDir= init -q
+        clean_tree
+        # An id in a tree that is allowed to hold one.
+        mkdir -p "$root/$d/decisions"
+        printf '%s\n' "traces to $id" > "$root/$d/decisions/adr.md"
+        git_at "$root" -c core.excludesFile=/dev/null add -A
+        if ! "{{just_executable()}}" story-id-check "$root" >"$report" 2>&1; then
+            echo "story-id-check: the gate did not pass over a fixture with no id in a scanned tree:" >&2
+            cat "$report" >&2
+            exit 1
+        fi
+        # One id in every scanned tree, each reported with its own file and line.
+        for tree in "${scanned[@]}"; do
+            printf '%s\n' "ok" "// lands with $id, until $lettered" > "$root/$tree/clean.txt"
+        done
+        git_at "$root" -c core.excludesFile=/dev/null add -A
+        if "{{just_executable()}}" story-id-check "$root" >"$report" 2>&1; then
+            echo "story-id-check: the gate returned 0 over a fixture naming story ids:" >&2
+            cat "$report" >&2
+            exit 1
+        fi
+        for tree in "${scanned[@]}"; do
+            if ! grep -q -- "^story-id-check: $tree/clean.txt:2: .*$lettered" "$report"; then
+                echo "story-id-check: the gate no longer names file:line, with a lettered id, for $tree:" >&2
+                cat "$report" >&2
+                exit 1
+            fi
+        done
+        if ! grep -q -- "^story-id-check: ${#scanned[@]} line(s) above" "$report"; then
+            echo "story-id-check: the gate no longer counts one line per scanned tree:" >&2
+            cat "$report" >&2
+            exit 1
+        fi
+        # A lettered id alone is enough to fail the gate.
+        clean_tree
+        printf '%s\n' "// see $lettered" > "$root/crates/clean.txt"
+        git_at "$root" -c core.excludesFile=/dev/null add -A
+        if "{{just_executable()}}" story-id-check "$root" >"$report" 2>&1; then
+            echo "story-id-check: the gate returned 0 over a fixture naming only a lettered id:" >&2
+            cat "$report" >&2
+            exit 1
+        fi
+        # A scanned tree that has no tracked file fails the gate, with the ids
+        # gone so that the status can only come from the missing tree.
+        clean_tree
+        git_at "$root" rm -q -r -f --cached "$d/technotes"
+        if "{{just_executable()}}" story-id-check "$root" >"$report" 2>&1 \
+            || ! grep -q -- "the scanned tree '$d/technotes' matches no tracked file" "$report"; then
+            echo "story-id-check: the gate no longer fails when a scanned tree has no tracked file:" >&2
+            cat "$report" >&2
+            exit 1
+        fi
+    )
+    if [ -n "{{root}}" ]; then
+        run_gate "{{root}}"
+    else
+        fixtures
+        run_gate .
+    fi
+
 # Check that CI still invokes every recipe the local gate is made of.
 #
 # The other half of gate parity. CI runs these recipes rather than its own copy
@@ -1642,7 +1792,7 @@ install-check:
 # The four members that need no compilation run first, so a wrong toolchain, an
 # unwired CI job, a formatting regression, or an unparseable SUMMARY.md all
 # report before a compile starts rather than after a full compile and test run.
-build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check compile test lint wasm-check compat-check demo check
+build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check compile test lint wasm-check compat-check demo check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:
@@ -1695,7 +1845,7 @@ lint-commits base="main":
 # `cargo clippy`. Wired as the pre-push hook (.githooks/pre-push.hooks). CI
 # (ci.yml) still runs the full `just build` gate on the PR; `just verify` runs
 # that same gate locally before opening one.
-pre-push: lint-commits toolchain-check gate-parity fmt-check check doc-path-check link-check book-check compile lint
+pre-push: lint-commits toolchain-check gate-parity fmt-check check doc-path-check story-id-check link-check book-check compile lint
 
 # Commit-message lint over commits not yet on origin/main, then build.
 # Run before opening a PR.

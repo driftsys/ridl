@@ -1839,8 +1839,8 @@ impl LiteralExpr {
         support::token(&self.syntax, SyntaxKind::Duration)
     }
 }
-/// An error-recovery node wrapping the tokens the parser skipped
-/// (task E1.2c). The one node kind with no rule in `family.ungram`.
+/// An error-recovery node wrapping the tokens the parser skipped.
+/// The one node kind with no rule in `family.ungram`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ErrorNode {
     syntax: SyntaxNode,

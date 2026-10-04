@@ -1,0 +1,9 @@
+id = "evolve-0001"
+kind = "evolve"
+corpus = "ros2"
+title = "Document geometric semantic distinctions compatibly"
+
+[expect]
+compiles = true
+lints = []
+diff = "compatible"

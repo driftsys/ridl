@@ -8,7 +8,7 @@
 //! lane's proof mechanism, because a generated `Payload<E>` implementation
 //! names items a cargo feature gates and every proof links `ridl-rt`'s source
 //! rather than a release. All three encoding features are enabled so that
-//! E11.8 and E11.12 inherit a working proof without editing a helper again.
+//! the other encodings inherit a working proof without editing a helper again.
 //!
 //! One `rustc` call over `lib.rs` is the whole build: `ridl-rt` is `no_std`
 //! with the encoding features and has no dependency in any feature combination
@@ -94,7 +94,7 @@ fn ridl_rt_rlib_with(dir: &Path, std: bool) -> PathBuf {
 /// exits zero.
 ///
 /// A compile proof shows that generated code type-checks. Only a run shows
-/// that the bytes it writes are the bytes it reads back, which is E11.7's own
+/// that the bytes it writes are the bytes it reads back, which is the codec's own
 /// `Done when`.
 pub fn run_program(name: &str, source: &str) {
     run_program_with_pattern(name, source, false);

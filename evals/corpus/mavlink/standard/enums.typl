@@ -1,0 +1,12 @@
+package standard
+
+// XML enum: name="MAV_BOOL"
+/// Enum used to indicate true or false (also: success or failure, enabled or disabled, active or inactive).
+enum MavBool {
+  // XML entry: value="0" name="MAV_BOOL_FALSE"
+  /// False.
+  MAV_BOOL_FALSE = 0
+  // XML entry: value="1" name="MAV_BOOL_TRUE"
+  /// True.
+  MAV_BOOL_TRUE = 1
+}

@@ -1,4 +1,4 @@
-//! The typed AST over the rowan tree (docs/ROADMAP.md epic E1.2a, ADR-0007
+//! The typed AST over the rowan tree (ADR-0007
 //! decision 1).
 //!
 //! The node structs and their mechanical accessors live in the `generated`
@@ -218,7 +218,7 @@ impl AstNode for FieldType {
 }
 
 /// One member of an `interface` body — the `InterfaceMember` alternation
-/// (ridl reference §14.0–§14.1, epic E2.1a).
+/// (ridl reference §14.0–§14.1).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InterfaceMember {
     Signal(SignalDef),
@@ -280,7 +280,7 @@ impl AstNode for ParamType {
 }
 
 /// One expression of the guaranteed subset — the `Expr` alternation
-/// (expr-core specification §3.1, ridl reference §13, epic E2.4).
+/// (expr-core specification §3.1, ridl reference §13).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Expr {
     Binary(BinaryExpr),
@@ -798,8 +798,7 @@ mod tests {
     }
 
     /// `/// Calibrated top speed.` + `internal type Speed: km/h [0.0..250.0
-    /// step 0.5] = 0.0`, built by hand — the full parser lands in task
-    /// E1.2b.
+    /// step 0.5] = 0.0`, built by hand — the full parser is a separate step.
     fn speed_source_file() -> SyntaxNode {
         let mut b = GreenNodeBuilder::new();
         b.start_node(SyntaxKind::SourceFile.into());
@@ -1186,7 +1185,7 @@ mod tests {
         );
     }
 
-    /// The attribute and expression accessors (E2.4) over a parsed tree:
+    /// The attribute and expression accessors over a parsed tree:
     /// the surface tasks 5, 11, 12, and 21 consume.
     #[test]
     fn attribute_and_expr_accessors_read_a_parsed_contract() {

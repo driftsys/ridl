@@ -1,6 +1,5 @@
 //! The canonical encoding round trip, and the nesting bound the IR stability
-//! specification states (`docs/specification/ir-specification.md`, roadmap
-//! story E4.5a, ADR-0014 decision 9 as amended 2026-09-22).
+//! specification states (`docs/specification/ir-specification.md`, ADR-0014 decision 9 as amended 2026-09-22).
 //!
 //! Two claims are pinned here. The first is the policy's central one: every IR
 //! the front end admits round-trips through canonical protobuf JSON, and the

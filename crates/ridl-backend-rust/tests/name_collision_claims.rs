@@ -195,7 +195,7 @@ interface Cabin {
 }
 
 /// X-8b: the same two members beside a call the face cannot carry. The
-/// pipeline skips the interface's face and descriptors (E11.14 decision 2),
+/// pipeline skips the interface's face and descriptors (interaction-face decision 2),
 /// so the members claim nothing and the package builds (decision 13).
 #[test]
 fn a_skipped_face_claims_nothing() {

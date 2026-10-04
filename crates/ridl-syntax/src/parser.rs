@@ -1,5 +1,5 @@
 //! The hand-written recursive-descent parser for the typl grammar
-//! (docs/ROADMAP.md epic E1.2b, ADR-0004 §2, typl reference Appendix E).
+//! (ADR-0004 §2, typl reference Appendix E).
 //!
 //! The parser consumes the flat token stream from [`crate::lex`] and builds a
 //! lossless rowan tree whose nodes match `family.ungram` exactly: every token —
@@ -68,8 +68,7 @@
 //! additionally emits **TYPL-301** (`stream type in typl context`) and
 //! parsing continues. Leading
 //! zeros in an integer literal emit **FORM-005**. Every [`SyntaxError`]
-//! carries its diagnostic code; the coded `Diagnostic` model consumes it in
-//! task E1.10.
+//! carries its diagnostic code; the coded `Diagnostic` model consumes it.
 //!
 //! # Error recovery
 //!
@@ -124,7 +123,7 @@ pub struct SyntaxError {
 /// The result of [`parse`]: the lossless green tree plus any diagnostics.
 ///
 /// [`Parse`] compares by the identity of its green tree, which is what the
-/// salsa query graph (epic E0.4) needs to decide whether a reparse changed
+/// salsa query graph needs to decide whether a reparse changed
 /// anything downstream.
 #[derive(Debug, Clone)]
 pub struct Parse {
@@ -191,7 +190,7 @@ fn ungrammatical_reserved_noun(kind: SyntaxKind) -> &'static str {
 /// Whether `kind` starts a top-level construct. These are the
 /// resynchronization points recovery falls back to, both at the file level
 /// and when a block body runs past an unclosed `}` into the next declaration.
-/// `interface` joins the set with E2.1a; under [`Profile::Typl`] it never
+/// `interface` joins the set under the ridl profile; under [`Profile::Typl`] it never
 /// occurs (the word lexes to `ReservedWord` there). The four top-level rsdl
 /// declaration keywords join it with the rsdl grammar; they occur only under
 /// [`Profile::Rsdl`]. `machine` is not among them: a machine is declared only
@@ -274,7 +273,7 @@ fn rsdl_foreign_declaration_message(word: &str) -> String {
 }
 
 /// Whether `kind` starts an interaction inside an interface body — the five
-/// interaction keywords (E2.1a). They join the recovery sync set inside
+/// interaction keywords. They join the recovery sync set inside
 /// interface bodies, so garbage resynchronizes at the next interaction.
 fn is_interaction_start(kind: SyntaxKind) -> bool {
     matches!(
@@ -1074,7 +1073,7 @@ impl<'a> Parser<'a> {
         self.builder.finish_node();
     }
 
-    // --- ridl interaction productions (E2.1a, ridl reference Appendix C) --
+    // --- ridl interaction productions (ridl reference Appendix C) --
 
     /// `InterfaceDef = 'internal'? 'error'? 'interface' Name '{' (members
     /// ','?)* '}'` — an interface body holds interactions and `reserved`
@@ -1098,7 +1097,7 @@ impl<'a> Parser<'a> {
     }
 
     /// The interaction-body loop shared by an `interface` body and a
-    /// `service` inline body (E2.13): the opening `{` has already been
+    /// `service` inline body: the opening `{` has already been
     /// consumed. Members are announced by the five interaction keywords, and
     /// those keywords plus the top-level starters are the recovery sync
     /// points, so garbage inside a body resynchronizes at the next
@@ -1735,7 +1734,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // --- the guaranteed-subset expression grammar (E2.4) ------------------
+    // --- the guaranteed-subset expression grammar ------------------
     //
     // The expr-core specification §3.1 productions, one function per
     // precedence level, loosest to tightest: `||` — `&&` — comparison —

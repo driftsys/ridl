@@ -225,7 +225,10 @@ For the closure:
   `SeatHeating` requires nothing, so its grant is empty.
 - **The region map** — one region per catalog the closure reaches, here
   `veh.climate`, holding `Climate`, `Seats` and `veh.climate.diag` with the
-  number each takes from its package's `interfaces.lock`.
+  number each takes from its package's `interfaces.lock`. Each region also
+  carries the catalog hash, computed by ridl over the catalog's interfaces,
+  their numbers and every type they reach: the same hash `--emit catalog` writes
+  in the catalog's descriptor.
 - **The distributions**, with the derived dependency.
 
 Per deployment:

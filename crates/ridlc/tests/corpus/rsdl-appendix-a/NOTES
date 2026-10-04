@@ -15,4 +15,6 @@ ir-json` writes it to `veh.topology.Vehicle.system.json`: the facts the
 reference lists after the example — the closure and its instances, the links of
 `Bench` and `Production` with their crossing kinds, the three `Backend` links in
 each surface set, the grants, and the installation of `Adas` and `Hmi` — are
-all in it. The deployments are in file order, so `Bench` comes first.
+all in it. The deployments are in file order, so `Bench` comes first. Each of
+the two regions, `veh.adas` and `veh.diag`, carries its catalog hash, the hash
+`ridlc build --emit catalog` writes in that catalog's descriptor.

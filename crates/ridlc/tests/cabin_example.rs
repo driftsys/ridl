@@ -1,4 +1,4 @@
-//! The end-to-end proof of story E11.14 (driftsys/ridl#444): what
+//! The end-to-end proof of driftsys/ridl#444: what
 //! `ridl build --emit rust` writes is a crate an application outside this
 //! workspace can link against and **run**.
 //!
@@ -50,7 +50,7 @@
 //! outside this proof, and inside `just demo`'s, which builds the generated
 //! crate with its default features through cargo. `std` is on because the
 //! consumer's command and query round trips go through the generated
-//! `blocking` client, which that feature gates (story E11.21, second half).
+//! `blocking` client, which that feature gates.
 //! The `ridl-rt` this links is built with the three encoding features and
 //! with `std`, because the `blocking` client is `ridl_rt::task::block_on` over
 //! the async one, and the consumer polls the async client's futures by hand

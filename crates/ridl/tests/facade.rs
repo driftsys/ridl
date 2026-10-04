@@ -1,5 +1,4 @@
-//! Integration tests for the `ridl` porcelain facade (docs/ROADMAP.md epic
-//! E1.13, E1.14): `check` / `build` delegating to the compiler, humane default
+//! Integration tests for the `ridl` porcelain facade: `check` / `build` delegating to the compiler, humane default
 //! paths, and `ridl fmt` (rewrite in place, `--check`, refuse a broken file).
 
 use std::path::{Path, PathBuf};

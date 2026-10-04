@@ -1,0 +1,353 @@
+// Modified ROS 2-to-RIDL translation. Inputs and pinned revisions: PROVENANCE.md.
+package stdmsgs
+import builtininterfaces.Time
+type RosBoolean : boolean
+type RosByte : integer [0..255]
+type RosChar : integer [0..255]
+type RosFloat32 : float
+type RosFloat64 : float
+type RosInt16 : integer [-32768..32767]
+type RosInt32 : integer [-2147483648..2147483647]
+type RosInt64 : integer [-9223372036854775808..9223372036854775807]
+type RosInt8 : integer [-128..127]
+type RosString : string [0..18446744073709551615]
+type RosUInt16 : integer [0..65535]
+type RosUInt32 : integer [0..4294967295]
+type RosUInt64 : bytes [8]
+type RosUInt8 : integer [0..255]
+// Upstream: std_msgs/msg/Bool.msg
+struct Bool {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+  data : RosBoolean
+}
+// Upstream: std_msgs/msg/Byte.msg
+struct Byte {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+  data : RosByte
+}
+// Upstream: std_msgs/msg/ByteMultiArray.msg
+struct ByteMultiArray {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+// Please look at the MultiArrayLayout message definition for
+// documentation on all multiarrays.
+
+  layout : MultiArrayLayout // specification of data layout
+  data : [RosByte; 0..18446744073709551615] // array of data
+}
+// Upstream: std_msgs/msg/Char.msg
+struct Char {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+  data : RosChar
+}
+// Upstream: std_msgs/msg/ColorRGBA.msg
+struct ColorRGBA {
+  r : RosFloat32
+  g : RosFloat32
+  b : RosFloat32
+  a : RosFloat32
+}
+// Upstream: std_msgs/msg/Empty.msg
+struct Empty {
+}
+// Upstream: std_msgs/msg/Float32.msg
+struct Float32 {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+  data : RosFloat32
+}
+// Upstream: std_msgs/msg/Float32MultiArray.msg
+struct Float32MultiArray {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+// Please look at the MultiArrayLayout message definition for
+// documentation on all multiarrays.
+
+  layout : MultiArrayLayout // specification of data layout
+  data : [RosFloat32; 0..18446744073709551615] // array of data
+}
+// Upstream: std_msgs/msg/Float64.msg
+struct Float64 {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+  data : RosFloat64
+}
+// Upstream: std_msgs/msg/Float64MultiArray.msg
+struct Float64MultiArray {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+// Please look at the MultiArrayLayout message definition for
+// documentation on all multiarrays.
+
+  layout : MultiArrayLayout // specification of data layout
+  data : [RosFloat64; 0..18446744073709551615] // array of data
+}
+// Upstream: std_msgs/msg/Header.msg
+struct Header {
+// Standard metadata for higher-level stamped data types.
+// This is generally used to communicate timestamped data
+// in a particular coordinate frame.
+
+// Two-integer timestamp that is expressed as seconds and nanoseconds.
+  stamp : Time
+
+// Transform frame with which this data is associated.
+  frameId : RosString
+}
+// Upstream: std_msgs/msg/Int16.msg
+struct Int16 {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+  data : RosInt16
+}
+// Upstream: std_msgs/msg/Int16MultiArray.msg
+struct Int16MultiArray {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+// Please look at the MultiArrayLayout message definition for
+// documentation on all multiarrays.
+
+  layout : MultiArrayLayout // specification of data layout
+  data : [RosInt16; 0..18446744073709551615] // array of data
+}
+// Upstream: std_msgs/msg/Int32.msg
+struct Int32 {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+  data : RosInt32
+}
+// Upstream: std_msgs/msg/Int32MultiArray.msg
+struct Int32MultiArray {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+// Please look at the MultiArrayLayout message definition for
+// documentation on all multiarrays.
+
+  layout : MultiArrayLayout // specification of data layout
+  data : [RosInt32; 0..18446744073709551615] // array of data
+}
+// Upstream: std_msgs/msg/Int64.msg
+struct Int64 {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+  data : RosInt64
+}
+// Upstream: std_msgs/msg/Int64MultiArray.msg
+struct Int64MultiArray {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+// Please look at the MultiArrayLayout message definition for
+// documentation on all multiarrays.
+
+  layout : MultiArrayLayout // specification of data layout
+  data : [RosInt64; 0..18446744073709551615] // array of data
+}
+// Upstream: std_msgs/msg/Int8.msg
+struct Int8 {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+  data : RosInt8
+}
+// Upstream: std_msgs/msg/Int8MultiArray.msg
+struct Int8MultiArray {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+// Please look at the MultiArrayLayout message definition for
+// documentation on all multiarrays.
+
+  layout : MultiArrayLayout // specification of data layout
+  data : [RosInt8; 0..18446744073709551615] // array of data
+}
+// Upstream: std_msgs/msg/MultiArrayDimension.msg
+struct MultiArrayDimension {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+  label : RosString // label of given dimension
+  size : RosUInt32 // size of given dimension (in type units)
+  stride : RosUInt32 // stride of given dimension
+}
+// Upstream: std_msgs/msg/MultiArrayLayout.msg
+struct MultiArrayLayout {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+// The multiarray declares a generic multi-dimensional array of a
+// particular data type.  Dimensions are ordered from outer most
+// to inner most.
+//
+// Accessors should ALWAYS be written in terms of dimension stride
+// and specified outer-most dimension first.
+//
+// multiarray(i,j,k) = data[data_offset + dim_stride[1]*i + dim_stride[2]*j + k]
+//
+// A standard, 3-channel 640x480 image with interleaved color channels
+// would be specified as:
+//
+// dim[0].label  = "height"
+// dim[0].size   = 480
+// dim[0].stride = 3*640*480 = 921600  (note dim[0] stride is just size of image)
+// dim[1].label  = "width"
+// dim[1].size   = 640
+// dim[1].stride = 3*640 = 1920
+// dim[2].label  = "channel"
+// dim[2].size   = 3
+// dim[2].stride = 3
+//
+// multiarray(i,j,k) refers to the ith row, jth column, and kth channel.
+
+  dim : [MultiArrayDimension; 0..18446744073709551615] // Array of dimension properties
+  dataOffset : RosUInt32 // padding bytes at front of data
+}
+// Upstream: std_msgs/msg/String.msg
+struct String {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+  data : RosString
+}
+// Upstream: std_msgs/msg/UInt16.msg
+struct UInt16 {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+  data : RosUInt16
+}
+// Upstream: std_msgs/msg/UInt16MultiArray.msg
+struct UInt16MultiArray {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+// Please look at the MultiArrayLayout message definition for
+// documentation on all multiarrays.
+
+  layout : MultiArrayLayout // specification of data layout
+  data : [RosUInt16; 0..18446744073709551615] // array of data
+}
+// Upstream: std_msgs/msg/UInt32.msg
+struct UInt32 {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+  data : RosUInt32
+}
+// Upstream: std_msgs/msg/UInt32MultiArray.msg
+struct UInt32MultiArray {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+// Please look at the MultiArrayLayout message definition for
+// documentation on all multiarrays.
+
+  layout : MultiArrayLayout // specification of data layout
+  data : [RosUInt32; 0..18446744073709551615] // array of data
+}
+// Upstream: std_msgs/msg/UInt64.msg
+struct UInt64 {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+  data : RosUInt64
+}
+// Upstream: std_msgs/msg/UInt64MultiArray.msg
+struct UInt64MultiArray {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+// Please look at the MultiArrayLayout message definition for
+// documentation on all multiarrays.
+
+  layout : MultiArrayLayout // specification of data layout
+  data : [RosUInt64; 0..18446744073709551615] // array of data
+}
+// Upstream: std_msgs/msg/UInt8.msg
+struct UInt8 {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+  data : RosUInt8
+}
+// Upstream: std_msgs/msg/UInt8MultiArray.msg
+struct UInt8MultiArray {
+// This was originally provided as an example message.
+// It is deprecated as of Foxy
+// It is recommended to create your own semantically meaningful message.
+// However if you would like to continue using this please use the equivalent in example_msgs.
+
+// Please look at the MultiArrayLayout message definition for
+// documentation on all multiarrays.
+
+  layout : MultiArrayLayout // specification of data layout
+  data : [RosUInt8; 0..18446744073709551615] // array of data
+}

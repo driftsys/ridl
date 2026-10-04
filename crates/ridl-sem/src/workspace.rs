@@ -27,7 +27,7 @@ pub struct CheckedWorkspace {
     pub system: CheckedSystem,
 }
 
-/// Runs the workspace-wide passes over `ws`: the service catalog (E2.13),
+/// Runs the workspace-wide passes over `ws`: the service catalog,
 /// whose RIDL-140 duplicate-name diagnostics span the whole workspace, and the
 /// rsdl system query (rsdl reference v0.2), which checks every `.rsdl` file at
 /// once because the closure is workspace-wide.

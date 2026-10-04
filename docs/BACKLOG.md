@@ -1,10 +1,14 @@
 # RIDL issue backlog
 
-This document captures the priority review of all 78 open issues in
+This document captures the priority review of all 77 open issues in
 [driftsys/ridl](https://github.com/driftsys/ridl/issues) on **3 October 2026**.
 It helps contributors select work and understand the remaining bugs and
 technical debt. Begin with the catalog descriptor, then complete the remaining
 Rust release dependencies in the order below.
+
+Since the review, #275, #367 and #377 to #382 have closed: lane E16 and E6.17
+landed on 2026-10-04, and #275 closed with E16.2. The counts below are those of
+the review date.
 
 [ROADMAP.md](ROADMAP.md) defines release scope, story acceptance criteria and
 dependencies. This backlog records issue priorities at the review date; GitHub
@@ -16,7 +20,7 @@ assessments based on the issue records and merged work.
 | Priority | Meaning                                     | Open issues |
 | -------- | ------------------------------------------- | ----------- |
 | P0       | Blocker requiring immediate work            | 0           |
-| P1       | Critical-path work                          | 14          |
+| P1       | Critical-path work                          | 13          |
 | P2       | Important work without an immediate blocker | 33          |
 | P3       | Later or lower-priority work                | 31          |
 
@@ -27,13 +31,14 @@ These estimates help planning and do not set delivery dates.
 
 ## Next delivery sequence
 
-1. **Catalog foundation:** #377 defines the descriptor, accessors and verifier.
-   Then #378 supplies numbering and the catalog hash, while #379 supplies the
-   size context and string byte bounds.
-2. **Catalog delivery:** #380 computes payload bounds; #381 lowers and emits the
-   catalog; #382 adds JSON inspection, `ridl describe` and the CLI records.
-   Coordinate schema identity #275 with #378. System integration #367 embeds the
-   delivered catalog hash in each rsdl region.
+1. **Catalog foundation (landed 2026-10-03 and 2026-10-04):** #377 defined the
+   descriptor, accessors and verifier. Then #378 supplied numbering and the
+   catalog hash, while #379 supplied the size context and string byte bounds.
+2. **Catalog delivery (landed 2026-10-04):** #380 computed payload bounds; #381
+   lowered and emitted the catalog; #382 added JSON inspection, `ridl describe`
+   and the CLI records. Schema identity #275 closed with #378 (PR #676). System
+   integration #367, which embeds the delivered catalog hash in each rsdl
+   region, landed on 2026-10-04.
 3. **Language finalization alongside the catalog:** finish constraint-change
    records and diff classification #255, and grammar/attribute work #276.
    Finalize reference status #320 after its prerequisites and remaining
@@ -74,14 +79,13 @@ does not override roadmap dependencies or maintainer decisions.
 
 | Issue                                                                                                                                                                                                                                            | Type labels                    | Size | Triage reason                                                                                                                                                                                                                                       |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [#377](https://github.com/driftsys/ridl/issues/377) E16.1 — The ridl-descriptor crate: catalog.fbs, the generated accessors and the verifier                                                                                                     | `enhancement`                  | L    | Start the remaining catalog descriptor chain: schema, accessors and whole-buffer verification.                                                                                                                                                      |
-| [#378](https://github.com/driftsys/ridl/issues/378) E16.2 — Interface numbering in the descriptor and the catalog hash over the reachable closure                                                                                                | `enhancement`                  | M    | Stable numbering and reachable-closure hashing unlock #367 and protect contract identity; use the already delivered lock numbering.                                                                                                                 |
-| [#379](https://github.com/driftsys/ridl/issues/379) E16.3 — The size context, the type leaves and the string byte capacity                                                                                                                       | `enhancement`                  | M    | Size context and Unicode byte bounds feed safe payload size calculations (#380).                                                                                                                                                                    |
-| [#380](https://github.com/driftsys/ridl/issues/380) E16.4 — The proto3 and FlatBuffers upper bound per payload                                                                                                                                   | `enhancement`                  | M    | Sound proto3/FlatBuffers payload upper bounds are required by descriptors and transport reservation.                                                                                                                                                |
-| [#381](https://github.com/driftsys/ridl/issues/381) E16.5 — The lowering from the IR and ridlc build --emit catalog                                                                                                                              | `enhancement`                  | M    | Catalog lowering/emission connects descriptor calculations to the compiler and system artifacts; follows #377-#380.                                                                                                                                 |
-| [#367](https://github.com/driftsys/ridl/issues/367) E6.17 — The catalog hash in each region of the lowered system                                                                                                                                | `enhancement`                  | S    | Last RSDL system-artifact contract piece depends on catalog hash (#378/#381).                                                                                                                                                                       |
-| [#382](https://github.com/driftsys/ridl/issues/382) E16.6 — The JSON view, ridl describe, and the records                                                                                                                                        | `documentation`, `enhancement` | M    | Complete the catalog delivery with strict JSON/describe and accurate CLI records; follows #381, coordinating #326.                                                                                                                                  |
-| [#275](https://github.com/driftsys/ridl/issues/275) E9.10 — The schema hash over the IR, not over the emitted schema                                                                                                                             | `enhancement`                  | M    | Cross-target schema identity is a remaining Step 1 deliverable; coordinate the hash definition with #378 to avoid competing identities.                                                                                                             |
+| [#377](https://github.com/driftsys/ridl/issues/377) E16.1 — The ridl-descriptor crate: catalog.fbs, the generated accessors and the verifier                                                                                                     | `enhancement`                  | L    | Landed 2026-10-03 (PR #669). Reason at review: Start the remaining catalog descriptor chain: schema, accessors and whole-buffer verification.                                                                                                       |
+| [#378](https://github.com/driftsys/ridl/issues/378) E16.2 — Interface numbering in the descriptor and the catalog hash over the reachable closure                                                                                                | `enhancement`                  | M    | Landed 2026-10-04 (PR #676). Reason at review: Stable numbering and reachable-closure hashing unlock #367 and protect contract identity; use the already delivered lock numbering.                                                                  |
+| [#379](https://github.com/driftsys/ridl/issues/379) E16.3 — The size context, the type leaves and the string byte capacity                                                                                                                       | `enhancement`                  | M    | Landed 2026-10-04 (PR #681). Reason at review: Size context and Unicode byte bounds feed safe payload size calculations (#380).                                                                                                                     |
+| [#380](https://github.com/driftsys/ridl/issues/380) E16.4 — The proto3 and FlatBuffers upper bound per payload                                                                                                                                   | `enhancement`                  | M    | Landed 2026-10-04 (PR #686). Reason at review: Sound proto3/FlatBuffers payload upper bounds are required by descriptors and transport reservation.                                                                                                 |
+| [#381](https://github.com/driftsys/ridl/issues/381) E16.5 — The lowering from the IR and ridlc build --emit catalog                                                                                                                              | `enhancement`                  | M    | Landed 2026-10-04 (PR #692). Reason at review: Catalog lowering/emission connects descriptor calculations to the compiler and system artifacts; follows #377-#380.                                                                                  |
+| [#382](https://github.com/driftsys/ridl/issues/382) E16.6 — The JSON view, ridl describe, and the records                                                                                                                                        | `documentation`, `enhancement` | M    | Landed 2026-10-04 (PR #696). Reason at review: Complete the catalog delivery with strict JSON/describe and accurate CLI records; follows #381, coordinating #326.                                                                                   |
+| [#275](https://github.com/driftsys/ridl/issues/275) E9.10 — The schema hash over the IR, not over the emitted schema                                                                                                                             | `enhancement`                  | M    | Closed 2026-10-04 with #378 (PR #676). Reason at review: Cross-target schema identity is a remaining Step 1 deliverable; coordinate the hash definition with #378 to avoid competing identities.                                                    |
 | [#255](https://github.com/driftsys/ridl/issues/255) E10.10 — Amend ADR-0013 and typl §5.7; verify the ridl-diff classification                                                                                                                   | `documentation`, `enhancement` | S    | Finalize ADR-0013 and constraint-change classification after the delivered value objects and #654 validation rules. PR #654 amends initialization/NaN records but does not establish that this entire E10.10 story is complete; #320 depends on it. |
 | [#276](https://github.com/driftsys/ridl/issues/276) E9.12 — General-form R5 postfix order contradicts the shipped grammar; InterfaceDef/ServiceDef gain an AttrBlock                                                                             | `bug`, `documentation`         | S    | Normative postfix order still differs from grammar, and interface/service attributes are needed by the registry. Coordinate with #268.                                                                                                              |
 | [#264](https://github.com/driftsys/ridl/issues/264) E11.8 — The proto3 payload codec plus byte-level conformance against a protoc-generated implementation                                                                                       | `enhancement`                  | L    | Step 1 exit criterion requires a proto3 payload codec with independent bidirectional conformance.                                                                                                                                                   |

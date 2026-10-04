@@ -1,0 +1,9 @@
+id = "evolve-0002"
+kind = "evolve"
+corpus = "mavlink"
+title = "Add indexed parameter reading compatibly"
+
+[expect]
+compiles = true
+lints = []
+diff = "compatible"

@@ -1,4 +1,4 @@
-//! Remote import fetch and materialization (docs/ROADMAP.md epic E1.6, ADR-0002
+//! Remote import fetch and materialization (ADR-0002
 //! §5, §7; ADR-0004 §9).
 //!
 //! [`fetch`] downloads one artifact over HTTP with `ureq` (synchronous, minimal
@@ -10,7 +10,7 @@
 //! cache (ADR-0002 §7).
 //!
 //! The fetched artifact is an uncompressed tar archive of one package directory
-//! (ADR-0007 decision 12, provisional until the registry spec E7.4);
+//! (ADR-0007 decision 12, provisional until the registry spec is written);
 //! [`Cache::store`] unpacks it.
 //!
 //! This module sits behind the `fetch` feature: it pulls `ureq` for the network
@@ -72,8 +72,8 @@ fn fetch_with_timeout(url: &str, timeout: Duration) -> Result<Vec<u8>, FetchErro
 /// a non-empty host and no whitespace or control characters. The manifest
 /// records every `[imports]` value verbatim, including ones that failed
 /// `MANI-007`, so a recorded URL is re-validated here before it reaches `ureq`.
-/// Full RFC 3986 and version-suffix validation is deferred to the registry spec
-/// (E7.4); this only rejects values that plainly cannot be fetched.
+/// Full RFC 3986 and version-suffix validation is deferred to the registry spec.
+/// This only rejects values that plainly cannot be fetched.
 fn is_fetchable_url(url: &str) -> bool {
     if url.chars().any(|c| c.is_whitespace() || c.is_control()) {
         return false;

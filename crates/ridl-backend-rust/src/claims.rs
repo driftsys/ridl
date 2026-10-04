@@ -21,7 +21,7 @@
 //!
 //! A table claims only what the backend emits. [`check`] is handed the
 //! interfaces whose descriptors and face are emitted, so an interface whose
-//! face the pipeline skips (E11.14 decision 2) claims nothing, and a pair of
+//! face the pipeline skips (interaction-face decision 2) claims nothing, and a pair of
 //! its members is refused by the change that makes its face emittable
 //! (decision 13; experiments X-8b and X-8c). The views are the
 //! ones the codec emits ([`codec::view_owners`]).

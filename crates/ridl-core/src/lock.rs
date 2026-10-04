@@ -1,4 +1,4 @@
-//! The `ridl.lock` lockfile (docs/ROADMAP.md epic E1.6, ADR-0002 §7).
+//! The `ridl.lock` lockfile (ADR-0002 §7).
 //!
 //! A [`Lockfile`] pins every remote import URL to the SHA-256 content hash of
 //! the artifact it resolved to. It lives at the workspace root — or the package

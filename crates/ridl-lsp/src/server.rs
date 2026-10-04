@@ -1,12 +1,11 @@
-//! The synchronous server loop and its state (docs/ROADMAP.md epic E1.15a,
-//! ADR-0004 §6).
+//! The synchronous server loop and its state (ADR-0004 §6).
 //!
 //! [`run`] follows the rust-analyzer `lsp-server` pattern: an initialize
 //! handshake, then a plain loop that receives one message at a time and
 //! dispatches it — no async runtime. Because the loop is strictly
 //! sequential, a `$/cancelRequest` is dequeued only after older requests
 //! were already answered; the cancelled-set check before each dispatch is
-//! the hook the later, longer-running handlers (E1.15b–d) extend, and
+//! the hook the later, longer-running handlers extend, and
 //! salsa's own cancellation applies once queries run off-thread.
 //!
 //! The state model is the incremental overlay design described in the crate
@@ -120,8 +119,8 @@ pub fn run_with_version(connection: Connection, version: Option<&str>) -> Result
 }
 
 /// The capability set: incremental text sync with open/close notifications,
-/// quick-fix code actions (E1.15a), hover, goto-definition, and find-references
-/// (E1.15b), completion and rename (E1.15c), and inlay hints (E1.16). Rename
+/// quick-fix code actions, hover, goto-definition, and find-references,
+/// completion and rename, and inlay hints. Rename
 /// advertises `prepareProvider` so the client validates the cursor and the new
 /// name before applying an edit. Inlay hints close the E1 LSP feature set.
 /// Whole-document formatting runs the `ridl fmt` engine.
@@ -810,9 +809,9 @@ impl ServerState {
     }
 
     /// `textDocument/hover`: the declaration or field the cursor names, rendered
-    /// as markdown (E1.15b).
+    /// as markdown.
     ///
-    /// In an `.rsdl` file, the declaration an rsdl reference names (E6.15); a
+    /// In an `.rsdl` file, the declaration an rsdl reference names; a
     /// typl symbol lookup never runs there, because a component name is not a
     /// typl symbol.
     fn hover(&mut self, params: &lt::HoverParams) -> Option<lt::Hover> {
@@ -836,9 +835,9 @@ impl ServerState {
     }
 
     /// `textDocument/definition`: the declaration site of the symbol the cursor
-    /// names, resolved through imports and qualified references (E1.15b).
+    /// names, resolved through imports and qualified references.
     ///
-    /// In an `.rsdl` file, the declaration an rsdl reference names (E6.15).
+    /// In an `.rsdl` file, the declaration an rsdl reference names.
     fn goto_definition(
         &mut self,
         params: &lt::GotoDefinitionParams,
@@ -860,7 +859,7 @@ impl ServerState {
 
     /// `textDocument/references`: every resolved reference to the symbol the
     /// cursor names, across every loaded package — the declaration itself
-    /// included when the client asks for it (E1.15b).
+    /// included when the client asks for it.
     fn references(&mut self, params: &lt::ReferenceParams) -> Option<Vec<lt::Location>> {
         let position = params.text_document_position.position;
         let path = convert::uri_to_path(&params.text_document_position.text_document.uri)?;
@@ -892,7 +891,7 @@ impl ServerState {
     }
 
     /// `textDocument/completion`: the items offered for the cursor position,
-    /// dispatched by the syntactic context the cursor sits in (E1.15c).
+    /// dispatched by the syntactic context the cursor sits in.
     fn completion(&mut self, params: &lt::CompletionParams) -> Option<lt::CompletionResponse> {
         let position = params.text_document_position.position;
         let path = convert::uri_to_path(&params.text_document_position.text_document.uri)?;
@@ -913,7 +912,7 @@ impl ServerState {
 
     /// `textDocument/inlayHint`: the ordinal and unit-expansion hints inside the
     /// requested range, converted to LSP positions through the file's line
-    /// table (E1.16). A range request — only hints in the visible window are
+    /// table. A range request — only hints in the visible window are
     /// returned.
     fn inlay_hints(&mut self, params: &lt::InlayHintParams) -> Option<Vec<lt::InlayHint>> {
         let path = convert::uri_to_path(&params.text_document.uri)?;
@@ -942,7 +941,7 @@ impl ServerState {
     }
 
     /// `textDocument/prepareRename`: the name span the cursor is on when it is a
-    /// renameable symbol, so the client can validate before applying (E1.15c).
+    /// renameable symbol, so the client can validate before applying.
     fn prepare_rename(
         &mut self,
         params: &lt::TextDocumentPositionParams,
@@ -957,7 +956,7 @@ impl ServerState {
 
     /// `textDocument/rename`: the workspace edit renaming the symbol under the
     /// cursor, or a [`RenameError`](rename::RenameError) the caller turns into an
-    /// LSP error response (E1.15c).
+    /// LSP error response.
     fn rename(
         &mut self,
         params: &lt::RenameParams,
@@ -1212,7 +1211,7 @@ fn convert_loader_diagnostics(
 
 /// The synthetic package name of a standalone overlay file: its declared
 /// `package` name, falling back to the file stem — the loader's single-file
-/// rule (E1.3).
+/// rule.
 fn overlay_package_name(db: &RidlDatabase, input: InputFile, path: &str) -> String {
     let parse = parse_file(db, input);
     let source = SourceFile::cast(parse.syntax()).expect("parser roots every tree in a SourceFile");

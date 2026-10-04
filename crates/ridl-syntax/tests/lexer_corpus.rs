@@ -1,4 +1,4 @@
-//! The lexer corpus (docs/ROADMAP.md epic E1.1, ADR-0007 decision 3).
+//! The lexer corpus (ADR-0007 decision 3).
 //!
 //! Each `.typl` file under `test_data/lexer/` is lexed under [`Profile::Typl`]
 //! and each `.ridl` file under [`Profile::Ridl`]; the token stream is

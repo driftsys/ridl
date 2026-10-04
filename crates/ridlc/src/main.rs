@@ -1,5 +1,4 @@
-//! The `ridlc` command-line front end — the plumbing layer (concept note §8.1,
-//! docs/ROADMAP.md epic E1.13). Stable flags for CI and build systems.
+//! The `ridlc` command-line front end — the plumbing layer (concept note §8.1). Stable flags for CI and build systems.
 //!
 //! `ridlc check <PATH>` type-checks and `ridlc build <PATH> --out-dir <DIR>`
 //! compiles, where `<PATH>` is a `.typl` file (single-file mode), a package

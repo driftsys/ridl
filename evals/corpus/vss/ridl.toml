@@ -1,0 +1,25 @@
+# Copyright (c) 2016 Contributors to COVESA
+#
+# This program and the accompanying materials are made available under the
+# terms of the Mozilla Public License 2.0 which is available at
+# https://www.mozilla.org/en-US/MPL/2.0/
+#
+# SPDX-License-Identifier: MPL-2.0
+# Modified VSS-to-RIDL translation; see the workspace PROVENANCE.md and LICENSE.
+[workspace]
+members = [
+  "Vehicle/Cabin/HVAC",
+  "Vehicle/Cabin/HVAC/Station",
+  "Vehicle/Cabin/HVAC/Station/Row1",
+  "Vehicle/Cabin/HVAC/Station/Row2",
+  "Vehicle/Cabin/HVAC/Station/Row3",
+  "Vehicle/Cabin/HVAC/Station/Row4",
+  "Vehicle/Cabin/HVAC/Station/Row1/Driver",
+  "Vehicle/Cabin/HVAC/Station/Row1/Passenger",
+  "Vehicle/Cabin/HVAC/Station/Row2/Driver",
+  "Vehicle/Cabin/HVAC/Station/Row2/Passenger",
+  "Vehicle/Cabin/HVAC/Station/Row3/Driver",
+  "Vehicle/Cabin/HVAC/Station/Row3/Passenger",
+  "Vehicle/Cabin/HVAC/Station/Row4/Driver",
+  "Vehicle/Cabin/HVAC/Station/Row4/Passenger",
+]

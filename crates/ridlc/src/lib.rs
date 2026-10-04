@@ -1,5 +1,4 @@
-//! The `ridlc` compile pipeline as a library (docs/ROADMAP.md epics E0.9,
-//! E1.10, E1.7a, E1.13).
+//! The `ridlc` compile pipeline as a library.
 //!
 //! [`compile`] runs the pipeline end to end over a single source file: it wraps
 //! the source in a single-file synthetic package, resolves it
@@ -27,7 +26,7 @@
 //! a `.typl` file, a package directory, or a workspace root ([`ridl_core::load_workspace`])
 //! — returning the per-package IR and the merged, render-ready diagnostics
 //! (load + parse + resolve + check). It is the library face the language server
-//! (E1.15) drives; it performs no network or lockfile side effects.
+//! drives; it performs no network or lockfile side effects.
 //!
 //! [`run_check`] and [`run_build`] are the stable command drivers shared by the
 //! `ridlc` plumbing binary and the `ridl` porcelain facade (concept note §8.1):
@@ -94,7 +93,7 @@ struct FrontEnd {
 
 /// Parses, resolves, and checks `text` (registered under `path`) as a
 /// single-file synthetic package named from its `package` declaration, falling
-/// back to the path's file stem — the loader's single-file rule (E1.3). The
+/// back to the path's file stem — the loader's single-file rule. The
 /// profile follows `path`'s extension. The package is the one member of a
 /// synthetic workspace, and [`check_loaded`] runs over it the passes
 /// `ridl check` runs after its load: parser → resolver → checker, then the
@@ -183,7 +182,7 @@ pub fn check_source(path: &str, text: &str) -> CliRun {
 /// resolver, then checker, then semantic workspace passes, RSDL-804 and design
 /// lints, then any Rust backend error. The source becomes a single-file synthetic package
 /// named from its `package` declaration, falling back to the path's file stem
-/// — the loader's single-file rule (E1.3).
+/// — the loader's single-file rule.
 ///
 /// The package-scoped passes stamp their spans with a [`FileId`] indexing the
 /// package's files in order; [`remap_diagnostics`] rewrites them onto the
@@ -197,7 +196,7 @@ pub fn compile(path: &str, text: &str) -> CompileOutput {
     } = front_end(path, text);
 
     let rust_source = match ridl_backend_rust::generate(&ir) {
-        // The E1.12 backend returns Rust plus a C header; this pre-CLI plumbing
+        // The Rust backend returns Rust plus a C header; this pre-CLI plumbing
         // path keeps only the Rust source. Task 20 wires the C header emit.
         Ok(generated) => generated.rust_source,
         Err(err) => {
@@ -265,7 +264,7 @@ pub fn module_name_from_path(path: &str) -> String {
 }
 
 // ==========================================================================
-// Workspace compile — the library face for the CLIs and the LSP (E1.13).
+// Workspace compile — the library face for the CLIs and the LSP.
 // ==========================================================================
 
 /// The result of [`compile_workspace`]: the checked, lowered IR for every
@@ -277,7 +276,7 @@ pub fn module_name_from_path(path: &str) -> String {
 /// checker's — each already remapped onto `sources`, so a caller renders them
 /// with [`render`](ridl_core::diag::render()) and keys the exit code on the
 /// presence of an [`Error`](Severity::Error). `checked` carries the per-package
-/// IR so the language server can serve it (E1.15).
+/// IR so the language server can serve it.
 ///
 /// `resolutions` and `std_ir` exist so a consumer can resolve a name the way the
 /// checker did rather than the way one package's `decls` happen to spell it
@@ -391,7 +390,7 @@ pub fn compile_workspace_with(
     // Reuse the standard IR query already evaluated by the design lint pass.
     let std_ir = check_package(&*db, workspace, std, std).ir;
     let packages: Vec<&ridl_ir::v2::Package> = checked.iter().map(|package| &package.ir).collect();
-    let system = lower_system(&system, &packages);
+    let system = lower_workspace_system(&system, &packages, &std_ir);
     Ok(WorkspaceOutput {
         checked,
         resolutions,
@@ -674,7 +673,7 @@ pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
 /// a workspace build writing several packages into one directory never has two
 /// packages collide on a file name. Each package is generated on its own; a
 /// cross-package derivable `Default` therefore needs the referenced package's
-/// generated code compiled alongside it (documented, not linked here — E1.13).
+/// generated code compiled alongside it (documented, not linked here).
 pub fn run_build(
     entry: &Path,
     out_dir: &Path,
@@ -813,9 +812,9 @@ pub fn run_build_with(
         // once, ahead of the per-package loop below, because the proto
         // backend needs it too (next paragraph) and this is the one
         // `check_package` call either use pays for.
-        let references_std = checked
-            .iter()
-            .any(|package| ridl_ir::v2::referenced_packages(&package.ir).contains("ridl.std"));
+        let packages: Vec<&ridl_ir::v2::Package> =
+            checked.iter().map(|package| &package.ir).collect();
+        let references_std = references_std(&packages);
         // Every emit kind except the direct IR dumps. The reasoning, and the
         // exhaustive classification ADR-0014 decision 10 requires, live on
         // `Emit::is_ir_dump`.
@@ -833,15 +832,14 @@ pub fn run_build_with(
 
         // Every other package a package's cross-package reference might
         // name: every sibling in the workspace, plus `ridl.std` when
-        // present. The proto3, FlatBuffers and — since E11.14 — Rust
+        // present. The proto3, FlatBuffers and Rust
         // backends each resolve a foreign reference themselves rather than
         // leaving it to the target language's own import statement, so each
-        // reads this (`write_emits`'s doc comment).
-        let others: Vec<&ridl_ir::v2::Package> = checked
-            .iter()
-            .map(|package| &package.ir)
-            .chain(std_ir.iter())
-            .collect();
+        // reads this (`write_emits`'s doc comment). `Emit::Catalog` is a code
+        // emit, so for the catalog descriptor `ridl.std` is here exactly when
+        // `references_std` holds, the set `embed_catalog_hashes` hashes each
+        // region over.
+        let others = catalog_scope(&packages, std_ir.as_ref());
 
         for package in &checked {
             let base = if single_file {
@@ -898,12 +896,23 @@ pub fn run_build_with(
 
         // The lowered system, beside the package IR, for each IR dump emit
         // (rsdl reference §13). An error in the closure has already stopped
-        // the build above, so `lower_system` is `None` here only when the
-        // workspace declares no `system`.
+        // the build above, so the lowering is `None` here only when the
+        // workspace declares no `system`. The region hashes must equal the
+        // hashes a `--emit catalog` build writes, so `ridl.std` is in their
+        // scope whenever a package references it: the `std_ir` above when a
+        // code emit computed it, otherwise checked here.
         if emits.iter().any(|emit| emit.system_dump_suffix().is_some()) {
-            let packages: Vec<&ridl_ir::v2::Package> =
-                checked.iter().map(|package| &package.ir).collect();
-            if let Some(lowered) = lower_system(&system, &packages) {
+            let checked_std;
+            let hash_std = match &std_ir {
+                Some(std_ir) => Some(std_ir),
+                None if references_std => {
+                    checked_std = check_package(&db, workspace, std, std).ir;
+                    Some(&checked_std)
+                }
+                None => None,
+            };
+            if let Some(mut lowered) = lower_system(&system, &packages) {
+                embed_catalog_hashes(&mut lowered, &packages, &catalog_scope(&packages, hash_std));
                 write_system_emits(out_dir, &lowered, emits, &mut diagnostics)?;
             }
         }
@@ -1052,17 +1061,17 @@ fn refuse_overwrite(path: &Path, marker: &str) -> std::io::Result<Option<Diagnos
 /// scalar's constructor names `::ridl_rt::payload::Violation` from it.
 ///
 /// It carries the `flatbuffers` feature, because `generate`'s output now
-/// includes the FlatBuffers payload codec (E11.7 stage K5, design note D-1 as
+/// includes the FlatBuffers payload codec (design note D-1 as
 /// amended), and that codec names the reading and writing helpers the feature
 /// gates. **This makes the generated manifest unbuildable outside this
 /// repository until a `ridl-rt` release carries the feature's contents**,
-/// which is the release coupling design note D-12 records and E11.14's
-/// manifest work settles; nothing here can test it, because a `rustc` proof
+/// which is the release coupling design note D-12 records and the generated manifest
+/// settles; nothing here can test it, because a `rustc` proof
 /// links `ridl-rt`'s source rather than a release.
 ///
 /// The `std` feature, on by default, forwards to `ridl-rt/std`: the generated
 /// face's `blocking` module is under it and is `block_on` over the async
-/// face (story E11.21, second half), and `block_on` is what `ridl-rt`'s `std`
+/// face, and `block_on` is what `ridl-rt`'s `std`
 /// feature gates. A build with default features off has no `blocking` module
 /// and links `ridl-rt` as `no_std`.
 ///
@@ -1204,6 +1213,65 @@ fn render_lib_rs(package_names: &[String]) -> String {
     let mut out = format!("{LIB_RS_MARKER}\n\n");
     render(&root, 0, &mut out);
     out
+}
+
+/// Lowers the workspace's system (rsdl reference §13) and embeds in each region
+/// the catalog hash of its catalog. The hash is an input to the rsdl lowering,
+/// which leaves it empty, so the driver fills it in.
+///
+/// The hash is `ridl_ir::catalog_hash::catalog_hash` over the region's package
+/// and [`catalog_scope`], the same packages [`run_build`] gives
+/// `ridl_descriptor::lower` for `--emit catalog`, so each region carries the
+/// hash the catalog's descriptor carries (driftsys/ridl#367).
+///
+/// `packages` is every checked package of the workspace and `std_ir` the
+/// lowered `ridl.std`. `None` when [`lower_system`] is.
+pub fn lower_workspace_system(
+    system: &CheckedSystem,
+    packages: &[&ridl_ir::v2::Package],
+    std_ir: &ridl_ir::v2::Package,
+) -> Option<ridl_ir::v2::System> {
+    let mut lowered = lower_system(system, packages)?;
+    let others = catalog_scope(packages, references_std(packages).then_some(std_ir));
+    embed_catalog_hashes(&mut lowered, packages, &others);
+    Some(lowered)
+}
+
+/// Sets each region's hash of `lowered` to the catalog hash of its package,
+/// computed over `others`, which [`catalog_scope`] builds.
+fn embed_catalog_hashes(
+    lowered: &mut ridl_ir::v2::System,
+    packages: &[&ridl_ir::v2::Package],
+    others: &[&ridl_ir::v2::Package],
+) {
+    for region in &mut lowered.regions {
+        let package = packages
+            .iter()
+            .find(|package| package.name == region.catalog)
+            .expect("a region's catalog is a package of the workspace");
+        region.hash = ridl_ir::catalog_hash::catalog_hash(package, others).to_vec();
+    }
+}
+
+/// Whether any package of the workspace names a declaration of `ridl.std`.
+/// When it does, `ridl.std` is part of the build's [`catalog_scope`].
+fn references_std(packages: &[&ridl_ir::v2::Package]) -> bool {
+    packages
+        .iter()
+        .any(|package| ridl_ir::v2::referenced_packages(package).contains("ridl.std"))
+}
+
+/// The packages a package of the build is resolved against when the build
+/// writes it: every checked package of the workspace, then `ridl.std` when
+/// it is given. A backend and the catalog descriptor read it as `others`, and
+/// the catalog hash is computed over it. The descriptor's hash and a region's
+/// hash are computed over the same set of packages. The order of the list does
+/// not change the hash, which keys every declaration by its qualified name.
+fn catalog_scope<'a>(
+    packages: &[&'a ridl_ir::v2::Package],
+    std_ir: Option<&'a ridl_ir::v2::Package>,
+) -> Vec<&'a ridl_ir::v2::Package> {
+    packages.iter().copied().chain(std_ir).collect()
 }
 
 /// Whether `diagnostic` stops [`run_build`] writing any artifact: every error
@@ -1558,7 +1626,7 @@ fn write_response(
 /// [`ridl_backend_rust::Backend`] over
 /// [`generate_pipeline`](ridl_backend_rust::generate_pipeline), which emits
 /// the interaction face and the descriptors beside the domain types and the
-/// codec (E11.14); TypeScript, proto3 and FlatBuffers are their own crates'
+/// codec; TypeScript, proto3 and FlatBuffers are their own crates'
 /// `Backend`; `codegen-model` is [`codegen::ModelBackend`], the model
 /// written back. Since stage P4 of the lane P driver the Rust backend reads
 /// the request's model and nothing else, as `codegen-model` does and as a

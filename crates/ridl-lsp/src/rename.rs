@@ -1,4 +1,4 @@
-//! Rename (docs/ROADMAP.md epic E1.15c).
+//! Rename.
 //!
 //! Rename produces a workspace-wide edit that rewrites a type-level declaration
 //! (`type`, `const`, `struct`, `enum`, `enumset`, `union`) and every reference

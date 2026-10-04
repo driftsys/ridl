@@ -40,13 +40,14 @@ ridl --version
 ```
 
 ```text
-ridl 0.0.0
+ridl X.Y.Z
 ```
 
-The version string is `0.0.0` on every build until a maintainer cuts a release
-([ADR-0007][adr-0007] decision 14 pins it there), so it cannot yet answer
-"which commit is this" — recorded as a known gap in [ADR-0010][adr-0010]
-decision 8, which also records a deferred fix.
+`X.Y.Z` stands for the build's version: the crate version for a local build,
+or the release tag when the release workflow sets `RIDL_BUILD_VERSION`. The
+version does not name a commit, so it cannot answer "which commit is this" —
+recorded as a known gap in [ADR-0010][adr-0010] decision 8, which also records
+a deferred fix.
 
 ## `ridl`
 
@@ -69,6 +70,7 @@ Commands:
   lock      Allocate a number to every interface that has none and write each package's `interfaces.lock`; with `--rename` or `--retire`, rewrite one package's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for the file
   lsp       Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this. Stdio is the only transport
   mcp       Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
+  describe  Print a catalog descriptor as strict JSON, after verifying it
   help      Print this message or the help of the given subcommand(s)
 
 Options:
@@ -544,6 +546,7 @@ Options:
           - proto:         The proto3 schema, written to `<base>.proto`
           - flatbuffers:   The FlatBuffers schema, written to `<base>.fbs`
           - codegen-model: The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
+          - catalog:       The catalog descriptor an engine reads, written to `<base>.catalog.binfb` when the package declares an interface or a service with an inline body: a FlatBuffers file of the package's interfaces, their members and their catalog hash
           
           [default: rust]
 
@@ -620,8 +623,8 @@ surface — structs, enums, enum sets and unions, projected to proto3 messages
 and enums, with named-scalar constraints carried as comments — plus the
 interaction identity table, one enum per interface giving each signal, event,
 command, query and fixed its ordinal. It emits no `service` block, no call
-face, and no value store; store and dispatcher generation is roadmap stories
-E11.2 and E11.4 (ADR-0018 decision 16), not this emit.
+face, and no value store; store and dispatcher generation is not part of this emit
+(ADR-0018 decision 16).
 
 **`flatbuffers` is the second wire backend**, with the same two tiers and the
 same ceiling. Its projection rules differ from proto3's where the targets
@@ -683,13 +686,14 @@ The one plugin in this repository is `ridlc-gen-model`, built for the test
 suite and not installed by any release: it is `--emit codegen-model` as a
 process, and the test that runs it through this path proves the host, not a
 language. The Rust backend and the other three still run in process only; the
-Rust backend's own plugin follows its port onto the model (roadmap story
-E4.5b).
+Rust backend's own plugin follows its port onto the model.
 
 **It writes** one file per package per `--emit` target, under `--out-dir`
 (`out` by default), and — exactly like [`ridl check`](#ridl-check) —
 `ridl.lock` at the workspace root when the manifest declares `[imports]`,
-non-frozen. `<base>` in the `--emit` list above is the package name when
+non-frozen. The exception is `catalog`, which writes no file for a package
+that declares no interface and no service with an inline body. `<base>` in the
+`--emit` list above is the package name when
 `PATH` is a package directory or a workspace root, and the input file's stem
 in single-file mode.
 
@@ -701,6 +705,8 @@ is lowered over the same scope. The three IR targets —
 `ir-json`, `ir-text`, `ir-binary` — get no such file: a direct IR dump
 records the packages the workspace declares, and `ridl.std` ships with the
 compiler rather than with the workspace ([ADR-0007][adr-0007] decision 15).
+`catalog` gets no such file either: `ridl.std` declares no interface, so no
+`ridl.std.catalog.binfb` is written.
 
 When the workspace declares a `system` (rsdl reference §3.1), each of the three
 IR targets also writes the lowered system — the closure, and every deployment
@@ -1052,15 +1058,19 @@ ridl fmt --check .
 error: cannot read ./sub: Permission denied (os error 13)
 ```
 
-Of the nine subcommands that take a path, [ADR-0010][adr-0010] decision 6
-found `ridl fmt` is the only one that reliably names the actual unreadable
-path this way in every case it was tested against. `ridl check`, `ridl build`,
-`ridl baseline`, `ridl lock`, `ridlc check`, and `ridlc build` still exit 2 on
-the same inputs, but with the wrong cause or none: an unreadable *workspace root*
-reports `` error: no `ridl.toml` found at or above `<path>` `` — confirmed
+Of the eight subcommands [ADR-0010][adr-0010] decision 6 examined on 2026-07-27,
+it found `ridl fmt` is the only one that reliably names the actual unreadable
+path this way in every case it was tested against. `ridl describe`, added later,
+names the path in every exit-2 message about a path it was given. `ridl check`,
+`ridl build`, `ridl baseline`, `ridlc check`, and `ridlc build` still exit 2 on
+the same inputs, but with the wrong cause or none: an unreadable *workspace
+root* reports `` error: no `ridl.toml` found at or above `<path>` `` — confirmed
 directly against this build — and an unreadable subdirectory nested inside an
 otherwise-readable workspace reports a bare `error: Permission denied (os
-error 13)`, naming no path at all — also confirmed directly. Tracked as
+error 13)`, naming no path at all — also confirmed directly. The other two
+subcommands decision 6 examined name a path only in part: `ridl diff` names the
+unreadable directory only when it is the argument given, and `ridl test` names
+the workspace root, not the subdirectory that failed. Tracked as
 [issue driftsys/ridl#196][issue-196], not fixed as of this page.
 
 ### `ridl diff`
@@ -1593,6 +1603,101 @@ against the built binary by `crates/ridl/tests/servers.rs`; a session-task
 failure cannot be provoked through the server, so its mapping is tested on its
 own in `crates/ridl-mcp`.
 
+### `ridl describe`
+
+```sh
+ridl describe --help
+```
+
+```text
+Print a catalog descriptor as strict JSON, after verifying it
+
+Usage: ridl describe <PATH>
+
+Arguments:
+  <PATH>  The `<base>.catalog.binfb` file `ridl build --emit catalog` wrote
+
+Options:
+  -h, --help  Print help
+```
+
+Prints a catalog descriptor written by `ridl build --emit catalog` as JSON after
+verifying it; a file that is not a descriptor, or is malformed, is rejected as a
+whole with exit code 2.
+
+The transcript below is abridged: it is the output for the test corpus in
+`crates/ridl/tests/baseline-corpus`, with each `...` line standing for lines
+that were removed. The keys print in alphabetical order. The 32 bytes of the
+catalog hash come first, then one entry per interface, then the package name,
+the retired numbers, the toolchain version that wrote the file, and the
+descriptor's schema version.
+
+```sh
+ridl build crates/ridl/tests/baseline-corpus --emit catalog
+ridl describe out/corpus.baseline.catalog.binfb
+```
+
+```json
+{
+  "hash": [
+    105,
+    123,
+    139,
+    ...
+  ],
+  "interfaces": [
+    {
+      "members": [
+        {
+          "kind": "Signal",
+          "name": "currentSpeed",
+          "ordinal": 1,
+          "payloads": [
+            {
+              "max_sizes": [
+                {
+                  "bytes": 46,
+                  "cause": "Unspecified",
+                  "encoding": "FlatBuffers",
+                  "state": "Bounded"
+                }
+              ],
+              "role": "value",
+              "type_name": "Speed"
+            }
+          ],
+          "timing": {
+            "max_us": "10000",
+            "min_us": "10000",
+            "mode": "StrictPeriodic"
+          }
+        },
+        ...
+      ],
+      "name": "VehicleStatus",
+      "number": 1,
+      "provisional": true,
+      "reserved_ordinals": []
+    },
+    ...
+  ],
+  "name": "corpus.baseline",
+  "retired": [],
+  ...
+  "version": 1
+}
+```
+
+**Exit codes.** 0 when the descriptor was printed. 2 for a missing or
+unreadable path, a file that is not a catalog descriptor, a version this
+toolchain does not read, a malformed buffer, or an I/O failure writing to
+stdout (a pipe whose reader has gone); the message names the path and the
+cause. There is no exit 1: `ridl describe` answers no question that can come
+back negative. The exit-0 outcome, the missing path, the foreign file, a
+malformed buffer (three fixtures), a version the toolchain does not read, and the write
+failure on stdout are confirmed against the built binary by
+`crates/ridl/tests/describe_cli.rs`.
+
 ## `ridlc`
 
 ```sh
@@ -1707,7 +1812,7 @@ Options:
           The directory to write generated artifacts into
 
       --emit <EMIT>
-          The artifacts to emit: `rust` (default), `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`, `flatbuffers`, `codegen-model`
+          The artifacts to emit: `rust` (default), `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`, `flatbuffers`, `codegen-model`, `catalog`
 
           Possible values:
           - rust:          Idiomatic Rust source, written to `<base>.rs`
@@ -1718,6 +1823,7 @@ Options:
           - proto:         The proto3 schema, written to `<base>.proto`
           - flatbuffers:   The FlatBuffers schema, written to `<base>.fbs`
           - codegen-model: The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
+          - catalog:       The catalog descriptor an engine reads, written to `<base>.catalog.binfb` when the package declares an interface or a service with an inline body: a FlatBuffers file of the package's interfaces, their members and their catalog hash
           
           [default: rust]
 
@@ -1766,8 +1872,8 @@ to `out`) and, on `check` only, the baseline desk check described
 [above](#ridl-check), which has no `ridlc` equivalent. On identical input the
 two render byte-identical diagnostics, confirmed earlier on this page.
 
-`ridl baseline`, `ridl test`, `ridl fmt`, `ridl diff`, and `ridl lock` have no
-`ridlc` counterpart at all — `ridlc`'s surface is `check` and `build`, full stop, as
+`ridl baseline`, `ridl test`, `ridl fmt`, `ridl diff`, `ridl lock`, and
+`ridl describe` have no `ridlc` counterpart at all — `ridlc`'s surface is `check` and `build`, full stop, as
 its own `--help` shows. Reach for `ridl` unless you are scripting the
 compiler directly and want its stable, default-free flags.
 
@@ -1779,10 +1885,11 @@ compiler directly and want its stable, default-free flags.
 | `ridl build` / `ridlc build` | clean, every requested artifact written | a diagnostic is an error, nothing written — except for an RSDL-7xx error, which leaves only its deployment out of the lowered system | the workspace cannot be found, or (for `ridlc build`) a missing `--out-dir` |
 | `ridl baseline` | clean, snapshot(s) published | a diagnostic is an error, or the publication gate refuses: the replacement under the tombstone rule (RIDL-408), a provisional interface number (RIDL-411), or a published number the fresh snapshot neither carries nor retires (RIDL-412); the existing baseline is left untouched | the workspace cannot be found, the output directory cannot be read or written, a published `.ir.json` snapshot fails to parse, two published snapshots declare one package, or a snapshot-named entry in the output directory cannot be stat'ed |
 | `ridl test` | every range self-corpus and sampled `require` passed | a self-corpus failure, or a clause raised an evaluation error | the workspace fails to compile, cannot be found, or `--samples 0` |
-| `ridl fmt` | nothing under `--check` would change, or the rewrite succeeded | a file under `--check` would change, or has a parse error | the path does not exist, or a directory the walk reaches is unreadable — named in the message, unlike six of the other eight, which name no path at all |
+| `ridl fmt` | nothing under `--check` would change, or the rewrite succeeded | a file under `--check` would change, or has a parse error | the path does not exist, or a directory the walk reaches is unreadable — named in the message, unlike six of the other nine, which name no path at all |
 | `ridl diff` | the change is compatible, or the two sides are identical | the change is breaking | a side fails to compile, an input is missing, or neither `--explain` nor both inputs were given |
 | `ridl lock` | the file is written, or there is nothing to change | a diagnostic error over the source, nothing written: a live entry with no declaration under plain `ridl lock` (RIDL-409), a malformed lock file (RIDL-410), or any other compile error | the path is missing or unreadable; a bad flag — `--rename` naming no live entry or a `NEW` that is not a declaration without an entry, `--retire` naming a still-declared interface, either flag over more than one package; an I/O failure writing |
 | `ridl lock merge` | the three sides merge clean, and the result is written to OURS | entries disagree: OURS is written with conflict markers around only the disagreeing entries, and is malformed (RIDL-410) until resolved | an input cannot be read or does not parse (OURS is left as it was), `MARKER_SIZE` is not a number from 1 up, or an I/O failure writing OURS |
+| `ridl describe` | the descriptor was printed |   | a missing or unreadable path; a file that is not a catalog descriptor; a version this toolchain does not read; a malformed buffer; an I/O failure writing to stdout |
 
 This table is this repository's own taxonomy, recorded in
 [ADR-0010][adr-0010]: **0** succeeded, or the verdict is affirmative; **1** a
@@ -1829,7 +1936,7 @@ For more information, try '--help'.
 `--help` itself, on any subcommand of either binary, always exits 0 — and so
 does `--version`/`-V`, covered [above](#ridl).
 
-Seven of the nine subcommands that take a path also share a lesser-known gap:
+Seven of the ten subcommands that take a path also share a lesser-known gap:
 [issue driftsys/ridl#196][issue-196] records that when the *workspace root
 itself* is unreadable, `ridl check`, `ridl build`, `ridl baseline`,
 `ridl lock`, `ridlc check`, and `ridlc build` all report

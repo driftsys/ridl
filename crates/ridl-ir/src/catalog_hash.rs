@@ -4,10 +4,11 @@
 //! package (ADR-0014 decision 15); see that decision for the determinism
 //! rule and for why the canonical JSON is not the input.
 //!
-//! The hash lives in this crate, not in `ridl-descriptor`, because two
+//! The hash lives in this crate, not in `ridl-descriptor`, because three
 //! artifacts carry it: the codegen model's `Catalog.hash`, lowered in
-//! [`crate::codegen`], and the catalog descriptor, whose crate re-exports
-//! these functions as `ridl_descriptor::hash`.
+//! [`crate::codegen`]; the catalog descriptor, whose crate re-exports these
+//! functions as `ridl_descriptor::hash`; and each `Region` of the lowered rsdl
+//! system, where `ridlc` embeds it.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -687,6 +688,38 @@ mod tests {
         let (p, fw) = fixture();
         let reached: Vec<String> = reachable_decls(&p, &[&fw]).into_keys().collect();
         assert_eq!(reached, vec!["Coord", "Point", "fw.Unit"]);
+    }
+
+    /// `ridlc`'s `catalog_scope` relies on this: the order of `others` does
+    /// not change the hash, because every declaration is keyed by its
+    /// qualified name.
+    #[test]
+    fn the_order_of_the_other_packages_does_not_move_the_hash() {
+        let p = Package {
+            name: "p".to_owned(),
+            decls: vec![struct_decl("Point", &["fa.A", "fb.B"])],
+            interfaces: vec![Interface {
+                name: "I".to_owned(),
+                interactions: vec![signal("pos", "Point")],
+                number: 1,
+                provisional: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let fa = Package {
+            name: "fa".to_owned(),
+            decls: vec![scalar_decl("A")],
+            ..Default::default()
+        };
+        let fb = Package {
+            name: "fb".to_owned(),
+            decls: vec![scalar_decl("B")],
+            ..Default::default()
+        };
+        let reached: Vec<String> = reachable_decls(&p, &[&fa, &fb]).into_keys().collect();
+        assert_eq!(reached, vec!["Point", "fa.A", "fb.B"]);
+        assert_eq!(catalog_hash(&p, &[&fa, &fb]), catalog_hash(&p, &[&fb, &fa]));
     }
 
     #[test]

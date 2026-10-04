@@ -292,7 +292,7 @@ fn a_new_package_is_compatible_and_a_dropped_one_is_breaking() {
 }
 
 // --------------------------------------------------------------------------
-// Ordinal analysis — supports the E2.8b classifier (task 17).
+// Ordinal analysis — supports the classifier.
 // --------------------------------------------------------------------------
 
 #[test]
@@ -709,8 +709,8 @@ fn a_fresh_tombstone_at_the_end_is_compatible() {
 /// `snake_case` specifically. The transform's own behaviour is pinned
 /// separately, by the unit tests in `crates/ridl-ir/src/name.rs`.
 ///
-/// Names are the only identity E9.7 assigns. E9.8 extends this test to the
-/// numbers a projection assigns, where the arm gains real content: a
+/// Names are the only identity assigned today; when a
+/// projection assigns numbers, this arm gains real content: a
 /// projection can assign a number that a compatible delta moves
 /// independently of the name it numbers.
 ///

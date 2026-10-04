@@ -23,8 +23,7 @@
 //! `rustc` for the test. The crate name is `veh_cabin` in both, because that
 //! is the package name `ridlc` writes into the generated `Cargo.toml`.
 //!
-//! The consumer side is the generated client, in both of its forms (story
-//! E11.21). Round trips 1 to 4 use the async `Client`: the signal read of
+//! The consumer side is the generated client, in both of its forms. Round trips 1 to 4 use the async `Client`: the signal read of
 //! round trip 1 returns at once, and `next_event` (round trip 2), the command
 //! (3) and the query (4) return a named future, polled here by hand with
 //! `ridl_rt::task::noop_waker`, the way a frame loop polls; the provider

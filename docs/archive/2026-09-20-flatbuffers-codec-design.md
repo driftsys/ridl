@@ -1274,6 +1274,6 @@ follows the disposition:
 - Design records: [`../design/ridl-rt.md`](../design/ridl-rt.md),
   [`../design/interaction-face.md`](../design/interaction-face.md)
 - Adjacent plans:
-  [`2026-09-13-catalog-descriptor-plan.md`](../wip/2026-09-13-catalog-descriptor-plan.md),
+  [`2026-09-13-catalog-descriptor-plan.md`](2026-09-13-catalog-descriptor-plan.md),
   [`typl-value-objects-plan.md`](../wip/typl-value-objects-plan.md)
 - Defect: driftsys/ridl#302

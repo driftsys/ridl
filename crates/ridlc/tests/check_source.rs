@@ -70,7 +70,7 @@ fn codes(run: &ridlc::CliRun) -> Vec<&'static str> {
 
 #[test]
 fn a_duplicate_service_name_is_ridl_140() {
-    // The service catalog is a workspace-wide pass (E2.13): a single file is a
+    // The service catalog is a workspace-wide pass: a single file is a
     // one-package workspace, and the catalog still runs over it (issue #345).
     let source = "package p\ninterface I {}\nservice p.s : I\nservice p.s : I\n";
     let run = ridlc::check_source("dup.ridl", source);

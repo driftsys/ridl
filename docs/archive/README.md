@@ -271,11 +271,10 @@ provenance. Nothing here is normative — the current references live in
   [ADR-0014's 2026-09-18 amendment](../decisions/ADR-0014-ir-encodings.md) (the
   system artifact's names), the rsdl reference §13 and §14, and
   [the rsdl implementation technote](../technotes/rsdl-implementation.md). Its
-  Part B4 Task 9 is the record of the one piece of lane B that is not built —
-  the catalog hash per region, story E6.17, which waits for
-  `ridl_descriptor::hash::catalog_hash` (driftsys/ridl#324). Read the rest as a
-  plan: its tasks are the sequence the implementation followed, not a
-  description of the result.
+  Part B4 Task 9 is the record of the last piece of lane B to be built — the
+  catalog hash per region, story E6.17 (driftsys/ridl#367), embedded by `ridlc`
+  (see the rsdl implementation technote). Read the rest as a plan: its tasks are
+  the sequence the implementation followed, not a description of the result.
 - **2026-09-20-flatbuffers-codec-design.md** and
   **2026-09-20-flatbuffers-codec-plan.md** — the design note and the seven-task
   plan for the FlatBuffers payload codec, story E11.7, run as lane K of the same
@@ -418,3 +417,20 @@ provenance. Nothing here is normative — the current references live in
   their own; the decisions taken while they were executed are in the pull
   request bodies and in decisions 7 and 8 of
   [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md).
+- **2026-09-13-runtime-descriptors-design.md** — the design for the two files an
+  engine reads: a catalog descriptor per package and a system descriptor per
+  deployment, decisions D-1 to D-10. Archived verbatim apart from relative links
+  once the catalog descriptor landed (E16.1 to E16.6). The catalog half became
+  [the catalog descriptor design record](../design/catalog-descriptor.md); the
+  system descriptor waits for its own story.
+- **2026-09-13-catalog-descriptor-plan.md** — the twelve-task plan for the
+  catalog half of that design, re-baselined on 2026-10-03. Archived verbatim
+  apart from relative links. What it built is described, as built, in
+  [the catalog descriptor design record](../design/catalog-descriptor.md).
+- **2026-10-03-lane-e16-catalog-descriptor-driver.md** — the driver for epic
+  E16, which ran that plan (#377 to #382, then E6.17 #367). Archived verbatim
+  apart from relative links and the corrections to its own §5 "D8" entry, made
+  during the review of the gardening pull request. The gardened record is
+  [the catalog descriptor design record](../design/catalog-descriptor.md); the
+  decisions the stages took are in the driver's
+  [§5 "Decisions taken under delegation"](2026-10-03-lane-e16-catalog-descriptor-driver.md#5-decisions-taken-under-delegation).

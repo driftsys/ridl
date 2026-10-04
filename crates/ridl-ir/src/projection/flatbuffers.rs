@@ -2,7 +2,7 @@
 //!
 //! Two emitters have to agree on these byte for byte: the `.fbs` schema
 //! `ridl-backend-flatbuffers` writes, and the payload codec
-//! `ridl-backend-rust` writes (roadmap story E11.7). They share no emission
+//! `ridl-backend-rust` writes. They share no emission
 //! code — one writes a schema, the other writes Rust — so what they share is
 //! this module, and a drift test asserts that what each of them puts on the
 //! wire is what the other one reads.
@@ -257,7 +257,7 @@ pub fn root_box_table() -> TableLayout {
 /// declaration order with no explicit values, so the target numbers them by
 /// position and the two disagree after a tombstoned retirement — driftsys/ridl#302.
 /// This function is what makes that disagreement visible: the drift test
-/// compares it against the schema's implicit numbering on every fixture. E11.7
+/// compares it against the schema's implicit numbering on every fixture. The codec
 /// does not close #302; the fix is explicit member values in the schema, and
 /// #302 records that `planus` 1.3.0 rejects that form.
 #[must_use]

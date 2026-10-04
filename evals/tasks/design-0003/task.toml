@@ -1,0 +1,7 @@
+id = "design-0003"
+kind = "design"
+title = "Design remote configuration access"
+
+[expect]
+compiles = true
+lints = []

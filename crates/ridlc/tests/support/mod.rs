@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 /// rlib built by another toolchain is rejected with E0514.
 ///
 /// **The three encoding features are enabled here**, which is the proof
-/// mechanism E11.7 stage K3 settled. A generated `Payload<E>` implementation
+/// mechanism the FlatBuffers codec settled. A generated `Payload<E>` implementation
 /// names items that a feature gates — `ridl_rt::flatbuffers` is the first —
 /// and this rlib is what every compile proof links, so a proof over generated
 /// codec code does not compile against a bare build. One `--cfg` argument per
@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 /// build of an emitted crate with path dependencies, which costs a manifest,
 /// a target directory and a cargo run per proof and still does not build what
 /// a consumer outside this repository builds. Enabling all three rather than
-/// only `flatbuffers` is so that E11.8 and E11.12 inherit a working proof
+/// only `flatbuffers` is so that the other encodings inherit a working proof
 /// without editing this helper again.
 ///
 /// **The `std` feature is enabled too**, for two consumers: the cabin

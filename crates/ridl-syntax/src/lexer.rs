@@ -1,4 +1,4 @@
-//! The family lexer (docs/ROADMAP.md epic E1.1, typl reference §1.4 and §2).
+//! The family lexer (typl reference §1.4 and §2).
 //!
 //! One lexer serves the whole RIDL family. It recognises the shared token set —
 //! the reserved-word registry (§1.4), identifiers, numeric, string, regex and

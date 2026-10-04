@@ -362,7 +362,7 @@ fn wire_named_decl() -> v2::Decl {
 /// output holds no `pub type Wire`.
 ///
 /// `generate_face` used to emit that alias at package scope, where a typl
-/// declaration named `Wire` emits `pub struct Wire`, and E11.14 decision 5
+/// declaration named `Wire` emits `pub struct Wire`, and interaction-face decision 5
 /// refused the package over the pair. The alias is gone (`docs/technotes/rust-backend-name-collisions.md`, decision 5, driftsys/ridl#588): every site that named it
 /// writes `::ridl_rt::encoding::FlatBuffers`, so `Wire` is an ordinary
 /// declaration in a package with a face as it always was in one without.
@@ -2754,7 +2754,7 @@ fn appendix_b_rust_snapshot() {
 /// happens if this is hoisted to a shared location outside the repository.
 ///
 /// **The three encoding features are enabled here**, which is the proof
-/// mechanism E11.7 stage K3 settled. A generated `Payload<E>` implementation
+/// mechanism the FlatBuffers codec settled. A generated `Payload<E>` implementation
 /// names items that a feature gates — `ridl_rt::flatbuffers` is the first —
 /// and this rlib is what every compile proof links, so a proof over generated
 /// codec code does not compile against a bare build. One `--cfg` argument per
@@ -2762,7 +2762,7 @@ fn appendix_b_rust_snapshot() {
 /// build of an emitted crate with path dependencies, which costs a manifest,
 /// a target directory and a cargo run per proof and still does not build what
 /// a consumer outside this repository builds. Enabling all three rather than
-/// only `flatbuffers` is so that E11.8 and E11.12 inherit a working proof
+/// only `flatbuffers` is so that the other encodings inherit a working proof
 /// without editing this helper again.
 ///
 /// Edition 2021 is the edition `crates/ridl-rt/Cargo.toml` declares. The

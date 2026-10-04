@@ -1,5 +1,4 @@
-//! The walking-skeleton golden test (docs/ROADMAP.md epic E0.9, the exit
-//! criterion): compile the fixture end to end, pin the generated Rust and the
+//! The walking-skeleton golden test: compile the fixture end to end, pin the generated Rust and the
 //! lowered IR against committed snapshots, and drive the same pipeline through
 //! the `ridlc` binary.
 
@@ -29,9 +28,9 @@ fn fixture_compiles_to_committed_snapshots() {
 }
 
 /// A typl name that is a Rust keyword (`fn`) lexes as a valid identifier and
-/// passes parse, resolve, and check. The E1.12 Rust backend escapes it as a raw
+/// passes parse, resolve, and check. The Rust backend escapes it as a raw
 /// identifier (`r#fn`) rather than rejecting it — the raw-escaping decision the
-/// walking-skeleton backend deferred to E1.12. `compile` stays total and emits
+/// walking-skeleton backend deferred. `compile` stays total and emits
 /// valid Rust with no diagnostic.
 #[test]
 fn keyword_type_name_is_raw_escaped() {

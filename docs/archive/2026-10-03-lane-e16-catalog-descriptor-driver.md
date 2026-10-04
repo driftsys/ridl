@@ -17,7 +17,7 @@ an answer departs from an ADR (answer 4 and ADR-0014 decision 9; answer 8 and
 the FlatBuffers runtime that ADR-0020 decision 5 permits `ridl-rt`), the stage
 that applies it writes the decision record first.
 
-**THIS SESSION RUNS: D7**. D0 is the pull request that added this document; D1
+**THIS SESSION RUNS: D8**. D0 is the pull request that added this document; D1
 re-baselined the plan on 2026-10-03 (its "Re-baseline 2026-10" section lists
 every change and the decisions it took beyond §4). D2 landed as PR #669 on
 2026-10-03. Every buffer is finished with `ridl_descriptor::finish`, not with
@@ -155,6 +155,30 @@ D6 landed as PR #692 (a8ad508e) on 2026-10-04 and closed #381. Facts D7 needs:
   (ADR-0023 decision 8). This is a breaking face change; #693 asks for the
   ridlc-gen-kotlin heads-up.
 - Debt from the review: #693.
+
+D7 landed as PR #696 (681e6661) on 2026-10-04 and closed #382. Facts D8 needs:
+
+- `ridl describe <PATH>` verifies a catalog descriptor and prints it as JSON
+  through `ridl_descriptor::describe::to_json`. Keys print in alphabetical
+  order, because the workspace's `serde_json` has no `preserve_order` feature.
+  Every failure exits 2 with `error: <path>: <cause>`, including a failed write
+  to a stdout pipe whose reader has gone. ADR-0010 has the `ridl describe` row.
+- The book is current for E16: `docs/book/cli-reference.md` has a
+  `### ridl describe` section, nine `--emit` values in both build transcripts
+  and the exit-code row; `docs/book/getting-started.md` has nine emit rows,
+  `codegen-model` included. `AGENTS.md` counts twenty crates.
+- Gardening must fix the citations of
+  `docs/wip/2026-09-13-runtime-descriptors-design.md` by path: the module doc of
+  `crates/ridl-descriptor/src/lib.rs` (line 2), the comment on line 2 of
+  `crates/ridl-descriptor/schema/catalog.fbs`, and the link in `docs/ROADMAP.md`
+  (near line 319). The design's own text near line 289 also says the `flatc`
+  view is the same as `ridl describe`'s, which is no longer true (key order, and
+  `null` for an absent `timing`, `min_us` or `max_us`); that item is on #697.
+  Grep `.rs`, `.ridl`, `.fbs` and `.md` files for every wip path before moving
+  them (§3 D8).
+- The ridlc-gen-kotlin heads-up for D6's catalog check is
+  driftsys/ridlc-gen-kotlin#27, linked on #693.
+- Debt from the review: #697.
 
 ## 0. How to work in this repository
 
@@ -752,3 +776,124 @@ named.
     that fixed pass 1's findings. During pass 1, review seats were mutating the
     shared worktree in place. Cost if wrong: an intermittent CI failure, which
     would show in CI.
+
+### D7 — PR #696 (681e6661)
+
+1. **`ridl describe` prints JSON keys in alphabetical order, not in schema
+   order.** Reason: the workspace's `serde_json` stores an object's keys sorted.
+   The `preserve_order` feature would apply to every crate in the workspace
+   through feature unification and change the key order of `ridl-mcp`,
+   `ridl-diff` and the other JSON writers. The module doc names this difference
+   from `flatc --json`, and the snapshot pins the order. Cost if wrong: a reader
+   that expects schema order; a later change can turn the feature on.
+2. **A failed write to stdout exits 2, and the other subcommands are not
+   changed.** `run_describe` writes through a locked stdout; a pipe whose reader
+   has gone gives `error: <path>: Broken pipe (os error 32)` and exit 2
+   (ADR-0010 decision 1), not a panic with exit 101. The same bare `println!` or
+   `print!` in `ridl diff --explain`, three other places in `main.rs`, and in
+   `lock.rs` and `property.rs` predates D7 and is on #697. Cost if wrong: an
+   error message that names the input path for an output failure; the plan's
+   form `error: <path>: <cause>` was kept for every cause.
+3. **The book's `json` fence under `### ridl describe` is an abridged copy of
+   the snapshot**, not its first twenty lines as the plan said. Reason: with
+   alphabetical keys, the first twenty lines hold the snapshot header, the
+   opening lines and 14 of the 32 hash bytes, and no interface. Every kept line
+   is copied from the snapshot, and the text says the fence is abridged. Cost if
+   wrong: one fence, kept current by hand.
+4. **The snapshot replaces `toolchain` with `[version]`** after asserting that
+   it equals the crate version. Reason: a literal version fails the snapshot at
+   every release bump. Cost if wrong: none found.
+5. **The foreign-file test uses 12 bytes, not the plan's 7.** Reason: `verify`
+   rejects fewer than 8 bytes as too short before it reads the identifier, so
+   the plan's buffer never reached "not a catalog descriptor". Cost if wrong:
+   none.
+6. **The `ridl describe` exit-code row leaves its exit-1 cell empty**, as the
+   `ridl lsp` and `ridl mcp` rows do, and not `—` as the plan wrote. Cost if
+   wrong: one cell in ADR-0010 and one in the book.
+7. **D7 also added the `codegen-model` row to the getting-started emit table and
+   corrected the "one file per package per `--emit` target" sentence**, which
+   the plan left out; the stage brief asked for all three book fixes D6 found.
+   Cost if wrong: none; both describe the code as built.
+8. **The stdout-pipe test runs on Unix only.** Its expected cause is built from
+   EPIPE, which is 32 on Linux and macOS and means something else on Windows. CI
+   runs on Linux only. Cost if wrong: a Windows contributor does not run that
+   one test.
+9. **The `/review` passes replaced the plan skill's final whole-branch review**,
+   as in D6, and Task 12's docs diff had no separate task review: the controller
+   checked it against the code, and pass 1's docs and tests seats reviewed it.
+   Cost if wrong: one review seat fewer on a docs diff.
+10. **Pass 2's two Important findings were fixed after pass 2, and a tests-seat
+    quick pass reviewed the fix.** Both were a test assertion and an exit-code
+    list in the docs. The quick pass ran mutations that the changed tests
+    caught; its two Minor findings were fixed in 5dfdb445 without another pass.
+    The quick pass is advisory and has no ledger, so its report is not on the
+    PR. Cost if wrong: about ten lines of prose and one `cfg` that no seat
+    reviewed.
+11. **No open pull request touched the shared files**
+    (`crates/ridl/src/main.rs`, `docs/book/cli-reference.md`, ADR-0010) when D7
+    started; the only open pull request was #694, which touched `docs/wip/` only
+    and merged during D7. The Spec 0 lint-foundation work had no open pull
+    request. Cost if wrong: none.
+
+### D8 — PR #699 (eaeb3a57) and the gardening pull request
+
+1. **`ridl diff` stays silent when a provisional interface number changes or
+   `ridl lock` freezes it, although the catalog hash changes. This is filed as
+   its own issue, #700, and is not fixed in #699.** Reason: reporting it needs a
+   new `ridl diff` category with a verdict, which changes the output contract of
+   `ridl diff` (its JSON report, `--explain` and the book). That is a separate
+   change from embedding the hash. Cost if wrong: until #700 lands, `ridl diff`
+   reports `identical` for two builds whose generated faces refuse each other's
+   ports (ADR-0023 decision 8).
+2. **One helper builds the package set for both the catalog descriptor and the
+   region hash (`catalog_scope`, with `references_std`), and `ridl build` checks
+   `ridl.std` for the system write when a package references it, even when no
+   code emit ran.** Reason: issue #367 asks for the hash the descriptor writes,
+   and the hash can depend on `ridl.std` (D6 found this for the Rust face). Cost
+   if wrong: one memoized `ridl.std` check in a build that emits only the IR.
+3. **`compile_workspace` embeds the hashes on every call**, so `ridl-mcp`,
+   `ridl lock`, `ridl diff` (through `compile_workspace_with`) and the other
+   `ridl` subcommands that compile through it compute them, although none of
+   them reads the hash. Reason: every lowered system the toolchain returns then
+   carries its hashes, as the archived rsdl plan's Part B4 Task 9 required. Cost
+   if wrong: one SHA-256 per region per call (#701).
+4. **`ridl_sem::lower_system` stays public and returns regions with an empty
+   hash.** Reason: ADR-0022 decision 7 requires the rsdl lowering not to compute
+   the hash. A test pins the empty field. Cost if wrong: a caller that uses
+   `lower_system` directly writes a system with no hashes.
+5. **ADR-0022 is amended by a dated note under decision 7. The decision's
+   original text, including its heading "The region carries no catalog hash
+   yet", is kept.** Reason: ADR amendments in this repository are dated notes,
+   and the original wording is kept as history. Cost if wrong: a reader who
+   stops at the heading misreads the current state.
+6. **The durable record is a design record, `docs/design/catalog-descriptor.md`,
+   not an ADR.** Reason: the binding choices already have decision records
+   (ADR-0014 decision 15, ADR-0020 decision 5, ADR-0023 decision 8, ADR-0010 and
+   ADR-0022 decision 7). What the design note adds is the shape of the artifact
+   as built, which is the scope of a design record. Cost if wrong: the decisions
+   D-1 to D-10 move to a new ADR.
+7. **The runtime descriptors design is archived whole, including the system
+   descriptor half, which is not built.** The design record lists that half as
+   not built and points to the archived note as the record of the agreed
+   direction. Reason: the working-memory rule keeps forward-looking text out of
+   shipped records, and the roadmap has no rows for the system descriptor, so no
+   active work needs the note in `docs/wip/`. Cost if wrong: the story that
+   plans the system descriptor starts from the archive instead of `docs/wip/`.
+8. **The archived design's sentence that `flatc --json` gives the same view as
+   `ridl describe` is left as written.** The archive holds the design verbatim
+   apart from relative links, and the design record states the difference
+   (alphabetical keys, and `null` for an absent `timing`, `min_us` or `max_us`).
+   That covers the item on #697. Cost if wrong: none; the archive records what
+   was true when it was written.
+9. **The backlog keeps its review date and counts of 3 October 2026. A note
+   records the E16 issues that have closed since then, and the E16 rows are
+   marked landed in place.** Reason: the file's own refresh rule changes the
+   date only for a full priority review, which this is not. Cost if wrong: a
+   reader counts open issues from a stale table.
+10. **The `/review` passes replaced the plan skill's final whole-branch review
+    on #699**, as in D6 and D7. Pass 2's Important finding (records that named
+    the wrong function for the build's system write) was fixed after pass 2, and
+    a docs-seat quick pass reviewed the fix. Its one Minor finding was fixed in
+    #699 without another pass. Cost if wrong: a few lines of prose that no seat
+    reviewed.
+11. **Debt from the review: #701.** The `ridl diff` gap is #700.

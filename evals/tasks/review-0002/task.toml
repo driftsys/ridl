@@ -1,0 +1,8 @@
+id = "review-0002"
+kind = "review"
+corpus = "ros2"
+title = "Review the navigation interaction boundary"
+
+[expect]
+compiles = true
+lints = []

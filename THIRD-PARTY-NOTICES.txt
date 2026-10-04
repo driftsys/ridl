@@ -215,3 +215,53 @@ The following licence text is copied from that release's LICENSE.txt.
    See the License for the specific language governing permissions and
    limitations under the License.
 
+
+-------------------------------------------------------------------------------
+ROS 2 evaluation corpus — modified RIDL translations
+Path: evals/corpus/ros2/
+Upstream projects:
+  ros2/common_interfaces — https://github.com/ros2/common_interfaces
+  ros-navigation/navigation2 (nav2_msgs) — https://github.com/ros-navigation/navigation2
+  ros2/rcl_interfaces (builtin_interfaces dependency types) — https://github.com/ros2/rcl_interfaces
+Licence: Apache-2.0 for the selected definitions from all three projects.
+
+The corpus's PROVENANCE.md records the pinned revisions, selected definitions,
+source-to-output mappings, licence evidence and translation limitations.
+Its LICENSE is a byte-exact copy of common_interfaces/std_msgs/LICENSE.
+These definitions retain their upstream licence within this MIT repository.
+They are evaluation data and are not included in the published compiler crates.
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+MAVLink evaluation corpus — modified RIDL translations
+Path: evals/corpus/mavlink/
+Upstream: mavlink/mavlink — https://github.com/mavlink/mavlink
+Revision: 527637cb39cb4e52293bea40441810b53f23ff25
+Licence: MIT for the selected message-definition XML files.
+
+The official upstream guide distinguishes the MIT XML definitions from the
+LGPLv3 generator. The generator is not selected for this corpus. The corpus's
+LICENSE is a byte-exact copy of the definitions repository's COPYING, retaining
+its MIT exception and generator licence text as upstream licence evidence.
+
+The corpus's PROVENANCE.md records the selected definitions, source-to-output
+mappings, pinned protocol documentation, licence evidence and translation
+limitations. Protocol documentation is cited as evidence, not translated.
+These definitions retain their upstream licence within this MIT repository.
+They are evaluation data and are not included in the published compiler crates.
+-------------------------------------------------------------------------------
+
+
+-------------------------------------------------------------------------------
+COVESA VSS evaluation corpus — modified RIDL translations
+Path: evals/corpus/vss/
+Upstream: COVESA/vehicle_signal_specification — https://github.com/COVESA/vehicle_signal_specification
+Revision: 923692329b46bd70cda88137030b662af2765770
+Licence: MPL-2.0 for all files under evals/corpus/vss/.
+
+The corpus's LICENSE is a byte-exact copy of the upstream MPL-2.0 licence.
+Its PROVENANCE.md records the selected definitions, complete source-to-output
+mappings, instance expansion, licence evidence and translation limitations.
+These files retain their upstream file-level licence within this MIT repository.
+They are evaluation data and are not included in the published compiler crates.
+-------------------------------------------------------------------------------

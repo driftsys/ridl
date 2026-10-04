@@ -1,0 +1,139 @@
+// Modified ROS 2-to-RIDL translation. Inputs and pinned revisions: PROVENANCE.md.
+package navmsgs
+import builtininterfaces.Time
+import geometrymsgs.Accel
+import geometrymsgs.Point
+import geometrymsgs.Pose
+import geometrymsgs.PoseStamped
+import geometrymsgs.PoseWithCovariance
+import geometrymsgs.Twist
+import geometrymsgs.TwistWithCovariance
+import geometrymsgs.Wrench
+import stdmsgs.Header
+type RosFloat32 : float
+type RosInt8 : integer [-128..127]
+type RosString : string [0..18446744073709551615]
+type RosUInt32 : integer [0..4294967295]
+// Upstream: nav_msgs/msg/Goals.msg
+struct Goals {
+// An array of navigation goals
+
+
+// This header will store the time at which the poses were computed (not to be confused with the stamps of the poses themselves)
+// In the case that individual poses do not have their frame_id set or their timetamp set they will use the default value here.
+  header : Header
+
+// An array of goals to for navigation to achieve.
+// The goals should be executed in the order of the array.
+// The header and stamp are intended to be used for computing the position of the goals.
+// They may vary to support cases of goals that are moving with respect to the robot.
+  goals : [PoseStamped; 0..18446744073709551615]
+}
+// Upstream: nav_msgs/msg/GridCells.msg
+struct GridCells {
+// An array of cells in a 2D grid
+
+  header : Header
+
+// Width of each cell
+  cellWidth : RosFloat32
+
+// Height of each cell
+  cellHeight : RosFloat32
+
+// Each cell is represented by the Point at the center of the cell
+  cells : [Point; 0..18446744073709551615]
+}
+// Upstream: nav_msgs/msg/MapMetaData.msg
+struct MapMetaData {
+// This hold basic information about the characteristics of the OccupancyGrid
+
+// The time at which the map was loaded
+  mapLoadTime : Time
+
+// The map resolution [m/cell]
+  resolution : RosFloat32
+
+// Map width [cells]
+  width : RosUInt32
+
+// Map height [cells]
+  height : RosUInt32
+
+// The origin of the map [m, m, rad].  This is the real-world pose of the
+// bottom left corner of cell (0,0) in the map.
+  origin : Pose
+}
+// Upstream: nav_msgs/msg/OccupancyGrid.msg
+struct OccupancyGrid {
+// This represents a 2-D grid map
+  header : Header
+
+// MetaData for the map
+  info : MapMetaData
+
+// The map data, in row-major order, starting with (0,0). 
+// Cell (1, 0) will be listed second, representing the next cell in the x direction. 
+// Cell (0, 1) will be at the index equal to info.width, followed by (1, 1).
+// The values inside are application dependent, but frequently, 
+// 0 represents unoccupied, 1 represents definitely occupied, and
+// -1 represents unknown. 
+  data : [RosInt8; 0..18446744073709551615]
+}
+// Upstream: nav_msgs/msg/Odometry.msg
+struct Odometry {
+// This represents an estimate of a position and velocity in free space.
+// The pose in this message should be specified in the coordinate frame given by header.frame_id
+// The twist in this message should be specified in the coordinate frame given by the child_frame_id
+
+// Includes the frame id of the pose parent.
+  header : Header
+
+// Frame id the pose points to. The twist is in this coordinate frame.
+  childFrameId : RosString
+
+// Estimated pose that is typically relative to a fixed world frame.
+  pose : PoseWithCovariance
+
+// Estimated linear and angular velocity relative to child_frame_id.
+  twist : TwistWithCovariance
+}
+// Upstream: nav_msgs/msg/Path.msg
+struct Path {
+// An array of poses that represents a Path for a robot to follow.
+
+// Indicates the frame_id of the path.
+  header : Header
+
+// Array of poses to follow.
+  poses : [PoseStamped; 0..18446744073709551615]
+}
+// Upstream: nav_msgs/msg/Trajectory.msg
+struct Trajectory {
+// An array of trajectory points that represents a trajectory for a robot to follow.
+
+// Indicates the frame_id in which the planner ran and timestamp represents when the trajectory was generated.
+  header : Header
+
+// Array of trajectory points to follow.
+  points : [TrajectoryPoint; 0..18446744073709551615]
+}
+// Upstream: nav_msgs/msg/TrajectoryPoint.msg
+struct TrajectoryPoint {
+// Trajectory point state
+
+// Absolute time and frame of reference of the point along a trajectory
+  header : Header
+
+// Pose of the trajectory sample.
+  pose : Pose
+
+// Velocity of the trajectory sample.
+  velocity : Twist
+
+// Acceleration of the trajectory (optional, linear.x component is NaN if not set).
+  acceleration : Accel
+
+// Force/Torque to apply at trajectory sample (optional, force.x component is NaN if not set).
+  effort : Wrench
+}

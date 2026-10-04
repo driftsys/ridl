@@ -11,7 +11,7 @@ description = "Compiles a RIDL IR package to Rust source, plus the generated int
 # checked-in generated face is `include!`d by the round-trip tests, and its
 # `blocking` module is under `#[cfg(feature = "std")]`, which rustc evaluates
 # against the crate that includes it, this one. Naming the feature here, on by
-# default, is what compiles that module in the tests (story E11.21, second
+# default, is what compiles that module in the tests (second
 # half).
 default = ["std"]
 std = []
@@ -53,7 +53,7 @@ ridlc = { path = "../ridlc" }
 # `RidlDatabase` itself has the crate available.
 ridl-core = { path = "../ridl-core" }
 # The in-process reference runtime the round-trip tests build the generated
-# face over (story E11.15). A dev-dependency for the same reason as `ridl-rt`
+# face over. A dev-dependency for the same reason as `ridl-rt`
 # below: the backend emits text that links a runtime and links none itself.
 ridl-loopback = { path = "../ridl-loopback" }
 # The generated interaction face names `::ridl_rt` (Lane M stage M3). The
@@ -67,10 +67,10 @@ ridl-loopback = { path = "../ridl-loopback" }
 # this crate's library links no runtime at all.
 # The `std` feature is what makes `::ridl_rt::task` exist: the round trips
 # through the generated async client poll its futures by hand with
-# `ridl_rt::task::noop_waker`, the way a frame loop does (story E11.21).
+# `ridl_rt::task::noop_waker`, the way a frame loop does.
 ridl-rt = { path = "../ridl-rt", features = ["flatbuffers", "std"] }
 # The independent FlatBuffers implementation the conformance test round trips
-# against (E11.7 design note D-8), and the code generator that turns the
+# against (design note D-8), and the code generator that turns the
 # emitted `.fbs` into the Rust reader that test drives. `planus-codegen` runs
 # in one test, which regenerates the checked-in reader and asserts it is byte
 # for byte what is in the tree; `planus` is the runtime that reader links, in

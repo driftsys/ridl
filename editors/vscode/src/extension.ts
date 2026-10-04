@@ -1,5 +1,4 @@
-// The RIDL VS Code extension entry point (docs/ROADMAP.md epics E1.17,
-// E2.10b, E6.15).
+// The RIDL VS Code extension entry point.
 //
 // `activate` registers the "Install ridl to PATH" command and the MCP
 // server definition provider unconditionally — both are cheap and spawn no

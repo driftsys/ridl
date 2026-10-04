@@ -1,6 +1,6 @@
 //! The FlatBuffers state of a named-type payload: the projection's own bound
 //! (`ridl_ir::projection::flatbuffers::max_size`, the one implementation of
-//! the bound — `docs/design/flatbuffers-codec.md`, from E11.7's design D-6),
+//! the bound — `docs/design/flatbuffers-codec.md`, design D-6),
 //! and the codegen model's cause when there is none. Nothing is derived here:
 //! a second derivation would be two implementations of one rule, and a silent
 //! disagreement the moment either changed.

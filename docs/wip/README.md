@@ -19,7 +19,10 @@ ADR-0018 decision 16), both now parked by the 2026-09-12 re-scope, read the E9.8
 design note, from the archive. The piece 1a MCP tools design and its two plans
 (`2026-10-03-mcp-workspace-tools-{design,plan}.md` and
 `2026-10-03-mcp-tools-followup-plan.md`) were archived on 2026-10-04, once #668
-and #677 landed.
+and #677 landed. The runtime descriptors design, the catalog descriptor plan and
+the lane E16 driver were archived on 2026-10-04, after E16.1 to E16.6 and E6.17
+landed, and gardened into
+[`../design/catalog-descriptor.md`](../design/catalog-descriptor.md).
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
@@ -114,21 +117,6 @@ and #677 landed.
   **2026-09-12-interface-id-study-2.md** — the two identity study reports that
   note's D-7 summarises, kept verbatim; the first ranked the carriers, the
   second simulated the merges and the diff. **Not ratified.**
-- **2026-09-13-runtime-descriptors-design.md** — the two files an engine reads:
-  a catalog descriptor per package (interfaces with frozen numbers, members with
-  ordinal, kind, bounds and a max-size table per payload per encoding) and a
-  self-contained system descriptor per deployment (producers, placements, links
-  with crossing kinds, routing table, grants, the attribute map). Both
-  FlatBuffers, lowered from the protobuf IR, which ADR-0014 keeps for the
-  toolchain. **Not ratified.**
-- **2026-09-13-catalog-descriptor-plan.md** — the twelve-task plan for the
-  catalog half of that design: the `ridl-descriptor` crate with the schema and
-  its planus-generated accessors, the verifier, the interface numbers copied
-  from the IR, the catalog hash, the proto3 and FlatBuffers size states, the
-  lowering, `ridlc build --emit catalog` and `ridl describe`. The system
-  descriptor waits for the rsdl lowering's descriptor story. **Re-baselined
-  2026-10-03 by lane E16's stage D1 (its first section lists every change); in
-  execution from stage D2.**
 - **2026-09-13-step1-lanes-plan.md** and its four driver prompts,
   **2026-09-13-lane-a-ridl-rt-driver.md**, **2026-09-13-lane-b-rsdl-driver.md**,
   **2026-09-13-lane-l-lock-driver.md** and **2026-09-13-lane-c-typl-driver.md**
@@ -139,9 +127,9 @@ and #677 landed.
   change a shared file when; each lane's own spec decides the design. The
   coordination issue is #328. Lane A (`ridl-rt` 0.1.0) landed; its own
   design/plan pair is archived — see
-  [`../archive/README.md`](../archive/README.md). Lane B (rsdl) landed except
-  for story E6.17, the catalog hash per region; its plan
-  (`2026-09-15-rsdl-plan.md`) is archived too, and its durable records are
+  [`../archive/README.md`](../archive/README.md). Lane B (rsdl) landed, story
+  E6.17, the catalog hash per region, last; its plan (`2026-09-15-rsdl-plan.md`)
+  is archived too, and its durable records are
   [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) and
   [the rsdl implementation technote](../technotes/rsdl-implementation.md). The
   state of the other two lanes is on #328.
@@ -161,12 +149,6 @@ and #677 landed.
   prior context, so it carries the working rules and the facts a driver prompt
   otherwise leaves to the conversation. Six stages; two design notes inside it
   stop for Sebastien's disposition. Coordination issue: #328.
-- **2026-10-03-lane-e16-catalog-descriptor-driver.md** — the driver for epic
-  E16, the catalog descriptor (#377 to #382, then E6.17 #367). It runs the
-  2026-09-13 catalog descriptor plan, after stage D1 brings the plan up to date
-  with what landed since: the lock, the codegen model's catalog facts, the frame
-  specification. Its §4 records Sebastien's answers of 2026-10-03 on the plan's
-  dispositions and #275. Archive it with the plan at stage D8.
 - **2026-09-22-ir-stability-design.md** — lane P stage P1a: the recommended
   disposition of O-P1 (canonical protobuf JSON becomes the canonical encoding,
   binary and prototext derived), with #231 reproduced as measured numbers, the
