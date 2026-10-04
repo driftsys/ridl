@@ -599,6 +599,12 @@ argument for it in the command case.
      blocking `serve` calls the async one, so it makes it once too. No member
      method compares anything: the comparison is made once per binding, as
      decision 3 of ADR-0021 states, not once per call.
+   - **The panic location.** `check_catalog`, both `Bind::new` methods and
+     `serve` are `#[track_caller]`, so a mismatch panic reports the program's
+     binding call, not a line of the generated face. The helper
+     `mismatch_message` in `crates/ridl-backend-rust/tests/interaction_face.rs`
+     pins it: each mismatch test runs it, and it asserts that the panic's file
+     is the test file.
    - **The comparison.** `CatalogRef` equality: the package name and the catalog
      hash ([ADR-0014](ADR-0014-ir-encodings.md) decision 15) must both be equal.
    - **A mismatch panics.** The panic message names the interface, the catalog

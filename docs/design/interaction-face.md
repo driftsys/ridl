@@ -745,6 +745,12 @@ path so that a member named `catalog` cannot capture the call:
   through `Bind::new`, and its `serve` calls the async `serve`, so each makes
   the comparison once, through that call.
 
+`check_catalog`, both `Bind::new` methods and `serve` are `#[track_caller]`, so
+a mismatch panic reports the program's binding call, not a line of the generated
+face. `tests/interaction_face.rs` pins this in `mismatch_message`, which every
+one of the `*_panics` tests listed below runs: it asserts that the panic's file
+is the test file.
+
 No member method compares anything: the comparison is made once per binding. The
 rustdoc of each `new` and each `serve` states the panic under `# Panics` and
 names the comparison a program makes first to avoid it,

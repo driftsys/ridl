@@ -34,9 +34,10 @@
 //! - `Provider`, the trait the application implements, with one method per
 //!   command and query;
 //! - `check_catalog`, private, which panics unless a port's catalog is the
-//!   interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new`
-//!   of the face, and `serve` where the interface emits one, call it once,
-//!   before they store or use the port; the blocking face reaches it through the async face;
+//!   interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new` of the
+//!   face, and `serve` where the interface emits one, call it once, before
+//!   they store or use the port; the blocking face reaches it through the
+//!   async face;
 //! - `serve`, which registers the interface's calls with the handler and
 //!   returns the future that settles every claim, and resolves only when the
 //!   handler port fails;
