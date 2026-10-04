@@ -128,11 +128,12 @@ D6 landed as PR #692 (a8ad508e) on 2026-10-04 and closed #381. Facts D7 needs:
   `crates/ridlc/src/main.rs` and the help census test in
   `crates/ridlc/tests/cli.rs` already name `catalog`. The book does not.
   `docs/book/cli-reference.md` shows eight values in its `ridl build` and
-  `ridlc build` help transcripts, which Task 11's census covers. It also says
-  "one file per package per `--emit` target", which is not true for `catalog`,
-  and `docs/book/getting-started.md` has an emit table of seven rows ("Seven
-  emit targets exist today", without `codegen-model`). Neither of these two is
-  in Task 11 or #382; D7 adds them to its census.
+  `ridlc build` help transcripts, which Task 11's census covers.
+  `docs/book/getting-started.md` has an emit table of seven rows ("Seven emit
+  targets exist today", without `codegen-model`), which Task 11 step 5 covers
+  but for the `codegen-model` row. `docs/book/cli-reference.md` also says "one
+  file per package per `--emit` target", which is not true for `catalog`; that
+  sentence is in neither Task 11 nor #382, so D7 adds it to its census.
 - `Emit::Catalog` is classed as a code emit, so a build with `--emit catalog`
   alone keeps `ridl.std` in `others` and hashes as the Rust face does. A test
   pins it. The cost is a codegen request that nothing reads (#693).
@@ -747,6 +748,7 @@ named.
     Cost if wrong: none found.
 11. **One failure of `descriptor_hash_equals_the_rust_face_hash` was treated as
     interference, not a flaky test.** It failed once on pass 1's first run. It
-    did not fail in 32 later runs by the review seat or in 90 runs by the fix
-    implementer. During pass 1, review seats were mutating the shared worktree
-    in place. Cost if wrong: an intermittent CI failure, which would show in CI.
+    did not fail in 32 later runs by the review seat or in 90 runs by the agent
+    that fixed pass 1's findings. During pass 1, review seats were mutating the
+    shared worktree in place. Cost if wrong: an intermittent CI failure, which
+    would show in CI.
