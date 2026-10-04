@@ -417,3 +417,19 @@ provenance. Nothing here is normative — the current references live in
   their own; the decisions taken while they were executed are in the pull
   request bodies and in decisions 7 and 8 of
   [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md).
+- **2026-09-13-runtime-descriptors-design.md** — the design for the two files an
+  engine reads: a catalog descriptor per package and a system descriptor per
+  deployment, decisions D-1 to D-10. Archived verbatim once the catalog
+  descriptor landed (E16.1 to E16.6). The catalog half became
+  [the catalog descriptor design record](../design/catalog-descriptor.md); the
+  system descriptor waits for its own story.
+- **2026-09-13-catalog-descriptor-plan.md** — the twelve-task plan for the
+  catalog half of that design, re-baselined on 2026-10-03. Archived verbatim.
+  What it built is described, as built, in
+  [the catalog descriptor design record](../design/catalog-descriptor.md).
+- **2026-10-03-lane-e16-catalog-descriptor-driver.md** — the driver for epic
+  E16, which ran that plan (#377 to #382, then E6.17 #367). Archived verbatim.
+  The gardened record is
+  [the catalog descriptor design record](../design/catalog-descriptor.md); the
+  decisions the stages took are in the driver's
+  [§5 "Decisions taken under delegation"](2026-10-03-lane-e16-catalog-descriptor-driver.md#5-decisions-taken-under-delegation).

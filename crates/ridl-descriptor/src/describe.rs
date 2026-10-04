@@ -1,7 +1,8 @@
 //! `ridl describe`'s view of a descriptor (the runtime descriptors design,
-//! D-9): strict JSON built by walking the checked accessors. There is no
-//! JSON emit; this is a rendering of the binary. `flatc --json --strict-json
-//! --defaults-json` gives the same view with two differences. First, `flatc`
+//! `docs/archive/2026-09-13-runtime-descriptors-design.md`, D-9): strict JSON
+//! built by walking the checked accessors. There is no JSON emit; this is a
+//! rendering of the binary. `flatc --json --strict-json --defaults-json` gives
+//! the same view with two differences. First, `flatc`
 //! omits an absent `timing`, `min_us` or `max_us`, which is `null` here.
 //! Second, `flatc` prints keys in schema order, and this view prints them in
 //! alphabetical order (the workspace's `serde_json` stores an object's keys

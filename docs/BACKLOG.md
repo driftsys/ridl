@@ -6,6 +6,9 @@ It helps contributors select work and understand the remaining bugs and
 technical debt. Begin with the catalog descriptor, then complete the remaining
 Rust release dependencies in the order below.
 
+Since the review, #367 and #377 to #382 have closed: lane E16 and E6.17 landed
+on 2026-10-04. The counts below are those of the review date.
+
 [ROADMAP.md](ROADMAP.md) defines release scope, story acceptance criteria and
 dependencies. This backlog records issue priorities at the review date; GitHub
 holds the current issue state and supporting evidence. Triage reasons below are
@@ -27,13 +30,14 @@ These estimates help planning and do not set delivery dates.
 
 ## Next delivery sequence
 
-1. **Catalog foundation:** #377 defines the descriptor, accessors and verifier.
-   Then #378 supplies numbering and the catalog hash, while #379 supplies the
-   size context and string byte bounds.
-2. **Catalog delivery:** #380 computes payload bounds; #381 lowers and emits the
-   catalog; #382 adds JSON inspection, `ridl describe` and the CLI records.
-   Coordinate schema identity #275 with #378. System integration #367, which
-   embeds the delivered catalog hash in each rsdl region, landed on 2026-10-04.
+1. **Catalog foundation (landed 2026-10-04):** #377 defined the descriptor,
+   accessors and verifier. Then #378 supplied numbering and the catalog hash,
+   while #379 supplied the size context and string byte bounds.
+2. **Catalog delivery (landed 2026-10-04):** #380 computed payload bounds; #381
+   lowered and emitted the catalog; #382 added JSON inspection, `ridl describe`
+   and the CLI records. Coordinate schema identity #275 with #378. System
+   integration #367, which embeds the delivered catalog hash in each rsdl
+   region, landed on 2026-10-04.
 3. **Language finalization alongside the catalog:** finish constraint-change
    records and diff classification #255, and grammar/attribute work #276.
    Finalize reference status #320 after its prerequisites and remaining

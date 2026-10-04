@@ -6,10 +6,11 @@ answers Sebastien gave in
 [`2026-10-03-lane-e16-catalog-descriptor-driver.md`](2026-10-03-lane-e16-catalog-descriptor-driver.md)
 §4: D-1, D-4, D-6, D-9, §6 and §7 changed; each change names its answer. Read
 after
-[`2026-09-12-release-scope-and-plugin-system-design.md`](2026-09-12-release-scope-and-plugin-system-design.md)
+[`2026-09-12-release-scope-and-plugin-system-design.md`](../wip/2026-09-12-release-scope-and-plugin-system-design.md)
 §3.8 and §3.13,
-[`2026-09-08-topology-vocabulary.md`](2026-09-08-topology-vocabulary.md) §6, and
-[`2026-09-12-rsdl-rewrite-decisions.md`](2026-09-12-rsdl-rewrite-decisions.md)
+[`2026-09-08-topology-vocabulary.md`](../wip/2026-09-08-topology-vocabulary.md)
+§6, and
+[`2026-09-12-rsdl-rewrite-decisions.md`](../wip/2026-09-12-rsdl-rewrite-decisions.md)
 D-6 and D-7.
 
 Why it exists: the records fix the IR for the toolchain (ADR-0014) and list what
@@ -226,7 +227,7 @@ bound counts Unicode scalar values and its byte capacity is four bytes per
 scalar value under UTF-8 (design note §3.11), in both columns and with no
 narrowing from a `match` constraint: the checker and the generated Rust code do
 not agree on what a pattern matches until the design of
-[`2026-10-01-portable-match-patterns-design.md`](2026-10-01-portable-match-patterns-design.md)
+[`2026-10-01-portable-match-patterns-design.md`](../wip/2026-10-01-portable-match-patterns-design.md)
 (approach A) is implemented, so an ASCII-only verdict is not safe for a size
 bound; driftsys/ridl#665 records the narrowing, to be built once in one function
 both bounds call. Each encoding's overhead — proto3 tags and varint widths at

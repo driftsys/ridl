@@ -333,7 +333,8 @@ fn main() -> ExitCode {
 
 /// `ridl describe`: read, verify (identifier, version, whole-buffer walk),
 /// render. Every failure means the tool could not answer: exit 2 with the
-/// cause named (ADR-0010 decision 1; the runtime descriptors design, D-8).
+/// cause named (ADR-0010 decision 1;
+/// `docs/archive/2026-09-13-runtime-descriptors-design.md`, D-8).
 fn run_describe(path: &Path) -> ExitCode {
     let bytes = match std::fs::read(path) {
         Ok(bytes) => bytes,

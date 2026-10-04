@@ -1915,12 +1915,13 @@ sections it points at are.
    the answer moved out of the language: the enumeration surface is the
    **catalog descriptor** — a per-package artifact carrying each interface, its
    members and its numbers in a form an engine reads without decoding, specified
-   in the runtime-descriptors design and scheduled as Epic 16, where
-   `ridl describe` prints it at the desk. Nothing about it is a language
-   construct, and a bridge that exposes that catalog at runtime is an ordinary
-   component with an ordinary ridl service, written where the bridge lives; the
-   bridge itself is a runtime concern the roadmap parks. No name is reserved for
-   it.
+   in
+   [the runtime-descriptors design](../archive/2026-09-13-runtime-descriptors-design.md)
+   and scheduled as Epic 16, where `ridl describe` prints it at the desk.
+   Nothing about it is a language construct, and a bridge that exposes that
+   catalog at runtime is an ordinary component with an ordinary ridl service,
+   written where the bridge lives; the bridge itself is a runtime concern the
+   roadmap parks. No name is reserved for it.
 8. **Failure management and safety/HA properties** (§10.4). **Deferred to ridl
    v0.3.** Failsafe states, fallbacks, degraded modes, health/halt management —
    a safety/quality-management layer over the runtime's total failure detection.
