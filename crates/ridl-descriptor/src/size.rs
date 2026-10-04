@@ -145,8 +145,12 @@ pub enum SizeState {
 }
 
 /// The state of the named type `type_name` under `encoding`: `None` when
-/// this toolchain computes no state (the `repr(C)` layout is undefined, a
-/// name does not resolve, or the projection has no root form for the type).
+/// this toolchain computes no state. For every encoding: the name does not
+/// resolve, or the projection has no root form for the type. For `ReprC`:
+/// always, the layout is undefined until E11.12. For `Proto3`, where no
+/// unbounded state exists (`proto3::state`): the type is not a struct or a
+/// union, a member of its message is one the proto backend refuses, an enum
+/// value it reaches is outside int32, or the bound is above `u32::MAX`.
 pub fn size_state(type_name: &str, ctx: &Ctx<'_>, encoding: Encoding) -> Option<SizeState> {
     match encoding {
         Encoding::Proto3 => proto3::state(type_name, ctx),
@@ -175,7 +179,9 @@ pub fn string_max_bytes(constraint: Option<&Constraint>) -> Option<u64> {
 /// A type resolved to what the proto3 sizer counts. A composite carries
 /// `home`, the package a bare name inside it resolves against: the declaring
 /// package of a named struct or union, the package of the field for an inline
-/// tuple, array or map.
+/// tuple, array or map. A named struct or union also carries its declared
+/// `name`, which with `home`'s name identifies the declaration: the key the
+/// proto3 sizer remembers a derived bound under.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Leaf<'a> {
     /// A scalar with a largest encoding, as the proto backend spells it
@@ -200,10 +206,12 @@ pub(crate) enum Leaf<'a> {
         retired_in_int32: bool,
     },
     Struct {
+        name: &'a str,
         def: &'a StructDef,
         home: &'a Package,
     },
     Union {
+        name: &'a str,
         def: &'a UnionDef,
         home: &'a Package,
     },
@@ -245,10 +253,12 @@ pub(crate) fn leaf_of_name<'a>(name: &str, home: &'a Package, ctx: &Ctx<'a>) -> 
     match decl.kind.as_ref()? {
         decl::Kind::TypeDef(def) => leaf_of_type_def(def),
         decl::Kind::StructDef(def) => Some(Leaf::Struct {
+            name: &decl.name,
             def,
             home: declaring,
         }),
         decl::Kind::UnionDef(def) => Some(Leaf::Union {
+            name: &decl.name,
             def,
             home: declaring,
         }),
@@ -953,7 +963,7 @@ mod tests {
         let ctx = Ctx::new(&root, &others);
 
         let (def, home) = match leaf_of_name("q.Thing", &root, &ctx) {
-            Some(Leaf::Struct { def, home }) => (def, home),
+            Some(Leaf::Struct { def, home, .. }) => (def, home),
             other => panic!("q.Thing is a struct leaf, got {other:?}"),
         };
         assert_eq!(
@@ -1428,6 +1438,68 @@ pub(crate) mod tests_support {
             ],
             ..Default::default()
         }
+    }
+
+    /// Two packages whose declarations share names, so a bare name inside a
+    /// declaration of the imported package `q` resolves differently in `q`
+    /// and in the root `p`. In `p`: `Inner { s: string [0..100] }` and
+    /// `Hole { b: boolean }`, both bounded. In `q`: `Thing { f: Inner }` over
+    /// a one-boolean `Inner`, and `Loose { f: Hole }` over a `Hole` that holds
+    /// a bare `string`, which no projection bounds. Sized in `q`, `Thing` is
+    /// small and `Loose` unbounded; sized in `p` by mistake, `Thing` is wide
+    /// and `Loose` bounded.
+    pub(crate) fn two_package_fixture() -> (Package, Package) {
+        let one_field = |name: &str, ty: FieldType| StructDef {
+            members: vec![StructMember {
+                member: Some(struct_member::Member::Field(Field {
+                    name: name.to_owned(),
+                    ordinal: 1,
+                    r#type: Some(ty),
+                    ..Default::default()
+                })),
+            }],
+            fixed_layout: false,
+        };
+        let structure = |name: &str, def: StructDef| Decl {
+            name: name.to_owned(),
+            kind: Some(decl::Kind::StructDef(def)),
+            ..Default::default()
+        };
+        let boolean = FieldType {
+            optional: false,
+            kind: Some(field_type::Kind::Primitive(PrimitiveType::Boolean as i32)),
+        };
+        let bare_string = FieldType {
+            optional: false,
+            kind: Some(field_type::Kind::Primitive(PrimitiveType::String as i32)),
+        };
+        let string_100 = inline(scalar_def(
+            PrimitiveType::String,
+            None,
+            Some(Constraint {
+                len_max: Some(100),
+                ..Default::default()
+            }),
+        ));
+        let root = Package {
+            name: "p".to_owned(),
+            decls: vec![
+                structure("Inner", one_field("s", string_100)),
+                structure("Hole", one_field("b", boolean.clone())),
+            ],
+            ..Default::default()
+        };
+        let imported = Package {
+            name: "q".to_owned(),
+            decls: vec![
+                structure("Thing", one_field("f", named("Inner"))),
+                structure("Inner", one_field("b", boolean)),
+                structure("Loose", one_field("f", named("Hole"))),
+                structure("Hole", one_field("text", bare_string)),
+            ],
+            ..Default::default()
+        };
+        (root, imported)
     }
 
     /// `Open { text: string }` with no bound on the string: the one member

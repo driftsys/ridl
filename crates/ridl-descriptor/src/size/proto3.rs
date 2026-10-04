@@ -8,20 +8,39 @@
 //! emits: a field number from the IR ordinal (`emit_struct`, `emit_union`), a
 //! named scalar inlined into its field, an enum as a varint, an enum set as
 //! its width's scalar, an array as `repeated` (packed for a scalar and an
-//! enum), a map as `map<K, V>`, a tuple as an induced message. A member the
-//! backend refuses makes the payload absent, and every refusal is reproduced
-//! here, citing the backend function that holds it: a nested array or map and
-//! a map value that is an array or a map (`resolve_field_type`), a map key
-//! outside the integral and string scalars (`map_key_text`), an optional array
-//! or map field (`emit_struct`, ADR-0013 decision 7), an enum live or
-//! retired value outside int32 (`emit_enum`), and a field number protobuf
-//! reserves or exceeds (`check_field_number`). proto3 has no unbounded state:
-//! typl bounds every collection, so a message is bounded or, when the
-//! projection refuses a member, absent. Every addition and multiplication is
-//! checked, so a bound the `u64` arithmetic cannot hold is absent, and so is a
-//! bound above `u32::MAX`, as in the FlatBuffers projection's `MAX_ENCODABLE`.
+//! enum), a map as `map<K, V>`, a tuple as an induced message.
+//!
+//! A member whose shape the backend refuses makes the payload absent. The
+//! refusals reproduced here, each citing the backend function that holds it,
+//! are exactly these: a nested array or map and a map value that is an array
+//! or a map (`resolve_field_type`), a map key outside the integral and string
+//! scalars (`map_key_text`), an optional array or map field (`emit_struct`,
+//! ADR-0013 decision 7), an enum live or retired value outside int32
+//! (`emit_enum`), and a field number protobuf reserves or exceeds
+//! (`check_field_number`). The backend's name-collision refusals are **not**
+//! reproduced: two struct field names that coincide after `snake_case`
+//! (`emit_struct`), two enum values that coincide after
+//! `SCREAMING_SNAKE_CASE` or one that spells the synthesized
+//! `<PREFIX>_UNSPECIFIED` (`emit_enum`), a union arm named `value`, the name
+//! of the `oneof` every union message carries (`emit_union`), and two induced
+//! tuple messages with one name (`emit_induced_tuples`). Each of those
+//! refuses the whole package rather than a member, so a payload in a package
+//! the backend refuses on a name collision still gets a proto3 bound here: the
+//! wire size does not depend on the names. Sharing those rules with the
+//! backend is deferred to a debt issue (move the proto3 projection's refusal
+//! rules into `ridl_ir::projection::proto3`).
+//!
+//! proto3 has no unbounded state: typl bounds every collection, so a message
+//! is bounded or, when the projection refuses a member, absent. Every
+//! addition and multiplication is checked, so a bound the `u64` arithmetic
+//! cannot hold is absent, and so is a bound above `u32::MAX`, as in the
+//! FlatBuffers projection's `MAX_ENCODABLE`.
 
-use ridl_ir::projection::proto3::{self as proto3_projection, Scalar};
+use std::collections::HashMap;
+
+use ridl_ir::projection::proto3::{
+    self as proto3_projection, PROTO_MAX_FIELD_NUMBER, PROTO_RESERVED, Scalar,
+};
 use ridl_ir::v2::{
     ArrayType, FieldType, MapType, Package, StructDef, TupleType, UnionDef, decl, field_type,
     struct_member,
@@ -32,11 +51,6 @@ use super::{Ctx, Leaf, SizeState, leaf_of_field_type, leaf_of_name};
 /// Nesting deeper than this is treated as unsizable; typl rejects recursion
 /// (§7.3), so this only guards against an IR the checker did not see.
 const MAX_DEPTH: u32 = 64;
-
-/// The field numbers protobuf reserves for itself, and its largest field
-/// number: the two bounds `check_field_number` in the proto backend refuses.
-const PROTO_RESERVED: std::ops::RangeInclusive<u32> = 19_000..=19_999;
-const PROTO_MAX_FIELD_NUMBER: u32 = 536_870_911;
 
 const SCALAR_IS_BOUNDED: &str = "a `Leaf::Scalar` is never `string` or `bytes`: `leaf_of_type_def` and `leaf_of_primitive` \
      make those a `Leaf::Blob` or no leaf";
@@ -67,6 +81,43 @@ fn delimited(number: u32, payload: u64) -> Option<u64> {
         .checked_add(payload)
 }
 
+/// One `state` call's walk: the scope it resolves names in, and the bounds
+/// it has derived so far.
+struct Walk<'a, 'c> {
+    ctx: &'c Ctx<'a>,
+    /// The bound of each named struct and union already derived, keyed by
+    /// the declaring package's name and the declaration's name, so a type
+    /// reached twice is walked once. Without it a diamond — `A { b: B, c: B }`,
+    /// `B { d: C, e: C }`, and so on — costs time exponential in its depth,
+    /// and typl admits one: TYPL-206 rejects a cycle, not sharing. The
+    /// FlatBuffers projection's `Sizer::computed` is the same device.
+    ///
+    /// Only a bound is remembered. A `None` may be the depth guard answering
+    /// for the path that reached it rather than a property of the type, and
+    /// that answer does not generalize to another path.
+    memo: HashMap<(&'a str, &'a str), u64>,
+}
+
+impl<'a> Walk<'a, '_> {
+    /// The bound of the declaration `name` of `home`: the one already
+    /// derived if there is one, otherwise what `body` derives, remembered
+    /// when it is a bound.
+    fn remembered(
+        &mut self,
+        home: &'a Package,
+        name: &'a str,
+        body: impl FnOnce(&mut Self) -> Option<u64>,
+    ) -> Option<u64> {
+        let key = (home.name.as_str(), name);
+        if let Some(bound) = self.memo.get(&key) {
+            return Some(*bound);
+        }
+        let bound = body(self)?;
+        self.memo.insert(key, bound);
+        Some(bound)
+    }
+}
+
 /// The proto3 state of the named type `type_name`: its message's bound for
 /// a struct or a union; absent for everything else (ADR-0017 decision 1
 /// inlines a named scalar and an enum set, decision 2 rejects a wrapper
@@ -74,9 +125,13 @@ fn delimited(number: u32, payload: u64) -> Option<u64> {
 /// does not resolve, for a member the projection refuses, and for a bound
 /// above `u32::MAX`.
 pub(crate) fn state(type_name: &str, ctx: &Ctx<'_>) -> Option<SizeState> {
+    let mut walk = Walk {
+        ctx,
+        memo: HashMap::new(),
+    };
     let bytes = match leaf_of_name(type_name, ctx.packages().package, ctx)? {
-        Leaf::Struct { def, home } => struct_size(def, home, ctx, 0)?,
-        Leaf::Union { def, home } => union_size(def, home, ctx, 0)?,
+        Leaf::Struct { name, def, home } => struct_size(name, def, home, &mut walk, 0)?,
+        Leaf::Union { name, def, home } => union_size(name, def, home, &mut walk, 0)?,
         Leaf::Scalar(_)
         | Leaf::Blob(_)
         | Leaf::Enum { .. }
@@ -91,10 +146,10 @@ fn field_size<'a>(
     number: u32,
     ty: &'a FieldType,
     home: &'a Package,
-    ctx: &Ctx<'a>,
+    walk: &mut Walk<'a, '_>,
     depth: u32,
 ) -> Option<u64> {
-    leaf_field(number, leaf_of_field_type(ty, home, ctx)?, ctx, depth)
+    leaf_field(number, leaf_of_field_type(ty, home, walk.ctx)?, walk, depth)
 }
 
 /// The largest encoding of one enum value: a negative member encodes as a
@@ -114,7 +169,7 @@ fn enum_len(min: i64, max: i64, retired_in_int32: bool) -> Option<u64> {
     })
 }
 
-fn leaf_field(number: u32, leaf: Leaf<'_>, ctx: &Ctx<'_>, depth: u32) -> Option<u64> {
+fn leaf_field<'a>(number: u32, leaf: Leaf<'a>, walk: &mut Walk<'a, '_>, depth: u32) -> Option<u64> {
     if depth > MAX_DEPTH || PROTO_RESERVED.contains(&number) || number > PROTO_MAX_FIELD_NUMBER {
         return None;
     }
@@ -126,11 +181,15 @@ fn leaf_field(number: u32, leaf: Leaf<'_>, ctx: &Ctx<'_>, depth: u32) -> Option<
             max,
             retired_in_int32,
         } => plain(number, enum_len(min, max, retired_in_int32)?),
-        Leaf::Struct { def, home } => delimited(number, struct_size(def, home, ctx, depth + 1)?),
-        Leaf::Union { def, home } => delimited(number, union_size(def, home, ctx, depth + 1)?),
-        Leaf::Tuple { def, home } => delimited(number, tuple_size(def, home, ctx, depth + 1)?),
-        Leaf::Array { def, home } => array_field(number, def, home, ctx, depth + 1),
-        Leaf::Map { def, home } => map_field(number, def, home, ctx, depth + 1),
+        Leaf::Struct { name, def, home } => {
+            delimited(number, struct_size(name, def, home, walk, depth + 1)?)
+        }
+        Leaf::Union { name, def, home } => {
+            delimited(number, union_size(name, def, home, walk, depth + 1)?)
+        }
+        Leaf::Tuple { def, home } => delimited(number, tuple_size(def, home, walk, depth + 1)?),
+        Leaf::Array { def, home } => array_field(number, def, home, walk, depth + 1),
+        Leaf::Map { def, home } => map_field(number, def, home, walk, depth + 1),
     }
 }
 
@@ -140,47 +199,63 @@ fn message_size(mut fields: impl Iterator<Item = Option<u64>>) -> Option<u64> {
     fields.try_fold(0u64, |sum, field| sum.checked_add(field?))
 }
 
+/// The message of the struct `name` declared in `home`: the sum of its
+/// fields. A reserved member is a retired field number and costs nothing.
 fn struct_size<'a>(
+    name: &'a str,
     def: &'a StructDef,
     home: &'a Package,
-    ctx: &Ctx<'a>,
+    walk: &mut Walk<'a, '_>,
     depth: u32,
 ) -> Option<u64> {
-    message_size(def.members.iter().map(|member| match &member.member {
-        Some(struct_member::Member::Field(field)) => {
-            let ty = field.r#type.as_ref()?;
-            // proto3 cannot mark a repeated or map field absent, so the proto
-            // backend refuses an optional array or map (`emit_struct`,
-            // ADR-0013 decision 7).
-            if ty.optional
-                && matches!(
-                    ty.kind,
-                    Some(field_type::Kind::Array(_) | field_type::Kind::Map(_))
-                )
-            {
-                return None;
+    walk.remembered(home, name, |walk| {
+        message_size(def.members.iter().map(|member| match &member.member {
+            Some(struct_member::Member::Field(field)) => {
+                let ty = field.r#type.as_ref()?;
+                // proto3 cannot mark a repeated or map field absent, so the
+                // proto backend refuses an optional array or map
+                // (`emit_struct`, ADR-0013 decision 7).
+                if ty.optional
+                    && matches!(
+                        ty.kind,
+                        Some(field_type::Kind::Array(_) | field_type::Kind::Map(_))
+                    )
+                {
+                    return None;
+                }
+                field_size(field.ordinal, ty, home, walk, depth)
             }
-            field_size(field.ordinal, ty, home, ctx, depth)
-        }
-        Some(struct_member::Member::Reserved(_)) | None => Some(0),
-    }))
+            Some(struct_member::Member::Reserved(_)) | None => Some(0),
+        }))
+    })
 }
 
-/// The largest arm, as a field of the `oneof` at the arm's ordinal.
-fn union_size<'a>(def: &'a UnionDef, home: &'a Package, ctx: &Ctx<'a>, depth: u32) -> Option<u64> {
-    let mut largest = 0;
-    for arm in &def.arms {
-        let leaf = leaf_of_name(&arm.type_ref, home, ctx)?;
-        largest = largest.max(leaf_field(arm.ordinal, leaf, ctx, depth)?);
-    }
-    Some(largest)
+/// The message of the union `name` declared in `home`: its largest arm, as
+/// a field of the `oneof` at the arm's ordinal. The backend's refusal of an
+/// arm named `value`, the `oneof`'s own name (`emit_union`), is a name
+/// collision and is not reproduced (module doc).
+fn union_size<'a>(
+    name: &'a str,
+    def: &'a UnionDef,
+    home: &'a Package,
+    walk: &mut Walk<'a, '_>,
+    depth: u32,
+) -> Option<u64> {
+    walk.remembered(home, name, |walk| {
+        let mut largest = 0;
+        for arm in &def.arms {
+            let leaf = leaf_of_name(&arm.type_ref, home, walk.ctx)?;
+            largest = largest.max(leaf_field(arm.ordinal, leaf, walk, depth)?);
+        }
+        Some(largest)
+    })
 }
 
 /// A tuple is an induced message with positional fields 1..n.
 fn tuple_size<'a>(
     tuple: &'a TupleType,
     home: &'a Package,
-    ctx: &Ctx<'a>,
+    walk: &mut Walk<'a, '_>,
     depth: u32,
 ) -> Option<u64> {
     message_size(tuple.fields.iter().enumerate().map(|(i, f)| {
@@ -188,7 +263,7 @@ fn tuple_size<'a>(
             u32::try_from(i + 1).ok()?,
             f.r#type.as_ref()?,
             home,
-            ctx,
+            walk,
             depth,
         )
     }))
@@ -202,10 +277,10 @@ fn array_field<'a>(
     number: u32,
     array: &'a ArrayType,
     home: &'a Package,
-    ctx: &Ctx<'a>,
+    walk: &mut Walk<'a, '_>,
     depth: u32,
 ) -> Option<u64> {
-    let element = leaf_of_field_type(array.element.as_ref()?, home, ctx)?;
+    let element = leaf_of_field_type(array.element.as_ref()?, home, walk.ctx)?;
     let n = array.max;
     match element {
         Leaf::Scalar(s) => delimited(
@@ -221,7 +296,7 @@ fn array_field<'a>(
             n.checked_mul(enum_len(min, max, retired_in_int32)?)?,
         ),
         Leaf::Array { .. } | Leaf::Map { .. } => None,
-        other => n.checked_mul(leaf_field(number, other, ctx, depth)?),
+        other => n.checked_mul(leaf_field(number, other, walk, depth)?),
     }
 }
 
@@ -250,12 +325,12 @@ fn map_field<'a>(
     number: u32,
     map: &'a MapType,
     home: &'a Package,
-    ctx: &Ctx<'a>,
+    walk: &mut Walk<'a, '_>,
     depth: u32,
 ) -> Option<u64> {
     let key = map.key.as_ref()?;
     let value = map.value.as_ref()?;
-    if !map_key_scalar(key, home, ctx)?.admitted_as_map_key()
+    if !map_key_scalar(key, home, walk.ctx)?.admitted_as_map_key()
         || matches!(
             value.kind,
             Some(field_type::Kind::Array(_) | field_type::Kind::Map(_))
@@ -263,19 +338,21 @@ fn map_field<'a>(
     {
         return None;
     }
-    let entry = field_size(1, key, home, ctx, depth)?
-        .checked_add(field_size(2, value, home, ctx, depth)?)?;
+    let entry = field_size(1, key, home, walk, depth)?
+        .checked_add(field_size(2, value, home, walk, depth)?)?;
     map.max.checked_mul(delimited(number, entry)?)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Encoding;
+    use crate::size::size_state;
     use crate::size::tests_support::*;
     use ridl_ir::v2::{
-        Backing, Constraint, Decl, EnumDef, EnumValue, Field, FloatWidth, IntWidth, Package,
-        PrimitiveType, Reserved, StructMember, TupleField, TypeDef, UnionArm, UnionDef, backing,
-        decl, field_type, type_def,
+        Backing, Constraint, Decl, EnumDef, EnumSetDef, EnumValue, Field, FloatWidth, IntWidth,
+        Package, PrimitiveType, Reserved, StructMember, TupleField, TypeDef, UnionArm, UnionDef,
+        backing, decl, field_type, type_def,
     };
 
     #[test]
@@ -731,5 +808,397 @@ mod tests {
         assert_eq!(state("ArmReserved", &ctx), None);
         // The largest field number takes a 5-byte tag: 5 + 5.
         assert_eq!(state("Highest", &ctx), Some(SizeState::Bounded(10)));
+    }
+
+    fn union_decl(name: &str, arms: &[(&str, u32, &str)]) -> Decl {
+        Decl {
+            name: name.to_owned(),
+            kind: Some(decl::Kind::UnionDef(UnionDef {
+                arms: arms
+                    .iter()
+                    .map(|&(name, ordinal, type_ref)| UnionArm {
+                        name: name.to_owned(),
+                        ordinal,
+                        type_ref: type_ref.to_owned(),
+                        ..Default::default()
+                    })
+                    .collect(),
+                ..Default::default()
+            })),
+            ..Default::default()
+        }
+    }
+
+    fn string_max(len_max: u64) -> FieldType {
+        inline(TypeDef {
+            backing: Some(Backing {
+                kind: Some(backing::Kind::Primitive(PrimitiveType::String as i32)),
+            }),
+            constraint: Some(Constraint {
+                len_max: Some(len_max),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+    }
+
+    fn primitive(primitive: PrimitiveType) -> FieldType {
+        field(field_type::Kind::Primitive(primitive as i32))
+    }
+
+    #[test]
+    fn a_deep_diamond_of_shared_types_is_walked_once() {
+        // L_k = A_k @1 | B_k @2, A_k { x: L_{k+1} }, B_k { y: L_{k+1} } for
+        // k in 0..30, and L30 { x: Coord }. Every level reaches the next
+        // through both arms, so a walk that remembers nothing visits L30
+        // 2^30 times; typl admits the shape (TYPL-206 rejects a cycle, not
+        // sharing). Bounds: L30 = 6; A_k = B_k = 1 + 1 + L_{k+1}; L_k is the
+        // larger arm, 1 + 1 + A_k = 4 + L_{k+1}; L0 = 6 + 4 * 30 = 126.
+        const DEPTH: u32 = 30;
+        let mut package = fixture();
+        for k in 0..DEPTH {
+            let next = format!("L{}", k + 1);
+            package.decls.push(union_decl(
+                &format!("L{k}"),
+                &[("a", 1, &format!("A{k}")), ("b", 2, &format!("B{k}"))],
+            ));
+            package
+                .decls
+                .push(struct_decl(&format!("A{k}"), vec![("x", 1, named(&next))]));
+            package
+                .decls
+                .push(struct_decl(&format!("B{k}"), vec![("y", 1, named(&next))]));
+        }
+        package.decls.push(struct_decl(
+            &format!("L{DEPTH}"),
+            vec![("x", 1, named("Coord"))],
+        ));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        let started = std::time::Instant::now();
+        assert_eq!(state("L0", &ctx), Some(SizeState::Bounded(126)));
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(10),
+            "a diamond of depth {DEPTH} is sized in linear time, took {:?}",
+            started.elapsed()
+        );
+    }
+
+    #[test]
+    fn two_fields_whose_sum_wraps_are_absent() {
+        // Each `bytes [0..2^63 - 1]` field is 1 + 9 + 2^63 - 1 = 2^63 + 9
+        // bytes; the two together are 2^64 + 18, which wraps to 18.
+        let mut package = fixture();
+        let half = u64::MAX / 2;
+        package.decls.push(struct_decl(
+            "Both",
+            vec![("a", 1, bytes_max(half)), ("b", 2, bytes_max(half))],
+        ));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("Both", &ctx), None);
+    }
+
+    #[test]
+    fn a_packed_scalar_array_whose_count_wraps_is_absent() {
+        // `[u8; 0..u64::MAX / 5 + 1]`: 5 bytes per packed `uint32` value is
+        // 2^64 + 4, which wraps to 4 and would publish `Bounded(6)`.
+        let mut package = fixture();
+        let u8_def = TypeDef {
+            backing: Some(Backing {
+                kind: Some(backing::Kind::Primitive(PrimitiveType::Integer as i32)),
+            }),
+            width: Some(type_def::Width::IntWidth(IntWidth::U8 as i32)),
+            ..Default::default()
+        };
+        package.decls.push(struct_decl(
+            "Wrapped",
+            vec![("items", 1, array_of(inline(u8_def), u64::MAX / 5 + 1))],
+        ));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("Wrapped", &ctx), None);
+    }
+
+    #[test]
+    fn a_packed_enum_array_whose_count_wraps_is_absent() {
+        // A negative member makes every value a 10-byte varint;
+        // `u64::MAX / 10 + 1` of them is 2^64 + 4, which wraps to 4.
+        let mut package = fixture();
+        package.decls.push(enum_decl("Signed", &[-1, 0]));
+        package.decls.push(struct_decl(
+            "Wrapped",
+            vec![("items", 1, array_of(named("Signed"), u64::MAX / 10 + 1))],
+        ));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("Wrapped", &ctx), None);
+    }
+
+    #[test]
+    fn a_message_array_whose_count_wraps_is_absent() {
+        // A `Point` element is 1 + 1 + 12 = 14 bytes; `u64::MAX / 14 + 1`
+        // of them is 2^64 + 12, which wraps to 12.
+        let mut package = fixture();
+        package.decls.push(struct_decl(
+            "Wrapped",
+            vec![("pts", 1, array_of(named("Point"), u64::MAX / 14 + 1))],
+        ));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("Wrapped", &ctx), None);
+    }
+
+    #[test]
+    fn a_map_entry_whose_key_and_value_sum_wraps_is_absent() {
+        // A `string [0..2^61 - 1]` is 2^63 - 4 bytes; as a key or a value it
+        // is 1 + 9 + 2^63 - 4 = 2^63 + 6 bytes, and the entry's two together
+        // are 2^64 + 12, which wraps to 12.
+        let mut package = fixture();
+        let wide = (1u64 << 61) - 1;
+        package.decls.push(struct_decl(
+            "Wrapped",
+            vec![("m", 1, map_of(string_max(wide), string_max(wide), 1))],
+        ));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("Wrapped", &ctx), None);
+    }
+
+    #[test]
+    fn a_map_whose_entry_count_wraps_is_absent() {
+        // `Bag`'s map entry is 1 + 1 + 40 = 42 bytes; `u64::MAX / 42 + 1`
+        // entries is 2^64 + 26, which wraps to 26.
+        let mut package = fixture();
+        let mut index = map_str8_u32_max2();
+        if let Some(field_type::Kind::Map(map)) = index.kind.as_mut() {
+            map.max = u64::MAX / 42 + 1;
+        }
+        package
+            .decls
+            .push(struct_decl("Wrapped", vec![("index", 1, index)]));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("Wrapped", &ctx), None);
+    }
+
+    #[test]
+    fn the_largest_union_arm_need_not_be_first() {
+        // Flipped = Coord @1 | Point @2: arm a 1 + 5 = 6, arm b 1 + 1 + 12 = 14.
+        let mut package = fixture();
+        package.decls.push(union_decl(
+            "Flipped",
+            &[("a", 1, "Coord"), ("b", 2, "Point")],
+        ));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("Flipped", &ctx), Some(SizeState::Bounded(14)));
+    }
+
+    #[test]
+    fn a_non_negative_enum_is_sized_by_its_largest_value() {
+        // Big = enum { A = 0, B = 200 }: 200 is a two-byte varint, so a
+        // field is 1 + 2; sized by the smallest value, or by one byte, it
+        // would be 2. An array of enums is packed: one tag, one length,
+        // 3 * 2 values = 8; unpacked it would be 3 * 3 = 9.
+        let mut package = fixture();
+        package.decls.push(enum_decl("Big", &[0, 200]));
+        package
+            .decls
+            .push(struct_decl("HoldsBig", vec![("e", 1, named("Big"))]));
+        package.decls.push(struct_decl(
+            "HoldsBigs",
+            vec![("es", 1, array_of(named("Big"), 3))],
+        ));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("HoldsBig", &ctx), Some(SizeState::Bounded(3)));
+        assert_eq!(state("HoldsBigs", &ctx), Some(SizeState::Bounded(8)));
+    }
+
+    #[test]
+    fn a_map_key_is_resolved_through_every_key_kind() {
+        // `map_key_scalar` admits a key by the scalar it projects to, through
+        // a named scalar, a bare primitive and an enum set; a named struct,
+        // enum or union is a message or enum name and is refused.
+        let mut package = fixture();
+        package.decls.push(Decl {
+            name: "Flt".to_owned(),
+            kind: Some(decl::Kind::TypeDef(TypeDef {
+                backing: Some(Backing {
+                    kind: Some(backing::Kind::Primitive(PrimitiveType::Float as i32)),
+                }),
+                width: Some(type_def::Width::FloatWidth(FloatWidth::F32 as i32)),
+                ..Default::default()
+            })),
+            ..Default::default()
+        });
+        package.decls.push(Decl {
+            name: "Flags".to_owned(),
+            kind: Some(decl::Kind::EnumSetDef(EnumSetDef {
+                width: IntWidth::U8 as i32,
+                ..Default::default()
+            })),
+            ..Default::default()
+        });
+        package.decls.push(enum_decl("Gear", &[0, 1]));
+        let keyed = |name: &str, key: FieldType| {
+            struct_decl(name, vec![("m", 1, map_of(key, named("Coord"), 2))])
+        };
+        package.decls.push(keyed("NamedKeyed", named("Coord")));
+        package.decls.push(keyed("NamedFloatKeyed", named("Flt")));
+        package
+            .decls
+            .push(keyed("IntegerKeyed", primitive(PrimitiveType::Integer)));
+        package
+            .decls
+            .push(keyed("FloatKeyed", primitive(PrimitiveType::Float)));
+        package.decls.push(keyed("EnumSetKeyed", named("Flags")));
+        package.decls.push(keyed("EnumKeyed", named("Gear")));
+        package.decls.push(keyed("UnionKeyed", named("Shape")));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        // A `sint32` key and value: entry (1 + 5) + (1 + 5) = 12; 2 * (1 + 1 + 12).
+        assert_eq!(state("NamedKeyed", &ctx), Some(SizeState::Bounded(28)));
+        assert_eq!(state("NamedFloatKeyed", &ctx), None, "a named float key");
+        // A bare `integer` key is `int64`: entry (1 + 10) + (1 + 5) = 17; 2 * (1 + 1 + 17).
+        assert_eq!(state("IntegerKeyed", &ctx), Some(SizeState::Bounded(38)));
+        assert_eq!(
+            state("FloatKeyed", &ctx),
+            None,
+            "a bare float key is `double`"
+        );
+        // An enum set of width u8 is a `uint32` key: entry (1 + 5) + (1 + 5).
+        assert_eq!(state("EnumSetKeyed", &ctx), Some(SizeState::Bounded(28)));
+        assert_eq!(
+            state("EnumKeyed", &ctx),
+            None,
+            "an enum key is an enum name"
+        );
+        assert_eq!(
+            state("UnionKeyed", &ctx),
+            None,
+            "a union key is a message name"
+        );
+    }
+
+    #[test]
+    fn a_length_of_128_bytes_or_more_takes_a_two_byte_length_varint() {
+        // Long { blob: bytes [0..200] }: 1 + 2 + 200; Outer { inner: Long }:
+        // 1 + 2 + 203. A one-byte length would under-state each by one.
+        let mut package = fixture();
+        package
+            .decls
+            .push(struct_decl("Long", vec![("blob", 1, bytes_max(200))]));
+        package
+            .decls
+            .push(struct_decl("Outer", vec![("inner", 1, named("Long"))]));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("Long", &ctx), Some(SizeState::Bounded(203)));
+        assert_eq!(state("Outer", &ctx), Some(SizeState::Bounded(206)));
+    }
+
+    #[test]
+    fn size_state_routes_the_proto3_column() {
+        let package = fixture();
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(
+            size_state("Point", &ctx, Encoding::Proto3),
+            Some(SizeState::Bounded(12))
+        );
+    }
+
+    #[test]
+    fn an_imported_declaration_is_sized_in_its_own_package() {
+        // `q.Thing { f: Inner }` names q's one-boolean `Inner` (1 + 1), so
+        // `Thing` is 1 + 1 + 2; rooted at p, the bare `Inner` would be p's
+        // `string [0..100]` struct (1 + 2 + 400) and `Thing` 406. `q.Loose`
+        // holds q's `Hole`, a bare `string` with no leaf, so it is absent;
+        // rooted at p, `Hole` would be a one-boolean struct and `Loose`
+        // bounded.
+        let (root, imported) = two_package_fixture();
+        let others = [&imported];
+        let ctx = Ctx::new(&root, &others);
+        assert_eq!(state("q.Thing", &ctx), Some(SizeState::Bounded(4)));
+        assert_eq!(state("q.Loose", &ctx), None);
+        assert_eq!(
+            state("Inner", &ctx),
+            Some(SizeState::Bounded(403)),
+            "the root's own `Inner`"
+        );
+        assert_eq!(state("Hole", &ctx), Some(SizeState::Bounded(2)));
+    }
+
+    #[test]
+    fn a_reserved_member_costs_nothing_and_keeps_the_message() {
+        // `WithRetired { x: Coord @1, reserved @2 }`: the retired slot is
+        // never encoded, and the message is still sized.
+        let mut package = fixture();
+        let mut decl = struct_decl("WithRetired", vec![("x", 1, named("Coord"))]);
+        if let Some(decl::Kind::StructDef(def)) = decl.kind.as_mut() {
+            def.members.push(StructMember {
+                member: Some(struct_member::Member::Reserved(Reserved {
+                    ordinal: 2,
+                    ..Default::default()
+                })),
+            });
+        }
+        package.decls.push(decl);
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("WithRetired", &ctx), Some(SizeState::Bounded(6)));
+    }
+
+    #[test]
+    fn tuple_fields_past_the_fifteenth_take_a_two_byte_tag() {
+        // A tuple of sixteen `Coord`: fields 1..=15 take a one-byte tag
+        // (6 each), field 16 a two-byte tag (7): 97, delimited 1 + 1 + 97.
+        // Numbered from 0 the sixteen tags would all be one byte: 96.
+        let mut package = fixture();
+        let wide = field(field_type::Kind::Tuple(TupleType {
+            fields: (0..16)
+                .map(|i| TupleField {
+                    name: format!("f{i}"),
+                    r#type: Some(named("Coord")),
+                })
+                .collect(),
+        }));
+        package
+            .decls
+            .push(struct_decl("Sixteen", vec![("t", 1, wide)]));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(state("Sixteen", &ctx), Some(SizeState::Bounded(99)));
+    }
+
+    #[test]
+    fn nesting_past_max_depth_is_absent() {
+        // C0 { n: C1 }, ..., C_last { x: Coord }: C_k is sized at depth k,
+        // and its field at the same depth, so a chain of MAX_DEPTH + 1
+        // structs is sized and one more is not. typl rejects a cycle, so
+        // the guard only answers for an IR the checker did not see.
+        let chain = |last: u32| {
+            let mut package = fixture();
+            for k in 0..last {
+                package.decls.push(struct_decl(
+                    &format!("C{k}"),
+                    vec![("n", 1, named(&format!("C{}", k + 1)))],
+                ));
+            }
+            package.decls.push(struct_decl(
+                &format!("C{last}"),
+                vec![("x", 1, named("Coord"))],
+            ));
+            package
+        };
+        let within = chain(MAX_DEPTH);
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&within, &others);
+        assert!(matches!(state("C0", &ctx), Some(SizeState::Bounded(_))));
+        let beyond = chain(MAX_DEPTH + 1);
+        let ctx = Ctx::new(&beyond, &others);
+        assert_eq!(state("C0", &ctx), None);
     }
 }
