@@ -478,9 +478,23 @@
             "code": {
               "type": "string"
             },
+            "default_level": {
+              "description": "The lint's default level, `warn` or `info`; present when `lint` is.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "kind": {
               "const": "diagnostic",
               "type": "string"
+            },
+            "lint": {
+              "description": "The lint name, when the code is a lint: the key that sets its level\nin `[lints]` in ridl.toml.",
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "severity": {
               "type": "string"

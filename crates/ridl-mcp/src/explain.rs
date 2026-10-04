@@ -1,6 +1,7 @@
 //! Diagnostic catalogue and diff-category explanations.
 use crate::snapshot::ToolError;
 use ridl_core::diag::{ALL_CATALOGS, Severity};
+use ridl_core::lint::default_level;
 use rmcp::schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +18,13 @@ pub enum ExplainOutput {
         code: String,
         severity: String,
         summary: String,
+        /// The lint name, when the code is a lint: the key that sets its level
+        /// in `[lints]` in ridl.toml.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        lint: Option<String>,
+        /// The lint's default level, `warn` or `info`; present when `lint` is.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        default_level: Option<String>,
     },
     DiffCategory {
         category: String,
@@ -34,10 +42,17 @@ pub fn explain(input: &ExplainInput) -> Result<ExplainOutput, ToolError> {
             Severity::Warning => "warning",
             Severity::Info => "info",
         };
+        // `default_level` maps an Error row to `warn`, so it is only read for
+        // a lint row, where the catalogue never holds an Error.
+        let default_level = entry
+            .lint
+            .map(|_| default_level(entry).as_str().to_string());
         return Ok(ExplainOutput::Diagnostic {
             code: entry.code.as_str().into(),
             severity: severity.into(),
             summary: entry.summary.into(),
+            lint: entry.lint.map(str::to_string),
+            default_level,
         });
     }
     if let Some(category) = ridl_diff::category_from_word(&input.code) {
@@ -71,6 +86,7 @@ mod tests {
                 code,
                 severity,
                 summary,
+                ..
             } => {
                 assert_eq!(code, "TYPL-002");
                 assert_eq!(severity, "error");
@@ -78,6 +94,24 @@ mod tests {
             }
             _ => panic!("expected a diagnostic"),
         }
+    }
+    // A lint code names its lint and its default level (lint foundation spec
+    // §7.4); an Error code, which is never a lint, carries neither field.
+    #[test]
+    fn explain_a_lint_code() {
+        let value = |code: &str| {
+            serde_json::to_value(explain(&ExplainInput { code: code.into() }).unwrap()).unwrap()
+        };
+        let lint = value("RIDL-100");
+        assert_eq!(lint["kind"], "diagnostic");
+        assert_eq!(lint["severity"], "warning");
+        assert_eq!(lint["lint"], "missing-timing");
+        assert_eq!(lint["default_level"], "warn");
+        let error = value("RIDL-101");
+        assert_eq!(error["kind"], "diagnostic");
+        assert_eq!(error["severity"], "error");
+        assert!(error.get("lint").is_none(), "{error}");
+        assert!(error.get("default_level").is_none(), "{error}");
     }
     #[test]
     fn explain_a_diff_category() {
