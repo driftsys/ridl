@@ -58,6 +58,24 @@ fn text_at(sources: &SourceMap, span: Span) -> &str {
         [usize::from(span.range.start())..usize::from(span.range.end())]
 }
 
+fn site(sources: &SourceMap, span: Span) -> (String, std::ops::Range<usize>) {
+    let path = std::path::Path::new(sources.path(span.file).unwrap());
+    let relative = format!(
+        "{}/{}",
+        path.parent()
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        path.file_name().unwrap().to_str().unwrap(),
+    );
+    (
+        relative,
+        usize::from(span.range.start())..usize::from(span.range.end()),
+    )
+}
+
 fn majority_source() -> String {
     format!(
         "package a\n{TYPES}struct First {{ speed: Speed }}\nstruct Second {{ speed: Speed }}\nstruct Third {{ speed: SpeedMs }}\n"
@@ -97,11 +115,53 @@ fn inconsistent_unit_reports_every_site_on_a_tie() {
     let out = workspace(&[("a", &source)]);
     let found = units(&out.diagnostics);
     assert_eq!(found.len(), 2, "{:?}", out.diagnostics);
-    for diagnostic in found {
-        assert_eq!(text_at(&out.sources, diagnostic.primary), "speed");
-        assert_eq!(diagnostic.labels.len(), 1);
-        assert_ne!(diagnostic.primary, diagnostic.labels[0].span);
-    }
+    let first = source.find("speed: Speed }").unwrap();
+    let second = source.find("speed: SpeedMs }").unwrap();
+    let actual: Vec<_> = found
+        .iter()
+        .map(|diagnostic| {
+            (
+                diagnostic.message.as_str(),
+                site(&out.sources, diagnostic.primary),
+            )
+        })
+        .collect();
+    assert_eq!(
+        actual,
+        vec![
+            (
+                "`speed` uses `km/h` here; elsewhere `speed` uses `m/s`",
+                ("a/source.ridl".to_string(), first..first + 5)
+            ),
+            (
+                "`speed` uses `m/s` here; elsewhere `speed` uses `km/h`",
+                ("a/source.ridl".to_string(), second..second + 5)
+            ),
+        ]
+    );
+    let labels: Vec<_> = found
+        .iter()
+        .map(|diagnostic| {
+            diagnostic
+                .labels
+                .iter()
+                .map(|label| (label.message.as_str(), site(&out.sources, label.span)))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert_eq!(
+        labels,
+        vec![
+            vec![(
+                "`speed` uses `m/s` here",
+                ("a/source.ridl".to_string(), second..second + 5)
+            )],
+            vec![(
+                "`speed` uses `km/h` here",
+                ("a/source.ridl".to_string(), first..first + 5)
+            )],
+        ]
+    );
 }
 
 #[test]
@@ -275,9 +335,139 @@ fn inconsistent_unit_reports_all_other_units_and_ignores_case_differences() {
     let out = workspace(&[("a", &source)]);
     let found = units(&out.diagnostics);
     assert_eq!(found.len(), 2, "{:?}", out.diagnostics);
-    for diagnostic in found {
-        assert_eq!(diagnostic.labels.len(), 2);
-        assert_eq!(text_at(&out.sources, diagnostic.primary), "speed");
-        assert!(diagnostic.message.contains("`km/h`"));
+    let first = source.find("speed: Speed }").unwrap();
+    let third = source.find("speed: SpeedMs }").unwrap();
+    let fourth = source.find("speed: SpeedCm }").unwrap();
+    let actual: Vec<_> = found
+        .iter()
+        .map(|diagnostic| {
+            (
+                diagnostic.message.as_str(),
+                site(&out.sources, diagnostic.primary),
+                diagnostic
+                    .labels
+                    .iter()
+                    .map(|label| (label.message.as_str(), site(&out.sources, label.span)))
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        actual,
+        vec![
+            (
+                "`speed` uses `cm/s` here; elsewhere `speed` uses `km/h`, `m/s`",
+                ("a/source.ridl".to_string(), fourth..fourth + 5),
+                vec![
+                    (
+                        "`speed` uses `km/h` here",
+                        ("a/source.ridl".to_string(), first..first + 5)
+                    ),
+                    (
+                        "`speed` uses `m/s` here",
+                        ("a/source.ridl".to_string(), third..third + 5)
+                    ),
+                ]
+            ),
+            (
+                "`speed` uses `m/s` here; elsewhere `speed` uses `cm/s`, `km/h`",
+                ("a/source.ridl".to_string(), third..third + 5),
+                vec![
+                    (
+                        "`speed` uses `cm/s` here",
+                        ("a/source.ridl".to_string(), fourth..fourth + 5)
+                    ),
+                    (
+                        "`speed` uses `km/h` here",
+                        ("a/source.ridl".to_string(), first..first + 5)
+                    ),
+                ]
+            ),
+        ]
+    );
+}
+
+#[test]
+fn inconsistent_unit_skips_same_named_primitive_sites() {
+    let source = "package a\ntype Speed: km/h [0.0..250.0 step 0.5]\nstruct Typed { speed: Speed }\nstruct Primitive { speed: float }\nstruct Constrained { speed: float [0.0..100.0 step 0.5] }\n";
+    let out = workspace(&[("a", source)]);
+    assert!(units(&out.diagnostics).is_empty(), "{:?}", out.diagnostics);
+    let single = ridlc::check_source("a.ridl", source);
+    assert_no_errors(&single.diagnostics);
+    assert!(
+        units(&single.diagnostics).is_empty(),
+        "{:?}",
+        single.diagnostics
+    );
+}
+
+#[test]
+fn shared_pass_excludes_standard_package_sites_from_unit_counts() {
+    use ridl_core::db::InputFile;
+    use ridl_core::package::{Package, PackageOrigin, Workspace};
+    use std::collections::BTreeMap;
+
+    let mut db = RidlDatabase::default();
+    let std = ridl_core::std_package(&mut db);
+    let make_package = |name: &str, source: String| {
+        let input = InputFile::new(&db, format!("{name}/source.ridl"), source);
+        Package::new(
+            &db,
+            name.to_string(),
+            vec![input],
+            PackageOrigin::WorkspaceMember,
+            BTreeMap::new(),
+            None,
+            None,
+        )
+    };
+    let user = make_package("a", majority_source());
+    // A controlled standard-package input adds two m/s sites. Counting them
+    // would reverse the user's majority and change its findings.
+    let standard = make_package(
+        "ridl.std",
+        format!(
+            "package ridl.std\n{TYPES}struct First {{ speed: SpeedMs }}\nstruct Second {{ speed: SpeedMs }}\n"
+        ),
+    );
+    let packages = [user, standard];
+    let workspace = Workspace::new(&db, packages.to_vec(), BTreeMap::new());
+    let resolutions: Vec<_> = packages
+        .iter()
+        .map(|package| ridl_sem::resolve_package(&db, workspace, *package, std))
+        .collect();
+    let checked: Vec<_> = packages
+        .iter()
+        .map(|package| ridl_sem::check_package(&db, workspace, *package, std))
+        .collect();
+    for package in &checked {
+        assert_no_errors(&package.diagnostics);
     }
+    let mut sources = SourceMap::new();
+    let diagnostics = ridlc::check_design_lints(
+        &db,
+        &packages,
+        &checked,
+        &resolutions,
+        &checked[1].ir,
+        None,
+        &mut sources,
+    );
+    let found = units(&diagnostics);
+    assert_eq!(found.len(), 1, "{diagnostics:?}");
+    assert_eq!(
+        found[0].message,
+        "`speed` uses `m/s` here; elsewhere `speed` uses `km/h`"
+    );
+    let minority = majority_source().find("speed: SpeedMs").unwrap();
+    assert_eq!(
+        site(&sources, found[0].primary),
+        ("a/source.ridl".to_string(), minority..minority + 5)
+    );
+    assert!(
+        found[0]
+            .labels
+            .iter()
+            .all(|label| sources.path(label.span.file) == Some("a/source.ridl"))
+    );
 }

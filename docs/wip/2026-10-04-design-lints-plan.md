@@ -795,6 +795,14 @@ reserved codes, corpus budgets, four PRs and approval stages.
     their rows; Task 14 must maintain those same gates when changing severities
     or removing candidates.
 
+15. **Task 6 review fixes: cover the compiler and CLI reporting boundary**
+    (approved ownership extension, 2026-10-04). Add an integration test to
+    `crates/ridl/tests/lints.rs` for TYPL-222 at `info`, `allow` and `deny`. The
+    test checks catalogue severity on raw compilation, effective severity from
+    the command driver, and the binary's JSON report and exit code. Without this
+    boundary check, editor tests could pass while the command line dropped
+    findings or failed to apply levels. Existing CLI tests remain unchanged.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:

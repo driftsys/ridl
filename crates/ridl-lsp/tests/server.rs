@@ -3729,3 +3729,61 @@ fn design_lints_apply_allow_and_deny_before_publishing() {
         server.join().unwrap().unwrap();
     }
 }
+
+#[test]
+fn design_lints_keep_two_standalone_overlays_separate() {
+    let first_dir = TempDir::new("design-first-overlay");
+    let second_dir = TempDir::new("design-second-overlay");
+    let first_uri = uri_of(&first_dir.path().join("source.ridl"));
+    let second_uri = uri_of(&second_dir.path().join("source.ridl"));
+    let second_source = DESIGN_SOURCE
+        .replace("speed: SpeedMs }", "speed: Speed }")
+        .replacen("speed: Speed }", "speed: SpeedMs }", 2);
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+    for (uri, source, barrier) in [
+        (&first_uri, DESIGN_SOURCE, 20),
+        (&second_uri, second_source.as_str(), 21),
+    ] {
+        notify::<lt::notification::DidOpenTextDocument>(
+            &client,
+            lt::DidOpenTextDocumentParams {
+                text_document: lt::TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "ridl".to_string(),
+                    version: 1,
+                    text: source.to_string(),
+                },
+            },
+        );
+        let publishes = published_before_barrier(&client, barrier, uri);
+        // The second open recomputes both buffers. Their opposite majorities
+        // must each still produce one finding at the third struct.
+        for (expected_uri, expected_message) in [
+            (
+                &first_uri,
+                "`speed` uses `m/s` here; elsewhere `speed` uses `km/h`",
+            ),
+            (
+                &second_uri,
+                "`speed` uses `km/h` here; elsewhere `speed` uses `m/s`",
+            ),
+        ]
+        .into_iter()
+        .take(if barrier == 20 { 1 } else { 2 })
+        {
+            let publish = publishes
+                .iter()
+                .find(|p| &p.uri == expected_uri)
+                .expect("each open source is published");
+            let found = design_findings(&publish.diagnostics);
+            assert_eq!(found.len(), 1, "{publishes:?}");
+            assert_eq!(found[0].message, expected_message);
+            assert_eq!(found[0].range, range((5, 15), (5, 20)));
+            assert_eq!(found[0].severity, Some(lt::DiagnosticSeverity::INFORMATION));
+        }
+    }
+    shut_down(&client, 22);
+    server.join().unwrap().unwrap();
+}
