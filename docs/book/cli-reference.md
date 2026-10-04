@@ -341,7 +341,12 @@ than RIDL-409 — a live `interfaces.lock` entry with no declaration, which
 leaves nothing out of the IR the desk check compares — and other than a lint
 raised to `deny`. A workspace with any other error draws no RIDL-407 warning in
 addition to that error: it exits 1, exactly as it would with no baseline
-present. A workspace whose only errors
+present. Entered at a workspace member, the run reports only the diagnostics of
+files under the member (ADR-0026 decision 10), and the desk check compares the
+whole workspace: an error in another member is not reported, the desk check
+does not run, and the run exits 0, exactly as it would with no baseline
+present. Run `ridl check` at the workspace root to see that error and, once it
+is fixed, the member's RIDL-407 warnings. A workspace whose only errors
 are RIDL-409 still exits 1, and the desk check runs over it: when exactly one
 declaration without an entry has the published shape of the orphan entry's
 interface, the desk check adds a label to that RIDL-409 naming the
