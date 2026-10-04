@@ -1,9 +1,9 @@
-//! The `[lints]` levels as the `ridl` command shows and applies them (lint
-//! foundation spec §6.2, §7.1 and §7.2): the `lint` field of the JSON report,
-//! the lint note of the text report, the exit code of `check` and `build`
-//! under `deny`, the commands that do not apply levels (D-8), and the
-//! `--baseline` path, whose RIDL-407 is raised by the CLI after `ridlc`
-//! returns.
+//! The `[lints]` levels as the `ridl` command shows and applies them (ADR-0024
+//! decision 6, docs/book/cli-reference.md and docs/book/lints.md): the `lint`
+//! field of the JSON report, the lint note of the text report, the exit code of
+//! `check` and `build` under `deny`, the commands that do not apply levels
+//! (ADR-0024 decision 8), and the `--baseline` path, whose RIDL-407 is raised
+//! by the CLI after `ridlc` returns.
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
@@ -168,7 +168,7 @@ fn build_fails_on_deny() {
     assert!(written.is_empty(), "the build wrote: {written:?}");
 }
 
-/// `ridl diff` compiles both sides without applying levels (spec D-8): a lint
+/// `ridl diff` compiles both sides without applying levels (ADR-0024 decision 8): a lint
 /// at `deny` on either side does not change its result.
 #[test]
 fn diff_ignores_deny() {
@@ -186,8 +186,8 @@ fn diff_ignores_deny() {
     );
 }
 
-/// `ridl baseline` publishes the snapshot without applying levels (spec
-/// D-8): a lint at `deny` does not block the publication.
+/// `ridl baseline` publishes the snapshot without applying levels (ADR-0024
+/// decision 8): a lint at `deny` does not block the publication.
 #[test]
 fn baseline_ignores_deny() {
     let dir = TempDir::new("baseline-deny");
@@ -217,7 +217,7 @@ const SOURCE_WITH_CONTRACT: &str = "package demo\n\ntype Speed: integer [0..300]
                                     command setRange(min: Speed, max: Speed) [\n    \
                                     require min < max\n  ] @[..50ms]\n}\n";
 
-/// `ridl test` compiles the workspace without applying levels (spec D-8): a
+/// `ridl test` compiles the workspace without applying levels (ADR-0024 decision 8): a
 /// lint at `deny` does not stop the run, which exits 2 on a compile error.
 #[test]
 fn test_ignores_deny() {
@@ -244,7 +244,7 @@ fn test_ignores_deny() {
     );
 }
 
-/// Entering at a workspace member loads the member alone (spec D-9), so the
+/// Entering at a workspace member loads the member alone (ADR-0024 decision 9), so the
 /// root's `[lints]` does not apply: the root's `deny` is an exit 1 from the
 /// root, and from the member RIDL-100 stays at its default Warning, exit 0.
 #[test]
@@ -488,7 +488,7 @@ fn sarif_uris_percent_encode_a_space_and_a_hash() {
 }
 
 /// The rendered note line for a file whose line numbers have one digit
-/// (spec §7.2).
+/// (docs/book/lints.md).
 const NOTE_LINE: &str = "  = lint: `missing-timing` (set its level in `[lints]` in ridl.toml)";
 
 #[test]

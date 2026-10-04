@@ -12,7 +12,7 @@
 //! `MANI-001` invalid TOML, `MANI-002` both sections, `MANI-003` neither
 //! section, `MANI-005` unknown key (warning), `MANI-006` invalid package name,
 //! `MANI-007` invalid import URL, `MANI-010` a `[lints]` entry that names no
-//! lint or whose value is not a level (warning, lint foundation spec §5.3).
+//! lint or whose value is not a level (warning, ADR-0024 decision 11).
 //! `MANI-004` (nested workspace) is defined in
 //! the catalogue but emitted by the package loader (E1.3, task 8), not here: a
 //! manifest read in isolation cannot know it is a workspace member, so a valid
@@ -59,8 +59,8 @@ use crate::lint::{LintLevel, LintTable, lint_by_name};
 /// manifest layer only records the string (ridl §9.1, E2 task 9).
 ///
 /// `lints` holds only the valid `[lints]` entries: a registered lint name
-/// mapped to a level. Every other entry is MANI-010 and is dropped (lint
-/// foundation spec §5.1, §5.3).
+/// mapped to a level. Every other entry is MANI-010 and is dropped
+/// (ADR-0002 §4, ADR-0024 decision 11).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Manifest {
     pub kind: ManifestKind,
@@ -221,7 +221,7 @@ struct RawWorkspace {
 /// carries its span. `lints` is not a field of [`RawManifest`]: a typed field
 /// there would make `lints = 1` fail the whole typed parse, which is MANI-001
 /// with no manifest, where the spec wants one MANI-010 and the rest of the
-/// manifest (lint foundation spec §5.3).
+/// manifest (ADR-0024 decision 11).
 #[derive(Deserialize)]
 struct RawLints {
     #[serde(default)]
@@ -229,9 +229,9 @@ struct RawLints {
 }
 
 /// Collects the `[lints]` table into a [`LintTable`] of registered lint names
-/// and levels (lint foundation spec §5.1). Every entry whose key is not a lint
+/// and levels (ADR-0002 §4). Every entry whose key is not a lint
 /// name, or whose value is not one of the four level strings, is MANI-010 on
-/// the key and is dropped (§5.3). A `lints` key that is not a table is one
+/// the key and is dropped (ADR-0024 decision 11). A `lints` key that is not a table is one
 /// MANI-010 on the value, and the table is empty.
 fn collect_lints(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) -> LintTable {
     let mut lints = LintTable::new();

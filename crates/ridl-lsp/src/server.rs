@@ -21,7 +21,7 @@
 //! a `[workspace]` loads that member's package only.
 //!
 //! The `[lints]` levels the load resolved apply to every published
-//! diagnostic (lint foundation spec §6.2): to the loader's findings once, at
+//! diagnostic (ADR-0024 decision 6): to the loader's findings once, at
 //! load time, and to the analysis results on every recompute, both before
 //! conversion. A lint at `allow` is not published; one at `deny` is published
 //! as an error.
@@ -232,8 +232,8 @@ struct ServerState {
     /// Whether [`ServerState::load`] has succeeded. Once it has, the
     /// workspace is not loaded again; a file outside it is an overlay.
     loaded: bool,
-    /// The `[lints]` levels by directory, as the loader built them (lint
-    /// foundation spec §6.1); replaced by each [`ServerState::load`], empty
+    /// The `[lints]` levels by directory, as the loader built them (ADR-0024
+    /// decision 10); replaced by each [`ServerState::load`], empty
     /// before one succeeds. The levels resolve by directory, not by file id,
     /// so a file opened after the load — an overlay with no load-time entry —
     /// still takes the levels of the member whose directory contains it. The
@@ -322,8 +322,8 @@ impl ServerState {
             }
         }
         // `analyze` never sees the loader's findings, so their levels are
-        // applied here, once, before the conversion (lint foundation spec
-        // §6.2). A manifest's MANI-010 is itself a lint, and its file is in
+        // applied here, once, before the conversion (ADR-0024
+        // decision 6). A manifest's MANI-010 is itself a lint, and its file is in
         // the scope of the manifest's own directory.
         apply_lint_levels(&mut diagnostics, &sources, &lints);
         self.loader_diagnostics =
@@ -713,8 +713,8 @@ impl ServerState {
             &mut sources,
         ));
         // The `[lints]` levels, resolved through the paths this source map
-        // recorded for every file, including an overlay's (lint foundation
-        // spec §6.2). `allow` removes a diagnostic before conversion, so it is
+        // recorded for every file, including an overlay's (ADR-0024
+        // decision 6). `allow` removes a diagnostic before conversion, so it is
         // never published.
         apply_lint_levels(&mut all, &sources, &self.lints);
         batch(all, &table)

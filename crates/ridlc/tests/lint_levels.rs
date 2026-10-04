@@ -1,5 +1,5 @@
-//! The `[lints]` levels applied by the `ridlc` command drivers (lint
-//! foundation spec D-8, §6.2): `run_check` and `run_build` apply them,
+//! The `[lints]` levels applied by the `ridlc` command drivers (ADR-0024
+//! decisions 6 and 8): `run_check` and `run_build` apply them,
 //! `check_source` applies the registry defaults, and `compile_workspace`
 //! carries the scopes out unapplied.
 

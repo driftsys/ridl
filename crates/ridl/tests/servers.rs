@@ -1113,7 +1113,7 @@ impl LspSession {
 
 /// The language server publishes the same `(code, severity)` pairs that
 /// `ridl check --format json` reports, after the `[lints]` levels apply
-/// (lint foundation spec §6.2): `deny` is LSP severity 1, `info` is 3,
+/// (ADR-0024 decision 6): `deny` is LSP severity 1, `info` is 3,
 /// `allow` removes the diagnostic on both faces, and the MANI-010 of the
 /// unknown key is an Info on both, the root's `unknown-lint = "info"` applied
 /// to a loader diagnostic. Both faces walk the same workspace

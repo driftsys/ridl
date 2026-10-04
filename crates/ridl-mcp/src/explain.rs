@@ -89,8 +89,8 @@ mod tests {
             _ => panic!("expected a diagnostic"),
         }
     }
-    // A lint code names its lint and its default level (lint foundation spec
-    // §7.4); an Error code, which is never a lint, carries neither field.
+    // A lint code names its lint and its default level (ADR-0024,
+    // Consequences); an Error code, which is never a lint, carries neither field.
     #[test]
     fn explain_a_lint_code() {
         let value = |code: &str| {

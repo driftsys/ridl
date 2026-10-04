@@ -1,10 +1,10 @@
-//! The lint registry: lint names and levels (lint foundation spec §4).
+//! The lint registry: lint names and levels (ADR-0024 decision 1).
 //!
 //! Every Warning and Info row of the diagnostic catalogue carries a lint name
 //! ([`CatalogEntry::lint`]). The catalogue is the registry; this module looks
 //! names up in it, defines the four levels a `[lints]` table can set, resolves
-//! the effective levels by directory ([`LintScopes`], spec §5.2), and applies
-//! them to a diagnostic list ([`apply_lint_levels`], spec §6.1).
+//! the effective levels by directory ([`LintScopes`], ADR-0002 §4), and applies
+//! them to a diagnostic list ([`apply_lint_levels`], ADR-0024 decision 6).
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -98,7 +98,7 @@ pub type LintTable = BTreeMap<&'static str, LintLevel>;
 
 /// The effective levels of one package: the registry defaults with the
 /// overrides of every `[lints]` table that applies, the later table winning
-/// (spec §5.2).
+/// (ADR-0002 §4).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LintLevels {
     overrides: LintTable,
@@ -124,7 +124,7 @@ impl LintLevels {
 }
 
 /// The effective levels of every directory the loader resolved: the
-/// workspace root, each member, or a standalone package (spec §6.1). A file
+/// workspace root, each member, or a standalone package (ADR-0024 decision 10). A file
 /// is looked up by the longest directory that is a prefix of its path.
 #[derive(Debug, Clone, Default)]
 pub struct LintScopes {
@@ -150,7 +150,7 @@ impl LintScopes {
     }
 }
 
-/// Applies the effective lint levels to `diagnostics` (spec §6.1).
+/// Applies the effective lint levels to `diagnostics` (ADR-0024 decision 6).
 ///
 /// For each diagnostic whose code is a lint, the level comes from the scope of
 /// `sources.path(primary.file)`, or from the registry defaults when the file

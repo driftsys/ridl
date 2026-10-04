@@ -43,7 +43,7 @@ use crate::package::{Package, PackageLock, PackageOrigin, Workspace, package_dec
 /// diagnostics the load accumulated, the interned path+text table the
 /// diagnostics' [`Span`]s point into (what the caller hands to
 /// [`render`](crate::diag::render())), and the effective lint levels by
-/// directory (lint foundation spec §6.1): one scope for the workspace root,
+/// directory (ADR-0024 decision 10): one scope for the workspace root,
 /// one per member, one for a standalone package, none in single-file mode.
 /// The scope keys are the directories in the same path form as the file
 /// paths in `sources`, so [`LintScopes::for_path`] resolves a recorded path.
@@ -248,13 +248,13 @@ struct Loader {
     /// single-file mode (E2 task 9).
     workspace_default_timing: Option<String>,
     /// The workspace root's effective lint levels: the registry defaults
-    /// overlaid with the root `[lints]` (lint foundation spec §5.2 step 2).
+    /// overlaid with the root `[lints]` (ADR-0002 §4).
     /// Each member's own table is overlaid on a clone. Stays at the defaults
     /// in a standalone package load and in single-file mode.
     workspace_lints: LintLevels,
     /// The effective lint levels by directory: one scope for the root, one per
     /// member directory, one for a standalone package, none in single-file
-    /// mode (spec §6.1). Each key is the directory in the path form the
+    /// mode (ADR-0024 decision 10). Each key is the directory in the path form the
     /// loader records for the files under it.
     lints: LintScopes,
 }
@@ -279,7 +279,7 @@ impl Loader {
         };
         // The root directory's scope: the registry defaults overlaid with the
         // root `[lints]`. In workspace mode it is also the base every member
-        // overlays its own table on (lint foundation spec §5.2).
+        // overlays its own table on (ADR-0002 §4).
         let mut root_lints = LintLevels::default();
         root_lints.overlay(&lints);
         self.lints.insert(root.to_path_buf(), root_lints.clone());
@@ -342,7 +342,7 @@ impl Loader {
             return Ok(());
         };
         // The member directory's scope: the root levels overlaid with the
-        // member's own `[lints]` (lint foundation spec §5.2 step 3). The key
+        // member's own `[lints]` (ADR-0002 §4). The key
         // is the member directory in the same path form as the file paths
         // recorded under it, so `for_path` finds them by prefix.
         let mut member_lints = self.workspace_lints.clone();
@@ -1401,7 +1401,7 @@ mod tests {
     /// The lint scopes the loader builds in workspace mode: the root
     /// directory gets the defaults overlaid with the root `[lints]`, and
     /// each member directory gets the root levels overlaid with the member's
-    /// own table (lint foundation spec §5.2, §6.1). The scope keys share the
+    /// own table (ADR-0002 §4, ADR-0024 decision 10). The scope keys share the
     /// path form of the file paths the loader records, so the path recorded
     /// for a member file resolves to the member's scope.
     #[test]
@@ -1465,7 +1465,7 @@ mod tests {
 
     /// A manifest diagnostic's file path resolves to the scope of the
     /// manifest's own directory, so a member's `[lints]` table sets the level
-    /// of the MANI-010 it causes (lint foundation spec §5.3).
+    /// of the MANI-010 it causes (ADR-0024 decision 11).
     #[test]
     fn a_member_manifest_diagnostic_is_in_the_member_scope() {
         let dir = TempDir::new("lint-scope-manifest");
