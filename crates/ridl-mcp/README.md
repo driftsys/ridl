@@ -125,23 +125,37 @@ are the same as `ridl_resolve`; a non-interface is a tool error.
 
 Input: `path`, optional `overlays`, `name`, optional `from`. Result:
 `{target, references, workspace}` with canonical `target` and each reference
-`{package, declaration, interaction, location}`. The walk includes nested type
-references, pattern constants, enumset backing enums, interface references and
-inline service interactions. Standard declarations are not walked. References
-are reported once per `(declaration, interaction)` pair. Repeated fields without
-an interaction yield one result; two interactions using the same target yield
-two results. Service references use the service name and a null location. Lookup
+`{package, declaration, kind, interaction, location}`. `kind` is `declaration`,
+`interface`, `service` or `component`. The walk includes nested type references,
+pattern constants, enumset backing enums, interface references and inline
+service interactions. Standard declarations are not walked. References are
+reported once per `(declaration, interaction)` pair. Repeated fields without an
+interaction yield one result; two interactions using the same target yield two
+results. Service references use the service name and a null location. Lookup
 errors are the same as `ridl_resolve`.
+
+Declared components in the lowered rsdl system count as references when they
+require a named interface. Inline requirements are covered by their service;
+offers, links, routes and implicit components do not add references. Component
+references have null interaction and location. If rsdl files were read but no
+system was lowered, workspace notes say that rsdl uses were not counted and
+recommend `ridl_check` on the same path.
 
 ### `ridl_dependencies`
 
 Input: `path`, optional `overlays`, optional `package`. Result:
 `{packages, workspace}`. Each package carries `name`, `imports` (manifest import
-names), sorted `depends_on` (other IR-referenced packages, excluding `ridl.std`)
-and sorted `dependents` (workspace packages referencing it). A `package` filter
-returns one package. An unknown package is a tool error listing the available
-packages. This tool reports the graph; it does not lint cycles or unused
-imports.
+names from the member manifest's `[imports]` only, excluding the workspace
+root's shared `[imports]`), sorted `depends_on` (other IR-referenced packages,
+excluding `ridl.std`) and sorted `dependents` (workspace packages referencing
+it). A `package` filter returns one package. An unknown package is a tool error
+listing the available packages. This tool reports the graph; it does not lint
+cycles or unused imports. Required named interfaces add dependencies from each
+declared component's package to the interface's catalog. The system's package
+also depends on the packages of its declared member components. The graph keeps
+qualifiers that name unresolved or remote packages outside the workspace. When
+the loaded workspace contains `.rsdl` files and no system was lowered, the
+workspace carries the same no-system note as `ridl_references`.
 
 ### `ridl_diff`
 

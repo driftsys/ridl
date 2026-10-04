@@ -413,16 +413,18 @@ impl Loader {
                 source_files.push(path);
             }
         }
-        let directory_key = dir.canonicalize()?;
-        for (key, _, _) in &self.overlays {
-            if key.parent() == Some(directory_key.as_path())
-                && !source_files
-                    .iter()
-                    .any(|p| overlay_key(p).as_ref() == Some(key))
-            {
-                let added = dir.join(key.file_name().expect("overlay keys have a file name"));
-                if !source_files.contains(&added) {
-                    source_files.push(added);
+        if !self.overlays.is_empty() {
+            let directory_key = dir.canonicalize()?;
+            for (key, _, _) in &self.overlays {
+                if key.parent() == Some(directory_key.as_path())
+                    && !source_files
+                        .iter()
+                        .any(|p| overlay_key(p).as_ref() == Some(key))
+                {
+                    let added = dir.join(key.file_name().expect("overlay keys have a file name"));
+                    if !source_files.contains(&added) {
+                        source_files.push(added);
+                    }
                 }
             }
         }
@@ -777,10 +779,43 @@ mod tests {
             &[overlay(path.clone(), text)],
         )
         .unwrap();
-        let file = loaded.workspace.packages(&db)[0].files(&db)[0];
+        let files = loaded.workspace.packages(&db)[0].files(&db);
+        assert_eq!(files.len(), 1);
+        let file = files[0];
         assert_eq!(file.text(&db), text);
         let entries: Vec<_> = loaded.sources.iter_files().collect();
         assert!(entries.contains(&(path_string(&path).as_str(), text)));
+    }
+
+    #[test]
+    fn an_added_file_sorts_with_the_disk_files() {
+        let (dir, _) = overlay_fixture();
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace_with(
+            &mut db,
+            &dir.path().join("p"),
+            &[overlay(dir.path().join("p/0.typl"), "package p\n")],
+        )
+        .unwrap();
+        let files = loaded.workspace.packages(&db)[0].files(&db);
+        assert_eq!(files.len(), 2);
+        assert!(files[0].path(&db).ends_with("0.typl"));
+        assert!(files[1].path(&db).ends_with("a.typl"));
+    }
+    #[test]
+    fn an_overlay_replaces_rather_than_adds() {
+        let (dir, path) = overlay_fixture();
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace_with(
+            &mut db,
+            &dir.path().join("p"),
+            &[overlay(
+                path,
+                "package p\ntype Replacement: integer [0..1]\n",
+            )],
+        )
+        .unwrap();
+        assert_eq!(loaded.workspace.packages(&db)[0].files(&db).len(), 1);
     }
 
     #[test]

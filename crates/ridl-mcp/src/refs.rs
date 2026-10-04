@@ -13,19 +13,33 @@ pub struct ReferencesOutput {
     pub references: Vec<Reference>,
     pub workspace: WorkspaceStatus,
 }
+#[derive(Serialize, JsonSchema, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[schemars(crate = "rmcp::schemars")]
+#[serde(rename_all = "snake_case")]
+pub enum ReferenceKind {
+    Declaration,
+    Interface,
+    Service,
+    Component,
+}
+
 #[derive(Debug, Serialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct Reference {
     pub package: String,
     pub declaration: String,
+    pub kind: ReferenceKind,
     pub interaction: Option<String>,
     pub location: Option<Location>,
 }
 #[derive(Debug, Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct DependenciesInput {
+    /// The workspace root, a package directory or a source file, relative to the server's working directory unless absolute.
     pub path: String,
+    /// Optional unsaved source files to apply without writing them to disk.
     pub overlays: Option<Vec<OverlayInput>>,
+    /// An optional package name that filters the result to that workspace package.
     pub package: Option<String>,
 }
 #[derive(Debug, Serialize, JsonSchema)]
@@ -133,6 +147,43 @@ fn items(package: &ridl_ir::v2::Package) -> impl Iterator<Item = Item<'_>> {
         )
         .chain(package.services.iter().map(Item::Service))
 }
+/// Every (component package, component name, required interface) triple of
+/// the lowered system, per spec §4.4: declared components only, required
+/// interfaces that are present and not inline, as `{catalog}.{name}`.
+fn component_requires(system: &ridl_ir::v2::System) -> Vec<(String, String, String)> {
+    system
+        .components
+        .iter()
+        .filter(|c| !c.package.is_empty())
+        .flat_map(|component| {
+            component.requires.iter().filter_map(|require| {
+                let interface = require.interface.as_ref()?;
+                (!interface.inline).then(|| {
+                    (
+                        component.package.clone(),
+                        component.name.clone(),
+                        format!("{}.{}", interface.catalog, interface.name),
+                    )
+                })
+            })
+        })
+        .collect()
+}
+
+/// (system package, member component package) pairs, per spec §4.4.
+fn system_member_packages(system: &ridl_ir::v2::System) -> Vec<(String, String)> {
+    system
+        .members
+        .iter()
+        .filter_map(|member| {
+            let component = system.components.iter().find(|c| {
+                !c.package.is_empty() && format!("{}.{}", c.package, c.name) == member.component
+            })?;
+            Some((system.package.clone(), component.package.clone()))
+        })
+        .collect()
+}
+
 pub fn references(snap: &Snapshot, input: &NameInput) -> Result<ReferencesOutput, ToolError> {
     let found = find(snap, &input.name, input.from.as_deref())?;
     let target = format!("{}.{}", found.package, found.item.name());
@@ -156,17 +207,40 @@ pub fn references(snap: &Snapshot, input: &NameInput) -> Result<ReferencesOutput
                 references.push(Reference {
                     package: checked.ir.name.clone(),
                     declaration: item.name().into(),
+                    kind: match item {
+                        Item::Decl(_) => ReferenceKind::Declaration,
+                        Item::Interface(_) => ReferenceKind::Interface,
+                        Item::Service(_) => ReferenceKind::Service,
+                    },
                     interaction,
                     location,
                 });
             }
         }
     }
+    if let Some(system) = &snap.output.system {
+        let components: BTreeSet<_> = component_requires(system)
+            .into_iter()
+            .filter_map(|(package, declaration, reference)| {
+                (reference == target).then_some((package, declaration))
+            })
+            .collect();
+        for (package, declaration) in components {
+            references.push(Reference {
+                package,
+                declaration,
+                kind: ReferenceKind::Component,
+                interaction: None,
+                location: None,
+            });
+        }
+    }
     references.sort_by(|a, b| {
-        (&a.package, &a.declaration, &a.interaction).cmp(&(
+        (&a.package, &a.declaration, &a.interaction, &a.kind).cmp(&(
             &b.package,
             &b.declaration,
             &b.interaction,
+            &b.kind,
         ))
     });
     Ok(ReferencesOutput {
@@ -208,6 +282,27 @@ pub fn dependencies(
             }
         })
         .collect();
+    if let Some(system) = &snap.output.system {
+        let edges = component_requires(system)
+            .into_iter()
+            .filter_map(|(package, _, reference)| {
+                let (catalog, _) = reference.rsplit_once('.')?;
+                Some((package, catalog.to_string()))
+            })
+            .chain(system_member_packages(system));
+        for (own, target) in edges {
+            if target != own
+                && target != "ridl.std"
+                && let Some(package) = packages.iter_mut().find(|p| p.name == own)
+            {
+                package.depends_on.push(target);
+            }
+        }
+        for package in &mut packages {
+            package.depends_on.sort();
+            package.depends_on.dedup();
+        }
+    }
     for i in 0..packages.len() {
         let mut dependents = packages
             .iter()
@@ -309,6 +404,7 @@ mod tests {
             ]
         );
         assert!(out.references[1].location.is_none());
+        assert_eq!(out.references[1].kind, ReferenceKind::Service);
     }
     #[test]
     fn interactions_referring_to_the_same_target_are_separate_pairs() {
@@ -373,7 +469,7 @@ mod tests {
     }
     #[test]
     fn dependencies_report_manifest_imports_and_preserve_the_filtered_graph() {
-        let copy = crate::snapshot::tests::TempWorkspace::copy();
+        let copy = crate::snapshot::tests::TempWorkspace::copy("ws");
         for (member, imports) in [
             ("a", "alpha = \"https://192.0.2.1/alpha.git\""),
             (
@@ -467,5 +563,240 @@ mod tests {
             message,
             "no package `missing` in this workspace; packages: fx.a, fx.a.sub, fx.b"
         );
+    }
+    fn rsdl_snap() -> Snapshot {
+        let snap = snapshot(&fixture("ws-rsdl"), &[]).unwrap();
+        assert_eq!(snap.status().errors, 0);
+        assert_eq!(snap.status().warnings, 2);
+        assert!(snap.output.system.is_some());
+        assert!(snap.notes.is_empty());
+        snap
+    }
+    fn deps(snap: &Snapshot, package: Option<&str>) -> DependenciesOutput {
+        dependencies(
+            snap,
+            &DependenciesInput {
+                path: snap.root.to_string_lossy().into_owned(),
+                overlays: None,
+                package: package.map(str::to_string),
+            },
+        )
+        .unwrap()
+    }
+    #[test]
+    fn references_from_components() {
+        let out = references(&rsdl_snap(), &input("veh.climate.Seats")).unwrap();
+        let rows = serde_json::to_value(&out.references).unwrap();
+        assert_eq!(
+            rows.as_array()
+                .unwrap()
+                .iter()
+                .map(|r| (
+                    r["package"].as_str().unwrap(),
+                    r["declaration"].as_str().unwrap(),
+                    r["kind"].as_str(),
+                    r["interaction"].as_str(),
+                ))
+                .collect::<Vec<_>>(),
+            [
+                ("veh.cabin", "ClimateControl", Some("component"), None),
+                ("veh.cabin", "Dashboard", Some("component"), None),
+                ("veh.climate", "veh.climate.seats", Some("service"), None),
+            ]
+        );
+        assert!(out.references.iter().all(|r| r.location.is_none()));
+    }
+    #[test]
+    fn an_inline_require_is_not_a_reference() {
+        let snap = rsdl_snap();
+        let mut requires = component_requires(snap.output.system.as_ref().unwrap());
+        requires.sort();
+        assert_eq!(
+            requires,
+            [
+                (
+                    "veh.cabin".into(),
+                    "ClimateControl".into(),
+                    "veh.climate.Seats".into()
+                ),
+                (
+                    "veh.cabin".into(),
+                    "Dashboard".into(),
+                    "veh.climate.Climate".into()
+                ),
+                (
+                    "veh.cabin".into(),
+                    "Dashboard".into(),
+                    "veh.climate.Seats".into()
+                ),
+                (
+                    "veh.cabin".into(),
+                    "PhoneApp".into(),
+                    "veh.climate.Climate".into()
+                ),
+            ]
+        );
+        let out = references(&snap, &input("veh.climate.Temperature")).unwrap();
+        assert!(out.references.iter().all(|r| r.declaration != "PhoneApp"));
+        assert!(
+            out.references
+                .iter()
+                .any(|r| r.declaration == "veh.climate.diag")
+        );
+    }
+    #[test]
+    fn one_package_keeps_its_workspace_dependents() {
+        let out = deps(&rsdl_snap(), Some("veh.climate"));
+        assert_eq!(out.packages.len(), 1);
+        assert_eq!(out.packages[0].name, "veh.climate");
+        assert_eq!(out.packages[0].dependents, ["veh.cabin"]);
+    }
+    #[test]
+    fn dependencies_count_component_requires() {
+        let out = deps(&rsdl_snap(), None);
+        assert_eq!(
+            out.packages
+                .iter()
+                .find(|p| p.name == "veh.cabin")
+                .unwrap()
+                .depends_on,
+            ["veh.climate"]
+        );
+        assert_eq!(
+            out.packages
+                .iter()
+                .find(|p| p.name == "veh.climate")
+                .unwrap()
+                .dependents,
+            ["veh.cabin"]
+        );
+    }
+    #[test]
+    fn system_package_depends_on_member_component_packages() {
+        use std::fs;
+        let copy = crate::snapshot::tests::TempWorkspace::copy("ws-rsdl");
+        fs::write(
+            copy.0.join("ridl.toml"),
+            "[workspace]\nmembers = [\"climate\", \"cabin\", \"ops\"]\n",
+        )
+        .unwrap();
+        let cabin = copy.0.join("cabin/cabin.rsdl");
+        let text = fs::read_to_string(&cabin).unwrap();
+        fs::write(cabin, text.split("system Cabin").next().unwrap()).unwrap();
+        fs::create_dir(copy.0.join("ops")).unwrap();
+        fs::write(
+            copy.0.join("ops/ridl.toml"),
+            "[package]\nname = \"veh.ops\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        fs::write(copy.0.join("ops/ops.rsdl"), "package veh.ops\nimport veh.climate.Climate\nimport veh.cabin.Dashboard\nimport veh.cabin.ClimateControl\nimport veh.cabin.SeatHeating\n\ncomponent Monitor {\n  requires Climate\n}\n\nsystem Ops {\n  Monitor\n  Dashboard\n  ClimateControl\n  SeatHeating\n}\n").unwrap();
+        let snap = snapshot(copy.0.to_str().unwrap(), &[]).unwrap();
+        assert_eq!(snap.status().errors, 0);
+        assert_eq!(snap.status().warnings, 2);
+        let references = references(&snap, &input("veh.climate.Seats")).unwrap();
+        assert_eq!(
+            pairs(&references),
+            [
+                ("veh.cabin", "ClimateControl", None),
+                ("veh.cabin", "Dashboard", None),
+                ("veh.climate", "veh.climate.seats", None),
+            ]
+        );
+        assert!(references.workspace.notes.is_empty());
+        let out = deps(&snap, Some("veh.ops"));
+        assert!(out.workspace.notes.is_empty());
+        assert_eq!(out.packages[0].depends_on, ["veh.cabin", "veh.climate"]);
+        for package in [None, Some("veh.cabin")] {
+            let graph = deps(&snap, package);
+            let cabin = graph
+                .packages
+                .iter()
+                .find(|p| p.name == "veh.cabin")
+                .unwrap();
+            assert_eq!(cabin.dependents, ["veh.ops"]);
+        }
+    }
+    #[test]
+    fn no_lowered_system_draws_the_rsdl_note() {
+        let path = format!("{}/cabin/cabin.rsdl", fixture("ws-rsdl"));
+        let disk = std::fs::read_to_string(&path).unwrap();
+        let snap = snapshot(
+            &fixture("ws-rsdl"),
+            &[OverlayInput {
+                path,
+                source: disk.split("system Cabin").next().unwrap().into(),
+            }],
+        )
+        .unwrap();
+        assert!(snap.output.system.is_none());
+        let out = references(&snap, &input("veh.climate.Seats")).unwrap();
+        assert!(out.workspace.notes.iter().any(|n| n == "rsdl uses were not counted, because no system was lowered: the workspace declares no `system`, or an error in its closure blocked the lowering; run ridl_check on the same path to see which"));
+        assert_eq!(deps(&snap, None).workspace.notes, out.workspace.notes);
+        let rows = serde_json::to_value(&out.references).unwrap();
+        assert!(
+            rows.as_array()
+                .unwrap()
+                .iter()
+                .all(|r| r["kind"] != "component")
+        );
+    }
+    #[test]
+    fn an_error_blocking_system_lowering_draws_the_rsdl_note() {
+        let path = format!("{}/cabin/cabin.rsdl", fixture("ws-rsdl"));
+        let disk = std::fs::read_to_string(&path).unwrap();
+        let snap = snapshot(
+            &fixture("ws-rsdl"),
+            &[OverlayInput {
+                path,
+                source: disk.replacen("requires Seats", "requires MissingInterface", 1),
+            }],
+        )
+        .unwrap();
+        assert!(snap.status().errors > 0);
+        assert!(snap.output.system.is_none());
+        let out = references(&snap, &input("veh.climate.Seats")).unwrap();
+        assert!(out.workspace.notes.iter().any(|n| n == "rsdl uses were not counted, because no system was lowered: the workspace declares no `system`, or an error in its closure blocked the lowering; run ridl_check on the same path to see which"));
+        assert_eq!(deps(&snap, None).workspace.notes, out.workspace.notes);
+        assert!(
+            deps(&snap, Some("veh.cabin")).packages[0]
+                .depends_on
+                .is_empty()
+        );
+        assert!(
+            out.references
+                .iter()
+                .all(|r| r.kind != ReferenceKind::Component)
+        );
+    }
+    #[test]
+    fn existing_references_carry_their_kind() {
+        let out = references(&snap(), &input("Reading")).unwrap();
+        let rows = serde_json::to_value(&out.references).unwrap();
+        assert_eq!(rows[0]["package"], "fx.a");
+        assert_eq!(rows[0]["declaration"], "Outcome");
+        assert_eq!(rows[0]["kind"], "declaration");
+        assert_eq!(rows[1]["package"], "fx.b");
+        assert_eq!(rows[1]["declaration"], "Status");
+        assert_eq!(rows[1]["kind"], "interface");
+    }
+
+    #[test]
+    fn declaration_references_have_locations() {
+        let out = references(&snap(), &input("Reading")).unwrap();
+        assert_eq!(
+            serde_json::to_value(&out.references[0].location).unwrap(),
+            crate::snapshot::tests::name_location("a/a.ridl", "union Outcome", "Outcome")
+        );
+        assert_eq!(
+            serde_json::to_value(&out.references[1].location).unwrap(),
+            crate::snapshot::tests::name_location("b/b.ridl", "interface Status", "Status")
+        );
+    }
+    #[test]
+    fn references_through_backing_enums_and_pattern_consts() {
+        let out = references(&snap(), &input("Health")).unwrap();
+        assert!(pairs(&out).contains(&("fx.a", "HealthSet", None)));
+        let out = references(&snap(), &input("HEALTH_PATTERN")).unwrap();
+        assert_eq!(pairs(&out), [("fx.a", "HealthCode", None)]);
     }
 }

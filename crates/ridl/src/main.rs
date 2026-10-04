@@ -53,6 +53,10 @@ use ridl_core::interface_lock::LockKey;
 use ridl_core::lint::{apply_lint_levels, lint_of};
 use ridl_fmt::{FormatOptions, FormatOutcome, format};
 use ridl_syntax::ast::{AstNode as _, HasName as _, InterfaceMember, Name, SourceFile};
+use ridlc::diff_side::{
+    first_nested_snapshot_dir, first_non_json_ir_in, ir_json_files, is_non_json_ir, is_source_dir,
+    snapshot_files,
+};
 use ridlc::plugin::PluginSpec;
 use ridlc::{ApplyLints, CliRun, Emit};
 use rowan::{TextRange, TextSize};
@@ -441,75 +445,6 @@ fn report_diff_side_error(error: ridlc::DiffSideError) -> ExitCode {
     ExitCode::from(2)
 }
 
-/// The one snapshot suffix this surface accepts — baselines and diffs stay
-/// `.ir.json` (ADR-0014 decision 5). Drawn from the emit table in `ridlc`
-/// rather than spelled here, so the recognition cannot drift from the name
-/// the artifact writer uses (issue #218 item 4).
-const IR_JSON_SUFFIX: &str = match Emit::IrJson.ir_dump_suffix() {
-    Some(suffix) => suffix,
-    None => panic!("`ir-json` is an IR dump"),
-};
-
-/// Whether `path` is an `.ir.json` snapshot (a file whose name ends
-/// [`IR_JSON_SUFFIX`]) rather than a source input.
-///
-/// `Path::is_file` is `false` on any metadata error as well as on a
-/// directory, so an entry named like a snapshot that cannot be read — a
-/// symlink whose target is gone — is not a snapshot to this test. That is
-/// acceptable for a single named input, which then falls through to the
-/// compiler and is reported there, but not for a directory listing, where a
-/// skipped entry would read as an absent snapshot: [`snapshot_files`] tells
-/// the two apart and reports the entry it cannot read (driftsys/ridl#339).
-fn is_ir_json(path: &Path) -> bool {
-    path.is_file() && has_ir_json_name(path)
-}
-
-/// Whether `path`'s file name ends [`IR_JSON_SUFFIX`], whatever the entry
-/// behind it is.
-fn has_ir_json_name(path: &Path) -> bool {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.ends_with(IR_JSON_SUFFIX))
-}
-
-/// Whether `path` is an IR artifact in an encoding the snapshot surface must
-/// refuse: every suffix the emit table names except `.ir.json` — prototext
-/// (`.ir.txtpb`) and binary (`.ir.binpb`) today. Baselines and diffs stay
-/// `.ir.json` (ADR-0014 decision 5) — a committed baseline must be
-/// reviewable in a pull request. The suffixes are iterated from the table
-/// rather than spelled here, so an encoding added to `ridlc` is refused by
-/// name with no edit on this side (issue #218 item 4).
-fn is_non_json_ir(path: &Path) -> bool {
-    path.is_file()
-        && path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| {
-                Emit::ir_dump_suffixes()
-                    .any(|(emit, suffix)| emit != Emit::IrJson && name.ends_with(suffix))
-            })
-}
-
-/// Whether `path` is a source file by the rule the workspace loader collects
-/// with: a file whose extension is `typl`, `ridl` or `rsdl`. Used only to tell
-/// a source tree from a snapshot directory ([`is_source_dir`]) — a diff
-/// *argument* is never gated on this, because a source file's own name is
-/// unconstrained ([`ridlc::load_diff_side`]).
-fn is_source_file(path: &Path) -> bool {
-    path.is_file()
-        && path.extension().is_some_and(|extension| {
-            extension == "typl" || extension == "ridl" || extension == "rsdl"
-        })
-}
-
-/// Whether `dir` is a source tree by its direct contents: it holds a
-/// `ridl.toml` or at least one `.typl`, `.ridl` or `.rsdl` file. A snapshot
-/// directory — `.ridl/baseline/`, or a build `--out-dir` — holds neither.
-fn is_source_dir(dir: &Path) -> bool {
-    dir.join("ridl.toml").is_file()
-        || files_matching(dir, is_source_file).is_ok_and(|files| !files.is_empty())
-}
-
 // ==========================================================================
 // The baseline-aware desk check (E2.9, general form §6.3, ADR-0008 decision 9)
 // ==========================================================================
@@ -752,7 +687,10 @@ fn untombstoned_removals(
     if published.is_empty() {
         return Ok(false);
     }
-    let fresh = load_snapshots(&snapshot_files(staging)?, None)?;
+    let fresh = load_snapshots(
+        &snapshot_files(staging).map_err(report_diff_side_error)?,
+        None,
+    )?;
 
     let report = ridl_diff::diff_sets(&published, &fresh);
     // Parsing every source file is wasted work on the common republish that
@@ -934,7 +872,10 @@ fn interface_refusals(
     staging: &Path,
     run: &mut CliRun,
 ) -> Result<bool, ExitCode> {
-    let fresh = load_snapshots(&snapshot_files(staging)?, None)?;
+    let fresh = load_snapshots(
+        &snapshot_files(staging).map_err(report_diff_side_error)?,
+        None,
+    )?;
     let mut index: Option<DeclIndex> = None;
     let mut refusals = Vec::new();
     for package in &fresh {
@@ -1894,7 +1835,7 @@ fn baseline_position(change: &ridl_diff::Change, word: &str) -> String {
 /// yet" state, and [`desk_check`] skips it silently.
 fn load_baseline(location: &Path, explicit: bool) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     let files = if location.is_dir() {
-        let snapshots = snapshot_files(location)?;
+        let snapshots = snapshot_files(location).map_err(report_diff_side_error)?;
         if snapshots.is_empty() {
             // What is directly inside is the more specific complaint, so it
             // is the one reported when a directory somehow has both.
@@ -1906,7 +1847,9 @@ fn load_baseline(location: &Path, explicit: bool) -> Result<Vec<ridl_ir::v2::Pac
                      `ridl baseline`",
                 ));
             }
-            if let Some(nested) = first_nested_snapshot_dir(location)? {
+            if let Some(nested) =
+                first_nested_snapshot_dir(location).map_err(report_diff_side_error)?
+            {
                 return Err(refuse_nested_snapshot_directory(
                     location,
                     &nested,
@@ -1961,81 +1904,6 @@ fn refuse_empty_baseline(location: &Path) -> ExitCode {
     ExitCode::from(2)
 }
 
-/// The files directly inside `dir` that satisfy `keep`, in file-name order.
-fn files_matching(dir: &Path, keep: fn(&Path) -> bool) -> std::io::Result<Vec<PathBuf>> {
-    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)?
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| keep(path))
-        .collect();
-    files.sort();
-    Ok(files)
-}
-
-/// The `.ir.json` snapshots directly inside `dir`, in file-name order.
-fn ir_json_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
-    files_matching(dir, is_ir_json)
-}
-
-/// The first non-JSON IR artifact directly inside `dir`, in file-name order —
-/// the witness a directory refusal names. A read failure yields `None`: every
-/// caller has just listed the same directory through [`snapshot_files`], so
-/// its own fallback reports the cause.
-fn first_non_json_ir_in(dir: &Path) -> Option<PathBuf> {
-    files_matching(dir, is_non_json_ir)
-        .unwrap_or_default()
-        .into_iter()
-        .next()
-}
-
-/// The first immediate subdirectory of `dir` that itself holds an `.ir.json`
-/// snapshot, in name order — the witness a nesting refusal names.
-///
-/// One level down, and no further. `ridl baseline` publishes one flat
-/// directory of snapshots and stages into a *sibling* of it, so snapshots
-/// below a snapshot directory are never a layout the toolchain writes: they
-/// are the signature of a path aimed one level too high (`.ridl` where
-/// `.ridl/baseline` was meant), which is the mistake worth telling apart from
-/// an unpublished baseline. Searching deeper would mean walking an arbitrary
-/// tree — `--baseline .` at a repository root — to answer a question about
-/// the one directory the author named, so a path aimed two or more levels
-/// high yields no snapshot from this scan (issue #230). What that empty
-/// result means is the caller's decision: [`load_baseline`] refuses it for an
-/// explicit `--baseline` (driftsys/ridl#235) and reads it as an unpublished
-/// baseline under auto-discovery.
-///
-/// A subdirectory that cannot be listed is exit 2, not a silent `None`. This
-/// is the one scan in this file that reads a level *no caller has listed* —
-/// [`first_non_json_ir_in`] and [`snapshot_files`] both read only `dir`
-/// itself, which the caller has already been through — so the rule
-/// [`snapshot_files`] states has to be restated here rather than inherited:
-/// a directory that cannot be read must not quietly become a directory that
-/// holds nothing. Swallowing the error would let an unreadable
-/// `.ridl/baseline/` read as an unpublished baseline and skip the desk check
-/// in silence, which is the failure this whole refusal exists to close.
-fn first_nested_snapshot_dir(dir: &Path) -> Result<Option<PathBuf>, ExitCode> {
-    let unreadable = |path: &Path, err: &std::io::Error| {
-        eprintln!("error: cannot read {}: {err}", path.display());
-        ExitCode::from(2)
-    };
-    let mut subdirectories: Vec<PathBuf> = std::fs::read_dir(dir)
-        .map_err(|err| unreadable(dir, &err))?
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| path.is_dir())
-        .collect();
-    subdirectories.sort();
-    for subdirectory in subdirectories {
-        if !ir_json_files(&subdirectory)
-            .map_err(|err| unreadable(&subdirectory, &err))?
-            .is_empty()
-        {
-            return Ok(Some(subdirectory));
-        }
-    }
-    Ok(None)
-}
-
 /// Reports a directory whose `.ir.json` snapshots sit one level below it
 /// rather than inside it, and yields exit 2 (issue #230).
 ///
@@ -2082,46 +1950,6 @@ fn refuse_artifact_directory(dir: &Path, witness: &Path, expectation: &str) -> E
     ExitCode::from(2)
 }
 
-/// The `.ir.json` snapshots directly inside `dir`, in file-name order, with
-/// two failures turned into exit 2 — a comparison against a directory that
-/// cannot be listed must not quietly become a comparison against nothing:
-///
-/// - the directory itself cannot be listed;
-/// - an entry named like a snapshot whose metadata cannot be read — a
-///   symlink whose target is gone. [`is_ir_json`] is `false` on such an
-///   entry, so [`ir_json_files`] would skip it and the directory would read
-///   as one snapshot short, which is an absent baseline to every caller:
-///   `ridl baseline` would publish over it as a first publication, and
-///   `ridl check` under auto-discovery would skip the desk check
-///   (driftsys/ridl#339 case 3). The message names the entry, not the
-///   directory, because the directory was listed.
-///
-/// A snapshot-named entry whose metadata reads fine but which is not a file
-/// — a directory — is skipped, as [`ir_json_files`] skips it. Entries are
-/// stat'ed in file-name order, so the entry a run reports is the same each
-/// time. The metadata read follows symlinks, so a link to a readable file
-/// is the file it names.
-fn snapshot_files(dir: &Path) -> Result<Vec<PathBuf>, ExitCode> {
-    let named = files_matching(dir, has_ir_json_name).map_err(|err| {
-        eprintln!(
-            "error: cannot read the snapshot directory {}: {err}",
-            dir.display()
-        );
-        ExitCode::from(2)
-    })?;
-    let mut files = Vec::new();
-    for path in named {
-        let metadata = std::fs::metadata(&path).map_err(|err| {
-            eprintln!("error: cannot read the snapshot {}: {err}", path.display());
-            ExitCode::from(2)
-        })?;
-        if metadata.is_file() {
-            files.push(path);
-        }
-    }
-    Ok(files)
-}
-
 /// The remedy [`load_published`] appends when the snapshot it cannot
 /// parse is the published baseline `ridl baseline` is about to replace.
 ///
@@ -2155,7 +1983,7 @@ const PUBLISHED_PARSE_REMEDY: &str = "the file is left as it is, because a recor
 /// refusal is this gate's alone — `ridl check --baseline` and `ridl diff`
 /// still read such a directory as `diff_sets` reads it.
 fn load_published(out_dir: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
-    let files = snapshot_files(out_dir)?;
+    let files = snapshot_files(out_dir).map_err(report_diff_side_error)?;
     let packages = load_snapshots(&files, Some(PUBLISHED_PARSE_REMEDY))?;
     let mut first_file_of: BTreeMap<&str, &Path> = BTreeMap::new();
     for (file, package) in files.iter().zip(&packages) {

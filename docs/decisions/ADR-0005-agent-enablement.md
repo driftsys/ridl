@@ -123,16 +123,16 @@ _for this platform specifically_: the hard parts (structured diagnostics, the
 stable IR, `ridl-diff`) are already built for other reasons. Minimum viable tool
 set:
 
-| Tool                                 | Returns                                                                                     | Backs the loop phase |
-| ------------------------------------ | ------------------------------------------------------------------------------------------- | -------------------- |
-| `ridl_check(path \| source)`         | structured diagnostics — coded, spans, **fix-its verbatim**                                 | verify               |
-| `ridl_explain(code)`                 | the rustc-`--explain`-style entry (ADR-0004 §10 error index)                                | verify / learn       |
-| `ridl_diff(a, b)`                    | exit class 0/1/2 + the breaking-change list                                                 | evolve               |
-| `ridl_describe_type(path, name)`     | range, unit, step, init, resolved wire width                                                | ground               |
-| `ridl_list_interactions(path, name)` | interactions with kinds `signal`, `event`, `command`, `query`, `fixed`, ordinals and timing | ground               |
-| `ridl_resolve(path, name)`           | package, kind, definition location                                                          | ground               |
-| `ridl_references(path, name)`        | declarations that use a declaration                                                         | ground               |
-| `ridl_dependencies(path, package)`   | each package's dependencies and dependents                                                  | ground               |
+| Tool                                      | Returns                                                                                     | Backs the loop phase |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------- | -------------------- |
+| `ridl_check(path \| source)`              | structured diagnostics — coded, spans, **fix-its verbatim**                                 | verify               |
+| `ridl_explain(code)`                      | the rustc-`--explain`-style entry (ADR-0004 §10 error index)                                | verify / learn       |
+| `ridl_diff(a, b)`                         | exit class 0/1/2 + the breaking-change list                                                 | evolve               |
+| `ridl_describe_type(path, name)`          | range, unit, step, init, resolved wire width                                                | ground               |
+| `ridl_list_interactions(path, interface)` | interactions with kinds `signal`, `event`, `command`, `query`, `fixed`, ordinals and timing | ground               |
+| `ridl_resolve(path, name)`                | package, kind, definition location                                                          | ground               |
+| `ridl_references(path, name)`             | declarations and rsdl components that use a declaration                                     | ground               |
+| `ridl_dependencies(path, package)`        | each package's dependencies and dependents                                                  | ground               |
 
 Two rules make this effective. **Return the coded diagnostics with their
 fix-its, unaltered** — agents are exceptional at consuming `TYPL-405`-style

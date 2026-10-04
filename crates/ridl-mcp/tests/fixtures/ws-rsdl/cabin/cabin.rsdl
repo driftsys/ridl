@@ -1,0 +1,32 @@
+package veh.cabin
+import veh.climate.Climate
+import veh.climate.Seats
+
+/// Runs the climate loop. Two copies, one per zone controller.
+component ClimateControl [ instances = (front, rear) ] {
+  offers veh.climate.control
+  requires Seats
+}
+
+component SeatHeating {
+  offers veh.climate.seats
+}
+
+component Dashboard {
+  requires Climate
+  requires Seats
+}
+
+/// The phone app. No implementation in this workspace.
+component PhoneApp [ external ] {
+  requires Climate
+  requires veh.climate.diag
+}
+
+system Cabin {
+  ClimateControl
+  SeatHeating
+  Dashboard
+  PhoneApp
+  veh.climate.diag
+}

@@ -79,6 +79,14 @@ pub fn snapshot(path: &str, overlays: &[OverlayInput]) -> Result<Snapshot, ToolE
             }
         }
     }
+    if output.system.is_none()
+        && output
+            .sources
+            .iter_files()
+            .any(|(path, _)| path.ends_with(".rsdl"))
+    {
+        notes.push("rsdl uses were not counted, because no system was lowered: the workspace declares no `system`, or an error in its closure blocked the lowering; run ridl_check on the same path to see which".into());
+    }
     Ok(Snapshot {
         db,
         output,
@@ -133,7 +141,7 @@ pub(crate) mod tests {
     }
     pub struct TempWorkspace(pub PathBuf);
     impl TempWorkspace {
-        pub fn copy() -> Self {
+        pub fn copy(name: &str) -> Self {
             static NEXT: AtomicUsize = AtomicUsize::new(0);
             let path = std::env::temp_dir().join(format!(
                 "ridl-mcp-{}-{}",
@@ -152,7 +160,7 @@ pub(crate) mod tests {
                     }
                 }
             }
-            copy(Path::new(&fixture("ws")), &path);
+            copy(Path::new(&fixture(name)), &path);
             Self(path)
         }
     }
@@ -211,7 +219,7 @@ pub(crate) mod tests {
             }],
         )
         .unwrap();
-        let copy = TempWorkspace::copy();
+        let copy = TempWorkspace::copy("ws");
         fs::write(copy.0.join("a/a.ridl"), "").unwrap();
         let output =
             ridlc::compile_workspace(&mut ridl_core::RidlDatabase::default(), &copy.0).unwrap();
@@ -265,7 +273,7 @@ pub(crate) mod tests {
     }
     #[tokio::test]
     async fn a_remote_import_is_reported_and_not_fetched() {
-        let copy = TempWorkspace::copy();
+        let copy = TempWorkspace::copy("ws");
         let manifest = copy.0.join("b/ridl.toml");
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
@@ -305,5 +313,22 @@ pub(crate) mod tests {
         );
         assert!(!copy.0.join("ridl.lock").exists());
         assert!(!copy.0.join(".ridl").exists());
+    }
+
+    pub fn name_location(relative: &str, declaration: &str, name: &str) -> serde_json::Value {
+        let path = format!("{}/{relative}", fixture("ws"));
+        let text = fs::read_to_string(&path).unwrap();
+        let start = text.find(declaration).unwrap() + declaration.len() - name.len();
+        let before = &text[..start];
+        let line = before.bytes().filter(|b| *b == b'\n').count() + 1;
+        let column = before.rsplit('\n').next().unwrap().chars().count() + 1;
+        serde_json::json!({"path": path,
+            "start": {"line": line, "column": column},
+            "end": {"line": line, "column": column + name.chars().count()}})
+    }
+    #[test]
+    fn snapshot_root_of_a_file_path() {
+        let snap = snapshot(&format!("{}/b/b.ridl", fixture("ws")), &[]).unwrap();
+        assert_eq!(snap.root, PathBuf::from(format!("{}/b", fixture("ws"))));
     }
 }

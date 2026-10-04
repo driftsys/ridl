@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct ExplainInput {
+    /// A diagnostic code such as TYPL-002 or a diff category word such as payload_changed.
     pub code: String,
 }
 #[derive(Debug, Serialize, JsonSchema)]
@@ -141,6 +142,17 @@ mod tests {
                 ),
                 _ => panic!("expected a request error"),
             }
+        }
+    }
+
+    #[test]
+    fn explain_reports_warning_and_info_severities() {
+        for (code, wanted) in [("TYPL-101", "warning"), ("TYPL-115", "info")] {
+            let result = explain(&ExplainInput { code: code.into() }).unwrap();
+            let ExplainOutput::Diagnostic { severity, .. } = result else {
+                panic!("diagnostic");
+            };
+            assert_eq!(severity, wanted);
         }
     }
 }

@@ -6,9 +6,11 @@
         "OverlayInput": {
           "properties": {
             "path": {
+              "description": "The .typl, .ridl or .rsdl file path whose parent directory exists, relative to the server's working directory unless absolute.",
               "type": "string"
             },
             "source": {
+              "description": "The full unsaved text of the source file.",
               "type": "string"
             }
           },
@@ -31,6 +33,7 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "overlays": {
+          "description": "Optional unsaved source files for path mode, refused in source mode.",
           "items": {
             "$ref": "#/$defs/OverlayInput"
           },
@@ -40,6 +43,7 @@
           ]
         },
         "path": {
+          "description": "The workspace root, a package directory or a source file, relative to the server's working directory unless absolute.",
           "type": [
             "string",
             "null"
@@ -130,9 +134,11 @@
         "OverlayInput": {
           "properties": {
             "path": {
+              "description": "The .typl, .ridl or .rsdl file path whose parent directory exists, relative to the server's working directory unless absolute.",
               "type": "string"
             },
             "source": {
+              "description": "The full unsaved text of the source file.",
               "type": "string"
             }
           },
@@ -146,6 +152,7 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "overlays": {
+          "description": "Optional unsaved source files to apply without writing them to disk.",
           "items": {
             "$ref": "#/$defs/OverlayInput"
           },
@@ -155,12 +162,14 @@
           ]
         },
         "package": {
+          "description": "An optional package name that filters the result to that workspace package.",
           "type": [
             "string",
             "null"
           ]
         },
         "path": {
+          "description": "The workspace root, a package directory or a source file, relative to the server's working directory unless absolute.",
           "type": "string"
         }
       },
@@ -261,9 +270,11 @@
         "OverlayInput": {
           "properties": {
             "path": {
+              "description": "The .typl, .ridl or .rsdl file path whose parent directory exists, relative to the server's working directory unless absolute.",
               "type": "string"
             },
             "source": {
+              "description": "The full unsaved text of the source file.",
               "type": "string"
             }
           },
@@ -277,15 +288,18 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "from": {
+          "description": "The package name in which a bare name resolves, including import aliases.",
           "type": [
             "string",
             "null"
           ]
         },
         "name": {
+          "description": "The declaration name as Name or pkg.Name.",
           "type": "string"
         },
         "overlays": {
+          "description": "Optional unsaved source files to apply without writing them to disk.",
           "items": {
             "$ref": "#/$defs/OverlayInput"
           },
@@ -295,6 +309,7 @@
           ]
         },
         "path": {
+          "description": "The workspace root, a package directory or a source file, relative to the server's working directory unless absolute.",
           "type": "string"
         }
       },
@@ -411,9 +426,11 @@
         "OverlayInput": {
           "properties": {
             "path": {
+              "description": "The .typl, .ridl or .rsdl file path whose parent directory exists, relative to the server's working directory unless absolute.",
               "type": "string"
             },
             "source": {
+              "description": "The full unsaved text of the source file.",
               "type": "string"
             }
           },
@@ -427,12 +444,15 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "new": {
+          "description": "The new side as an .ir.json file, a snapshot directory such as <root>/.ridl/baseline, or a source path.",
           "type": "string"
         },
         "old": {
+          "description": "The old side as an .ir.json file, a snapshot directory such as <root>/.ridl/baseline, or a source path.",
           "type": "string"
         },
         "overlays": {
+          "description": "Optional unsaved source files applied to the new source side only.",
           "items": {
             "$ref": "#/$defs/OverlayInput"
           },
@@ -461,6 +481,7 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "code": {
+          "description": "A diagnostic code such as TYPL-002 or a diff category word such as payload_changed.",
           "type": "string"
         }
       },
@@ -541,9 +562,11 @@
         "OverlayInput": {
           "properties": {
             "path": {
+              "description": "The .typl, .ridl or .rsdl file path whose parent directory exists, relative to the server's working directory unless absolute.",
               "type": "string"
             },
             "source": {
+              "description": "The full unsaved text of the source file.",
               "type": "string"
             }
           },
@@ -557,15 +580,18 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "from": {
+          "description": "The package name in which a bare name resolves, including import aliases.",
           "type": [
             "string",
             "null"
           ]
         },
         "interface": {
+          "description": "The interface name as Name or pkg.Name.",
           "type": "string"
         },
         "overlays": {
+          "description": "Optional unsaved source files to apply without writing them to disk.",
           "items": {
             "$ref": "#/$defs/OverlayInput"
           },
@@ -575,6 +601,7 @@
           ]
         },
         "path": {
+          "description": "The workspace root, a package directory or a source file, relative to the server's working directory unless absolute.",
           "type": "string"
         }
       },
@@ -736,9 +763,11 @@
         "OverlayInput": {
           "properties": {
             "path": {
+              "description": "The .typl, .ridl or .rsdl file path whose parent directory exists, relative to the server's working directory unless absolute.",
               "type": "string"
             },
             "source": {
+              "description": "The full unsaved text of the source file.",
               "type": "string"
             }
           },
@@ -752,15 +781,18 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "from": {
+          "description": "The package name in which a bare name resolves, including import aliases.",
           "type": [
             "string",
             "null"
           ]
         },
         "name": {
+          "description": "The declaration name as Name or pkg.Name.",
           "type": "string"
         },
         "overlays": {
+          "description": "Optional unsaved source files to apply without writing them to disk.",
           "items": {
             "$ref": "#/$defs/OverlayInput"
           },
@@ -770,6 +802,7 @@
           ]
         },
         "path": {
+          "description": "The workspace root, a package directory or a source file, relative to the server's working directory unless absolute.",
           "type": "string"
         }
       },
@@ -831,6 +864,9 @@
                 "null"
               ]
             },
+            "kind": {
+              "$ref": "#/$defs/ReferenceKind"
+            },
             "location": {
               "anyOf": [
                 {
@@ -847,9 +883,19 @@
           },
           "required": [
             "package",
-            "declaration"
+            "declaration",
+            "kind"
           ],
           "type": "object"
+        },
+        "ReferenceKind": {
+          "enum": [
+            "declaration",
+            "interface",
+            "service",
+            "component"
+          ],
+          "type": "string"
         },
         "WorkspaceStatus": {
           "properties": {
@@ -912,9 +958,11 @@
         "OverlayInput": {
           "properties": {
             "path": {
+              "description": "The .typl, .ridl or .rsdl file path whose parent directory exists, relative to the server's working directory unless absolute.",
               "type": "string"
             },
             "source": {
+              "description": "The full unsaved text of the source file.",
               "type": "string"
             }
           },
@@ -928,15 +976,18 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "from": {
+          "description": "The package name in which a bare name resolves, including import aliases.",
           "type": [
             "string",
             "null"
           ]
         },
         "name": {
+          "description": "The declaration name as Name or pkg.Name.",
           "type": "string"
         },
         "overlays": {
+          "description": "Optional unsaved source files to apply without writing them to disk.",
           "items": {
             "$ref": "#/$defs/OverlayInput"
           },
@@ -946,6 +997,7 @@
           ]
         },
         "path": {
+          "description": "The workspace root, a package directory or a source file, relative to the server's working directory unless absolute.",
           "type": "string"
         }
       },
