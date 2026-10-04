@@ -1,6 +1,11 @@
 //! The catalog hash of the corpus package is pinned (driver §4 answer 4).
 //! A different value here means the reduced package or the binary encoding
 //! changed; ADR-0014 decision 15 says when the pin may move.
+//!
+//! driftsys/ridl#275's criterion, that the hash does not depend on which
+//! wire schema a build emits, is tested end to end by
+//! `catalog_hash_is_the_same_whether_a_build_emits_proto_flatbuffers_or_both`
+//! in `crates/ridl/tests/facade.rs`.
 
 use std::path::Path;
 
@@ -43,14 +48,4 @@ fn the_corpus_hash_is_pinned() {
     let hash = catalog_hash(&package, &[]);
     let hex: String = hash.iter().map(|b| format!("{b:02x}")).collect();
     assert_eq!(hex, CORPUS_HASH);
-}
-
-/// driftsys/ridl#275's criterion (driver §4 answer 11): the hash is a
-/// property of the IR, so it does not depend on which wire schema a build
-/// emits. The hash takes no emit list; this test states the property where
-/// a reader looks for it.
-#[test]
-fn the_hash_is_the_same_whatever_a_build_emits() {
-    let package = numbered_corpus();
-    assert_eq!(catalog_hash(&package, &[]), catalog_hash(&package, &[]));
 }
