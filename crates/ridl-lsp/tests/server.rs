@@ -5018,7 +5018,7 @@ fn completion_triggers_on_a_doc_link_and_a_doc_tag() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
-/// An rsdl declaration is a doc carrier too (spec 2a §3.1): a doc link in an
+/// An rsdl declaration is a doc carrier too (ADR-0026 decision 1): a doc link in an
 /// `.rsdl` file navigates, hovers, completes and is renamed like one in a
 /// typl or ridl file.
 #[test]
