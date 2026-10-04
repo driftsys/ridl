@@ -155,6 +155,8 @@ fn artifact_uri(path: &str, root: &Path) -> String {
             .components()
             .filter_map(|component| match component {
                 Component::Normal(segment) => Some(segment.to_string_lossy()),
+                // Dropping `..` would name a different file.
+                Component::ParentDir => Some("..".into()),
                 _ => None,
             })
             .collect::<Vec<_>>()
@@ -394,6 +396,28 @@ mod tests {
             value["runs"][0]["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"]
                 ["uri"],
             "/elsewhere/a.ridl"
+        );
+    }
+
+    /// A `..` component stays in the URI, so the URI names the same file.
+    #[test]
+    fn a_parent_dir_component_is_kept() {
+        let mut sources = SourceMap::new();
+        let file = sources.file_id("/ws/../other/a.ridl", "package p\n");
+        let diagnostics = vec![Diagnostic {
+            code: DiagCode::RIDL_100,
+            severity: Severity::Warning,
+            message: "m".to_string(),
+            primary: span(file, 0, 7),
+            labels: Vec::new(),
+            fixits: Vec::new(),
+        }];
+        let log = to_sarif(&diagnostics, &sources, Path::new("/ws"), "0");
+        let value = serde_json::to_value(&log).expect("the log serializes");
+        assert_eq!(
+            value["runs"][0]["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"]
+                ["uri"],
+            "../other/a.ridl"
         );
     }
 }
