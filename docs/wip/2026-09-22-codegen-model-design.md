@@ -1281,10 +1281,10 @@ Each item is a fact this note had to work around; none is fixed here.
    descriptor** (`descriptors.rs`, `payload_info`) while the bound exists and is
    emitted as `MAX_SIZE` a few items lower; the interaction-face record says
    "the toolchain cannot size the payload yet". The model carries the bound on
-   every `Payload`; P4 keeps `None` for byte identity, and E16.2 (or the story
-   that reconciles `ridl-rt`'s two readings of `None`) fills it. The 2026-09-13
-   runtime-descriptors note's D-6 says "nothing in the crates computes an
-   encoded size today", which stage K2 made false.
+   every `Payload`; P4 keeps `None` for byte identity, and E16.4
+   (driftsys/ridl#380) filled the `flatbuffers` column from it on 2026-10-04.
+   The 2026-09-13 runtime-descriptors note's D-6 says "nothing in the crates
+   computes an encoded size today", which stage K2 made false.
 6. **The Rust and TypeScript backends resolve nothing across packages for inits,
    derives and constants, while the codec and both wire backends do (ADR-0017
    decision 1).** The model resolves over the scope; three printer rules stay
