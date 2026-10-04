@@ -198,6 +198,9 @@ mod tests {
             name: name.to_string(),
             value,
             doc: String::new(),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         };
         assert_eq!(
             enum_zero_member(&[value("ON", 1), value("OFF", 0)]),

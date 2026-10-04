@@ -14,6 +14,9 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
       "doc": "Vehicle speed over ground",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "unit": "km/h"
@@ -37,6 +40,9 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
       "doc": "Coolant temperature",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "unit": "Cel"
@@ -70,6 +76,9 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
       "doc": "Instrument-cluster reading, carrying a speed from the common package.",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -85,7 +94,10 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],

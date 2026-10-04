@@ -15,7 +15,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use sha2::{Digest, Sha256};
 
 use crate::v2::{
-    Decl, FieldType, Package, TypeDef, decl, field_type, return_type, stream_type, struct_member,
+    Decl, DocLink, FieldType, Package, Param, TypeDef, decl, field_type, return_type, stream_type,
+    struct_member,
 };
 
 /// Every declaration an interface of `package` reaches, keyed by canonical
@@ -39,8 +40,9 @@ pub fn reachable_decls<'a>(
 /// the reached declarations under canonical names, in canonical-name order,
 /// every type reference inside them rewritten to the canonical name of the
 /// declaration it resolves to, and every expression string left as written;
-/// doc strings and doc tags (`labels`, `deprecated`) blanked; no services
-/// and no retired entries.
+/// doc strings, doc links and doc tags (`labels`, `deprecated`, `see`,
+/// `since`) blanked, a parameter's included; no services and no retired
+/// entries.
 pub fn reduced_package(package: &Package, others: &[&Package]) -> Package {
     let index = Index::new(package, others);
     let mut reduced = Package {
@@ -72,6 +74,9 @@ pub fn reduced_package(package: &Package, others: &[&Package]) -> Package {
         interface.doc.clear();
         interface.labels.clear();
         interface.deprecated = None;
+        interface.links.clear();
+        interface.see.clear();
+        interface.since.clear();
         for interaction in &mut interface.interactions {
             visit_refs(interaction, &mut |name| index.canonicalize(name, ROOT));
             blank_docs(interaction);
@@ -492,6 +497,7 @@ fn blank_docs(decl: &mut Decl) {
     decl.doc.clear();
     decl.labels.clear();
     decl.deprecated = None;
+    blank_doc_links(&mut decl.links, &mut decl.see, &mut decl.since);
     match &mut decl.kind {
         Some(decl::Kind::StructDef(def)) => {
             for member in &mut def.members {
@@ -499,45 +505,66 @@ fn blank_docs(decl: &mut Decl) {
                     field.doc.clear();
                     field.labels.clear();
                     field.deprecated = None;
+                    blank_doc_links(&mut field.links, &mut field.see, &mut field.since);
                 }
             }
         }
         Some(decl::Kind::UnionDef(def)) => {
             for arm in &mut def.arms {
                 arm.doc.clear();
+                blank_doc_links(&mut arm.links, &mut arm.see, &mut arm.since);
             }
         }
         Some(decl::Kind::EnumDef(def)) => {
             for value in &mut def.values {
                 value.doc.clear();
+                blank_doc_links(&mut value.links, &mut value.see, &mut value.since);
             }
         }
         Some(decl::Kind::EnumSetDef(def)) => {
             for bit in &mut def.bits {
                 bit.doc.clear();
+                blank_doc_links(&mut bit.links, &mut bit.see, &mut bit.since);
             }
         }
+        Some(decl::Kind::CommandDef(def)) => blank_param_docs(&mut def.params),
+        Some(decl::Kind::QueryDef(def)) => blank_param_docs(&mut def.params),
         Some(decl::Kind::TypeDef(_))
         | Some(decl::Kind::ConstDef(_))
         | Some(decl::Kind::SignalDef(_))
         | Some(decl::Kind::EventDef(_))
-        | Some(decl::Kind::CommandDef(_))
-        | Some(decl::Kind::QueryDef(_))
         | Some(decl::Kind::FixedDef(_))
         | Some(decl::Kind::ReservedSlot(_))
         | None => {}
     }
 }
 
+fn blank_param_docs(params: &mut [Param]) {
+    for param in params {
+        param.doc.clear();
+        blank_doc_links(&mut param.links, &mut param.see, &mut param.since);
+    }
+}
+
+/// Clears the three doc fields every doc carrier shares besides `doc`
+/// (ADR-0026). Taken as three borrows because the carriers are unrelated
+/// generated structs with no shared trait.
+fn blank_doc_links(links: &mut Vec<DocLink>, see: &mut Vec<DocLink>, since: &mut Vec<String>) {
+    links.clear();
+    see.clear();
+    since.clear();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::v2::{
-        ArrayType, CommandDef, ConstDef, Constraint, Contract, ContractKind, Decl, EnumDef,
-        EnumSetDef, EnumValue, EventDef, FallibleType, Field, FieldType, FixedDef, Interface,
-        MapType, Param, QueryDef, RetiredInterface, ReturnType, Service, ServiceShape, SignalDef,
-        StreamType, StructDef, StructMember, TupleField, TupleType, TypeDef, UnionArm, UnionDef,
-        Visibility, decl, field_type, return_type, service_shape, stream_type, struct_member,
+        ArrayType, CommandDef, ConstDef, Constraint, Contract, ContractKind, Decl, DocLink,
+        EnumDef, EnumSetDef, EnumValue, EventDef, FallibleType, Field, FieldType, FixedDef,
+        Interface, MapType, Param, QueryDef, RetiredInterface, ReturnType, Service, ServiceShape,
+        SignalDef, StreamType, StructDef, StructMember, TupleField, TupleType, TypeDef, UnionArm,
+        UnionDef, Visibility, decl, field_type, return_type, service_shape, stream_type,
+        struct_member,
     };
 
     fn named(name: &str) -> FieldType {
@@ -555,12 +582,12 @@ mod tests {
                     .iter()
                     .enumerate()
                     .map(|(i, ty)| StructMember {
-                        member: Some(struct_member::Member::Field(Field {
+                        member: Some(struct_member::Member::Field(Box::new(Field {
                             name: format!("f{i}"),
                             ordinal: i as u32 + 1,
                             r#type: Some(named(ty)),
                             ..Default::default()
-                        })),
+                        }))),
                     })
                     .collect(),
                 fixed_layout: false,
@@ -838,6 +865,9 @@ mod tests {
                     name: "a".to_owned(),
                     value: 1,
                     doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 }],
                 ..Default::default()
             })),
@@ -1026,6 +1056,10 @@ mod tests {
                 params: vec![Param {
                     name: "level".to_owned(),
                     r#type: Some(named("Level")),
+                    doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 }],
                 contracts: vec![Contract {
                     kind: ContractKind::Require as i32,
@@ -1229,12 +1263,12 @@ mod tests {
             name: "S".to_owned(),
             kind: Some(decl::Kind::StructDef(StructDef {
                 members: vec![StructMember {
-                    member: Some(struct_member::Member::Field(Field {
+                    member: Some(struct_member::Member::Field(Box::new(Field {
                         name: "f".to_owned(),
                         ordinal: 1,
                         r#type: Some(ty),
                         ..Default::default()
-                    })),
+                    }))),
                 }],
                 fixed_layout: false,
             })),
@@ -1266,6 +1300,10 @@ mod tests {
         Param {
             name: "p".to_owned(),
             r#type: Some(ty),
+            doc: String::new(),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         }
     }
 
@@ -1310,6 +1348,9 @@ mod tests {
                             ordinal: 1,
                             type_ref: "T".to_owned(),
                             doc: String::new(),
+                            links: Vec::new(),
+                            see: Vec::new(),
+                            since: Vec::new(),
                         }],
                         ..Default::default()
                     }),
@@ -1569,6 +1610,9 @@ mod tests {
                     ordinal: 1,
                     type_ref: "Coord".to_owned(),
                     doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 }],
                 ..Default::default()
             }),
@@ -1580,6 +1624,9 @@ mod tests {
                     name: "on".to_owned(),
                     value: 1,
                     doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 }],
                 ..Default::default()
             }),
@@ -1601,5 +1648,279 @@ mod tests {
         }
         assert_ne!(value_doc, p);
         assert_eq!(hash_of(&value_doc, &fw), before, "an enum value's doc");
+    }
+    /// Writes a value into every doc field `$carrier` has: `doc`, `links`,
+    /// `see` and `since`, then each extra field named after the semicolon.
+    macro_rules! document {
+        ($carrier:expr $(; $tag:ident = $value:expr)*) => {{
+            let carrier = &mut $carrier;
+            carrier.doc = "documented, see [Other]".to_owned();
+            carrier.links.push(DocLink {
+                text: "Other".to_owned(),
+                offset: 16,
+                len: 7,
+                target: "fw.Other".to_owned(),
+            });
+            carrier.see.push(DocLink {
+                text: "fw.Other".to_owned(),
+                target: "fw.Other".to_owned(),
+                ..Default::default()
+            });
+            carrier.since.push("1.2".to_owned());
+            $(carrier.$tag = $value;)*
+        }};
+    }
+
+    /// `p`: one declaration of each kind, every one reached from interface
+    /// `I` — a signal of the struct `S`, an event of the union `U`, a
+    /// command whose parameter is the enum `E` and whose contract names the
+    /// constant `C`, a query of the enum set `F` returning the scalar `T`,
+    /// and a fixed member of `T` — and the service `svc` with an inline
+    /// shape holding a signal of `S`.
+    fn every_carrier_fixture() -> Package {
+        let field = Field {
+            name: "f".to_owned(),
+            ordinal: 1,
+            r#type: Some(named("T")),
+            ..Default::default()
+        };
+        let command = decl_of(
+            "c",
+            decl::Kind::CommandDef(CommandDef {
+                params: vec![Param {
+                    name: "x".to_owned(),
+                    r#type: Some(named("E")),
+                    ..Default::default()
+                }],
+                contracts: vec![Contract {
+                    kind: ContractKind::Require as i32,
+                    source: "x != C".to_owned(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+        );
+        let query = decl_of(
+            "q",
+            decl::Kind::QueryDef(QueryDef {
+                params: vec![Param {
+                    name: "y".to_owned(),
+                    r#type: Some(named("F")),
+                    ..Default::default()
+                }],
+                return_type: Some(ReturnType {
+                    kind: Some(return_type::Kind::Value(named("T"))),
+                }),
+                ..Default::default()
+            }),
+        );
+        Package {
+            name: "p".to_owned(),
+            decls: vec![
+                scalar_decl("T"),
+                const_decl("C", "E", "E.ON"),
+                decl_of(
+                    "S",
+                    decl::Kind::StructDef(StructDef {
+                        members: vec![StructMember {
+                            member: Some(struct_member::Member::Field(Box::new(field))),
+                        }],
+                        fixed_layout: false,
+                    }),
+                ),
+                decl_of(
+                    "E",
+                    decl::Kind::EnumDef(EnumDef {
+                        values: vec![EnumValue {
+                            name: "ON".to_owned(),
+                            value: 1,
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    }),
+                ),
+                decl_of(
+                    "F",
+                    decl::Kind::EnumSetDef(EnumSetDef {
+                        bits: vec![EnumValue {
+                            name: "A".to_owned(),
+                            value: 0,
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    }),
+                ),
+                decl_of(
+                    "U",
+                    decl::Kind::UnionDef(UnionDef {
+                        arms: vec![UnionArm {
+                            name: "s".to_owned(),
+                            ordinal: 1,
+                            type_ref: "S".to_owned(),
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    }),
+                ),
+            ],
+            interfaces: vec![Interface {
+                name: "I".to_owned(),
+                interactions: vec![
+                    signal("s", "S"),
+                    decl_of(
+                        "e",
+                        decl::Kind::EventDef(EventDef {
+                            payload: "U".to_owned(),
+                            ..Default::default()
+                        }),
+                    ),
+                    command,
+                    query,
+                    decl_of(
+                        "fx",
+                        decl::Kind::FixedDef(FixedDef {
+                            payload: Some(named("T")),
+                        }),
+                    ),
+                ],
+                number: 1,
+                ..Default::default()
+            }],
+            services: vec![inline_service("svc", vec![signal("t", "S")])],
+            ..Default::default()
+        }
+    }
+
+    fn decl_named<'a>(package: &'a mut Package, name: &str) -> &'a mut Decl {
+        package.decls.iter_mut().find(|d| d.name == name).unwrap()
+    }
+
+    fn interaction_named<'a>(package: &'a mut Package, name: &str) -> &'a mut Decl {
+        package.interfaces[0]
+            .interactions
+            .iter_mut()
+            .find(|d| d.name == name)
+            .unwrap()
+    }
+
+    fn inline_shape_of(package: &mut Package) -> &mut Interface {
+        match &mut package.services[0].shapes[0].kind {
+            Some(service_shape::Kind::Inline(interface)) => interface,
+            _ => panic!("svc has no inline shape"),
+        }
+    }
+
+    /// Writes doc fields into one carrier of a package.
+    type SetDocs<'a> = Box<dyn Fn(&mut Package) + 'a>;
+
+    /// Every doc field the package IR carries — `doc`, `links`, `see` and
+    /// `since`, and `labels` and `deprecated` where the message has them —
+    /// is blanked before hashing, on every message that carries one. Each
+    /// carrier is documented on its own, so the test fails when any one
+    /// clear is missing.
+    #[test]
+    fn catalog_hash_ignores_every_doc_field() {
+        let p = every_carrier_fixture();
+        let reached: Vec<String> = reachable_decls(&p, &[]).into_keys().collect();
+        assert_eq!(reached, vec!["C", "E", "F", "S", "T", "U"]);
+        let before = catalog_hash(&p, &[]);
+
+        let labels = vec!["tagged".to_owned()];
+        let deprecated = Some("use another".to_owned());
+        let cases: Vec<(&str, SetDocs<'_>)> = vec![
+            (
+                "a declaration",
+                Box::new(
+                    |p| document!(*decl_named(p, "T"); labels = labels.clone(); deprecated = deprecated.clone()),
+                ),
+            ),
+            (
+                "a struct field",
+                Box::new(|p| {
+                    if let Some(decl::Kind::StructDef(def)) = &mut decl_named(p, "S").kind
+                        && let Some(struct_member::Member::Field(field)) =
+                            &mut def.members[0].member
+                    {
+                        document!(*field; labels = labels.clone(); deprecated = deprecated.clone());
+                    }
+                }),
+            ),
+            (
+                "an enum value",
+                Box::new(|p| {
+                    if let Some(decl::Kind::EnumDef(def)) = &mut decl_named(p, "E").kind {
+                        document!(def.values[0]);
+                    }
+                }),
+            ),
+            (
+                "an enum set bit",
+                Box::new(|p| {
+                    if let Some(decl::Kind::EnumSetDef(def)) = &mut decl_named(p, "F").kind {
+                        document!(def.bits[0]);
+                    }
+                }),
+            ),
+            (
+                "a union arm",
+                Box::new(|p| {
+                    if let Some(decl::Kind::UnionDef(def)) = &mut decl_named(p, "U").kind {
+                        document!(def.arms[0]);
+                    }
+                }),
+            ),
+            (
+                "an interface",
+                Box::new(
+                    |p| document!(p.interfaces[0]; labels = labels.clone(); deprecated = deprecated.clone()),
+                ),
+            ),
+            (
+                "an interaction",
+                Box::new(
+                    |p| document!(*interaction_named(p, "s"); labels = labels.clone(); deprecated = deprecated.clone()),
+                ),
+            ),
+            (
+                "a command parameter",
+                Box::new(|p| {
+                    if let Some(decl::Kind::CommandDef(def)) = &mut interaction_named(p, "c").kind {
+                        document!(def.params[0]);
+                    }
+                }),
+            ),
+            (
+                "a query parameter",
+                Box::new(|p| {
+                    if let Some(decl::Kind::QueryDef(def)) = &mut interaction_named(p, "q").kind {
+                        document!(def.params[0]);
+                    }
+                }),
+            ),
+            (
+                "a service",
+                Box::new(
+                    |p| document!(p.services[0]; labels = labels.clone(); deprecated = deprecated.clone()),
+                ),
+            ),
+            (
+                "an inline shape",
+                Box::new(
+                    |p| document!(*inline_shape_of(p); labels = labels.clone(); deprecated = deprecated.clone()),
+                ),
+            ),
+            (
+                "an inline shape's interaction",
+                Box::new(
+                    |p| document!(inline_shape_of(p).interactions[0]; labels = labels.clone(); deprecated = deprecated.clone()),
+                ),
+            ),
+        ];
+        for (carrier, set_docs) in &cases {
+            let mut documented = p.clone();
+            set_docs(&mut documented);
+            assert_ne!(documented, p, "{carrier}: the case must change the IR");
+            assert_eq!(catalog_hash(&documented, &[]), before, "{carrier}");
+        }
     }
 }

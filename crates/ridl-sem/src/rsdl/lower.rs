@@ -52,6 +52,10 @@ pub fn lower_system(system: &CheckedSystem, packages: &[&v2::Package]) -> Option
         regions: lowering.regions(),
         distributions: lowering.distributions(),
         deployments: lowering.deployments(),
+        doc: String::new(),
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     })
 }
 
@@ -116,6 +120,10 @@ impl<'a> Lowering<'a> {
                 Some(v2::MemberLine {
                     component: self.component_name(component),
                     attributes: attributes(&decl.members[position].backend_keys),
+                    doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 })
             })
             .collect()
@@ -145,6 +153,10 @@ impl<'a> Lowering<'a> {
                             Some(v2::Offer {
                                 service: service.clone()?,
                                 attributes: attributes(&line.backend_keys),
+                                doc: String::new(),
+                                links: Vec::new(),
+                                see: Vec::new(),
+                                since: Vec::new(),
                             })
                         })
                         .collect(),
@@ -154,6 +166,10 @@ impl<'a> Lowering<'a> {
                         .map(|service| v2::Offer {
                             service: service.clone(),
                             attributes: Vec::new(),
+                            doc: String::new(),
+                            links: Vec::new(),
+                            see: Vec::new(),
+                            since: Vec::new(),
                         })
                         .collect(),
                 };
@@ -169,6 +185,10 @@ impl<'a> Lowering<'a> {
                         attributes: decl.map_or_else(Vec::new, |decl| {
                             attributes(&decl.requires[require.line].backend_keys)
                         }),
+                        doc: String::new(),
+                        links: Vec::new(),
+                        see: Vec::new(),
+                        since: Vec::new(),
                     })
                     .collect();
                 v2::Component {
@@ -182,6 +202,10 @@ impl<'a> Lowering<'a> {
                     labels: decl.map_or_else(Vec::new, |decl| decl.attrs.labels.clone()),
                     attributes: decl
                         .map_or_else(Vec::new, |decl| attributes(&decl.attrs.backend_keys)),
+                    doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 }
             })
             .collect()
@@ -213,6 +237,10 @@ impl<'a> Lowering<'a> {
                 external: machine.external,
                 labels: machine.attrs.labels.clone(),
                 attributes: attributes(&machine.attrs.backend_keys),
+                doc: String::new(),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             })
             .collect();
 
@@ -286,6 +314,10 @@ impl<'a> Lowering<'a> {
             routes,
             surface,
             installations: self.installations(decl, placement),
+            doc: String::new(),
+            doc_links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         }
     }
 
@@ -459,6 +491,10 @@ impl<'a> Lowering<'a> {
                         Some(v2::MemberLine {
                             component: self.component_name(component),
                             attributes: attributes(&decl.members[position].backend_keys),
+                            doc: String::new(),
+                            links: Vec::new(),
+                            see: Vec::new(),
+                            since: Vec::new(),
                         })
                     })
                     .collect();
@@ -475,6 +511,10 @@ impl<'a> Lowering<'a> {
                     depends_on: depends_on.into_iter().collect(),
                     labels: decl.attrs.labels.clone(),
                     attributes: attributes(&decl.attrs.backend_keys),
+                    doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 }
             })
             .collect()

@@ -308,7 +308,13 @@ mod tests {
                     deprecated: None,
                     ordinal: 1,
                     kind: Some(kind),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 }],
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             }],
             services: Vec::new(),
             retired: Vec::new(),
@@ -356,6 +362,9 @@ mod tests {
                 init: None,
                 width: None,
             })),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         }
     }
 
@@ -366,6 +375,10 @@ mod tests {
                 optional: false,
                 kind: Some(v2::field_type::Kind::Named(type_ref.to_string())),
             }),
+            doc: String::new(),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         }
     }
 

@@ -845,6 +845,9 @@ mod v2_round_trip {
             deprecated: None,
             ordinal,
             kind: Some(kind),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         }
     }
 
@@ -904,6 +907,10 @@ mod v2_round_trip {
             params: vec![v2::Param {
                 name: "target".to_string(),
                 r#type: Some(named_type("Speed")),
+                doc: String::new(),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             }],
             contracts: vec![v2::Contract {
                 kind: v2::ContractKind::Require as i32,
@@ -922,6 +929,10 @@ mod v2_round_trip {
             params: vec![v2::Param {
                 name: "page".to_string(),
                 r#type: Some(named_type("PageSpec")),
+                doc: String::new(),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             }],
             return_type: Some(v2::ReturnType {
                 kind: Some(v2::return_type::Kind::Fallible(v2::FallibleType {
@@ -971,6 +982,9 @@ mod v2_round_trip {
             ],
             number: 0,
             provisional: false,
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         };
 
         // query tailLogs(pattern : <string>) : <LogLine> — a stream param
@@ -981,6 +995,10 @@ mod v2_round_trip {
                 r#type: Some(stream_of(v2::stream_type::Element::Primitive(
                     v2::PrimitiveType::String as i32,
                 ))),
+                doc: String::new(),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             }],
             return_type: Some(v2::ReturnType {
                 kind: Some(v2::return_type::Kind::Value(stream_of(
@@ -1004,6 +1022,9 @@ mod v2_round_trip {
                     "VehicleStatus".to_string(),
                 )),
             }],
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         };
         // service veh.adas.logs { … } — the inline shape as the one entry,
         // Interface.name == "" (ridl §14.5).
@@ -1027,8 +1048,14 @@ mod v2_round_trip {
                     )],
                     number: 0,
                     provisional: false,
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 })),
             }],
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         };
 
         v2::Package {
@@ -1053,6 +1080,9 @@ mod v2_round_trip {
                     init: None,
                     width: Some(v2::type_def::Width::FloatWidth(v2::FloatWidth::F32 as i32)),
                 })),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             }],
             interfaces: vec![vehicle_status],
             services: vec![status_service, logs_service],
@@ -1077,6 +1107,9 @@ mod v2_round_trip {
                 deprecated: None,
                 ordinal: 0,
                 kind: Some(kind),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             }
         }
 
@@ -1090,6 +1123,9 @@ mod v2_round_trip {
                 doc: String::new(),
                 labels: Vec::new(),
                 deprecated: None,
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             }
         }
 
@@ -1108,11 +1144,17 @@ mod v2_round_trip {
                     name: "PARK".to_string(),
                     value: 1,
                     doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 },
                 v2::EnumValue {
                     name: "DRIVE".to_string(),
                     value: 2,
                     doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 },
             ],
             reserved: vec![v2::Reserved {
@@ -1131,11 +1173,17 @@ mod v2_round_trip {
                     name: "LOW_FUEL".to_string(),
                     value: 0,
                     doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 },
                 v2::EnumValue {
                     name: "ICE_RISK".to_string(),
                     value: 33,
                     doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 },
             ],
             width: v2::IntWidth::U64 as i32,
@@ -1171,12 +1219,18 @@ mod v2_round_trip {
                     ordinal: 1,
                     type_ref: "Speed".to_string(),
                     doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 },
                 v2::UnionArm {
                     name: "gear".to_string(),
                     ordinal: 2,
                     type_ref: "Gear".to_string(),
                     doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 },
             ],
             is_result: false,
@@ -1282,7 +1336,7 @@ mod v2_round_trip {
             members: [retries, position, gears, plates]
                 .into_iter()
                 .map(|field| v2::StructMember {
-                    member: Some(v2::struct_member::Member::Field(field)),
+                    member: Some(v2::struct_member::Member::Field(Box::new(field))),
                 })
                 .collect(),
             fixed_layout: false,
@@ -2460,6 +2514,15 @@ mod system_round_trip {
     /// scalar set to a value other than its default — a flag and a nested-list
     /// attribute value included — so a round trip that drops a field is
     /// caught.
+    fn doc_link() -> v2::DocLink {
+        v2::DocLink {
+            text: "Cruise".to_string(),
+            offset: 16,
+            len: 6,
+            target: "veh.topology.Cruise".to_string(),
+        }
+    }
+
     fn fixture() -> v2::System {
         let link = v2::Link {
             interface: interface("veh.diag", "veh.diag.access", true),
@@ -2477,10 +2540,18 @@ mod system_round_trip {
                 v2::MemberLine {
                     component: "veh.topology.Cruise".to_string(),
                     attributes: vec![attribute("linux", "pinned", None)],
+                    doc: "Documented, see [Cruise].".to_string(),
+                    links: vec![doc_link()],
+                    see: vec![doc_link()],
+                    since: vec!["1.2".to_string()],
                 },
                 v2::MemberLine {
                     component: "veh.diag.access".to_string(),
                     attributes: vec![],
+                    doc: "Documented, see [Cruise].".to_string(),
+                    links: vec![doc_link()],
+                    see: vec![doc_link()],
+                    since: vec!["1.2".to_string()],
                 },
             ],
             components: vec![
@@ -2493,6 +2564,10 @@ mod system_round_trip {
                     offers: vec![v2::Offer {
                         service: "veh.adas.cruise".to_string(),
                         attributes: vec![attribute("someip", "serviceId", Some(scalar("4097")))],
+                        doc: "Documented, see [Cruise].".to_string(),
+                        links: vec![doc_link()],
+                        see: vec![doc_link()],
+                        since: vec!["1.2".to_string()],
                     }],
                     requires: vec![v2::Require {
                         interface: interface("veh.adas", "LaneAssist", false),
@@ -2503,9 +2578,17 @@ mod system_round_trip {
                             "cpuset",
                             Some(list(vec![scalar("2"), list(vec![scalar("3")])])),
                         )],
+                        doc: "Documented, see [Cruise].".to_string(),
+                        links: vec![doc_link()],
+                        see: vec![doc_link()],
+                        since: vec!["1.2".to_string()],
                     }],
                     labels: vec!["ASIL_B".to_string()],
                     attributes: vec![attribute("rust", "crate", None)],
+                    doc: "Documented, see [Cruise].".to_string(),
+                    links: vec![doc_link()],
+                    see: vec![doc_link()],
+                    since: vec!["1.2".to_string()],
                 },
                 v2::Component {
                     name: "veh.diag.access".to_string(),
@@ -2516,10 +2599,18 @@ mod system_round_trip {
                     offers: vec![v2::Offer {
                         service: "veh.diag.access".to_string(),
                         attributes: vec![],
+                        doc: "Documented, see [Cruise].".to_string(),
+                        links: vec![doc_link()],
+                        see: vec![doc_link()],
+                        since: vec!["1.2".to_string()],
                     }],
                     requires: vec![],
                     labels: vec![],
                     attributes: vec![],
+                    doc: "Documented, see [Cruise].".to_string(),
+                    links: vec![doc_link()],
+                    see: vec![doc_link()],
+                    since: vec!["1.2".to_string()],
                 },
             ],
             producers: vec![v2::Producer {
@@ -2550,10 +2641,18 @@ mod system_round_trip {
                 members: vec![v2::MemberLine {
                     component: "veh.topology.Cruise".to_string(),
                     attributes: vec![],
+                    doc: "Documented, see [Cruise].".to_string(),
+                    links: vec![doc_link()],
+                    see: vec![doc_link()],
+                    since: vec!["1.2".to_string()],
                 }],
                 depends_on: vec!["veh.topology.Base".to_string()],
                 labels: vec!["PLATFORM_BUNDLE".to_string()],
                 attributes: vec![attribute("deb", "section", Some(scalar("net")))],
+                doc: "Documented, see [Cruise].".to_string(),
+                links: vec![doc_link()],
+                see: vec![doc_link()],
+                since: vec!["1.2".to_string()],
             }],
             deployments: vec![v2::Deployment {
                 name: "Production".to_string(),
@@ -2565,6 +2664,10 @@ mod system_round_trip {
                     external: true,
                     labels: vec!["OFF_BOARD".to_string()],
                     attributes: vec![attribute("net", "zone", Some(scalar("wan")))],
+                    doc: "Documented, see [Cruise].".to_string(),
+                    links: vec![doc_link()],
+                    see: vec![doc_link()],
+                    since: vec!["1.2".to_string()],
                 }],
                 placements: vec![v2::Placement {
                     component: "veh.topology.Cruise".to_string(),
@@ -2590,7 +2693,15 @@ mod system_round_trip {
                     distribution: "veh.topology.Adas".to_string(),
                     machines: vec!["AdasHpc".to_string(), "Cockpit".to_string()],
                 }],
+                doc: "Documented, see [Cruise].".to_string(),
+                doc_links: vec![doc_link()],
+                see: vec![doc_link()],
+                since: vec!["1.2".to_string()],
             }],
+            doc: "Documented, see [Cruise].".to_string(),
+            see: vec![doc_link()],
+            since: vec!["1.2".to_string()],
+            links: vec![doc_link()],
         }
     }
 

@@ -19,6 +19,9 @@ fn interaction(name: &str, ordinal: u32, kind: v2::decl::Kind) -> v2::Decl {
         deprecated: None,
         ordinal,
         kind: Some(kind),
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 
@@ -60,6 +63,9 @@ fn reserved(name: &str, ordinal: u32) -> v2::Decl {
             name: Some(name.to_string()),
             value: None,
         })),
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 
@@ -73,6 +79,9 @@ fn interface(name: &str, interactions: Vec<v2::Decl>) -> v2::Interface {
         interactions,
         number: 0,
         provisional: false,
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 
@@ -842,6 +851,9 @@ fn inline_service(name: &str, number: u32, interactions: Vec<v2::Decl>) -> v2::S
                 ..frozen("", number, interactions)
             })),
         }],
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 
@@ -1323,4 +1335,208 @@ fn a_headed_change_renders_json_with_no_heading_field() {
         ["after", "before", "category", "path", "verdict"]
     );
     assert_eq!(change["category"], "interface_renamed");
+}
+
+// --------------------------------------------------------------------------
+// Doc fields (ADR-0026): a change to `doc`, `links`, `see` or `since` on any
+// carrier is `DocOnly`.
+// --------------------------------------------------------------------------
+
+/// `set(level: Level)`, a command with one parameter.
+fn command_with_param() -> v2::Decl {
+    interaction(
+        "set",
+        1,
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![v2::Param {
+                name: "level".to_string(),
+                r#type: Some(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Named("Level".to_string())),
+                }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }),
+    )
+}
+
+fn only_doc_only(report: &crate::DiffReport, path: &str) {
+    assert_eq!(
+        report.changes,
+        vec![change(
+            path,
+            Category::DocOnly,
+            Verdict::Compatible,
+            None,
+            None
+        )],
+    );
+    assert_eq!(report.verdict, Verdict::Compatible);
+}
+
+#[test]
+fn a_parameter_doc_change_is_doc_only() {
+    let old = pkg(
+        "veh.cluster",
+        interface("Control", vec![command_with_param()]),
+    );
+    let mut new = old.clone();
+    let Some(v2::decl::Kind::CommandDef(def)) = &mut new.interfaces[0].interactions[0].kind else {
+        panic!("not a command");
+    };
+    def.params[0].doc = "the requested level".to_string();
+    def.params[0].links.push(v2::DocLink {
+        text: "Level".to_string(),
+        offset: 0,
+        len: 5,
+        target: "veh.cluster.Level".to_string(),
+    });
+
+    only_doc_only(&diff_packages(&old, &new), "veh.cluster/Control/set");
+}
+
+#[test]
+fn a_since_change_is_doc_only() {
+    let old = pkg(
+        "veh.cluster",
+        interface("Control", vec![command_with_param()]),
+    );
+
+    let mut on_interaction = old.clone();
+    on_interaction.interfaces[0].interactions[0]
+        .since
+        .push("1.2".to_string());
+    only_doc_only(
+        &diff_packages(&old, &on_interaction),
+        "veh.cluster/Control/set",
+    );
+
+    let mut on_interface = old.clone();
+    on_interface.interfaces[0].since.push("1.2".to_string());
+    only_doc_only(&diff_packages(&old, &on_interface), "veh.cluster/Control");
+}
+
+#[test]
+fn a_see_change_on_a_declaration_or_a_service_is_doc_only() {
+    let see = v2::DocLink {
+        text: "Other".to_string(),
+        target: "veh.cluster.Other".to_string(),
+        ..Default::default()
+    };
+    let mut old = pkg(
+        "veh.cluster",
+        interface("Control", vec![command_with_param()]),
+    );
+    old.decls.push(v2::Decl {
+        name: "Level".to_string(),
+        kind: Some(v2::decl::Kind::TypeDef(v2::TypeDef::default())),
+        ..Default::default()
+    });
+    old.services.push(v2::Service {
+        name: "veh.cluster.control".to_string(),
+        ..Default::default()
+    });
+
+    let mut on_decl = old.clone();
+    on_decl.decls[0].see.push(see.clone());
+    only_doc_only(&diff_packages(&old, &on_decl), "veh.cluster/Level");
+
+    let mut on_service = old.clone();
+    on_service.services[0].see.push(see);
+    only_doc_only(
+        &diff_packages(&old, &on_service),
+        "veh.cluster/veh.cluster.control",
+    );
+}
+
+/// A member of a struct, enum, enum set or union carries the same doc
+/// fields. A change to them is `DocOnly` on the declaration, not a
+/// `ConstraintChanged` on its body.
+#[test]
+fn a_member_doc_change_is_doc_only() {
+    let field = v2::Field {
+        name: "x".to_string(),
+        ordinal: 1,
+        ..Default::default()
+    };
+    let value = v2::EnumValue {
+        name: "ON".to_string(),
+        value: 1,
+        ..Default::default()
+    };
+    let arm = v2::UnionArm {
+        name: "a".to_string(),
+        ordinal: 1,
+        type_ref: "S".to_string(),
+        ..Default::default()
+    };
+    let decl = |name: &str, kind| v2::Decl {
+        name: name.to_string(),
+        kind: Some(kind),
+        ..Default::default()
+    };
+    let mut old = pkg("veh.cluster", interface("Control", Vec::new()));
+    old.decls = vec![
+        decl(
+            "S",
+            v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![v2::StructMember {
+                    member: Some(v2::struct_member::Member::Field(Box::new(field))),
+                }],
+                fixed_layout: false,
+            }),
+        ),
+        decl(
+            "E",
+            v2::decl::Kind::EnumDef(v2::EnumDef {
+                values: vec![value.clone()],
+                ..Default::default()
+            }),
+        ),
+        decl(
+            "F",
+            v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+                bits: vec![value],
+                ..Default::default()
+            }),
+        ),
+        decl(
+            "U",
+            v2::decl::Kind::UnionDef(v2::UnionDef {
+                arms: vec![arm],
+                ..Default::default()
+            }),
+        ),
+    ];
+
+    let mut on_field = old.clone();
+    if let Some(v2::decl::Kind::StructDef(def)) = &mut on_field.decls[0].kind
+        && let Some(v2::struct_member::Member::Field(field)) = &mut def.members[0].member
+    {
+        field.doc = "documented".to_string();
+    }
+    only_doc_only(&diff_packages(&old, &on_field), "veh.cluster/S");
+
+    let mut on_value = old.clone();
+    if let Some(v2::decl::Kind::EnumDef(def)) = &mut on_value.decls[1].kind {
+        def.values[0].since.push("1.2".to_string());
+    }
+    only_doc_only(&diff_packages(&old, &on_value), "veh.cluster/E");
+
+    let mut on_bit = old.clone();
+    if let Some(v2::decl::Kind::EnumSetDef(def)) = &mut on_bit.decls[2].kind {
+        def.bits[0].doc = "documented".to_string();
+    }
+    only_doc_only(&diff_packages(&old, &on_bit), "veh.cluster/F");
+
+    let mut on_arm = old.clone();
+    if let Some(v2::decl::Kind::UnionDef(def)) = &mut on_arm.decls[3].kind {
+        def.arms[0].see.push(v2::DocLink {
+            text: "S".to_string(),
+            target: "veh.cluster.S".to_string(),
+            ..Default::default()
+        });
+    }
+    only_doc_only(&diff_packages(&old, &on_arm), "veh.cluster/U");
 }

@@ -23,6 +23,9 @@ fn decl(name: &str, ordinal: u32, kind: v2::decl::Kind) -> v2::Decl {
         deprecated: None,
         ordinal,
         kind: Some(kind),
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 
@@ -64,6 +67,9 @@ fn reserved(name: &str, ordinal: u32) -> v2::Decl {
             name: Some(name.to_string()),
             value: None,
         })),
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 
@@ -105,6 +111,10 @@ fn param(name: &str, r#type: v2::FieldType) -> v2::Param {
     v2::Param {
         name: name.to_string(),
         r#type: Some(r#type),
+        doc: String::new(),
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 
@@ -180,6 +190,9 @@ fn interface(name: &str, interactions: Vec<v2::Decl>) -> v2::Interface {
         interactions,
         number: 0,
         provisional: false,
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 
@@ -264,6 +277,9 @@ fn enum_value(name: &str, value: i64) -> v2::EnumValue {
         name: name.to_string(),
         value,
         doc: String::new(),
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 
@@ -291,6 +307,9 @@ fn union_arm(name: &str, ordinal: u32, type_ref: &str) -> v2::UnionArm {
         ordinal,
         type_ref: type_ref.to_string(),
         doc: String::new(),
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 
@@ -325,7 +344,7 @@ fn union_with_reserved(name: &str, arms: Vec<v2::UnionArm>, reserved: Vec<u32>) 
 
 fn field(name: &str, ordinal: u32, type_ref: &str) -> v2::StructMember {
     v2::StructMember {
-        member: Some(v2::struct_member::Member::Field(v2::Field {
+        member: Some(v2::struct_member::Member::Field(Box::new(v2::Field {
             name: name.to_string(),
             ordinal,
             r#type: Some(named(type_ref)),
@@ -334,7 +353,10 @@ fn field(name: &str, ordinal: u32, type_ref: &str) -> v2::StructMember {
             doc: String::new(),
             labels: Vec::new(),
             deprecated: None,
-        })),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
+        }))),
     }
 }
 
@@ -1381,6 +1403,9 @@ fn service_shapes(name: &str, shapes: Vec<v2::ServiceShape>) -> v2::Service {
         labels: Vec::new(),
         deprecated: None,
         shapes,
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 
@@ -1418,8 +1443,14 @@ fn service_inline(
                 interactions,
                 number: 0,
                 provisional: false,
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             })),
         }],
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 
@@ -1852,7 +1883,7 @@ fn a_struct_field_appended_at_the_end_is_compatible() {
 /// A field of any type at `ordinal`.
 fn typed_field(name: &str, ordinal: u32, r#type: v2::FieldType) -> v2::StructMember {
     v2::StructMember {
-        member: Some(v2::struct_member::Member::Field(v2::Field {
+        member: Some(v2::struct_member::Member::Field(Box::new(v2::Field {
             name: name.to_string(),
             ordinal,
             r#type: Some(r#type),
@@ -1861,7 +1892,10 @@ fn typed_field(name: &str, ordinal: u32, r#type: v2::FieldType) -> v2::StructMem
             doc: String::new(),
             labels: Vec::new(),
             deprecated: None,
-        })),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
+        }))),
     }
 }
 
@@ -2625,6 +2659,9 @@ fn nameless_reserved(ordinal: u32) -> v2::Decl {
             name: None,
             value: None,
         })),
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 

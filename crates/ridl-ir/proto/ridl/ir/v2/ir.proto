@@ -101,8 +101,12 @@ message Decl {
   // E2 (earmarked 7–9): the interaction ordinal — 1-based declaration
   // order across all interactions of the enclosing interface, one
   // sequence regardless of kind, reserved tombstones counted (ridl §11).
-  // 0 for package-level declarations. 8–9 remain open.
+  // 0 for package-level declarations.
   uint32 ordinal = 7;
+  // Resolved doc links in `doc`, in source order (ADR-0026).
+  repeated DocLink links = 8;
+  // Resolved @see targets, in source order (ADR-0026).
+  repeated DocLink see = 9;
   oneof kind {
     TypeDef type_def = 10;
     ConstDef const_def = 11;
@@ -121,6 +125,25 @@ message Decl {
     FixedDef fixed_def = 20;
     Reserved reserved_slot = 21;
   }
+  // @since versions, in source order (ADR-0026). Numbered after the oneof:
+  // 8 and 9 hold `links` and `see`, and 22–29 stay open for the oneof.
+  repeated string since = 30;
+}
+
+// One resolved doc link (ADR-0026): a `[Name]` or `[Name.member]` link in a
+// doc comment, or one `@see` target. A link that did not resolve is not
+// stored. `target` names a declaration for a reader; it is not a type
+// reference, and `ridl_ir::v2::referenced_packages` does not read it.
+message DocLink {
+  // The link text as written, without the brackets.
+  string text = 1;
+  // Byte offset of the link in the carrier's `doc`; 0 for a `see` entry.
+  uint32 offset = 2;
+  // Byte length of the link in the carrier's `doc`; 0 for a `see` entry.
+  uint32 len = 3;
+  // The canonical qualified name of the target, `pkg.Name`, with an
+  // optional `.member`.
+  string target = 4;
 }
 
 // The five typl primitives (typl §4).
@@ -279,6 +302,12 @@ message Field {
   repeated string labels = 7;
   // @deprecated reason string; absent when not deprecated (typl §14.2).
   optional string deprecated = 8;
+  // Resolved doc links in `doc`, in source order (ADR-0026).
+  repeated DocLink links = 9;
+  // Resolved @see targets, in source order (ADR-0026).
+  repeated DocLink see = 10;
+  // @since versions, in source order (ADR-0026).
+  repeated string since = 11;
 }
 
 // A reserved tombstone — a retired slot that is never reused (typl §7.4).
@@ -311,6 +340,12 @@ message EnumValue {
   // structured tag fields, so doc tags (@see, @labels, @deprecated) remain
   // verbatim in this body.
   string doc = 3;
+  // Resolved doc links in `doc`, in source order (ADR-0026).
+  repeated DocLink links = 4;
+  // Resolved @see targets, in source order (ADR-0026).
+  repeated DocLink see = 5;
+  // @since versions, in source order (ADR-0026).
+  repeated string since = 6;
 }
 
 // A named bitfield (typl §9).
@@ -348,6 +383,12 @@ message UnionArm {
   // Doc comment body; empty when absent (typl §14.1, Appendix E admits doc
   // comments on arms).
   string doc = 4;
+  // Resolved doc links in `doc`, in source order (ADR-0026).
+  repeated DocLink links = 5;
+  // Resolved @see targets, in source order (ADR-0026).
+  repeated DocLink see = 6;
+  // @since versions, in source order (ADR-0026).
+  repeated string since = 7;
 }
 
 // The type of a struct field or tuple field (typl §7, §11, §12; usage rules
@@ -439,6 +480,12 @@ message Interface {
   // provisional number carries no identity: `ridl diff` never matches on
   // it and `ridl baseline` refuses to publish it (RIDL-411).
   bool provisional = 8;
+  // Resolved doc links in `doc`, in source order (ADR-0026).
+  repeated DocLink links = 9;
+  // Resolved @see targets, in source order (ADR-0026).
+  repeated DocLink see = 10;
+  // @since versions, in source order (ADR-0026).
+  repeated string since = 11;
 }
 
 // A global published declaration of one or more interfaces (ridl §14.5,
@@ -453,6 +500,12 @@ message Service {
   repeated string labels = 4;
   // @deprecated reason string; absent when not deprecated (typl §14.2).
   optional string deprecated = 5;
+  // Resolved doc links in `doc`, in source order (ADR-0026).
+  repeated DocLink links = 6;
+  // Resolved @see targets, in source order (ADR-0026).
+  repeated DocLink see = 7;
+  // @since versions, in source order (ADR-0026).
+  repeated string since = 8;
   // 10 and 11 carried `oneof shape { string interface_ref = 10; Interface
   // inline = 11; }` until ADR-0015 decision 12 made the shape a list — a
   // `oneof` member cannot be `repeated`. Reserved rather than reused
@@ -567,6 +620,14 @@ message Param {
   string name = 1;
   // Stream parameters ride FieldType.kind.stream (ridl §12).
   FieldType type = 2;
+  // Doc comment body in CommonMark; empty when absent (ADR-0026).
+  string doc = 3;
+  // Resolved doc links in `doc`, in source order (ADR-0026).
+  repeated DocLink links = 4;
+  // Resolved @see targets, in source order (ADR-0026).
+  repeated DocLink see = 5;
+  // @since versions, in source order (ADR-0026).
+  repeated string since = 6;
 }
 
 // The ridl-owned stream container (ridl §12), the earmarked FieldType

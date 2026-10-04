@@ -437,12 +437,12 @@ mod tests {
                 members: fields
                     .into_iter()
                     .map(|(name, ordinal, ty)| StructMember {
-                        member: Some(struct_member::Member::Field(Field {
+                        member: Some(struct_member::Member::Field(Box::new(Field {
                             name: name.to_owned(),
                             ordinal,
                             r#type: Some(ty),
                             ..Default::default()
-                        })),
+                        }))),
                     })
                     .collect(),
                 fixed_layout: false,
@@ -490,6 +490,9 @@ mod tests {
                         name: format!("V{}", value.unsigned_abs()),
                         value,
                         doc: String::new(),
+                        links: Vec::new(),
+                        see: Vec::new(),
+                        since: Vec::new(),
                     })
                     .collect(),
                 reserved: Vec::new(),
@@ -524,6 +527,9 @@ mod tests {
                         name: name.to_owned(),
                         value,
                         doc: String::new(),
+                        links: Vec::new(),
+                        see: Vec::new(),
+                        since: Vec::new(),
                     })
                     .collect(),
                 reserved: Vec::new(),

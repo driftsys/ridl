@@ -1005,6 +1005,9 @@ impl Checker<'_> {
             // (ridl §11).
             ordinal: 0,
             kind: Some(kind),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         })
     }
 
@@ -2196,7 +2199,7 @@ impl Checker<'_> {
                         fixed = false;
                     }
                     members.push(v2::StructMember {
-                        member: Some(v2::struct_member::Member::Field(lowered)),
+                        member: Some(v2::struct_member::Member::Field(Box::new(lowered))),
                     });
                 }
             }
@@ -2263,6 +2266,9 @@ impl Checker<'_> {
             doc: String::new(),
             labels: Vec::new(),
             deprecated: None,
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         }
     }
 
@@ -3047,6 +3053,9 @@ impl Checker<'_> {
                 name,
                 value,
                 doc: String::new(),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             });
         }
         v2::EnumDef { values, reserved }
@@ -3081,6 +3090,9 @@ impl Checker<'_> {
                                 name,
                                 value: bit,
                                 doc: String::new(),
+                                links: Vec::new(),
+                                see: Vec::new(),
+                                since: Vec::new(),
                             });
                         }
                     }
@@ -3158,6 +3170,9 @@ impl Checker<'_> {
                     name,
                     value,
                     doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 });
             }
         }
@@ -3280,6 +3295,9 @@ impl Checker<'_> {
                 ordinal,
                 type_ref,
                 doc: String::new(),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             });
         }
 
@@ -3682,6 +3700,9 @@ impl Checker<'_> {
             // fold that reads the lock sets both.
             number: 0,
             provisional: false,
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         }
     }
 
@@ -3727,6 +3748,9 @@ impl Checker<'_> {
             deprecated: doc_info.deprecated,
             ordinal,
             kind: Some(kind),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         }
     }
 
@@ -3776,6 +3800,9 @@ impl Checker<'_> {
             labels: doc_info.labels,
             deprecated: doc_info.deprecated,
             shapes,
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         }
     }
 
@@ -4242,6 +4269,9 @@ impl Checker<'_> {
             // (lock design §3); the fold that reads the lock sets both.
             number: 0,
             provisional: false,
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         }
     }
 
@@ -5177,7 +5207,7 @@ impl Checker<'_> {
                     Some(ast::ParamType::Stream(stream)) => Some(self.lower_stream(&stream)),
                     None => None,
                 };
-                v2::Param { name, r#type }
+                v2::Param { name, r#type, doc: String::new(), links: Vec::new(), see: Vec::new(), since: Vec::new() }
             })
             .collect()
     }

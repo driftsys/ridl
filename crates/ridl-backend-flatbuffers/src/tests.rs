@@ -821,6 +821,9 @@ fn union_decl(name: &str, arms: &[(&str, u32, &str)]) -> v2::Decl {
                     ordinal: *ordinal,
                     type_ref: type_ref.to_string(),
                     doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 })
                 .collect(),
             is_result: false,
@@ -883,12 +886,12 @@ fn struct_with_union_between_scalars() -> v2::Package {
 
 fn field_member(name: &str, ordinal: u32, r#type: v2::FieldType) -> v2::StructMember {
     v2::StructMember {
-        member: Some(v2::struct_member::Member::Field(v2::Field {
+        member: Some(v2::struct_member::Member::Field(Box::new(v2::Field {
             name: name.to_string(),
             ordinal,
             r#type: Some(r#type),
             ..Default::default()
-        })),
+        }))),
     }
 }
 
@@ -1053,6 +1056,9 @@ fn enum_values(values: Vec<(&str, i64)>) -> Vec<v2::EnumValue> {
             name: name.to_string(),
             value,
             doc: String::new(),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         })
         .collect()
 }

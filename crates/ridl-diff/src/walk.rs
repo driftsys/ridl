@@ -91,13 +91,16 @@ fn diff_decls(pkg: &str, old: &[v2::Decl], new: &[v2::Decl], changes: &mut Vec<C
 
 fn diff_decl(pkg: &str, name: &str, old: &v2::Decl, new: &v2::Decl, changes: &mut Vec<Change>) {
     let path = format!("{pkg}/{name}");
-    if envelope_differs(old, new) {
+    if envelope_differs(old, new) || member_docs_differ(&old.kind, &new.kind) {
         emit(changes, path.clone(), Category::DocOnly, None, None);
     }
     emit_visibility(changes, path.clone(), old.visibility, new.visibility);
 
     use v2::decl::Kind;
-    match (&old.kind, &new.kind) {
+    match (
+        &without_member_docs(&old.kind),
+        &without_member_docs(&new.kind),
+    ) {
         (Some(Kind::TypeDef(a)), Some(Kind::TypeDef(b))) => diff_type_def(&path, a, b, changes),
         (Some(Kind::ConstDef(a)), Some(Kind::ConstDef(b))) => {
             if a != b {
@@ -690,13 +693,18 @@ fn diff_interaction(
     new: &v2::Decl,
     changes: &mut Vec<Change>,
 ) {
-    if envelope_differs(old, new) {
+    if envelope_differs(old, new) || member_docs_differ(&old.kind, &new.kind) {
         emit(changes, path.to_string(), Category::DocOnly, None, None);
     }
     emit_visibility(changes, path.to_string(), old.visibility, new.visibility);
 
     use v2::decl::Kind;
-    match (&old.kind, &new.kind) {
+    // A parameter's doc fields are compared above, so `params` below is
+    // compared without them: a parameter doc edit is not `ParamsChanged`.
+    match (
+        &without_member_docs(&old.kind),
+        &without_member_docs(&new.kind),
+    ) {
         (Some(Kind::SignalDef(a)), Some(Kind::SignalDef(b))) => {
             if a.payload != b.payload {
                 emit(
@@ -1022,9 +1030,10 @@ fn positions(values: &[v2::EnumValue]) -> Vec<(String, i64)> {
 // two things from what `a == b` compares: the order of the members, and every
 // field whose value is derived from position (the 1-based `ordinal` of a
 // struct field, a union arm, and a struct or union tombstone — typl §7.4).
-// Everything else stays in the comparison: member names, types, inits, docs,
-// labels, deprecations, the explicit value of an enum value or enum-set bit,
-// the retired identity of a tombstone, and the container's own fields.
+// Everything else stays in the comparison: member names, types, inits, the
+// explicit value of an enum value or enum-set bit, the retired identity of a
+// tombstone, and the container's own fields. The members' doc fields are not
+// there to compare: `diff_decl` removes them first ([`without_member_docs`]).
 
 /// A struct body with its member order removed (see above). Fields and
 /// tombstones share the `members` list and one ordinal counter, so both have
@@ -1102,7 +1111,12 @@ fn tombstone_key(reserved: &v2::Reserved) -> (Option<String>, Option<i64>) {
 /// declaration from every out-of-package consumer. It travels as its own
 /// category so it can be classified by direction.
 fn envelope_differs(old: &v2::Decl, new: &v2::Decl) -> bool {
-    old.doc != new.doc || old.labels != new.labels || old.deprecated != new.deprecated
+    old.doc != new.doc
+        || old.labels != new.labels
+        || old.deprecated != new.deprecated
+        || old.links != new.links
+        || old.see != new.see
+        || old.since != new.since
 }
 
 /// The same comparison as [`envelope_differs`], over an interface. The body is
@@ -1111,13 +1125,182 @@ fn envelope_differs(old: &v2::Decl, new: &v2::Decl) -> bool {
 /// can call another without a trait written only to join them. The third copy is
 /// [`service_envelope_differs`].
 fn interface_envelope_differs(old: &v2::Interface, new: &v2::Interface) -> bool {
-    old.doc != new.doc || old.labels != new.labels || old.deprecated != new.deprecated
+    old.doc != new.doc
+        || old.labels != new.labels
+        || old.deprecated != new.deprecated
+        || old.links != new.links
+        || old.see != new.see
+        || old.since != new.since
 }
 
 /// The third copy, over a service — named rather than inlined so all three are
 /// greppable together.
 fn service_envelope_differs(old: &v2::Service, new: &v2::Service) -> bool {
-    old.doc != new.doc || old.labels != new.labels || old.deprecated != new.deprecated
+    old.doc != new.doc
+        || old.labels != new.labels
+        || old.deprecated != new.deprecated
+        || old.links != new.links
+        || old.see != new.see
+        || old.since != new.since
+}
+
+/// The doc fields of one member of a declaration body — a struct field, an
+/// enum value, an enum-set bit, a union arm or a parameter. `labels` and
+/// `deprecated` are empty on the members that do not carry them.
+#[derive(PartialEq)]
+struct MemberDocs<'a> {
+    doc: &'a str,
+    labels: &'a [String],
+    deprecated: Option<&'a str>,
+    links: &'a [v2::DocLink],
+    see: &'a [v2::DocLink],
+    since: &'a [String],
+}
+
+/// The doc fields of every member of a declaration body, by member name.
+fn member_docs(kind: &Option<v2::decl::Kind>) -> BTreeMap<&str, MemberDocs<'_>> {
+    use v2::decl::Kind;
+    let mut docs = BTreeMap::new();
+    match kind {
+        Some(Kind::StructDef(def)) => {
+            for member in &def.members {
+                if let Some(v2::struct_member::Member::Field(field)) = &member.member {
+                    docs.insert(
+                        field.name.as_str(),
+                        MemberDocs {
+                            doc: &field.doc,
+                            labels: &field.labels,
+                            deprecated: field.deprecated.as_deref(),
+                            links: &field.links,
+                            see: &field.see,
+                            since: &field.since,
+                        },
+                    );
+                }
+            }
+        }
+        Some(Kind::EnumDef(v2::EnumDef { values, .. }))
+        | Some(Kind::EnumSetDef(v2::EnumSetDef { bits: values, .. })) => {
+            for value in values {
+                docs.insert(
+                    value.name.as_str(),
+                    MemberDocs {
+                        doc: &value.doc,
+                        labels: &[],
+                        deprecated: None,
+                        links: &value.links,
+                        see: &value.see,
+                        since: &value.since,
+                    },
+                );
+            }
+        }
+        Some(Kind::UnionDef(def)) => {
+            for arm in &def.arms {
+                docs.insert(
+                    arm.name.as_str(),
+                    MemberDocs {
+                        doc: &arm.doc,
+                        labels: &[],
+                        deprecated: None,
+                        links: &arm.links,
+                        see: &arm.see,
+                        since: &arm.since,
+                    },
+                );
+            }
+        }
+        Some(Kind::CommandDef(v2::CommandDef { params, .. }))
+        | Some(Kind::QueryDef(v2::QueryDef { params, .. })) => {
+            for param in params {
+                docs.insert(
+                    param.name.as_str(),
+                    MemberDocs {
+                        doc: &param.doc,
+                        labels: &[],
+                        deprecated: None,
+                        links: &param.links,
+                        see: &param.see,
+                        since: &param.since,
+                    },
+                );
+            }
+        }
+        Some(Kind::TypeDef(_))
+        | Some(Kind::ConstDef(_))
+        | Some(Kind::SignalDef(_))
+        | Some(Kind::EventDef(_))
+        | Some(Kind::FixedDef(_))
+        | Some(Kind::ReservedSlot(_))
+        | None => {}
+    }
+    docs
+}
+
+/// Whether a member present on both sides changed a doc field. A member on
+/// one side only is an addition or a removal, reported by the body walk.
+fn member_docs_differ(old: &Option<v2::decl::Kind>, new: &Option<v2::decl::Kind>) -> bool {
+    let new_docs = member_docs(new);
+    member_docs(old).iter().any(|(name, old_docs)| {
+        new_docs
+            .get(name)
+            .is_some_and(|new_docs| new_docs != old_docs)
+    })
+}
+
+/// A declaration body with every member's doc fields cleared, so that the
+/// body comparisons see only what carries contract identity.
+fn without_member_docs(kind: &Option<v2::decl::Kind>) -> Option<v2::decl::Kind> {
+    use v2::decl::Kind;
+    let mut kind = kind.clone();
+    match &mut kind {
+        Some(Kind::StructDef(def)) => {
+            for member in &mut def.members {
+                if let Some(v2::struct_member::Member::Field(field)) = &mut member.member {
+                    field.doc.clear();
+                    field.labels.clear();
+                    field.deprecated = None;
+                    field.links.clear();
+                    field.see.clear();
+                    field.since.clear();
+                }
+            }
+        }
+        Some(Kind::EnumDef(v2::EnumDef { values, .. }))
+        | Some(Kind::EnumSetDef(v2::EnumSetDef { bits: values, .. })) => {
+            for value in values {
+                value.doc.clear();
+                value.links.clear();
+                value.see.clear();
+                value.since.clear();
+            }
+        }
+        Some(Kind::UnionDef(def)) => {
+            for arm in &mut def.arms {
+                arm.doc.clear();
+                arm.links.clear();
+                arm.see.clear();
+                arm.since.clear();
+            }
+        }
+        Some(Kind::CommandDef(v2::CommandDef { params, .. }))
+        | Some(Kind::QueryDef(v2::QueryDef { params, .. })) => {
+            for param in params {
+                param.doc.clear();
+                param.links.clear();
+                param.see.clear();
+                param.since.clear();
+            }
+        }
+        Some(Kind::TypeDef(_))
+        | Some(Kind::ConstDef(_))
+        | Some(Kind::SignalDef(_))
+        | Some(Kind::EventDef(_))
+        | Some(Kind::FixedDef(_))
+        | Some(Kind::ReservedSlot(_))
+        | None => {}
+    }
+    kind
 }
 
 /// Emits a [`Category::VisibilityChanged`] when the two sides publish a

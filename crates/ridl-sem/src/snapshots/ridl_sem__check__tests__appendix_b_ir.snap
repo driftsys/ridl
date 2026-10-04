@@ -12,6 +12,9 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
       "doc": "Vehicle speed over ground",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "unit": "km/h"
@@ -35,6 +38,9 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
       "doc": "Coolant / ambient temperature",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "unit": "Cel"
@@ -58,6 +64,9 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
       "doc": "Engine crankshaft speed",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "unit": "/min"
@@ -81,6 +90,9 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
       "doc": "Normalised ratio",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "unit": "%"
@@ -104,6 +116,9 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "primitive": "PRIMITIVE_TYPE_INTEGER"
@@ -126,6 +141,9 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "typeDef": {
         "backing": {
           "primitive": "PRIMITIVE_TYPE_FLOAT"
@@ -149,6 +167,9 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "constDef": {
         "typeRef": "Speed",
         "value": "250"
@@ -161,6 +182,9 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "constDef": {
         "typeRef": "Speed",
         "value": "130"
@@ -173,6 +197,9 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "constDef": {
         "typeRef": "integer",
         "value": "6"
@@ -185,6 +212,9 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "constDef": {
         "typeRef": "RPM",
         "value": "800"
@@ -197,27 +227,42 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "enumDef": {
         "values": [
           {
             "name": "PARK",
             "value": "0",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "DRIVE",
             "value": "1",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "REVERSE",
             "value": "2",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "NEUTRAL",
             "value": "3",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           }
         ],
         "reserved": []
@@ -230,27 +275,42 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "enumDef": {
         "values": [
           {
             "name": "LOW_FUEL",
             "value": "0",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "CHECK_ENGINE",
             "value": "1",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "DOOR_OPEN",
             "value": "2",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "SEATBELT",
             "value": "3",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           }
         ],
         "reserved": []
@@ -263,28 +323,43 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "enumSetDef": {
         "backingEnum": "Warning",
         "bits": [
           {
             "name": "LOW_FUEL",
             "value": "0",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "CHECK_ENGINE",
             "value": "1",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "DOOR_OPEN",
             "value": "2",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "SEATBELT",
             "value": "3",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           }
         ],
         "width": "INT_WIDTH_U8"
@@ -297,6 +372,9 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -312,7 +390,10 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -328,7 +409,10 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],
@@ -342,6 +426,9 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -356,7 +443,10 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
                 "derivable": false
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -372,7 +462,10 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -387,7 +480,10 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
                 "derivable": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -413,7 +509,10 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
                 "value": "6"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],
@@ -427,6 +526,9 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -458,7 +560,10 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
                 "derivable": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -480,7 +585,10 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
                 "derivable": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -502,7 +610,10 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
                 "derivable": false
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -528,7 +639,10 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
                 "derivable": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],
@@ -542,19 +656,28 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "unionDef": {
         "arms": [
           {
             "name": "ok",
             "ordinal": 1,
             "typeRef": "SensorReading",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           },
           {
             "name": "err",
             "ordinal": 2,
             "typeRef": "SensorFault",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": []
           }
         ],
         "isResult": true,
@@ -568,6 +691,9 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -583,7 +709,10 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -599,7 +728,10 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],
@@ -613,6 +745,9 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -628,7 +763,10 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -643,7 +781,10 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
                 "derivable": false
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],
@@ -657,6 +798,9 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
       "doc": "",
       "labels": [],
       "ordinal": 0,
+      "links": [],
+      "see": [],
+      "since": [],
       "structDef": {
         "members": [
           {
@@ -672,7 +816,10 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
                 "value": "0"
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           },
           {
@@ -695,7 +842,10 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
                 "derivable": false
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": []
             }
           }
         ],
