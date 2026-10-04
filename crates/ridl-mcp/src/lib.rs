@@ -1,11 +1,12 @@
 //! The RIDL MCP server (ADR-0005 Layer B; docs/ROADMAP.md epic E8.6).
 //!
-//! Eight read-only workspace tools expose checks, declarations, references,
+//! Nine read-only workspace tools expose checks, declarations, references,
 //! dependencies and compatibility comparisons over stdio behind `ridl mcp`.
 //! The server consumes the shared compiler crates and their canonical IR JSON.
 
 pub mod diff;
 pub mod explain;
+pub mod metrics;
 pub mod query;
 pub mod refs;
 pub mod snapshot;
@@ -210,6 +211,26 @@ impl RidlMcp {
             Err(error) => Ok(error.into_result()),
         }
     }
+    #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<metrics::MetricsOutput>(), description = "Report workspace package fan-in, fan-out, instability and interface cohesion groups. Pass the workspace root as `path`. Read-only and offline.")]
+    async fn ridl_metrics(
+        &self,
+        Parameters(input): Parameters<metrics::MetricsInput>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let output = tokio::task::spawn_blocking(move || {
+            let snap = snapshot(&input.path, &[])?;
+            metrics::metrics(&snap, &input)
+        })
+        .await
+        .map_err(checker_failed)?;
+        match output {
+            Ok(output) => {
+                let value = serde_json::to_value(&output)
+                    .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::structured(value))
+            }
+            Err(error) => Ok(error.into_result()),
+        }
+    }
     #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<query::ResolveOutput>(), description = "Resolve a declaration by name. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.")]
     async fn ridl_resolve(
         &self,
@@ -372,6 +393,7 @@ impl ServerHandler for RidlMcp {
                  ridl_list_interactions: list an interface's interactions.\n\
                  ridl_references: list declarations and interactions using a declaration.\n\
                  ridl_dependencies: list package dependencies and dependents.\n\
+                 ridl_metrics: report package coupling and interface cohesion.\n\
                  ridl_diff: compare source workspaces or IR snapshots.\n\
                  Pass the workspace root (the directory that holds its ridl.toml) as `path`. Tools are read-only: they never write files and never fetch remote imports. Use `overlays` to check unsaved text.",
             )
@@ -460,6 +482,7 @@ mod tests {
                 "ridl_diff",
                 "ridl_explain",
                 "ridl_list_interactions",
+                "ridl_metrics",
                 "ridl_references",
                 "ridl_resolve"
             ]
@@ -494,7 +517,87 @@ mod tests {
                 .iter()
                 .map(|d| d["code"].as_str().unwrap())
                 .collect::<Vec<_>>(),
-            ["TYPL-103", "TYPL-011"]
+            ["TYPL-103", "TYPL-011", "TYPL-223", "RIDL-414"]
+        );
+        assert_eq!(
+            value["diagnostics"],
+            serde_json::json!([
+                {
+                    "code": "TYPL-103",
+                    "severity": "warning",
+                    "lint": "unbounded-length",
+                    "message": "`string` without explicit bounds; the default `[0..256]` applies",
+                    "span": {
+                        "path": format!("{}/a/a.ridl", path),
+                        "start": {
+                            "line": 25,
+                            "column": 11
+                        },
+                        "end": {
+                            "line": 25,
+                            "column": 17
+                        }
+                    },
+                    "labels": [],
+                    "fixes": []
+                },
+                {
+                    "code": "TYPL-011",
+                    "severity": "error",
+                    "message": "unknown type name `Missing`",
+                    "span": {
+                        "path": format!("{}/b/b.ridl", path),
+                        "start": {
+                            "line": 18,
+                            "column": 25
+                        },
+                        "end": {
+                            "line": 18,
+                            "column": 32
+                        }
+                    },
+                    "labels": [],
+                    "fixes": []
+                },
+                {
+                    "code": "TYPL-223",
+                    "severity": "info",
+                    "lint": "inconsistent-abbreviation",
+                    "message": "`read` in `readSpeed` abbreviates `reading`, used in `Reading`",
+                    "span": {
+                        "path": format!("{}/b/b.ridl", path),
+                        "start": {
+                            "line": 25,
+                            "column": 9
+                        },
+                        "end": {
+                            "line": 25,
+                            "column": 18
+                        }
+                    },
+                    "labels": [],
+                    "fixes": []
+                },
+                {
+                    "code": "RIDL-414",
+                    "severity": "info",
+                    "lint": "low-cohesion-interface",
+                    "message": "interface `Status` splits into 4 groups of members that share no type: [speed], [reading], [setLevel], [outcome]",
+                    "span": {
+                        "path": format!("{}/b/b.ridl", path),
+                        "start": {
+                            "line": 14,
+                            "column": 11
+                        },
+                        "end": {
+                            "line": 14,
+                            "column": 17
+                        }
+                    },
+                    "labels": [],
+                    "fixes": []
+                }
+            ])
         );
     }
 

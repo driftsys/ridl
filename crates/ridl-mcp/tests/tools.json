@@ -757,6 +757,145 @@
     }
   },
   {
+    "description": "Report workspace package fan-in, fan-out, instability and interface cohesion groups. Pass the workspace root as `path`. Read-only and offline.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "path": {
+          "description": "The workspace root, a package directory or a source file, relative to the server's working directory unless absolute.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "name": "ridl_metrics",
+    "outputSchema": {
+      "$defs": {
+        "InterfaceMetrics": {
+          "properties": {
+            "groups": {
+              "items": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "members": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "members",
+            "groups"
+          ],
+          "type": "object"
+        },
+        "PackageMetrics": {
+          "properties": {
+            "dependsOn": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "fanIn": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "fanOut": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "instability": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "fanIn",
+            "fanOut",
+            "dependsOn"
+          ],
+          "type": "object"
+        },
+        "WorkspaceStatus": {
+          "properties": {
+            "errors": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "notes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "root": {
+              "type": "string"
+            },
+            "warnings": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "root",
+            "errors",
+            "warnings",
+            "notes"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "interfaces": {
+          "items": {
+            "$ref": "#/$defs/InterfaceMetrics"
+          },
+          "type": "array"
+        },
+        "packages": {
+          "items": {
+            "$ref": "#/$defs/PackageMetrics"
+          },
+          "type": "array"
+        },
+        "workspace": {
+          "$ref": "#/$defs/WorkspaceStatus"
+        }
+      },
+      "required": [
+        "packages",
+        "interfaces",
+        "workspace"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "description": "List declarations and interactions using a declaration. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.",
     "inputSchema": {
       "$defs": {

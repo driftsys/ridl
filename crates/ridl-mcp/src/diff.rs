@@ -128,7 +128,87 @@ mod tests {
                         .iter()
                         .map(|d| d["code"].as_str().unwrap())
                         .collect::<Vec<_>>(),
-                    ["TYPL-103", "TYPL-011"]
+                    ["TYPL-103", "TYPL-011", "TYPL-223", "RIDL-414"]
+                );
+                assert_eq!(
+                    data["diagnostics"],
+                    serde_json::json!([
+                        {
+                            "code": "TYPL-103",
+                            "severity": "warning",
+                            "lint": "unbounded-length",
+                            "message": "`string` without explicit bounds; the default `[0..256]` applies",
+                            "span": {
+                                "path": format!("{}/a/a.ridl", fixture("ws-diag")),
+                                "start": {
+                                    "line": 25,
+                                    "column": 11
+                                },
+                                "end": {
+                                    "line": 25,
+                                    "column": 17
+                                }
+                            },
+                            "labels": [],
+                            "fixes": []
+                        },
+                        {
+                            "code": "TYPL-011",
+                            "severity": "error",
+                            "message": "unknown type name `Missing`",
+                            "span": {
+                                "path": format!("{}/b/b.ridl", fixture("ws-diag")),
+                                "start": {
+                                    "line": 18,
+                                    "column": 25
+                                },
+                                "end": {
+                                    "line": 18,
+                                    "column": 32
+                                }
+                            },
+                            "labels": [],
+                            "fixes": []
+                        },
+                        {
+                            "code": "TYPL-223",
+                            "severity": "info",
+                            "lint": "inconsistent-abbreviation",
+                            "message": "`read` in `readSpeed` abbreviates `reading`, used in `Reading`",
+                            "span": {
+                                "path": format!("{}/b/b.ridl", fixture("ws-diag")),
+                                "start": {
+                                    "line": 25,
+                                    "column": 9
+                                },
+                                "end": {
+                                    "line": 25,
+                                    "column": 18
+                                }
+                            },
+                            "labels": [],
+                            "fixes": []
+                        },
+                        {
+                            "code": "RIDL-414",
+                            "severity": "info",
+                            "lint": "low-cohesion-interface",
+                            "message": "interface `Status` splits into 4 groups of members that share no type: [speed], [reading], [setLevel], [outcome]",
+                            "span": {
+                                "path": format!("{}/b/b.ridl", fixture("ws-diag")),
+                                "start": {
+                                    "line": 14,
+                                    "column": 11
+                                },
+                                "end": {
+                                    "line": 14,
+                                    "column": 17
+                                }
+                            },
+                            "labels": [],
+                            "fixes": []
+                        }
+                    ])
                 );
             }
             _ => panic!("expected diagnostics"),

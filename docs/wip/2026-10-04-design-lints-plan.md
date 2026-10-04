@@ -1109,6 +1109,66 @@ reserved codes, corpus budgets, four PRs and approval stages.
     the hook's configured commands, this recovery could omit a required check;
     compare the commands before committing.
 
+47. **Task 11: consume the existing public re-export** (2026-10-04).
+    `design_lints` is private and `cohesion_groups` is already re-exported at
+    `ridlc::cohesion_groups`. Use that public entry point with each declared
+    `Package.interfaces` entry, matching the shared cohesion check. Do not
+    include service-inline shapes as declared interfaces. Compute package
+    metrics from `workspace_package_edges(package_edges(...))`, retaining the
+    complete graph in the dependency tool. Sort packages and canonical interface
+    names; preserve the shared function's group ordering. A mistaken distinction
+    between declared and inline interfaces would change the published metric
+    inventory.
+
+48. **Task 11: retain the approved path-only input** (2026-10-04). The approved
+    section 6 and Task 11 interface specify `MetricsInput { path }`. Follow that
+    interface through the common snapshot loader with no overlays, and document
+    this exception to the existing path tools' overlay support. Return the
+    common workspace status, including errors and warnings, rather than reducing
+    it to the illustrative root and notes fields. Pin the schema by adding only
+    the new tool; compare every pre-existing entry for equality. If overlays are
+    required later, they can be added as an optional field under ADR-0025
+    decision 9.
+
+49. **Task 11: synchronize the authorized MCP diagnostic expectations**
+    (2026-10-04). The actual diagnostic sequence in the unchanged fixture is
+    TYPL-103, TYPL-011, TYPL-223 and RIDL-414. Update
+    `path_mode_check_matches_to_json` and the existing diff test
+    `diff_with_a_side_that_does_not_compile_carries_diagnostics` (the brief
+    names it `compile_errors_preserve_structured_diagnostics`) to pin the
+    complete code, message, severity, lint, span, labels, fixes and ordering.
+    Preserve the fixtures, structured-error and side-message assertions. Task 14
+    must remove candidate expectations if calibration drops or suppresses those
+    findings, or synchronize their exact final severity, message and ordering.
+
+50. **Task 11: report the sandbox verification limit** (2026-10-04). The full
+    focused MCP suite reaches
+    `snapshot::tests::a_remote_import_is_reported_and_not_fetched`, whose
+    loopback `TcpListener::bind` is rejected with `PermissionDenied` and
+    `Operation not permitted` by this execution sandbox. Preserve that test
+    unchanged, record the unfiltered failure, and run the remaining MCP suite
+    with that single test excluded. Root must rerun the unfiltered suite in an
+    environment that permits the listener before claiming its offline regression
+    passed. This exclusion does not verify the listener-based no-fetch
+    assertion.
+
+51. **Task 11: make the no-findings test a single-package fixture**
+    (2026-10-04). A source-file path within a package manifest loads that
+    package and its subpackages under the existing discovery rule. The copied
+    fixture's `a/sub` therefore made the initial one-package assertion fail.
+    Remove that directory only in the temporary copy before loading the source
+    file; preserve all tracked fixtures and the production loader. The resulting
+    assertion pins empty interfaces, zero edges and null instability with no
+    diagnostics.
+
+52. **Run configured commit checks without the shared stash operation**
+    (2026-10-04). For prepared CLI output, run the configured `prim .` formatter
+    and `git std lint --file` check directly before committing. Disable the
+    automatic hook invocation only after both commands pass. This avoids the
+    stash rejection recorded in decision 46 without omitting a required check.
+    Compare the hook configuration each time; if it gains another command, that
+    command must also run before this procedure is used.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:
