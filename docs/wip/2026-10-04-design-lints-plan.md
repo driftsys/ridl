@@ -770,6 +770,39 @@ execution.
    `just link-check` pass; no build gate is omitted. Removing those spaces would
    change the reviewed upstream text, so they remain part of the corpus.
 
+10. **Freeze the second port and its protocol evidence** (Task 2). The
+    definitions input is pinned to `527637cb39cb4e52293bea40441810b53f23ff25`;
+    official protocol and licence documentation is pinned to
+    `7412790c2a38162a3f31fa1c2fdac9263d65a1d3`. The frozen subset contains 27
+    message declarations and 16 required enums, 43 declarations in total, with
+    1,130 selected upstream physical lines. One large enum retains five selected
+    entries; its other 165 entries are explicitly outside the subset. Every
+    other selected enum is complete, including a parameter dependency reached
+    through selected enum entries. Original include layers remain separate
+    packages, and five interfaces follow documented protocol boundaries. The
+    [corpus provenance](../../evals/corpus/mavlink/PROVENANCE.md) records exact
+    names, declaration mappings, protocol choices and representation limits.
+    Selected XML definitions are MIT; generator code is excluded. The full
+    upstream COPYING is retained byte-exactly as licence evidence. Protocol
+    documentation is cited without translating its separately licensed prose. If
+    the frozen subset cannot fit the 2,500-line budget, change it explicitly
+    before continuing; removing comments, stubbing dependencies or inventing
+    protocol boundaries would invalidate the evidence. No candidate design check
+    runs on the corpus before the Task 4 rubrics are committed.
+
+11. **Complete the independent port review before committing** (Task 2). The
+    external reviewer checked all 43 selected declarations and 20 detailed
+    samples. Its advisory correction removed one translator-created duplicate
+    comment while preserving the single upstream comment, and documented a
+    frozen import used only by parameter metadata. The corrected provenance
+    records 1,695 physical source lines and all 165 omitted enum entries. A
+    second external review checked the correction and the omitted-entry list
+    exhaustively. Other port sources and the licence remain byte-identical to
+    the previously reviewed files. Upstream whitespace remains verbatim. The
+    [corpus provenance](../../evals/corpus/mavlink/PROVENANCE.md) records the
+    exact sites and representation choices. If this review boundary is wrong,
+    the corpus would require another preservation review.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:

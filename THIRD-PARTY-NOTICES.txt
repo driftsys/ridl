@@ -231,3 +231,22 @@ Its LICENSE is a byte-exact copy of common_interfaces/std_msgs/LICENSE.
 These definitions retain their upstream licence within this MIT repository.
 They are evaluation data and are not included in the published compiler crates.
 -------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+MAVLink evaluation corpus — modified RIDL translations
+Path: evals/corpus/mavlink/
+Upstream: mavlink/mavlink — https://github.com/mavlink/mavlink
+Revision: 527637cb39cb4e52293bea40441810b53f23ff25
+Licence: MIT for the selected message-definition XML files.
+
+The official upstream guide distinguishes the MIT XML definitions from the
+LGPLv3 generator. The generator is not selected for this corpus. The corpus's
+LICENSE is a byte-exact copy of the definitions repository's COPYING, retaining
+its MIT exception and generator licence text as upstream licence evidence.
+
+The corpus's PROVENANCE.md records the selected definitions, source-to-output
+mappings, pinned protocol documentation, licence evidence and translation
+limitations. Protocol documentation is cited as evidence, not translated.
+These definitions retain their upstream licence within this MIT repository.
+They are evaluation data and are not included in the published compiler crates.
+-------------------------------------------------------------------------------
