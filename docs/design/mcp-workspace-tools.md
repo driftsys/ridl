@@ -25,12 +25,13 @@ not repeat. Built by driftsys/ridl#668 and #677; roadmap stories E8.6 and E8.7.
 
 ## 2. Common rules
 
-- **`path`.** Every tool except `ridl_explain` takes `path`: a workspace root
-  directory, a package directory or a source file. A relative path resolves
-  against the server's working directory. The tool descriptions and the server's
-  `instructions` string tell the agent to pass the workspace root.
-- **`overlays`.** Every tool that takes `path` also takes optional
-  `overlays: [{path, source}]`, the unsaved text of a file (§4.1).
+- **`path`.** Every tool except `ridl_explain` and `ridl_diff` takes `path`: a
+  workspace root directory, a package directory or a source file. A relative
+  path resolves against the server's working directory. The tool descriptions
+  and the server's `instructions` string tell the agent to pass the workspace
+  root.
+- **`overlays`.** Every tool that takes `path`, and `ridl_diff`, also takes
+  optional `overlays: [{path, source}]`, the unsaved text of a file (§4.1).
 - **Output.** Every tool returns MCP structured content with an output schema,
   and the same JSON as text content for hosts that ignore structured content.
 - **Workspace status.** A result built from a workspace carries
@@ -87,15 +88,16 @@ The behaviour that is not in the README:
   `[imports]`), and `depends_on` from the package qualifiers of the reference
   walk plus the rsdl edges above. A qualifier that names no workspace package
   stays as written. `dependents` is computed over the whole workspace before a
-  `package` filter is applied. The tool reports the graph; cycles and unused
-  imports are lints, not tool results.
+  `package` filter is applied. The tool reports the graph; a package import
+  cycle is already an error (TYPL-004) and an unused import would be a lint
+  (piece 1b); neither is a tool result.
 - **`ridl_diff`** accepts what `ridl diff <old> <new>` accepts, through
   `ridlc::load_diff_side`, and returns what `ridl_diff::render_json` writes,
   with the standard IR passed as context (driftsys/ridl#598). A comparison
   against the published baseline is `old: "<root>/.ridl/baseline"`.
 - **`ridl_explain`** reports, for a diagnostic code, `lint` and `default_level`
-  when the code is a lint (ADR-0024 decision 12). It never carries a link to a
-  document.
+  when the code is a lint (ADR-0024 decision 15 and its Consequences). It never
+  carries a link to a document.
 
 ## 4. Where the code lives
 
@@ -135,14 +137,14 @@ diagnostics and the source map of a source side that did not compile; its
 `Display` is the message `ridl diff` prints, and `run_diff` in
 `crates/ridl/src/main.rs` calls the function, so its output and exit codes did
 not change. Overlays are accepted only when the side is a source path. The
-helpers that the baseline commands in `main.rs` also need (`is_ir_json`,
-`is_source_file`, `files_matching`, `first_nested_snapshot_dir`,
-`snapshot_files` and the others `ridlc::diff_side` makes public) exist once, in
-`ridlc`. The helpers whose message depends on the caller
-(`refuse_nested_snapshot_directory`, `refuse_artifact_directory` and the parse
-remedy of `load_snapshots`) stay in `main.rs`. `ridlc` depends on `ridl-diff`
-for the snapshot parse; `ridl-diff` depends only on `ridl-ir` and `serde`, so
-there is no cycle.
+helpers that the baseline commands in `main.rs` also need
+(`first_nested_snapshot_dir`, `first_non_json_ir_in`, `ir_json_files`,
+`is_non_json_ir`, `is_source_dir` and `snapshot_files`) exist once, in
+`ridlc::diff_side`, with the others that module makes public. The helpers whose
+message depends on the caller (`refuse_nested_snapshot_directory`,
+`refuse_artifact_directory` and the parse remedy of `load_snapshots`) stay in
+`main.rs`. `ridlc` depends on `ridl-diff` for the snapshot parse; `ridl-diff`
+depends only on `ridl-ir`, `serde` and `serde_json`, so there is no cycle.
 
 ### 4.2 `ridl-mcp`
 
@@ -154,14 +156,19 @@ there is no cycle.
   them (ADR-0024 decision 8).
 - `query.rs` holds the lookups (`find`, `resolve`, `describe_type`,
   `list_interactions`), `refs.rs` the reference and dependency walks,
-  `explain.rs`, `diff.rs` and `types.rs` the rest. These are pure functions from
-  a `&Snapshot` and the tool input to the tool's result type, with no MCP type
-  in them, and are unit-tested directly.
-- `lib.rs` has one `#[tool]` method per tool. Each runs `snapshot` and the query
-  in `tokio::task::spawn_blocking`, and converts a `ToolError` into an MCP tool
-  error. A compiler panic stays an MCP internal error.
-- `ridl-lsp` is not a dependency. The crate depends on `ridl-diff`, `ridl-ir`,
-  `ridl-sem` (for `Symbol`) and `rowan` (for `TextRange`).
+  `explain.rs`, `diff.rs` and `types.rs` the rest. These hold no MCP type and
+  are unit-tested directly. The lookups and walks are functions from a
+  `&Snapshot` and the tool input to the tool's result type. `explain()` and
+  `diff()` take no `Snapshot`, and `diff()` reads the disk through
+  `load_diff_side`.
+- `lib.rs` has one `#[tool]` method per tool. Each runs its work (`snapshot` and
+  the query, or for `ridl_explain`, `ridl_diff` and source-mode `ridl_check` the
+  function without a snapshot) in `tokio::task::spawn_blocking`, and converts a
+  `ToolError` into an MCP tool error. A compiler panic stays an MCP internal
+  error.
+- `ridl-lsp` is not a dependency. The crate depends on `ridl-core`, `ridlc`,
+  `ridl-diff`, `ridl-ir`, `ridl-sem` (for `Symbol`), `rowan` (for `TextRange`),
+  `rmcp`, `serde`, `serde_json` and `tokio`.
 - `.mcp.json` at the repository root registers the server for Claude Code:
   `command: "ridl"`, `args: ["mcp"]`. It assumes `ridl` is on `PATH`.
 
@@ -171,9 +178,12 @@ there is no cycle.
 
 `ridl_check` reports the diagnostics. A lookup tool answers from the IR that was
 produced, and `workspace.errors` and `workspace.warnings` tell the agent the
-tree is not clean. When the package a lookup needs produced no IR, the tool
-returns a tool error that names the package and tells the agent to run
-`ridl_check` on the same `path`.
+tree is not clean. When the workspace has errors and nothing was checked, the
+lookup returns a tool error that tells the agent to run `ridl_check` on the same
+`path`, and it names no package. When a `from` name resolves to a package with
+no checked IR, the error names that package and gives the same advice. A
+canonical `pkg.Name` whose package has no IR gets the unknown-name error, with
+no `ridl_check` advice.
 
 ### 5.2 A wrong request is a tool error
 
@@ -186,12 +196,15 @@ forms); an overlay outside the workspace or not a source file; a name with no
 match (the message lists up to 10 declared canonical names that contain it,
 ignoring case, sorted, and ends after the name when there are none); a bare name
 with several matches (every canonical name, and that `pkg.Name` or `from`
-selects one); `ridl_describe_type` given an interface; an unknown code or
-category (the five namespaces, and that diff category words are accepted); a
-`ridl_diff` side that cannot be loaded (the `DiffSideError` message, the text
-the CLI prints); and a `ridl_diff` source side that does not compile (the
-message identifies the old or new side, and the diagnostics are in the error's
-structured content).
+selects one); `ridl_describe_type` given an interface; `ridl_list_interactions`
+given a declaration that is not an interface (the message points to
+`ridl_describe_type`); a `from` or `ridl_dependencies` `package` that names no
+workspace package (the message lists the packages); a declaration with no kind
+(the message advises `ridl_check`); an unknown code or category (the five
+namespaces, and that diff category words are accepted); a `ridl_diff` side that
+cannot be loaded (the `DiffSideError` message, the text the CLI prints); and a
+`ridl_diff` source side that does not compile (the message identifies the old or
+new side, and the diagnostics are in the error's structured content).
 
 ### 5.3 Notes
 
@@ -250,6 +263,7 @@ All are Rust tests, so `just test` runs them.
   `ridl_diff` agrees with `ridl diff --format json`; an overlay that introduces
   an error is reported and the file on disk is unchanged; after one call of each
   tool the fixture's files, sizes and modification times are unchanged; and
-  `tools/list` equals `tools.json`.
+  `tools/list` names the eight tools. The unit test `the_tool_list_is_pinned` in
+  `crates/ridl-mcp/src/lib.rs` pins the response to `tools.json`.
 - The `ridl diff` tests of `crates/ridl/tests/` pass unchanged after the move of
   the diff loader.

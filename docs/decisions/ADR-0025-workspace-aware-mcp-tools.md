@@ -65,11 +65,13 @@ pasted-source form.
    URL** (design D-4). A diagnostic code is looked up in
    `ridl_core::diag::ALL_CATALOGS` and returns its code, severity and one-line
    summary; a diff category word is looked up through `ridl_diff` and returns
-   its explanation text. Which document explains each namespace is stated in the
-   authoring skill (piece 1c), because a skill is prose that changes together
-   with the documents, and a URL in a tool result is a contract that a moved
-   chapter breaks. The long-form error index (E4.2) is not written here; when it
-   lands it is added as an `explanation` field.
+   its explanation text. The mapping from each namespace to its explaining
+   document is recorded in
+   [the authoring skill outline](../wip/skill-ridl-authoring-outline.md) §7, for
+   the authoring skill of piece 1c, which does not exist yet. A skill is prose
+   that changes together with the documents, and a URL in a tool result is a
+   contract that a moved chapter breaks. The long-form error index (E4.2) is not
+   written here; when it lands it is added as an `explanation` field.
 5. **One `ridl_check` with two modes, additive** (design D-5). The input
    `{source, profile}` keeps its meaning and its result `{diagnostics}`. The
    input `{path, overlays}` is added beside it and returns
@@ -133,7 +135,7 @@ From the design's §10. The numbers are the decisions that reject them.
   piece, and becomes the right move when the language server needs lookups by
   name. Decision 3.
 - **Write the long-form error index inside this piece.** It is writing across
-  the 147 catalogued codes, not wrapping compiler functions. Rejected for
+  the 148 catalogued codes, not wrapping compiler functions. Rejected for
   decision 4.
 - **A `reference` URL for each namespace in the `ridl_explain` result.** A
   chapter that moves breaks the URL, which would be a tool contract under

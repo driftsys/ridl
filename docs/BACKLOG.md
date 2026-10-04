@@ -1,6 +1,6 @@
 # RIDL issue backlog
 
-This document captures the priority review of all 80 open issues in
+This document captures the priority review of all 78 open issues in
 [driftsys/ridl](https://github.com/driftsys/ridl/issues) on **3 October 2026**.
 It helps contributors select work and understand the remaining bugs and
 technical debt. Begin with the catalog descriptor, then complete the remaining
@@ -17,7 +17,7 @@ assessments based on the issue records and merged work.
 | -------- | ------------------------------------------- | ----------- |
 | P0       | Blocker requiring immediate work            | 0           |
 | P1       | Critical-path work                          | 14          |
-| P2       | Important work without an immediate blocker | 35          |
+| P2       | Important work without an immediate blocker | 33          |
 | P3       | Later or lower-priority work                | 31          |
 
 The remaining P1 issues are release dependencies. Each open issue has one
