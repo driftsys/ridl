@@ -6,10 +6,11 @@ use ridl_descriptor::{
 };
 use ridl_ir::projection::flatbuffers::{Packages, max_size};
 use ridl_ir::v2::{
-    Backing, CommandDef, Decl, EventDef, Field, FieldType, FixedDef, IntWidth, Interface, Package,
-    Param, PrimitiveType, QueryDef, Reserved, RetiredInterface, ReturnType, Service, ServiceShape,
-    SignalDef, StreamType, StructDef, StructMember, Timing, TimingMode, TypeDef, backing, decl,
-    field_type, return_type, service_shape, stream_type, struct_member, type_def,
+    ArrayType, Backing, CommandDef, Constraint, Decl, EventDef, Field, FieldType, FixedDef,
+    IntWidth, Interface, MapType, Package, Param, PrimitiveType, QueryDef, Reserved,
+    RetiredInterface, ReturnType, Service, ServiceShape, SignalDef, StreamType, StructDef,
+    StructMember, Timing, TimingMode, TupleField, TupleType, TypeDef, backing, decl, field_type,
+    return_type, service_shape, stream_type, struct_member, type_def,
 };
 
 fn i16_def() -> TypeDef {
@@ -645,4 +646,167 @@ fn a_payload_from_another_package_is_sized_and_hashed_through_others() {
     let alone = verify(&without).unwrap();
     assert!(rows(payload_at(alone, 0, 0)).is_empty());
     assert_ne!(catalog.hash().unwrap(), alone.hash().unwrap());
+}
+
+/// A field type of `kind`, required.
+fn ty(kind: field_type::Kind) -> FieldType {
+    FieldType {
+        optional: false,
+        kind: Some(kind),
+    }
+}
+
+/// An inline scalar over `backing` with `constraint`.
+fn inline(backing: backing::Kind, constraint: Constraint) -> FieldType {
+    ty(field_type::Kind::InlineScalar(Box::new(TypeDef {
+        backing: Some(Backing {
+            kind: Some(backing),
+        }),
+        constraint: Some(constraint),
+        ..Default::default()
+    })))
+}
+
+#[test]
+fn a_structural_type_name_is_spelled_as_the_typl_source_writes_it() {
+    let integer = || ty(field_type::Kind::Primitive(PrimitiveType::Integer as i32));
+    let cases: Vec<(FieldType, &str)> = vec![
+        (integer(), "integer"),
+        (
+            ty(field_type::Kind::Primitive(PrimitiveType::Boolean as i32)),
+            "boolean",
+        ),
+        (
+            FieldType {
+                optional: true,
+                kind: Some(field_type::Kind::Named("Coord".to_owned())),
+            },
+            "Coord?",
+        ),
+        (
+            ty(field_type::Kind::Tuple(TupleType {
+                fields: vec![
+                    TupleField {
+                        name: "lo".to_owned(),
+                        r#type: Some(named("Coord")),
+                    },
+                    TupleField {
+                        name: "hi".to_owned(),
+                        r#type: Some(named("Coord")),
+                    },
+                ],
+            })),
+            "(lo: Coord, hi: Coord)",
+        ),
+        (
+            ty(field_type::Kind::Array(Box::new(ArrayType {
+                element: Some(Box::new(named("Coord"))),
+                min: 8,
+                max: 8,
+            }))),
+            "[Coord; 8]",
+        ),
+        (
+            ty(field_type::Kind::Array(Box::new(ArrayType {
+                element: Some(Box::new(named("Coord"))),
+                min: 0,
+                max: 32,
+            }))),
+            "[Coord; 0..32]",
+        ),
+        (
+            ty(field_type::Kind::Map(Box::new(MapType {
+                key: Some(Box::new(ty(field_type::Kind::Primitive(
+                    PrimitiveType::String as i32,
+                )))),
+                value: Some(Box::new(named("Coord"))),
+                min: 1,
+                max: 8,
+            }))),
+            "[string: Coord; 1..8]",
+        ),
+        (
+            inline(
+                backing::Kind::Unit("km/h".to_owned()),
+                Constraint {
+                    min: Some("0.0".to_owned()),
+                    max: Some("250.0".to_owned()),
+                    step: Some("0.5".to_owned()),
+                    ..Default::default()
+                },
+            ),
+            "km/h [0.0..250.0 step 0.5]",
+        ),
+        (
+            inline(
+                backing::Kind::Primitive(PrimitiveType::Integer as i32),
+                Constraint {
+                    max: Some("100".to_owned()),
+                    ..Default::default()
+                },
+            ),
+            "integer [..100]",
+        ),
+        (
+            inline(
+                backing::Kind::Primitive(PrimitiveType::String as i32),
+                Constraint {
+                    len_min: Some(17),
+                    len_max: Some(17),
+                    pattern: Some("/^[A-Z]+$/".to_owned()),
+                    pattern_const: Some("VIN_PATTERN".to_owned()),
+                    ..Default::default()
+                },
+            ),
+            "string [17 match VIN_PATTERN]",
+        ),
+        (
+            inline(
+                backing::Kind::Primitive(PrimitiveType::Bytes as i32),
+                Constraint {
+                    len_min: Some(0),
+                    len_max: Some(64),
+                    pattern: Some("/^ab/".to_owned()),
+                    ..Default::default()
+                },
+            ),
+            "bytes [0..64 match /^ab/]",
+        ),
+    ];
+    let members = cases
+        .iter()
+        .zip(1..)
+        .map(|((field, _), ordinal)| {
+            interaction(
+                &format!("m{ordinal}"),
+                ordinal,
+                decl::Kind::FixedDef(FixedDef {
+                    payload: Some(field.clone()),
+                }),
+            )
+        })
+        .collect();
+    let package = Package {
+        name: "veh.cluster".to_owned(),
+        decls: package().decls,
+        interfaces: vec![Interface {
+            name: "Vehicle".to_owned(),
+            number: 1,
+            interactions: members,
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let bytes = lower(&package, &[]).unwrap();
+    let catalog = verify(&bytes).unwrap();
+    let spelled: Vec<String> = (0..cases.len())
+        .map(|index| {
+            payload_at(catalog, index, 0)
+                .type_name()
+                .unwrap()
+                .to_owned()
+        })
+        .collect();
+    let expected: Vec<&str> = cases.iter().map(|(_, spelling)| *spelling).collect();
+    assert_eq!(spelled, expected);
 }

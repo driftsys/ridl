@@ -5,8 +5,8 @@
 use std::fmt;
 
 use ridl_ir::v2::{
-    Decl, FieldType, Package, Param, PrimitiveType, ReturnType, StreamType, decl, field_type,
-    return_type, stream_type,
+    Constraint, Decl, FieldType, Package, Param, PrimitiveType, ReturnType, StreamType, decl,
+    field_type, return_type, stream_type,
 };
 
 use crate::hash::catalog_hash;
@@ -229,17 +229,26 @@ fn row(encoding: Encoding, state: SizeState) -> MaxSize {
     }
 }
 
-/// A display spelling of a type for the descriptor's `type_name`: the
-/// canonical name when there is one, a structural spelling otherwise.
+/// The typl source form of a type for the descriptor's `type_name`: the
+/// canonical name when there is one, the structural form otherwise — a tuple
+/// `(a: T, b: U)` (typl §11), an exact-length array `[T; N]`, a bounded array
+/// `[T; min..max]`, a map `[K: V; min..max]` (typl §12, in `ridl-fmt`'s
+/// spacing), an inline scalar as its backing and constraint, such as
+/// `km/h [0.0..250.0 step 0.5]` (typl §5.1-§5.4), and a stream `<T>`
+/// (ridl §12). An optional type carries the `?` suffix (typl §7.1).
 fn spell(ty: &FieldType) -> String {
-    match &ty.kind {
+    let base = match &ty.kind {
         Some(field_type::Kind::Named(name)) => name.clone(),
         Some(field_type::Kind::Primitive(p)) => spell_primitive(*p),
         Some(field_type::Kind::InlineScalar(def)) => {
-            match def.backing.as_ref().and_then(|b| b.kind.as_ref()) {
+            let backing = match def.backing.as_ref().and_then(|b| b.kind.as_ref()) {
                 Some(ridl_ir::v2::backing::Kind::Primitive(p)) => spell_primitive(*p),
                 Some(ridl_ir::v2::backing::Kind::Unit(unit)) => unit.clone(),
                 None => String::new(),
+            };
+            match def.constraint.as_ref().map(spell_constraint) {
+                Some(constraint) if !constraint.is_empty() => format!("{backing} {constraint}"),
+                _ => backing,
             }
         }
         Some(field_type::Kind::Tuple(tuple)) => format!(
@@ -256,13 +265,12 @@ fn spell(ty: &FieldType) -> String {
                 .join(", ")
         ),
         Some(field_type::Kind::Array(array)) => format!(
-            "[{}; {}..{}]",
+            "[{}; {}]",
             array.element.as_deref().map(spell).unwrap_or_default(),
-            array.min,
-            array.max
+            spell_bound(array.min, array.max)
         ),
         Some(field_type::Kind::Map(map)) => format!(
-            "{{{}: {}; {}..{}}}",
+            "[{}: {}; {}..{}]",
             map.key.as_deref().map(spell).unwrap_or_default(),
             map.value.as_deref().map(spell).unwrap_or_default(),
             map.min,
@@ -270,6 +278,57 @@ fn spell(ty: &FieldType) -> String {
         ),
         Some(field_type::Kind::Stream(stream)) => format!("<{}>", spell_stream(stream)),
         None => String::new(),
+    };
+    if ty.optional {
+        format!("{base}?")
+    } else {
+        base
+    }
+}
+
+/// An array's bound: `N` when the length is exact (`min == max`, as the IR
+/// lowers `[T; N]`), `min..max` otherwise (typl §12.3).
+fn spell_bound(min: u64, max: u64) -> String {
+    if min == max {
+        min.to_string()
+    } else {
+        format!("{min}..{max}")
+    }
+}
+
+/// An inline scalar's constraint as the source writes it: a range
+/// `[min..max step s]` with an absent bound left empty (typl §5.5), or a
+/// length `[N]` or `[min..max]` (typl §5.3, §5.4), followed inside the
+/// brackets by `match` and the regex constant's name or the regex literal,
+/// which the IR keeps with its `/` delimiters. Empty when the constraint
+/// states nothing.
+fn spell_constraint(constraint: &Constraint) -> String {
+    let mut parts = Vec::new();
+    if constraint.min.is_some() || constraint.max.is_some() {
+        let mut range = format!(
+            "{}..{}",
+            constraint.min.as_deref().unwrap_or_default(),
+            constraint.max.as_deref().unwrap_or_default()
+        );
+        if let Some(step) = &constraint.step {
+            range.push_str(&format!(" step {step}"));
+        }
+        parts.push(range);
+    } else if constraint.len_min.is_some() || constraint.len_max.is_some() {
+        parts.push(spell_bound(
+            constraint.len_min.unwrap_or(0),
+            constraint.len_max.unwrap_or(0),
+        ));
+    }
+    if let Some(name) = &constraint.pattern_const {
+        parts.push(format!("match {name}"));
+    } else if let Some(pattern) = &constraint.pattern {
+        parts.push(format!("match {pattern}"));
+    }
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!("[{}]", parts.join(" "))
     }
 }
 
