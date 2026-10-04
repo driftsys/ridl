@@ -684,7 +684,7 @@ pub(crate) fn declared_symbols(
     symbols
 }
 
-/// A named top-level declaration — a typl definition or a ridl interface
+/// A named top-level declaration — a typl definition or a ridl interface.
 /// [`declarations`] yields them in source order, so the first-wins
 /// tiebreak (ADR-0007 decision 6) holds across the two shapes.
 pub(crate) enum Declaration {

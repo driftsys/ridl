@@ -1340,7 +1340,7 @@ doc-path-check root="":
     fi
     run_gate "$root"
 
-# Check that no story, stage or epic id is named in shipped text.
+# Check that no story id (a dotted id such as `E16.5`) is named in shipped text.
 #
 # Shipped text describes the system as built. A story id such as `E16.5` in a
 # rustdoc comment, a book chapter or a design record is a reference to status,
@@ -1425,7 +1425,7 @@ story-id-check root="":
         clean_tree() {
             for tree in "${scanned[@]}"; do
                 mkdir -p "$root/$tree"
-                printf '%s\n' "// driftsys/ridl#12 and 1E5.0 and TYPE1.2 are not story ids" > "$root/$tree/clean.txt"
+                printf '%s\n' "// driftsys/ridl#12, 1E5.0, TYPE1.2, $(printf 'E%s.%s' 2 8)bc, $(printf 'E%s.%s' 2 8)B, $(printf 'E%s.%s' 2 8)_1 and _$(printf 'E%s.%s' 1 2) are not story ids" > "$root/$tree/clean.txt"
             done
             git_at "$root" -c core.excludesFile=/dev/null add -A
         }
@@ -1441,8 +1441,7 @@ story-id-check root="":
             cat "$report" >&2
             exit 1
         fi
-        # One id in every scanned tree. Each is reported with its own file and
-        # line, so dropping a tree from the list fails here.
+        # One id in every scanned tree, each reported with its own file and line.
         for tree in "${scanned[@]}"; do
             printf '%s\n' "ok" "// lands with $id, until $lettered" > "$root/$tree/clean.txt"
         done

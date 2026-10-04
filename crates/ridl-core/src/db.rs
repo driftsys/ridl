@@ -205,7 +205,8 @@ mod tests {
     }
 
     /// The salsa spike's proof: editing one file's text re-parses only that
-    /// file, and the other file's parse stays memoized. The event callback records each executed query's `database_key`,
+    /// file, and the other file's parse stays memoized. The event callback records each executed query's
+    /// `database_key`,
     /// so the test asserts *which* query re-ran, not just how many (issue
     /// #102).
     #[test]

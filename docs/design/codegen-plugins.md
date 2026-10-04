@@ -315,9 +315,9 @@ section (how the plugin is found and what `ridlc` does with the response).
 1. **ADR-0020 decision 11's text before its amendment, the release-scope note
    §3.8's "Proof without a second language", and issue #322's `Done when` all
    named `ridlc-gen-ts`.** Decision 11 is amended in place; the note is a
-   reasoning trail and is not edited; #322 is corrected by comment. The the
-   roadmap row said "both in-tree backends ported onto it" and is corrected to
-   the Rust backend alone, the other three following in their own stories.
+   reasoning trail and is not edited; #322 is corrected by comment. The roadmap
+   row said "both in-tree backends ported onto it" and is corrected to the Rust
+   backend alone, the other three following in their own stories.
 2. **ADR-0020 decision 9 and the driver write the request as
    `{version, model, options}`.** The IR specification §7 fixed `schema` and
    `toolchain` instead (§2 above), and `artifact_base` is added. Decision 9 is

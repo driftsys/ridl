@@ -386,7 +386,7 @@ pub(crate) fn generate() -> String {
     // wraps arbitrary skipped tokens in it, so it has no
     // describable shape and is appended here unconditionally.
     structs.extend(quote! {
-        /// An error-recovery node wrapping the tokens the parser skipped
+        /// An error-recovery node wrapping the tokens the parser skipped.
         /// The one node kind with no rule in `family.ungram`.
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
         pub struct ErrorNode {

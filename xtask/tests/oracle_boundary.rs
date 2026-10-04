@@ -21,7 +21,7 @@
 //! repeated here as an automated check, because reproducing it would mean
 //! shipping the very promotion this guard exists to prevent).
 //!
-//! This guard also covers a third and a fourth edge.
+//! This guard also covers the test-time edges of `ridl-backend-rust`.
 //! `ridl-backend-rust`'s FlatBuffers conformance test drives planus's
 //! runtime and code generator, and emits the `.fbs` it feeds them with
 //! `ridl-backend-flatbuffers`. All four edges are test-time only, for the

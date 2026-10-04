@@ -3534,8 +3534,8 @@ impl Checker<'_> {
         );
     }
 
-    /// The structural rules of one interface (ridl §16, E2 task 5).
-    /// Checks one interface and lowers it to its IR shape (ridl §14.0, §11;
+    /// The structural rules of one interface (ridl §16).
+    /// Checks one interface and lowers it to its IR shape (ridl §14.0, §11):
     /// the structural diagnostics accumulate exactly as in the
     /// structural pass, and every surviving member lowers to an interaction
     /// `Decl` with its §11 ordinal — the same assignment
