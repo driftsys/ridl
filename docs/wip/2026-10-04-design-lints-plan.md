@@ -950,6 +950,30 @@ reserved codes, corpus budgets, four PRs and approval stages.
     update their provisional Info severity if its catalogue level changes. The
     affected suites and one final workspace run verify the batch.
 
+32. **Task 8 review fix: pin type association and nested nominal identity**
+    (2026-10-04). Add a swapped field/type-pair negative and reordered positive,
+    plus a negative where differently qualified same-named types have identical
+    one-field definitions below the shape threshold. Local/import-alias
+    positives cover tuple children, map keys, map values and stream elements.
+    The stream fixture uses the existing checked-IR variant because streams are
+    interaction-only in source. A metadata fixture changes source field order
+    and initial values, sets distinct checked-IR documentation, and asserts all
+    three metadata differences while preserving the field/type set. Independent
+    name/type sorting, removal of each nested qualification branch, and
+    expansion of nominal references into definitions must fail their exact
+    targeted tests. These fixtures close the review's three important coverage
+    gaps without changing production behavior.
+33. **Task 8 review fix: exercise inline pattern references in checked IR**
+    (2026-10-04). Inline string scalar fields are forbidden in source, so copy
+    two valid named string type definitions using one regex constant into the
+    existing inline-scalar IR variant. Set the controlled references explicitly
+    to local and canonical qualified forms of that one constant, independently
+    of the spelling retained by the checker. This isolates the inline-scalar
+    qualification branch, whose removal must fail the positive duplicate
+    assertion. No grammar or production code changes. The shared test setup
+    accepts an IR amendment after checking, then runs the public pass with the
+    same source-indexed sites and render map.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:

@@ -611,6 +611,13 @@ fn abbreviation_covers_enumset_bits_and_union_arms_at_their_tokens() {
 }
 
 fn abbreviation_source_set(packages: &[(&str, &str)]) -> (Vec<Diagnostic>, SourceMap) {
+    design_source_set_with(packages, |_| {})
+}
+
+fn design_source_set_with(
+    packages: &[(&str, &str)],
+    amend: impl FnOnce(&mut [ridl_sem::CheckedPackage]),
+) -> (Vec<Diagnostic>, SourceMap) {
     use ridl_core::db::InputFile;
     use ridl_core::package::{Package, PackageOrigin, Workspace};
     use std::collections::BTreeMap;
@@ -637,13 +644,14 @@ fn abbreviation_source_set(packages: &[(&str, &str)]) -> (Vec<Diagnostic>, Sourc
         .iter()
         .map(|package| ridl_sem::resolve_package(&db, workspace, *package, std))
         .collect();
-    let checked: Vec<_> = packages
+    let mut checked: Vec<_> = packages
         .iter()
         .map(|package| ridl_sem::check_package(&db, workspace, *package, std))
         .collect();
     for package in &checked {
         assert_no_errors(&package.diagnostics);
     }
+    amend(&mut checked);
     let std_ir = ridl_sem::check_package(&db, workspace, std, std).ir;
     let mut sources = SourceMap::new();
     let diagnostics = ridlc::check_design_lints(
@@ -836,4 +844,199 @@ fn duplicate_shape_orders_packages_independently_of_source_set_order() {
             assert_eq!(d.labels[0].message, "`a.Z` declared here");
         }
     }
+}
+
+#[test]
+fn duplicate_shape_preserves_field_name_type_pairs() {
+    let source = "package a\nstruct First { x: integer, y: boolean }\nstruct Swapped { x: boolean, y: integer }\nstruct Equivalent { y: boolean, x: integer }\n";
+    let out = ridlc::check_source("a.ridl", source);
+    assert_no_errors(&out.diagnostics);
+    assert_eq!(
+        shapes(&out.diagnostics)
+            .iter()
+            .map(|d| d.message.as_str())
+            .collect::<Vec<_>>(),
+        ["`a.Equivalent` has the same 2 fields as `a.First`"]
+    );
+}
+
+fn nested_shape_alias_fixture(local: &str, alias: &str, imports: &str) {
+    let a = format!(
+        "package a\ntype Key: string [1..8]\nstruct Value {{ flag: boolean }}\nstruct First {{ data: {local}, index: integer }}\n"
+    );
+    let b = format!("package b\n{imports}struct Second {{ index: integer, data: {alias} }}\n");
+    let out = workspace(&[("b", &b), ("a", &a)]);
+    assert_eq!(
+        shapes(&out.diagnostics)
+            .iter()
+            .map(|d| d.message.as_str())
+            .collect::<Vec<_>>(),
+        ["`b.Second` has the same 2 fields as `a.First`"]
+    );
+}
+
+#[test]
+fn duplicate_shape_qualifies_tuple_children() {
+    nested_shape_alias_fixture(
+        "(item: Value)",
+        "(item: Payload)",
+        "import a.Value as Payload\n",
+    );
+}
+
+#[test]
+fn duplicate_shape_qualifies_map_keys() {
+    nested_shape_alias_fixture(
+        "[Key: boolean; 2]",
+        "[Identifier: boolean; 2]",
+        "import a.Key as Identifier\n",
+    );
+}
+
+#[test]
+fn duplicate_shape_qualifies_map_values() {
+    nested_shape_alias_fixture(
+        "[integer: Value; 2]",
+        "[integer: Payload; 2]",
+        "import a.Value as Payload\n",
+    );
+}
+
+#[test]
+fn duplicate_shape_qualifies_stream_elements_in_checked_ir() {
+    use ridl_ir::v2::{StreamType, decl, field_type, stream_type, struct_member};
+    // Streams are interaction-only in source. Exercise the existing FieldType
+    // branch using checked IR, retaining source-indexed outer declarations.
+    let a =
+        "package a\nstruct Value { flag: boolean }\nstruct First { data: Value, index: integer }\n";
+    let b =
+        "package b\nimport a.Value as Payload\nstruct Second { index: integer, data: Payload }\n";
+    let (diagnostics, _) = design_source_set_with(&[("a", a), ("b", b)], |checked| {
+        for package in checked {
+            for declaration in &mut package.ir.decls {
+                if let Some(decl::Kind::StructDef(def)) = &mut declaration.kind {
+                    for member in &mut def.members {
+                        if let Some(struct_member::Member::Field(field)) = &mut member.member
+                            && field.name == "data"
+                        {
+                            let ty = field.r#type.as_mut().unwrap();
+                            let Some(field_type::Kind::Named(name)) = ty.kind.take() else {
+                                panic!("named fixture type")
+                            };
+                            ty.kind = Some(field_type::Kind::Stream(StreamType {
+                                element: Some(stream_type::Element::Named(name)),
+                            }));
+                        }
+                    }
+                }
+            }
+        }
+    });
+    assert_eq!(
+        shapes(&diagnostics)
+            .iter()
+            .map(|d| d.message.as_str())
+            .collect::<Vec<_>>(),
+        ["`b.Second` has the same 2 fields as `a.First`"]
+    );
+}
+
+#[test]
+fn duplicate_shape_keeps_nominal_identity_for_equal_type_definitions() {
+    let a =
+        "package a\nstruct Pose { flag: boolean }\nstruct First { pose: Pose, index: integer }\n";
+    let b =
+        "package b\nstruct Pose { flag: boolean }\nstruct Second { pose: Pose, index: integer }\n";
+    let out = workspace(&[("a", a), ("b", b)]);
+    assert!(shapes(&out.diagnostics).is_empty(), "{:?}", out.diagnostics);
+}
+
+#[test]
+fn duplicate_shape_ignores_field_ordinals_docs_and_initial_values() {
+    use ridl_ir::v2::{decl, struct_member};
+    let source = "package a\nstruct First { x: integer [0..9] = 1, y: boolean = false }\nstruct Second { y: boolean = true, x: integer [0..9] = 2 }\n";
+    let mut metadata = Vec::new();
+    let (diagnostics, _) = design_source_set_with(&[("a", source)], |checked| {
+        for declaration in &mut checked[0].ir.decls {
+            if let Some(decl::Kind::StructDef(def)) = &mut declaration.kind {
+                for member in &mut def.members {
+                    if let Some(struct_member::Member::Field(field)) = &mut member.member
+                        && field.name == "x"
+                    {
+                        // Set distinct documentation explicitly alongside the
+                        // source-derived ordinal and initial value differences.
+                        field.doc = format!("Documentation for {}", declaration.name);
+                        metadata.push((
+                            field.ordinal,
+                            field.doc.clone(),
+                            field.declared_init.clone(),
+                        ));
+                    }
+                }
+            }
+        }
+    });
+    assert_eq!(metadata.len(), 2);
+    assert_ne!(metadata[0].0, metadata[1].0);
+    assert_ne!(metadata[0].1, metadata[1].1);
+    assert_ne!(metadata[0].2, metadata[1].2);
+    assert_eq!(
+        shapes(&diagnostics)
+            .iter()
+            .map(|d| d.message.as_str())
+            .collect::<Vec<_>>(),
+        ["`a.Second` has the same 2 fields as `a.First`"]
+    );
+}
+
+#[test]
+fn duplicate_shape_qualifies_inline_scalar_pattern_constants_in_checked_ir() {
+    use ridl_ir::v2::{decl, field_type, struct_member};
+    // Inline string scalars are forbidden in source fields. Copy valid named
+    // string type data into the existing IR variant to exercise its reference.
+    let a = "package a\nconst PATTERN = /^x+$/\ntype Text: string [1..8 match PATTERN]\nstruct First { data: Text, index: integer }\n";
+    let b = "package b\nimport a.PATTERN as TEXT_PATTERN\ntype Text: string [1..8 match TEXT_PATTERN]\nstruct Second { index: integer, data: Text }\n";
+    let (diagnostics, _) = design_source_set_with(&[("a", a), ("b", b)], |checked| {
+        for package in checked {
+            let mut scalar = package
+                .ir
+                .decls
+                .iter()
+                .find_map(|d| match &d.kind {
+                    Some(decl::Kind::TypeDef(def)) if d.name == "Text" => Some(def.clone()),
+                    _ => None,
+                })
+                .unwrap();
+            assert!(scalar.constraint.as_ref().unwrap().pattern.is_some());
+            // Exercise local and qualified forms of the same referenced
+            // constant without depending on the checker's retained spelling.
+            scalar.constraint.as_mut().unwrap().pattern_const = Some(
+                if package.ir.name == "a" {
+                    "PATTERN"
+                } else {
+                    "a.PATTERN"
+                }
+                .into(),
+            );
+            for declaration in &mut package.ir.decls {
+                if let Some(decl::Kind::StructDef(def)) = &mut declaration.kind {
+                    for member in &mut def.members {
+                        if let Some(struct_member::Member::Field(field)) = &mut member.member
+                            && field.name == "data"
+                        {
+                            field.r#type.as_mut().unwrap().kind =
+                                Some(field_type::Kind::InlineScalar(Box::new(scalar.clone())));
+                        }
+                    }
+                }
+            }
+        }
+    });
+    assert_eq!(
+        shapes(&diagnostics)
+            .iter()
+            .map(|d| d.message.as_str())
+            .collect::<Vec<_>>(),
+        ["`b.Second` has the same 2 fields as `a.First`"]
+    );
 }
