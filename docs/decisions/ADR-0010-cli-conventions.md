@@ -84,10 +84,11 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    have no exit code that depends on them.
 
    The paragraph above was added on 2026-10-04 (lint foundation design) and is
-   verified by tests, not by the direct construction below:
-   `json_carries_lint_field_and_deny_exits_1` and `build_fails_on_deny` in
-   `crates/ridl/tests/lints.rs` run the `ridl` binary;
-   `deny_turns_a_lint_into_an_error` and `deny_blocks_build` in
+   verified by tests, not by the direct construction below: `text_deny_exits_1`
+   and `build_fails_on_deny` in `crates/ridl/tests/lints.rs` run the `ridl`
+   binary, and `diff_ignores_deny`, `baseline_ignores_deny` and
+   `test_ignores_deny` in the same file pin that the other subcommands apply no
+   level; `deny_turns_a_lint_into_an_error` and `deny_blocks_build` in
    `crates/ridlc/tests/lint_levels.rs` call `ridlc::run_check` and
    `ridlc::run_build`, and `binary_build_fails_on_deny` in the same file runs
    the `ridlc build` binary.
