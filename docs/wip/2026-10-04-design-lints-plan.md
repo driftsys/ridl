@@ -1671,6 +1671,16 @@ execution.
     require exact commands, results and remaining issues in the handoff and
     fresh scoped review before completing the task.
 
+72. **Synchronize the remaining backend fixture assertion** (2026-10-04). Full
+    verification exposed the same stale cruise diagnostic expectation in the
+    TypeScript model-drift test. Apply the same precise ordered two-Info
+    expectation as the independently reviewed backend repair, retaining source
+    identity, byte ranges, messages, lint names and empty labels and fixes. Keep
+    the fixture and production code unchanged. The affected package passed all
+    30 tests. A bounded search found no other stale helper. If wrong, the
+    updated assertion could conceal a compiler defect; require a fresh scoped
+    review before relying on the full verification result.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:
