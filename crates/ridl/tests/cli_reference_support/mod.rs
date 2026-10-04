@@ -10,7 +10,13 @@
 //! - **Tables of its own.** The exit-code table lists commands, and the
 //!   getting-started emit table lists `--emit` values. These are compared as
 //!   sets: every documented item must exist, and every real item must be
-//!   documented.
+//!   documented. The exit-code table's 0, 1 and 2 cells are not compared. The
+//!   `lsp` and `mcp` servers are exempt from the table, because their exit
+//!   codes are stated in their own sections.
+//! - **Prose.** Every long flag named in an inline code span or in a `sh`
+//!   fence must exist, and the prose count of emit targets must match.
+//! - **The version line.** `<program> --version` is compared with the version
+//!   masked as `X.Y.Z`.
 //!
 //! Fences and tables come from `pulldown-cmark`, under the same option set
 //! mdBook uses (see `book_examples.rs`), never from pattern matching over raw
@@ -25,7 +31,8 @@ use std::process::Command;
 
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 
-/// The option set mdBook parses with; `book_examples.rs` pins it by name.
+/// The option set mdBook parses with: the same five options as
+/// `MDBOOK_OPTIONS` in `book_examples.rs`, which holds the test that pins them.
 const MDBOOK_OPTIONS: Options = Options::ENABLE_TABLES
     .union(Options::ENABLE_FOOTNOTES)
     .union(Options::ENABLE_STRIKETHROUGH)
@@ -97,7 +104,6 @@ pub struct Table {
 pub fn tables(page: &Page) -> Vec<Table> {
     let mut out = Vec::new();
     let mut current: Option<Table> = None;
-    let mut in_head = false;
     let mut row: Vec<String> = Vec::new();
     let mut cell: Option<String> = None;
     for (event, range) in Parser::new_ext(&page.text, MDBOOK_OPTIONS).into_offset_iter() {
@@ -110,11 +116,9 @@ pub fn tables(page: &Page) -> Vec<Table> {
                 });
             }
             Event::Start(Tag::TableHead) => {
-                in_head = true;
                 row.clear();
             }
             Event::End(TagEnd::TableHead) => {
-                in_head = false;
                 if let Some(table) = current.as_mut() {
                     table.header = std::mem::take(&mut row);
                 }
@@ -135,7 +139,6 @@ pub fn tables(page: &Page) -> Vec<Table> {
             Event::End(TagEnd::Table) => out.extend(current.take()),
             _ => {}
         }
-        let _ = in_head;
     }
     out
 }
@@ -175,6 +178,11 @@ pub fn help_transcripts(page: &Page) -> Vec<Transcript> {
 pub fn run(exe: &Path, args: &[&str]) -> (i32, String, String) {
     let output = Command::new(exe)
         .args(args)
+        // clap colours its help when these ask for it, which adds escape codes
+        // the book does not carry.
+        .env("NO_COLOR", "1")
+        .env_remove("CLICOLOR_FORCE")
+        .env_remove("CLICOLOR")
         .output()
         .unwrap_or_else(|error| panic!("run {} {args:?}: {error}", exe.display()));
     (
@@ -433,10 +441,11 @@ fn real_flags(exe: &Path) -> BTreeSet<String> {
     out
 }
 
-/// Fails for each long flag the book names in an inline code span that no
+/// Fails for each long flag the book names in an inline code span or a `sh`
+/// fence that no
 /// command of the binary, and no `other_program` transcript in the book,
-/// accepts. `foreign` lists flags of other programs (`cargo build --release`)
-/// and deliberate misuse (`--bogus-flag`).
+/// accepts. `foreign` lists flags the book names that no command accepts:
+/// flags of other programs, and flags named only to say they do not exist.
 pub fn prose_flag_failures(
     page: &Page,
     exe: &Path,
@@ -450,12 +459,22 @@ pub fn prose_flag_failures(
         }
     }
     let mut failures = Vec::new();
+    for fence in fences(page).iter().filter(|f| f.info == "sh") {
+        for flag in long_flags(&fence.body) {
+            if !known.contains(&flag) && !foreign.contains(&flag.as_str()) {
+                failures.push(format!(
+                    "{}:{}: `{flag}` is used in a `sh` fence, but no command of the binary or of `{other_program}` accepts it",
+                    page.name, fence.line
+                ));
+            }
+        }
+    }
     for (event, range) in Parser::new_ext(&page.text, MDBOOK_OPTIONS).into_offset_iter() {
         if let Event::Code(code) = event {
             for flag in long_flags(&code) {
                 if !known.contains(&flag) && !foreign.contains(&flag.as_str()) {
                     failures.push(format!(
-                        "{}:{}: `{flag}` is named in the book, but no `ridl` or `{other_program}` command accepts it",
+                        "{}:{}: `{flag}` is named in the book, but no command of the binary or of `{other_program}` accepts it",
                         page.name,
                         line_of(&page.text, range.start)
                     ));
@@ -464,4 +483,38 @@ pub fn prose_flag_failures(
         }
     }
     failures
+}
+
+/// Compares the `<program> --version` transcript with the binary's output,
+/// after masking the version as `X.Y.Z` in both.
+pub fn version_failures(page: &Page, exe: &Path, program: &str) -> Vec<String> {
+    let command = format!("{program} --version");
+    let fences = fences(page);
+    let Some(pair) = fences
+        .windows(2)
+        .find(|p| p[0].info == "sh" && p[0].body.trim() == command && p[1].info == "text")
+    else {
+        return vec![format!("{}: no `{command}` transcript", page.name)];
+    };
+    let (_, stdout, _) = run(exe, &["--version"]);
+    let masked: Vec<String> = stdout
+        .split_whitespace()
+        .map(|word| {
+            if word.starts_with(|c: char| c.is_ascii_digit()) {
+                "X.Y.Z".to_string()
+            } else {
+                word.to_string()
+            }
+        })
+        .collect();
+    let real = masked.join(" ");
+    let book = pair[1].body.trim();
+    if real == book {
+        Vec::new()
+    } else {
+        vec![format!(
+            "{}:{}: `{command}` prints `{real}` (version masked), the book shows `{book}`",
+            page.name, pair[1].line
+        )]
+    }
 }

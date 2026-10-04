@@ -50,8 +50,15 @@ fn every_flag_named_in_prose_exists() {
         &page,
         Path::new(RIDL),
         "ridlc",
-        // `--bogus-flag` is deliberate misuse. `--wire`, `--pipe` and `--socket`
-        // are named only to say that no such flag exists.
-        &["--bogus-flag", "--wire", "--pipe", "--socket"],
+        // `--bogus-flag` is a deliberate misuse in a `sh` fence. `--wire`,
+        // `--pipe` and `--socket` are named only to say that no such flag
+        // exists. `--release` is a `cargo build` flag.
+        &["--bogus-flag", "--wire", "--pipe", "--socket", "--release"],
     ));
+}
+
+#[test]
+fn the_version_transcript_equals_the_binary() {
+    let page = page("cli-reference.md");
+    assert_no_failures(version_failures(&page, Path::new(RIDL), "ridl"));
 }

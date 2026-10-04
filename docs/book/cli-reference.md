@@ -40,13 +40,14 @@ ridl --version
 ```
 
 ```text
-ridl 0.0.0
+ridl X.Y.Z
 ```
 
-The version string is `0.0.0` on every build until a maintainer cuts a release
-([ADR-0007][adr-0007] decision 14 pins it there), so it cannot yet answer
-"which commit is this" — recorded as a known gap in [ADR-0010][adr-0010]
-decision 8, which also records a deferred fix.
+`X.Y.Z` stands for the build's version: the crate version for a local build,
+or the release tag when the release workflow sets `RIDL_BUILD_VERSION`. The
+version does not name a commit, so it cannot answer "which commit is this" —
+recorded as a known gap in [ADR-0010][adr-0010] decision 8, which also records
+a deferred fix.
 
 ## `ridl`
 
