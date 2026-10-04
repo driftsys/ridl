@@ -51,7 +51,7 @@ use ridl_core::db::InputFile;
 use ridl_core::diag::{
     DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, house_style_message, remap_diagnostics,
 };
-use ridl_core::lint::{LintScopes, apply_lint_levels};
+use ridl_core::lint::{LintScopes, apply_lint_levels, drop_allowed_by_default};
 use ridl_core::package::{Package, PackageOrigin, Workspace};
 use ridl_core::{
     Cache, Frozen, LoadedWorkspace, ManifestKind, RidlDatabase, materialize_imports, parse_file,
@@ -753,6 +753,8 @@ pub fn run_build_with(
     // docs/archive/2026-10-03-lint-foundation-plan.md).
     if apply_lints == ApplyLints::Yes {
         apply_lint_levels(&mut diagnostics, &sources, &lints);
+    } else {
+        drop_allowed_by_default(&mut diagnostics);
     }
 
     // A build must not emit artifacts for a workspace that failed: code

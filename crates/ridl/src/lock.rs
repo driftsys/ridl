@@ -38,6 +38,7 @@ use std::process::ExitCode;
 
 use ridl_core::diag::{DiagCode, Diagnostic, Severity, render};
 use ridl_core::interface_lock::{self, InterfaceLock, InvalidLockKey, LockKey, MergeOutcome};
+use ridl_core::lint::drop_allowed_by_default;
 use ridl_core::{RidlDatabase, load_workspace};
 use ridl_ir::v2;
 use rowan::TextRange;
@@ -80,13 +81,16 @@ pub fn run_lock(path: &Path, renames: &[String], retires: &[String]) -> ExitCode
     let editing = !renames.is_empty() || !retires.is_empty();
 
     let mut db = RidlDatabase::default();
-    let output = match ridlc::compile_workspace(&mut db, path) {
+    let mut output = match ridlc::compile_workspace(&mut db, path) {
         Ok(output) => output,
         Err(err) => {
             eprintln!("error: {err}");
             return ExitCode::from(2);
         }
     };
+    // `ridl lock` applies no `[lints]` levels (ADR-0024 decision 8), so a lint
+    // that is `allow` by default is left out of what it renders.
+    drop_allowed_by_default(&mut output.diagnostics);
     let has_error = output
         .diagnostics
         .iter()

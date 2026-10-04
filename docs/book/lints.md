@@ -98,7 +98,8 @@ Levels apply where diagnostics are reported to a person or an agent:
 Every other command reports the severities the emit sites chose: `ridl diff`,
 `ridl test`, `ridl baseline`, `ridl lock`, the MCP tool `ridl_diff` and the MCP
 lookup tools. A lint at `deny` never makes one of them fail. The text note that
-names the lint still appears in their output.
+names the lint still appears in their output. A lint that is `allow` by default
+is left out of their output, as it is everywhere else.
 
 ## Mistakes in `[lints]`
 

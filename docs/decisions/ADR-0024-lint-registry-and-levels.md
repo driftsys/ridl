@@ -135,7 +135,9 @@ decision n** for n from 1 to 9, so a citation of "D-8" is a citation of decision
    compiles with the severities the emit sites chose, so a lint at `deny` never
    makes one of them fail or exit 2. A `[lints]` table is a reporting setting;
    it does not change whether a workspace compiles. ADR-0010 decision 1 states
-   the exit-code consequence.
+   the exit-code consequence. These commands still leave out a lint whose
+   default is `allow` (decision 1), so that default holds on every path (amended
+   by ADR-0026).
 
 9. **Entering at a workspace member loads the member alone** (design D-9).
    `ridl check <member>`, `ridl check` on a file inside a member, the MCP path

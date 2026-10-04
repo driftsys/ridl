@@ -81,25 +81,61 @@ fn doc_comment_style(token: &SyntaxToken, file_id: FileId) -> Option<Diagnostic>
 }
 
 /// The `///` lines that replace a `/** */` comment whose text between the
-/// delimiters is `body`. On each line, leading whitespace and then one `*`
-/// and one space after it are removed, and trailing whitespace is removed.
-/// An empty first or last line is dropped. The lines after the first start
-/// with `indent`, the indentation of the comment itself, because the
-/// replacement starts at the comment's first character. The line ending is
-/// `\r\n` when the comment uses it.
+/// delimiters is `body`.
+///
+/// - The first line is the text after `/**`. It never carries decoration, so
+///   only its surrounding whitespace is removed: `/** *Note* x */` keeps
+///   `*Note*`.
+/// - The continuation lines are **decorated** when every one that is not blank
+///   starts, after its leading whitespace, with a `*` followed by a space or by
+///   the end of the line. On a decorated line, the leading whitespace, the `*`
+///   and one space after it are removed, so `* * item` becomes the bullet
+///   `* item`. A `*` followed by anything else (`**bold**`) is never
+///   decoration, and one such line makes the whole block undecorated.
+/// - Undecorated continuation lines keep their relative indentation: the
+///   leading whitespace they all share is removed, and nothing else. A
+///   continuation line that is a bullet (`* item`) in an undecorated block
+///   cannot be told apart from decoration when every continuation line is one,
+///   so a block whose continuation lines are all `* `-bullets is read as
+///   decorated.
+/// - Trailing whitespace is removed from every line, and an empty first or
+///   last line is dropped.
+///
+/// The lines after the first start with `indent`, the indentation of the
+/// comment itself, because the replacement starts at the comment's first
+/// character. The line ending is `\r\n` when the comment uses it.
 fn line_doc_replacement(body: &str, indent: &str) -> String {
     let newline = if body.contains("\r\n") { "\r\n" } else { "\n" };
-    let mut lines: Vec<&str> = body
-        .split('\n')
-        .map(|line| {
-            let line = line.trim_start();
-            let line = match line.strip_prefix('*') {
-                Some(rest) => rest.strip_prefix(' ').unwrap_or(rest),
-                None => line,
-            };
-            line.trim_end()
-        })
-        .collect();
+    let mut raw = body.split('\n').map(|line| line.trim_end());
+    let first = raw.next().unwrap_or_default().trim_start();
+    let rest: Vec<&str> = raw.collect();
+
+    let is_decoration = |line: &str| {
+        let line = line.trim_start();
+        line == "*" || line.starts_with("* ")
+    };
+    let decorated = rest
+        .iter()
+        .filter(|line| !line.trim_start().is_empty())
+        .all(|line| is_decoration(line));
+    let shared_indent = rest
+        .iter()
+        .filter(|line| !line.trim_start().is_empty())
+        .map(|line| line.len() - line.trim_start_matches([' ', '\t']).len())
+        .min()
+        .unwrap_or(0);
+
+    let mut lines = vec![first];
+    lines.extend(rest.iter().map(|line| {
+        if line.trim_start().is_empty() {
+            ""
+        } else if decorated {
+            let line = &line.trim_start()[1..];
+            line.strip_prefix(' ').unwrap_or(line)
+        } else {
+            &line[shared_indent..]
+        }
+    }));
     if lines.len() > 1 && lines.last().is_some_and(|line| line.is_empty()) {
         lines.pop();
     }
@@ -229,6 +265,54 @@ mod tests {
         let found = typl_410(&checked);
         assert_eq!(found.len(), 1, "{:?}", checked.diagnostics);
         assert_eq!(found[0].fixits[0].replacement, "/// First.\r\n/// Second.");
+    }
+
+    /// The replacement of the comment `/**{body}*/` at column 0.
+    fn replacement(body: &str) -> String {
+        line_doc_replacement(body, "")
+    }
+
+    #[test]
+    fn fixit_keeps_markdown_emphasis_on_the_first_line() {
+        assert_eq!(replacement(" **Note**: x "), "/// **Note**: x");
+        assert_eq!(replacement(" *Deprecated* soon "), "/// *Deprecated* soon");
+    }
+
+    #[test]
+    fn fixit_keeps_a_bullet_in_a_decorated_block() {
+        assert_eq!(
+            replacement("\n * List:\n * * item\n *\n "),
+            "/// List:\n/// * item\n///"
+        );
+    }
+
+    #[test]
+    fn fixit_keeps_a_bullet_in_an_undecorated_block() {
+        assert_eq!(
+            replacement(" List:\n  intro\n  * item "),
+            "/// List:\n/// intro\n/// * item"
+        );
+    }
+
+    #[test]
+    fn fixit_reads_a_star_without_a_space_as_text_not_decoration() {
+        assert_eq!(replacement("\n * a\n **bold** "), "/// * a\n/// **bold**");
+    }
+
+    #[test]
+    fn fixit_reads_continuation_lines_that_are_all_bullets_as_decoration() {
+        assert_eq!(
+            replacement(" List:\n * a\n * b "),
+            "/// List:\n/// a\n/// b"
+        );
+    }
+
+    #[test]
+    fn fixit_keeps_relative_indentation_in_an_undecorated_block() {
+        assert_eq!(
+            replacement(" Code:\n    a\n\n      b "),
+            "/// Code:\n/// a\n///\n///   b"
+        );
     }
 
     /// `check_package` leaves a `.rsdl` file to `check_system`, so its doc

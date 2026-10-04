@@ -189,6 +189,18 @@ pub fn apply_lint_levels(
     });
 }
 
+/// Removes every diagnostic whose lint is `allow` by default (ADR-0024
+/// decision 1) and leaves every other diagnostic unchanged.
+///
+/// A path that applies no `[lints]` levels (ADR-0024 decision 8) reports the
+/// severities the emit sites chose. An emit site gives an allow-by-default
+/// lint a Warning severity, which is not its default level, so such a path
+/// calls this function to keep that lint silent as its default requires.
+pub fn drop_allowed_by_default(diagnostics: &mut Vec<Diagnostic>) {
+    diagnostics
+        .retain(|diagnostic| !lint_of(diagnostic.code).is_some_and(|entry| entry.allow_by_default));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -253,6 +265,29 @@ mod tests {
         assert_eq!(LintLevels::default().level(style), Some(LintLevel::Allow));
         let detached = lint_of(DiagCode::TYPL_404).expect("TYPL-404 is a lint");
         assert_eq!(default_level(detached), Some(LintLevel::Warn));
+    }
+
+    #[test]
+    fn drop_allowed_by_default_removes_only_allow_by_default_lints() {
+        let diagnostic = |code: DiagCode, severity: Severity| Diagnostic {
+            code,
+            severity,
+            message: String::new(),
+            primary: Span {
+                file: FileId::DETACHED,
+                range: TextRange::empty(TextSize::from(0)),
+            },
+            labels: Vec::new(),
+            fixits: Vec::new(),
+        };
+        let mut diagnostics = vec![
+            diagnostic(DiagCode::TYPL_410, Severity::Warning),
+            diagnostic(DiagCode::TYPL_404, Severity::Warning),
+            diagnostic(DiagCode::RIDL_101, Severity::Error),
+        ];
+        drop_allowed_by_default(&mut diagnostics);
+        let codes: Vec<&str> = diagnostics.iter().map(|d| d.code.as_str()).collect();
+        assert_eq!(codes, ["TYPL-404", "RIDL-101"]);
     }
 
     /// The row of an Error code, which has no lint name.

@@ -785,3 +785,50 @@ fn doc_comment_style_at_deny_exits_1() {
         "the lint at deny is rendered as an error:\n{stderr}"
     );
 }
+
+/// The commands that apply no `[lints]` levels (ADR-0024 decision 8) still
+/// leave out a lint that is `allow` by default: `ridl baseline` and
+/// `ridl lock` render the warnings of the compile.
+#[test]
+fn doc_comment_style_is_silent_in_baseline_and_lock() {
+    let dir = TempDir::new("doc-style-baseline");
+    let root = block_doc_workspace(&dir, "");
+
+    let (code, stdout, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert!(
+        !stderr.contains("TYPL-410"),
+        "`ridl lock` does not report an allow-by-default lint:\n{stderr}"
+    );
+
+    let (code, stdout, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert!(
+        !stderr.contains("TYPL-410"),
+        "`ridl baseline` does not report an allow-by-default lint:\n{stderr}"
+    );
+}
+
+/// `ridl diff` renders the diagnostics of a side that does not compile, with
+/// no `[lints]` levels; an allow-by-default lint is left out of them.
+#[test]
+fn doc_comment_style_is_silent_in_a_diff_compile_error() {
+    let dir = TempDir::new("doc-style-diff");
+    let old = dir.write("old/speed.typl", BLOCK_DOC_SOURCE);
+    let new = dir.write(
+        "new/speed.typl",
+        &format!("{BLOCK_DOC_SOURCE}type Broken: Missing\n"),
+    );
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+
+    assert_eq!(code, 2, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert!(
+        stderr.contains("error"),
+        "the new side does not compile:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("TYPL-410"),
+        "`ridl diff` does not report an allow-by-default lint:\n{stderr}"
+    );
+}
