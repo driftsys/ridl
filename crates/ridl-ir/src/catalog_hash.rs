@@ -32,11 +32,12 @@ pub fn reachable_decls<'a>(
 }
 
 /// The exact input of the hash: the package name; every interface shape
-/// under its identity name, in (number, name) order because the lock makes
-/// the number the identity, with the owning service's visibility for an
-/// inline shape, the IR's `number` and `provisional`, and its interactions; the reached declarations under
-/// canonical names, in canonical-name order, every type reference inside
-/// them rewritten to the canonical name of the declaration it resolves to;
+/// under its identity name, with the owning service's visibility for an
+/// inline shape, the IR's `number` and `provisional`, and its interactions,
+/// in (number, name) order because the lock makes the number the identity;
+/// the reached declarations under canonical names, in canonical-name order,
+/// every type reference inside them rewritten to the canonical name of the
+/// declaration it resolves to, and every expression string left as written;
 /// doc strings and doc tags (`labels`, `deprecated`) blanked; no services
 /// and no retired entries.
 pub fn reduced_package(package: &Package, others: &[&Package]) -> Package {
@@ -66,9 +67,6 @@ pub fn reduced_package(package: &Package, others: &[&Package]) -> Package {
         services: vec![],
         retired: vec![],
     };
-    reduced
-        .interfaces
-        .sort_by(|a, b| (a.number, &a.name).cmp(&(b.number, &b.name)));
     for interface in &mut reduced.interfaces {
         interface.doc.clear();
         interface.labels.clear();
@@ -78,6 +76,9 @@ pub fn reduced_package(package: &Package, others: &[&Package]) -> Package {
             blank_docs(interaction);
         }
     }
+    reduced
+        .interfaces
+        .sort_by(|a, b| (a.number, &a.name).cmp(&(b.number, &b.name)));
     reduced
 }
 
@@ -177,8 +178,9 @@ impl<'a> Index<'a> {
     /// transitively, keyed by canonical name, with the index of the package
     /// that declares it.
     fn closure(&self) -> BTreeMap<String, (usize, &'a Decl)> {
-        // Each pending reference carries the package it was read in.
-        let mut pending: Vec<(String, usize)> = Vec::new();
+        // Each pending reference carries the package it was read in and
+        // where it was read.
+        let mut pending: Vec<Pending> = Vec::new();
         for shape in self.packages[ROOT].shapes() {
             for interaction in &shape.interface.interactions {
                 collect_refs(interaction, ROOT, &mut pending);
@@ -186,42 +188,97 @@ impl<'a> Index<'a> {
         }
         let mut reached: BTreeMap<String, (usize, &'a Decl)> = BTreeMap::new();
         let mut seen: BTreeSet<String> = BTreeSet::new();
-        while let Some((name, context)) = pending.pop() {
+        while let Some((name, context, origin)) = pending.pop() {
             // A primitive spelled as a name, or a name the checker already
             // rejected, has no declaration: nothing more to reach.
-            let Some((canonical, owner, decl)) = self.resolve(&name, context) else {
-                continue;
+            let found = match origin {
+                Origin::TypeRef => self.resolve(&name, context).into_iter().collect(),
+                Origin::Expr => self.resolve_expr(&name, context),
             };
-            if !seen.insert(canonical.clone()) {
-                continue;
+            for (canonical, owner, decl) in found {
+                if !seen.insert(canonical.clone()) {
+                    continue;
+                }
+                reached.insert(canonical, (owner, decl));
+                collect_refs(decl, owner, &mut pending);
             }
-            reached.insert(canonical, (owner, decl));
-            collect_refs(decl, owner, &mut pending);
         }
         reached
     }
+
+    /// The declarations a name read inside an expression string of package
+    /// `context` may mean. A type reference is canonical in the IR, but an
+    /// expression is source text: it names a declaration of another package
+    /// by the name the file's import binds, and the contract checker accepts
+    /// only that form (it rejects a qualified `pkg.Name`, expr-core §3.1).
+    /// The IR records no imports, so a bare name that `context` does not
+    /// declare is looked up in every other package of the build, and every
+    /// match is returned. That can include a declaration the expression does
+    /// not mean, which only widens what the hash covers. An import alias
+    /// (`import a.B as C`, typl §3.2) binds a name no package declares, so a
+    /// declaration named through an alias is not found.
+    fn resolve_expr(&self, name: &str, context: usize) -> Vec<(String, usize, &'a Decl)> {
+        if let Some(found) = self.resolve(name, context) {
+            return vec![found];
+        }
+        if name.contains('.') {
+            return vec![];
+        }
+        self.bare
+            .iter()
+            .enumerate()
+            .filter_map(|(owner, decls)| {
+                let decl = decls.get(name)?;
+                Some((self.canonical(owner, name), owner, *decl))
+            })
+            .collect()
+    }
+}
+
+/// A name waiting to be resolved: the name, the package it was read in, and
+/// where it was read.
+type Pending = (String, usize, Origin);
+
+/// Where a pending name was read, which decides how it resolves.
+#[derive(Clone, Copy)]
+enum Origin {
+    /// A type reference field: canonical, resolved by [`Index::resolve`].
+    TypeRef,
+    /// A name inside an expression string: resolved by
+    /// [`Index::resolve_expr`].
+    Expr,
 }
 
 /// Pushes every type name `decl` references, and every name chain inside
 /// its expression strings, each tagged with `context`, the package `decl`
 /// belongs to.
-fn collect_refs(decl: &Decl, context: usize, out: &mut Vec<(String, usize)>) {
+fn collect_refs(decl: &Decl, context: usize, out: &mut Vec<Pending>) {
     // The visitor is written once, over `&mut`, so that the rewrite in
     // `reduced_package` and this read share one exhaustive walk; the clone
     // is the price of not writing the walk twice.
     let mut copy = decl.clone();
-    visit_refs(&mut copy, &mut |name| out.push((name.clone(), context)));
+    visit_refs(&mut copy, &mut |name| {
+        out.push((name.clone(), context, Origin::TypeRef));
+    });
     visit_exprs(decl, &mut |source| {
-        expr_names(source, &mut |name| out.push((name.to_owned(), context)));
+        expr_names(source, &mut |name| {
+            out.push((name.to_owned(), context, Origin::Expr));
+        });
     });
 }
 
 /// Calls `f` on every expression string inside `decl` that can name a
-/// constant or an enum: `ConstDef.value` (a constant may be defined as
-/// another constant, and the lowering keeps the name as written) and the
-/// `source` of every `Contract` of a command or a query. These strings are
-/// hashed as written and never rewritten; the names inside them are only
-/// followed, so the declarations they name enter the closure.
+/// constant or an enum: the `source` of every `Contract` of a command or a
+/// query, and `ConstDef.value`. These strings are hashed as written and
+/// never rewritten; the names inside them are only followed, so the
+/// declarations they name enter the closure.
+///
+/// `ConstDef.value` normally holds a value: `lower_const` follows a chain
+/// of constants (`const B : Level = A`) and stores the resolved value. It
+/// stores the written name only when the chain does not resolve to a
+/// value: a cycle (`const A : integer = B` with `const B : integer = A`,
+/// which `ridl check` accepts) or an unknown name. The arm follows that
+/// name, so the other constants of the cycle are hashed too.
 ///
 /// The IR's other value strings hold resolved values, not names: a
 /// constant named in a declared init is lowered as its value (`declared_init`
@@ -261,15 +318,17 @@ fn visit_exprs(decl: &Decl, f: &mut dyn FnMut(&str)) {
 /// `[A-Za-z_][A-Za-z0-9_]*` joined by `.`) and on every dotted prefix of
 /// each chain: `Mode.off` yields `Mode` and `Mode.off`, and `a.b.MAX` yields
 /// `a`, `a.b` and `a.b.MAX`, because a package name contains dots and an
-/// enum value is written after its enum's name. The caller keeps only what
-/// [`Index::resolve`] resolves.
+/// enum value is written after its enum's name. The caller keeps what
+/// [`Index::resolve_expr`] resolves: a name the declaring package holds,
+/// a qualified name, or else a bare name any other package of the build
+/// declares, which is how an imported declaration is named.
 ///
 /// A string literal (`"..."`, RFC 8259 escapes, typl §2.6) is skipped, and so
 /// is a number with its suffix or exponent (`1e3`, `10ms`). Anything else is
 /// scanned, so a parameter or a field named like a declaration also reaches
-/// that declaration, and so does a word of a string constant's value, which
-/// the lowering stores without its quotes. That over-inclusion only widens
-/// what the hash covers; it never leaves a named declaration out.
+/// that declaration. That over-inclusion only widens what the hash covers.
+/// A declaration named through an import alias is not reached (see
+/// [`Index::resolve_expr`]).
 fn expr_names(source: &str, f: &mut dyn FnMut(&str)) {
     let bytes = source.as_bytes();
     let is_start = |b: u8| b.is_ascii_alphabetic() || b == b'_';
@@ -982,7 +1041,11 @@ mod tests {
         assert_ne!(catalog_hash(&p, &[]), before);
     }
 
-    /// A constant whose value names another constant reaches it.
+    /// A constant whose `value` is the name of another constant reaches it.
+    /// The IR built here is what `lower_const` writes when it cannot follow
+    /// a constant chain to a value: a cycle (`const A : integer = B` with
+    /// `const B : integer = A`, which `ridl check` accepts) or an unknown
+    /// name. A resolvable chain is lowered as the resolved value instead.
     #[test]
     fn a_constant_named_in_a_constant_value_is_reached() {
         let mut p = guarded_fixture("level < LIMIT");
@@ -994,23 +1057,98 @@ mod tests {
         assert_ne!(catalog_hash(&p, &[]), before);
     }
 
-    /// Every dotted prefix of a name chain is followed: `Mode.off` reaches
-    /// the enum `Mode`, and `fw.MAX` reaches the foreign constant.
-    #[test]
-    fn a_dotted_name_in_an_expression_reaches_its_declarations() {
-        let mut p = guarded_fixture("mode == Mode.off && level < fw.MAX");
-        p.decls.push(Decl {
-            name: "Mode".to_owned(),
+    fn enum_decl(name: &str) -> Decl {
+        Decl {
+            name: name.to_owned(),
             kind: Some(decl::Kind::EnumDef(EnumDef::default())),
             ..Default::default()
-        });
+        }
+    }
+
+    /// Every dotted prefix of a name chain is followed, in the form the
+    /// contract checker accepts (expr-core §3.1): an enum member access
+    /// `Mode.OFF` reaches the local enum `Mode`, and `Gear.PARK`, with `Gear`
+    /// imported from `fw` under its own name, reaches `fw.Gear`.
+    #[test]
+    fn a_dotted_name_in_an_expression_reaches_its_declarations() {
+        let mut p = guarded_fixture("mode == Mode.OFF && gear != Gear.PARK");
+        p.decls.push(enum_decl("Mode"));
         let fw = Package {
             name: "fw".to_owned(),
-            decls: vec![const_decl("MAX", "u8", "7")],
+            decls: vec![enum_decl("Gear")],
             ..Default::default()
         };
         let reached: Vec<String> = reachable_decls(&p, &[&fw]).into_keys().collect();
-        assert_eq!(reached, vec!["Level", "Mode", "fw.MAX"]);
+        assert_eq!(reached, vec!["Level", "Mode", "fw.Gear"]);
+    }
+
+    /// A contract names a constant of another package by the name its
+    /// import binds, which is the constant's bare name: the checker rejects
+    /// the qualified `fw.LIMIT` in an expression. The IR records no imports,
+    /// so the bare name is looked up in every other package of the build.
+    #[test]
+    fn an_imported_constant_named_in_a_contract_is_reached() {
+        let p = guarded_fixture("level < LIMIT");
+        let mut fw = Package {
+            name: "fw".to_owned(),
+            decls: vec![const_decl("LIMIT", "Level", "130.0")],
+            ..Default::default()
+        };
+        let reached: Vec<String> = reachable_decls(&p, &[&fw]).into_keys().collect();
+        assert_eq!(reached, vec!["Level", "fw.LIMIT"]);
+        let before = hash_of(&p, &fw);
+        set_const_value(&mut fw, "LIMIT", "140.0");
+        assert_ne!(hash_of(&p, &fw), before);
+    }
+
+    /// A name inside an expression string is resolved in the package that
+    /// declares the string. `fw.LIMIT`'s value `MAX` means `fw.MAX`, not
+    /// the hashed package's own `MAX`: a bare name that the declaring
+    /// package holds resolves there before any other package is searched.
+    #[test]
+    fn a_name_in_a_foreign_constant_value_resolves_in_its_own_package() {
+        let p = guarded_fixture("level < LIMIT");
+        let fw = Package {
+            name: "fw".to_owned(),
+            decls: vec![
+                const_decl("LIMIT", "Level", "MAX"),
+                const_decl("MAX", "Level", "7"),
+            ],
+            ..Default::default()
+        };
+        let reached: Vec<String> = reachable_decls(&p, &[&fw]).into_keys().collect();
+        assert_eq!(reached, vec!["Level", "fw.LIMIT", "fw.MAX"]);
+    }
+
+    /// A query `get(level: Level) -> Level` with one `require` clause.
+    fn guarded_query(source: &str) -> Decl {
+        decl_of(
+            "get",
+            decl::Kind::QueryDef(QueryDef {
+                params: vec![param(named("Level"))],
+                return_type: Some(ReturnType {
+                    kind: Some(return_type::Kind::Value(named("Level"))),
+                }),
+                contracts: vec![Contract {
+                    kind: ContractKind::Require as i32,
+                    source: source.to_owned(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+        )
+    }
+
+    /// A query's contract clause is followed like a command's.
+    #[test]
+    fn a_constant_named_in_a_query_contract_is_reached() {
+        let mut p = guarded_fixture("");
+        p.interfaces[0].interactions = vec![guarded_query("p < MAX")];
+        let reached: Vec<String> = reachable_decls(&p, &[]).into_keys().collect();
+        assert_eq!(reached, vec!["Level", "MAX"]);
+        let before = catalog_hash(&p, &[]);
+        set_const_value(&mut p, "MAX", "200");
+        assert_ne!(catalog_hash(&p, &[]), before);
     }
 
     /// A name inside a string literal of an expression is not a reference,
@@ -1023,16 +1161,26 @@ mod tests {
         assert_eq!(reached, vec!["Level"]);
     }
 
-    /// The expression string is hashed as written: following a name does not
-    /// rewrite it.
+    /// Expression strings are hashed as written: following a name does not
+    /// rewrite it. Each string here is exactly one qualified name that
+    /// resolves to a declaration of the hashed package, whose canonical name
+    /// is bare, so a rewrite would be visible as `LIMIT` or `FLAG`.
     #[test]
     fn an_expression_string_is_hashed_as_written() {
-        let p = guarded_fixture("level < MAX");
+        let mut p = guarded_fixture("p.LIMIT");
+        p.decls.push(const_decl("LIMIT", "Level", "p.FLAG"));
+        p.decls.push(const_decl("FLAG", "Level", "1"));
         let reduced = reduced_package(&p, &[]);
+        assert!(reduced.decls.iter().any(|d| d.name == "FLAG"));
         let Some(decl::Kind::CommandDef(def)) = &reduced.interfaces[0].interactions[0].kind else {
             panic!("not a command");
         };
-        assert_eq!(def.contracts[0].source, "level < MAX");
+        assert_eq!(def.contracts[0].source, "p.LIMIT");
+        let limit = reduced.decls.iter().find(|d| d.name == "LIMIT").unwrap();
+        let Some(decl::Kind::ConstDef(def)) = &limit.kind else {
+            panic!("not a constant");
+        };
+        assert_eq!(def.value, "p.FLAG");
     }
 
     fn field_of(kind: field_type::Kind) -> FieldType {
@@ -1335,6 +1483,34 @@ mod tests {
             .map(|i| i.name)
             .collect();
         assert_eq!(names, ["I", "J"]);
+    }
+
+    fn reduced_interface_names(p: &Package, fw: &Package) -> Vec<String> {
+        reduced_package(p, &[fw])
+            .interfaces
+            .into_iter()
+            .map(|i| i.name)
+            .collect()
+    }
+
+    /// The number orders the interfaces, whatever their names: `I` numbered
+    /// 2 comes after `J` numbered 1.
+    #[test]
+    fn interfaces_are_ordered_by_number() {
+        let (mut p, fw) = two_interface_fixture();
+        p.interfaces[0].number = 2;
+        p.interfaces[1].number = 1;
+        assert_eq!(reduced_interface_names(&p, &fw), ["J", "I"]);
+    }
+
+    /// Two interfaces with the same number are ordered by name, whatever
+    /// their source order.
+    #[test]
+    fn interfaces_with_equal_numbers_are_ordered_by_name() {
+        let (mut p, fw) = two_interface_fixture();
+        p.interfaces[1].number = 1;
+        p.interfaces.reverse();
+        assert_eq!(reduced_interface_names(&p, &fw), ["I", "J"]);
     }
 
     #[test]
