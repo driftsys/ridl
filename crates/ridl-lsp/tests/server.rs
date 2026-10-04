@@ -4867,3 +4867,90 @@ fn completion_triggers_on_a_doc_link_and_a_doc_tag() {
     shut_down(&client, 1);
     server.join().expect("thread joins").expect("clean exit");
 }
+
+/// An rsdl declaration is a doc carrier too (spec 2a §3.1): a doc link in an
+/// `.rsdl` file navigates, hovers, completes and is renamed like one in a
+/// typl or ridl file.
+#[test]
+fn doc_links_work_in_an_rsdl_file() {
+    let dir = TempDir::new("doc-link-rsdl");
+    let (contracts, system) = write_rsdl_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let text = "package veh.topology\n\
+\n\
+import veh.adas.LaneAssist\n\
+\n\
+/// Keeps the lane with [LaneAssist].\n\
+/// See [\n\
+component Lane { requires LaneAssist }\n\
+\n\
+/// The system.\n\
+system Vehicle { Lane }\n";
+    did_open(&client, &system, text);
+
+    // Go-to-definition on the link lands on the interface's name.
+    let location = scalar_location(definition_at(
+        &client,
+        10,
+        system.clone(),
+        pos_in(text, "[LaneAssist]", 0, 4),
+    ));
+    assert_eq!(location.uri.as_str(), contracts.as_str());
+    assert_eq!(
+        location.range,
+        range_of(RSDL_CONTRACTS, "LaneAssist", 0),
+        "the interface declaration"
+    );
+
+    // Hover on the link shows the interface's hover, anchored to the link.
+    let hover = hover_at(
+        &client,
+        11,
+        system.clone(),
+        pos_in(text, "[LaneAssist]", 0, 4),
+    )
+    .expect("a doc link in an rsdl file has hover content");
+    let value = match hover.contents {
+        lt::HoverContents::Markup(markup) => markup.value,
+        other => panic!("expected markdown hover, got {other:?}"),
+    };
+    assert!(
+        value.contains("interface veh.adas.LaneAssist"),
+        "the target's hover: {value}"
+    );
+    assert_eq!(hover.range, Some(range_of(text, "[LaneAssist]", 0)));
+
+    // Completion after `[` reaches the imported interface and the packages.
+    let items = complete_at(&client, 12, system.clone(), pos_after(text, "See [", 0));
+    let offered = labels(&items);
+    assert!(
+        offered.contains(&"LaneAssist") && offered.contains(&"veh.adas"),
+        "reachable names in an rsdl doc: {offered:?}"
+    );
+
+    // Renaming the interface from its declaration rewrites the rsdl doc link.
+    let edit = rename_at(
+        &client,
+        13,
+        contracts.clone(),
+        pos_in(RSDL_CONTRACTS, "interface LaneAssist", 0, 12),
+        "LaneKeeping",
+    );
+    let system_edits: Vec<lt::Range> = edits_for(&edit, &system)
+        .into_iter()
+        .map(|e| e.range)
+        .collect();
+    assert_eq!(
+        system_edits,
+        vec![
+            range_of(text, "LaneAssist", 0), // the import line
+            range_of(text, "LaneAssist", 1), // the doc link
+            range_of(text, "LaneAssist", 2), // `requires LaneAssist`
+        ],
+        "the rsdl buffer's edits"
+    );
+
+    shut_down(&client, 14);
+    server.join().expect("thread joins").expect("clean exit");
+}

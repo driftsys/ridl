@@ -186,6 +186,20 @@ fn member_hover(scope: Scope<'_>, file: InputFile, offset: TextSize) -> Option<H
     })
 }
 
+/// The hover for a doc link or an `@see` target in `file` (a file of `pkg`),
+/// for a file whose own hover does not go through [`hover`] — an `.rsdl`
+/// file, whose declarations are doc carriers too.
+pub(crate) fn doc_link_hover_at(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    pkg: Package,
+    file: InputFile,
+    offset: TextSize,
+) -> Option<HoverInfo> {
+    doc_link_hover(Scope { db, ws, std, pkg }, file, offset)
+}
+
 /// The hover for a doc link or an `@see` target: the hover of its target at
 /// the target's own declaration site — a declaration's, a member's or an
 /// interaction's, whichever the link names — anchored to the link's span.

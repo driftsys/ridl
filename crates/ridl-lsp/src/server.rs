@@ -810,7 +810,20 @@ impl ServerState {
         let (file, package) = self.locate(&path)?;
         let offset = self.line_index_of(file).offset(position);
         let info = if profile_of_path(&path) == Profile::Rsdl {
-            rsdl::hover(&self.db, self.workspace, self.std, package, file, offset)?
+            // An rsdl declaration is a doc carrier too: a doc link in its
+            // doc shows the target's hover (ADR-0026).
+            rsdl::hover(&self.db, self.workspace, self.std, package, file, offset).or_else(
+                || {
+                    hover::doc_link_hover_at(
+                        &self.db,
+                        self.workspace,
+                        self.std,
+                        package,
+                        file,
+                        offset,
+                    )
+                },
+            )?
         } else {
             hover::hover(&self.db, self.workspace, self.std, package, file, offset)?
         };
@@ -837,13 +850,15 @@ impl ServerState {
         let path = convert::uri_to_path(&params.text_document_position_params.text_document.uri)?;
         let (file, package) = self.locate(&path)?;
         let offset = self.line_index_of(file).offset(position);
-        let (target, range) = if profile_of_path(&path) == Profile::Rsdl {
-            rsdl::definition(&self.db, self.workspace, self.std, file, offset)?
-        } else if let Some(located) =
-            nav::symbol_at(&self.db, self.workspace, self.std, package, file, offset)
-        {
-            (located.symbol.file, located.symbol.range)
+        let site = if profile_of_path(&path) == Profile::Rsdl {
+            rsdl::definition(&self.db, self.workspace, self.std, file, offset)
         } else {
+            nav::symbol_at(&self.db, self.workspace, self.std, package, file, offset)
+                .map(|located| (located.symbol.file, located.symbol.range))
+        };
+        // In either profile, a doc link under the cursor leads to its target
+        // (ADR-0026).
+        let (target, range) = site.or_else(|| {
             let link = nav::resolve_doc_link_at(
                 &self.db,
                 self.workspace,
@@ -858,8 +873,8 @@ impl ServerState {
                 self.std,
                 package,
                 &link.target.canonical(),
-            )?
-        };
+            )
+        })?;
         let location = self.location(target, range)?;
         Some(lt::GotoDefinitionResponse::Scalar(location))
     }
