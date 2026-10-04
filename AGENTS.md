@@ -157,7 +157,7 @@ member; rsdl is the apex.
     just lint-commits    git std lint over the commits on top of a base branch
                          (BASE defaults to main; CI passes the PR base branch)
     just pre-push        lint-commits + the static-check members of build,
-                         keeping compile — skips test, wasm-check,
+                         skips compile, lint, test, wasm-check,
                          compat-check, demo, and install-check — wired as the
                          pre-push hook
     just verify          lint-commits, then build — run before a PR
