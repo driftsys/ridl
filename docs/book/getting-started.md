@@ -784,25 +784,27 @@ ridl build --emit rust --out-dir out
 emit target, except that `catalog` writes none for a package that declares no
 interface and no service with an inline body. Nine emit targets exist today:
 
-| `--emit`      | Output               | Contents                                       |
-| ------------- | -------------------- | ---------------------------------------------- |
-| `rust`        | `<package>.rs`       | idiomatic Rust source (the default)            |
-| `ir-json`     | `<package>.ir.json`  | the lowered IR v2 as exact-decimal JSON        |
-| `ir-text`     | `<package>.ir.txtpb` | the lowered IR v2 as prototext                 |
-| `ir-binary`   | `<package>.ir.binpb` | the lowered IR v2 as protobuf binary           |
-| `typescript`  | `<package>.ts`       | idiomatic TypeScript source                    |
-| `proto`       | `<package>.proto`    | the proto3 schema — types and the ordinals     |
-| `flatbuffers` | `<package>.fbs`      | the FlatBuffers schema — types and the ordinals |
-| `codegen-model` | `<package>.codegen.json` | the lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON |
-| `catalog` | `<package>.catalog.binfb` | the catalog descriptor an engine reads — interfaces, numbers, members, sizes |
+| `--emit`        | Output                    | Contents                                                                     |
+| --------------- | ------------------------- | ---------------------------------------------------------------------------- |
+| `rust`          | `<package>.rs`            | idiomatic Rust source (the default)                                          |
+| `ir-json`       | `<package>.ir.json`       | the lowered IR v2 as exact-decimal JSON                                      |
+| `ir-text`       | `<package>.ir.txtpb`      | the lowered IR v2 as prototext                                               |
+| `ir-binary`     | `<package>.ir.binpb`      | the lowered IR v2 as protobuf binary                                         |
+| `typescript`    | `<package>.ts`            | idiomatic TypeScript source                                                  |
+| `proto`         | `<package>.proto`         | the proto3 schema — types and the ordinals                                   |
+| `flatbuffers`   | `<package>.fbs`           | the FlatBuffers schema — types and the ordinals                              |
+| `codegen-model` | `<package>.codegen.json`  | the lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON     |
+| `catalog`       | `<package>.catalog.binfb` | the catalog descriptor an engine reads — interfaces, numbers, members, sizes |
 
 One more artifact joins them when a package names a type from `ridl.std` —
 `Duration` above does — because generated code refers to standard types by
 package path and does not compile without the standard package beside it.
 The command above therefore writes `out/ridl.std.rs` as well, and
-`--emit typescript` writes `ridl.std.ts` the same way. The three IR targets are the exception: a direct
-IR dump records the packages the workspace declares, and `ridl.std` ships
-with the compiler.
+`--emit typescript` writes `ridl.std.ts` the same way. The three IR targets
+are an exception: a direct IR dump records the packages the workspace
+declares, and `ridl.std` ships with the compiler. `catalog` is the other
+exception: `ridl.std` declares no interface, so no `ridl.std.catalog.binfb`
+is written.
 
 There is no transport binding and no code generator for SOME/IP, gRPC, DDS,
 MQTT or AIDL yet. Those mappings are specified in the ridl language reference,

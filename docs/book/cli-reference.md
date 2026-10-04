@@ -689,10 +689,11 @@ Rust backend's own plugin follows its port onto the model (roadmap story
 E4.5b).
 
 **It writes** one file per package per `--emit` target, under `--out-dir`
-(`out` by default) — except that `catalog` writes none for a package that
-declares no interface and no service with an inline body — and — exactly like [`ridl check`](#ridl-check) —
+(`out` by default), and — exactly like [`ridl check`](#ridl-check) —
 `ridl.lock` at the workspace root when the manifest declares `[imports]`,
-non-frozen. `<base>` in the `--emit` list above is the package name when
+non-frozen. The exception is `catalog`, which writes no file for a package
+that declares no interface and no service with an inline body. `<base>` in the
+`--emit` list above is the package name when
 `PATH` is a package directory or a workspace root, and the input file's stem
 in single-file mode.
 
@@ -704,6 +705,8 @@ is lowered over the same scope. The three IR targets —
 `ir-json`, `ir-text`, `ir-binary` — get no such file: a direct IR dump
 records the packages the workspace declares, and `ridl.std` ships with the
 compiler rather than with the workspace ([ADR-0007][adr-0007] decision 15).
+`catalog` gets no such file either: `ridl.std` declares no interface, so no
+`ridl.std.catalog.binfb` is written.
 
 When the workspace declares a `system` (rsdl reference §3.1), each of the three
 IR targets also writes the lowered system — the closure, and every deployment
@@ -1055,10 +1058,11 @@ ridl fmt --check .
 error: cannot read ./sub: Permission denied (os error 13)
 ```
 
-Of the ten subcommands that take a path, [ADR-0010][adr-0010] decision 6
-found `ridl fmt` is the only one that reliably names the actual unreadable
-path this way in every case it was tested against; `ridl describe`, added
-later, also names the path in every exit-2 message. `ridl check`, `ridl build`,
+Of the eight subcommands [ADR-0010][adr-0010] decision 6 examined on
+2026-07-27, it found `ridl fmt` is the only one that reliably names the actual
+unreadable path this way in every case it was tested against. `ridl describe`,
+added later, names the path in every exit-2 message about a path it was given.
+`ridl check`, `ridl build`,
 `ridl baseline`, `ridl lock`, `ridlc check`, and `ridlc build` still exit 2 on
 the same inputs, but with the wrong cause or none: an unreadable *workspace root*
 reports `` error: no `ridl.toml` found at or above `<path>` `` — confirmed

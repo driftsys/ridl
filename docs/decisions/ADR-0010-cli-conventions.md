@@ -203,18 +203,21 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    two branches through git itself.
 
    **`ridl describe` earned its row on 2026-10-04, when it was added and
-   checked** by the four `describe` tests in `crates/ridl/tests/describe_cli.rs`
+   checked** by the six `describe` tests in `crates/ridl/tests/describe_cli.rs`
    against the built `ridl` binary: `describe_prints_the_descriptor_as_json`
    (exit 0), `describe_reports_a_missing_path_with_exit_2`,
-   `describe_rejects_a_foreign_file_before_any_read`, and
+   `describe_rejects_a_foreign_file_before_any_read`,
    `describe_rejects_a_truncated_and_a_flipped_descriptor` (a malformed buffer,
-   two ways). A missing path and an unreadable path take the same read-error
-   path, and every `ridl_descriptor::verify` error takes one exit-2 path. The
-   version cause is checked against `verify` itself by
-   `an_unknown_version_is_rejected` in `crates/ridl-descriptor/tests/verify.rs`,
-   because the built `ridl` writes only the version it reads. Its 1 column is
-   empty, as for `ridl lsp` and `ridl mcp`: `ridl describe` answers no question
-   that can come back negative — it prints the descriptor, or the tool could not
+   three ways: truncated, a root offset past the end, and one byte flipped
+   inside the body), `describe_rejects_a_version_this_toolchain_does_not_read`
+   (a descriptor that `ridl_descriptor::finish` writes with the next schema
+   version, because the built `ridl` writes only the version it reads), and
+   `describe_exits_2_when_stdout_is_closed` (a write I/O failure). The other
+   four exit-2 tests also check that stdout is empty. A missing path and an
+   unreadable path take the same read-error path, and every
+   `ridl_descriptor::verify` error takes one exit-2 path. Its 1 column is empty,
+   as for `ridl lsp` and `ridl mcp`: `ridl describe` answers no question that
+   can come back negative — it prints the descriptor, or the tool could not
    answer.
 
 2. **The clig.dev guidance that applies, quoted rather than paraphrased:**

@@ -198,9 +198,10 @@ that.
   its own artifact.
 
 - **`crates/ridl`** — the porcelain facade: `ridl check`, `ridl baseline`,
-  `ridl build`, `ridl test`, `ridl fmt`, `ridl diff`, `ridl lsp`, and
-  `ridl mcp`, driving the `ridlc` command drivers, the `ridl-fmt` engine, the
-  `ridl-diff` engine, and the `ridl-lsp`/`ridl-mcp` libraries (the
+  `ridl build`, `ridl test`, `ridl fmt`, `ridl diff`, `ridl lock`, `ridl lsp`,
+  `ridl mcp`, and `ridl describe`, driving the `ridlc` command drivers, the
+  `ridl-fmt` engine, the `ridl-diff` engine, the `ridl-lsp`/`ridl-mcp`
+  libraries, and the `ridl-descriptor` verifier and JSON view (the
   plumbing/porcelain split of concept note §8.1). Everything E2 added to the CLI
   landed here rather than in `ridlc`, because `ridlc` stays a pure source→IR
   function — the minimal ISO 26262 tool-qualification boundary (ADR-0008
@@ -289,14 +290,13 @@ that.
 
 - **`xtask`** — `cargo xtask codegen`, the typed-AST generator over
   `family.ungram`, and `cargo xtask descriptor-codegen`, which generates
-  `ridl-descriptor`'s accessors from `schema/catalog.fbs` with planus.
+  `ridl-descriptor`'s accessors (`crates/ridl-descriptor/src/generated.rs`) from
+  `crates/ridl-descriptor/schema/catalog.fbs` with planus.
 
-  `cargo xtask descriptor-codegen` regenerates
-  `crates/ridl-descriptor/src/generated.rs` from
-  `crates/ridl-descriptor/schema/catalog.fbs` with planus; run it after every
-  schema edit. The xtask test `committed_generated_accessors_match_the_schema`
-  fails while the committed file is stale. The schema is append-only: add fields
-  at the end of a table, never remove or reorder one.
+  Run `cargo xtask descriptor-codegen` after every schema edit. The xtask test
+  `committed_generated_accessors_match_the_schema` fails while the committed
+  file is stale. The schema is append-only: add fields at the end of a table,
+  never remove or reorder one.
 
 ## The end-to-end pipeline contract
 
