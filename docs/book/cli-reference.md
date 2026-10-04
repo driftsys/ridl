@@ -214,12 +214,14 @@ count Unicode code points (`columnKind` is `unicodeCodePoints`). The log
 carries no fix-its, which the JSON output carries, and no `helpUri`. A
 diagnostic with no source file, such as a lockfile or remote-fetch diagnostic
 (MANI-1xx), has no location. An uncoded diagnostic has no `ruleId` and no
-`ruleIndex`. An artifact URI is relative to the checked path — the directory
-given, or the parent directory of a file given — with `/` separators; a file
-outside that path keeps its path as it is. Run `ridl check --format sarif`
-from the repository root, with no `PATH` or with `.`, so that the URIs are
-relative to the repository root, which is what a code-scanning upload expects.
-The exit code is the same as for the other formats.
+`ruleIndex`. An artifact URI is relative to the current working directory,
+whatever path was checked, with `/` separators and every segment
+percent-encoded; it carries `uriBaseId` `%SRCROOT%`, which the run's
+`originalUriBaseIds` resolves to the working directory as a `file://` URI. A
+file outside the working directory is an absolute `file://` URI with no
+`uriBaseId`. Run `ridl check --format sarif` from the repository root so that
+every URI is relative to it, which is what a code-scanning upload expects. The
+exit code is the same as for the other formats.
 
 2 when the workspace itself cannot be found:
 

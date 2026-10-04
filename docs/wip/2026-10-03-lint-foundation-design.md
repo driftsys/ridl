@@ -392,13 +392,25 @@ the MCP server can reuse it later; no SARIF crate is added.
   `warning`, `info` → `note`, Error → `error`).
 - Each result: `ruleId` and `ruleIndex` for a coded diagnostic (an uncoded
   diagnostic has neither), `level` the effective level mapped the same way,
-  `message.text`, and one `location` with a `physicalLocation` (the artifact URI
-  relative to the checked root, and a `region` with 1-based start and end line
-  and column). A diagnostic whose primary span has no path in the source map
+  `message.text`, and one `location` with a `physicalLocation` (the artifact
+  location, and a `region` with 1-based start and end line and column). A
+  diagnostic whose primary span has no path in the source map
   (`FileId::DETACHED`, which the MANI-1xx manifest, lockfile and fetch
   diagnostics and the uncoded lockfile write warning carry) has no `locations`
   property.
 - Each label becomes a `relatedLocation` with its message.
+- Every artifact URI has one base, the process's working directory, whatever
+  path was checked: a file under it is a URI relative to it, with `/` separators
+  and every segment percent-encoded (RFC 3986 unreserved characters pass, every
+  other byte of the UTF-8 form is `%XX`), and carries `uriBaseId` `%SRCROOT%`;
+  the run's `originalUriBaseIds` maps `%SRCROOT%` to the working directory as a
+  `file://` URI that ends with `/`. A relative source path is joined onto the
+  working directory first, and `.` and `..` are resolved lexically, not through
+  the filesystem, before the comparison. A file outside the working directory is
+  an absolute `file://` URI with no `uriBaseId`. When the working directory
+  cannot be read, every file is an absolute `file://` URI and the run has no
+  `originalUriBaseIds`. A code-scanning upload run from the checkout root
+  therefore resolves every URI.
 - `run.columnKind` is `"unicodeCodePoints"`, because RIDL columns count
   characters and SARIF's default unit is UTF-16 code units.
 - Fix-its are not emitted. GitHub code scanning ignores them, and the JSON

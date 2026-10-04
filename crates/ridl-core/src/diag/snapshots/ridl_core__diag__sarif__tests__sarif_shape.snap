@@ -1371,6 +1371,11 @@ expression: log
           ]
         }
       },
+      "originalUriBaseIds": {
+        "%SRCROOT%": {
+          "uri": "file:///ws/"
+        }
+      },
       "results": [
         {
           "ruleId": "RIDL-100",
@@ -1383,7 +1388,8 @@ expression: log
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "sensor/demo.ridl"
+                  "uri": "sensor/demo.ridl",
+                  "uriBaseId": "%SRCROOT%"
                 },
                 "region": {
                   "startLine": 3,
@@ -1398,7 +1404,8 @@ expression: log
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "sensor/demo.ridl"
+                  "uri": "sensor/demo.ridl",
+                  "uriBaseId": "%SRCROOT%"
                 },
                 "region": {
                   "startLine": 2,
@@ -1422,7 +1429,8 @@ expression: log
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "sensor/demo.ridl"
+                  "uri": "sensor/demo.ridl",
+                  "uriBaseId": "%SRCROOT%"
                 },
                 "region": {
                   "startLine": 2,

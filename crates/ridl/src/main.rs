@@ -618,7 +618,7 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
     // the diagnostics `ridlc` already levelled do not change.
     apply_lint_levels(&mut run.diagnostics, &run.sources, &run.lints);
 
-    finish_check(run, path, format)
+    finish_check(run, format)
 }
 
 /// Publishes the workspace at `path` as a baseline.
@@ -2564,10 +2564,12 @@ fn exit_code(run: &CliRun) -> ExitCode {
 }
 
 /// Ends `ridl check`: text renders to stderr through [`finish`]; JSON and
-/// SARIF print their contract to stdout and keep the same exit code. `path`
-/// is the checked path: the SARIF artifact URIs are relative to it when it is
-/// a directory, and to its parent otherwise (lint foundation spec §7.3).
-fn finish_check(run: CliRun, path: &Path, format: CheckFormat) -> ExitCode {
+/// SARIF print their contract to stdout and keep the same exit code. The
+/// SARIF artifact URIs are relative to the working directory, not to the
+/// checked path, so one log has one base whatever path was given (lint
+/// foundation spec §7.3); a working directory that cannot be read gives
+/// absolute `file://` URIs.
+fn finish_check(run: CliRun, format: CheckFormat) -> ExitCode {
     match format {
         CheckFormat::Text => finish(Ok(run)),
         CheckFormat::Json => {
@@ -2579,15 +2581,11 @@ fn finish_check(run: CliRun, path: &Path, format: CheckFormat) -> ExitCode {
             exit_code(&run)
         }
         CheckFormat::Sarif => {
-            let root = if path.is_dir() {
-                path
-            } else {
-                path.parent().unwrap_or(Path::new(""))
-            };
+            let cwd = std::env::current_dir().ok();
             let log = ridl_core::diag::sarif::to_sarif(
                 &run.diagnostics,
                 &run.sources,
-                root,
+                cwd.as_deref(),
                 env!("CARGO_PKG_VERSION"),
             );
             println!(

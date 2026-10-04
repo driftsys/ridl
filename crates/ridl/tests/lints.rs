@@ -239,15 +239,25 @@ fn allow_is_absent_in_text_and_json() {
 /// internal, so the validator needs no network.
 const SARIF_SCHEMA: &str = include_str!("fixtures/sarif-2.1.0.json");
 
-/// Runs `ridl check --format sarif` on `root` and returns the exit code and
-/// the parsed log, after validating the log against the vendored schema.
+/// Runs `ridl check --format sarif .` from `root` and returns the exit code
+/// and the parsed log, after validating the log against the vendored schema.
 fn sarif_check(root: &Path) -> (i32, serde_json::Value) {
-    let (code, stdout, stderr) = ridl(&[
-        "check".as_ref(),
-        "--format".as_ref(),
-        "sarif".as_ref(),
-        root.as_os_str(),
-    ]);
+    sarif_check_in(root, ".".as_ref())
+}
+
+/// Runs `ridl check --format sarif <entry>` from `current_dir` and returns
+/// the exit code and the parsed log, after validating the log against the
+/// vendored schema.
+fn sarif_check_in(current_dir: &Path, entry: &OsStr) -> (i32, serde_json::Value) {
+    let (code, stdout, stderr) = ridl_in(
+        Some(current_dir),
+        &[
+            "check".as_ref(),
+            "--format".as_ref(),
+            "sarif".as_ref(),
+            entry,
+        ],
+    );
     let log: serde_json::Value = serde_json::from_str(&stdout).unwrap_or_else(|err| {
         panic!("stdout is JSON ({err}):\nstdout:\n{stdout}\nstderr:\n{stderr}")
     });
@@ -300,6 +310,114 @@ fn sarif_validates_and_denies() {
         sarif_results(&log, "RIDL-100").is_empty(),
         "an allowed lint is absent from the SARIF log:\n{log}"
     );
+}
+
+/// A second file of the `demo` package, in its `sub` directory, with one
+/// untimed signal: it draws one RIDL-100 and nothing else.
+const SUB_SOURCE: &str = "package demo.sub\n\ntype Level: integer [0..10]\n\ninterface Gauge {\n  \
+                          signal level: Level\n}\n";
+
+/// A package at `ws/` with `ws/sensor.ridl` and `ws/sub/<sub_file>`, each
+/// drawing one RIDL-100. The fixture for the artifact URI tests, which run
+/// the binary from `dir` so that `ws/` is one level below the working
+/// directory.
+fn two_level_package(dir: &TempDir, sub_file: &str) {
+    dir.write(
+        "ws/ridl.toml",
+        "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("ws/sensor.ridl", SOURCE);
+    dir.write(&format!("ws/sub/{sub_file}"), SUB_SOURCE);
+}
+
+/// The `file://` URI of an absolute path, percent-encoding every byte outside
+/// the RFC 3986 unreserved set and `/`, as the binary is expected to write
+/// the `%SRCROOT%` base.
+fn file_uri(path: &Path) -> String {
+    let mut uri = String::from("file://");
+    for byte in path.to_str().expect("the temp dir is UTF-8").bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' => {
+                uri.push(byte as char);
+            }
+            _ => uri.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    uri
+}
+
+/// The `(uri, uriBaseId)` pair of each RIDL-100 result's primary location,
+/// sorted by URI.
+fn ridl_100_locations(log: &serde_json::Value) -> Vec<(String, Option<String>)> {
+    let mut locations: Vec<(String, Option<String>)> = sarif_results(log, "RIDL-100")
+        .iter()
+        .map(|result| {
+            let location = &result["locations"][0]["physicalLocation"]["artifactLocation"];
+            (
+                location["uri"]
+                    .as_str()
+                    .expect("uri is a string")
+                    .to_string(),
+                location["uriBaseId"].as_str().map(str::to_string),
+            )
+        })
+        .collect();
+    locations.sort();
+    locations
+}
+
+/// Asserts that `log` names the working directory `cwd` as `%SRCROOT%`, as a
+/// `file://` URI that ends with `/`, and that both RIDL-100 results carry
+/// `sub_uri` and `ws/sensor.ridl` relative to that base.
+fn assert_cwd_relative_uris(log: &serde_json::Value, cwd: &Path, sub_uri: &str) {
+    let cwd = cwd.canonicalize().expect("the temp dir resolves");
+    let expected_base = format!("{}/", file_uri(&cwd));
+    assert_eq!(
+        log["runs"][0]["originalUriBaseIds"]["%SRCROOT%"]["uri"], expected_base,
+        "{log}"
+    );
+    let base = Some("%SRCROOT%".to_string());
+    assert_eq!(
+        ridl_100_locations(log),
+        vec![
+            ("ws/sensor.ridl".to_string(), base.clone()),
+            (sub_uri.to_string(), base),
+        ],
+        "{log}"
+    );
+}
+
+/// An entry at a file: the URIs are relative to the working directory, not to
+/// the file's directory.
+#[test]
+fn sarif_uris_are_cwd_relative_from_a_file_entry() {
+    let dir = TempDir::new("sarif-uri-file");
+    two_level_package(&dir, "gauge.ridl");
+    let (code, log) = sarif_check_in(dir.path(), "ws/sensor.ridl".as_ref());
+    assert_eq!(code, 0, "{log}");
+    assert_cwd_relative_uris(&log, dir.path(), "ws/sub/gauge.ridl");
+}
+
+/// An entry at a subdirectory of the package: the file above the entry and
+/// the file inside it share one base, the working directory.
+#[test]
+fn sarif_uris_are_cwd_relative_from_a_subdirectory_entry() {
+    let dir = TempDir::new("sarif-uri-subdir");
+    two_level_package(&dir, "gauge.ridl");
+    let (code, log) = sarif_check_in(dir.path(), "ws/sub".as_ref());
+    assert_eq!(code, 0, "{log}");
+    assert_cwd_relative_uris(&log, dir.path(), "ws/sub/gauge.ridl");
+}
+
+/// A file name with a space and a `#` is percent-encoded, so the URI is a
+/// valid URI reference.
+#[test]
+fn sarif_uris_percent_encode_a_space_and_a_hash() {
+    let dir = TempDir::new("sarif-uri-encode");
+    two_level_package(&dir, "b c#1.ridl");
+    let (code, log) = sarif_check_in(dir.path(), "ws".as_ref());
+    assert_eq!(code, 0, "{log}");
+    assert_cwd_relative_uris(&log, dir.path(), "ws/sub/b%20c%231.ridl");
 }
 
 /// The rendered note line for a file whose line numbers have one digit
