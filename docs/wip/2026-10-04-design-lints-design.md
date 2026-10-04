@@ -3,8 +3,8 @@
 Status: design spec for piece 1b of
 [`2026-10-03-devex-and-agent-tracks-brief.md`](2026-10-03-devex-and-agent-tracks-brief.md),
 written 2026-10-04 against `main` at c1e63351. Sebastien agreed the approach in
-the brainstorming session of 2026-10-04 (decisions D-1 to D-8, §2). D-9 is
-proposed by this spec and is not yet agreed. It is archived with its plan when
+the brainstorming session of 2026-10-04 (decisions D-1 to D-8, §2), and approved
+the written spec, D-9 included, the same day. It is archived with its plan when
 the work lands.
 
 Satisfies: the brief's piece 1b, and the first step of piece 1c ("start
@@ -99,12 +99,12 @@ eval tasks, so 1b also seeds the eval set and fixes its format.
   the machine-checkable expectations, `prompt.md` for what the designer asks,
   `rubric.md` for what a good answer contains. The seed is about ten tasks,
   weighted toward review and evolution, as the maintainer weighted them.
-- **D-9 (proposed, not yet agreed). Review rubrics are written before the checks
-  run.** The review tasks' rubrics list the real design issues of a corpus
-  workspace. Written before anyone sees the lint findings, they are an
-  independent reference: they give each check a recall figure (which listed
-  issues it finds) beside its precision, and they keep the labels in §7 from
-  being anchored on the checks' own output. Recall is reported, not gated.
+- **D-9. Review rubrics are written before the checks run.** The review tasks'
+  rubrics list the real design issues of a corpus workspace. Written before
+  anyone sees the lint findings, they are an independent reference: they give
+  each check a recall figure (which listed issues it finds) beside its
+  precision, and they keep the labels in §7 from being anchored on the checks'
+  own output. Recall is reported, not gated.
 
 ## 3. The corpus and the porting brief
 
