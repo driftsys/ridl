@@ -187,6 +187,13 @@ const ALLOWED: &[Allowed] = &[
               field, not a read of `Package::interfaces`",
     },
     Allowed {
+        path: "crates/ridl/tests/describe_cli.rs",
+        lines: 1,
+        why: "a test reading the catalog descriptor's own `Catalog.interfaces` \
+              field back out of a buffer that `ridl build --emit catalog` \
+              wrote, not a read of `Package::interfaces`",
+    },
+    Allowed {
         path: "crates/ridl-ir/src/catalog_hash.rs",
         lines: 34,
         why: "the reduced package's own `interfaces` field, which the hash \

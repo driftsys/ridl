@@ -9,12 +9,24 @@ impl TempDir {
     fn new(label: &str) -> Self {
         let dir =
             std::env::temp_dir().join(format!("ridl-describe-{label}-{}", std::process::id()));
+        // A directory left by an earlier process with the same id is
+        // emptied, so a test reads only what its own build wrote.
+        let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("create the temporary directory");
         Self(dir)
     }
 
     fn path(&self) -> &Path {
         &self.0
+    }
+
+    /// Writes `contents` to `relative`, creating its parent directories.
+    fn write(&self, relative: &str, contents: &str) -> PathBuf {
+        let path = self.0.join(relative);
+        std::fs::create_dir_all(path.parent().expect("a file has a parent"))
+            .expect("create the parent directory");
+        std::fs::write(&path, contents).expect("write the file");
+        path
     }
 }
 
@@ -47,9 +59,14 @@ fn corpus() -> PathBuf {
 
 /// Builds the corpus with `--emit <emits>` into `out`, asserting exit 0.
 fn build(out: &Path, emits: &str) {
+    build_from(&corpus(), out, emits);
+}
+
+/// Builds `entry` with `--emit <emits>` into `out`, asserting exit 0.
+fn build_from(entry: &Path, out: &Path, emits: &str) {
     let (code, _, stderr) = ridl(&[
         "build".as_ref(),
-        corpus().as_os_str(),
+        entry.as_os_str(),
         "--out-dir".as_ref(),
         out.as_os_str(),
         "--emit".as_ref(),
@@ -58,15 +75,26 @@ fn build(out: &Path, emits: &str) {
     assert_eq!(code, 0, "`--emit {emits}` failed: {stderr}");
 }
 
-/// The one `*.catalog.binfb` in `out`.
-fn the_catalog(out: &Path) -> PathBuf {
-    let mut found: Vec<PathBuf> = std::fs::read_dir(out)
+/// Every `*.catalog.binfb` in `out`, by file name, sorted.
+fn catalogs_in(out: &Path) -> Vec<String> {
+    let mut found: Vec<String> = std::fs::read_dir(out)
         .unwrap()
-        .map(|e| e.unwrap().path())
-        .filter(|p| p.to_string_lossy().ends_with(".catalog.binfb"))
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|name| name.ends_with(".catalog.binfb"))
         .collect();
-    assert_eq!(found.len(), 1, "exactly one catalog descriptor: {found:?}");
-    found.pop().unwrap()
+    found.sort();
+    found
+}
+
+/// The one `*.catalog.binfb` in `out`, which must be the corpus package's
+/// `corpus.baseline.catalog.binfb`.
+fn the_catalog(out: &Path) -> PathBuf {
+    assert_eq!(
+        catalogs_in(out),
+        vec!["corpus.baseline.catalog.binfb".to_owned()],
+        "exactly one catalog descriptor, named after the package"
+    );
+    out.join("corpus.baseline.catalog.binfb")
 }
 
 /// Builds the corpus with `--emit catalog` into `out` and returns the one
@@ -139,8 +167,9 @@ fn rust_catalog_hashes(source: &str) -> Vec<Vec<u8>> {
 
 /// The descriptor and the generated Rust face are the two artifacts a pair is
 /// built from, and the port's catalog check compares their hashes. Both come
-/// from `ridl_ir::catalog_hash`; this fails if `ridlc` gives the two
-/// different `others`.
+/// from `ridl_ir::catalog_hash`. The corpus package imports nothing, so this
+/// test does not see which `others` each artifact is given;
+/// `descriptor_hash_equals_the_rust_face_hash_across_packages` does.
 #[test]
 fn descriptor_hash_equals_the_rust_face_hash() {
     let out = TempDir::new("rust-hash");
@@ -184,4 +213,112 @@ fn build_writes_no_descriptor_for_a_package_without_an_interface_shape() {
         .filter(|p| p.to_string_lossy().ends_with(".catalog.binfb"))
         .collect();
     assert!(written.is_empty(), "no catalog descriptor: {written:?}");
+}
+
+/// The descriptor is named `<base>.catalog.binfb` with the base the IR dumps
+/// use, the package name: `corpus.baseline.ir.binpb` beside it.
+#[test]
+fn the_descriptor_takes_the_ir_dumps_base_name() {
+    let out = TempDir::new("base");
+    build(out.path(), "ir-binary,catalog");
+    assert!(out.path().join("corpus.baseline.ir.binpb").is_file());
+    assert!(the_catalog(out.path()).is_file());
+}
+
+/// The hash of `bytes`, a catalog descriptor, and the one `CatalogHash` every
+/// `Interface` impl of the face `source` carries.
+fn hashes(bytes: &[u8], source: &str) -> (Vec<u8>, Vec<u8>) {
+    let catalog = ridl_descriptor::verify(bytes).expect("the descriptor verifies");
+    let descriptor_hash = catalog.hash().expect("the descriptor carries a hash");
+    let face_hashes = rust_catalog_hashes(source);
+    assert!(!face_hashes.is_empty(), "the face names a catalog hash");
+    assert!(
+        face_hashes.windows(2).all(|w| w[0] == w[1]),
+        "one hash per package"
+    );
+    (descriptor_hash.to_vec(), face_hashes[0].clone())
+}
+
+/// A two-package workspace: `veh.common` declares the types, `veh.cluster`
+/// imports them and declares the one interface. The catalog hash of
+/// `veh.cluster` covers the imported types, so the descriptor and the face
+/// agree only if `ridlc` gives both the same `others`.
+#[test]
+fn descriptor_hash_equals_the_rust_face_hash_across_packages() {
+    let src = TempDir::new("two-src");
+    src.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"common\", \"cluster\"]\n",
+    );
+    src.write(
+        "common/ridl.toml",
+        "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n",
+    );
+    src.write(
+        "common/common.typl",
+        "package veh.common\n\
+type Speed: km/h [0.0..250.0 step 0.5]\n\
+struct Reading {\n  speed: Speed\n}\n",
+    );
+    src.write(
+        "cluster/ridl.toml",
+        "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n",
+    );
+    src.write(
+        "cluster/cluster.ridl",
+        "package veh.cluster\n\
+import veh.common.Speed\n\
+import veh.common.Reading\n\
+interface Dash {\n\
+  signal speed: Speed @10ms\n\
+  event reading: Reading @[100ms..1s]\n\
+}\n",
+    );
+    let out = TempDir::new("two-out");
+    build_from(src.path(), out.path(), "rust,catalog");
+
+    // `veh.common` declares no interface shape, so it has no descriptor.
+    assert_eq!(
+        catalogs_in(out.path()),
+        vec!["veh.cluster.catalog.binfb".to_owned()]
+    );
+    let bytes = std::fs::read(out.path().join("veh.cluster.catalog.binfb")).unwrap();
+    let source = std::fs::read_to_string(out.path().join("veh.cluster.rs"))
+        .expect("`--emit rust` writes veh.cluster.rs");
+    let (descriptor_hash, face_hash) = hashes(&bytes, &source);
+    assert_eq!(descriptor_hash, face_hash);
+}
+
+/// A package whose one interface shape is a service's inline body still has
+/// a catalog: the descriptor is written and names the interface after the
+/// service's dotted name. A single-file build takes the file stem as the
+/// base, for the descriptor as for the IR dump.
+#[test]
+fn a_service_inline_body_alone_gets_a_descriptor() {
+    let src = TempDir::new("service-src");
+    let file = src.write(
+        "hvac.ridl",
+        "package veh.hvac\n\
+type Temp: Cel [-40.0..125.0 step 0.1]\n\
+service veh.hvac.cabin {\n\
+  signal cabinTemp: Temp @[500ms..5s]\n\
+}\n",
+    );
+    let out = TempDir::new("service-out");
+    build_from(&file, out.path(), "ir-binary,catalog");
+
+    assert!(out.path().join("hvac.ir.binpb").is_file());
+    assert_eq!(
+        catalogs_in(out.path()),
+        vec!["hvac.catalog.binfb".to_owned()]
+    );
+    let bytes = std::fs::read(out.path().join("hvac.catalog.binfb")).unwrap();
+    let catalog = ridl_descriptor::verify(&bytes).expect("the descriptor verifies");
+    let names: Vec<&str> = catalog
+        .interfaces()
+        .unwrap()
+        .iter()
+        .map(|interface| interface.unwrap().name().unwrap())
+        .collect();
+    assert_eq!(names, vec!["veh.hvac.cabin"]);
 }
