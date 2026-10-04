@@ -40,6 +40,7 @@ use ridl_core::package::{Package, Workspace, service_catalog};
 use ridl_syntax::Profile;
 use rowan::TextRange;
 
+use crate::docs::DocInfo;
 use crate::resolve::source_file;
 
 /// The name of the unit instance: the one instance of a component that
@@ -230,6 +231,8 @@ pub struct SystemDecl {
     /// The member lines, in source order.
     pub members: Vec<MemberRef>,
     pub attrs: DeclAttrs,
+    /// The doc comment (typl §14, ADR-0026).
+    pub doc: DocInfo,
 }
 
 /// A `component` declaration (rsdl §3.2).
@@ -250,6 +253,8 @@ pub struct ComponentDecl {
     /// and still sets the flag.
     pub external: bool,
     pub attrs: DeclAttrs,
+    /// The doc comment (typl §14, ADR-0026).
+    pub doc: DocInfo,
 }
 
 /// A `distribution` declaration (rsdl §3.3).
@@ -261,6 +266,8 @@ pub struct DistributionDecl {
     /// `None` when `tier` is absent, or when its value drew RSDL-908.
     pub tier: Option<Tier>,
     pub attrs: DeclAttrs,
+    /// The doc comment (typl §14, ADR-0026).
+    pub doc: DocInfo,
 }
 
 /// A `deployment` declaration and its machines (rsdl §3.4).
@@ -272,6 +279,8 @@ pub struct DeploymentDecl {
     pub system: Option<Reference>,
     pub machines: Vec<MachineDecl>,
     pub attrs: DeclAttrs,
+    /// The doc comment (typl §14, ADR-0026).
+    pub doc: DocInfo,
 }
 
 /// A `machine` declaration inside a deployment (rsdl §3.5).
@@ -283,6 +292,8 @@ pub struct MachineDecl {
     /// The `external` flag, read as on a component.
     pub external: bool,
     pub attrs: DeclAttrs,
+    /// The doc comment (typl §14, ADR-0026).
+    pub doc: DocInfo,
 }
 
 /// One body line: a member line of a `system`, `distribution` or `machine`,
@@ -292,6 +303,8 @@ pub struct MachineDecl {
 pub struct MemberRef {
     pub reference: Reference,
     pub backend_keys: Vec<BackendKey>,
+    /// The line's doc comment (typl §14, ADR-0026).
+    pub doc: DocInfo,
 }
 
 /// A reference as written (rsdl §4): its dotted segments, its site, and the

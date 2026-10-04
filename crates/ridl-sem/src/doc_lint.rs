@@ -6,18 +6,30 @@
 //! `.rsdl` file is also a package file, so [`lint_package`] skips it and the
 //! file is linted once.
 //!
-//! The checks so far:
+//! The checks:
 //!
+//! - TYPL-404 `detached-doc-comment`: a blank line between a doc comment and
+//!   its carrier, on every carrier (typl §14, ADR-0026).
+//! - TYPL-407 `misplaced-doc-comment`: a doc comment whose next non-trivia
+//!   sibling is not a carrier node — before `package`, an `import`, a return
+//!   type or an attribute block, or at the end of a file or a body.
+//! - TYPL-408 `unknown-doc-tag` and TYPL-409 `malformed-doc-tag`: the tag
+//!   problems the scanner (`crate::docs`) returns for a carrier's doc.
 //! - TYPL-410 `doc-comment-style`: a doc comment written as `/** */`. The lint
 //!   is `allow` by default (ADR-0024 decision 1), so a project opts in to
 //!   requiring `///` doc comments.
+//!
+//! TYPL-405 `deprecated-without-reason` stays in the checker, beside the
+//! lowering that marks the declaration deprecated.
 
 use ridl_core::db::{InputFile, profile_of_path};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, FixIt, Severity, Span};
-use ridl_syntax::ast::{AstNode, SourceFile};
-use ridl_syntax::{Profile, SyntaxKind, SyntaxToken};
+use ridl_syntax::ast::{AstNode, SourceFile, doc_comments_before};
+use ridl_syntax::{Profile, SyntaxKind, SyntaxNode, SyntaxToken};
+use rowan::{NodeOrToken, TextRange};
 
 use crate::check::Checker;
+use crate::docs::{self, TagProblemKind};
 use crate::resolve::source_file;
 
 /// Runs the doc lints over every `.typl` and `.ridl` file of the package and
@@ -39,20 +51,206 @@ pub(crate) fn lint_rsdl_file(file: &SourceFile, file_id: FileId) -> Vec<Diagnost
     lint_file(file, file_id)
 }
 
-/// The doc lints of one file.
+/// The doc lints of one file, in source order: the per-token checks for each
+/// doc comment, then the per-carrier checks when a carrier follows it.
 fn lint_file(file: &SourceFile, file_id: FileId) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
-    for token in file
-        .syntax()
-        .descendants_with_tokens()
-        .filter_map(|element| element.into_token())
-        .filter(|token| token.kind() == SyntaxKind::DocComment)
-    {
-        if let Some(diagnostic) = doc_comment_style(&token, file_id) {
-            diagnostics.push(diagnostic);
+    for element in file.syntax().descendants_with_tokens() {
+        match element {
+            NodeOrToken::Token(token) if token.kind() == SyntaxKind::DocComment => {
+                diagnostics.extend(doc_comment_style(&token, file_id));
+                diagnostics.extend(misplaced_doc_comment(&token, file_id));
+            }
+            NodeOrToken::Node(node) if is_carrier(node.kind()) => {
+                let docs = doc_comments_before(&node);
+                if docs.is_empty() {
+                    continue;
+                }
+                diagnostics.extend(detached_doc_comment(&node, file_id));
+                diagnostics.extend(tag_problems(&docs, file_id));
+            }
+            _ => {}
         }
     }
     diagnostics
+}
+
+/// Whether a node of `kind` is a doc carrier (typl §14, ADR-0026): a
+/// declaration, an interaction, a member, a call parameter, or an rsdl
+/// declaration or body line.
+fn is_carrier(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        SyntaxKind::TypeDef
+            | SyntaxKind::ConstDef
+            | SyntaxKind::StructDef
+            | SyntaxKind::EnumDef
+            | SyntaxKind::EnumSetDef
+            | SyntaxKind::UnionDef
+            | SyntaxKind::FieldDef
+            | SyntaxKind::ReservedEntry
+            | SyntaxKind::EnumValue
+            | SyntaxKind::EnumSetBit
+            | SyntaxKind::UnionArm
+            | SyntaxKind::InterfaceDef
+            | SyntaxKind::ServiceDef
+            | SyntaxKind::SignalDef
+            | SyntaxKind::EventDef
+            | SyntaxKind::CommandDef
+            | SyntaxKind::QueryDef
+            | SyntaxKind::FixedDef
+            | SyntaxKind::Param
+            | SyntaxKind::SystemDef
+            | SyntaxKind::ComponentDef
+            | SyntaxKind::ComponentLine
+            | SyntaxKind::DistributionDef
+            | SyntaxKind::DeploymentDef
+            | SyntaxKind::MachineDef
+            | SyntaxKind::MemberLine
+    )
+}
+
+/// TYPL-407: a doc comment whose next non-trivia sibling is not a carrier
+/// node, or that has none. A doc comment inside a recovery node, or followed
+/// by one, is not reported: the parse error already names what is wrong there.
+fn misplaced_doc_comment(token: &SyntaxToken, file_id: FileId) -> Option<Diagnostic> {
+    if token
+        .parent()
+        .is_some_and(|parent| parent.kind() == SyntaxKind::ErrorNode)
+    {
+        return None;
+    }
+    let mut cursor = token.next_sibling_or_token();
+    while let Some(NodeOrToken::Token(next)) = &cursor {
+        if !next.kind().is_trivia() {
+            break;
+        }
+        cursor = next.next_sibling_or_token();
+    }
+    let position = match &cursor {
+        Some(NodeOrToken::Node(node)) if is_carrier(node.kind()) => return None,
+        Some(NodeOrToken::Node(node)) if node.kind() == SyntaxKind::ErrorNode => return None,
+        Some(NodeOrToken::Node(node)) => match node.kind() {
+            SyntaxKind::PackageDecl => "the `package` header".to_string(),
+            SyntaxKind::Import => "an `import`".to_string(),
+            SyntaxKind::ReturnType => "a return type".to_string(),
+            SyntaxKind::AttrBlock => "an attribute block".to_string(),
+            other => format!("a {other:?}"),
+        },
+        Some(NodeOrToken::Token(next)) => format!("`{}`", next.text()),
+        None => "the end of the file".to_string(),
+    };
+    Some(Diagnostic {
+        code: DiagCode::TYPL_407,
+        severity: Severity::Warning,
+        message: format!(
+            "misplaced doc comment: {position} follows it, and a doc comment documents the \
+             declaration or member after it"
+        ),
+        primary: Span {
+            file: file_id,
+            range: token.text_range(),
+        },
+        labels: Vec::new(),
+        fixits: Vec::new(),
+    })
+}
+
+/// TYPL-404: a blank line between a carrier's doc comment and the carrier. The
+/// whitespace token immediately before the carrier is read — two or more line
+/// breaks is a blank line. Doc comments are trivia, so the tree attaches them
+/// across the blank line even though the spec warns about the gap.
+fn detached_doc_comment(node: &SyntaxNode, file_id: FileId) -> Option<Diagnostic> {
+    let detached = matches!(
+        node.prev_sibling_or_token(),
+        Some(NodeOrToken::Token(token))
+            if token.kind() == SyntaxKind::Whitespace
+                && token.text().matches('\n').count() >= 2
+    );
+    if !detached {
+        return None;
+    }
+    let (name, range) = carrier_name(node);
+    let what = match name {
+        Some(name) => format!("`{name}`"),
+        None => "the member".to_string(),
+    };
+    Some(Diagnostic {
+        code: DiagCode::TYPL_404,
+        severity: Severity::Warning,
+        message: format!("blank line between the doc comment and {what}"),
+        primary: Span {
+            file: file_id,
+            range,
+        },
+        labels: Vec::new(),
+        fixits: Vec::new(),
+    })
+}
+
+/// TYPL-408 and TYPL-409: the tag problems of one carrier's doc, each at the
+/// span of its tag text.
+fn tag_problems(docs: &[SyntaxToken], file_id: FileId) -> Vec<Diagnostic> {
+    docs::scan(docs)
+        .problems
+        .into_iter()
+        .map(|problem| {
+            let (code, message) = match problem.kind {
+                TagProblemKind::Unknown(word) => (
+                    DiagCode::TYPL_408,
+                    format!(
+                        "unknown doc tag `@{word}`; the tags are `@see`, `@since`, `@deprecated` \
+                         and `@labels`"
+                    ),
+                ),
+                TagProblemKind::Malformed("see") => (
+                    DiagCode::TYPL_409,
+                    "malformed `@see`: the value is one qualified name, `Name`, `pkg.Name` or \
+                     `pkg.Name.member`"
+                        .to_string(),
+                ),
+                TagProblemKind::Malformed(tag) => (
+                    DiagCode::TYPL_409,
+                    format!(
+                        "malformed `@{tag}`: the value is a version, `MAJOR.MINOR` or \
+                         `MAJOR.MINOR.PATCH`"
+                    ),
+                ),
+            };
+            Diagnostic {
+                code,
+                severity: Severity::Warning,
+                message,
+                primary: Span {
+                    file: file_id,
+                    range: problem.source,
+                },
+                labels: Vec::new(),
+                fixits: Vec::new(),
+            }
+        })
+        .collect()
+}
+
+/// The name a carrier declares and its range: the text of its `Name`,
+/// `DottedName` or `Reference` child. A carrier the parser recovered without
+/// one yields no name and the carrier's own range.
+fn carrier_name(node: &SyntaxNode) -> (Option<String>, TextRange) {
+    let Some(name) = node.children().find(|child| {
+        matches!(
+            child.kind(),
+            SyntaxKind::Name | SyntaxKind::DottedName | SyntaxKind::Reference
+        )
+    }) else {
+        return (None, node.text_range());
+    };
+    let text: String = name
+        .descendants_with_tokens()
+        .filter_map(|element| element.into_token())
+        .filter(|token| !token.kind().is_trivia())
+        .map(|token| token.text().to_string())
+        .collect();
+    (Some(text), name.text_range())
 }
 
 /// TYPL-410: a doc comment written as `/** */`, with one fix-it that rewrites
@@ -313,6 +511,140 @@ mod tests {
             replacement(" Code:\n    a\n\n      b "),
             "/// Code:\n/// a\n///\n///   b"
         );
+    }
+
+    /// The diagnostics with `code`, in order.
+    fn with_code(checked: &CheckedPackage, code: DiagCode) -> Vec<&Diagnostic> {
+        checked
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code == code)
+            .collect()
+    }
+
+    /// The source text under a diagnostic's primary span.
+    fn spanned<'a>(text: &'a str, diagnostic: &Diagnostic) -> &'a str {
+        let range = diagnostic.primary.range;
+        &text[usize::from(range.start())..usize::from(range.end())]
+    }
+
+    /// TYPL-407: one fixture per position of ADR-0026 that is not a carrier,
+    /// and a doc above a field, which is one.
+    #[test]
+    fn misplaced_doc_comment_positions() {
+        let misplaced = [
+            ("above package", "/// Doc.\npackage demo\n"),
+            (
+                "above import",
+                "package demo\n/// Doc.\nimport veh.common.Speed\n",
+            ),
+            (
+                "before a return type",
+                "package demo\ntype S: integer [0..1]\ninterface I {\n  query q()\n  /// Doc.\n  : S @[..50ms]\n}\n",
+            ),
+            (
+                "at the end of the file",
+                "package demo\ntype S: integer [0..1]\n/// Doc.\n",
+            ),
+        ];
+        for (position, text) in misplaced {
+            let checked = check_source("demo.ridl", text);
+            let found = with_code(&checked, DiagCode::TYPL_407);
+            assert_eq!(found.len(), 1, "{position}: {:?}", checked.diagnostics);
+            assert_eq!(found[0].severity, Severity::Warning, "{position}");
+            assert_eq!(spanned(text, found[0]), "/// Doc.", "{position}");
+        }
+        let checked = check_source(
+            "demo.typl",
+            "package demo\nstruct S {\n  /// Doc.\n  a: boolean\n}\n",
+        );
+        assert_eq!(checked.diagnostics, Vec::new());
+    }
+
+    /// A doc comment in a region the parser recovered draws no TYPL-407: the
+    /// parse error is the diagnosis.
+    #[test]
+    fn misplaced_doc_comment_is_quiet_inside_a_recovery_node() {
+        let text = "package demo\nstruct S {\n  /// Doc.\n  : boolean\n}\n";
+        let checked = check_source("demo.typl", text);
+        assert_eq!(
+            with_code(&checked, DiagCode::TYPL_407),
+            Vec::<&Diagnostic>::new()
+        );
+    }
+
+    /// TYPL-404 on a member: a blank line between a field's doc and the field.
+    #[test]
+    fn detached_doc_on_a_field() {
+        let text = "package demo\nstruct S {\n  /// Doc.\n\n  a: boolean\n}\n";
+        let checked = check_source("demo.typl", text);
+        let found = with_code(&checked, DiagCode::TYPL_404);
+        assert_eq!(found.len(), 1, "{:?}", checked.diagnostics);
+        assert_eq!(found[0].severity, Severity::Warning);
+        assert_eq!(spanned(text, found[0]), "a");
+        assert!(found[0].message.contains("`a`"), "{}", found[0].message);
+        assert_eq!(
+            with_code(&checked, DiagCode::TYPL_407),
+            Vec::<&Diagnostic>::new()
+        );
+    }
+
+    /// TYPL-408 and TYPL-409, each at the span of its tag text.
+    #[test]
+    fn unknown_and_malformed_tags() {
+        let text = "package demo\n/// A speed.\n/// @sinc 1.0\n/// @since soon\n/// @see\ntype S: integer [0..1]\n";
+        let checked = check_source("demo.typl", text);
+        let unknown = with_code(&checked, DiagCode::TYPL_408);
+        assert_eq!(unknown.len(), 1, "{:?}", checked.diagnostics);
+        assert_eq!(spanned(text, unknown[0]), "@sinc 1.0");
+        assert!(
+            unknown[0].message.contains("`@sinc`"),
+            "{}",
+            unknown[0].message
+        );
+        let malformed = with_code(&checked, DiagCode::TYPL_409);
+        assert_eq!(malformed.len(), 2, "{:?}", checked.diagnostics);
+        assert_eq!(spanned(text, malformed[0]), "@since soon");
+        assert_eq!(spanned(text, malformed[1]), "@see");
+        assert!(
+            malformed[0].message.contains("`@since`"),
+            "{}",
+            malformed[0].message
+        );
+        assert!(
+            malformed[1].message.contains("`@see`"),
+            "{}",
+            malformed[1].message
+        );
+        assert_eq!(
+            with_code(&checked, DiagCode::TYPL_407),
+            Vec::<&Diagnostic>::new()
+        );
+        assert_eq!(
+            with_code(&checked, DiagCode::TYPL_404),
+            Vec::<&Diagnostic>::new()
+        );
+    }
+
+    /// The tag lints read a member's doc too.
+    #[test]
+    fn unknown_tag_on_a_parameter() {
+        let text = "package demo\ntype S: integer [0..1]\ninterface I {\n  command c(\n    /// @param x\n    a: S\n  ) @[..50ms]\n}\n";
+        let checked = check_source("demo.ridl", text);
+        let unknown = with_code(&checked, DiagCode::TYPL_408);
+        assert_eq!(unknown.len(), 1, "{:?}", checked.diagnostics);
+        assert_eq!(spanned(text, unknown[0]), "@param x");
+    }
+
+    /// `lint_rsdl_file` runs the positional and tag lints over an `.rsdl` file.
+    #[test]
+    fn lint_rsdl_file_runs_the_positional_and_tag_lints() {
+        let text = "/// Doc.\npackage demo\n\n/// @sinc 1.0\nsystem S {\n}\n";
+        let parse = ridl_syntax::parse(text, Profile::Rsdl);
+        let file = SourceFile::cast(parse.syntax()).expect("the root is a SourceFile");
+        let found = lint_rsdl_file(&file, FileId::DETACHED);
+        let codes: Vec<&str> = found.iter().map(|d| d.code.as_str()).collect();
+        assert_eq!(codes, ["TYPL-407", "TYPL-408"], "{found:?}");
     }
 
     /// `check_package` leaves a `.rsdl` file to `check_system`, so its doc

@@ -488,11 +488,12 @@ fn visit_field_type(ty: &mut FieldType, f: &mut dyn FnMut(&mut String)) {
     }
 }
 
-/// Clears every doc string and doc tag inside `decl`: `doc`, `labels` and
-/// `deprecated` (typl §14). The IR carries `doc` on `Decl`, `Field`,
-/// `EnumValue` (in `EnumDef.values` and `EnumSetDef.bits`) and `UnionArm`,
-/// and `labels` and `deprecated` on `Decl` and `Field`; no other message that
-/// can occur inside a declaration has one.
+/// Clears every doc field inside `decl` (typl §14, ADR-0026): `doc`, `labels`,
+/// `deprecated`, `links`, `see` and `since`. The IR carries `doc`, `links`,
+/// `see` and `since` on every doc carrier inside a declaration — `Decl`,
+/// `Field`, `EnumValue` (in `EnumDef.values` and `EnumSetDef.bits`),
+/// `UnionArm` and `Param` — and `labels` and `deprecated` on `Decl` and
+/// `Field`; no other message that can occur inside a declaration has one.
 fn blank_docs(decl: &mut Decl) {
     decl.doc.clear();
     decl.labels.clear();

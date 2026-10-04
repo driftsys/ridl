@@ -526,15 +526,34 @@ diag_codes! {
         TYPL_304 = "TYPL-304", Error,
             "interaction declaration in a typl context";
 
-        /// Blank line between a doc comment and its definition (typl §14, §16.5).
-        /// Warning. Emitted by the checker.
+        /// Blank line between a doc comment and its carrier (typl §14, §16.5;
+        /// ADR-0026 extends it from declarations to every carrier). Warning.
+        /// Emitted by the doc lints (`ridl_sem::doc_lint`).
         TYPL_404 = "TYPL-404", Warning,
-            "blank line between a doc comment and its definition", lint = "detached-doc-comment";
+            "blank line between a doc comment and its carrier", lint = "detached-doc-comment";
 
         /// `@deprecated` doc tag without a reason string (typl §14.2, §16.5).
         /// Warning. Emitted by the checker.
         TYPL_405 = "TYPL-405", Warning,
             "`@deprecated` doc tag without a reason string", lint = "deprecated-without-reason";
+
+        /// Doc comment in a position that is not a carrier (ADR-0026): before
+        /// `package`, an `import`, a return type or an attribute block, or at
+        /// the end of a file or a body. Warning. Emitted by the doc lints
+        /// (`ridl_sem::doc_lint`).
+        TYPL_407 = "TYPL-407", Warning,
+            "doc comment in a position that is not a carrier", lint = "misplaced-doc-comment";
+
+        /// A doc tag other than `@see`, `@since`, `@deprecated` and `@labels`
+        /// (typl §14.2, ADR-0026). Warning. Emitted by the doc lints
+        /// (`ridl_sem::doc_lint`).
+        TYPL_408 = "TYPL-408", Warning,
+            "doc tag other than `@see`, `@since`, `@deprecated` and `@labels`", lint = "unknown-doc-tag";
+
+        /// `@see` or `@since` with a missing or malformed value (ADR-0026).
+        /// Warning. Emitted by the doc lints (`ridl_sem::doc_lint`).
+        TYPL_409 = "TYPL-409", Warning,
+            "`@see` or `@since` with a missing or malformed value", lint = "malformed-doc-tag";
 
         /// Doc comment written as `/** */` (ADR-0026). Warning, `allow` by
         /// default, so a project opts in to requiring `///`. Emitted by the
@@ -1923,6 +1942,9 @@ mod tests {
             ("TYPL-211", "duplicate-reserved"),
             ("TYPL-404", "detached-doc-comment"),
             ("TYPL-405", "deprecated-without-reason"),
+            ("TYPL-407", "misplaced-doc-comment"),
+            ("TYPL-408", "unknown-doc-tag"),
+            ("TYPL-409", "malformed-doc-tag"),
             ("TYPL-410", "doc-comment-style"),
             ("RIDL-100", "missing-timing"),
             ("RIDL-108", "degenerate-timing-range"),

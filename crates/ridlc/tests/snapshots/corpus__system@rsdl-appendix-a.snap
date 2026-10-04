@@ -90,7 +90,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "ASIL_B"
       ],
       "attributes": [],
-      "doc": "",
+      "doc": "Adaptive cruise, two copies: one per compute node.",
       "links": [],
       "see": [],
       "since": []
@@ -208,7 +208,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       ],
       "labels": [],
       "attributes": [],
-      "doc": "",
+      "doc": "The fleet backend. No implementation in this workspace.",
       "links": [],
       "see": [],
       "since": []

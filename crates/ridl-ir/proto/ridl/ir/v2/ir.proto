@@ -88,9 +88,9 @@ message Decl {
   // vocabulary (typl §10.1). Valid on struct, enum, and union declarations
   // only (TYPL-212).
   bool is_error = 3;
-  // Doc comment body in CommonMark; empty when absent (typl §14.1). Doc
-  // tags without a structured field of their own (e.g. @see, typl §14.2)
-  // remain verbatim in this body.
+  // Doc comment body in CommonMark; empty when absent (typl §14.1). No tag
+  // line is in the body (ADR-0026): @labels and @deprecated fill the fields
+  // below, @see and @since fill `see` and `since`.
   string doc = 4;
   // @labels classification identifiers, passed through to generated
   // metadata unchanged; the core language defines no vocabulary
@@ -336,9 +336,10 @@ message EnumValue {
   // The explicitly assigned integer value (typl §8) — the bit position when
   // used as an enum-set bit (typl §9.1).
   int64 value = 2;
-  // Doc comment body; empty when absent (typl §14.1). Enum values carry no
-  // structured tag fields, so doc tags (@see, @labels, @deprecated) remain
-  // verbatim in this body.
+  // Doc comment body; empty when absent (typl §14.1). No tag line is in the
+  // body (ADR-0026): @see and @since fill `see` and `since`; an enum value
+  // has no labels or deprecated field, so a @labels or @deprecated line on
+  // one is dropped.
   string doc = 3;
   // Resolved doc links in `doc`, in source order (ADR-0026).
   repeated DocLink links = 4;

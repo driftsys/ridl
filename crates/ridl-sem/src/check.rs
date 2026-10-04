@@ -37,7 +37,7 @@ use ridl_ir::name::{camel_case, pascal_case, snake_case};
 use ridl_ir::v2;
 use ridl_syntax::ast::{self, AstNode, Definition, HasDocComments, HasModifiers, HasName};
 use ridl_syntax::{Profile, SyntaxKind};
-use rowan::{NodeOrToken, TextRange};
+use rowan::TextRange;
 
 use crate::doc_lint;
 use crate::docs;
@@ -975,22 +975,15 @@ impl Checker<'_> {
             v2::Visibility::Public
         };
 
-        // Doc-comment body, @labels, and @deprecated (typl §14). TYPL-405 warns
-        // when @deprecated carries no reason string; TYPL-404 warns on a blank
-        // line between the doc comment and the definition (§16.5).
+        // Doc-comment body, @labels, @deprecated and @since (typl §14,
+        // ADR-0026). TYPL-405 warns when @deprecated carries no reason string;
+        // the other doc lints run in `doc_lint`.
         let doc_info = docs::scan(&definition.doc_comments());
         if doc_info.deprecated_missing_reason() {
             self.warning(
                 DiagCode::TYPL_405,
                 name_range(definition),
                 format!("`@deprecated` on `{name}` has no reason string"),
-            );
-        }
-        if blank_line_before_definition(definition) {
-            self.warning(
-                DiagCode::TYPL_404,
-                name_range(definition),
-                format!("blank line between the doc comment and `{name}`"),
             );
         }
 
@@ -1007,7 +1000,7 @@ impl Checker<'_> {
             kind: Some(kind),
             links: Vec::new(),
             see: Vec::new(),
-            since: Vec::new(),
+            since: doc_info.since,
         })
     }
 
@@ -2257,18 +2250,22 @@ impl Checker<'_> {
             Some(init) => Some(init),
             None => lowered.as_ref().map(|l| self.derive_field_init(&l.ty)),
         };
+        // The field's own doc envelope (typl §14, ADR-0026): the IR carries
+        // `labels` and `deprecated` on a field, so the tags fill them as on a
+        // declaration.
+        let doc_info = docs::scan(&field.doc_comments());
         v2::Field {
             name,
             ordinal,
             r#type: lowered.map(|l| l.ty),
             declared_init,
             init,
-            doc: String::new(),
-            labels: Vec::new(),
-            deprecated: None,
+            doc: doc_info.doc,
+            labels: doc_info.labels,
+            deprecated: doc_info.deprecated,
             links: Vec::new(),
             see: Vec::new(),
-            since: Vec::new(),
+            since: doc_info.since,
         }
     }
 
@@ -3049,13 +3046,14 @@ impl Checker<'_> {
             if !duplicate_name {
                 self.check_enum_value_projection(&name, name_range, &mut pascal_values);
             }
+            let doc_info = docs::scan(&value_node.doc_comments());
             values.push(v2::EnumValue {
                 name,
                 value,
-                doc: String::new(),
+                doc: doc_info.doc,
                 links: Vec::new(),
                 see: Vec::new(),
-                since: Vec::new(),
+                since: doc_info.since,
             });
         }
         v2::EnumDef { values, reserved }
@@ -3166,13 +3164,14 @@ impl Checker<'_> {
                         format!("duplicate enumset bit position {value}"),
                     );
                 }
+                let doc_info = docs::scan(&bit.doc_comments());
                 bits.push(v2::EnumValue {
                     name,
                     value,
-                    doc: String::new(),
+                    doc: doc_info.doc,
                     links: Vec::new(),
                     see: Vec::new(),
-                    since: Vec::new(),
+                    since: doc_info.since,
                 });
             }
         }
@@ -3290,14 +3289,15 @@ impl Checker<'_> {
             if let Some(is_error) = arm_is_error {
                 resolved_kinds.push(is_error);
             }
+            let doc_info = docs::scan(&arm.doc_comments());
             arms.push(v2::UnionArm {
                 name,
                 ordinal,
                 type_ref,
-                doc: String::new(),
+                doc: doc_info.doc,
                 links: Vec::new(),
                 see: Vec::new(),
-                since: Vec::new(),
+                since: doc_info.since,
             });
         }
 
@@ -3702,7 +3702,7 @@ impl Checker<'_> {
             provisional: false,
             links: Vec::new(),
             see: Vec::new(),
-            since: Vec::new(),
+            since: doc_info.since,
         }
     }
 
@@ -3750,7 +3750,7 @@ impl Checker<'_> {
             kind: Some(kind),
             links: Vec::new(),
             see: Vec::new(),
-            since: Vec::new(),
+            since: doc_info.since,
         }
     }
 
@@ -3802,7 +3802,7 @@ impl Checker<'_> {
             shapes,
             links: Vec::new(),
             see: Vec::new(),
-            since: Vec::new(),
+            since: doc_info.since,
         }
     }
 
@@ -5207,7 +5207,14 @@ impl Checker<'_> {
                     Some(ast::ParamType::Stream(stream)) => Some(self.lower_stream(&stream)),
                     None => None,
                 };
-                v2::Param { name, r#type, doc: String::new(), links: Vec::new(), see: Vec::new(), since: Vec::new() }
+                let doc_info = docs::scan(&param.doc_comments());
+                v2::Param {
+                    name,
+                    r#type,
+                    doc: doc_info.doc,
+                    since: doc_info.since,
+                    ..Default::default()
+                }
             })
             .collect()
     }
@@ -5747,23 +5754,6 @@ fn regex_crate_refusal(error: &regex::Error) -> String {
                 .map_or_else(|| rendered.clone(), str::to_string)
         }
     }
-}
-
-/// Whether a blank line separates `definition`'s doc comment from the
-/// definition (TYPL-404). Only meaningful when a doc comment is attached; the
-/// check reads the whitespace token immediately before the definition — two or
-/// more newlines is a blank line. Doc comments are trivia, so the AST attaches
-/// them across the blank line even though the spec warns about the gap.
-fn blank_line_before_definition(definition: &Definition) -> bool {
-    if definition.doc_comments().is_empty() {
-        return false;
-    }
-    matches!(
-        definition.syntax().prev_sibling_or_token(),
-        Some(NodeOrToken::Token(token))
-            if token.kind() == SyntaxKind::Whitespace
-                && token.text().matches('\n').count() >= 2
-    )
 }
 
 /// The declared name of a body member (field, arm, enum value, bit,
@@ -9655,6 +9645,68 @@ mod tests {
             decl(&checked, "Speed").labels,
             vec!["SAFETY(D)", "CALIBRATION"],
         );
+    }
+
+    /// Every member carrier of ADR-0026 reads its doc into the IR: a struct
+    /// field, an enum value, an enumset bit, a union arm and a command
+    /// parameter.
+    #[test]
+    fn member_docs_reach_the_ir() {
+        let checked = check_ridl(
+            "app",
+            "package app\n\
+             struct S {\n  /// Doc 1.\n  a: boolean\n}\n\
+             enum E {\n  /// Doc 2.\n  A = 1\n}\n\
+             enumset F {\n  /// Doc 3.\n  X = 0\n}\n\
+             union U {\n  /// Doc 4.\n  s: S\n}\n\
+             interface I {\n  command c(\n    /// Doc 5.\n    a: S\n  ) @[..50ms]\n}\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let Some(v2::struct_member::Member::Field(field)) =
+            &struct_def(&checked, "S").members[0].member
+        else {
+            panic!("`S` has a field");
+        };
+        assert_eq!(field.doc, "Doc 1.");
+        assert_eq!(enum_def(&checked, "E").values[0].doc, "Doc 2.");
+        let Some(v2::decl::Kind::EnumSetDef(set)) = &decl(&checked, "F").kind else {
+            panic!("`F` is an enumset");
+        };
+        assert_eq!(set.bits[0].doc, "Doc 3.");
+        assert_eq!(union_def(&checked, "U").arms[0].doc, "Doc 4.");
+        let Some(v2::decl::Kind::CommandDef(command)) = &interaction(&checked, "c").kind else {
+            panic!("`c` is a command");
+        };
+        assert_eq!(command.params[0].doc, "Doc 5.");
+    }
+
+    #[test]
+    fn since_reaches_the_ir() {
+        let checked = check_source(
+            "app",
+            "package app\n/// A pair.\n/// @since 1.2\nstruct S {\n  a: boolean\n}\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let decl = decl(&checked, "S");
+        assert_eq!(decl.doc, "A pair.");
+        assert_eq!(decl.since, ["1.2"]);
+    }
+
+    /// `@deprecated` and `@labels` keep today's behaviour beside the new tags
+    /// (ADR-0026): the reason and the labels fill their fields, and a tag line
+    /// is not in the body.
+    #[test]
+    fn deprecated_and_labels_unchanged() {
+        let checked = check_source(
+            "app",
+            "package app\n/// A speed.\n/// @labels A, B\n/// @deprecated \"use Velocity\"\n/// @since 2.0\ntype Speed : km/h [0.0..250.0 step 0.5]\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let decl = decl(&checked, "Speed");
+        assert_eq!(decl.doc, "A speed.");
+        assert_eq!(decl.labels, ["A", "B"]);
+        assert_eq!(decl.deprecated.as_deref(), Some("use Velocity"));
+        assert_eq!(decl.since, ["2.0"]);
     }
 
     #[test]

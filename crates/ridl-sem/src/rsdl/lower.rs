@@ -52,10 +52,10 @@ pub fn lower_system(system: &CheckedSystem, packages: &[&v2::Package]) -> Option
         regions: lowering.regions(),
         distributions: lowering.distributions(),
         deployments: lowering.deployments(),
-        doc: String::new(),
+        doc: decl.doc.doc.clone(),
         links: Vec::new(),
         see: Vec::new(),
-        since: Vec::new(),
+        since: decl.doc.since.clone(),
     })
 }
 
@@ -117,13 +117,14 @@ impl<'a> Lowering<'a> {
                     .components
                     .iter()
                     .position(|component| component.line == position)?;
+                let line = &decl.members[position];
                 Some(v2::MemberLine {
                     component: self.component_name(component),
-                    attributes: attributes(&decl.members[position].backend_keys),
-                    doc: String::new(),
+                    attributes: attributes(&line.backend_keys),
+                    doc: line.doc.doc.clone(),
                     links: Vec::new(),
                     see: Vec::new(),
-                    since: Vec::new(),
+                    since: line.doc.since.clone(),
                 })
             })
             .collect()
@@ -153,10 +154,10 @@ impl<'a> Lowering<'a> {
                             Some(v2::Offer {
                                 service: service.clone()?,
                                 attributes: attributes(&line.backend_keys),
-                                doc: String::new(),
+                                doc: line.doc.doc.clone(),
                                 links: Vec::new(),
                                 see: Vec::new(),
-                                since: Vec::new(),
+                                since: line.doc.since.clone(),
                             })
                         })
                         .collect(),
@@ -178,17 +179,19 @@ impl<'a> Lowering<'a> {
                     .requires
                     .iter()
                     .filter(|require| require.consumer == index)
-                    .map(|require| v2::Require {
-                        interface: Some(self.interface_ref(&require.interface)),
-                        service: require.service.clone(),
-                        producer: self.component_name(require.producer),
-                        attributes: decl.map_or_else(Vec::new, |decl| {
-                            attributes(&decl.requires[require.line].backend_keys)
-                        }),
-                        doc: String::new(),
-                        links: Vec::new(),
-                        see: Vec::new(),
-                        since: Vec::new(),
+                    .map(|require| {
+                        let line = decl.map(|decl| &decl.requires[require.line]);
+                        v2::Require {
+                            interface: Some(self.interface_ref(&require.interface)),
+                            service: require.service.clone(),
+                            producer: self.component_name(require.producer),
+                            attributes: line
+                                .map_or_else(Vec::new, |line| attributes(&line.backend_keys)),
+                            doc: line.map(|line| line.doc.doc.clone()).unwrap_or_default(),
+                            links: Vec::new(),
+                            see: Vec::new(),
+                            since: line.map(|line| line.doc.since.clone()).unwrap_or_default(),
+                        }
                     })
                     .collect();
                 v2::Component {
@@ -202,10 +205,10 @@ impl<'a> Lowering<'a> {
                     labels: decl.map_or_else(Vec::new, |decl| decl.attrs.labels.clone()),
                     attributes: decl
                         .map_or_else(Vec::new, |decl| attributes(&decl.attrs.backend_keys)),
-                    doc: String::new(),
+                    doc: decl.map(|decl| decl.doc.doc.clone()).unwrap_or_default(),
                     links: Vec::new(),
                     see: Vec::new(),
-                    since: Vec::new(),
+                    since: decl.map(|decl| decl.doc.since.clone()).unwrap_or_default(),
                 }
             })
             .collect()
@@ -237,10 +240,10 @@ impl<'a> Lowering<'a> {
                 external: machine.external,
                 labels: machine.attrs.labels.clone(),
                 attributes: attributes(&machine.attrs.backend_keys),
-                doc: String::new(),
+                doc: machine.doc.doc.clone(),
                 links: Vec::new(),
                 see: Vec::new(),
-                since: Vec::new(),
+                since: machine.doc.since.clone(),
             })
             .collect();
 
@@ -314,10 +317,10 @@ impl<'a> Lowering<'a> {
             routes,
             surface,
             installations: self.installations(decl, placement),
-            doc: String::new(),
+            doc: decl.doc.doc.clone(),
             doc_links: Vec::new(),
             see: Vec::new(),
-            since: Vec::new(),
+            since: decl.doc.since.clone(),
         }
     }
 
@@ -488,13 +491,14 @@ impl<'a> Lowering<'a> {
                             facts.membership[component] == Some(index)
                                 && facts.member_lines[component] == Some(position)
                         })?;
+                        let line = &decl.members[position];
                         Some(v2::MemberLine {
                             component: self.component_name(component),
-                            attributes: attributes(&decl.members[position].backend_keys),
-                            doc: String::new(),
+                            attributes: attributes(&line.backend_keys),
+                            doc: line.doc.doc.clone(),
                             links: Vec::new(),
                             see: Vec::new(),
-                            since: Vec::new(),
+                            since: line.doc.since.clone(),
                         })
                     })
                     .collect();
@@ -511,10 +515,10 @@ impl<'a> Lowering<'a> {
                     depends_on: depends_on.into_iter().collect(),
                     labels: decl.attrs.labels.clone(),
                     attributes: attributes(&decl.attrs.backend_keys),
-                    doc: String::new(),
+                    doc: decl.doc.doc.clone(),
                     links: Vec::new(),
                     see: Vec::new(),
-                    since: Vec::new(),
+                    since: decl.doc.since.clone(),
                 }
             })
             .collect()
@@ -859,6 +863,49 @@ mod tests {
             system.components[1].requires[0].attributes,
             [attribute("someip", "reliable", None)]
         );
+    }
+
+    /// Every rsdl carrier of ADR-0026 reads its doc into the system IR: the
+    /// `system`, a `component`, an `offers` line, a `requires` line, a system
+    /// member line, a `deployment` and a `machine`.
+    #[test]
+    fn rsdl_docs_reach_the_system_ir() {
+        let text = "package veh.topology\n\
+                    import veh.adas.LaneAssist\n\
+                    /// Doc component.\n\
+                    /// @since 1.0\n\
+                    component Lane {\n\
+                    \x20 /// Doc offers.\n\
+                    \x20 offers veh.adas.lane\n\
+                    }\n\
+                    component Panel {\n\
+                    \x20 /// Doc requires.\n\
+                    \x20 requires LaneAssist\n\
+                    }\n\
+                    /// Doc system.\n\
+                    system Vehicle {\n\
+                    \x20 /// Doc member.\n\
+                    \x20 Lane\n\
+                    \x20 Panel\n\
+                    }\n\
+                    /// Doc deployment.\n\
+                    deployment Prod for Vehicle {\n\
+                    \x20 /// Doc machine.\n\
+                    \x20 machine Box { Lane, Panel }\n\
+                    }\n";
+        let (checked, lowered) = lower_topology(&[("veh/topology/x.rsdl", text)]);
+        assert!(!checked.closure_has_errors, "{:?}", checked.diagnostics);
+        let system = lowered.expect("the closure lowers");
+        assert_eq!(system.doc, "Doc system.");
+        assert_eq!(system.members[0].doc, "Doc member.");
+        assert_eq!(system.members[1].doc, "");
+        let lane = &system.components[0];
+        assert_eq!(lane.doc, "Doc component.");
+        assert_eq!(lane.since, ["1.0"]);
+        assert_eq!(lane.offers[0].doc, "Doc offers.");
+        assert_eq!(system.components[1].requires[0].doc, "Doc requires.");
+        assert_eq!(system.deployments[0].doc, "Doc deployment.");
+        assert_eq!(system.deployments[0].machines[0].doc, "Doc machine.");
     }
 
     /// The link set of `deployment` as `(consumer instance, producer
