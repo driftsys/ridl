@@ -342,14 +342,19 @@ fn normalize(path: &Path) -> PathBuf {
 
 /// The directory `levels` levels above `path`, in the path form of `path`:
 /// a trailing name is removed, and `..` is added once no name is left to
-/// remove. The empty path is the current directory, as
-/// [`Path::ancestors`] yields it.
+/// remove. Removing the last name of a relative path yields `.`, not the
+/// empty path [`Path::ancestors`] yields: the empty path joins like the
+/// current directory, but `read_dir`, `is_dir` and `exists` fail on it, so
+/// a caller that walks the root's files would read nothing.
 fn up(path: &Path, levels: usize) -> PathBuf {
     let mut result = path.to_path_buf();
     for _ in 0..levels {
         match result.components().next_back() {
             Some(Component::Normal(_)) => {
                 result.pop();
+                if result.as_os_str().is_empty() {
+                    result = PathBuf::from(".");
+                }
             }
             Some(Component::RootDir | Component::Prefix(_)) => {}
             Some(Component::CurDir) | None => result = PathBuf::from(".."),
@@ -2289,7 +2294,9 @@ service:veh.common.climate 2
     /// relative form.
     #[test]
     fn up_keeps_the_relative_form_of_the_entry() {
-        assert_eq!(up(Path::new("members/a"), 2), PathBuf::from(""));
+        assert_eq!(up(Path::new("members/a"), 2), PathBuf::from("."));
+        assert_eq!(up(Path::new("a"), 1), PathBuf::from("."));
+        assert_eq!(up(Path::new("a"), 2), PathBuf::from(".."));
         assert_eq!(up(Path::new("."), 2), PathBuf::from("../.."));
         assert_eq!(up(Path::new(""), 1), PathBuf::from(".."));
         assert_eq!(up(Path::new("a/.."), 1), PathBuf::from("a/../.."));

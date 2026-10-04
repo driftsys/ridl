@@ -43,10 +43,17 @@ impl Drop for TempDir {
 
 /// Runs `ridl` with `args`, returning `(exit_code, stdout, stderr)`.
 fn ridl(args: &[&std::ffi::OsStr]) -> (i32, String, String) {
-    let output = Command::new(env!("CARGO_BIN_EXE_ridl"))
-        .args(args)
-        .output()
-        .expect("the ridl binary must run");
+    ridl_in(None, args)
+}
+
+/// Runs `ridl` with `args` from `current_dir` when one is given.
+fn ridl_in(current_dir: Option<&Path>, args: &[&std::ffi::OsStr]) -> (i32, String, String) {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_ridl"));
+    command.args(args);
+    if let Some(dir) = current_dir {
+        command.current_dir(dir);
+    }
+    let output = command.output().expect("the ridl binary must run");
     let code = output.status.code().expect("the process exits with a code");
     (
         code,
@@ -2741,6 +2748,24 @@ fn a_member_check_reports_only_the_member_desk_warnings() {
     // `.ridl/baseline/`.
     let (_, _, stderr) = ridl(&["check".as_ref(), root.join("cluster").as_os_str()]);
     assert!(stderr.contains("`doorClosed` has moved"), "{stderr}");
+}
+
+/// A relative member path from the workspace root (`ridl check cluster`)
+/// finds the root as the empty parent of `cluster`, and the desk check still
+/// reads the workspace's files, so each RIDL-407 carries its file and line.
+#[test]
+fn a_relative_member_entry_from_the_root_keeps_the_desk_warning_spans() {
+    let dir = TempDir::new("member-desk-relative");
+    let root = member_workspace(&dir);
+    dir.write("cluster/cluster.ridl", REORDERED);
+
+    let (code, _, stderr) = ridl_in(Some(&root), &["check".as_ref(), "cluster".as_ref()]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stderr.contains("`doorClosed` has moved"), "{stderr}");
+    assert!(
+        stderr.contains("cluster.ridl:"),
+        "the warning names its file and line:\n{stderr}"
+    );
 }
 
 /// The desk check compares the whole workspace, so it does not run while
