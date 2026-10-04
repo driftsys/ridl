@@ -900,9 +900,10 @@ run.
 The final physical source count is 1,695 lines: common/enums.typl 565,
 common/interactions.ridl 41, common/messages.typl 716, minimal/enums.typl 288,
 minimal/interactions.ridl 5, minimal/messages.typl 28, standard/enums.typl 12
-and standard/messages.typl 40. The combined corpus currently contains 4,086
-physical source lines. These counts include comments and blank lines; manifests,
-provenance and licence text are excluded from source budgets.
+and standard/messages.typl 40. After the VSS port, the combined corpus contains
+4,845 physical source lines: 2,391 in `ros2`, 1,695 in `mavlink` and 759 in
+`vss`. These counts include comments and blank lines; manifests, provenance and
+licence text are excluded from source budgets.
 
 The declaration/field comparison against the actual pinned XML and frozen
 inventory verifies all 27 messages, 16 enums, 186 fields and 223 selected enum

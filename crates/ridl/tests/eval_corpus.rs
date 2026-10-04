@@ -335,19 +335,28 @@ fn rubric_validation_accepts_indented_wrapped_continuations() {
     assert!(validate_rubric("1. **must** preserve every existing\n   interaction identity.\n\n2. **must not** change existing\n   wire numbers.\n").is_ok());
 }
 
-fn validate_lint_fixture(lints: &str) -> Result<serde_json::Value, String> {
+fn validate_task_fixture(kind: &str, lints: &str, diff: &str) -> Result<serde_json::Value, String> {
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .expect("the current time follows the epoch")
         .as_nanos();
-    let id = format!("ridl-task-lint-{}-{unique}", std::process::id());
+    static NEXT_FIXTURE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let sequence = NEXT_FIXTURE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let id = format!("ridl-task-{}-{unique}-{sequence}", std::process::id());
     let dir = std::env::temp_dir().join(&id);
-    std::fs::create_dir(&dir).expect("create the isolated lint task fixture");
+    std::fs::create_dir(&dir).expect("create the isolated task fixture");
+    let corpus = if kind == "design" {
+        String::new()
+    } else {
+        let dirs = corpus_dirs();
+        let name = dirs[0].file_name().unwrap().to_str().unwrap();
+        format!("corpus = {name:?}\n")
+    };
     std::fs::write(
         dir.join("task.toml"),
-        format!("id = \"{id}\"\nkind = \"design\"\ntitle = \"Lint validation fixture\"\n\n[expect]\ncompiles = true\nlints = {lints}\n"),
+        format!("id = \"{id}\"\nkind = \"{kind}\"\ntitle = \"Task validation fixture\"\n{corpus}\n[expect]\ncompiles = true\nlints = {lints}\n{diff}\n"),
     )
-    .expect("write valid task metadata with the tested lint entries");
+    .expect("write task metadata with the tested expectations");
     std::fs::write(dir.join("prompt.md"), "Provide valid declarations.\n")
         .expect("write the fixture prompt");
     std::fs::write(
@@ -356,8 +365,46 @@ fn validate_lint_fixture(lints: &str) -> Result<serde_json::Value, String> {
     )
     .expect("write the fixture rubric");
     let result = validate_task(&dir);
-    std::fs::remove_dir_all(&dir).expect("remove the isolated lint task fixture");
+    std::fs::remove_dir_all(&dir).expect("remove the isolated task fixture");
     result
+}
+
+fn validate_lint_fixture(lints: &str) -> Result<serde_json::Value, String> {
+    validate_task_fixture("design", lints, "")
+}
+
+#[test]
+fn task_diff_validation_accepts_every_recognized_evolve_verdict() {
+    for verdict in ["identical", "compatible", "breaking"] {
+        validate_task_fixture("evolve", "[]", &format!("diff = {verdict:?}"))
+            .unwrap_or_else(|error| panic!("{verdict}: {error}"));
+    }
+}
+
+#[test]
+fn task_diff_validation_rejects_a_missing_evolve_verdict() {
+    assert_eq!(
+        validate_task_fixture("evolve", "[]", "").unwrap_err(),
+        "expect.diff must name a diff verdict",
+    );
+}
+
+#[test]
+fn task_diff_validation_rejects_an_unknown_evolve_verdict() {
+    assert_eq!(
+        validate_task_fixture("evolve", "[]", "diff = \"added\"").unwrap_err(),
+        "expect.diff must name a diff verdict",
+    );
+}
+
+#[test]
+fn task_diff_validation_rejects_a_verdict_on_each_non_evolve_kind() {
+    for kind in ["review", "design"] {
+        assert_eq!(
+            validate_task_fixture(kind, "[]", "diff = \"compatible\"").unwrap_err(),
+            "only evolve tasks may name a diff verdict",
+        );
+    }
 }
 
 #[test]
@@ -392,19 +439,128 @@ fn every_eval_task_is_well_formed() {
         .map(|entry| entry.path())
         .collect();
     dirs.sort();
-    assert!(
-        dirs.len() >= 10,
-        "at least ten evaluation tasks are required"
-    );
-    let mut third_corpus_tasks = 0;
-    for dir in &dirs {
-        let task = validate_task(dir).unwrap_or_else(|error| panic!("{}: {error}", dir.display()));
-        if task["corpus"] == "vss" {
-            third_corpus_tasks += 1;
+    let tasks: Vec<_> = dirs
+        .iter()
+        .map(|dir| validate_task(dir).unwrap_or_else(|error| panic!("{}: {error}", dir.display())))
+        .collect();
+    validate_task_set(&tasks).expect("the evaluation task set must preserve the approved seed");
+}
+
+fn validate_task_set(tasks: &[serde_json::Value]) -> Result<(), String> {
+    if tasks.len() < 10 {
+        return Err("at least ten evaluation tasks are required".to_owned());
+    }
+    let third_corpus_tasks = tasks.iter().filter(|task| task["corpus"] == "vss").count();
+    if third_corpus_tasks * 3 > tasks.len() {
+        return Err("at most one third of tasks may use the third corpus".to_owned());
+    }
+    // Seed IDs also identify the committed rubric items. Additional tasks may
+    // extend the set without replacing or reclassifying those seed tasks.
+    for (kind, count) in [("review", 5), ("evolve", 2), ("design", 3)] {
+        for number in 1..=count {
+            let id = format!("{kind}-{number:04}");
+            let task = tasks
+                .iter()
+                .find(|task| task["id"] == id)
+                .ok_or_else(|| format!("approved seed task {id} is missing"))?;
+            if task["kind"] != kind {
+                return Err(format!("approved seed task {id} must retain its kind"));
+            }
         }
     }
-    assert!(
-        third_corpus_tasks * 3 <= dirs.len(),
-        "at most one third of tasks may use the third corpus"
+    for dir in corpus_dirs() {
+        let name = dir.file_name().unwrap().to_str().unwrap();
+        if !tasks
+            .iter()
+            .any(|task| task["kind"] == "review" && task["corpus"] == name)
+        {
+            return Err(format!(
+                "every selected corpus must retain a review task: {name}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn approved_task_fixture() -> Vec<serde_json::Value> {
+    let mut dirs: Vec<_> = std::fs::read_dir(task_root())
+        .expect("read the approved tasks")
+        .map(|entry| entry.expect("read a task entry").path())
+        .filter(|path| path.is_dir())
+        .collect();
+    dirs.sort();
+    dirs.iter()
+        .map(|dir| validate_task(dir).expect("an approved task must be valid"))
+        .collect()
+}
+
+#[test]
+fn task_set_validation_rejects_replacing_a_seed_review_with_an_extra_design() {
+    let mut tasks = approved_task_fixture();
+    let task = tasks
+        .iter_mut()
+        .find(|task| task["id"] == "review-0005")
+        .unwrap();
+    task["id"] = "design-0004".into();
+    task["kind"] = "design".into();
+    task.as_object_mut().unwrap().remove("corpus");
+    assert_eq!(
+        validate_task_set(&tasks).unwrap_err(),
+        "approved seed task review-0005 is missing"
     );
+}
+
+#[test]
+fn task_set_validation_rejects_changing_a_seed_kind_without_renaming() {
+    for (id, kind) in [
+        ("review-0005", "design"),
+        ("evolve-0001", "review"),
+        ("design-0001", "review"),
+    ] {
+        let mut tasks = approved_task_fixture();
+        let task = tasks.iter_mut().find(|task| task["id"] == id).unwrap();
+        task["kind"] = kind.into();
+        if kind == "design" {
+            task.as_object_mut().unwrap().remove("corpus");
+        } else if task.get("corpus").is_none() {
+            let dirs = corpus_dirs();
+            task["corpus"] = dirs[0].file_name().unwrap().to_str().unwrap().into();
+        }
+        task["expect"].as_object_mut().unwrap().remove("diff");
+        assert_eq!(
+            validate_task_set(&tasks).unwrap_err(),
+            format!("approved seed task {id} must retain its kind")
+        );
+    }
+}
+
+#[test]
+fn task_set_validation_rejects_losing_review_coverage_for_each_corpus() {
+    for dir in corpus_dirs() {
+        let name = dir.file_name().unwrap().to_str().unwrap();
+        let mut tasks = approved_task_fixture();
+        for task in &mut tasks {
+            if task["kind"] == "review" && task["corpus"] == name {
+                let other = corpus_dirs().into_iter().find(|path| path != &dir).unwrap();
+                task["corpus"] = other.file_name().unwrap().to_str().unwrap().into();
+            }
+        }
+        assert_eq!(
+            validate_task_set(&tasks).unwrap_err(),
+            format!("every selected corpus must retain a review task: {name}")
+        );
+    }
+}
+
+#[test]
+fn task_set_validation_accepts_future_additions() {
+    let mut tasks = approved_task_fixture();
+    let mut extra = tasks
+        .iter()
+        .find(|task| task["id"] == "design-0003")
+        .unwrap()
+        .clone();
+    extra["id"] = "design-0004".into();
+    tasks.push(extra);
+    validate_task_set(&tasks).expect("additional tasks may extend the approved seed");
 }

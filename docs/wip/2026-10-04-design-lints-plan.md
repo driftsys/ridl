@@ -958,6 +958,39 @@ execution.
     remain unchanged. This fixes one untested branch without another review
     cycle over the QUICK fix or another full gate run.
 
+23. **Preserve the approved seed and exercise diff expectations** (PR 707
+    full-review fix wave). Keep the ten approved seed IDs and their five review,
+    two evolve and three design kinds, and require a review for every selected
+    corpus. Additional valid tasks remain permitted under the original minimum
+    count and maximum share rules. The whole-set guard checks these constraints
+    after each task passes the existing metadata validator. Focused regressions
+    replace a seed review with an extra design, change seed kinds without
+    renaming, remove review coverage and accept a future addition. Isolated
+    mutations must fail when seed or coverage checks are removed. Diff fixtures
+    accept all three recognized evolve verdicts and reject missing or unknown
+    verdicts and a verdict on either other kind, with literal failure messages.
+    Removing either rejection must fail the corresponding fixtures. A monotonic
+    fixture counter prevents concurrent tests from reusing a timestamp-based
+    directory. Correct only the provenance aggregate sentence to describe the
+    4,845 physical source lines after all three ports; the earlier test handoff
+    remains a historical statement. All thirty approved task files, ported
+    sources and licence bytes remain unchanged. If the seed identity policy
+    changes later, it requires a deliberate guard update; adding tasks alone
+    does not. This wave runs focused tests, isolated mutations, Clippy and
+    static checks, with no candidate checks, new review, commit or push by the
+    implementer. The controller inspects the output before committing, pushing
+    and requesting fresh pass 2 and CI.
+
+24. **Run configured commit checks without the shared stash wrapper** (PR 707
+    fix commit). The current pre-commit configuration contains only `prim .`;
+    commit-msg contains only `git std lint --file {msg}`. Run both exact
+    commands before staging the three authorized files, save the checked tree,
+    and commit with `GIT_STD_SKIP_HOOKS=1` because the shared fix-mode stash
+    wrapper previously failed when another worktree changed the stash stack. No
+    other worktree or stash is touched, and no configured check is omitted. If
+    the hook configuration changes, the controller must run any added checks
+    first.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:
