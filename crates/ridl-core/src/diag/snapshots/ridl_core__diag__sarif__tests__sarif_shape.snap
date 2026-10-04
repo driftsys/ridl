@@ -506,6 +506,16 @@ expression: log
               }
             },
             {
+              "id": "TYPL-222",
+              "name": "inconsistent-unit",
+              "shortDescription": {
+                "text": "one field name used with different units"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
               "id": "TYPL-301",
               "shortDescription": {
                 "text": "stream type `<T>` outside interaction position"
@@ -1379,7 +1389,7 @@ expression: log
       "results": [
         {
           "ruleId": "RIDL-100",
-          "ruleIndex": 60,
+          "ruleIndex": 61,
           "level": "warning",
           "message": {
             "text": "signal without a timing annotation"
@@ -1444,7 +1454,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 144,
+          "ruleIndex": 145,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

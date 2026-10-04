@@ -745,6 +745,56 @@ reserved codes, corpus budgets, four PRs and approval stages.
    direct library dependencies; both already exist in the workspace dependency
    graph.
 
+9. **Task 6: allocate candidate codes once** (2026-10-04). The catalogue and
+   every open pull request diff were checked before allocation. Reserve TYPL-222
+   for `inconsistent-unit`, TYPL-223 for `inconsistent-abbreviation`, TYPL-224
+   for `duplicate-shape`, RIDL-414 for `low-cohesion-interface`, and RIDL-415
+   for `package-fan-out`. Task 6 registers only `inconsistent-unit`, at Info;
+   later tasks register their own rows. The allocation respects the separately
+   reserved codes. A conflicting allocation would make catalogue identity
+   ambiguous; the catalogue uniqueness guard and the pre-allocation audit cover
+   that risk.
+10. **Task 6: synchronize the language server lockfile entry** (approved
+    ownership extension, 2026-10-04). Adding the prescribed `ridlc` dependency
+    to `crates/ridl-lsp/Cargo.toml` also adds it to that package's dependency
+    list in `Cargo.lock`. No other lockfile entry changes. Omitting this would
+    fail the locked dependency gate.
+11. **Task 6: test resolved units using the current grammar and IR**
+    (2026-10-04). The grammar has import aliases, not `type Alias = Speed`; the
+    alias fixture therefore imports a unit type from another package under an
+    alias, which the checker canonicalizes. Optionality is the `?` suffix and an
+    IR flag; arrays and maps use bracket syntax. The source grammar admits
+    inline constrained primitives but no inline unit scalar. A checked-IR
+    fixture sets an inline scalar's backing to a unit, then exercises the public
+    shared pass and its rendered finding. This covers that IR branch without
+    adding grammar or IR variants. If wrong, aliases or inline scalar units
+    would be omitted from the finding counts; the positive tests cover both.
+12. **Task 6: intern spans while constructing the shared context** (2026-10-04).
+    The exported pass accepts mutable access to the caller's source map;
+    `SiteIndex` interns source spans before the immutable `Ctx` is passed to
+    checks. Checks need no interior mutability or second source map. A
+    mismatched source map would report the wrong file or range; shared-map and
+    unsaved-overlay tests check both.
+
+13. **Task 6: synchronize the SARIF catalogue snapshot** (approved ownership
+    extension, 2026-10-04). The existing `sarif_shape` snapshot lists the entire
+    diagnostic catalogue. Registering TYPL-222 adds its rule and shifts the
+    later rule indices; only that addition and its derived indices are updated.
+    The first covering test run detected the stale snapshot. The silence fixture
+    filters by registered candidate lint names, so later candidates join the
+    assertion when registered without introducing uncatalogued code literals
+    into Rust sources.
+
+14. **Task 6: synchronize the language reference catalogue** (approved ownership
+    extension, 2026-10-04). The existing compiler corpus test checks every TYPL
+    and RIDL catalogue row against its language reference's §16 table. Add
+    TYPL-222 there with the same summary and Info severity, and update the
+    family overview's diagnostic index as its footer requires. This is catalogue
+    synchronization, with no language-surface change. Later Tasks 7 to 10 must
+    update the matching reference table and SARIF snapshot when registering
+    their rows; Task 14 must maintain those same gates when changing severities
+    or removing candidates.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:

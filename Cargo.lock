@@ -2127,6 +2127,7 @@ dependencies = [
  "ridl-ir",
  "ridl-sem",
  "ridl-syntax",
+ "ridlc",
  "rowan",
  "salsa",
  "serde_json",

@@ -3543,3 +3543,189 @@ fn formatting_reads_the_edited_buffer() {
     shut_down(&client, 22);
     server.join().expect("thread joins").expect("clean exit");
 }
+
+const DESIGN_SOURCE: &str = "package a\ntype Speed: km/h [0.0..250.0 step 0.5]\ntype SpeedMs: m/s [0.0..100.0 step 0.5]\nstruct First { speed: Speed }\nstruct Second { speed: Speed }\nstruct Third { speed: SpeedMs }\n";
+
+fn design_findings(diagnostics: &[lt::Diagnostic]) -> Vec<&lt::Diagnostic> {
+    diagnostics
+        .iter()
+        .filter(|d| d.code == Some(lt::NumberOrString::String("TYPL-222".to_string())))
+        .collect()
+}
+
+/// A request after the notifications is a barrier for this synchronous server.
+fn published_before_barrier(
+    client: &Connection,
+    id: i32,
+    uri: &lt::Uri,
+) -> Vec<lt::PublishDiagnosticsParams> {
+    request::<lt::request::HoverRequest>(
+        client,
+        id,
+        lt::HoverParams {
+            text_document_position_params: text_position(uri.clone(), pos(0, 0)),
+            work_done_progress_params: Default::default(),
+        },
+    );
+    let mut publishes = Vec::new();
+    loop {
+        match recv(client) {
+            Message::Response(response) => {
+                assert_eq!(response.id, RequestId::from(id));
+                assert!(response.response_result.is_ok());
+                return publishes;
+            }
+            Message::Notification(notification)
+                if notification.method == lt::notification::PublishDiagnostics::METHOD =>
+            {
+                publishes.push(serde_json::from_value(notification.params).unwrap());
+            }
+            _ => {}
+        }
+    }
+}
+
+#[test]
+fn design_lints_recompute_workspace_overlays_and_isolate_standalone_sources() {
+    let dir = TempDir::new("design-lints");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
+    std::fs::create_dir(dir.path().join("a")).unwrap();
+    std::fs::create_dir(dir.path().join("b")).unwrap();
+    dir.write(
+        "a/ridl.toml",
+        "[package]\nname = \"a\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "b/ridl.toml",
+        "[package]\nname = \"b\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("a/source.ridl", "package a\ntype Speed: km/h [0.0..250.0 step 0.5]\nstruct First { speed: Speed }\nstruct Second { speed: Speed }\n");
+    let source =
+        "package b\ntype SpeedMs: m/s [0.0..100.0 step 0.5]\nstruct Third { speed: SpeedMs }\n";
+    let file = dir.write("b/source.ridl", source);
+    let uri = uri_of(&file);
+    let expected =
+        ridlc::compile_workspace(&mut ridl_core::RidlDatabase::default(), dir.path()).unwrap();
+    let expected = expected
+        .diagnostics
+        .iter()
+        .find(|d| d.code.as_str() == "TYPL-222")
+        .expect("CLI/MCP compile path reports the unit conflict");
+    assert_eq!(expected.severity, ridl_core::diag::Severity::Info);
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, Some(uri_of(dir.path())));
+    let initial = next_publish(&client, &uri);
+    let found = design_findings(&initial.diagnostics);
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].message, expected.message);
+    assert_eq!(found[0].range, range((2, 15), (2, 20)));
+    assert_eq!(found[0].severity, Some(lt::DiagnosticSeverity::INFORMATION));
+
+    let clean = source.replace("m/s", "km/h");
+    notify::<lt::notification::DidOpenTextDocument>(
+        &client,
+        lt::DidOpenTextDocumentParams {
+            text_document: lt::TextDocumentItem {
+                uri: uri.clone(),
+                language_id: "ridl".to_string(),
+                version: 1,
+                text: clean,
+            },
+        },
+    );
+    assert!(design_findings(&next_publish(&client, &uri).diagnostics).is_empty());
+    let edited = format!("// Unsaved line shifts the diagnostic\n{source}");
+    notify::<lt::notification::DidChangeTextDocument>(
+        &client,
+        lt::DidChangeTextDocumentParams {
+            text_document: lt::VersionedTextDocumentIdentifier {
+                uri: uri.clone(),
+                version: 2,
+            },
+            content_changes: vec![lt::TextDocumentContentChangeEvent {
+                range: None,
+                range_length: None,
+                text: edited,
+            }],
+        },
+    );
+    let changed = next_publish(&client, &uri);
+    assert_eq!(
+        design_findings(&changed.diagnostics)[0].range,
+        range((3, 15), (3, 20))
+    );
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), source);
+
+    let outside = TempDir::new("design-standalone");
+    // Two m/s sites and one km/h site: combining this with the workspace
+    // changes its majority and therefore the number and sites of findings.
+    let standalone = DESIGN_SOURCE
+        .replace("speed: SpeedMs }", "speed: Speed }")
+        .replacen("speed: Speed }", "speed: SpeedMs }", 2);
+    let outside_uri = uri_of(&outside.path().join("source.ridl"));
+    notify::<lt::notification::DidOpenTextDocument>(
+        &client,
+        lt::DidOpenTextDocumentParams {
+            text_document: lt::TextDocumentItem {
+                uri: outside_uri.clone(),
+                language_id: "ridl".to_string(),
+                version: 1,
+                text: standalone,
+            },
+        },
+    );
+    let publishes = published_before_barrier(&client, 20, &uri);
+    let workspace = publishes
+        .iter()
+        .find(|p| p.uri == uri)
+        .expect("workspace is recomputed");
+    assert_eq!(design_findings(&workspace.diagnostics).len(), 1);
+    assert_eq!(
+        design_findings(&workspace.diagnostics)[0].range,
+        range((3, 15), (3, 20))
+    );
+    let standalone = publishes
+        .iter()
+        .find(|p| p.uri == outside_uri)
+        .expect("standalone finding has its own URI");
+    assert_eq!(design_findings(&standalone.diagnostics).len(), 1);
+    assert_eq!(
+        design_findings(&standalone.diagnostics)[0].range,
+        range((5, 15), (5, 20))
+    );
+    assert_eq!(
+        design_findings(&standalone.diagnostics)[0].message,
+        "`speed` uses `km/h` here; elsewhere `speed` uses `m/s`"
+    );
+    shut_down(&client, 21);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn design_lints_apply_allow_and_deny_before_publishing() {
+    for (level, count, severity) in [
+        ("allow", 0, None),
+        ("deny", 1, Some(lt::DiagnosticSeverity::ERROR)),
+    ] {
+        let dir = TempDir::new("design-levels");
+        dir.write("ridl.toml", &format!("[package]\nname = \"a\"\nversion = \"1.0.0\"\n[lints]\ninconsistent-unit = \"{level}\"\n"));
+        let uri = uri_of(&dir.write("source.ridl", DESIGN_SOURCE));
+        let (server_side, client) = Connection::memory();
+        let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+        initialize(&client, Some(uri_of(dir.path())));
+        let publishes = published_before_barrier(&client, 20, &uri);
+        let findings: Vec<_> = publishes
+            .iter()
+            .filter(|p| p.uri == uri)
+            .flat_map(|p| design_findings(&p.diagnostics))
+            .collect();
+        assert_eq!(findings.len(), count, "{level}: {publishes:?}");
+        if let Some(finding) = findings.first() {
+            assert_eq!(finding.severity, severity);
+            assert_eq!(finding.range, range((5, 15), (5, 20)));
+        }
+        shut_down(&client, 21);
+        server.join().unwrap().unwrap();
+    }
+}

@@ -45,6 +45,8 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 pub mod deps;
+mod design_lints;
+pub use design_lints::check_design_lints;
 pub mod diff_side;
 pub use diff_side::{DiffSide, DiffSideError, load_diff_side};
 pub mod plugin;
@@ -384,8 +386,7 @@ pub fn compile_workspace_with(
         sources,
         lints,
     } = load_and_check(db, entry, overlays)?;
-    // `ridl.std` is checked here rather than in `load_and_check` so the command
-    // drivers, which never look at its IR, do not pay for the pass.
+    // Reuse the standard IR query already evaluated by the design lint pass.
     let std_ir = check_package(&*db, workspace, std, std).ir;
     let packages: Vec<&ridl_ir::v2::Package> = checked.iter().map(|package| &package.ir).collect();
     let system = lower_system(&system, &packages);
@@ -1344,6 +1345,19 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         db,
         &system,
         &BTreeSet::new(),
+        &mut sources,
+    ));
+
+    let std_ir = check_package(db, workspace, std, std).ir;
+    let ir_packages: Vec<_> = checked.iter().map(|package| &package.ir).collect();
+    let lowered_system = lower_system(&system, &ir_packages);
+    diagnostics.extend(check_design_lints(
+        db,
+        &packages,
+        &checked,
+        &resolutions,
+        &std_ir,
+        lowered_system.as_ref(),
         &mut sources,
     ));
 

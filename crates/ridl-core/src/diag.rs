@@ -493,6 +493,11 @@ diag_codes! {
         TYPL_220 = "TYPL-220", Error,
             "regex pattern the Rust `regex` crate cannot compile";
 
+        /// One exact site name is used with different canonical units across
+        /// the checked workspace. Emitted by the design lint pass.
+        TYPL_222 = "TYPL-222", Info,
+            "one field name used with different units", lint = "inconsistent-unit";
+
         /// Stream type `<T>` outside interaction position (typl §16.4, ridl
         /// §12.3). Emitted by the parser in a `.typl` parse (E2 task 2) and by
         /// the checker for struct fields and collections in a `.ridl` file
@@ -1891,6 +1896,7 @@ mod tests {
             ("TYPL-103", "unbounded-length"),
             ("TYPL-115", "no-init-value"),
             ("TYPL-211", "duplicate-reserved"),
+            ("TYPL-222", "inconsistent-unit"),
             ("TYPL-404", "detached-doc-comment"),
             ("TYPL-405", "deprecated-without-reason"),
             ("RIDL-100", "missing-timing"),

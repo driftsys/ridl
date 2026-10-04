@@ -123,6 +123,7 @@ MANI-010 is itself a lint, so the table can set its level.
 | `unbounded-length` | TYPL-103 | warn | `string`/`bytes` without explicit bounds |
 | `no-init-value` | TYPL-115 | info | type has no derivable init value and no declared `= value` |
 | `duplicate-reserved` | TYPL-211 | warn | duplicate `reserved` entry |
+| `inconsistent-unit` | TYPL-222 | info | one field name used with different units |
 | `detached-doc-comment` | TYPL-404 | warn | blank line between a doc comment and its definition |
 | `deprecated-without-reason` | TYPL-405 | warn | `@deprecated` doc tag without a reason string |
 | `missing-timing` | RIDL-100 | warn | `signal` or `event` without a timing annotation |
