@@ -825,6 +825,7 @@ pub mod catalog_hash;
 pub mod codegen;
 pub mod name;
 pub mod projection;
+pub mod rules;
 pub mod zero;
 
 #[cfg(test)]
