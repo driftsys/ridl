@@ -98,7 +98,7 @@ fn allow_removes_a_lint() {
 /// `ridl_core::lint`'s `apply_uses_defaults_outside_scopes` pins the
 /// normalisation itself.
 #[test]
-fn defaults_normalise_severity() {
+fn a_lint_without_lints_table_is_a_warning() {
     let fixture = Fixture::new("");
     let run = ridlc::run_check(fixture.root(), Frozen::No).expect("the check runs");
     assert_eq!(the_ridl_100(&run.diagnostics).severity, Severity::Warning);
@@ -127,7 +127,7 @@ fn deny_blocks_build() {
 /// its catalogue row's; `ridl_core::lint`'s
 /// `apply_uses_defaults_outside_scopes` pins the normalisation itself.
 #[test]
-fn check_source_uses_defaults() {
+fn check_source_reports_the_lint_as_a_warning() {
     let run = ridlc::check_source("sensor.ridl", SOURCE);
     assert_eq!(the_ridl_100(&run.diagnostics).severity, Severity::Warning);
     assert!(!run.has_error());
