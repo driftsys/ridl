@@ -12,10 +12,9 @@ the language server, hover with the extracted rules, `[Type]` links with
 completion and go-to-definition, a doc-stub quick fix) and issue #529 (the
 language server's member-entry gap). Builds on: ADR-0024 (the lint registry and
 levels, merged as #678). Related: the general form §4.1 (the deletion test) and
-§4.7 (promoted metadata), ADR-0002 §4 and §5 (manifest and package resolution),
-ADR-0012 decision 9 (attribute keys and diff categories), ADR-0015 (RIDL-106),
-issue #172 (attribute keys not consumable), spec 2b (documentation in generated
-code, which consumes §6.4).
+§4.7 (promoted metadata, deferred here, §3.4), ADR-0002 §4 and §5 (manifest and
+package resolution), spec 2b (documentation in generated code, which consumes
+§6.4).
 
 ## 1. The problem
 
@@ -32,10 +31,8 @@ lost on the way to the reader:
 - A doc comment in a position nothing reads is dropped with no diagnostic.
 - `[TypeName]` links are not resolved. TYPL-401 is in the typl reference but not
   in the catalogue.
-- typl §14.2 still lists `@labels` and `@deprecated` as doc tags, and the
-  checker still parses them, although the general form §4.7 moved both to
-  attributes under the deletion test. `[deprecated = "…"]` is recognised and
-  rejected as not consumable (FORM-107, issue #172).
+- The only tags are `@see`, `@labels` and `@deprecated` (typl §14.2), and `@see`
+  is not checked.
 - The language server shows a doc on hover for declarations, interfaces and
   interactions and their uses, but not for a field, and completion items carry
   no documentation.
@@ -68,10 +65,10 @@ Decisions taken on 2026-10-04:
   doc is allowed and never required.** A parameter's type is always a named typl
   type (general form R6), so its type's doc and rules stand in for it. The rsdl
   member lines take a doc and never require one (§3.1, §5.2).
-- **D-4 — The tags are `@see` and `@since`, and 2a carries out the §4.7
-  promotion.** `deprecated` and `labels` become consumed attributes; the doc-tag
-  forms are removed; `fixed` takes a block that holds only those two keys (§3.3,
-  §3.4). Recorded in a new ADR-0025.
+- **D-4 — The tags are `@see`, `@since`, `@deprecated` and `@labels`.** `@since`
+  is new; the other three keep their meaning, so the language does not change
+  for existing sources. The general form §4.7 promotion of `deprecated` and
+  `labels` to attributes is deferred (§3.4). Recorded in a new ADR-0025.
 - **D-5 — A link resolves in the scope of the file that holds it, with the rules
   of a type reference.** A qualified link reaches any package the current
   package can depend on, without an import. One member level is allowed. The IR
@@ -81,8 +78,10 @@ Decisions taken on 2026-10-04:
   (§6.4).
 
 Agreed in the design review of the same session: the lint table and codes (§5),
-the registry's allow-by-default row (§5.3), classifying a `labels` change as
-compatible (§3.4), and removing signature help from 2a (§7.3).
+the registry's allow-by-default row (§5.3), and removing signature help from 2a
+(§7.3). D-4 was first agreed with the promotion included; the maintainer
+narrowed it when planning found that most declarations have no attribute block
+(§3.4).
 
 ## 3. The language surface
 
@@ -128,75 +127,68 @@ convention, not a tag, and the compiler does not read it.
 ### 3.3 Tags
 
 A tag is `@word` at the start of a line of the doc, after the comment markers
-and leading whitespace. Two tags exist:
+and leading whitespace. Four tags exist:
 
-| Tag      | Value                                           | Checked                              |
-| -------- | ----------------------------------------------- | ------------------------------------ |
-| `@see`   | one qualified name, with an optional member     | resolved like a link (§6)            |
-| `@since` | a version: `MAJOR.MINOR` or `MAJOR.MINOR.PATCH` | its form only; compared with nothing |
+| Tag           | Value                                           | Checked                                 |
+| ------------- | ----------------------------------------------- | --------------------------------------- |
+| `@see`        | one qualified name, with an optional member     | resolved like a link (§6)               |
+| `@since`      | a version: `MAJOR.MINOR` or `MAJOR.MINOR.PATCH` | its form only; compared with nothing    |
+| `@deprecated` | a quoted reason string                          | unchanged; a missing reason is TYPL-405 |
+| `@labels`     | comma-separated `SCREAMING_SNAKE` labels        | unchanged (typl §14.3)                  |
 
 Each tag may appear more than once (`@see` usually does; a repeated `@since` is
 allowed and every value is kept). Any other `@word` at the start of a line draws
-`unknown-doc-tag`. For `@deprecated` and `@labels` the diagnostic says that the
-fact moved to an attribute and offers a quick fix (§7.5). A known tag with a
-missing or malformed value draws `malformed-doc-tag`. An `@` that is not at the
-start of a line is prose.
+`unknown-doc-tag`. A known tag with a missing or malformed value draws
+`malformed-doc-tag`, except a `@deprecated` with no reason, which stays
+TYPL-405. An `@` that is not at the start of a line is prose.
 
-Both tags pass the deletion test (general form §4.1): no tool output depends on
-them except rendered documentation.
+`@see` and `@since` pass the deletion test (general form §4.1): no tool output
+depends on them except rendered documentation. `@deprecated` and `@labels` keep
+today's behaviour: the IR carries them, hover shows them, the catalog hash
+clears them, and `ridl diff` classifies a change to them as `DocOnly`.
 
-### 3.4 The promotion of `deprecated` and `labels`
+### 3.4 The promotion of `deprecated` and `labels` is deferred
 
-The general form §4.3 lists `deprecated` and `labels` as attribute keys legal on
-any declaration; §4.7 removes the doc-tag forms. 2a implements both:
+The general form §4.3 and §4.7 decide that `deprecated` and `labels` become
+attribute keys and that their doc-tag forms go away, because tools consume them
+(the deletion test, §4.1). 2a does not implement this:
 
-- `deprecated = "reason"` and `labels = (A, B(C))` are consumed on every
-  declaration and member that takes an attribute block. They fill the existing
-  `labels` and `deprecated` fields of the IR `Decl`, `Field` and `Interface`,
-  and the same fields are added where a carrier of §3.1 lacks them. The
-  `GF_ATTRIBUTE_KEYS` list in `crates/ridl-sem/src/check.rs` becomes the key ×
-  kind allow-list issue #172 calls for, for these two keys at least.
-- `fixed` takes an attribute block that holds only `deprecated` and `labels`.
-  RIDL-106 narrows from "an attribute block on `fixed`" to "an attribute block
-  on `fixed` with a key other than `deprecated` or `labels`". This amends
-  ADR-0015.
-- `[deprecated]` written as a flag, with no reason string, draws TYPL-405, which
-  keeps its code and its lint name `deprecated-without-reason`. Its text changes
-  from "doc tag" to "attribute", as the general form §4.3 already proposed.
-- Label validation by a profile (TYPL-402, TYPL-403) stays deferred, as ADR-0007
-  decision 10 records.
-- `ridl-diff` (ADR-0012 decision 9 requires a category for each consumed key):
-  adding, removing or changing `deprecated` is a `Deprecation` change classified
-  compatible; any change to `labels` is a `Labels` change classified compatible.
-  An assurance profile may escalate a labels change; the core does not. Both
-  leave `DocOnly`, which keeps only doc comments.
-- The doc-tag forms `@deprecated` and `@labels` are removed from typl §14.2 and
-  from `docs::scan`.
+- An attribute block exists today only on `command`, `query` and `fixed` and on
+  the rsdl declarations (`crates/ridl-syntax/family.ungram`). `type`, `struct`,
+  `enum`, `union`, `interface`, `signal`, `event`, fields and enum values have
+  none, and RIDL-106 rejects a block on `fixed`. Removing the doc tags would
+  leave those declarations with no way to be deprecated.
+- Nothing in 2a needs the promotion: hover already shows labels and deprecation
+  from the IR, and no 2a output changes when they change.
+- The first consumer that would need it is 2b, if it generates `#[deprecated]`
+  or `@Deprecated` from the fact. 2b decides between promoting then (adding the
+  attribute block to the grammar) and accepting generated deprecation metadata
+  from a doc tag.
 
-The human narrative of a deprecation stays in the doc comment; the
-machine-readable fact is the attribute (general form §4.1).
+The general form §4.7 is marked as not implemented, with a pointer to 2b.
 
 ## 4. Records changed
 
-A new **ADR-0025** records D-3 to D-5, the carrier table, the tag set, the
-promotion and its diff categories, and the RIDL-106 narrowing, with the
-deletion-test argument and the ADR-0011, ADR-0012 and ADR-0015 checks:
+A new **ADR-0025** records D-3 to D-5, the carrier table, the tag set, the link
+forms and the deferral of §3.4, with the deletion-test argument and the
+ADR-0011, ADR-0012 and ADR-0015 checks:
 
 - ADR-0011 (the provisioned constant keyword): no interaction. `const` keeps its
   carrier.
-- ADR-0012: decision 9's fail-closed rule is met — both keys get a diff category
-  (§3.4). Decision 9's description of `DocOnly` ("doc comment, labels, or
-  deprecation metadata") is amended to "doc comment".
-- ADR-0015: RIDL-106 narrows for the two metadata keys (§3.4).
+- ADR-0012: no attribute key is added, so decision 9's fail-closed rule is not
+  engaged. `DocOnly` keeps its meaning ("doc comment, labels, or deprecation
+  metadata") and also covers the new doc fields of §6.3.
+- ADR-0015: no interaction. RIDL-106 is unchanged; a doc comment on `fixed` is a
+  carrier like on any interaction.
 
 Amended in place:
 
-- typl reference §14 (carriers, content, tags, the attribute forms), §16
-  (TYPL-401 implemented, TYPL-405 re-anchored, TYPL-406 to TYPL-410 added).
-- ridl reference: the doc-comment notes and the RIDL-106 row. rsdl reference:
-  the doc-comment notes for its declarations and lines.
-- `docs/wip/family-general-form.md` §4.3 and §4.7: `deprecated` and `labels`
-  marked as implemented; the RIDL-106 exception for `fixed`.
+- typl reference §14 (carriers, content, links, tags), §16 (TYPL-401
+  implemented, TYPL-406 to TYPL-410 added).
+- ridl reference: the doc-comment notes. rsdl reference: the doc-comment notes
+  for its declarations and lines.
+- `docs/wip/family-general-form.md` §4.7: marked as not implemented, deferred to
+  2b (§3.4).
 - ADR-0024: decisions 1 and 15 for the allow-by-default row (§5.3); decision 9
   replaced (§8).
 - ADR-0002 §4: root discovery from a member (§8).
@@ -215,7 +207,7 @@ files. New codes start at TYPL-406.
 | -------- | --------------------------- | ------- | ---------------------------------------------------------------------------------------------------------- |
 | TYPL-401 | `broken-doc-link`           | `warn`  | a link or `@see` target does not resolve, or resolves to an `internal` declaration of another package (§6) |
 | TYPL-404 | `detached-doc-comment`      | `warn`  | a blank line separates a doc comment from its carrier; extended from declarations to every carrier of §3.1 |
-| TYPL-405 | `deprecated-without-reason` | `warn`  | `[deprecated]` with no reason string (§3.4)                                                                |
+| TYPL-405 | `deprecated-without-reason` | `warn`  | `@deprecated` with no reason string (unchanged)                                                            |
 | TYPL-406 | `missing-docs`              | `warn`  | a covered item has no doc (§5.2)                                                                           |
 | TYPL-407 | `misplaced-doc-comment`     | `warn`  | a doc comment in a position that is not a carrier (§3.1)                                                   |
 | TYPL-408 | `unknown-doc-tag`           | `warn`  | a tag other than `@see` and `@since` (§3.3)                                                                |
@@ -323,8 +315,8 @@ pub struct DocInfo {
 }
 ```
 
-`labels` and `deprecated` leave `DocInfo`; they come from the attribute block
-(§3.4).
+`DocInfo` keeps its `labels` and `deprecated` fields, read from the tags as
+today.
 
 ### 6.3 The IR
 
@@ -344,11 +336,13 @@ ADR-0014.
   `Deployment`, `Machine` and `MemberLine` gain `doc`, `links`, `see` and
   `since`.
 - `catalog_hash` already clears `doc`, `labels` and `deprecated`. It also clears
-  `links`, `see`, `since` and the parameter doc. The system artifact's identity
-  (ADR-0022) clears the new system fields in the same way. A test deletes every
-  doc comment of a fixture workspace and checks that both hashes are unchanged:
-  that is the deletion test, run directly.
+  `links`, `see`, `since` and the parameter doc. A test deletes every doc
+  comment of a fixture workspace and checks that the catalog hash is unchanged:
+  that is the deletion test, run directly. The system IR has no hash (ADR-0022
+  decision 7).
 - `ridl-diff` classifies a change to any of these fields as `DocOnly`.
+  `diff_systems` ignores the new system doc fields: a system change has no
+  verdict, and a doc edit is not a placement or composition change.
 
 The backends keep emitting what they emit today; member docs now reach them
 because the checker fills the fields. Rendering links, `@see` and `@since` in
@@ -419,9 +413,6 @@ Rename updates every doc link and `@see` that resolves to the renamed item.
 ### 7.5 Quick fixes
 
 - On `missing-docs`: insert a `///` line above the item, at its indentation.
-- On `unknown-doc-tag` for `@deprecated` or `@labels`: remove the tag and add
-  the equivalent attribute to the item's attribute block, creating the block
-  when there is none.
 - On `doc-comment-style`: rewrite a `/** */` comment as `///` lines.
 
 ### 7.6 Lint levels and freshness
@@ -490,10 +481,8 @@ CLI reference describe it.
   same package, a candidate in a code span, a candidate in a fenced block,
   `[0..250]`, `[see below]`, and a name with a reference definition.
 - **Tags**: `@see` resolved and broken, `@since` well formed and malformed, an
-  unknown tag, `@deprecated` and `@labels` with the hint, `@` mid-line.
-- **Promotion**: `deprecated` and `labels` reach the IR on every carrier;
-  `fixed` accepts a block with only these keys and rejects any other key
-  (RIDL-106); `ridl diff` reports the two categories and `DocOnly`.
+  unknown tag, `@deprecated` and `@labels` unchanged on a declaration, `@`
+  mid-line.
 - **IR**: a snapshot of a fixture with a doc on every carrier of §3.1; the
   deletion test of §6.3.
 - **Rules**: one test per `Rule` variant, and the named-type case.
@@ -511,12 +500,10 @@ The review's tests seat mutates and reruns, as for earlier stages.
 
 ## 10. Documentation
 
-- A new book chapter, "Documenting your API": house style, carriers, links,
-  tags, the `# Examples` convention, `deprecated` and `labels`, and the doc
-  lints.
+- A new book chapter, "Documenting your API": house style, carriers, links, the
+  four tags, the `# Examples` convention, and the doc lints.
 - `docs/book/lints.md`: rows for the new lints and a default-level column.
-- The book's examples and `examples/` use `///`, and no `@deprecated` or
-  `@labels` tag remains in them.
+- The book's examples and `examples/` use `///`.
 - The CLI reference and the workspace chapter: root discovery from a member.
 - The records of §4.
 
@@ -527,15 +514,14 @@ The plan refines this; the first cut is:
 1. ADR-0025 and the allow-by-default catalogue row.
 2. Root discovery (#529).
 3. Carriers and scanning: syntax, checker, IR.
-4. The promotion and its diff categories.
-5. The link resolver and TYPL-401.
-6. The remaining doc lints.
-7. `ridl_ir::rules`.
-8. Language server: hover and completion.
-9. Language server: navigation and quick fixes.
-10. The book, the examples and the specification records.
+4. The link resolver and TYPL-401.
+5. The remaining doc lints.
+6. `ridl_ir::rules`.
+7. Language server: hover and completion.
+8. Language server: navigation and quick fixes.
+9. The book, the examples and the specification records.
 
-Tasks 2, 3 and 4 are independent of each other.
+Tasks 2 and 3 are independent of each other.
 
 ## 12. Alternatives considered
 
@@ -552,11 +538,11 @@ Tasks 2, 3 and 4 are independent of each other.
   named, documented type, so the doc would mostly repeat it. **No parameter
   carrier** (a `# Parameters` section) leaves hover on a parameter with nothing
   of its own.
-- **Keeping `@deprecated` and `@labels` as synonyms for one release** (D-4).
-  Gentler for existing sources, at the cost of two spellings and two code paths.
-  **Only `@see`, no promotion** leaves the deletion-test conflict open, and 2b's
-  generated `#[deprecated]` would come from a doc tag. **`@example`** duplicates
-  a Markdown heading and a fenced block.
+- **Carrying out the §4.7 promotion in 2a** (D-4 as first agreed). It needs an
+  attribute block on every declaration and member — a grammar, parser, formatter
+  and lowering change — and nothing in 2a consumes the result. **Promoting only
+  where a block exists** (`command`, `query`, `fixed`, rsdl) gives two spellings
+  of one fact. **`@example`** duplicates a Markdown heading and a fenced block.
 - **Qualified links only to imported packages** (D-5). A simpler resolver, but a
   doc link would force an import the code does not use. **Raw link text in the
   IR**, resolved by each backend, repeats the resolver in every backend, and the
