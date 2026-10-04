@@ -167,6 +167,14 @@ const ALLOWED: &[Allowed] = &[
               the hash; the hash itself walks `shapes()`",
     },
     Allowed {
+        path: "crates/ridl-descriptor/tests/lower.rs",
+        lines: 3,
+        why: "two tests reading the catalog descriptor's own \
+              `Catalog.interfaces` field back out of a buffer, and a test \
+              fixture that zeroes the number of the one interface its package \
+              declares; the lowering itself walks `shapes()`",
+    },
+    Allowed {
         path: "crates/ridl-descriptor/tests/round_trip.rs",
         lines: 1,
         why: "a test reading the catalog descriptor's own `Catalog.interfaces` \
