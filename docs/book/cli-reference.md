@@ -1693,8 +1693,7 @@ toolchain does not read, a malformed buffer, or an I/O failure writing to
 stdout (a pipe whose reader has gone); the message names the path and the
 cause. There is no exit 1: `ridl describe` answers no question that can come
 back negative. The exit-0 outcome, the missing path, the foreign file, a
-malformed buffer (three fixtures, of which the truncated one reaches the
-whole-buffer walk), a version the toolchain does not read, and the write
+malformed buffer (three fixtures), a version the toolchain does not read, and the write
 failure on stdout are confirmed against the built binary by
 `crates/ridl/tests/describe_cli.rs`.
 

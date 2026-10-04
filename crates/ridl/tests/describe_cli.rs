@@ -467,7 +467,9 @@ fn describe_rejects_a_version_this_toolchain_does_not_read() {
 /// members, so its JSON view is far larger than a pipe buffer, and a write
 /// fails even when the process starts writing before the pipe is closed.
 /// A write I/O failure is exit 2 (ADR-0010 decision 1), not the exit 101 of
-/// a panic.
+/// a panic. Unix only: the expected cause is built from EPIPE, which is 32
+/// on Linux and macOS.
+#[cfg(unix)]
 #[test]
 fn describe_exits_2_when_the_stdout_reader_has_gone() {
     let src = TempDir::new("closed-pipe-src");

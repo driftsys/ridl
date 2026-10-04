@@ -209,8 +209,9 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    `describe_rejects_a_foreign_file_before_any_read`,
    `describe_rejects_a_truncated_and_a_flipped_descriptor` (a malformed buffer,
    three fixtures: truncated, a root offset past the end, and one byte flipped
-   inside the body; the truncated one reaches the whole-buffer walk, and the
-   other two are rejected by the root check before it),
+   inside the body; the test checks the exit code and the `malformed` cause, not
+   which check rejected the buffer, and `crates/ridl-descriptor/tests/verify.rs`
+   pins the whole-buffer walk),
    `describe_rejects_a_version_this_toolchain_does_not_read` (a descriptor that
    `ridl_descriptor::finish` writes with the next schema version, because the
    built `ridl` writes only the version it reads), and
