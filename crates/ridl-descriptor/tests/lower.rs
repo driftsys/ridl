@@ -29,6 +29,16 @@ fn named(name: &str) -> FieldType {
     }
 }
 
+/// A `Range` timing with the given bounds, in microseconds.
+fn range(min_us: Option<&str>, max_us: Option<&str>) -> Timing {
+    Timing {
+        mode: TimingMode::Range as i32,
+        min_us: min_us.map(str::to_owned),
+        max_us: max_us.map(str::to_owned),
+        default_applied: false,
+    }
+}
+
 fn interaction(name: &str, ordinal: u32, kind: decl::Kind) -> Decl {
     Decl {
         name: name.to_owned(),
@@ -38,8 +48,10 @@ fn interaction(name: &str, ordinal: u32, kind: decl::Kind) -> Decl {
     }
 }
 
-/// Coord = integer i16; Point { x: Coord, y: Coord }; interface Vehicle with
-/// one member of every kind and one reserved slot.
+/// Coord = integer i16; Point { x: Coord, y: Coord }; interface Vehicle,
+/// locked (not provisional), with one member of every kind and one reserved
+/// slot. The event, the command and the query `nearest` declare a `Range`
+/// timing, so every kind that carries timing carries one here.
 fn package() -> Package {
     let field = |name: &str, ordinal: u32| StructMember {
         member: Some(struct_member::Member::Field(Field {
@@ -69,7 +81,7 @@ fn package() -> Package {
         interfaces: vec![Interface {
             name: "Vehicle".to_owned(),
             number: 1,
-            provisional: true,
+            provisional: false,
             interactions: vec![
                 interaction(
                     "position",
@@ -90,7 +102,7 @@ fn package() -> Package {
                     2,
                     decl::Kind::EventDef(EventDef {
                         payload: "Point".to_owned(),
-                        timing: None,
+                        timing: Some(range(Some("100000"), Some("1000000"))),
                     }),
                 ),
                 interaction(
@@ -101,6 +113,7 @@ fn package() -> Package {
                             name: "to".to_owned(),
                             r#type: Some(named("Point")),
                         }],
+                        timing: Some(range(None, Some("50000"))),
                         ..Default::default()
                     }),
                 ),
@@ -115,6 +128,7 @@ fn package() -> Package {
                         return_type: Some(ReturnType {
                             kind: Some(return_type::Kind::Value(named("Point"))),
                         }),
+                        timing: Some(range(Some("20000"), Some("200000"))),
                         ..Default::default()
                     }),
                 ),
@@ -220,7 +234,10 @@ fn the_descriptor_carries_every_member_of_every_kind() {
     let interface = vehicle(catalog);
     assert_eq!(interface.name().unwrap(), "Vehicle");
     assert_eq!(interface.number().unwrap(), 1);
-    assert!(interface.provisional().unwrap());
+    // The fixture's interface is locked; the inline shape in
+    // `an_inline_service_shape_is_an_interface_under_the_service_name` is
+    // provisional, so each value of the flag is read back once.
+    assert!(!interface.provisional().unwrap());
     assert_eq!(
         interface
             .reserved_ordinals()
@@ -396,27 +413,56 @@ fn a_fallible_reply_is_absent() {
     );
 }
 
+/// A member's lowered timing as `(mode, min_us, max_us)`, `None` when the
+/// member carries none.
+fn timing_of(
+    member: ridl_descriptor::MemberRef<'_>,
+) -> Option<(ridl_descriptor::TimingMode, Option<String>, Option<String>)> {
+    member.timing().unwrap().map(|t| {
+        (
+            t.mode().unwrap(),
+            t.min_us().unwrap().map(str::to_owned),
+            t.max_us().unwrap().map(str::to_owned),
+        )
+    })
+}
+
 #[test]
 fn timing_is_carried_when_declared_and_absent_otherwise() {
+    use ridl_descriptor::TimingMode::{Range, StrictPeriodic};
     let bytes = lower(&package(), &[]).unwrap();
     let catalog = verify(&bytes).unwrap();
     let members = vehicle(catalog).members().unwrap();
-    let timing = members
-        .get(0)
-        .unwrap()
-        .unwrap()
-        .timing()
-        .unwrap()
-        .expect("the signal declares timing");
+    let us = |v: &str| Some(v.to_owned());
+    let timings: Vec<_> = members
+        .iter()
+        .map(|m| {
+            let m = m.unwrap();
+            (m.name().unwrap().to_owned(), timing_of(m))
+        })
+        .collect();
     assert_eq!(
-        timing.mode().unwrap(),
-        ridl_descriptor::TimingMode::StrictPeriodic
-    );
-    assert_eq!(timing.min_us().unwrap(), Some("100000"));
-    assert!(members.get(1).unwrap().unwrap().timing().unwrap().is_none());
-    assert!(
-        members.get(4).unwrap().unwrap().timing().unwrap().is_none(),
-        "a fixed never carries timing"
+        timings,
+        vec![
+            (
+                "position".to_owned(),
+                Some((StrictPeriodic, us("100000"), None))
+            ),
+            (
+                "doorOpened".to_owned(),
+                Some((Range, us("100000"), us("1000000")))
+            ),
+            ("moveTo".to_owned(), Some((Range, None, us("50000")))),
+            (
+                "nearest".to_owned(),
+                Some((Range, us("20000"), us("200000")))
+            ),
+            // A fixed never carries timing.
+            ("vin".to_owned(), None),
+            ("trace".to_owned(), None),
+            ("moveBoth".to_owned(), None),
+            ("tryNearest".to_owned(), None),
+        ]
     );
 }
 
@@ -494,4 +540,109 @@ fn the_bytes_are_stable_across_runs() {
         lower(&package(), &[]).unwrap(),
         lower(&package(), &[]).unwrap()
     );
+}
+
+/// One payload of the member at `index` of the fixture's interface.
+fn payload_at(
+    catalog: CatalogRef<'_>,
+    index: usize,
+    payload: usize,
+) -> ridl_descriptor::PayloadRef<'_> {
+    vehicle(catalog)
+        .members()
+        .unwrap()
+        .get(index)
+        .unwrap()
+        .unwrap()
+        .payloads()
+        .unwrap()
+        .get(payload)
+        .unwrap()
+        .unwrap()
+}
+
+#[test]
+fn a_query_response_of_one_named_type_is_sized() {
+    let package = package();
+    let bytes = lower(&package, &[]).unwrap();
+    let catalog = verify(&bytes).unwrap();
+    let response = payload_at(catalog, 3, 1);
+    assert_eq!(response.role().unwrap(), "response");
+    assert_eq!(response.type_name().unwrap(), "Point");
+    assert_eq!(
+        rows(response),
+        vec![
+            (Encoding::Proto3, SizeStateTag::Bounded, 12),
+            (
+                Encoding::FlatBuffers,
+                SizeStateTag::Bounded,
+                point_fb_bound(&package)
+            ),
+        ]
+    );
+}
+
+#[test]
+fn the_event_and_the_fixed_payloads_name_their_types() {
+    let bytes = lower(&package(), &[]).unwrap();
+    let catalog = verify(&bytes).unwrap();
+    assert_eq!(payload_at(catalog, 1, 0).type_name().unwrap(), "Point");
+    assert_eq!(payload_at(catalog, 4, 0).type_name().unwrap(), "Coord");
+}
+
+/// `veh.geo` declares `Coord` and `Point`; `veh.cluster` declares no type and
+/// names `veh.geo.Point` as its one signal's payload, so sizing the payload
+/// and hashing the catalog both need `veh.geo` among `others`.
+fn importing_and_imported() -> (Package, Package) {
+    let geo = Package {
+        name: "veh.geo".to_owned(),
+        decls: package().decls,
+        ..Default::default()
+    };
+    let cluster = Package {
+        name: "veh.cluster".to_owned(),
+        interfaces: vec![Interface {
+            name: "Vehicle".to_owned(),
+            number: 1,
+            interactions: vec![interaction(
+                "position",
+                1,
+                decl::Kind::SignalDef(SignalDef {
+                    payload: "veh.geo.Point".to_owned(),
+                    ..Default::default()
+                }),
+            )],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    (cluster, geo)
+}
+
+#[test]
+fn a_payload_from_another_package_is_sized_and_hashed_through_others() {
+    let (cluster, geo) = importing_and_imported();
+    let with = lower(&cluster, &[&geo]).unwrap();
+    let without = lower(&cluster, &[]).unwrap();
+
+    let catalog = verify(&with).unwrap();
+    let payload = payload_at(catalog, 0, 0);
+    assert_eq!(payload.type_name().unwrap(), "veh.geo.Point");
+    assert_eq!(
+        rows(payload),
+        vec![
+            (Encoding::Proto3, SizeStateTag::Bounded, 12),
+            (
+                Encoding::FlatBuffers,
+                SizeStateTag::Bounded,
+                point_fb_bound(&geo)
+            ),
+        ]
+    );
+
+    // Without `others` the name resolves nowhere: no row is sized, and the
+    // hash closure loses `Point`, so the two hashes differ.
+    let alone = verify(&without).unwrap();
+    assert!(rows(payload_at(alone, 0, 0)).is_empty());
+    assert_ne!(catalog.hash().unwrap(), alone.hash().unwrap());
 }
