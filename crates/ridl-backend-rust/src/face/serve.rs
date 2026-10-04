@@ -2,7 +2,7 @@
 //! The face as a whole is described in the documentation of the parent
 //! module, `face.rs`.
 
-use super::{Call, interface_number};
+use super::{Call, catalog_panics_doc, interface_number};
 use proc_macro2::{Ident, Literal, TokenStream};
 use quote::quote;
 
@@ -11,8 +11,9 @@ use quote::quote;
 /// private `SERVE_BUDGET` and is the number the emitted documentation states.
 const SERVE_BUDGET: usize = 32;
 
-/// `serve` and its future (the async face design, note F-7): the served set
-/// is registered when the function is called; each poll registers
+/// `serve` and its future (the async face design, note F-7): the handler
+/// port's catalog is checked (ADR-0023 decision 8), then the served set is
+/// registered when the function is called; each poll registers
 /// `Interest::Claim`, then settles claims through `dispatch`, at most
 /// `SERVE_BUDGET` of them (driftsys/ridl#568), and wakes its own waker when it
 /// stopped at that bound; the handler port's failure is the value the future
@@ -50,7 +51,12 @@ pub(super) fn serve(
          flag was set, up to the loop's own limit of polls per frame. The \
          future resolves only when the handler port fails, to `ProviderError::Claim`; every \
          claim settled before the failure stays settled. `h` is held by value \
-         and `p` by `&mut` until the future is dropped."
+         and `p` by `&mut` until the future is dropped.\n\n{panics}",
+        panics = catalog_panics_doc(
+            iface,
+            "h",
+            "the comparison is made once, before `Handler::serve` is called",
+        ),
     );
     let future_doc = format!(
         "The future `serve` returns over interface `{iface_name}`. It holds \
@@ -76,6 +82,7 @@ pub(super) fn serve(
         where
             #bounds,
         {
+            check_catalog(::ridl_rt::port::Attached::catalog(&h));
             let state = match h.serve(#number, &[#(#ordinals),*]) {
                 Ok(()) => ServeState::Serving,
                 Err(error) => ServeState::Refused(error),
