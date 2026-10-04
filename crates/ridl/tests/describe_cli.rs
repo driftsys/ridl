@@ -1,5 +1,4 @@
-//! `ridl build --emit catalog` (spec D-9), through the binary. Stage D7 extends
-//! this file.
+//! `ridl build --emit catalog` (spec D-9), through the binary.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -287,6 +286,40 @@ interface Dash {\n\
     let source = std::fs::read_to_string(out.path().join("veh.cluster.rs"))
         .expect("`--emit rust` writes veh.cluster.rs");
     let (descriptor_hash, face_hash) = hashes(&bytes, &source);
+    assert_eq!(descriptor_hash, face_hash);
+}
+
+/// `--emit catalog` alone keeps `ridl.std` in the `others` that `run_build`
+/// passes, because `Emit::Catalog` is classed as a code emit. The payload of
+/// the one event is `Timestamp`, a `ridl.std` type, so the catalog hash covers
+/// it: the descriptor built with `--emit catalog` must equal the one built with
+/// `--emit rust,catalog`, and its hash must equal the face's `CatalogHash`.
+#[test]
+fn the_catalog_alone_hashes_the_standard_package_as_the_rust_face_does() {
+    let src = TempDir::new("std-src");
+    let file = src.write(
+        "clock.ridl",
+        "package veh.clock\n\
+interface Clock {\n\
+  event ticked: Timestamp @[100ms..1s]\n\
+}\n",
+    );
+    let alone = TempDir::new("std-alone");
+    build_from(&file, alone.path(), "catalog");
+    let with_face = TempDir::new("std-face");
+    build_from(&file, with_face.path(), "rust,catalog");
+
+    let name = "clock.catalog.binfb";
+    let alone_bytes = std::fs::read(alone.path().join(name)).unwrap();
+    let face_bytes = std::fs::read(with_face.path().join(name)).unwrap();
+    assert_eq!(
+        alone_bytes, face_bytes,
+        "the descriptor does not depend on the other emits"
+    );
+
+    let source = std::fs::read_to_string(with_face.path().join("clock.rs"))
+        .expect("`--emit rust` writes clock.rs");
+    let (descriptor_hash, face_hash) = hashes(&alone_bytes, &source);
     assert_eq!(descriptor_hash, face_hash);
 }
 
