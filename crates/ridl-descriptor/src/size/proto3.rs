@@ -100,6 +100,12 @@ struct Walk<'a, 'c> {
     /// for the path that reached it rather than a property of the type, and
     /// that answer does not generalize to another path.
     memo: HashMap<(&'a str, &'a str), u64>,
+    /// How many times `remembered` ran its body: the number of struct and
+    /// union messages the walk derived rather than reused. A test counts
+    /// these, because a memo regression on a deep diamond would otherwise
+    /// show as a walk that does not return.
+    #[cfg(test)]
+    bodies: u32,
 }
 
 impl<'a> Walk<'a, '_> {
@@ -115,6 +121,10 @@ impl<'a> Walk<'a, '_> {
         let key = (home.name.as_str(), name);
         if let Some(bound) = self.memo.get(&key) {
             return Some(*bound);
+        }
+        #[cfg(test)]
+        {
+            self.bodies += 1;
         }
         let bound = body(self)?;
         self.memo.insert(key, bound);
@@ -132,6 +142,8 @@ pub(crate) fn state(type_name: &str, ctx: &Ctx<'_>) -> Option<SizeState> {
     let mut walk = Walk {
         ctx,
         memo: HashMap::new(),
+        #[cfg(test)]
+        bodies: 0,
     };
     let bytes = match leaf_of_name(type_name, ctx.packages().package, ctx)? {
         Leaf::Struct { name, def, home } => struct_size(name, def, home, &mut walk, 0)?,
@@ -851,42 +863,101 @@ mod tests {
         field(field_type::Kind::Primitive(primitive as i32))
     }
 
+    /// The bound of the struct or union `type_name`, and how many struct
+    /// and union messages the walk derived rather than reused from its memo.
+    fn walked(type_name: &str, ctx: &Ctx<'_>) -> (Option<u64>, u32) {
+        let mut walk = Walk {
+            ctx,
+            memo: HashMap::new(),
+            bodies: 0,
+        };
+        let bound = match leaf_of_name(type_name, ctx.packages().package, ctx) {
+            Some(Leaf::Struct { name, def, home }) => struct_size(name, def, home, &mut walk, 0),
+            Some(Leaf::Union { name, def, home }) => union_size(name, def, home, &mut walk, 0),
+            _ => panic!("{type_name} is not a struct or a union"),
+        };
+        (bound, walk.bodies)
+    }
+
     #[test]
-    fn a_deep_diamond_of_shared_types_is_walked_once() {
-        // L_k = A_k @1 | B_k @2, A_k { x: L_{k+1} }, B_k { y: L_{k+1} } for
-        // k in 0..30, and L30 { x: Coord }. Every level reaches the next
-        // through both arms, so a walk that remembers nothing visits L30
-        // 2^30 times; typl admits the shape (TYPL-206 rejects a cycle, not
-        // sharing). Bounds: L30 = 6; A_k = B_k = 1 + 1 + L_{k+1}; L_k is the
-        // larger arm, 1 + 1 + A_k = 4 + L_{k+1}; L0 = 6 + 4 * 30 = 126.
-        const DEPTH: u32 = 30;
+    fn a_deep_diamond_of_shared_structs_is_walked_once() {
+        // S_k { x: S_{k+1} @1, y: S_{k+1} @2 } for k in 0..DEPTH, and
+        // S_DEPTH { x: Coord @1 }. Every level reaches the next through both
+        // fields, so a walk that remembers nothing derives 2^(DEPTH + 1) - 1
+        // messages; one that remembers each struct derives DEPTH + 1. typl
+        // admits the shape (TYPL-206 rejects a cycle, not sharing). The
+        // bound doubles at each level: S_DEPTH = 6, and S_k is two
+        // one-byte-tag fields of S_{k+1}, 2 * (1 + varint_len(S_{k+1}) +
+        // S_{k+1}). The depth is low enough that a walk without the memo
+        // ends, and the count fails instead of the walk not returning.
+        const DEPTH: u32 = 16;
         let mut package = fixture();
         for k in 0..DEPTH {
-            let next = format!("L{}", k + 1);
-            package.decls.push(union_decl(
-                &format!("L{k}"),
-                &[("a", 1, &format!("A{k}")), ("b", 2, &format!("B{k}"))],
+            let next = format!("S{}", k + 1);
+            package.decls.push(struct_decl(
+                &format!("S{k}"),
+                vec![("x", 1, named(&next)), ("y", 2, named(&next))],
             ));
-            package
-                .decls
-                .push(struct_decl(&format!("A{k}"), vec![("x", 1, named(&next))]));
-            package
-                .decls
-                .push(struct_decl(&format!("B{k}"), vec![("y", 1, named(&next))]));
         }
         package.decls.push(struct_decl(
-            &format!("L{DEPTH}"),
+            &format!("S{DEPTH}"),
             vec![("x", 1, named("Coord"))],
         ));
+        let expected = (0..DEPTH).fold(6u64, |s, _| 2 * (1 + varint_len(s) + s));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        let started = std::time::Instant::now();
-        assert_eq!(state("L0", &ctx), Some(SizeState::Bounded(126)));
-        assert!(
-            started.elapsed() < std::time::Duration::from_secs(10),
-            "a diamond of depth {DEPTH} is sized in linear time, took {:?}",
-            started.elapsed()
+        assert_eq!(walked("S0", &ctx), (Some(expected), DEPTH + 1));
+    }
+
+    #[test]
+    fn a_deep_diamond_of_shared_unions_is_walked_once() {
+        // U_k = a: U_{k+1} @1 | b: U_{k+1} @2 for k in 0..DEPTH, and
+        // U_DEPTH = a: Coord @1. Both arms reach the next level, so a walk
+        // that remembers nothing derives 2^(DEPTH + 1) - 1 messages; one
+        // that remembers each union derives DEPTH + 1. The largest arm is
+        // the one at ordinal 1: U_DEPTH = 6, U_k = 1 + 1 + U_{k+1} while the
+        // length is one byte, so U_0 = 6 + 2 * DEPTH.
+        const DEPTH: u32 = 16;
+        let mut package = fixture();
+        for k in 0..DEPTH {
+            let next = format!("U{}", k + 1);
+            package.decls.push(union_decl(
+                &format!("U{k}"),
+                &[("a", 1, &next), ("b", 2, &next)],
+            ));
+        }
+        package
+            .decls
+            .push(union_decl(&format!("U{DEPTH}"), &[("a", 1, "Coord")]));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(
+            walked("U0", &ctx),
+            (Some(6 + 2 * u64::from(DEPTH)), DEPTH + 1)
         );
+    }
+
+    #[test]
+    fn the_memo_keys_on_the_declaring_package_as_well_as_the_name() {
+        // p's `Inner { s: string [0..100] }` is 403 bytes and q's
+        // `Inner { b: boolean }` is 2. `Both { a: Inner @1, b: q.Inner @2 }`
+        // in p reaches the two in one walk: (1 + 2 + 403) + (1 + 1 + 2) =
+        // 410, in either field order (`Swapped`). A memo keyed on the name
+        // alone would answer the second `Inner` with the first one's bound:
+        // 812 for `Both` and 8 for `Swapped`.
+        let (mut root, imported) = two_package_fixture();
+        root.decls.push(struct_decl(
+            "Both",
+            vec![("a", 1, named("Inner")), ("b", 2, named("q.Inner"))],
+        ));
+        root.decls.push(struct_decl(
+            "Swapped",
+            vec![("a", 1, named("q.Inner")), ("b", 2, named("Inner"))],
+        ));
+        let others = [&imported];
+        let ctx = Ctx::new(&root, &others);
+        assert_eq!(state("Both", &ctx), Some(SizeState::Bounded(410)));
+        assert_eq!(state("Swapped", &ctx), Some(SizeState::Bounded(410)));
     }
 
     #[test]
