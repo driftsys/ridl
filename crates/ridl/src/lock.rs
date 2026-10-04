@@ -54,8 +54,8 @@ struct LockedPackage {
 /// error `--rename` and `--retire` run with, and the condition under which
 /// `ridl check` still runs its desk check (lock design §4). True when there
 /// is no error at all.
-pub(crate) fn only_lock_orphans(diagnostics: &[Diagnostic]) -> bool {
-    diagnostics.iter().all(|diagnostic| {
+pub(crate) fn only_lock_orphans<'a>(diagnostics: impl IntoIterator<Item = &'a Diagnostic>) -> bool {
+    diagnostics.into_iter().all(|diagnostic| {
         diagnostic.severity != Severity::Error || diagnostic.code == DiagCode::RIDL_409
     })
 }

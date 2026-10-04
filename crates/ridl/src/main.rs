@@ -595,13 +595,11 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
     // runs over is whole, so it does not stop the desk check (lint foundation
     // spec §6.2). The lint diagnostics are left out of the gate here, at the
     // `ridl check` call site only; `ridl lock` keeps the unfiltered test.
-    let compile_diagnostics: Vec<Diagnostic> = run
+    let compile_diagnostics = run
         .diagnostics
         .iter()
-        .filter(|diagnostic| lint_of(diagnostic.code).is_none())
-        .cloned()
-        .collect();
-    if lock::only_lock_orphans(&compile_diagnostics) {
+        .filter(|diagnostic| lint_of(diagnostic.code).is_none());
+    if lock::only_lock_orphans(compile_diagnostics) {
         match baseline_location(path, baseline) {
             Ok(Some(location)) => {
                 if let Err(code) = desk_check(path, &location, baseline.is_some(), &mut run) {
