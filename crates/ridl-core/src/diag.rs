@@ -948,6 +948,11 @@ diag_codes! {
         /// parameters still lower — this check reports and does not drop.
         RIDL_413 = "RIDL-413", Error,
             "parameter name declared twice in one parameter list";
+
+        /// A declared interface has disconnected groups of members under
+        /// direct named-type sharing. Provisional Info during calibration.
+        RIDL_414 = "RIDL-414", Info,
+            "interface members form disconnected type-sharing groups", lint = "low-cohesion-interface";
     }
 
     /// The rsdl catalogue: every `RSDL-` code declared in this module, with the
@@ -1922,6 +1927,7 @@ mod tests {
             ("RIDL-405", "shared-error-type"),
             ("RIDL-406", "redeclared-envelope-metadata"),
             ("RIDL-407", "ordinal-changed"),
+            ("RIDL-414", "low-cohesion-interface"),
             ("RSDL-409", "redundant-provider-set"),
             ("RSDL-804", "unclaimed-backend-key"),
             ("MANI-005", "unknown-manifest-key"),

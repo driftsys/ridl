@@ -319,7 +319,7 @@ demands on a binding (see the note above — no binding exists yet):
   late-joiner delivery. An occurrence that happened before you subscribed did
   not happen to you.
 
-```ridl,allow=TYPL-223
+```ridl,allow=TYPL-223,allow=RIDL-414
 package veh.cluster
 import veh.common.Speed
 import veh.common.Temperature
@@ -447,7 +447,7 @@ enumset WarningFlags: Warning
 Both names are then usable on a boundary — the enum where one value is meant,
 the enumset where several are:
 
-```ridl
+```ridl,allow=RIDL-414
 package veh.cluster
 import veh.common.Warning
 import veh.common.WarningFlags
@@ -463,7 +463,7 @@ interface Warnings {
 A `fixed` is a value set at build, factory, or over-the-air update, and
 immutable for the lifetime of the running software instance:
 
-```ridl,allow=TYPL-223
+```ridl,allow=TYPL-223,allow=RIDL-414
 package veh.cluster
 import veh.common.DoorCount
 import veh.common.Enabled
@@ -496,7 +496,7 @@ outcome, the outcome is observed as state, or the interaction is a query.
 A **query** is request/response. The reply is mandatory, and a query returning
 `()` is a `RIDL-105` error.
 
-```ridl
+```ridl,allow=RIDL-414
 package veh.cluster
 import veh.common.Speed
 import veh.common.GearPosition
@@ -670,7 +670,7 @@ or a `match` pattern does. The note is harmless here — a stream element is nev
 a signal payload, so nothing ever asks it for an init — and the block's fence
 carries `allow=TYPL-115` to say so.
 
-```ridl
+```ridl,allow=RIDL-414
 package veh.cluster
 import veh.common.LogLine
 import veh.common.FwBlock
@@ -839,7 +839,7 @@ on an error. Interactions carry implicit ordinals by declaration order, so
 appending is compatible and inserting or reordering is not. Retire an
 interaction with a `reserved` tombstone rather than deleting it:
 
-```ridl,allow=TYPL-223
+```ridl,allow=TYPL-223,allow=RIDL-414
 package veh.cluster
 import veh.common.Speed
 
@@ -949,7 +949,7 @@ air. Note that every capability flag names a type rather than writing
 `boolean`, and that `ModelYear` and `Speed` are declared types, not inline
 ranges.
 
-```ridl
+```ridl,allow=RIDL-414
 package veh.identity
 import veh.common.Speed
 import veh.common.Vin
@@ -1010,7 +1010,7 @@ not reach into a struct-typed one. And the engine state field is named
 `engineState`: `state` is a reserved word family-wide, so it cannot be an
 identifier.
 
-```ridl,allow=RIDL-406,allow=TYPL-223,allow=TYPL-224
+```ridl,allow=RIDL-406,allow=TYPL-223,allow=TYPL-224,allow=RIDL-414
 package veh.powertrain
 
 type RPM: /min [0.0..8000.0 step 10.0]
@@ -1115,7 +1115,7 @@ published through a struct that wraps the array rather than as a bare array.
 Command parameters name types too: `DoorIndex`, not `integer [0..7]`. And the
 lock parameter is named `lock`, because `state` is reserved.
 
-```ridl,allow=RIDL-406,allow=TYPL-223
+```ridl,allow=RIDL-406,allow=TYPL-223,allow=RIDL-414
 package veh.body
 import veh.common.Temperature
 
@@ -1227,7 +1227,7 @@ interface BodyControl {
 
 ## Annex 4 — Driver monitoring
 
-```ridl,allow=RIDL-406,allow=TYPL-223
+```ridl,allow=RIDL-406,allow=TYPL-223,allow=RIDL-414
 package veh.dms
 
 type Ratio: % [0.0..100.0 step 0.1]

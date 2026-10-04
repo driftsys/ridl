@@ -475,7 +475,7 @@ the final values).
   `LOW_COHESION_MIN_GROUPS: usize = 2`,
   `LOW_COHESION_MIN_GROUP_SIZE: usize = 1`.
 
-- [ ] **Step 1: Write the failing tests**:
+- [x] **Step 1: Write the failing tests**:
   - `cohesion_groups_link_members_that_share_a_type`: members `a(X)`, `b(X, Y)`,
     `c(Z)`, `reset()`; groups `[[a,b],[c]]`.
   - `cohesion_groups_follow_first_member_source_order`: members declared in the
@@ -486,12 +486,12 @@ the final values).
     ``"interface `I` splits into 2 groups of members that share no type: [a, b], [c]"``,
     at the interface's declaration.
   - `a_cohesive_interface_is_not_reported`.
-- [ ] **Step 2: Run** — expect FAIL.
-- [ ] **Step 3: Add the Info row**, the `expected` pair and the book row.
-- [ ] **Step 4: Implement** §4.4 with a union-find over the types each member
+- [x] **Step 2: Run** — expect FAIL.
+- [x] **Step 3: Add the Info row**, the `expected` pair and the book row.
+- [x] **Step 4: Implement** §4.4 with a union-find over the types each member
       references directly (payload, parameters, return value, fallible ok and
       err).
-- [ ] **Step 5: Run** — expect PASS. **Step 6: Commit** —
+- [x] **Step 5: Run** — expect PASS. **Step 6: Commit** —
       `feat(ridlc): add the low-cohesion-interface lint`.
 
 ### Task 10: `package-fan-out`
@@ -973,6 +973,72 @@ reserved codes, corpus budgets, four PRs and approval stages.
     assertion. No grammar or production code changes. The shared test setup
     accepts an IR amendment after checking, then runs the public pass with the
     same source-indexed sites and render map.
+
+34. **Controller: route the remaining Task 7 MCP expectations to Task 11**
+    (2026-10-04). The existing exact code arrays in `ridl-mcp/src/diff.rs` and
+    `ridl-mcp/src/lib.rs` still omit the known TYPL-223 finding. Task 11 owns
+    their precise synchronization while preserving source, spans and all other
+    assertions. Task 9 leaves these files unchanged and does not claim a green
+    workspace suite. The final PR still requires `just verify`.
+35. **Task 9: expose the shared cohesion metric at the crate boundary**
+    (approved ownership extension, 2026-10-04). Re-export `cohesion_groups` from
+    `ridlc/src/lib.rs` beside `check_design_lints`, with the prescribed
+    `(&Package, &Interface) -> Vec<Vec<String>>` signature over checked IR. Task
+    11 can consume it without duplicating grouping or adding hidden resolution
+    context. An integration test calls this public API directly.
+36. **Task 9: share nominal qualification and preserve source group order**
+    (2026-10-04). Move Task 8's unchanged local-name qualification helper into
+    the shared module and use it in both checks. Visit references inside
+    anonymous containers but never expand named definitions or treat pattern
+    constants as types. Exclude exactly the `ridl.std` owner. Union-find roots
+    retain the earliest member index, then each group's member names are sorted.
+    Missing transitive links, lost qualification or lexical group ordering would
+    change the metric; direct, alias and ordering fixtures detect those errors.
+    Map-key, map-value and query-parameter traversal each have a mutation check:
+    removing one branch fails the public API fixture's hand-written group
+    assertion, and restoring it passes.
+37. **Task 9: synchronize the candidate's catalogue records** (approved
+    ownership extension, 2026-10-04). Register RIDL-414 at provisional Info,
+    with search-start thresholds of two groups and one member in the smallest
+    group. Add the catalogue pair, book row, ridl reference row and SARIF rule,
+    and extend the overview's diagnostic index to ridl §16.4. Task 14 must
+    synchronize these records with the selected severity or remove the lint
+    emitter and records if calibration drops it, retaining the public metric.
+
+38. **Task 9: synchronize the diagnostic coverage index and observed book
+    findings** (approved bounded extension, 2026-10-04). Add RIDL-414 to
+    `RIDL_PROFILE_CODES` as `Elsewhere`, pointing at
+    `crates/ridlc/tests/design_lints.rs` and its exact positive test. The
+    existing showcase remains unchanged. The book harness observed eleven
+    RIDL-414 findings. Add only their allowances to `getting-started.md` fence
+    starts 322, 450, 466, 499, 673, 842, 952, 1013, 1118 and 1230, and `rsdl.md`
+    fence start 25. Preserve every other allowance, example source and the
+    bidirectional harness. Task 14 must revalidate these exact markers and
+    remove any whose finding disappears after threshold selection or lint
+    removal; selected severity must also be synchronized with the catalogue,
+    reference, book row, SARIF rule and precise provisional Info test.
+
+39. **Task 9: preserve the baseline tests' exact output contract** (approved
+    test-only extension, 2026-10-04). The full CLI suite finds RIDL-414 in the
+    unchanged `BASE` and `REORDERED` fixtures of `baseline_desk.rs`.
+    `check_without_a_baseline_is_unchanged` and
+    `auto_discovery_of_an_empty_baseline_directory_stays_silent` retain their
+    commands, success status and empty stdout. Replace their empty stderr
+    expectation with the complete single rendered Info note: the code, groups,
+    exact fixture path, declaration line and column, token underline and lint
+    hint. Any extra diagnostic or baseline report still fails. Task 14 must
+    restore empty stderr if the lint drops or its chosen thresholds suppress
+    this finding, or update this exact note if its severity changes.
+
+40. **Task 9: synchronize the CLI server fixture's cohesion finding** (approved
+    test-only extension, 2026-10-04). In `crates/ridl/tests/servers.rs`, add
+    RIDL-414 to the exact compile-error code array and add its complete Info
+    diagnostic to the read-only tool test. It names `Status`, five groups and
+    `b/b.ridl` line 16, columns 11 to 17, with empty labels and fixes. Preserve
+    the existing TYPL-223 expectation, fixture source, tree metadata equality
+    and every lookup/diff assertion. Task 14 must remove these additions if the
+    lint drops or its thresholds suppress the finding, or synchronize the exact
+    severity if its final level changes.
 
 ## Pull requests
 

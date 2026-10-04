@@ -8,12 +8,15 @@ use ridl_core::package::Package;
 use ridl_ir::v2;
 use ridl_sem::{CheckedPackage, Resolution};
 
+mod cohesion;
 mod shapes;
 mod sites;
 mod units;
 mod words;
 
 use sites::SiteIndex;
+
+pub use cohesion::cohesion_groups;
 
 /// Checks one source set without loading files or applying lint levels.
 ///
@@ -60,5 +63,12 @@ pub(crate) fn run(ctx: &Ctx<'_>) -> Vec<Diagnostic> {
     let mut diagnostics = units::check(ctx);
     diagnostics.extend(words::check(ctx));
     diagnostics.extend(shapes::check(ctx));
+    diagnostics.extend(cohesion::check(ctx));
     diagnostics
+}
+
+fn qualify(pkg: &str, name: &mut String) {
+    if !name.contains('.') {
+        *name = format!("{pkg}.{name}");
+    }
 }

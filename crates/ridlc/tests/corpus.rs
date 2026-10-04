@@ -558,6 +558,15 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
         },
     ),
     ("RIDL-413", Showcase),
+    (
+        "RIDL-414",
+        Elsewhere {
+            fixture: "crates/ridlc/tests/design_lints.rs",
+            reason: "a workspace design lint; provoked by \
+                     `low_cohesion_interface_is_reported_with_its_groups` \
+                     in `crates/ridlc/tests/design_lints.rs`",
+        },
+    ),
     // The shared codes E2 added or folded into the ridl profile.
     ("TYPL-005", Showcase),
     ("FORM-106", Showcase),

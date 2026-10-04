@@ -6,7 +6,7 @@ use ridl_core::diag::{DiagCode, Diagnostic, Label, Span};
 use ridl_core::lint::lint_by_name;
 use ridl_ir::v2::{self, decl, field_type, stream_type, struct_member};
 
-use super::Ctx;
+use super::{Ctx, qualify};
 
 pub(crate) const DUPLICATE_SHAPE_MIN_FIELDS: usize = 2;
 pub(crate) const DUPLICATE_SHAPE_MIN_VARIANTS: usize = 2;
@@ -90,12 +90,6 @@ pub(crate) fn check(ctx: &Ctx<'_>) -> Vec<Diagnostic> {
         }
     }
     diagnostics
-}
-
-fn qualify(pkg: &str, name: &mut String) {
-    if !name.contains('.') {
-        *name = format!("{pkg}.{name}");
-    }
 }
 
 fn canonicalize(pkg: &str, ty: &mut v2::FieldType) {

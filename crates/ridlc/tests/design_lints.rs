@@ -2,6 +2,7 @@ use ridl_core::RidlDatabase;
 use ridl_core::diag::{Diagnostic, Severity, SourceMap, Span};
 
 const UNIT: &str = "TYPL-222";
+const COHESION: &str = "RIDL-414";
 const DESIGN_LINTS: &[&str] = &[
     "inconsistent-unit",
     "inconsistent-abbreviation",
@@ -51,6 +52,149 @@ fn units(diagnostics: &[Diagnostic]) -> Vec<&Diagnostic> {
         .iter()
         .filter(|d| d.code.as_str() == UNIT)
         .collect()
+}
+
+fn cohesion(diagnostics: &[Diagnostic]) -> Vec<&Diagnostic> {
+    diagnostics
+        .iter()
+        .filter(|d| d.code.as_str() == COHESION)
+        .collect()
+}
+
+#[test]
+fn low_cohesion_interface_is_reported_with_its_groups() {
+    let source = "package a\ntype X: boolean\ntype Y: boolean\ntype Z: boolean\ninterface I { command a(x: X) @[..1s] command b(x: X, y: Y) @[..1s] command c(z: Z) @[..1s] command reset() @[..1s] }\n";
+    let out = workspace(&[("a", source)]);
+    let found = cohesion(&out.diagnostics);
+    assert_eq!(found.len(), 1, "{:?}", out.diagnostics);
+    assert_eq!(
+        found[0].message,
+        "interface `I` splits into 2 groups of members that share no type: [a, b], [c]"
+    );
+    assert_eq!(found[0].severity, Severity::Info);
+    assert_eq!(
+        ridl_core::lint::lint_of(found[0].code).unwrap().lint,
+        Some("low-cohesion-interface")
+    );
+    let start = source.find("I {").unwrap();
+    assert_eq!(
+        site(&out.sources, found[0].primary),
+        ("a/source.ridl".to_string(), start..start + 1)
+    );
+    assert!(found[0].labels.is_empty());
+    assert!(found[0].fixits.is_empty());
+}
+
+#[test]
+fn a_cohesive_interface_is_not_reported() {
+    let source = "package a\ntype X: boolean\ninterface I { command a(x: X) @[..1s] command b(x: X) @[..1s] command reset() @[..1s] }\n";
+    let out = workspace(&[("a", source)]);
+    assert!(cohesion(&out.diagnostics).is_empty());
+}
+
+fn groups(source: &str) -> Vec<Vec<String>> {
+    let out = workspace(&[("a", source)]);
+    let pkg = &out.checked[0].ir;
+    ridlc::cohesion_groups(pkg, &pkg.interfaces[0])
+}
+
+#[test]
+fn cohesion_groups_link_members_that_share_a_type() {
+    let source = "package a\ntype X: boolean\ntype Y: boolean\ntype Z: boolean\ninterface I { command a(x: X) @[..1s] command b(x: X, y: Y) @[..1s] command c(z: Z) @[..1s] command reset() @[..1s] }\n";
+    assert_eq!(groups(source), vec![vec!["a", "b"], vec!["c"]]);
+}
+
+#[test]
+fn cohesion_groups_follow_first_member_source_order() {
+    let source = "package a\ntype X: boolean\ntype Z: boolean\ninterface I { command z(x: X) @[..1s] command y(x: X) @[..1s] command a(z: Z) @[..1s] command reset() @[..1s] }\n";
+    assert_eq!(groups(source), vec![vec!["y", "z"], vec!["a"]]);
+}
+
+#[test]
+fn cohesion_groups_merge_transitively_through_a_later_member() {
+    let source = "package a\ntype X: boolean\ntype Y: boolean\ntype Z: boolean\ninterface I { command z(x: X) @[..1s] command separate(z: Z) @[..1s] command a(y: Y) @[..1s] command bridge(x: X, y: Y) @[..1s] }\n";
+    assert_eq!(
+        groups(source),
+        vec![vec!["a", "bridge", "z"], vec!["separate"]]
+    );
+}
+
+#[test]
+fn cohesion_groups_cover_payloads_parameters_returns_and_fallible_arms() {
+    let source = "package a\ntype X: boolean\ntype Y: boolean\nerror enum E { FAILED = 0 }\ninterface I { signal status: X @[1s..2s] event changed: X @[1s..2s] fixed initial: X command send(value: X) @[..1s] query read(): X @[..1s] query attempt(): Y | E @[..1s] query retry(): X | E @[..1s] command accept(value: Y) @[..1s] }\n";
+    assert_eq!(
+        groups(source),
+        vec![vec![
+            "accept", "attempt", "changed", "initial", "read", "retry", "send", "status"
+        ]]
+    );
+}
+
+#[test]
+fn cohesion_groups_keep_named_types_in_anonymous_containers() {
+    let source = "package a\ntype X: boolean\ntype Y: boolean\ninterface I { command upload(values: <X>) @[..1s] query download(): <X> @[..1s] fixed initial: [X; 2] query read(): (first: X, second: Y) @[..1s] command send(value: Y) @[..1s] }\n";
+    assert_eq!(
+        groups(source),
+        vec![vec!["download", "initial", "read", "send", "upload"]]
+    );
+}
+
+#[test]
+fn cohesion_groups_link_map_keys_values_and_query_parameters() {
+    let source = "package a\ntype Key: string [1..8]\ntype X: boolean\ntype Y: boolean\ninterface I { command key(value: Key) @[..1s] command value(value: X) @[..1s] query read(): (items: [Key: X; 2]) @[..1s] query connect(request: Y): (maybe: X?) @[..1s] command send(value: Y) @[..1s] query raw(): (flag: boolean, count: integer [0..9]) @[..1s] }\n";
+    assert_eq!(
+        groups(source),
+        vec![vec!["connect", "key", "read", "send", "value"]]
+    );
+}
+
+#[test]
+fn cohesion_groups_use_direct_nominal_references_without_expanding_definitions() {
+    let source = "package a\ntype X: boolean\nstruct First { value: X }\nstruct Second { value: X }\ninterface I { command a(value: First) @[..1s] command b(value: Second) @[..1s] command c(value: X) @[..1s] }\n";
+    assert_eq!(groups(source), vec![vec!["a"], vec!["b"], vec!["c"]]);
+}
+
+#[test]
+fn cohesion_groups_qualify_local_types_and_preserve_import_identity() {
+    let a = "package a\ntype X: boolean\n";
+    let b = "package b\nimport a.X as Remote\ntype X: boolean\ninterface I { command local(value: X) @[..1s] command remote(value: Remote) @[..1s] command again(value: a.X) @[..1s] }\n";
+    let out = workspace(&[("a", a), ("b", b)]);
+    let pkg = &out.checked.iter().find(|p| p.ir.name == "b").unwrap().ir;
+    assert_eq!(
+        ridlc::cohesion_groups(pkg, &pkg.interfaces[0]),
+        vec![vec!["local"], vec!["again", "remote"]]
+    );
+    let mut iface = pkg.interfaces[0].clone();
+    let ridl_ir::v2::decl::Kind::CommandDef(command) = iface.interactions[0].kind.as_mut().unwrap()
+    else {
+        panic!("command")
+    };
+    command.params[0].r#type.as_mut().unwrap().kind =
+        Some(ridl_ir::v2::field_type::Kind::Named("b.X".into()));
+    iface.interactions[1] = pkg.interfaces[0].interactions[0].clone();
+    iface.interactions[1].name = "bare".into();
+    assert_eq!(
+        ridlc::cohesion_groups(pkg, &iface),
+        vec![vec!["bare", "local"], vec!["again"]]
+    );
+}
+
+#[test]
+fn cohesion_groups_exclude_standard_types_and_members_without_named_types() {
+    let source = "package a\ntype X: boolean\ntype Y: boolean\ninterface I { command a(value: X, delay: Duration) @[..1s] command b(value: Y, delay: Duration) @[..1s] command wait(delay: Duration) @[..1s] command reset() @[..1s] command raw(data: <bytes>) @[..1s] reserved old }\n";
+    assert_eq!(groups(source), vec![vec!["a"], vec!["b"]]);
+    let empty = "package a\ninterface I { command reset() @[..1s] command wait(delay: Duration) @[..1s] command raw(data: <bytes>) @[..1s] }\n";
+    assert!(groups(empty).is_empty());
+    let out = workspace(&[("a", empty)]);
+    assert!(cohesion(&out.diagnostics).is_empty());
+}
+
+#[test]
+fn low_cohesion_interface_excludes_standard_packages_and_service_inline_shapes() {
+    let standard = "package ridl.std\ntype X: boolean\ntype Y: boolean\ninterface I { command a(value: X) @[..1s] command b(value: Y) @[..1s] }\n";
+    let user = "package a\ntype X: boolean\ntype Y: boolean\nservice a.example { command a(value: X) @[..1s] command b(value: Y) @[..1s] }\n";
+    let (diagnostics, _) = abbreviation_source_set(&[("ridl.std", standard), ("a", user)]);
+    assert!(cohesion(&diagnostics).is_empty(), "{diagnostics:?}");
 }
 
 fn text_at(sources: &SourceMap, span: Span) -> &str {

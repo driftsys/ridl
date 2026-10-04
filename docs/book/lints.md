@@ -139,6 +139,7 @@ MANI-010 is itself a lint, so the table can set its level.
 | `shared-error-type` | RIDL-405 | info | one `error` type shared across unrelated failure domains |
 | `redeclared-envelope-metadata` | RIDL-406 | info | payload struct re-declares envelope metadata |
 | `ordinal-changed` | RIDL-407 | warn | interaction, struct field, or union arm ordinal changed against the published baseline |
+| `low-cohesion-interface` | RIDL-414 | info | interface members form disconnected type-sharing groups |
 | `redundant-provider-set` | RSDL-409 | warn | a `requires` resolves to a redundant provider set |
 | `unclaimed-backend-key` | RSDL-804 | warn | a backend key whose namespace no configured backend claims |
 | `unknown-manifest-key` | MANI-005 | warn | unknown manifest key |

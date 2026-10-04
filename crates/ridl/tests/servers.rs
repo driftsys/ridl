@@ -541,7 +541,7 @@ async fn diff_compile_errors_preserve_structured_diagnostics() {
                     .iter()
                     .map(|d| d["code"].as_str().unwrap())
                     .collect::<Vec<_>>(),
-                ["TYPL-103", "TYPL-011", "TYPL-223"]
+                ["TYPL-103", "TYPL-011", "TYPL-223", "RIDL-414"]
             );
         }
         client.cancel().await.unwrap();
@@ -648,6 +648,18 @@ async fn every_tool_leaves_the_tree_unchanged() {
                             "path": interface_path,
                             "start": {"line": 28, "column": 9},
                             "end": {"line": 28, "column": 18},
+                        },
+                        "labels": [],
+                        "fixes": [],
+                    }, {
+                        "code": "RIDL-414",
+                        "severity": "info",
+                        "lint": "low-cohesion-interface",
+                        "message": "interface `Status` splits into 5 groups of members that share no type: [speed], [reading], [setLevel], [outcome], [probe]",
+                        "span": {
+                            "path": interface_path,
+                            "start": {"line": 16, "column": 11},
+                            "end": {"line": 16, "column": 17},
                         },
                         "labels": [],
                         "fixes": [],

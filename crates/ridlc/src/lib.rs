@@ -47,7 +47,7 @@ use std::time::Duration;
 
 pub mod deps;
 mod design_lints;
-pub use design_lints::check_design_lints;
+pub use design_lints::{check_design_lints, cohesion_groups};
 pub mod diff_side;
 pub use diff_side::{DiffSide, DiffSideError, load_diff_side};
 pub mod plugin;

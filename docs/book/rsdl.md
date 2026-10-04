@@ -22,7 +22,7 @@ rsdl declares no type, no interface and no service. An `.rsdl` file that tries
 draws RSDL-604. The contracts live in a ridl package, exactly as the getting
 started chapter writes them:
 
-```ridl,allow=TYPL-223
+```ridl,allow=TYPL-223,allow=RIDL-414
 package veh.climate
 
 type Temperature: integer [-40..85]

@@ -972,6 +972,16 @@ expression: log
               }
             },
             {
+              "id": "RIDL-414",
+              "name": "low-cohesion-interface",
+              "shortDescription": {
+                "text": "interface members form disconnected type-sharing groups"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
               "id": "RSDL-305",
               "shortDescription": {
                 "text": "`instances` is not a parenthesised list of one or more camelCase names"
@@ -1474,7 +1484,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 147,
+          "ruleIndex": 148,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"
