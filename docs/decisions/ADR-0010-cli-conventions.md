@@ -13,7 +13,9 @@ driftsys/ridl#194.
 
 Amended 2026-10-04 by the lint foundation design (spec 0): decision 1 states
 that a lint raised to `deny` exits 1 in `ridl check`, `ridl build`,
-`ridlc check` and `ridlc build`.
+`ridlc check` and `ridlc build`, and that of the other subcommands only the
+`ridl lsp` and `ridl mcp` servers apply lint levels, with no effect on their
+exit code.
 
 ## Context
 
@@ -76,8 +78,10 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
      flag, or an I/O failure while reading or writing.
 
    In `ridl check`, `ridl build`, `ridlc check` and `ridlc build`, a lint raised
-   to `deny` in `[lints]` is a diagnostic error, so it exits 1; the other
-   subcommands of both binaries do not apply lint levels.
+   to `deny` in `[lints]` is a diagnostic error, so it exits 1. The other
+   subcommands of both binaries do not apply lint levels, except the `ridl lsp`
+   and `ridl mcp` servers, which apply them to the diagnostics they report and
+   have no exit code that depends on them.
 
    Verified by direct construction against the built `ridl` and `ridlc` binaries
    on this branch (2026-07-27), one input per cell, across the eight subcommands
