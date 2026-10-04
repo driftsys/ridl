@@ -71,7 +71,8 @@ D4 landed as PR #681 (eb36d16b) on 2026-10-04. The plan's types block and Tasks
   `proto_scalar` and `scalar_charge` do. An integer or float backing with no
   width still gives a bounded `Scalar(Unspecified)`, where `proto_scalar` emits
   `string` and `scalar_charge` answers `None`; ridl-sem always sets the width,
-  and Task 6 may align the two.
+  and Task 6 may align the two. (D5 aligned them: such a backing now has no
+  leaf.)
 - The leaf model counts in `u64`; `proto_max` excludes the tag and `Blob`
   excludes the length prefix. Task 6 adds both, and Tasks 6 and 7 narrow to the
   descriptor's `u32` with a checked conversion.
@@ -88,8 +89,8 @@ D5 landed as PR #686 (d317c96b) on 2026-10-04. Facts D6 needs:
   `size_state` only for a payload that is one named type.
 - The proto3 column is `Some` only for a struct or a union payload, and is
   always `Bounded`. It is `None` for a named scalar, an enum or an enum set. It
-  is also `None` in these cases, among others (`size/proto3.rs` has the full
-  list):
+  is also `None` in these cases, among others (the `size_state` rustdoc in
+  `size.rs` has the full list):
   - an unresolved name;
   - a member the proto backend refuses (a map key, a map value, an optional
     array or map, an array of arrays or maps, an enum value outside int32, a
@@ -616,7 +617,7 @@ named.
 6. **A unit backing with no width has no leaf.** Reason: `proto_scalar` emits
    `string` for it, so a numeric bound would not be an upper bound. An integer
    or float backing with no width keeps a `Scalar(Unspecified)` leaf. D5
-   reversed this second sentence: such a backing now has no leaf either (§5 D5
+   reversed this last sentence: such a backing now has no leaf either (§5 D5
    item 2). Cost if wrong: hand-built IR only.
 7. **An optional named payload (`T?`) is sized as `T`.** Reason: the bound of
    `T` is an upper bound for `T?` in both encodings. Cost if wrong: none found.
