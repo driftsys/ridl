@@ -55,6 +55,7 @@ pub mod v1 {
 
 mod clauses;
 mod contract;
+mod depth;
 mod facts;
 mod flatbuffers;
 mod lower;
