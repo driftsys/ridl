@@ -91,4 +91,18 @@ mod tests {
         );
         assert_eq!(ceil_ratio("1", &format!("0.{}1", "0".repeat(60))), None);
     }
+
+    /// A scaled operand that does not fit in `u128` is not derivable, and the
+    /// answer is not the answer a clamped operand would give. Both operands
+    /// here overflow by the same amount, so clamping both would answer 1.
+    #[test]
+    fn an_operand_that_does_not_fit_is_not_derivable() {
+        let huge = format!("1{}", "0".repeat(40));
+        assert_eq!(ceil_ratio(&huge, &huge), None);
+        assert_eq!(ceil_ratio(&huge, "1"), None);
+        assert_eq!(ceil_ratio("1", &huge), None);
+        // One digit fewer fits, so the shape itself is not what is rejected.
+        let fits = format!("1{}", "0".repeat(37));
+        assert_eq!(ceil_ratio(&fits, &fits), Some(1));
+    }
 }

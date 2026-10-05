@@ -1501,6 +1501,63 @@ mod tests {
         );
     }
 
+    /// rsdl §13: the routing table is in (catalog, interface number, member
+    /// ordinal) order, which is not the order the closure walks its
+    /// interfaces in. The closure keys them by identity, where every declared
+    /// interface precedes every inline service shape, so a declared interface
+    /// of `veh.topology` is walked before the inline shape of `veh.diag`
+    /// while the table must hold `veh.diag` first: the lowering sorts the
+    /// table rather than writing it in the order it walks.
+    #[test]
+    fn the_routing_table_is_sorted_and_not_written_in_closure_order() {
+        let contracts = "package veh.topology\n\
+                         \n\
+                         type Flag: boolean\n\
+                         \n\
+                         interface Status {\n\
+                         \x20 signal ready: Flag @[100ms..1s]\n\
+                         }\n\
+                         \n\
+                         service veh.topology.hub : Status\n";
+        let topology = "package veh.topology\n\
+                        component Hub { offers veh.topology.hub }\n\
+                        component Screen { requires Status, requires veh.diag.access }\n\
+                        system Vehicle { Hub, Screen, veh.diag.access }\n\
+                        deployment Desk for Vehicle {\n\
+                        \x20 machine Top { Hub, Screen, veh.diag.access }\n\
+                        }\n";
+        let (checked, lowered) = lower_topology(&[
+            ("veh/topology/status.ridl", contracts),
+            ("veh/topology/x.rsdl", topology),
+        ]);
+        assert!(!checked.closure_has_errors, "{:?}", checked.diagnostics);
+        let system = lowered.expect("the closure lowers");
+
+        assert_eq!(
+            route_rows(&system.deployments[0]),
+            [
+                (
+                    "veh.diag",
+                    1,
+                    1,
+                    "veh.diag.access",
+                    "readFaults",
+                    "veh.diag.access",
+                    vec!["veh.diag.access.Unit@Top".to_string()]
+                ),
+                (
+                    "veh.topology",
+                    1,
+                    1,
+                    "Status",
+                    "ready",
+                    "veh.topology.hub",
+                    vec!["veh.topology.Hub.Unit@Top".to_string()]
+                ),
+            ]
+        );
+    }
+
     /// Appendix A's distributions with their member lines and dependency, and
     /// their installation in each deployment (rsdl §3.3, §13, the
     /// "Distributions" item after the example).

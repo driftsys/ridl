@@ -36,8 +36,10 @@ use crate::v2::{MAX_JSON_NESTING, read_json, render_json};
 
 pub mod v1 {
     //! The generated types of `ridl.codegen.v1`: the model
-    //! (`proto/ridl/codegen/v1/model.proto`) and the backend contract's
-    //! request and response over it (`proto/ridl/codegen/v1/plugin.proto`).
+    //! (`proto/ridl/codegen/v1/model.proto`), the deployment section of a
+    //! request (`proto/ridl/codegen/v1/deployment.proto`) and the backend
+    //! contract's request and response over them
+    //! (`proto/ridl/codegen/v1/plugin.proto`).
 
     include!(concat!(env!("OUT_DIR"), "/ridl.codegen.v1.rs"));
 

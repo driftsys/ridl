@@ -2217,3 +2217,312 @@ fn a_request_with_a_deployment_round_trips() {
         request
     );
 }
+
+/// A section with one of every message the deployment schema declares, filled
+/// with values that are not the field's default, so that every JSON key is
+/// written.
+fn populated_deployment() -> v1::Deployment {
+    v1::Deployment {
+        system: "veh.cabin.Cabin".to_string(),
+        name: "Bench".to_string(),
+        regions: vec![v1::Region {
+            catalog: "veh.cabin".to_string(),
+            hash: vec![1, 2, 3],
+            interfaces: vec![v1::RegionInterface {
+                name: "Climate".to_string(),
+                number: 1,
+                inline: true,
+                provisional: true,
+                service: "veh.cabin.climate".to_string(),
+            }],
+        }],
+        instances: vec![v1::Instance {
+            component: "veh.cabin.Provider".to_string(),
+            instance: "primary".to_string(),
+            machine: "head".to_string(),
+            external: true,
+            offers: vec![v1::InterfaceKey {
+                catalog: "veh.cabin".to_string(),
+                number: 1,
+                name: "Climate".to_string(),
+                inline: true,
+            }],
+            maps: vec!["veh.cabin".to_string()],
+        }],
+        channels: vec![v1::Channel {
+            catalog: "veh.cabin".to_string(),
+            interface_number: 1,
+            interface: "Climate".to_string(),
+            inline: true,
+            member_ordinal: 2,
+            member: "TempChanged".to_string(),
+            kind: v1::Kind::Event as i32,
+            producer: Some(v1::Endpoint {
+                component: "veh.cabin.Provider".to_string(),
+                instance: "primary".to_string(),
+                machine: "head".to_string(),
+            }),
+            consumers: vec![v1::Consumer {
+                component: "veh.cabin.Panel".to_string(),
+                instance: "Unit".to_string(),
+                machine: "head".to_string(),
+                crossing: v1::Crossing::SameMachine as i32,
+                encoding: v1::Encoding::Flatbuffers as i32,
+                depth: Some(v1::Depth {
+                    value: Some(10),
+                    source: v1::ValueSource::Derived as i32,
+                }),
+                slots: Some(16),
+                slots_source: v1::ValueSource::Default as i32,
+                budget: Some(4096),
+                budget_source: v1::ValueSource::Declared as i32,
+            }],
+            depth: Some(v1::Depth {
+                value: Some(10),
+                source: v1::ValueSource::Derived as i32,
+            }),
+        }],
+        bindings: vec![v1::Binding {
+            name: "websocket".to_string(),
+            version: "1".to_string(),
+            frame_header_max_bytes: Some(14),
+            envelope_bytes: Some(8),
+        }],
+    }
+}
+
+/// The JSON key of every field of the deployment section, pinned against a
+/// golden document. A round trip through the same serde impls cannot show a
+/// renamed key, because it writes and reads the same name.
+#[test]
+fn a_populated_deployment_section_renders_the_keys_a_plugin_reads() {
+    let request = v1::CodegenRequest {
+        deployment: Some(populated_deployment()),
+        ..minimal_request()
+    };
+    let json = super::request_to_json(&request).expect("the request renders");
+    assert_eq!(
+        json,
+        r#"{
+  "schema": "ridl.codegen.v1",
+  "toolchain": "t",
+  "model": {
+    "declarations": [],
+    "tuples": [],
+    "interfaces": [],
+    "services": [],
+    "foreign": [],
+    "tupleCollisions": []
+  },
+  "options": [],
+  "artifactBase": "a",
+  "deployment": {
+    "system": "veh.cabin.Cabin",
+    "name": "Bench",
+    "regions": [
+      {
+        "catalog": "veh.cabin",
+        "hash": "AQID",
+        "interfaces": [
+          {
+            "name": "Climate",
+            "number": 1,
+            "inline": true,
+            "provisional": true,
+            "service": "veh.cabin.climate"
+          }
+        ]
+      }
+    ],
+    "instances": [
+      {
+        "component": "veh.cabin.Provider",
+        "instance": "primary",
+        "machine": "head",
+        "external": true,
+        "offers": [
+          {
+            "catalog": "veh.cabin",
+            "number": 1,
+            "name": "Climate",
+            "inline": true
+          }
+        ],
+        "maps": [
+          "veh.cabin"
+        ]
+      }
+    ],
+    "channels": [
+      {
+        "catalog": "veh.cabin",
+        "interfaceNumber": 1,
+        "interface": "Climate",
+        "inline": true,
+        "memberOrdinal": 2,
+        "member": "TempChanged",
+        "kind": "KIND_EVENT",
+        "producer": {
+          "component": "veh.cabin.Provider",
+          "instance": "primary",
+          "machine": "head"
+        },
+        "consumers": [
+          {
+            "component": "veh.cabin.Panel",
+            "instance": "Unit",
+            "machine": "head",
+            "crossing": "CROSSING_SAME_MACHINE",
+            "encoding": "ENCODING_FLATBUFFERS",
+            "depth": {
+              "value": 10,
+              "source": "VALUE_SOURCE_DERIVED"
+            },
+            "slots": 16,
+            "slotsSource": "VALUE_SOURCE_DEFAULT",
+            "budget": "4096",
+            "budgetSource": "VALUE_SOURCE_DECLARED"
+          }
+        ],
+        "depth": {
+          "value": 10,
+          "source": "VALUE_SOURCE_DERIVED"
+        }
+      }
+    ],
+    "bindings": [
+      {
+        "name": "websocket",
+        "version": "1",
+        "frameHeaderMaxBytes": 14,
+        "envelopeBytes": 8
+      }
+    ]
+  }
+}"#
+    );
+}
+
+/// The field numbers and names of every message the deployment schema
+/// declares, read off the compiled descriptor.
+///
+/// Neither the JSON a plugin reads nor a round trip through this crate's own
+/// serde impls can show a renumbered field: JSON is keyed by name, and the
+/// round trip writes and reads the same number. This reads the schema
+/// (`proto/ridl/codegen/v1/deployment.proto`), as the `Spellings` test above
+/// reads `model.proto`.
+#[test]
+fn the_deployment_sections_field_numbers_are_the_schemas() {
+    let pool = v2::codegen_model_descriptor().parent_pool().clone();
+    let fields = |message: &str| -> Vec<(String, u32)> {
+        pool.get_message_by_name(message)
+            .unwrap_or_else(|| panic!("the compiled schema declares {message}"))
+            .fields()
+            .map(|field| (field.name().to_string(), field.number()))
+            .collect()
+    };
+    let expected = |rows: &[(&str, u32)]| -> Vec<(String, u32)> {
+        rows.iter()
+            .map(|(name, number)| ((*name).to_string(), *number))
+            .collect()
+    };
+
+    assert_eq!(
+        fields("ridl.codegen.v1.CodegenRequest"),
+        expected(&[
+            ("schema", 1),
+            ("toolchain", 2),
+            ("model", 3),
+            ("options", 4),
+            ("artifact_base", 5),
+            ("deployment", 6),
+        ])
+    );
+    assert_eq!(
+        fields("ridl.codegen.v1.Deployment"),
+        expected(&[
+            ("system", 1),
+            ("name", 2),
+            ("regions", 3),
+            ("instances", 4),
+            ("channels", 5),
+            ("bindings", 6),
+        ])
+    );
+    assert_eq!(
+        fields("ridl.codegen.v1.Region"),
+        expected(&[("catalog", 1), ("hash", 2), ("interfaces", 3)])
+    );
+    assert_eq!(
+        fields("ridl.codegen.v1.RegionInterface"),
+        expected(&[
+            ("name", 1),
+            ("number", 2),
+            ("inline", 3),
+            ("provisional", 4),
+            ("service", 5),
+        ])
+    );
+    assert_eq!(
+        fields("ridl.codegen.v1.InterfaceKey"),
+        expected(&[("catalog", 1), ("number", 2), ("name", 3), ("inline", 4)])
+    );
+    assert_eq!(
+        fields("ridl.codegen.v1.Instance"),
+        expected(&[
+            ("component", 1),
+            ("instance", 2),
+            ("machine", 3),
+            ("external", 4),
+            ("offers", 5),
+            ("maps", 6),
+        ])
+    );
+    assert_eq!(
+        fields("ridl.codegen.v1.Endpoint"),
+        expected(&[("component", 1), ("instance", 2), ("machine", 3)])
+    );
+    assert_eq!(
+        fields("ridl.codegen.v1.Depth"),
+        expected(&[("value", 1), ("source", 2)])
+    );
+    assert_eq!(
+        fields("ridl.codegen.v1.Consumer"),
+        expected(&[
+            ("component", 1),
+            ("instance", 2),
+            ("machine", 3),
+            ("crossing", 4),
+            ("encoding", 5),
+            ("depth", 6),
+            ("slots", 7),
+            ("slots_source", 8),
+            ("budget", 9),
+            ("budget_source", 10),
+        ])
+    );
+    assert_eq!(
+        fields("ridl.codegen.v1.Channel"),
+        expected(&[
+            ("catalog", 1),
+            ("interface_number", 2),
+            ("interface", 3),
+            ("inline", 4),
+            ("member_ordinal", 5),
+            ("member", 6),
+            ("kind", 7),
+            ("producer", 8),
+            ("consumers", 9),
+            ("depth", 10),
+        ])
+    );
+    assert_eq!(
+        fields("ridl.codegen.v1.Binding"),
+        expected(&[
+            ("name", 1),
+            ("version", 2),
+            ("frame_header_max_bytes", 3),
+            ("envelope_bytes", 4),
+        ])
+    );
+}

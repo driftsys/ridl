@@ -10,7 +10,8 @@ syntax = "proto3";
 // never touches the filesystem: `ridlc` writes every file the response
 // carries (ADR-0020 decision 9).
 //
-// The request carries the lowered model and the backend options, never the
+// The request carries the lowered model, the backend options and, when the
+// build selected one, the deployment section of `deployment.proto`, never the
 // raw IR. A backend that still needs a fact the
 // model does not state is a gap in the model, fixed in the model.
 //

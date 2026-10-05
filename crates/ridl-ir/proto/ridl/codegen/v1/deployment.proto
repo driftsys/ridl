@@ -121,7 +121,10 @@ enum ValueSource {
   VALUE_SOURCE_DECLARED = 2;
   // A default, for example 16 slots.
   VALUE_SOURCE_DEFAULT = 3;
-  // A depth with a half-open range and nothing declared; the value is absent.
+  // The value is absent and nothing declared one: the timing has an explicit
+  // half-open range, so one bound is missing; or the quotient is zero, above
+  // the 32-bit ceiling, or not computable because an operand is not
+  // `digits[.digits]` or does not fit.
   VALUE_SOURCE_UNDERIVABLE = 4;
 }
 

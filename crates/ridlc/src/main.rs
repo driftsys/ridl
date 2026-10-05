@@ -94,12 +94,15 @@ fn main() -> ExitCode {
 }
 
 /// Renders the run's diagnostics to stderr and turns the outcome into an exit
-/// code: 2 on an I/O error, 1 when any diagnostic is an error, 0 otherwise.
+/// code: 2 on an I/O error or a bad flag value, 1 when any diagnostic is an
+/// error, 0 otherwise.
 fn finish(run: std::io::Result<CliRun>) -> ExitCode {
     match run {
         Ok(run) => {
             eprint!("{}", render(&run.diagnostics, &run.sources));
-            if run.has_error() {
+            if run.usage_error {
+                ExitCode::from(2)
+            } else if run.has_error() {
                 ExitCode::FAILURE
             } else {
                 ExitCode::SUCCESS

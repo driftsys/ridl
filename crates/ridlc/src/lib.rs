@@ -171,6 +171,7 @@ pub fn check_source(path: &str, text: &str) -> CliRun {
         diagnostics: front.diagnostics,
         sources: front.sources,
         lints: LintScopes::default(),
+        usage_error: false,
     }
 }
 
@@ -325,6 +326,11 @@ pub struct WorkspaceOutput {
     /// workspace declares no `system` or an error in its closure blocks the
     /// lowering. A deployment an RSDL-7xx error blocks is absent from it.
     pub system: Option<ridl_ir::v2::System>,
+    /// The name of every `deployment` the source declares, in declaration
+    /// order — including one an RSDL-7xx error blocked, which `system` leaves
+    /// out. [`select_deployment`] counts these, not the lowered system's, to
+    /// decide whether the workspace has exactly one deployment.
+    pub declared_deployments: Vec<String>,
     /// The diagnostics with the severities the emit sites chose. The lint
     /// levels of `lints` are not applied here (ADR-0024 decision 8): a
     /// consumer that reports to a person or an agent applies them itself.
@@ -397,6 +403,7 @@ pub fn compile_workspace_with(
     // Reuse the standard IR query already evaluated by the design lint pass.
     let std_ir = check_package(&*db, workspace, std, std).ir;
     let packages: Vec<&ridl_ir::v2::Package> = checked.iter().map(|package| &package.ir).collect();
+    let declared_deployments = declared_deployments(&system);
     let system = lower_workspace_system(&system, &packages, &std_ir);
     Ok(WorkspaceOutput {
         checked,
@@ -404,6 +411,7 @@ pub fn compile_workspace_with(
         imports,
         std_ir,
         system,
+        declared_deployments,
         diagnostics,
         sources,
         lints,
@@ -650,6 +658,12 @@ pub struct CliRun {
     /// that adds a lint diagnostic after the run returns applies them once
     /// more over the whole list (ADR-0024 decision 6).
     pub lints: LintScopes,
+    /// Whether the run failed on a bad flag value rather than on anything in
+    /// the sources: exit code 2 (ADR-0010 decision 1). The reason is the last
+    /// diagnostic of `diagnostics`, so a caller renders the list as usual and
+    /// reads this only for the exit code. `run_check` and [`check_source`]
+    /// never set it.
+    pub usage_error: bool,
 }
 
 /// Whether [`run_build_with`] applies the lint levels of the loaded `[lints]`
@@ -700,6 +714,7 @@ pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
         diagnostics,
         sources,
         lints,
+        usage_error: false,
     })
 }
 
@@ -761,8 +776,11 @@ pub fn run_build(
 ///
 /// `deployment` names the deployment of the workspace's system that every
 /// codegen request carries ([`select_deployment`] holds the rule). A name the
-/// system does not declare is an I/O error, which the command reports with
-/// exit code 2 (ADR-0010 decision 1).
+/// system does not declare is a bad flag value: the returned run carries the
+/// reason as its last diagnostic and sets [`CliRun::usage_error`], which the
+/// command reports with exit code 2 (ADR-0010 decision 1). When the build has
+/// already drawn an error of its own, that error takes precedence: the run
+/// carries it, writes nothing, and exits 1.
 #[expect(
     clippy::too_many_arguments,
     reason = "the build's options, passed once from each command"
@@ -937,6 +955,7 @@ pub fn run_build_with(
         };
         let selected = match select_deployment(
             lowered_system.as_ref(),
+            &declared_deployments(&system),
             deployment,
             &catalog_scope(&packages, hash_std),
         ) {
@@ -949,11 +968,29 @@ pub fn run_build_with(
                     diagnostics,
                     sources,
                     lints,
+                    usage_error: false,
                 });
             }
             // A name no source declares is a bad flag value (ADR-0010
             // decision 1): exit 2, before the output directory is created.
-            Err(err) => return Err(std::io::Error::other(err.to_string())),
+            // The diagnostics the compile already drew are kept and rendered
+            // with it, as they are on every other failure of this function:
+            // the flag value is wrong, which is no reason to hide a finding
+            // about the sources.
+            Err(err) => {
+                diagnostics.push(error_diagnostic(
+                    "",
+                    err.to_string(),
+                    FileId::DETACHED,
+                    TextRange::default(),
+                ));
+                return Ok(CliRun {
+                    diagnostics,
+                    sources,
+                    lints,
+                    usage_error: true,
+                });
+            }
         };
 
         std::fs::create_dir_all(out_dir)?;
@@ -984,6 +1021,7 @@ pub fn run_build_with(
                     diagnostics,
                     sources,
                     lints,
+                    usage_error: false,
                 });
             }
         }
@@ -1056,6 +1094,7 @@ pub fn run_build_with(
         diagnostics,
         sources,
         lints,
+        usage_error: false,
     })
 }
 
@@ -1371,6 +1410,22 @@ pub fn lower_workspace_system(
     Some(lowered)
 }
 
+/// The name of every `deployment` the checked model holds, in declaration
+/// order.
+///
+/// This is the count the source states. [`lower_system`] leaves out a
+/// deployment an RSDL-7xx error blocked (rsdl reference §13), so the lowered
+/// system's list is shorter than this one on such a build, and counting it
+/// would make a workspace that declares two deployments look like a workspace
+/// that declares one.
+fn declared_deployments(system: &CheckedSystem) -> Vec<String> {
+    system
+        .deployments
+        .iter()
+        .map(|deployment| deployment.name.name.clone())
+        .collect()
+}
+
 /// Sets each region's hash of `lowered` to the catalog hash of its package,
 /// computed over `others`, which [`catalog_scope`] builds.
 fn embed_catalog_hashes(
@@ -1672,23 +1727,33 @@ pub struct UnknownDeployment {
     pub requested: String,
     /// The names of the deployments the workspace declares, sorted.
     pub known: Vec<String>,
+    /// Whether the workspace has a `system` at all. With `known` empty, this
+    /// is what separates the two reasons no deployment can be named: no
+    /// `system` to carry one, or a `system` with no `deployment` block. Both
+    /// are reachable, and naming the wrong one sends a reader to the wrong
+    /// file.
+    pub has_system: bool,
 }
 
 impl std::fmt::Display for UnknownDeployment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.known.is_empty() {
-            write!(
+        match (self.known.is_empty(), self.has_system) {
+            (true, false) => write!(
                 f,
                 "no deployment named `{}`; the workspace declares no system, so no deployment can be named",
                 self.requested
-            )
-        } else {
-            write!(
+            ),
+            (true, true) => write!(
+                f,
+                "no deployment named `{}`; the system declares no deployment, so no deployment can be named",
+                self.requested
+            ),
+            (false, _) => write!(
                 f,
                 "no deployment named `{}`; the system declares: {}",
                 self.requested,
                 self.known.join(", ")
-            )
+            ),
         }
     }
 }
@@ -1697,43 +1762,48 @@ impl std::error::Error for UnknownDeployment {}
 
 /// The deployment section every codegen request of one build carries.
 ///
+/// `declared` is the name of every `deployment` the source declares, in any
+/// order ([`WorkspaceOutput::declared_deployments`]). It decides how many
+/// deployments the workspace has, and `system` — the lowered system, which
+/// leaves out a deployment an RSDL-7xx error blocked (rsdl reference §13) —
+/// supplies the facts of the one selected. Counting the lowered system's
+/// deployments instead would carry one deployment silently when the source
+/// declares two and an error dropped one.
+///
 /// With a `name`: the deployment of that name, or [`UnknownDeployment`] when
-/// the system declares none of that name (or there is no system). Without a
-/// `name`: the deployment when the system declares exactly one, and `None`
-/// for several deployments or no system, so that a request for such a
-/// workspace has no deployment section at all. `packages` holds every package
-/// of the workspace, `ridl.std` included.
+/// the lowered system has none of that name. A name the source declares but
+/// the lowering dropped is such an error; the caller resolves that case by
+/// reporting the error it already holds, which takes precedence over the
+/// unknown name. The error reads `has_system` off `system`, which is also
+/// `None` when an error in the closure blocked the lowering (rsdl reference
+/// §13) — that case is an error, so the caller's precedence rule reports it
+/// and the message is never rendered. Without a `name`: the deployment when
+/// the source declares
+/// exactly one, and `None` for several declarations or none, so that a request
+/// for such a workspace has no deployment section at all.
+///
+/// `packages` holds every package of the workspace, `ridl.std` included.
 pub fn select_deployment(
     system: Option<&ridl_ir::v2::System>,
+    declared: &[String],
     name: Option<&str>,
     packages: &[&ridl_ir::v2::Package],
 ) -> Result<Option<v1::Deployment>, UnknownDeployment> {
-    let Some(system) = system else {
-        return match name {
-            Some(requested) => Err(UnknownDeployment {
-                requested: requested.to_string(),
-                known: Vec::new(),
-            }),
-            None => Ok(None),
-        };
+    let lowered = |wanted: &str| {
+        system.and_then(|system| codegen::lower_deployment(system, wanted, packages))
     };
     match name {
-        Some(requested) => codegen::lower_deployment(system, requested, packages)
-            .map(Some)
-            .ok_or_else(|| {
-                let mut known: Vec<String> = system
-                    .deployments
-                    .iter()
-                    .map(|deployment| deployment.name.clone())
-                    .collect();
-                known.sort();
-                UnknownDeployment {
-                    requested: requested.to_string(),
-                    known,
-                }
-            }),
-        None => match system.deployments.as_slice() {
-            [only] => Ok(codegen::lower_deployment(system, &only.name, packages)),
+        Some(requested) => lowered(requested).map(Some).ok_or_else(|| {
+            let mut known = declared.to_vec();
+            known.sort();
+            UnknownDeployment {
+                requested: requested.to_string(),
+                known,
+                has_system: system.is_some(),
+            }
+        }),
+        None => match declared {
+            [only] => Ok(lowered(only)),
             _ => Ok(None),
         },
     }

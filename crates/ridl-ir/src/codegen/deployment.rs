@@ -43,7 +43,8 @@ pub fn lower_deployment(
         regions: regions(system),
         instances: instances(system, deployment),
         channels: channels(system, deployment, packages),
-        // A later task fills the binding table the toolchain holds.
+        // The binding table is empty: the toolchain holds no binding
+        // document yet, so there is no overhead to state (driftsys/ridl#265).
         bindings: Vec::new(),
     })
 }
@@ -181,7 +182,7 @@ fn channels(
                         component: consumer.component.clone(),
                         instance: consumer.instance.clone(),
                         machine: consumer.machine.clone(),
-                        crossing: link.crossing,
+                        crossing: crossing_of(link.crossing),
                         encoding: encoding_of(link.crossing),
                         depth: bound,
                         slots: call.then_some(DEFAULT_SLOTS),
@@ -214,6 +215,24 @@ fn channels(
         }
     }
     channels
+}
+
+/// The crossing of a consumer link, as the section's own enum.
+///
+/// The two schemas carry the same values and version independently
+/// (`deployment.proto`, the `Crossing` comment), so an IR value this schema
+/// does not list is written as `CROSSING_UNSPECIFIED` rather than copied
+/// through. Copying it through would put a discriminant outside the schema
+/// into the message, which the canonical-JSON writer refuses with the one
+/// error [`super::SerializeError::Json`] has.
+fn crossing_of(crossing: i32) -> i32 {
+    let value = match v2::Crossing::try_from(crossing) {
+        Ok(v2::Crossing::SameMachine) => v1::Crossing::SameMachine,
+        Ok(v2::Crossing::DifferentMachine) => v1::Crossing::DifferentMachine,
+        Ok(v2::Crossing::OffBoard) => v1::Crossing::OffBoard,
+        Ok(v2::Crossing::Unspecified) | Err(_) => v1::Crossing::Unspecified,
+    };
+    value as i32
 }
 
 /// The encoding of a consumer link, derived from its crossing and from
@@ -324,28 +343,31 @@ fn depth_of(timing: Option<&v2::Timing>) -> v1::Depth {
 /// The ring depth of an event channel: the maximum over its consumer links,
 /// absent when any link's depth is absent.
 ///
+/// The source is the source of the link that supplies the maximum, so a
+/// declared depth on one link is reported as declared rather than as derived
+/// (`docs/design/codegen-plugins.md`, the deployment section, the depth
+/// rule). No rsdl key writes a declared depth yet, so every link of one
+/// channel carries the same derived value today.
+///
 /// A channel with no consumer link takes `bound`, the contract bound of its
 /// member: that is the value every consumer link of it would carry.
 fn ring_depth(consumers: &[v1::Consumer], bound: v1::Depth) -> v1::Depth {
     if consumers.is_empty() {
         return bound;
     }
-    let mut max = 0u32;
+    let mut deepest: Option<v1::Depth> = None;
     for consumer in consumers {
-        match consumer.depth.and_then(|depth| depth.value) {
-            Some(value) => max = max.max(value),
-            None => {
-                return v1::Depth {
-                    value: None,
-                    source: v1::ValueSource::Underivable as i32,
-                };
-            }
+        let Some(depth) = consumer.depth.filter(|depth| depth.value.is_some()) else {
+            return v1::Depth {
+                value: None,
+                source: v1::ValueSource::Underivable as i32,
+            };
+        };
+        if deepest.is_none_or(|held| held.value < depth.value) {
+            deepest = Some(depth);
         }
     }
-    v1::Depth {
-        value: Some(max),
-        source: v1::ValueSource::Derived as i32,
-    }
+    deepest.unwrap_or(bound)
 }
 
 #[cfg(test)]
@@ -664,7 +686,8 @@ mod tests {
         assert_eq!(section.name, "prod");
         // Four members, each with two producer instances.
         assert_eq!(section.channels.len(), 8);
-        // A later task fills the binding table from the toolchain.
+        // The binding table is empty: no binding document exists yet
+        // (driftsys/ridl#265).
         assert!(section.bindings.is_empty());
 
         let event = channels_of(&section, EVENT_ORDINAL);
@@ -882,32 +905,73 @@ mod tests {
         }
     }
 
-    #[test]
-    fn reordering_placements_in_the_system_does_not_change_the_bytes() {
-        // `instances` is in the system IR's placement order by design, so a
-        // permuted placement list permutes it; the test sorts that one list
-        // in both sections and then holds every other list, and every value,
-        // byte-identical.
-        let package = package();
-        let mut system = system();
-        let first = lower_deployment(&system, "prod", &[&package]).expect("the fixture lowers");
-        system.deployments[0].placements.reverse();
-        let second = lower_deployment(&system, "prod", &[&package]).expect("the fixture lowers");
-        assert_eq!(first.instances.len(), 5);
-        assert_eq!(second.instances.len(), 5);
-        assert_ne!(first.instances, second.instances);
-
-        let normalized = |mut section: v1::Deployment| {
-            section
-                .instances
-                .sort_by(|a, b| (&a.component, &a.instance).cmp(&(&b.component, &b.instance)));
-            let request = v1::CodegenRequest {
-                deployment: Some(section),
-                ..Default::default()
-            };
-            crate::codegen::request_to_json(&request).expect("the request renders")
+    /// The bytes of one section, for a comparison that covers every field.
+    fn bytes(section: &v1::Deployment) -> String {
+        let request = v1::CodegenRequest {
+            deployment: Some(section.clone()),
+            ..Default::default()
         };
-        assert_eq!(normalized(first), normalized(second));
+        crate::codegen::request_to_json(&request).expect("the request renders")
+    }
+
+    /// The two lists the emitter sorts — a route's producers and a
+    /// deployment's links — reach the section through that sort, so the
+    /// section's bytes do not depend on the order the system IR holds them in,
+    /// and the emitted order is the order the schema fixes whatever the input
+    /// order is.
+    ///
+    /// `instances` is in the system IR's placement order by design, so a
+    /// permuted placement list permutes that one list and changes nothing
+    /// else.
+    #[test]
+    fn the_emitted_order_does_not_depend_on_the_order_of_the_inputs() {
+        let package = package();
+        let system = system();
+        let first = lower_deployment(&system, "prod", &[&package]).expect("the fixture lowers");
+
+        let mut permuted = system.clone();
+        let deployment = &mut permuted.deployments[0];
+        deployment.links.reverse();
+        for route in &mut deployment.routes {
+            route.producers.reverse();
+        }
+        let second = lower_deployment(&permuted, "prod", &[&package]).expect("the fixture lowers");
+        assert_eq!(bytes(&first), bytes(&second));
+
+        // The order the permuted section is in is the schema's, not its
+        // input's: the producers of a route ascending, the consumer links of
+        // a channel ascending.
+        let producers: Vec<String> = channels_of(&second, EVENT_ORDINAL)
+            .iter()
+            .map(|channel| {
+                channel
+                    .producer
+                    .as_ref()
+                    .expect("every channel carries a producer")
+                    .instance
+                    .clone()
+            })
+            .collect();
+        assert_eq!(producers, ["backup", "primary"]);
+        let consumers: Vec<String> = channel_of(&second, EVENT_ORDINAL, "primary")
+            .consumers
+            .iter()
+            .map(|consumer| consumer.component.clone())
+            .collect();
+        assert_eq!(consumers, [DASH, FLEET, LOGGER]);
+
+        // A permuted placement list permutes `instances`; with that one list
+        // put back, every other field is unchanged.
+        let mut reordered = system.clone();
+        reordered.deployments[0].placements.reverse();
+        let third = lower_deployment(&reordered, "prod", &[&package]).expect("the fixture lowers");
+        assert_eq!(third.instances.len(), 5);
+        assert_ne!(third.instances, first.instances);
+        let rest = v1::Deployment {
+            instances: first.instances.clone(),
+            ..third
+        };
+        assert_eq!(bytes(&rest), bytes(&first));
     }
 
     #[test]
@@ -1034,9 +1098,6 @@ mod tests {
         };
         system.regions[0].interfaces[0].name = SERVICE.to_string();
         system.regions[0].interfaces[0].inline = true;
-        for region_interface in &mut system.regions[0].interfaces {
-            region_interface.inline = true;
-        }
         for component in &mut system.components {
             for require in &mut component.requires {
                 require.interface = Some(inline_ref.clone());
@@ -1065,6 +1126,642 @@ mod tests {
                 name: SERVICE.to_string(),
                 inline: true,
             }]
+        );
+    }
+
+    // --- A second catalog shape: two interfaces of one catalog, each with a
+    // consumer of its own. The fixtures above have one interface, so they
+    // cannot show that a channel lists the links of its own interface only.
+
+    const HORN: &str = "Horn";
+    const HORN_SERVICE: &str = "veh.cabin.horn";
+    const PANEL: &str = "veh.cabin.Panel";
+    const TELEMETRY: &str = "veh.cabin.Telemetry";
+    /// The ordinal of `Climate.setLevel`, the command member of the
+    /// two-interface fixture. It is not one of the ordinals above, so a
+    /// lookup that confuses the two fixtures finds nothing.
+    const SET_LEVEL_ORDINAL: u32 = 7;
+
+    fn interface_ref_of(name: &str, inline: bool) -> v2::InterfaceRef {
+        v2::InterfaceRef {
+            catalog: CATALOG.to_string(),
+            name: name.to_string(),
+            inline,
+        }
+    }
+
+    /// One package whose catalog declares two interfaces: `Climate`, number
+    /// 1, with an event and a command, and `Horn`, number 2, with one event.
+    fn two_interface_package() -> v2::Package {
+        v2::Package {
+            name: CATALOG.to_string(),
+            interfaces: vec![
+                v2::Interface {
+                    name: INTERFACE.to_string(),
+                    number: 1,
+                    interactions: vec![
+                        member(
+                            "TempChanged",
+                            EVENT_ORDINAL,
+                            v2::decl::Kind::EventDef(v2::EventDef {
+                                payload: "Temp".to_string(),
+                                // ceil(1000000 / 100000) = 10.
+                                timing: Some(timing(Some("100000"), Some("1000000"))),
+                            }),
+                        ),
+                        member(
+                            "setLevel",
+                            SET_LEVEL_ORDINAL,
+                            v2::decl::Kind::CommandDef(v2::CommandDef::default()),
+                        ),
+                    ],
+                    ..Default::default()
+                },
+                v2::Interface {
+                    name: HORN.to_string(),
+                    number: 2,
+                    interactions: vec![member(
+                        "active",
+                        EVENT_ORDINAL,
+                        v2::decl::Kind::EventDef(v2::EventDef {
+                            payload: "Flag".to_string(),
+                            // ceil(500000 / 100000) = 5.
+                            timing: Some(timing(Some("100000"), Some("500000"))),
+                        }),
+                    )],
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }
+    }
+
+    fn two_interface_link(consumer: &str, interface: &str, service: &str) -> v2::Link {
+        v2::Link {
+            interface: Some(interface_ref_of(interface, false)),
+            service: service.to_string(),
+            consumer: Some(endpoint(consumer, "Unit", "head")),
+            producer: Some(endpoint(PROVIDER, "primary", "head")),
+            crossing: v2::Crossing::SameMachine as i32,
+        }
+    }
+
+    fn two_interface_route(
+        interface: &str,
+        number: u32,
+        name: &str,
+        ordinal: u32,
+        service: &str,
+    ) -> v2::Route {
+        v2::Route {
+            catalog: CATALOG.to_string(),
+            interface_number: number,
+            member_ordinal: ordinal,
+            interface: interface.to_string(),
+            member: name.to_string(),
+            service: service.to_string(),
+            producers: vec![endpoint(PROVIDER, "primary", "head")],
+        }
+    }
+
+    /// One system whose provider offers two services, one interface each, and
+    /// whose two consumers require one interface each: `Panel` requires
+    /// `Climate` and `Telemetry` requires `Horn`. `Horn`'s interface number is
+    /// provisional and `Climate`'s is not.
+    fn two_interface_system() -> v2::System {
+        let mut provider = component("Provider", &["primary"], false);
+        provider.package = CATALOG.to_string();
+        provider.offers = vec![
+            v2::Offer {
+                service: SERVICE.to_string(),
+                ..Default::default()
+            },
+            v2::Offer {
+                service: HORN_SERVICE.to_string(),
+                ..Default::default()
+            },
+        ];
+        let consumer = |name: &str, interface: &str, service: &str| {
+            let mut component = component(name, &["Unit"], false);
+            component.package = CATALOG.to_string();
+            component.requires = vec![v2::Require {
+                interface: Some(interface_ref_of(interface, false)),
+                service: service.to_string(),
+                producer: PROVIDER.to_string(),
+                ..Default::default()
+            }];
+            component
+        };
+        v2::System {
+            name: "Cabin".to_string(),
+            package: CATALOG.to_string(),
+            components: vec![
+                provider,
+                consumer("Panel", INTERFACE, SERVICE),
+                consumer("Telemetry", HORN, HORN_SERVICE),
+            ],
+            grants: vec![
+                grant(PROVIDER, false, &[]),
+                grant(PANEL, false, &[CATALOG]),
+                grant(TELEMETRY, false, &[CATALOG]),
+            ],
+            regions: vec![v2::Region {
+                catalog: CATALOG.to_string(),
+                interfaces: vec![
+                    v2::RegionInterface {
+                        name: INTERFACE.to_string(),
+                        inline: false,
+                        number: 1,
+                        provisional: false,
+                        service: SERVICE.to_string(),
+                    },
+                    v2::RegionInterface {
+                        name: HORN.to_string(),
+                        inline: false,
+                        number: 2,
+                        provisional: true,
+                        service: HORN_SERVICE.to_string(),
+                    },
+                ],
+                hash: vec![3; 32],
+            }],
+            deployments: vec![v2::Deployment {
+                name: "prod".to_string(),
+                package: CATALOG.to_string(),
+                machines: vec![v2::Machine {
+                    name: "head".to_string(),
+                    ..Default::default()
+                }],
+                placements: vec![
+                    placement(PROVIDER, "primary", "head"),
+                    placement(PANEL, "Unit", "head"),
+                    placement(TELEMETRY, "Unit", "head"),
+                ],
+                links: vec![
+                    two_interface_link(PANEL, INTERFACE, SERVICE),
+                    two_interface_link(TELEMETRY, HORN, HORN_SERVICE),
+                ],
+                routes: vec![
+                    two_interface_route(INTERFACE, 1, "TempChanged", EVENT_ORDINAL, SERVICE),
+                    two_interface_route(INTERFACE, 1, "setLevel", SET_LEVEL_ORDINAL, SERVICE),
+                    two_interface_route(HORN, 2, "active", EVENT_ORDINAL, HORN_SERVICE),
+                ],
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
+
+    /// `(interface, member ordinal, the consumer components)` of every
+    /// channel, in emitted order.
+    fn consumer_rows(section: &v1::Deployment) -> Vec<(&str, u32, Vec<&str>)> {
+        section
+            .channels
+            .iter()
+            .map(|channel| {
+                (
+                    channel.interface.as_str(),
+                    channel.member_ordinal,
+                    channel
+                        .consumers
+                        .iter()
+                        .map(|consumer| consumer.component.as_str())
+                        .collect(),
+                )
+            })
+            .collect()
+    }
+
+    /// The kind of every channel, in emitted order.
+    fn kind_rows(section: &v1::Deployment) -> Vec<(&str, i32)> {
+        section
+            .channels
+            .iter()
+            .map(|channel| (channel.member.as_str(), channel.kind))
+            .collect()
+    }
+
+    /// A channel's consumer links are the links of that channel's own
+    /// interface. `Panel` requires `Climate` and `Telemetry` requires `Horn`,
+    /// so neither is listed on the other's channels.
+    #[test]
+    fn a_channel_lists_only_the_links_of_its_own_interface() {
+        let package = two_interface_package();
+        let system = two_interface_system();
+        let section = lower_deployment(&system, "prod", &[&package]).expect("the fixture lowers");
+        assert_eq!(
+            consumer_rows(&section),
+            [
+                (INTERFACE, EVENT_ORDINAL, vec![PANEL]),
+                (INTERFACE, SET_LEVEL_ORDINAL, vec![PANEL]),
+                (HORN, EVENT_ORDINAL, vec![TELEMETRY]),
+            ]
+        );
+    }
+
+    /// A command channel is sized as a query channel is: sixteen slots from
+    /// the default source on each consumer link, and no ring depth.
+    #[test]
+    fn a_command_channel_carries_sixteen_default_slots() {
+        let package = two_interface_package();
+        let system = two_interface_system();
+        let section = lower_deployment(&system, "prod", &[&package]).expect("the fixture lowers");
+        let channel = section
+            .channels
+            .iter()
+            .find(|channel| channel.member_ordinal == SET_LEVEL_ORDINAL)
+            .expect("the command member has a channel");
+        assert_eq!(channel.kind, v1::Kind::Command as i32);
+        assert_eq!(channel.member, "setLevel");
+        assert_eq!(channel.depth, None);
+        assert_eq!(channel.consumers.len(), 1);
+        let consumer = &channel.consumers[0];
+        assert_eq!(consumer.slots, Some(16));
+        assert_eq!(consumer.slots_source, v1::ValueSource::Default as i32);
+        assert_eq!(consumer.depth, None);
+        assert_eq!(consumer.budget, None);
+        assert_eq!(consumer.budget_source, v1::ValueSource::Unspecified as i32);
+    }
+
+    /// A region interface carries the `provisional` flag the system IR holds
+    /// for it, so a plugin is never told that an unlocked interface number is
+    /// final.
+    #[test]
+    fn a_region_interface_carries_its_own_provisional_flag() {
+        let package = two_interface_package();
+        let system = two_interface_system();
+        let section = lower_deployment(&system, "prod", &[&package]).expect("the fixture lowers");
+        let rows: Vec<(&str, u32, bool)> = section.regions[0]
+            .interfaces
+            .iter()
+            .map(|interface| {
+                (
+                    interface.name.as_str(),
+                    interface.number,
+                    interface.provisional,
+                )
+            })
+            .collect();
+        assert_eq!(rows, [(INTERFACE, 1, false), (HORN, 2, true)]);
+    }
+
+    /// `inline` is read for one interface of a region, not for the region as a
+    /// whole: with `Horn` moved into its service's inline shape and `Climate`
+    /// left declared, each channel carries its own flag and keeps its own
+    /// consumer link.
+    #[test]
+    fn one_inline_interface_does_not_make_its_sibling_inline() {
+        let mut package = two_interface_package();
+        let mut horn = package.interfaces.remove(1);
+        horn.name = String::new();
+        package.services = vec![v2::Service {
+            name: HORN_SERVICE.to_string(),
+            shapes: vec![v2::ServiceShape {
+                kind: Some(v2::service_shape::Kind::Inline(horn)),
+            }],
+            ..Default::default()
+        }];
+
+        let mut system = two_interface_system();
+        system.regions[0].interfaces[1].name = HORN_SERVICE.to_string();
+        system.regions[0].interfaces[1].inline = true;
+        let deployment = &mut system.deployments[0];
+        deployment.links[1].interface = Some(interface_ref_of(HORN_SERVICE, true));
+        deployment.routes[2].interface = HORN_SERVICE.to_string();
+
+        let section = lower_deployment(&system, "prod", &[&package]).expect("the fixture lowers");
+        let rows: Vec<(&str, bool, Vec<&str>)> = section
+            .channels
+            .iter()
+            .map(|channel| {
+                (
+                    channel.interface.as_str(),
+                    channel.inline,
+                    channel
+                        .consumers
+                        .iter()
+                        .map(|consumer| consumer.component.as_str())
+                        .collect(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            rows,
+            [
+                (INTERFACE, false, vec![PANEL]),
+                (INTERFACE, false, vec![PANEL]),
+                (HORN_SERVICE, true, vec![TELEMETRY]),
+            ]
+        );
+        // Each interface is still found, so each channel still has its kind.
+        assert_eq!(
+            kind_rows(&section),
+            [
+                ("TempChanged", v1::Kind::Event as i32),
+                ("setLevel", v1::Kind::Command as i32),
+                ("active", v1::Kind::Event as i32),
+            ]
+        );
+    }
+
+    /// The member's kind and timing are read from the package the route names
+    /// as its catalog. An interface of the same name in another package does
+    /// not supply them, even when it is the first package the caller hands in.
+    #[test]
+    fn an_interface_of_the_same_name_in_another_catalog_supplies_nothing() {
+        let mut decoy = two_interface_package();
+        decoy.name = "veh.other".to_string();
+        for interface in &mut decoy.interfaces {
+            for interaction in &mut interface.interactions {
+                interaction.kind = Some(v2::decl::Kind::SignalDef(v2::SignalDef::default()));
+            }
+        }
+        let package = two_interface_package();
+        let system = two_interface_system();
+        let section =
+            lower_deployment(&system, "prod", &[&decoy, &package]).expect("the fixture lowers");
+        assert_eq!(
+            kind_rows(&section),
+            [
+                ("TempChanged", v1::Kind::Event as i32),
+                ("setLevel", v1::Kind::Command as i32),
+                ("active", v1::Kind::Event as i32),
+            ]
+        );
+        // The timing comes from the same place, so the depth is the one the
+        // route's own catalog states.
+        let event = &section.channels[0];
+        assert_eq!(
+            event.depth,
+            Some(v1::Depth {
+                value: Some(10),
+                source: v1::ValueSource::Derived as i32,
+            })
+        );
+    }
+
+    /// The member is found by ordinal; the route's member name is a label the
+    /// section carries. A package whose ordinals disagree with the route's
+    /// names — a stale package set — gives the kind of the ordinal.
+    #[test]
+    fn the_member_is_found_by_ordinal_and_not_by_name() {
+        let mut package = two_interface_package();
+        package.interfaces[0].interactions[0].ordinal = SET_LEVEL_ORDINAL;
+        package.interfaces[0].interactions[1].ordinal = EVENT_ORDINAL;
+        let system = two_interface_system();
+        let section = lower_deployment(&system, "prod", &[&package]).expect("the fixture lowers");
+        assert_eq!(
+            kind_rows(&section),
+            [
+                ("TempChanged", v1::Kind::Command as i32),
+                ("setLevel", v1::Kind::Event as i32),
+                ("active", v1::Kind::Event as i32),
+            ]
+        );
+    }
+
+    /// A fixed member is a channel of its own kind with no sizing; a member
+    /// declaration that is not an interaction gives the unspecified kind.
+    #[test]
+    fn a_fixed_member_and_a_member_that_is_not_an_interaction_carry_no_sizing() {
+        let mut package = two_interface_package();
+        package.interfaces[0].interactions = vec![
+            member(
+                "vin",
+                EVENT_ORDINAL,
+                v2::decl::Kind::FixedDef(v2::FixedDef::default()),
+            ),
+            member(
+                "Temp",
+                SET_LEVEL_ORDINAL,
+                v2::decl::Kind::StructDef(v2::StructDef::default()),
+            ),
+        ];
+        let system = two_interface_system();
+        let section = lower_deployment(&system, "prod", &[&package]).expect("the fixture lowers");
+        assert_eq!(
+            kind_rows(&section),
+            [
+                ("TempChanged", v1::Kind::Fixed as i32),
+                ("setLevel", v1::Kind::Unspecified as i32),
+                ("active", v1::Kind::Event as i32),
+            ]
+        );
+        for channel in &section.channels[..2] {
+            assert_eq!(channel.depth, None);
+            for consumer in &channel.consumers {
+                assert_eq!(consumer.depth, None);
+                assert_eq!(consumer.slots, None);
+                assert_eq!(consumer.slots_source, v1::ValueSource::Unspecified as i32);
+            }
+        }
+    }
+
+    /// A crossing that is unspecified, and one carrying a value this schema
+    /// does not list, are both written as the unspecified crossing with the
+    /// unspecified encoding, so no discriminant outside the schema reaches the
+    /// message and the request still renders.
+    #[test]
+    fn an_unspecified_or_unknown_crossing_is_written_as_unspecified() {
+        let package = two_interface_package();
+        let mut system = two_interface_system();
+        system.deployments[0].links[0].crossing = v2::Crossing::Unspecified as i32;
+        system.deployments[0].links[1].crossing = 99;
+        let section = lower_deployment(&system, "prod", &[&package]).expect("the fixture lowers");
+        let rows: Vec<(i32, i32)> = section
+            .channels
+            .iter()
+            .flat_map(|channel| &channel.consumers)
+            .map(|consumer| (consumer.crossing, consumer.encoding))
+            .collect();
+        assert_eq!(
+            rows,
+            [(
+                v1::Crossing::Unspecified as i32,
+                v1::Encoding::Unspecified as i32
+            ); 3]
+        );
+        bytes(&section);
+    }
+
+    /// `Instance.external` is the component's flag and not the machine's: an
+    /// external component on an inboard machine is still external, and a local
+    /// component on an external machine is still local.
+    #[test]
+    fn an_instances_external_flag_is_the_components_and_not_the_machines() {
+        let package = package();
+        let mut system = system();
+        for placed in &mut system.deployments[0].placements {
+            if placed.component == FLEET {
+                placed.machine = "head".to_string();
+            } else if placed.component == DASH {
+                placed.machine = "cloud".to_string();
+            }
+        }
+        let section = lower_deployment(&system, "prod", &[&package]).expect("the fixture lowers");
+        let rows: Vec<(&str, &str, bool)> = section
+            .instances
+            .iter()
+            .map(|instance| {
+                (
+                    instance.component.as_str(),
+                    instance.machine.as_str(),
+                    instance.external,
+                )
+            })
+            .collect();
+        assert_eq!(
+            rows,
+            [
+                (PROVIDER, "head", false),
+                (PROVIDER, "zone", false),
+                (DASH, "cloud", false),
+                (LOGGER, "zone", false),
+                (FLEET, "head", true),
+            ]
+        );
+    }
+
+    /// A placement whose component the system does not carry, and a component
+    /// with no grant, each contribute an entry with empty lists rather than
+    /// being left out: the instance is placed either way, and a plugin laying
+    /// out its memory needs the placement.
+    #[test]
+    fn a_placement_outside_the_closure_and_a_component_with_no_grant_are_listed() {
+        let package = package();
+        let mut system = system();
+        system.grants.retain(|grant| grant.component != DASH);
+        system.deployments[0]
+            .placements
+            .push(placement("veh.cabin.Ghost", "Unit", "head"));
+        let section = lower_deployment(&system, "prod", &[&package]).expect("the fixture lowers");
+        assert_eq!(section.instances.len(), 6);
+        let dash = section
+            .instances
+            .iter()
+            .find(|instance| instance.component == DASH)
+            .expect("a component with no grant is still listed");
+        assert!(dash.maps.is_empty());
+        assert!(dash.offers.is_empty());
+        let ghost = section
+            .instances
+            .iter()
+            .find(|instance| instance.component == "veh.cabin.Ghost")
+            .expect("a placement outside the closure is still listed");
+        assert!(!ghost.external);
+        assert!(ghost.offers.is_empty());
+        assert!(ghost.maps.is_empty());
+    }
+
+    /// The consumer links are sorted by component and then by instance, so two
+    /// instances of one consuming component are in instance order and not in
+    /// the order the link list happens to hold them.
+    #[test]
+    fn consumer_links_of_one_component_are_sorted_by_instance() {
+        let package = package();
+        let mut system = system();
+        let dash = system
+            .components
+            .iter_mut()
+            .find(|component| component.qualified_name() == DASH)
+            .expect("Dash is a component of the fixture");
+        dash.instances = vec!["right".to_string(), "left".to_string()];
+        let deployment = &mut system.deployments[0];
+        deployment
+            .placements
+            .retain(|placed| placed.component != DASH);
+        deployment.placements.push(placement(DASH, "right", "head"));
+        deployment.placements.push(placement(DASH, "left", "head"));
+        deployment.links.retain(|link| {
+            link.consumer
+                .as_ref()
+                .is_some_and(|consumer| consumer.component != DASH)
+        });
+        // `right` is written before `left`, so a sort by component alone keeps
+        // that order.
+        deployment.links.insert(
+            0,
+            link(
+                endpoint(DASH, "right", "head"),
+                endpoint(PROVIDER, "primary", "head"),
+                v2::Crossing::SameMachine,
+            ),
+        );
+        deployment.links.insert(
+            1,
+            link(
+                endpoint(DASH, "left", "head"),
+                endpoint(PROVIDER, "primary", "head"),
+                v2::Crossing::SameMachine,
+            ),
+        );
+        let section = lower_deployment(&system, "prod", &[&package]).expect("the fixture lowers");
+        let channel = channel_of(&section, EVENT_ORDINAL, "primary");
+        let rows: Vec<(&str, &str)> = channel
+            .consumers
+            .iter()
+            .map(|consumer| (consumer.component.as_str(), consumer.instance.as_str()))
+            .collect();
+        assert_eq!(
+            rows,
+            [
+                (DASH, "left"),
+                (DASH, "right"),
+                (FLEET, "Unit"),
+                (LOGGER, "Unit"),
+            ]
+        );
+    }
+
+    /// The ring depth is the maximum over the consumer links, with the source
+    /// of the link that supplies it, and absent as soon as one link's depth is
+    /// absent.
+    ///
+    /// No input of the emitter makes two links of one channel differ today:
+    /// every link carries the member's contract bound, and no rsdl key states
+    /// a depth. The rule is therefore pinned on the function.
+    #[test]
+    fn the_ring_depth_is_the_deepest_link_and_absent_when_any_link_is() {
+        let derived = |value: u32| v1::Depth {
+            value: Some(value),
+            source: v1::ValueSource::Derived as i32,
+        };
+        let underivable = v1::Depth {
+            value: None,
+            source: v1::ValueSource::Underivable as i32,
+        };
+        let declared = v1::Depth {
+            value: Some(9),
+            source: v1::ValueSource::Declared as i32,
+        };
+        let at = |depth: v1::Depth| v1::Consumer {
+            depth: Some(depth),
+            ..Default::default()
+        };
+        let bound = derived(4);
+        assert_eq!(super::ring_depth(&[], bound), bound);
+        assert_eq!(
+            super::ring_depth(&[at(derived(2)), at(derived(7)), at(derived(5))], bound),
+            derived(7)
+        );
+        assert_eq!(
+            super::ring_depth(&[at(derived(7)), at(derived(2))], bound),
+            derived(7)
+        );
+        assert_eq!(
+            super::ring_depth(&[at(derived(2)), at(underivable), at(derived(7))], bound),
+            underivable
+        );
+        assert_eq!(super::ring_depth(&[at(underivable)], bound), underivable);
+        // The deepest link states where its value came from.
+        assert_eq!(
+            super::ring_depth(&[at(derived(3)), at(declared)], bound),
+            declared
+        );
+        // A link with no depth at all is a link whose depth is absent.
+        assert_eq!(
+            super::ring_depth(&[v1::Consumer::default()], bound),
+            underivable
         );
     }
 }

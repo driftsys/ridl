@@ -480,10 +480,10 @@ fn with_sized_stack(test: impl FnOnce() + Send + 'static) {
     }
 }
 
-/// The lowered system of `entry` under `ridlc/tests` or `examples`, and every
-/// package of its workspace with `ridl.std`: the inputs `select_deployment`
-/// reads.
-fn system_and_packages(entry: &Path) -> (Option<v2::System>, Vec<v2::Package>) {
+/// The lowered system of `entry` under `ridlc/tests` or `examples`, the names
+/// of the deployments its source declares, and every package of its workspace
+/// with `ridl.std`: the inputs `select_deployment` reads.
+fn system_and_packages(entry: &Path) -> (Option<v2::System>, Vec<String>, Vec<v2::Package>) {
     let mut db = RidlDatabase::default();
     let output = ridlc::compile_workspace(&mut db, entry).expect("the entry loads");
     let mut packages: Vec<v2::Package> = output
@@ -492,7 +492,7 @@ fn system_and_packages(entry: &Path) -> (Option<v2::System>, Vec<v2::Package>) {
         .map(|checked| checked.ir.clone())
         .collect();
     packages.push(output.std_ir.clone());
-    (output.system, packages)
+    (output.system, output.declared_deployments, packages)
 }
 
 fn corpus_entry(name: &str) -> PathBuf {
@@ -507,9 +507,9 @@ fn corpus_entry(name: &str) -> PathBuf {
 #[test]
 fn a_request_for_cabin_carries_its_one_deployment_without_a_flag() {
     let cabin = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/cabin");
-    let (system, packages) = system_and_packages(&cabin);
+    let (system, declared, packages) = system_and_packages(&cabin);
     let refs: Vec<&v2::Package> = packages.iter().collect();
-    let deployment = ridlc::select_deployment(system.as_ref(), None, &refs)
+    let deployment = ridlc::select_deployment(system.as_ref(), &declared, None, &refs)
         .expect("no name is not an error")
         .expect("the one deployment is selected");
     assert_eq!(deployment.name, "Bench");
@@ -535,9 +535,10 @@ fn a_request_for_cabin_carries_its_one_deployment_without_a_flag() {
 /// to the request written out field by field, and the production serializer's
 /// bytes for each. The deployment section is absent from the bytes.
 fn assert_request_without_deployment(entry: &str, name: &str) {
-    let (system, packages) = system_and_packages(&corpus_entry(entry));
+    let (system, declared, packages) = system_and_packages(&corpus_entry(entry));
     let refs: Vec<&v2::Package> = packages.iter().collect();
-    let selected = ridlc::select_deployment(system.as_ref(), None, &refs).expect("not an error");
+    let selected =
+        ridlc::select_deployment(system.as_ref(), &declared, None, &refs).expect("not an error");
     assert!(selected.is_none(), "{entry}: no deployment without a name");
 
     let request = ridlc::codegen_request(name, &packages[0], &refs[1..], Vec::new(), selected);
@@ -573,28 +574,41 @@ fn a_workspace_without_a_system_builds_the_request_of_today() {
 /// carries neither.
 #[test]
 fn two_deployments_and_no_flag_select_none() {
-    let (system, packages) = system_and_packages(&corpus_entry("rsdl-appendix-a"));
+    let (system, declared, packages) = system_and_packages(&corpus_entry("rsdl-appendix-a"));
     let refs: Vec<&v2::Package> = packages.iter().collect();
-    let selected = ridlc::select_deployment(system.as_ref(), None, &refs).expect("not an error");
+    let selected =
+        ridlc::select_deployment(system.as_ref(), &declared, None, &refs).expect("not an error");
     assert!(selected.is_none());
     assert_request_without_deployment("rsdl-appendix-a", "veh.topology");
 }
 
 #[test]
 fn an_unknown_name_lists_the_known_deployments() {
-    let (system, packages) = system_and_packages(&corpus_entry("rsdl-appendix-a"));
+    let (system, declared, packages) = system_and_packages(&corpus_entry("rsdl-appendix-a"));
     let refs: Vec<&v2::Package> = packages.iter().collect();
-    let err = ridlc::select_deployment(system.as_ref(), Some("Nope"), &refs)
+    let err = ridlc::select_deployment(system.as_ref(), &declared, Some("Nope"), &refs)
         .expect_err("no deployment is named Nope");
     assert_eq!(
         err,
         ridlc::UnknownDeployment {
             requested: "Nope".to_string(),
             known: vec!["Bench".to_string(), "Production".to_string()],
+            has_system: true,
         }
     );
-    let named = ridlc::select_deployment(system.as_ref(), Some("Production"), &refs)
+    let named = ridlc::select_deployment(system.as_ref(), &declared, Some("Production"), &refs)
         .expect("Production is declared")
         .expect("and selected");
     assert_eq!(named.name, "Production");
+
+    // The known names are sorted, whatever order the source declares them in.
+    let reversed = ["Zulu".to_string(), "Alpha".to_string()];
+    let err = ridlc::select_deployment(system.as_ref(), &reversed, Some("Nope"), &refs)
+        .expect_err("no deployment is named Nope");
+    assert_eq!(err.known, ["Alpha", "Zulu"]);
+    assert!(
+        err.to_string()
+            .ends_with("the system declares: Alpha, Zulu"),
+        "{err}"
+    );
 }

@@ -589,10 +589,12 @@ targets. `--frozen` is the same flag as on `ridl check`: it is
 codegen request carries. Without it, the request carries the deployment when
 the system declares exactly one, and none when it declares several or the
 workspace has no system. A `NAME` that the system does not declare exits 2 and
-names the deployments it does declare; in a workspace with no system, the
-message says that no deployment can be named. A deployment that an `RSDL-7xx`
-error removed from the system is not unknown: the build reports that error and
-exits 1.
+names the deployments it does declare, unless the build already has an error of
+its own: that error takes precedence, and the build reports it and exits 1.
+When no name can be right, the message says which reason it is — the workspace
+declares no system, or the system declares no deployment. A deployment that an
+`RSDL-7xx` error removed from the system is not unknown either: the build
+reports that error and exits 1.
 
 **`rust` is a language backend**, and it writes the whole generated surface of
 a package in one file: the domain types (a struct, an enum, an enum set, a
@@ -691,8 +693,10 @@ receives on its standard input one `ridl.codegen.v1.CodegenRequest` in canonical
 protobuf JSON: `schema` (`"ridl.codegen.v1"`) and `toolchain` (this `ridl`'s
 version) first, then `model`, byte for byte the package's `codegen-model`
 artifact one indentation level deeper, `options` (empty from this command
-line; no flag sets one yet) and `artifactBase`, the `<base>` of the emit list
-above. It answers on its standard output with one `CodegenResponse`: `files`,
+line; no flag sets one yet), `artifactBase`, the `<base>` of the emit list
+above, and `deployment`, the section `--deployment` selects, absent when no
+deployment is carried. It answers on its standard output with one
+`CodegenResponse`: `files`,
 each a `path` relative to `--out-dir` with a `text` or `binary` content, and
 `diagnostics`, each a `severity` and a `message`. `ridl` writes the files; the
 plugin never touches the filesystem, so `--out-dir` means for a plugin exactly

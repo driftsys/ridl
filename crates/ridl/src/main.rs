@@ -2463,11 +2463,14 @@ fn dotted_text(node: &ridl_syntax::SyntaxNode) -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
-/// The 1/0 rule every `check`/`build` run turns its diagnostics into: 1 when
-/// any diagnostic is an error, 0 otherwise. Shared by [`finish`] and
-/// [`finish_check`]'s JSON arm so the rule is stated once.
+/// The exit-code rule every `check`/`build` run turns its outcome into: 2 on a
+/// bad flag value (ADR-0010 decision 1), 1 when any diagnostic is an error, 0
+/// otherwise. Shared by [`finish`] and [`finish_check`]'s JSON arm so the rule
+/// is stated once. `check` never reports a bad flag value this way.
 fn exit_code(run: &CliRun) -> ExitCode {
-    if run.has_error() {
+    if run.usage_error {
+        ExitCode::from(2)
+    } else if run.has_error() {
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS

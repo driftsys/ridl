@@ -30,12 +30,12 @@ plugins; each waits to be ported. §6 says what each parity test proves.
 
 | What                                                                                                 | Where                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The schema: `CodegenRequest`, `CodegenResponse`, `GeneratedFile`, `Diagnostic`, `BackendOption`      | `crates/ridl-ir/proto/ridl/codegen/v1/plugin.proto`, in the package `ridl.codegen.v1` beside `model.proto`, compiled by the same `build.rs` and registered with the same `pbjson-build` builder                                                                                                                                                                                                       |
+| The schema: `CodegenRequest`, `CodegenResponse`, `GeneratedFile`, `Diagnostic`, `BackendOption`      | `crates/ridl-ir/proto/ridl/codegen/v1/plugin.proto`, with the deployment section's messages in `crates/ridl-ir/proto/ridl/codegen/v1/deployment.proto`, in the package `ridl.codegen.v1` beside `model.proto`, all compiled by the same `build.rs` and registered with the same `pbjson-build` builder                                                                                                |
 | The trait `Backend`, the transitional `RawIr`, `ModelBackend`, `SCHEMA`, the encodings, `check_path` | `crates/ridl-ir/src/codegen/contract.rs`, re-exported from `ridl_ir::codegen`                                                                                                                                                                                                                                                                                                                         |
 | The four in-tree backends behind the trait                                                           | `crates/ridl-backend-{rust,ts,proto,flatbuffers}/src/contract.rs`. Rust is `pub struct Backend` over the request's model alone; the other three are `pub struct Backend<'a>` over `RawIr`, `generate` (TypeScript) or `generate_with` (proto3, FlatBuffers)                                                                                                                                           |
 | The in-process host: one request per package, every emit through the trait, the response written     | `crates/ridlc/src/lib.rs` — `codegen_request`, `write_emits`, `write_response`, `run_build_with`                                                                                                                                                                                                                                                                                                      |
 | The process host: `ridlc-gen-<language>`, `PATH` lookup, the pipe, the timeout, the error            | `crates/ridlc/src/plugin.rs` — `PluginSpec`, `resolve`, `run`, `PluginError`                                                                                                                                                                                                                                                                                                                          |
-| The flags                                                                                            | `crates/ridlc/src/main.rs` and `crates/ridl/src/main.rs`, `--plugin` and `--plugin-timeout` on `build`; documented in [`docs/book/cli-reference.md`](../book/cli-reference.md)                                                                                                                                                                                                                        |
+| The flags                                                                                            | `crates/ridlc/src/main.rs` and `crates/ridl/src/main.rs`, `--plugin`, `--plugin-timeout` and `--deployment` on `build`; documented in [`docs/book/cli-reference.md`](../book/cli-reference.md)                                                                                                                                                                                                        |
 | The reference plugins                                                                                | `crates/ridlc-gen-model/`, a binary over `ModelBackend`, and `crates/ridlc-gen-rust/`, a binary over the Rust backend; both `publish = false`                                                                                                                                                                                                                                                         |
 | The parity tests                                                                                     | `crates/ridlc-gen-model/tests/parity.rs` and `crates/ridlc-gen-rust/tests/parity.rs`, each over every corpus package at the contract's level and every corpus entry at the command's level; the host's failure modes in `crates/ridlc/src/plugin.rs`'s tests; the flag's behaviour in `crates/ridlc/tests/cli.rs`; the messages' encodings and the path rule in `crates/ridl-ir/src/codegen/tests.rs` |
 
@@ -126,11 +126,11 @@ plugin and the path.
 
 ## 3. The in-process host
 
-``ridlc::codegen_request(base, package, others,
-options)`builds the one request
-per package — the model lowered once, over the same`others`every code emit
-reads, so the request's model is the artifact — and`write_emits`
-hands it to each selected backend through the trait:
+`ridlc::codegen_request(base, package, others, options, deployment)` builds the
+one request per package — the model lowered once, over the same `others` every
+code emit reads, so the request's model is the artifact, and the `deployment`
+section the build selected once, the same section in every request — and
+`write_emits` hands it to each selected backend through the trait:
 
 ```rust
 pub trait Backend {
@@ -414,9 +414,10 @@ written today.
   in 32 bits is recorded the same way.
 
 Every consumer link of an event channel carries the member's depth. The
-channel's ring depth is the maximum over its consumer links, and it is absent
-when any link's depth is absent. An event channel with no consumer link takes
-the member's contract bound as its ring depth.
+channel's ring depth is the maximum over its consumer links, with the source of
+the link that supplies it, and it is absent when any link's depth is absent. An
+event channel with no consumer link takes the member's contract bound as its
+ring depth.
 
 The schema also names a declared source, for a value that an rsdl key states. No
 rsdl key states a depth today, so no value is written with it.
@@ -431,12 +432,20 @@ unspecified. A **signal or fixed channel** carries no sizing fields.
 ([CLI reference](../book/cli-reference.md)). The flag names a deployment of the
 workspace's system; a workspace has at most one system.
 
-- A workspace with exactly one deployment needs no flag: the request carries it.
-- A workspace with several deployments and no flag carries none.
+- A workspace whose source declares exactly one deployment needs no flag: the
+  request carries it.
+- A workspace whose source declares several deployments and no flag carries
+  none. The count is the count the source declares, so a deployment an
+  `RSDL-7xx` error removed from the system IR still counts: a workspace that
+  declares two carries neither.
 - A workspace with no system and no flag carries none.
 - A `NAME` that the system does not declare exits 2 and names the deployments it
-  does declare. A workspace with no system built with `--deployment` is the same
-  error, and its message says that no deployment can be named.
+  does declare, unless the build has already drawn an error of its own: that
+  error takes precedence, so the build reports it and exits 1.
+- A workspace with no system, and a workspace whose system declares no
+  `deployment` block, built with `--deployment` are the same bad flag value.
+  There is no deployment to name in either, so the message states which of the
+  two it is rather than listing nothing.
 - A deployment that an `RSDL-7xx` error removed from the system is not unknown:
   the build reports that error and exits 1.
 
@@ -446,7 +455,9 @@ The `bindings` list is empty today. The emitter writes none.
 
 Nothing in the workspace reads the section: the Rust backend and the two
 reference plugins ignore it, and no `--emit` value writes the request out. The
-request is built in memory, and a test plugin reads it in process.
+request is built in memory, and what a build hands a plugin is checked by
+running a plugin that saves each request it is given
+(`crates/ridlc/tests/cli.rs`).
 
 ## 8. What a plugin author reads
 
