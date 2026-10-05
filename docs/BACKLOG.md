@@ -3,8 +3,8 @@
 This document captures the priority review of all 77 open issues in
 [driftsys/ridl](https://github.com/driftsys/ridl/issues) on **3 October 2026**.
 It helps contributors select work and understand the remaining bugs and
-technical debt. Begin with the catalog descriptor, then complete the remaining
-Rust release dependencies in the order below.
+technical debt. Begin with layout inputs for backend plugins (Epic 17), then
+complete the remaining Rust release dependencies in the order below.
 
 Since the review, #275, #367 and #377 to #382 have closed: lane E16 and E6.17
 landed on 2026-10-04, and #275 closed with E16.2. The counts below are those of
@@ -45,11 +45,12 @@ These estimates help planning and do not set delivery dates.
    region, landed on 2026-10-04.
 3. **Layout inputs for backend plugins (P1 since 2026-10-05):** Epic 17 in the
    roadmap. E17.0 designs the system section of the codegen model and the rsdl
-   deployment attributes for the queue depth, the slot count and the call
-   budget; then the system in the model, the payload sizes the model lacks
-   (#336, #665), the envelope and frame header sizes, the sizing inputs, and a
-   test plugin that computes the layouts. `repr(C)` #317 adds its slot layout
-   when it lands.
+   deployment attributes for the queue depth override, the slot count and the
+   call budget; then the system in the model, the payload sizes the model lacks
+   (#336, and #665 as an optional narrowing after #597), the frame header and
+   envelope sizes per transport binding (these wait on the WebSocket transport
+   #265), the sizing inputs, and a test plugin that computes the layouts.
+   `repr(C)` #317 adds its slot layout when it lands.
 4. **Language finalization alongside the catalog:** finish constraint-change
    records and diff classification #255, and grammar/attribute work #276.
    Finalize reference status #320 after its prerequisites and remaining
@@ -85,11 +86,11 @@ strengthens deterministic formatter work guards after
 generate a deployment's shared-memory layouts and socket message layouts from
 its `CodegenRequest` alone. The codegen model it receives describes one package:
 the regions, the crossings, the routes and the placement are only in the system
-IR; the envelope and frame header sizes are not in the model; the queue depth,
-the slot count and the call budget have no source; and some payload shapes have
-no size. Epic 17 in the [roadmap](ROADMAP.md) holds the stories. It is the first
-open item of the delivery sequence above; the rest of the sequence keeps its
-order.
+IR; the envelope and frame header sizes are not in the model; the queue depth's
+derivation rule is not in the model, and the slot count and the call budget have
+no source; and some payload shapes have no size. Epic 17 in the
+[roadmap](ROADMAP.md) holds the stories. It is the first open item of the
+delivery sequence above; the rest of the sequence keeps its order.
 
 **P2 focus: the developer-experience track.** The tooling for people and for
 agents — the language server, the MCP server, doc comments and the authoring
@@ -97,7 +98,7 @@ skill — leads P2, ahead of the advisory score, in this order:
 
 1. Design lints and metrics, PR #712: merge it, then move its specification and
    plan out of `docs/wip/` into the records.
-2. The authoring skill and its rules: one specification that takes in #73, #74,
+2. The authoring skill and its rules: one specification that covers #73, #74,
    #75 and #87 and decides which agent hosts it supports, how it is registered,
    and how the evals score an answer. It needs only the MCP tools that have
    landed, so it can start before step 1 finishes.
@@ -108,8 +109,8 @@ skill — leads P2, ahead of the advisory score, in this order:
 4. rsdl-aware references, rename and completion in the language server, #385.
 5. The review debt of the track: #711 and #682.
 
-The developer-experience track runs beside P1. It does not change the
-descriptor's place in the sequence.
+The developer-experience track runs beside P1. It does not change Epic 17's
+place in the sequence.
 
 ## Open issues by priority
 
@@ -122,6 +123,12 @@ does not override roadmap dependencies or maintainer decisions.
 
 | Issue                                                                                                                                                                                                                                            | Type labels                    | Size | Triage reason                                                                                                                                                                                                                                       |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [#715](https://github.com/driftsys/ridl/issues/715) E17.0 — The design: the system in the codegen model and the rsdl sizing attributes                                                                                                           | `documentation`, `enhancement` | M    | Gates every other Epic 17 story: fixes the model's system section and the rsdl deployment attributes before any code.                                                                                                                               |
+| [#716](https://github.com/driftsys/ridl/issues/716) E17.1 — The system in the codegen model: regions, crossings, encodings, fan-out and placement                                                                                                | `enhancement`                  | M    | A backend plugin cannot compute a layout without the regions and routes; adds the examples/cabin system fixture.                                                                                                                                    |
+| [#717](https://github.com/driftsys/ridl/issues/717) E17.2 — The payload sizes the codegen model lacks                                                                                                                                            | `enhancement`                  | M    | A socket message size needs every payload bound; shapes with no defined encoding wait on that definition.                                                                                                                                           |
+| [#718](https://github.com/driftsys/ridl/issues/718) E17.3 — The frame header and envelope sizes per transport binding, in the codegen model                                                                                                      | `enhancement`                  | S    | Socket message size needs the fixed overheads; they are defined per binding and wait on #265.                                                                                                                                                       |
+| [#719](https://github.com/driftsys/ridl/issues/719) E17.4 — The rsdl deployment attributes for the depth override, slot count and call budget                                                                                                    | `enhancement`                  | M    | The slot count and call budget have no source; the depth override completes ADR-0018 decision 12.                                                                                                                                                   |
+| [#720](https://github.com/driftsys/ridl/issues/720) E17.5 — A test plugin that computes the layouts from the request, and the records                                                                                                            | `enhancement`                  | M    | Proves the inputs are sufficient against a fixture checked by hand.                                                                                                                                                                                 |
 | [#377](https://github.com/driftsys/ridl/issues/377) E16.1 — The ridl-descriptor crate: catalog.fbs, the generated accessors and the verifier                                                                                                     | `enhancement`                  | L    | Landed 2026-10-03 (PR #669). Reason at review: Start the remaining catalog descriptor chain: schema, accessors and whole-buffer verification.                                                                                                       |
 | [#378](https://github.com/driftsys/ridl/issues/378) E16.2 — Interface numbering in the descriptor and the catalog hash over the reachable closure                                                                                                | `enhancement`                  | M    | Landed 2026-10-04 (PR #676). Reason at review: Stable numbering and reachable-closure hashing unlock #367 and protect contract identity; use the already delivered lock numbering.                                                                  |
 | [#379](https://github.com/driftsys/ridl/issues/379) E16.3 — The size context, the type leaves and the string byte capacity                                                                                                                       | `enhancement`                  | M    | Landed 2026-10-04 (PR #681). Reason at review: Size context and Unicode byte bounds feed safe payload size calculations (#380).                                                                                                                     |
