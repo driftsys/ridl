@@ -1534,3 +1534,138 @@ fn build_with_an_unknown_deployment_exits_two_and_names_the_known_ones() {
     assert_eq!(code, 2, "stderr:\n{stderr}");
     assert!(stderr.contains("Bench"), "stderr:\n{stderr}");
 }
+
+/// Runs `ridlc build <entry> --out-dir <out> --plugin dump=<script> <extra>`
+/// where the script stands in for a plugin: it saves each request it is given
+/// under `requests/` and answers with no files. Returns the parsed requests,
+/// the exit code and stderr. Unix only, for the script.
+#[cfg(unix)]
+fn build_dumping_requests(entry: &Path, extra: &[&str]) -> (Vec<serde_json::Value>, i32, String) {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let dir = TempDir::new("dump-requests");
+    let requests = dir.path().join("requests");
+    std::fs::create_dir_all(&requests).unwrap();
+    let script = dir.write(
+        "ridlc-gen-dump",
+        &format!(
+            "#!/bin/sh\ncat > '{}'/$$.json\n\
+             printf '{{\"files\": [], \"diagnostics\": []}}\\n'\n",
+            requests.display()
+        ),
+    );
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let out = TempDir::new("dump-requests-out");
+    let mut args: Vec<std::ffi::OsString> = vec![
+        "build".into(),
+        entry.into(),
+        "--out-dir".into(),
+        out.path().into(),
+        "--emit".into(),
+        "codegen-model".into(),
+        "--plugin".into(),
+        format!("dump={}", script.display()).into(),
+    ];
+    args.extend(extra.iter().map(Into::into));
+    let args: Vec<&std::ffi::OsStr> = args.iter().map(AsRef::as_ref).collect();
+    let (code, stderr) = ridlc(&args);
+    let parsed = std::fs::read_dir(&requests)
+        .unwrap()
+        .map(|file| {
+            let text = std::fs::read_to_string(file.unwrap().path()).unwrap();
+            serde_json::from_str(&text).expect("a request is JSON")
+        })
+        .collect();
+    (parsed, code, stderr)
+}
+
+/// Every request a build hands a plugin carries the selected deployment,
+/// package it is run for: with one deployment in the workspace and no
+/// flag, and with a flag that names one of two.
+#[cfg(unix)]
+#[test]
+fn build_hands_every_plugin_request_the_selected_deployment() {
+    let (requests, code, stderr) = build_dumping_requests(Path::new("../../examples/cabin"), &[]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(!requests.is_empty());
+    for request in &requests {
+        assert_eq!(
+            request["deployment"]["name"], "Bench",
+            "{}",
+            request["artifactBase"]
+        );
+    }
+
+    let (requests, code, stderr) = build_dumping_requests(
+        Path::new("tests/corpus/rsdl-appendix-a"),
+        &["--deployment", "Production"],
+    );
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(!requests.is_empty());
+    for request in &requests {
+        assert_eq!(
+            request["deployment"]["name"], "Production",
+            "{}",
+            request["artifactBase"]
+        );
+    }
+
+    let (requests, code, stderr) =
+        build_dumping_requests(Path::new("tests/corpus/rsdl-appendix-a"), &[]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(!requests.is_empty());
+    for request in &requests {
+        assert!(
+            request.get("deployment").is_none(),
+            "{}",
+            request["artifactBase"]
+        );
+    }
+}
+
+/// A workspace with no system cannot name a deployment: exit 2, and the
+/// message says why. No output directory is created.
+#[test]
+fn build_with_a_deployment_flag_and_no_system_exits_two_and_says_why() {
+    let out = TempDir::new("no-system-deployment-out");
+    let fresh = out.path().join("fresh");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        "tests/corpus/veh-common".as_ref(),
+        "--out-dir".as_ref(),
+        fresh.as_os_str(),
+        "--deployment".as_ref(),
+        "X".as_ref(),
+    ]);
+    assert_eq!(code, 2, "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("the workspace declares no system, so no deployment can be named"),
+        "stderr:\n{stderr}"
+    );
+    assert!(!fresh.exists(), "a refused build creates no directory");
+}
+
+/// A deployment that an RSDL-7xx error dropped is declared in the source, so
+/// it is not an unknown name: the build reports the error, exits 1 and writes
+/// nothing.
+#[test]
+fn build_with_the_flag_naming_a_dropped_deployment_reports_the_rsdl_error() {
+    let dir = placement_workspace("system-dropped-flag", "system Vehicle { Lane, Panel }");
+    let out = TempDir::new("system-dropped-flag-out");
+    let fresh = out.path().join("fresh");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        dir.path().as_os_str(),
+        "--out-dir".as_ref(),
+        fresh.as_os_str(),
+        "--deployment".as_ref(),
+        "Bad".as_ref(),
+    ]);
+    assert_eq!(code, 1, "stderr:\n{stderr}");
+    assert!(stderr.contains("error[RSDL-701]"), "stderr:\n{stderr}");
+    assert!(
+        !stderr.contains("no deployment named"),
+        "the name is declared, stderr:\n{stderr}"
+    );
+    assert!(!fresh.exists(), "nothing is written");
+}

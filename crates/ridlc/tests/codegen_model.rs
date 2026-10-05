@@ -531,23 +531,42 @@ fn a_request_for_cabin_carries_its_one_deployment_without_a_flag() {
     );
 }
 
-/// A workspace with no system builds the request it built before the
-/// deployment section existed: the JSON has no `deployment` key.
-#[test]
-fn a_workspace_without_a_system_builds_the_request_of_today() {
-    let (system, packages) = system_and_packages(&corpus_entry("veh-common"));
-    assert!(system.is_none(), "veh-common declares no system");
+/// The request `codegen_request` builds for `name` with no deployment, next
+/// to the request written out field by field, and the production serializer's
+/// bytes for each. The deployment section is absent from the bytes.
+fn assert_request_without_deployment(entry: &str, name: &str) {
+    let (system, packages) = system_and_packages(&corpus_entry(entry));
     let refs: Vec<&v2::Package> = packages.iter().collect();
     let selected = ridlc::select_deployment(system.as_ref(), None, &refs).expect("not an error");
-    assert!(selected.is_none());
+    assert!(selected.is_none(), "{entry}: no deployment without a name");
 
-    let request =
-        ridlc::codegen_request("veh.common", &packages[0], &refs[1..], Vec::new(), selected);
-    let json = serde_json::to_string(&request).expect("the request serializes");
-    assert!(
-        !json.contains("deployment"),
-        "no deployment key in the request:\n{json}"
+    let request = ridlc::codegen_request(name, &packages[0], &refs[1..], Vec::new(), selected);
+    let expected = v1::CodegenRequest {
+        schema: codegen::SCHEMA.to_string(),
+        toolchain: env!("CARGO_PKG_VERSION").to_string(),
+        model: Some(codegen::lower(&packages[0], &refs[1..])),
+        options: Vec::new(),
+        artifact_base: name.to_string(),
+        deployment: None,
+    };
+    assert_eq!(request, expected, "{entry}");
+    let json = codegen::request_to_json(&request).expect("the request serializes");
+    assert_eq!(
+        json,
+        codegen::request_to_json(&expected).expect("the literal serializes"),
+        "{entry}"
     );
+    assert!(
+        !json.contains("\"deployment\""),
+        "{entry}: no deployment key in the request:\n{json}"
+    );
+}
+
+/// A workspace with no system builds the request it built before the
+/// deployment section existed.
+#[test]
+fn a_workspace_without_a_system_builds_the_request_of_today() {
+    assert_request_without_deployment("veh-common", "veh.common");
 }
 
 /// Appendix A declares `Production` and `Bench`; with no name the request
@@ -558,6 +577,7 @@ fn two_deployments_and_no_flag_select_none() {
     let refs: Vec<&v2::Package> = packages.iter().collect();
     let selected = ridlc::select_deployment(system.as_ref(), None, &refs).expect("not an error");
     assert!(selected.is_none());
+    assert_request_without_deployment("rsdl-appendix-a", "veh.topology");
 }
 
 #[test]

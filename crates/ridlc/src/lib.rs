@@ -870,38 +870,6 @@ pub fn run_build_with(
         ));
     }
     if succeeded {
-        std::fs::create_dir_all(out_dir)?;
-        let single_file = entry.is_file() && manifest_root_of(entry).is_none();
-        let file_stem = module_name_from_path(&entry.to_string_lossy());
-
-        // Whether this build owes the output directory a crate root and a
-        // manifest: generated Rust names a cross-package reference as
-        // `crate::veh::…` (`ridl_backend_rust::type_path`), so every package
-        // it emits must land inside one crate. Single-file mode keeps writing
-        // only `<stem>.rs`, matching the documented single-file asymmetry on
-        // `Emit::TypeScript`.
-        let writes_crate_files =
-            !single_file && emits.iter().any(|emit| matches!(emit, Emit::Rust));
-
-        // The overwrite gate runs before any write, not after the per-package
-        // loop: a refusal is a build that produced nothing, and a loop that
-        // had already written every `<package>.rs` into a hand-written crate
-        // would contradict that. `lib.rs` and `Cargo.toml` are not
-        // package-scoped names and `--out-dir` is any directory the caller
-        // names, so this is the check that keeps a build from truncating
-        // sources a person wrote.
-        if writes_crate_files {
-            let refusals = crate_file_refusals(out_dir)?;
-            if !refusals.is_empty() {
-                diagnostics.extend(refusals);
-                return Ok(CliRun {
-                    diagnostics,
-                    sources,
-                    lints,
-                });
-            }
-        }
-
         // `ridl.std` is deliberately absent from `checked` (it is not a
         // workspace member), so no loop over `checked` ever reaches it. A
         // consumer's generated code still references it, so the build
@@ -967,12 +935,58 @@ pub fn run_build_with(
         } else {
             None
         };
-        let selected = select_deployment(
+        let selected = match select_deployment(
             lowered_system.as_ref(),
             deployment,
             &catalog_scope(&packages, hash_std),
-        )
-        .map_err(|err| std::io::Error::other(err.to_string()))?;
+        ) {
+            Ok(selected) => selected,
+            // A deployment an RSDL-7xx error dropped from the system is
+            // declared in the source, so its name is not unknown: the build
+            // reports that error and writes nothing (rsdl reference §13).
+            Err(_) if diagnostics.iter().any(|d| d.severity == Severity::Error) => {
+                return Ok(CliRun {
+                    diagnostics,
+                    sources,
+                    lints,
+                });
+            }
+            // A name no source declares is a bad flag value (ADR-0010
+            // decision 1): exit 2, before the output directory is created.
+            Err(err) => return Err(std::io::Error::other(err.to_string())),
+        };
+
+        std::fs::create_dir_all(out_dir)?;
+        let single_file = entry.is_file() && manifest_root_of(entry).is_none();
+        let file_stem = module_name_from_path(&entry.to_string_lossy());
+
+        // Whether this build owes the output directory a crate root and a
+        // manifest: generated Rust names a cross-package reference as
+        // `crate::veh::…` (`ridl_backend_rust::type_path`), so every package
+        // it emits must land inside one crate. Single-file mode keeps writing
+        // only `<stem>.rs`, matching the documented single-file asymmetry on
+        // `Emit::TypeScript`.
+        let writes_crate_files =
+            !single_file && emits.iter().any(|emit| matches!(emit, Emit::Rust));
+
+        // The overwrite gate runs before any write, not after the per-package
+        // loop: a refusal is a build that produced nothing, and a loop that
+        // had already written every `<package>.rs` into a hand-written crate
+        // would contradict that. `lib.rs` and `Cargo.toml` are not
+        // package-scoped names and `--out-dir` is any directory the caller
+        // names, so this is the check that keeps a build from truncating
+        // sources a person wrote.
+        if writes_crate_files {
+            let refusals = crate_file_refusals(out_dir)?;
+            if !refusals.is_empty() {
+                diagnostics.extend(refusals);
+                return Ok(CliRun {
+                    diagnostics,
+                    sources,
+                    lints,
+                });
+            }
+        }
 
         for package in &checked {
             let base = if single_file {
@@ -1665,7 +1679,7 @@ impl std::fmt::Display for UnknownDeployment {
         if self.known.is_empty() {
             write!(
                 f,
-                "no deployment named `{}`; the workspace declares no deployment",
+                "no deployment named `{}`; the workspace declares no system, so no deployment can be named",
                 self.requested
             )
         } else {
