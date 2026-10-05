@@ -10,6 +10,10 @@ Since the review, #275, #367 and #377 to #382 have closed: lane E16 and E6.17
 landed on 2026-10-04, and #275 closed with E16.2. The counts below are those of
 the review date.
 
+**Changed on 2026-10-05:** layout inputs for backend plugins, Epic 17 in the
+roadmap, is P1 and comes first, and the developer-experience track leads P2. See
+[Changes on 2026-10-05](#changes-on-2026-10-05). Its stories are #715 to #720.
+
 [ROADMAP.md](ROADMAP.md) defines release scope, story acceptance criteria and
 dependencies. This backlog records issue priorities at the review date; GitHub
 holds the current issue state and supporting evidence. Triage reasons below are
@@ -39,14 +43,21 @@ These estimates help planning and do not set delivery dates.
    and the CLI records. Schema identity #275 closed with #378 (PR #676). System
    integration #367, which embeds the delivered catalog hash in each rsdl
    region, landed on 2026-10-04.
-3. **Language finalization alongside the catalog:** finish constraint-change
+3. **Layout inputs for backend plugins (P1 since 2026-10-05):** Epic 17 in the
+   roadmap. E17.0 designs the system section of the codegen model and the rsdl
+   deployment attributes for the queue depth, the slot count and the call
+   budget; then the system in the model, the payload sizes the model lacks
+   (#336, #665), the envelope and frame header sizes, the sizing inputs, and a
+   test plugin that computes the layouts. `repr(C)` #317 adds its slot layout
+   when it lands.
+4. **Language finalization alongside the catalog:** finish constraint-change
    records and diff classification #255, and grammar/attribute work #276.
    Finalize reference status #320 after its prerequisites and remaining
    normative defects are disposed of.
-4. **Remaining Rust release work:** implement proto3 #264 and `repr(C)` #317,
+5. **Remaining Rust release work:** implement proto3 #264 and `repr(C)` #317,
    with its projection-layout record, and WebSocket transport #265. The frame
    specification, loopback runtime and plugin protocol are already available.
-5. **Step 2:** deliver the TypeScript/wasm surface #287 and emulator #290. The
+6. **Step 2:** deliver the TypeScript/wasm surface #287 and emulator #290. The
    attribute registry #268, its enforcement #269 and boundary IR #270, plus
    agent tooling, run in the threads the roadmap assigns to them.
 
@@ -67,6 +78,38 @@ strengthens deterministic formatter work guards after
 [PR #651](https://github.com/driftsys/ridl/pull/651) and
 [PR #652](https://github.com/driftsys/ridl/pull/652). Closed formatter issues
 #387, #627, #641 and #650 are excluded from the open issue tables.
+
+## Changes on 2026-10-05
+
+**P1: layout inputs for backend plugins.** A backend plugin must compute and
+generate a deployment's shared-memory layouts and socket message layouts from
+its `CodegenRequest` alone. The codegen model it receives describes one package:
+the regions, the crossings, the routes and the placement are only in the system
+IR; the envelope and frame header sizes are not in the model; the queue depth,
+the slot count and the call budget have no source; and some payload shapes have
+no size. Epic 17 in the [roadmap](ROADMAP.md) holds the stories. It is the first
+open item of the delivery sequence above; the rest of the sequence keeps its
+order.
+
+**P2 focus: the developer-experience track.** The tooling for people and for
+agents — the language server, the MCP server, doc comments and the authoring
+skill — leads P2, ahead of the advisory score, in this order:
+
+1. Design lints and metrics, PR #712: merge it, then move its specification and
+   plan out of `docs/wip/` into the records.
+2. The authoring skill and its rules: one specification that takes in #73, #74,
+   #75 and #87 and decides which agent hosts it supports, how it is registered,
+   and how the evals score an answer. It needs only the MCP tools that have
+   landed, so it can start before step 1 finishes.
+3. Doc comments in generated code: the rules and the source docs rendered as
+   rustdoc and TSDoc on the public facade. It needs a specification; its
+   dependencies (doc comments in the source, and the catalog descriptor) have
+   landed.
+4. rsdl-aware references, rename and completion in the language server, #385.
+5. The review debt of the track: #711 and #682.
+
+The developer-experience track runs beside P1. It does not change the
+descriptor's place in the sequence.
 
 ## Open issues by priority
 
