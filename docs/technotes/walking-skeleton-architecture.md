@@ -13,9 +13,9 @@ as PRs #136–#181), not as planned. Where it disagrees with an ADR or the
 roadmap, the ADR/roadmap is normative and this note is stale.
 
 The file has been rewritten as-built at each epic close. The first version
-described the epic E0 walking skeleton, which the filename still carries; E1
-rebuilt every part that version named, and E2 added the interaction layer over
-it. The earlier versions remain in git history, and the section
+described the E0 walking skeleton, which the filename still carries; E1 rebuilt
+every part that version named, and E2 added the interaction layer over it. The
+earlier versions remain in git history, and the section
 [What E1 closed from the E0 note](#what-e1-closed-from-the-e0-note) records what
 happened to the E0 open items.
 
@@ -32,10 +32,10 @@ extension (`editors/vscode`) is TypeScript and is not a workspace member.
 The crates below arrived in three waves: seven from the E1 spine, grown in place
 through E2; two more from E2 — `ridl-backend-ts` and `ridl-diff`; and
 `ridl-mcp`, most recently. `ridl-rt`, `ridl-loopback` and `ridl-rt-conformance`
-landed after those three waves, from epic E11 rather than from E1 or E2, and are
-listed with the others because a newcomer will look for them here. This list is
-not a standing count of every crate the workspace holds — see `AGENTS.md` for
-that.
+landed after those three waves, from the runtime-library work rather than from
+E1 or E2, and are listed with the others because a newcomer will look for them
+here. This list is not a standing count of every crate the workspace holds — see
+`AGENTS.md` for that.
 
 - **`crates/ridl-syntax`** — the surface layer, and the one grammar. A `logos`
   lexer over the full family token set; a hand-written recursive-descent parser

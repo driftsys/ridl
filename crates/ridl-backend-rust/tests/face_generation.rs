@@ -1,5 +1,5 @@
-//! The generated interaction face over the interaction-face fixture (Lane M
-//! stage M3, Task 2). Asserts that `generate_face` emits, per interface, a
+//! The generated interaction face over the interaction-face fixture.
+//! Asserts that `generate_face` emits, per interface, a
 //! `Client` bound by exactly the ports that interface needs, a `Publisher`
 //! over the writer ports, and a `Provider` trait with the settled method
 //! signatures.

@@ -1,5 +1,5 @@
-//! The generated `dispatch` over the interaction-face fixture (Lane M stage
-//! M3, Task 3). Asserts that the emitted routing, settlement mapping and
+//! The generated `dispatch` over the interaction-face fixture.
+//! Asserts that the emitted routing, settlement mapping and
 //! counting are total and in the order the design's settlement table gives.
 //!
 //! These assertions read the generated source, for the reason

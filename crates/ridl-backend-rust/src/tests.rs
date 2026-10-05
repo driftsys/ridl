@@ -354,7 +354,7 @@ fn counter_decl() -> v2::Decl {
 ///
 /// The **width** is load-bearing, not a range: a named scalar with no declared
 /// width has no finite FlatBuffers bound, and both entry points then refuse it
-/// for that reason (K4's D-7 refusal), which would make the face test below
+/// for that reason (the D-7 refusal), which would make the face test below
 /// pass for the wrong reason. This carries `Counter`'s width for that reason.
 fn wire_named_decl() -> v2::Decl {
     public_decl(
@@ -371,7 +371,7 @@ fn wire_named_decl() -> v2::Decl {
 /// output holds no `pub type Wire`.
 ///
 /// `generate_face` used to emit that alias at package scope, where a typl
-/// declaration named `Wire` emits `pub struct Wire`, and interaction-face decision 5
+/// declaration named `Wire` emits `pub struct Wire`, and interaction-face design rule 5
 /// refused the package over the pair. The alias is gone (`docs/technotes/rust-backend-name-collisions.md`, decision 5, driftsys/ridl#588): every site that named it
 /// writes `::ridl_rt::encoding::FlatBuffers`, so `Wire` is an ordinary
 /// declaration in a package with a face as it always was in one without.
@@ -3306,7 +3306,7 @@ fn keyword_field_name_is_raw_escaped() {
 }
 
 // ---------------------------------------------------------------------------
-// Epic E1 whole-epic review — regression fixtures.
+// Regression fixtures from the whole-epic review of the typl toolchain.
 // ---------------------------------------------------------------------------
 
 /// C1b: a non-optional self-reference `struct S { next: S }` is a cycle. The
@@ -4751,12 +4751,12 @@ fn the_derive_attribute_sits_under_the_doc_comment() {
 }
 
 // ---------------------------------------------------------------------------
-// The FlatBuffers size bound's refusal (design note D-7, stages K4 and K5).
+// The FlatBuffers size bound's refusal (design note D-7).
 //
-// `check_flatbuffers_bound` is called per type by the codec emitter (stage
-// K5). These tests call it directly over hand-built IR, because no typl
-// source reaches an unbounded type — D-7's diagnostic is totality over the
-// IR, not a case a user meets.
+// `check_flatbuffers_bound` is called per type by the codec emitter. These
+// tests call it directly over hand-built IR, because no typl source reaches an
+// unbounded type — D-7's diagnostic is totality over the IR, not a case a user
+// meets.
 // ---------------------------------------------------------------------------
 
 /// Runs the per-type refusal over every declaration of `package`, which is
@@ -5042,7 +5042,7 @@ fn flatbuffers_bound_names_an_unbounded_box_root() {
 ///
 /// The cycle exemption beside an *unbounded* member is pinned separately, by
 /// [`flatbuffers_bound_names_the_unbounded_member_beside_a_cycle`] — the
-/// third gap design note §4a left to stage K5.
+/// third gap that design note §4a left open.
 #[test]
 fn flatbuffers_bound_leaves_a_cycle_alone_beside_a_bounded_member() {
     let recursive = v2::StructDef {
@@ -5739,7 +5739,8 @@ fn flatbuffers_bound_leaves_a_cross_package_reference_alone() {
 /// cross-package reference: `recursive_struct_default_terminates` and
 /// `a_cyclic_struct_takes_no_conditional_derives` already pin that `generate`
 /// still emits `S`'s domain type over exactly this shape, and this refusal
-/// must not take that away before K5 has a codec to withhold instead.
+/// must not take that away where the codec emitter can withhold the codec
+/// instead.
 #[test]
 fn flatbuffers_bound_leaves_a_cycle_alone() {
     let recursive = v2::StructDef {
@@ -5759,7 +5760,7 @@ fn flatbuffers_bound_leaves_a_cycle_alone() {
     assert_eq!(
         check_flatbuffers_bounds(&pkg),
         Ok(()),
-        "a same-package cycle must not be refused before K5 has a codec to withhold"
+        "a same-package cycle must not be refused where the codec emitter can withhold the codec"
     );
 }
 
@@ -5850,5 +5851,30 @@ fn a_withheld_declaration_claims_no_view_name() {
     assert!(
         source.contains("__RIDL_FB_NO_CODEC_Line"),
         "the codec of `Line` must be withheld, or this test proves nothing:\n{source}"
+    );
+}
+
+/// The owner line of a skipped-interface note for a refusal that no owner
+/// claims names the reason and no tracking issue, and cites neither of the
+/// two issues that own the other gaps.
+#[test]
+fn a_skipped_interface_note_without_an_owner_names_no_issue() {
+    use crate::{GenerateError, skipped_interface_note};
+    use ridl_ir::codegen::v1;
+
+    let note = skipped_interface_note(
+        &v1::Interface::default(),
+        &GenerateError {
+            message: "a refusal nobody owns".to_string(),
+        },
+    )
+    .to_string();
+    assert!(
+        note.contains("No tracking issue owns this one"),
+        "got: {note}"
+    );
+    assert!(
+        !note.contains("driftsys/ridl#713") && !note.contains("driftsys/ridl#704"),
+        "got: {note}"
     );
 }

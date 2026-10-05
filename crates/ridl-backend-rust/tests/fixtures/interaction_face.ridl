@@ -1,12 +1,11 @@
-// The interaction-face MVP fixture
-// (docs/design/interaction-face.md; the approved design is
-// docs/archive/2026-09-16-interaction-face-v0-design.md §7). A single-file, single-
-// catalog package kept to the shapes the hand-written payload stand-in could
-// carry when it was written: fixed-width named scalars, one enum, and one
-// struct whose fields are all fixed size. No optional field, no sequence, no
-// map, no union, no string, no bytes. The stand-in is gone
-// and the generated codec carries every typl shape; the fixture stays small
-// because the round trips need no more.
+// The interaction-face MVP fixture (docs/design/interaction-face.md; the
+// approved design is docs/archive/2026-09-16-interaction-face-v0-design.md §7).
+// A single-file, single-catalog package kept to the shapes the hand-written
+// payload stand-in could carry when it was written: fixed-width named scalars,
+// one enum, and one struct whose fields are all fixed size. No optional field,
+// no sequence, no map, no union, no string, no bytes. The stand-in is gone and
+// the generated codec carries every typl shape; the fixture stays small because
+// the round trips need no more.
 //
 // Kept self-contained (no cross-package import), because the compile path this
 // fixture is read through (`ridlc::compile`) wraps one file as a single-file

@@ -7,7 +7,7 @@ repository.workspace = true
 description = "The reference codegen plugin over the Rust backend, for the process host's parity test."
 # Test-only: the plugin exists so that `ridlc`'s process host has a real
 # executable to run under `just test`, with no network and no installation
-# (the lane P driver, stage P4; `docs/design/codegen-plugins.md`). It is not
+# (`docs/design/codegen-plugins.md`). It is not
 # a backend a user would run — `--emit rust` writes the same file in process
 # — so it is not published.
 publish = false

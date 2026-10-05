@@ -14,10 +14,10 @@ use ridl_descriptor::hash::catalog_hash;
 /// Pinned on the first run; see ADR-0014 decision 15 for the rule on moving it.
 const CORPUS_HASH: &str = "ff876b7ac7f4ba17e20be3863c31956059f26f17bf905ceea67af0aab4d49bb2";
 
-/// The corpus snapshot was published before Epic 15, so its shapes carry no
-/// number (`"number"` does not occur in the file). The pin must cover the
-/// numbers (driver §4 answers 3 and 4), so the test numbers the shapes in
-/// `Package::shapes()` order, 1.., all provisional, before hashing.
+/// The corpus snapshot was published before shapes carried a number (`"number"`
+/// does not occur in the file). The pin must cover the numbers, so the test
+/// numbers the shapes in `Package::shapes()` order, 1.., all provisional,
+/// before hashing.
 fn numbered_corpus() -> ridl_ir::v2::Package {
     let snapshot = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../ridl/tests/baseline-corpus/.ridl/baseline/corpus.baseline.ir.json");

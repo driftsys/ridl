@@ -382,9 +382,9 @@ pub enum RootTable {
 ///
 /// This is the one implementation of the bound (design note D-6). The codec
 /// emits it as `<T as Payload<FlatBuffers>>::MAX_SIZE`, the face sizes real
-/// buffers from that constant, and Epic 16 advertises the same number as
+/// buffers from that constant, and the catalog descriptor advertises the same number as
 /// `EncodedSizes.flatbuffers`. A second implementation would be a defect no
-/// test either story writes could catch: a codec whose buffer is larger than
+/// test of either consumer could catch: a codec whose buffer is larger than
 /// the size the descriptor advertises.
 ///
 /// **It is an upper bound with the slack charged explicitly, not the exact

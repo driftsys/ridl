@@ -15,14 +15,15 @@ Version: 0.2.0 — Draft
 > from the prior-art review (Appendix F): the error model (§10), the last-value
 > subscription guarantee (§4.4), and interaction identity & evolution (§11).
 >
-> **Reconciled with the shipped toolchain at the epic E2 close-out** (ADR-0008
-> decisions 1 and 16 to 21). Four supersessions from general form §6 are now
-> absorbed rather than pending: inline `T | E` returns (§7, §10.1, Appendix A,
-> Appendix C), generic `min`/`max` timing with the per-kind table as a
-> derivation (§4.3, §5.2, §9), ordinal drift reported at the desk (RIDL-407),
-> and the Stratum-3 wording "infrastructure failure — detected, undeclared"
-> (§10.3). §2.1's duration table, §9.2's `@[X..X]` rule, §16.1's RIDL-108 and
-> RIDL-110 rows, and Appendix C's grammar are corrected to the compiler.
+> **Reconciled with the shipped toolchain at the close-out of the interface
+> layer** (ADR-0008 decisions 1 and 16 to 21). Four supersessions from general
+> form §6 are now absorbed rather than pending: inline `T | E` returns (§7,
+> §10.1, Appendix A, Appendix C), generic `min`/`max` timing with the per-kind
+> table as a derivation (§4.3, §5.2, §9), ordinal drift reported at the desk
+> (RIDL-407), and the Stratum-3 wording "infrastructure failure — detected,
+> undeclared" (§10.3). §2.1's duration table, §9.2's `@[X..X]` rule, §16.1's
+> RIDL-108 and RIDL-110 rows, and Appendix C's grammar are corrected to the
+> compiler.
 
 ---
 
@@ -1927,7 +1928,7 @@ sections it points at are.
    members and its numbers in a form an engine reads without decoding, specified
    in
    [the runtime-descriptors design](../archive/2026-09-13-runtime-descriptors-design.md)
-   and built in Epic 16 (described in
+   and built (described in
    [the catalog descriptor design record](../design/catalog-descriptor.md)),
    where `ridl describe` prints it at the desk. Nothing about it is a language
    construct, and a bridge that exposes that catalog at runtime is an ordinary

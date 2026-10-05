@@ -9,11 +9,9 @@
 //! backend — the framing, the two encodings on the pipe, and `ridlc`
 //! writing the file.
 //!
-//! It exists because stage P4 of the lane P driver ported the Rust backend
-//! onto the lowered model: before that the backend read the raw IR, a
-//! plugin has none, and the exit test could only be run over
-//! `ridlc-gen-model`.
-//!
+//! It exists because the Rust backend reads the lowered model: before that the
+//! backend read the raw IR, a plugin has none, and the exit test could only be
+//! run over `ridlc-gen-model`.
 //! What a plugin owes the host, in order, and what this one does:
 //!
 //! - **Read one document from standard input.** Standard input that is not

@@ -1558,7 +1558,7 @@ fn main() {{
 /// reaches generated code and not only this workspace's own packages. The
 /// recipe cannot reach it: it runs `cargo check` over a `-p` list, and the
 /// codec is text with no manifest. This runs the same check over the emitted
-/// source through stage K3's proof mechanism, so it needs no new recipe and
+/// source through the bare-`rustc` proof mechanism, so it needs no new recipe and
 /// no example crate — see `just wasm-check`'s own comment, which names this
 /// test.
 ///

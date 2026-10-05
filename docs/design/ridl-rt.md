@@ -37,7 +37,7 @@ decision 19), plus two that a cargo feature adds:
 | `correlate`   | since the call-table move: `Table`, `Settled`, `Forgotten`, `Waiters`                                                                                                                                                                                                |
 | `error`       | `Contract`, `Transport`, `CallError`, `ClientError`, `ProviderError`                                                                                                                                                                                                 |
 | `face`        | since 2026-09-28 (driftsys/ridl#580): `Bind`, `Events`, `Publish`; `Timeout` under the `std` feature — the traits a generated face implements, the section "The face traits" below                                                                                   |
-| `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with stage K5                           |
+| `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with the Rust codec emitter             |
 | `task`        | under the `std` feature, since 2026-09-25: `block_on`, `noop_waker`; `flag_waker` and `WakeFlag` since 2026-09-28 (driftsys/ridl#568)                                                                                                                                |
 
 Generated code names every item by its full path and imports none, because
@@ -464,18 +464,18 @@ waker over `alloc::task::Wake` on an `Arc` when it has an allocator; one without
 an allocator needs a hand-written `RawWaker`, which needs `unsafe`. ADR-0021
 decision 8 carries the dated note.
 
-**Stage K5 added one helper and corrected one sentence.**
+**The Rust codec emitter added one helper and corrected one sentence.**
 `Builder::push_offset_vector` writes a vector of `uoffset_t`s naming objects
 already written, which is what a vector of strings or of tables needs and what
-K3's own module documentation said would arrive with the emitter. The corrected
-sentence is the one above: K3 wrote that a field's offset in its table and the
-table's size are the projection's facts. They are not. The projection owns the
-slot ids, the union discriminant and the size bound, because two emitters have
-to agree on those; a field's inline offset is observable only by the codec,
-since a `.fbs` schema states none, so `ridl-backend-rust` computes it. The bound
-stays sound whatever order is chosen, because it charges one alignment event per
-vtable slot and one more for the table's `soffset`, which is the worst case any
-order can reach.
+the module's own documentation said would arrive with the emitter. The corrected
+sentence is the one above: that documentation wrote that a field's offset in its
+table and the table's size are the projection's facts. They are not. The
+projection owns the slot ids, the union discriminant and the size bound, because
+two emitters have to agree on those; a field's inline offset is observable only
+by the codec, since a `.fbs` schema states none, so `ridl-backend-rust` computes
+it. The bound stays sound whatever order is chosen, because it charges one
+alignment event per vtable slot and one more for the table's `soffset`, which is
+the worst case any order can reach.
 
 Because the workspace resolves this crate with default features, `just test`,
 `just lint` and `just wasm-check` each carry a second invocation with

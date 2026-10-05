@@ -18,7 +18,7 @@
 //! and each `import * as x from './p'` against a package the model lists as
 //! foreign, under `DottedName.underscored`.
 //!
-//! It is the form of drift test stage P2b can write. When this backend stops
+//! It is the form of drift test that the model's own tests cannot write. When this backend stops
 //! deriving a fact and reads it from the model instead, that fact is a
 //! function of the model by construction and leaves this file.
 

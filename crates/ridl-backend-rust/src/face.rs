@@ -1,5 +1,5 @@
-//! The generated interaction face (Lane M stage M3, Tasks 2 and 3,
-//! `docs/design/interaction-face.md`; the approved design is
+//! The generated interaction face
+//! (`docs/design/interaction-face.md`; the approved design is
 //! `docs/archive/2026-09-16-interaction-face-v0-design.md` §6).
 //!
 //! For each named interface this module emits one `pub mod`, named after the
@@ -153,7 +153,7 @@ struct Call<'a> {
 
 /// The face module of one interface, or `None` when the interface declares
 /// nothing the face carries. Reachable from the crate for the pipeline's
-/// per-interface walk (interaction-face decision 2).
+/// per-interface walk (interaction-face design rule 2).
 ///
 /// The module is named by the interface's `snake_case`, so an interface
 /// `Climate` of package `veh` beside a package `veh.climate` gives a face
@@ -170,7 +170,7 @@ pub(crate) fn one_interface(
     let module = module_ident(interface);
 
     // Payload type names are kept beside each member, because the face names
-    // the declared type directly (M3 emits no induced argument struct).
+    // the declared type directly (the face emits no induced argument struct).
     let mut signals: Vec<(Member, &str)> = Vec::new();
     let mut events: Vec<(Member, &str)> = Vec::new();
     let mut commands: Vec<Call> = Vec::new();
@@ -1173,7 +1173,7 @@ fn payload_reference(payload: Option<&v1::Payload>) -> &str {
 /// The pinned `snake_case` of an interface's declared name, which names its
 /// generated module.
 ///
-/// Before stage P4 this module had a `snake_case` of its own, which differed
+/// This module once had a `snake_case` of its own, which differed
 /// from the transform ADR-0016 decision 1 pins on an acronym followed by a
 /// word — `HTTPServer` became `httpserver` rather than `http_server`
 /// (driftsys/ridl#450). The model carries the pinned spelling only, so

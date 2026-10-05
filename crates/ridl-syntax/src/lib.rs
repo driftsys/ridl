@@ -1,4 +1,4 @@
-//! The family lexer and grammar (epic E0, docs/ROADMAP.md).
+//! The family lexer and grammar.
 
 pub mod ast;
 pub mod keywords;

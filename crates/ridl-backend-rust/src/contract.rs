@@ -2,10 +2,9 @@
 //! in-process face `ridlc` calls, and the one the reference plugin
 //! `ridlc-gen-rust` wraps.
 //!
-//! Since stage P4 of the lane P driver it reads the request and nothing
-//! else: the model the request carries is what every emitter of this crate
-//! reads, so the in-process host and the process host hand the backend the
-//! same thing, and the parity test compares the two
+//! It reads the request and nothing else: the model the request carries is what
+//! every emitter of this crate reads, so the in-process host and the process
+//! host hand the backend the same thing, and the parity test compares the two
 //! (`docs/design/codegen-plugins.md`).
 
 use ridl_ir::codegen::{self, v1};

@@ -1279,7 +1279,7 @@ fn a_cross_package_struct_or_union_reference_compiles() {
 /// An **interface** named `Wire` builds and the emitted crate compiles.
 ///
 /// The descriptor emitter writes `pub struct <Interface>;` at package scope,
-/// which is where the `pub type Wire` alias used to land, so interaction-face decision 5
+/// which is where the `pub type Wire` alias used to land, so interaction-face design rule 5
 /// refused this package. The alias is gone (`docs/technotes/rust-backend-name-collisions.md`, decision 5, driftsys/ridl#588): every site that named it writes
 /// `::ridl_rt::encoding::FlatBuffers`, so the interface's identity struct
 /// collides with nothing and no name is reserved.
@@ -1323,7 +1323,7 @@ fn an_interface_named_wire_compiles() {
 }
 
 /// An interface the face cannot carry is skipped with a note, and the rest of
-/// the package is still emitted and still compiles (interaction-face decision 2).
+/// the package is still emitted and still compiles (interaction-face design rule 2).
 ///
 /// The corpus's `veh-cluster` is the fixture that exercises this without one
 /// being written for it: two of its interfaces carry a contract clause the
@@ -1385,8 +1385,8 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
         "this interface is skipped for a clause, got:\n{note}"
     );
     assert!(
-        note.contains("driftsys/ridl#704") && !note.contains("lane M's"),
-        "the owner line must name the clause story, not the multi-parameter \
+        note.contains("driftsys/ridl#704") && !note.contains("driftsys/ridl#713"),
+        "the owner line must name the clause issue, not the multi-parameter \
          one, got:\n{note}"
     );
     // A run of literal spaces inside a note is a broken line continuation in
@@ -1401,9 +1401,19 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
     let call_shape_note = &call_shape_note[call_shape_note
         .rfind("Interface `WheelDiagnostics`")
         .expect("the call-shape note's headline")..];
+    let call_shape_reason = &call_shape_note[..call_shape_note
+        .find("A call the face cannot carry")
+        .expect("the call-shape owner line")];
     assert!(
-        call_shape_note.contains("lane M's"),
-        "the call-shape note names its own story, got:\n{call_shape_note}"
+        call_shape_reason.contains("driftsys/ridl#713"),
+        "the refusal reason names the argument-struct issue, got:\n{call_shape_reason}"
+    );
+    let call_shape_owner = &call_shape_note[call_shape_note
+        .find("A call the face cannot carry")
+        .expect("the call-shape owner line")..];
+    assert!(
+        call_shape_owner.contains("driftsys/ridl#713"),
+        "the call-shape owner line names its own issue, got:\n{call_shape_owner}"
     );
     for (which, text) in [("clause", note), ("call-shape", call_shape_note)] {
         assert!(

@@ -598,12 +598,12 @@ fn main() {
     rustc::run_program("fb_union_discriminant", &program(&main));
 }
 
-/// The hazard stage K5 left and stage K6 closes (design note §4b): before
-/// K6, `verify` checked the structural walk, an enum and an enum-set
-/// discriminant and a collection's declared element count, but not a named
-/// scalar's own range, length or pattern — a `Speed` of 9000 or a `Label` of
-/// sixty-four characters passed `verify`, and `Ref::decode()`, a safe call,
-/// returned a value outside its declared typl bound.
+/// The hazard design note §4b records: before the fix, `verify` checked the
+/// structural walk, an enum and an enum-set discriminant and a collection's
+/// declared element count, but not a named scalar's own range, length or
+/// pattern — a `Speed` of 9000 or a `Label` of sixty-four characters passed
+/// `verify`, and `Ref::decode()`, a safe call, returned a value outside its
+/// declared typl bound.
 ///
 /// `Speed::new_unchecked` and `Label::new_unchecked` bypass `new`'s own
 /// checks by design — they are how `decode` itself builds a value over bytes
@@ -761,9 +761,9 @@ fn main() {
 }
 
 /// Flipping any one byte of a valid buffer reaches the contract half of
-/// `verify` at least once: `Rule::Variant` from an enum discriminant no
-/// variant carries, `Rule::Length` from a collection count, or, since stage
-/// K6, `Rule::Range` from a named scalar's own inline bytes.
+/// `verify` at least once: `Rule::Variant` from an enum discriminant no variant
+/// carries, `Rule::Length` from a collection count, or `Rule::Range` from a
+/// named scalar's own inline bytes.
 ///
 /// **That is all this case establishes, and its name says so.** It was
 /// called `verify_refuses_an_undeclared_discriminant`, which claimed
@@ -771,7 +771,7 @@ fn main() {
 /// somewhere else in the buffer satisfies `hits > 0` on its own, and the
 /// case still passes with the union `verify`'s wildcard arm changed from
 /// `_ => return #union_malformed` to `_ => {}` — measured by applying that
-/// mutation, in the review of 2026-09-21 and again at stage K8. Counting
+/// mutation, in the review of 2026-09-21 and again in a later review. Counting
 /// per rule would not repair it either, for the same reason: a `Variant`
 /// hit can come from the enum. The isolated
 /// [`verify_refuses_a_union_discriminant_that_names_no_arm`] above is the

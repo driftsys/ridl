@@ -66,9 +66,8 @@ pub struct GenerateError {
 ///
 /// The compiler corpus runs this. The pipeline ran it too until it gained [`generate_pipeline`], which
 /// `ridl build --emit rust` calls, and this output is a subset of it. The face is emitted by
-/// [`generate_face`] and [`generate_pipeline`], not from here, for the reason the Lane M plan records ("Where the face is
-/// emitted from"): the corpus interfaces carry contract clauses the M3 clause
-/// translator must refuse. The plan's second reason, that the corpus proofs
+/// [`generate_face`] and [`generate_pipeline`], not from here, for the reason `docs/design/interaction-face.md` gives: the
+/// corpus interfaces carry contract clauses the clause translator must refuse. The second reason, that the corpus proofs
 /// passed no `--extern ridl_rt`, no longer holds: every compile proof links
 /// the runtime, because a generated named scalar, enum and enum set all name
 /// it. A package of pure `enum` and `enumset` declarations, with no named
@@ -89,24 +88,22 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
 
 /// Generates the Rust source for `package`: the domain types [`generate`]
 /// emits, plus the interaction-face descriptors over the `ridl-rt` runtime
-/// crate (Lane M stage M3).
+/// crate.
 ///
-/// This is the companion entry point of the M3 design's "companion entry
-/// point, not the pipeline" decision. The descriptors it appends name
-/// `::ridl_rt` and carry the translated `require`/`ensure` clause bodies, so it
-/// is the only caller of the clause translator, and the only entry point whose
-/// output names the runtime outside the domain types' own constructors and
-/// conversions. The domain types come from the same call because the
-/// checked-in fixture is brought in
-/// with a single `include!`: the face names those types, and the orphan rule
-/// needs them local to the test crate. The codec comes from the same call for
-/// the same reason: the face names `Payload<::ridl_rt::encoding::FlatBuffers>`
-/// for every payload type, and the implementations that satisfy it are the
-/// ones [`generate`] emits.
+/// This is the companion entry point, not the pipeline. The descriptors it
+/// appends name `::ridl_rt` and carry the translated `require`/`ensure` clause
+/// bodies, so it is the only caller of the clause translator, and the only
+/// entry point whose output names the runtime outside the domain types' own
+/// constructors and conversions. The domain types come from the same call
+/// because the checked-in fixture is brought in with a single `include!`: the
+/// face names those types, and the orphan rule needs them local to the test
+/// crate. The codec comes from the same call for the same reason: the face
+/// names `Payload<::ridl_rt::encoding::FlatBuffers>` for every payload type,
+/// and the implementations that satisfy it are the ones [`generate`] emits.
 ///
 /// Total for the same reason [`generate`] is: it returns [`GenerateError`]
 /// rather than panicking, and additionally refuses a contract clause outside
-/// the accepted form and a call the M3 restriction cannot represent.
+/// the accepted form and a call the one-parameter restriction cannot represent.
 pub fn generate_face(package: &v2::Package) -> Result<Generated, GenerateError> {
     generate_face_with(package, WireEncoding::default())
 }
@@ -126,7 +123,7 @@ pub fn generate_face(package: &v2::Package) -> Result<Generated, GenerateError> 
 /// Until `docs/technotes/rust-backend-name-collisions.md` (2026-09-29, driftsys/ridl#588)
 /// the encoding reached the output as one alias, `pub type Wire`, emitted
 /// here at package scope, and a declaration or an interface named `Wire`
-/// was refused (interaction-face decision 5). The alias is gone and no name is
+/// was refused (interaction-face design rule 5). The alias is gone and no name is
 /// reserved: a name the backend chose never refuses a package.
 pub fn generate_face_with(
     package: &v2::Package,
@@ -165,9 +162,9 @@ pub fn generate_with(
 
 /// The pipeline's entry point: everything [`generate_face_with`] emits, over
 /// the whole build, with an interface the face cannot carry skipped rather
-/// than refused (interaction-face decisions 1, 2 and 4).
+/// than refused (interaction-face design rules 1, 2 and 4).
 ///
-/// **Why the pipeline calls this and not [`generate`]** (decision 1): a
+/// **Why the pipeline calls this and not [`generate`]** (design rule 1): a
 /// consumer of `ridl build --emit rust` needs the face as much as the domain
 /// types, and the face compiles over the codec in the same unit, so the
 /// emitted unit is the superset rather than two calls.
@@ -179,19 +176,19 @@ pub fn generate_with(
 /// (2026-09-21) saying the CLI calls this entry point rather than
 /// [`generate`]; the decision itself is not amended.
 ///
-/// **Why an interface is skipped and not refused** (decision 2): the clause
+/// **Why an interface is skipped and not refused** (design rule 2): the clause
 /// translator accepts one narrow form, and a multi-parameter call and a stream
 /// have no face at all. Refusing would make `--emit rust` reject legal ridl
 /// over a gap with two follow-ups — driftsys/ridl#704 replaces the translator, and the
-/// multi-parameter argument struct is lane M's parked follow-up — and would
+/// multi-parameter argument struct is driftsys/ridl#713 — and would
 /// put a codegen error where a source diagnostic belongs. So the package keeps
 /// its domain types and its codec, the interface loses its `Client`,
 /// `Publisher`, `Provider` and `dispatch`, and a note at that site names the
-/// interface, the reason and the story that removes it.
+/// interface, the reason and the tracking issue that removes it.
 /// [`generate_face_with`] itself still refuses, for a direct caller.
 ///
 /// **What a skipped interface also loses.** Its descriptors. Every cause
-/// decision 2 names is detected in the descriptor emitter, not the face
+/// design rule 2 names is detected in the descriptor emitter, not the face
 /// emitter — `single_param_type`, `query_reply_type` and the clause translator
 /// all live there and serve both — so an interface whose face cannot be built
 /// cannot have its descriptors built either. The rest of the package's
@@ -257,7 +254,7 @@ fn faced_interface(
     Ok(items)
 }
 
-/// The note left where an interface's face was skipped (decision 2).
+/// The note left where an interface's face was skipped (design rule 2).
 ///
 /// It is a `const` carrying doc attributes rather than a bare comment, for the
 /// reason the codec's withheld note gives: `quote!` emits tokens, and a doc
@@ -277,15 +274,15 @@ fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> Tok
         FaceGap::CallShape => {
             " A call the face cannot carry — an interaction that does not declare \
              exactly one named parameter, or a query whose reply is not a named \
-             type. The induced argument struct that removes the first is lane M's \
-             parked multi-parameter follow-up."
+             type. driftsys/ridl#713 adds the induced argument struct that removes \
+             the first."
         }
         FaceGap::Clause => {
             " A contract clause outside the form the narrow translator accepts — \
              `<subject> <comparison> <numeric literal>`, conjoined with `&&`. \
              driftsys/ridl#704 replaces the translator and removes this."
         }
-        FaceGap::Other => " No story below owns this one: the reason above is the whole of it.",
+        FaceGap::Other => " No tracking issue owns this one: the reason above is the whole of it.",
     };
     quote! {
         #[doc = #headline]
@@ -298,13 +295,13 @@ fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> Tok
         /// raised by the descriptor emitter, which the face is built on. The
         /// rest of this package — its domain types, its codec, and every
         /// other interface — is unaffected, which is why the build succeeded
-        /// (interaction-face decision 2).
+        /// (interaction-face design rule 2).
         #[allow(dead_code, non_upper_case_globals)]
         const #name: () = ();
     }
 }
 
-/// Which of decision 2's two owners a skipped interface belongs to.
+/// Which of design rule 2's two owners a skipped interface belongs to.
 ///
 /// Decided by the refusal that was actually raised, and only then by reading
 /// the interface. Reading the interface alone reports the wrong owner
@@ -361,7 +358,7 @@ fn face_gap(interface: &v1::Interface, err: &GenerateError) -> FaceGap {
 ///
 /// There is one codec emitter and one call to it, which is why the face
 /// compiles over the codec `generate` emits rather than over one written for
-/// it (design note D-11, stage K9b).
+/// it (design note D-11).
 ///
 /// The claim tables run first, before the domain types and the codec
 /// (`claims::check`). `interfaces` are the interfaces whose descriptors and
@@ -423,7 +420,7 @@ impl WireEncoding {
 
 /// The domain-type items of the package, emitted from the lowered model.
 ///
-/// Stage P4 layers 1 and 2: every declaration is read from `Ctx::model`, not
+/// Every declaration is read from `Ctx::model`, not
 /// from the IR. `model.declarations[i]` is lowered from `package.decls[i]`, so
 /// the order and the count are the IR's; the induced tuple structs come from
 /// `model.tuples`, which the lowering discovers in the same worklist order
@@ -431,7 +428,7 @@ impl WireEncoding {
 ///
 /// This does not emit the codec. [`package_items`] appends it, for both entry
 /// points: the codec is `generate`'s output (design note D-1 as amended), and
-/// the face compiles over that same output (D-11, stage K9b).
+/// the face compiles over that same output (D-11).
 fn domain_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
     let mut items: Vec<TokenStream> = Vec::new();
     for decl in &ctx.model.declarations {
@@ -495,12 +492,12 @@ fn tuple_collision(collision: &v1::TupleCollision) -> GenerateError {
 }
 
 // ---------------------------------------------------------------------------
-// The FlatBuffers size bound's refusal (design note D-7, stages K4 and K5).
+// The FlatBuffers size bound's refusal (design note D-7).
 // ---------------------------------------------------------------------------
 
 /// Refuses one declaration with no finite FlatBuffers bound (design note
 /// D-7 of `docs/archive/2026-09-20-flatbuffers-codec-design.md`; §4a of that
-/// note records what stage K4 built and what stage K5 closed).
+/// note records how the refusal narrowed over time).
 ///
 /// **Called per type, by the codec emitter**, at the point where it is about
 /// to emit that type's `Payload<FlatBuffers>` implementation — which is what
@@ -516,7 +513,7 @@ fn tuple_collision(collision: &v1::TupleCollision) -> GenerateError {
 /// that one type simply carries no codec.
 ///
 /// The attribution is the lowering's (`FbRoot.bound`), computed over the
-/// package alone as this backend computed it for itself before stage P4; the
+/// package alone as this backend computed it for itself before the lowering took it over; the
 /// message is this backend's own. It names the member wherever the
 /// attribution names one, and says which of the other three causes it found
 /// otherwise.
@@ -605,9 +602,8 @@ fn render(items: Vec<TokenStream>) -> Result<Generated, GenerateError> {
 pub(crate) struct Ctx<'a> {
     /// The lowered codegen model of this package over this scope
     /// (`ridl_ir::codegen::lower`), which the domain-type emitters, the
-    /// default derivation and the derive pass read instead of the IR (lane P
-    /// stage P4, design note §8.3). Since that stage's third layer every
-    /// emitter reads it and none reads the IR, so the pairing by index that
+    /// default derivation and the derive pass read instead of the IR (design
+    /// note §8.3). Every emitter reads it and none reads the IR, so the pairing by index that
     /// held during the port — `model.declarations[i]` lowered from
     /// `package.decls[i]` — is no longer something an emitter relies on.
     pub(crate) model: &'a v1::Model,
@@ -644,7 +640,7 @@ impl<'a> Ctx<'a> {
     }
 
     /// The context over a lowered model alone — what a plugin has, and what
-    /// every emitter reads since stage P4.
+    /// every emitter reads.
     pub(crate) fn over(model: &'a v1::Model) -> Self {
         Ctx {
             model,
@@ -997,7 +993,7 @@ fn emit_type_def(decl: &v1::Declaration, sc: &v1::Scalar, derived: &TokenStream)
             /// tree and so cannot see a private item here. The emitted crate
             /// is one crate per build, so `pub(crate)` reaches every such
             /// caller while adding nothing to the crate's public surface.
-            /// Whether this becomes `pub` is Epic 10's call, still open.
+            /// Whether this becomes `pub` is an open question of the public API surface.
             /// `new` is the composition of this and `new_unchecked`.
             pub(crate) fn check(
                 value: #check_param_ty,

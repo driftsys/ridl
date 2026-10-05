@@ -7,8 +7,8 @@ expect without being rebuilt, and how a change it cannot absorb is versioned.
 
 Version: 0.1.0 — Draft
 
-> **Provenance.** This document is roadmap story E4.5a (driftsys/ridl#321). It
-> writes down the canonical-form policy of
+> **Provenance.** This document is the canonical-form policy of the IR
+> (driftsys/ridl#321). It writes down the canonical-form policy of
 > [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 9, as that decision
 > was amended on 2026-09-22: the canonical encoding is canonical protobuf JSON,
 > and the binary and prototext encodings are derived. The reasoning trail,
@@ -21,10 +21,10 @@ Version: 0.1.0 — Draft
 > ([family overview](ridl-family-overview.md) §2) gives the IR specification
 > four subjects: serialization, the plugin protocol, the diff categories, and
 > the canonical encoding. This version owns the first and the last, which is
-> what story E4.5a asked for. The plugin protocol is story E4.5b and is
-> specified where that story lands; the diff categories are stated today by the
-> [typl language reference](typl-language-reference.md) §7.4, the
-> [ridl language reference](ridl-language-reference.md) §11 and the
+> what driftsys/ridl#321 asked for. The plugin protocol is specified in
+> [the codegen plugin design](../design/codegen-plugins.md); the diff categories
+> are stated today by the [typl language reference](typl-language-reference.md)
+> §7.4, the [ridl language reference](ridl-language-reference.md) §11 and the
 > [rsdl language reference](rsdl-language-reference.md) §14, and move here when
 > a story moves them.
 
@@ -60,8 +60,8 @@ It binds three schema packages:
 | `ridl.codegen.v1` | the lowered codegen model and its two envelopes | the request and response of a codegen plugin             |
 
 The word **IR** below means all three unless a sentence says otherwise.
-`ridl.codegen.v1` does not exist yet: it is defined by roadmap stories E4.5a's
-successors (the lowered model, then the plugin contract). The rules here are
+`ridl.codegen.v1` does not exist yet: it is defined by the work that follows
+this document (the lowered model, then the plugin contract). The rules here are
 written for it in advance, because the point of stating them is that a plugin
 built outside this repository can rely on them before it is written.
 
