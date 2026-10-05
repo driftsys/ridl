@@ -188,21 +188,37 @@ fn channels(
                 .iter()
                 .filter_map(|link| {
                     let consumer = link.consumer.as_ref()?;
+                    let declared = declared_sizing(deployment, consumer);
+                    // A key reaches only the channel kind it applies to: a
+                    // `depth` on a link of a call channel, or `slots` and
+                    // `budget` on a link of an event channel, write nothing.
+                    let depth = bound.map(|bound| match declared.depth {
+                        Some(value) => v1::Depth {
+                            value: Some(value),
+                            source: v1::ValueSource::Declared as i32,
+                        },
+                        None => bound,
+                    });
+                    let (slots, slots_source) = match declared.slots {
+                        Some(value) if call => (Some(value), v1::ValueSource::Declared as i32),
+                        None if call => (Some(DEFAULT_SLOTS), v1::ValueSource::Default as i32),
+                        _ => (None, v1::ValueSource::Unspecified as i32),
+                    };
+                    let (budget, budget_source) = match declared.budget {
+                        Some(value) if call => (Some(value), v1::ValueSource::Declared as i32),
+                        _ => (None, v1::ValueSource::Unspecified as i32),
+                    };
                     Some(v1::Consumer {
                         component: consumer.component.clone(),
                         instance: consumer.instance.clone(),
                         machine: consumer.machine.clone(),
                         crossing: crossing_of(link.crossing),
                         encoding: encoding_of(link.crossing),
-                        depth: bound,
-                        slots: call.then_some(DEFAULT_SLOTS),
-                        slots_source: if call {
-                            v1::ValueSource::Default as i32
-                        } else {
-                            v1::ValueSource::Unspecified as i32
-                        },
-                        budget: None,
-                        budget_source: v1::ValueSource::Unspecified as i32,
+                        depth,
+                        slots,
+                        slots_source,
+                        budget,
+                        budget_source,
                     })
                 })
                 .collect();
@@ -219,16 +235,34 @@ fn channels(
                     instance: producer.instance.clone(),
                     machine: producer.machine.clone(),
                 }),
-                // Every link of this channel was given `bound`, so the
-                // aggregation answers `bound` for every input the emitter
-                // can build; `ring_depth` is where the rule itself is
-                // pinned.
                 depth: bound.map(|bound| ring_depth(&consumers, bound)),
                 consumers,
             });
         }
     }
     channels
+}
+
+/// The declared sizing of one consumer link, each key read from the
+/// placement line of the consuming instance first and from the `deployment`
+/// declaration second (`docs/design/codegen-plugins.md`, the deployment
+/// section). A key written on neither site is `None`. The two sites compose
+/// per key: a placement line that writes `slots` alone still takes the
+/// deployment's `depth` and `budget`.
+fn declared_sizing(deployment: &v2::Deployment, consumer: &v2::Endpoint) -> v2::Sizing {
+    let placed = deployment
+        .placements
+        .iter()
+        .find(|placement| {
+            placement.component == consumer.component && placement.instance == consumer.instance
+        })
+        .and_then(|placement| placement.sizing.as_ref());
+    let sites = [placed, deployment.sizing.as_ref()];
+    v2::Sizing {
+        depth: sites.iter().flatten().find_map(|sizing| sizing.depth),
+        slots: sites.iter().flatten().find_map(|sizing| sizing.slots),
+        budget: sites.iter().flatten().find_map(|sizing| sizing.budget),
+    }
 }
 
 /// The crossing of a consumer link, as the section's own enum.
@@ -360,9 +394,13 @@ fn depth_of(timing: Option<&v2::Timing>) -> v1::Depth {
 /// The source is the source of the link that supplies the maximum, so a
 /// declared depth on one link is reported as declared rather than as derived
 /// (`docs/design/codegen-plugins.md`, the deployment section, the depth
-/// rule). Every consumer link of one channel is given the member's contract
-/// bound, so the maximum over the links of one channel is that bound, and
-/// nothing the emitter reads writes the declared source.
+/// rule). A declared value takes part in the maximum as any other value: a
+/// declared depth below a sibling link's derived one leaves the ring depth at
+/// the derived one, and a declared depth on every link of a channel makes
+/// the ring depth that declared value, below the contract bound or not. When
+/// a declared depth and a derived one are equal, the ring depth is reported
+/// as declared, whichever link comes first: the value is the same either way
+/// and a plugin that reads the source must see that a deployment stated it.
 ///
 /// A channel with no consumer link takes `bound`, the contract bound of its
 /// member: that is the value every consumer link of it would carry.
@@ -378,7 +416,13 @@ fn ring_depth(consumers: &[v1::Consumer], bound: v1::Depth) -> v1::Depth {
                 source: v1::ValueSource::Underivable as i32,
             };
         };
-        if deepest.is_none_or(|held| held.value < depth.value) {
+        let rank = |depth: v1::Depth| {
+            (
+                depth.value,
+                depth.source == v1::ValueSource::Declared as i32,
+            )
+        };
+        if deepest.is_none_or(|held| rank(held) < rank(depth)) {
             deepest = Some(depth);
         }
     }
@@ -396,6 +440,7 @@ mod tests {
     const QUERY_ORDINAL: u32 = 2;
     const SIGNAL_ORDINAL: u32 = 3;
     const HALF_OPEN_ORDINAL: u32 = 4;
+    const SECOND_EVENT_ORDINAL: u32 = 5;
 
     const CATALOG: &str = "veh.cabin";
     const INTERFACE: &str = "Climate";
@@ -425,7 +470,8 @@ mod tests {
     }
 
     /// One package with one interface carrying the four member kinds the
-    /// sizing rules distinguish.
+    /// sizing rules distinguish, and a second event whose derived depth
+    /// differs from the first's.
     fn package() -> v2::Package {
         v2::Package {
             name: CATALOG.to_string(),
@@ -461,6 +507,15 @@ mod tests {
                             timing: Some(timing(Some("100000"), None)),
                         }),
                     ),
+                    member(
+                        "HumidityChanged",
+                        SECOND_EVENT_ORDINAL,
+                        v2::decl::Kind::EventDef(v2::EventDef {
+                            payload: "Humidity".to_string(),
+                            // @[400ms..1s] gives ceil(1000000 / 400000) = 3.
+                            timing: Some(timing(Some("400000"), Some("1000000"))),
+                        }),
+                    ),
                 ],
                 ..Default::default()
             }],
@@ -485,13 +540,18 @@ mod tests {
         }
     }
 
-    fn placement(component: &str, instance: &str, machine: &str) -> v2::Placement {
+    fn placement(
+        component: &str,
+        instance: &str,
+        machine: &str,
+        sizing: Option<v2::Sizing>,
+    ) -> v2::Placement {
         v2::Placement {
             component: component.to_string(),
             instance: instance.to_string(),
             machine: machine.to_string(),
             attributes: Vec::new(),
-            sizing: None,
+            sizing,
         }
     }
 
@@ -608,11 +668,11 @@ mod tests {
                     },
                 ],
                 placements: vec![
-                    placement(PROVIDER, "primary", "head"),
-                    placement(PROVIDER, "backup", "zone"),
-                    placement(DASH, "Unit", "head"),
-                    placement(LOGGER, "Unit", "zone"),
-                    placement(FLEET, "Unit", "cloud"),
+                    placement(PROVIDER, "primary", "head", None),
+                    placement(PROVIDER, "backup", "zone", None),
+                    placement(DASH, "Unit", "head", None),
+                    placement(LOGGER, "Unit", "zone", None),
+                    placement(FLEET, "Unit", "cloud", None),
                 ],
                 links: vec![
                     link(
@@ -651,6 +711,7 @@ mod tests {
                     route("GetTemp", QUERY_ORDINAL),
                     route("Level", SIGNAL_ORDINAL),
                     route("FanSpeedChanged", HALF_OPEN_ORDINAL),
+                    route("HumidityChanged", SECOND_EVENT_ORDINAL),
                 ],
                 ..Default::default()
             }],
@@ -735,8 +796,8 @@ mod tests {
         let section = section();
         assert_eq!(section.system, "veh.cabin.Cabin");
         assert_eq!(section.name, "prod");
-        // Four members, each with two producer instances.
-        assert_eq!(section.channels.len(), 8);
+        // Five members, each with two producer instances.
+        assert_eq!(section.channels.len(), 10);
 
         let event = channels_of(&section, EVENT_ORDINAL);
         assert_eq!(event.len(), 2);
@@ -898,6 +959,598 @@ mod tests {
         }
     }
 
+    fn sizing(depth: Option<u32>, slots: Option<u32>, budget: Option<u64>) -> v2::Sizing {
+        v2::Sizing {
+            depth,
+            slots,
+            budget,
+        }
+    }
+
+    /// The fixture system with sizing keys written on its deployment and on
+    /// the placement lines of the named (component, instance) pairs.
+    fn sized_system(
+        deployment: Option<v2::Sizing>,
+        placed: &[(&str, &str, v2::Sizing)],
+    ) -> v2::System {
+        let mut system = system();
+        let prod = &mut system.deployments[0];
+        prod.sizing = deployment;
+        for (component, instance, sizing) in placed {
+            let placement = prod
+                .placements
+                .iter_mut()
+                .find(|placement| {
+                    placement.component == *component && placement.instance == *instance
+                })
+                .expect("the instance is placed");
+            placement.sizing = Some(*sizing);
+        }
+        system
+    }
+
+    /// The section of `system`'s one deployment.
+    fn section_of(system: &v2::System) -> v1::Deployment {
+        let package = package();
+        lower_deployment(system, "prod", &[&package]).expect("the deployment is named prod")
+    }
+
+    /// (component, depth value, depth source) per consumer link, in emitted
+    /// order; a link with no `Depth` message at all reads as `(None, -1)`.
+    fn depth_rows(channel: &v1::Channel) -> Vec<(&str, Option<u32>, i32)> {
+        channel
+            .consumers
+            .iter()
+            .map(|consumer| {
+                let (value, source) = consumer
+                    .depth
+                    .map_or((None, -1), |depth| (depth.value, depth.source));
+                (consumer.component.as_str(), value, source)
+            })
+            .collect()
+    }
+
+    /// (component, slots, slots source, budget, budget source) of one
+    /// consumer link.
+    type CallRow<'a> = (&'a str, Option<u32>, i32, Option<u64>, i32);
+
+    /// One [`CallRow`] per consumer link, in emitted order.
+    fn call_rows(channel: &v1::Channel) -> Vec<CallRow<'_>> {
+        channel
+            .consumers
+            .iter()
+            .map(|consumer| {
+                (
+                    consumer.component.as_str(),
+                    consumer.slots,
+                    consumer.slots_source,
+                    consumer.budget,
+                    consumer.budget_source,
+                )
+            })
+            .collect()
+    }
+
+    const DECLARED: i32 = v1::ValueSource::Declared as i32;
+    const DERIVED: i32 = v1::ValueSource::Derived as i32;
+    const DEFAULT: i32 = v1::ValueSource::Default as i32;
+    const UNDERIVABLE: i32 = v1::ValueSource::Underivable as i32;
+    const UNSPECIFIED: i32 = v1::ValueSource::Unspecified as i32;
+
+    #[test]
+    fn a_placement_value_takes_precedence_over_the_deployment_value() {
+        let system = sized_system(
+            Some(sizing(Some(3), Some(8), Some(4096))),
+            &[(DASH, "Unit", sizing(Some(5), Some(32), Some(65536)))],
+        );
+        let section = section_of(&system);
+        let event = channel_of(&section, EVENT_ORDINAL, "primary");
+        assert_eq!(
+            depth_rows(&event),
+            [
+                (DASH, Some(5), DECLARED),
+                (FLEET, Some(3), DECLARED),
+                (LOGGER, Some(3), DECLARED),
+            ]
+        );
+        let query = channel_of(&section, QUERY_ORDINAL, "primary");
+        assert_eq!(
+            call_rows(&query),
+            [
+                (DASH, Some(32), DECLARED, Some(65536), DECLARED),
+                (FLEET, Some(8), DECLARED, Some(4096), DECLARED),
+                (LOGGER, Some(8), DECLARED, Some(4096), DECLARED),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_deployment_value_applies_to_every_link() {
+        let system = sized_system(Some(sizing(Some(3), Some(8), Some(4096))), &[]);
+        let section = section_of(&system);
+        for instance in ["primary", "backup"] {
+            let event = channel_of(&section, EVENT_ORDINAL, instance);
+            assert_eq!(
+                depth_rows(&event),
+                [
+                    (DASH, Some(3), DECLARED),
+                    (FLEET, Some(3), DECLARED),
+                    (LOGGER, Some(3), DECLARED),
+                ]
+            );
+            assert_eq!(
+                event.depth,
+                Some(v1::Depth {
+                    value: Some(3),
+                    source: DECLARED
+                })
+            );
+            let query = channel_of(&section, QUERY_ORDINAL, instance);
+            assert_eq!(
+                call_rows(&query),
+                [
+                    (DASH, Some(8), DECLARED, Some(4096), DECLARED),
+                    (FLEET, Some(8), DECLARED, Some(4096), DECLARED),
+                    (LOGGER, Some(8), DECLARED, Some(4096), DECLARED),
+                ]
+            );
+        }
+    }
+
+    #[test]
+    fn a_declared_depth_replaces_the_derived_one_and_the_ring_depth_is_the_max() {
+        let system = sized_system(None, &[(DASH, "Unit", sizing(Some(25), None, None))]);
+        let section = section_of(&system);
+        for instance in ["primary", "backup"] {
+            let event = channel_of(&section, EVENT_ORDINAL, instance);
+            assert_eq!(
+                depth_rows(&event),
+                [
+                    (DASH, Some(25), DECLARED),
+                    (FLEET, Some(10), DERIVED),
+                    (LOGGER, Some(10), DERIVED),
+                ]
+            );
+            assert_eq!(
+                event.depth,
+                Some(v1::Depth {
+                    value: Some(25),
+                    source: DECLARED
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn a_declared_budget_has_source_declared() {
+        let system = sized_system(Some(sizing(None, None, Some(4096))), &[]);
+        let section = section_of(&system);
+        let query = channel_of(&section, QUERY_ORDINAL, "primary");
+        assert_eq!(
+            call_rows(&query),
+            [
+                (DASH, Some(16), DEFAULT, Some(4096), DECLARED),
+                (FLEET, Some(16), DEFAULT, Some(4096), DECLARED),
+                (LOGGER, Some(16), DEFAULT, Some(4096), DECLARED),
+            ]
+        );
+        // The budget key does not reach an event channel.
+        let event = channel_of(&section, EVENT_ORDINAL, "primary");
+        assert_eq!(
+            call_rows(&event),
+            [
+                (DASH, None, UNSPECIFIED, None, UNSPECIFIED),
+                (FLEET, None, UNSPECIFIED, None, UNSPECIFIED),
+                (LOGGER, None, UNSPECIFIED, None, UNSPECIFIED),
+            ]
+        );
+    }
+
+    /// A placement that writes one key leaves the other two at their
+    /// defaults, whichever key it is.
+    #[test]
+    fn each_key_is_resolved_independently_of_the_others() {
+        // Only `slots`.
+        let system = sized_system(None, &[(DASH, "Unit", sizing(None, Some(32), None))]);
+        let section = section_of(&system);
+        let query = channel_of(&section, QUERY_ORDINAL, "primary");
+        assert_eq!(
+            call_rows(&query)[0],
+            (DASH, Some(32), DECLARED, None, UNSPECIFIED)
+        );
+        let event = channel_of(&section, EVENT_ORDINAL, "primary");
+        assert_eq!(depth_rows(&event)[0], (DASH, Some(10), DERIVED));
+
+        // Only `depth`.
+        let system = sized_system(None, &[(DASH, "Unit", sizing(Some(5), None, None))]);
+        let section = section_of(&system);
+        let query = channel_of(&section, QUERY_ORDINAL, "primary");
+        assert_eq!(
+            call_rows(&query)[0],
+            (DASH, Some(16), DEFAULT, None, UNSPECIFIED)
+        );
+        let event = channel_of(&section, EVENT_ORDINAL, "primary");
+        assert_eq!(depth_rows(&event)[0], (DASH, Some(5), DECLARED));
+
+        // Only `budget`.
+        let system = sized_system(None, &[(DASH, "Unit", sizing(None, None, Some(4096)))]);
+        let section = section_of(&system);
+        let query = channel_of(&section, QUERY_ORDINAL, "primary");
+        assert_eq!(
+            call_rows(&query)[0],
+            (DASH, Some(16), DEFAULT, Some(4096), DECLARED)
+        );
+        let event = channel_of(&section, EVENT_ORDINAL, "primary");
+        assert_eq!(depth_rows(&event)[0], (DASH, Some(10), DERIVED));
+    }
+
+    /// The two sites compose per key: a placement that writes `slots` still
+    /// takes the deployment's `depth` and `budget`.
+    #[test]
+    fn a_deployment_value_reaches_a_link_whose_placement_declares_another_key() {
+        let system = sized_system(
+            Some(sizing(Some(3), None, Some(4096))),
+            &[(DASH, "Unit", sizing(None, Some(32), None))],
+        );
+        let section = section_of(&system);
+        let event = channel_of(&section, EVENT_ORDINAL, "primary");
+        assert_eq!(
+            depth_rows(&event),
+            [
+                (DASH, Some(3), DECLARED),
+                (FLEET, Some(3), DECLARED),
+                (LOGGER, Some(3), DECLARED),
+            ]
+        );
+        let query = channel_of(&section, QUERY_ORDINAL, "primary");
+        assert_eq!(
+            call_rows(&query),
+            [
+                (DASH, Some(32), DECLARED, Some(4096), DECLARED),
+                (FLEET, Some(16), DEFAULT, Some(4096), DECLARED),
+                (LOGGER, Some(16), DEFAULT, Some(4096), DECLARED),
+            ]
+        );
+    }
+
+    /// One system in which every source is written: a declared depth and
+    /// slots on one placement, next to links that derive, default, or cannot
+    /// derive.
+    #[test]
+    fn every_value_source_is_written_for_its_case() {
+        let system = sized_system(None, &[(DASH, "Unit", sizing(Some(5), Some(32), None))]);
+        let section = section_of(&system);
+        let event = channel_of(&section, EVENT_ORDINAL, "primary");
+        assert_eq!(
+            depth_rows(&event),
+            [
+                (DASH, Some(5), DECLARED),
+                (FLEET, Some(10), DERIVED),
+                (LOGGER, Some(10), DERIVED),
+            ]
+        );
+        let half_open = channel_of(&section, HALF_OPEN_ORDINAL, "primary");
+        assert_eq!(
+            depth_rows(&half_open),
+            [
+                (DASH, Some(5), DECLARED),
+                (FLEET, None, UNDERIVABLE),
+                (LOGGER, None, UNDERIVABLE),
+            ]
+        );
+        let query = channel_of(&section, QUERY_ORDINAL, "primary");
+        assert_eq!(
+            call_rows(&query),
+            [
+                (DASH, Some(32), DECLARED, None, UNSPECIFIED),
+                (FLEET, Some(16), DEFAULT, None, UNSPECIFIED),
+                (LOGGER, Some(16), DEFAULT, None, UNSPECIFIED),
+            ]
+        );
+    }
+
+    /// The declared value replaces the contract bound; it is not a floor. An
+    /// implementation that takes `max(derived, declared)` answers 10 here.
+    #[test]
+    fn a_declared_depth_below_the_bound_replaces_it() {
+        let system = sized_system(
+            Some(sizing(Some(3), None, None)),
+            &[(DASH, "Unit", sizing(Some(2), None, None))],
+        );
+        let section = section_of(&system);
+        let event = channel_of(&section, EVENT_ORDINAL, "primary");
+        assert_eq!(
+            depth_rows(&event),
+            [
+                (DASH, Some(2), DECLARED),
+                (FLEET, Some(3), DECLARED),
+                (LOGGER, Some(3), DECLARED),
+            ]
+        );
+        assert_eq!(
+            event.depth,
+            Some(v1::Depth {
+                value: Some(3),
+                source: DECLARED
+            })
+        );
+    }
+
+    /// A declared depth below a sibling link's derived one: the ring depth is
+    /// the sibling's, with the derived source.
+    #[test]
+    fn the_ring_depth_is_the_derived_link_when_it_is_deeper_than_the_declared_one() {
+        let system = sized_system(None, &[(DASH, "Unit", sizing(Some(4), None, None))]);
+        let section = section_of(&system);
+        let event = channel_of(&section, EVENT_ORDINAL, "backup");
+        assert_eq!(
+            depth_rows(&event),
+            [
+                (DASH, Some(4), DECLARED),
+                (FLEET, Some(10), DERIVED),
+                (LOGGER, Some(10), DERIVED),
+            ]
+        );
+        assert_eq!(
+            event.depth,
+            Some(v1::Depth {
+                value: Some(10),
+                source: DERIVED
+            })
+        );
+    }
+
+    #[test]
+    fn a_ring_depth_is_absent_while_one_link_is_underivable() {
+        let system = sized_system(None, &[(DASH, "Unit", sizing(Some(5), None, None))]);
+        let section = section_of(&system);
+        let half_open = channel_of(&section, HALF_OPEN_ORDINAL, "primary");
+        assert_eq!(
+            depth_rows(&half_open),
+            [
+                (DASH, Some(5), DECLARED),
+                (FLEET, None, UNDERIVABLE),
+                (LOGGER, None, UNDERIVABLE),
+            ]
+        );
+        assert_eq!(
+            half_open.depth,
+            Some(v1::Depth {
+                value: None,
+                source: UNDERIVABLE
+            })
+        );
+    }
+
+    #[test]
+    fn a_declared_depth_replaces_an_underivable_one() {
+        let system = sized_system(Some(sizing(Some(3), None, None)), &[]);
+        let section = section_of(&system);
+        let half_open = channel_of(&section, HALF_OPEN_ORDINAL, "primary");
+        assert_eq!(
+            depth_rows(&half_open),
+            [
+                (DASH, Some(3), DECLARED),
+                (FLEET, Some(3), DECLARED),
+                (LOGGER, Some(3), DECLARED),
+            ]
+        );
+        assert_eq!(
+            half_open.depth,
+            Some(v1::Depth {
+                value: Some(3),
+                source: DECLARED
+            })
+        );
+    }
+
+    /// `slots` and `budget` on a placement whose every link is an event
+    /// channel reach nothing, and leave the derived depth alone.
+    #[test]
+    fn call_keys_on_a_placement_that_consumes_only_events_are_ignored() {
+        let mut system = sized_system(None, &[(DASH, "Unit", sizing(None, Some(32), Some(4096)))]);
+        system.deployments[0].routes = vec![route("TempChanged", EVENT_ORDINAL)];
+        let section = section_of(&system);
+        assert_eq!(section.channels.len(), 2);
+        let event = channel_of(&section, EVENT_ORDINAL, "primary");
+        assert_eq!(
+            call_rows(&event),
+            [
+                (DASH, None, UNSPECIFIED, None, UNSPECIFIED),
+                (FLEET, None, UNSPECIFIED, None, UNSPECIFIED),
+                (LOGGER, None, UNSPECIFIED, None, UNSPECIFIED),
+            ]
+        );
+        assert_eq!(
+            depth_rows(&event),
+            [
+                (DASH, Some(10), DERIVED),
+                (FLEET, Some(10), DERIVED),
+                (LOGGER, Some(10), DERIVED),
+            ]
+        );
+    }
+
+    /// `depth` on a placement whose every link is a call channel reaches
+    /// nothing, and leaves the default slots alone.
+    #[test]
+    fn a_depth_on_a_placement_that_consumes_only_calls_is_ignored() {
+        let mut system = sized_system(None, &[(DASH, "Unit", sizing(Some(5), None, None))]);
+        system.deployments[0].routes = vec![route("GetTemp", QUERY_ORDINAL)];
+        let section = section_of(&system);
+        assert_eq!(section.channels.len(), 2);
+        let query = channel_of(&section, QUERY_ORDINAL, "primary");
+        assert_eq!(query.depth, None);
+        assert_eq!(
+            depth_rows(&query),
+            [(DASH, None, -1), (FLEET, None, -1), (LOGGER, None, -1)]
+        );
+        assert_eq!(
+            call_rows(&query),
+            [
+                (DASH, Some(16), DEFAULT, None, UNSPECIFIED),
+                (FLEET, Some(16), DEFAULT, None, UNSPECIFIED),
+                (LOGGER, Some(16), DEFAULT, None, UNSPECIFIED),
+            ]
+        );
+    }
+
+    /// A placement line sizes the instance it places and no other instance of
+    /// the same component: the other instance's links take the deployment's
+    /// value, or the derived or default one.
+    #[test]
+    fn a_placement_value_reaches_only_the_instance_it_places() {
+        let mut system = sized_system(Some(sizing(Some(3), None, None)), &[]);
+        let dash = system
+            .components
+            .iter_mut()
+            .find(|component| component.qualified_name() == DASH)
+            .expect("Dash is a component of the fixture");
+        dash.instances = vec!["left".to_string(), "right".to_string()];
+        let deployment = &mut system.deployments[0];
+        deployment
+            .placements
+            .retain(|placed| placed.component != DASH);
+        deployment.placements.push(placement(
+            DASH,
+            "left",
+            "head",
+            Some(sizing(Some(25), Some(32), Some(4096))),
+        ));
+        deployment
+            .placements
+            .push(placement(DASH, "right", "head", None));
+        deployment.links.retain(|link| {
+            link.consumer
+                .as_ref()
+                .is_some_and(|consumer| consumer.component != DASH)
+        });
+        for instance in ["left", "right"] {
+            deployment.links.push(link(
+                endpoint(DASH, instance, "head"),
+                endpoint(PROVIDER, "primary", "head"),
+                v2::Crossing::SameMachine,
+            ));
+        }
+        let section = section_of(&system);
+        let event = channel_of(&section, EVENT_ORDINAL, "primary");
+        let rows: Vec<(&str, Option<u32>, i32)> = event
+            .consumers
+            .iter()
+            .map(|consumer| {
+                let depth = consumer.depth.expect("an event link carries a depth");
+                (consumer.instance.as_str(), depth.value, depth.source)
+            })
+            .collect();
+        assert_eq!(
+            rows,
+            [
+                ("left", Some(25), DECLARED),
+                ("right", Some(3), DECLARED),
+                ("Unit", Some(3), DECLARED),
+                ("Unit", Some(3), DECLARED),
+            ]
+        );
+        let query = channel_of(&section, QUERY_ORDINAL, "primary");
+        let rows: Vec<CallRow<'_>> = query
+            .consumers
+            .iter()
+            .map(|consumer| {
+                (
+                    consumer.instance.as_str(),
+                    consumer.slots,
+                    consumer.slots_source,
+                    consumer.budget,
+                    consumer.budget_source,
+                )
+            })
+            .collect();
+        assert_eq!(
+            rows,
+            [
+                ("left", Some(32), DECLARED, Some(4096), DECLARED),
+                ("right", Some(16), DEFAULT, None, UNSPECIFIED),
+                ("Unit", Some(16), DEFAULT, None, UNSPECIFIED),
+                ("Unit", Some(16), DEFAULT, None, UNSPECIFIED),
+            ]
+        );
+    }
+
+    /// A declared depth equal to the contract bound: the same number, and the
+    /// ring depth says a deployment declared it, whether the declaring link
+    /// is the first consumer (Dash) or the last (Logger).
+    #[test]
+    fn a_declared_depth_equal_to_the_bound_gives_the_ring_depth_the_declared_source() {
+        let declared = Some(v1::Depth {
+            value: Some(10),
+            source: DECLARED,
+        });
+        let system = sized_system(None, &[(LOGGER, "Unit", sizing(Some(10), None, None))]);
+        let event = channel_of(&section_of(&system), EVENT_ORDINAL, "primary");
+        assert_eq!(
+            depth_rows(&event),
+            [
+                (DASH, Some(10), DERIVED),
+                (FLEET, Some(10), DERIVED),
+                (LOGGER, Some(10), DECLARED),
+            ]
+        );
+        assert_eq!(event.depth, declared);
+        let system = sized_system(None, &[(DASH, "Unit", sizing(Some(10), None, None))]);
+        let event = channel_of(&section_of(&system), EVENT_ORDINAL, "primary");
+        assert_eq!(
+            depth_rows(&event),
+            [
+                (DASH, Some(10), DECLARED),
+                (FLEET, Some(10), DERIVED),
+                (LOGGER, Some(10), DERIVED),
+            ]
+        );
+        assert_eq!(event.depth, declared);
+    }
+
+    /// The ring depth is taken over the links of one channel: two event
+    /// members with different contract bounds each keep their own.
+    #[test]
+    fn each_event_channel_has_its_own_ring_depth() {
+        let section = section();
+        for instance in ["primary", "backup"] {
+            let first = channel_of(&section, EVENT_ORDINAL, instance);
+            assert_eq!(
+                depth_rows(&first),
+                [
+                    (DASH, Some(10), DERIVED),
+                    (FLEET, Some(10), DERIVED),
+                    (LOGGER, Some(10), DERIVED),
+                ]
+            );
+            assert_eq!(
+                first.depth,
+                Some(v1::Depth {
+                    value: Some(10),
+                    source: DERIVED
+                })
+            );
+            let second = channel_of(&section, SECOND_EVENT_ORDINAL, instance);
+            assert_eq!(second.member, "HumidityChanged");
+            assert_eq!(
+                depth_rows(&second),
+                [
+                    (DASH, Some(3), DERIVED),
+                    (FLEET, Some(3), DERIVED),
+                    (LOGGER, Some(3), DERIVED),
+                ]
+            );
+            assert_eq!(
+                second.depth,
+                Some(v1::Depth {
+                    value: Some(3),
+                    source: DERIVED
+                })
+            );
+        }
+    }
+
     #[test]
     fn instances_list_what_they_offer_and_what_they_map() {
         let section = section();
@@ -1028,7 +1681,7 @@ mod tests {
         // The caller hands in no package at all: nothing declares the route's
         // interface, so no member kind and no timing can be read.
         let section = lower_deployment(&system, "prod", &[]).expect("the fixture lowers");
-        assert_eq!(section.channels.len(), 8);
+        assert_eq!(section.channels.len(), 10);
         for channel in &section.channels {
             // The key, the producer and the consumer links are still written.
             assert_eq!(channel.catalog, CATALOG);
@@ -1088,7 +1741,7 @@ mod tests {
                 .is_some_and(|end| end.instance != "backup")
         });
         let section = lower_deployment(&system, "prod", &[&package]).expect("the fixture lowers");
-        assert_eq!(section.channels.len(), 8);
+        assert_eq!(section.channels.len(), 10);
 
         let event = channel_of(&section, EVENT_ORDINAL, "backup");
         assert!(event.consumers.is_empty());
@@ -1341,9 +1994,9 @@ mod tests {
                     ..Default::default()
                 }],
                 placements: vec![
-                    placement(PROVIDER, "primary", "head"),
-                    placement(PANEL, "Unit", "head"),
-                    placement(TELEMETRY, "Unit", "head"),
+                    placement(PROVIDER, "primary", "head", None),
+                    placement(PANEL, "Unit", "head", None),
+                    placement(TELEMETRY, "Unit", "head", None),
                 ],
                 links: vec![
                     two_interface_link(PANEL, INTERFACE, SERVICE),
@@ -1681,7 +2334,7 @@ mod tests {
         system.grants.retain(|grant| grant.component != DASH);
         system.deployments[0]
             .placements
-            .push(placement("veh.cabin.Ghost", "Unit", "head"));
+            .push(placement("veh.cabin.Ghost", "Unit", "head", None));
         let section = lower_deployment(&system, "prod", &[&package]).expect("the fixture lowers");
         assert_eq!(section.instances.len(), 6);
         let dash = section
@@ -1718,8 +2371,12 @@ mod tests {
         deployment
             .placements
             .retain(|placed| placed.component != DASH);
-        deployment.placements.push(placement(DASH, "right", "head"));
-        deployment.placements.push(placement(DASH, "left", "head"));
+        deployment
+            .placements
+            .push(placement(DASH, "right", "head", None));
+        deployment
+            .placements
+            .push(placement(DASH, "left", "head", None));
         deployment.links.retain(|link| {
             link.consumer
                 .as_ref()
