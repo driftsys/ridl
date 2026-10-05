@@ -1,7 +1,6 @@
-//! The process host's parity test (the lane P driver, stage P3; ADR-0020
-//! decision 11 as amended 2026-09-22): the reference plugin, run by
-//! `ridlc`'s process host, is byte-identical to the in-process path over
-//! every corpus package.
+//! The process host's parity test (ADR-0020 decision 11 as amended 2026-09-22):
+//! the reference plugin, run by `ridlc`'s process host, is byte-identical to
+//! the in-process path over every corpus package.
 //!
 //! Two levels. At the contract's level, one request per corpus package is
 //! answered by `ModelBackend` in process and by `ridlc-gen-model` across the
@@ -12,10 +11,8 @@
 //! for this test (`CARGO_BIN_EXE_ridlc-gen-model`): no installation, no
 //! `PATH`, no network.
 //!
-//! The Rust backend is not what runs here, because it still reads the raw
-//! IR and a plugin has none (the model backend is the one backend a plugin
-//! can wrap today); stage P4 ports it, and this file then gains
-//! `ridlc-gen-rust` on the same two levels.
+//! The Rust backend is not what runs here:
+//! `ridlc-gen-rust/tests/parity.rs` covers it on the same two levels.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

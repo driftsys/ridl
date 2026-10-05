@@ -1409,11 +1409,10 @@ fn a_local_struct_reference_names_the_bare_declared_table() {
 // comparison stays quiet — what fails then is the hand-written assertions
 // elsewhere in this file. What the comparison does catch is the emitter
 // walking away from the facts: `slot.id + 1` in `emit_struct` turns these
-// tests red while thirty others stay green. The comparison becomes
-// two-sided when `ridl-backend-rust` emits the codec from the same facts in
-// stage K5; until then the union-arm discriminant is the one fact both
-// sides derive independently, because the `.fbs` emitter writes no explicit
-// member values.
+// tests red while thirty others stay green. The comparison is two-sided
+// because `ridl-backend-rust` emits the codec from the same facts, and the
+// union-arm discriminant is the one fact both sides derive independently,
+// because the `.fbs` emitter writes no explicit member values.
 //
 // That is also what makes driftsys/ridl#302 visible. The target numbers a
 // union's arms by position while the IR numbers them by `UnionArm.ordinal`,
@@ -1878,19 +1877,38 @@ fn cruise_package() -> v2::Package {
             diagnostic.code != ridl_core::lint::lint_by_name("missing-docs").unwrap().code
         })
         .collect::<Vec<_>>();
+    let declaration_name_range = |declaration: &str, name: &str| {
+        assert_eq!(
+            text.match_indices(declaration).count(),
+            1,
+            "the fixture declaration must be unique: {declaration}"
+        );
+        assert_eq!(
+            declaration.match_indices(name).count(),
+            1,
+            "the declaration name must be unique: {name}"
+        );
+        let start = text.find(declaration).unwrap() + declaration.find(name).unwrap();
+        let range = start..start + name.len();
+        assert_eq!(&text[range.clone()], name);
+        range
+    };
     let expected = [
         (
             ridl_core::diag::DiagCode::TYPL_223,
             "inconsistent-abbreviation",
             "`set` in `setTarget` abbreviates `setpoint`, used in `Setpoint`",
-            1752..1761,
+            declaration_name_range(
+                "command setTarget(desired: Speed) @[10ms..50ms]",
+                "setTarget",
+            ),
             "setTarget",
         ),
         (
             ridl_core::diag::DiagCode::RIDL_414,
             "low-cohesion-interface",
             "interface `CruiseControl` splits into 3 groups of members that share no type: [currentSpeed, setTarget], [mode], [warning]",
-            1599..1612,
+            declaration_name_range("interface CruiseControl {", "CruiseControl"),
             "CruiseControl",
         ),
     ];

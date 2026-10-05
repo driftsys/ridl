@@ -18,7 +18,7 @@ impl Temperature {
     /// tree and so cannot see a private item here. The emitted crate
     /// is one crate per build, so `pub(crate)` reaches every such
     /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is Epic 10's call, still open.
+    /// Whether this becomes `pub` is an open question of the public API surface.
     /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::i64,
@@ -88,7 +88,7 @@ impl Level {
     /// tree and so cannot see a private item here. The emitted crate
     /// is one crate per build, so `pub(crate)` reaches every such
     /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is Epic 10's call, still open.
+    /// Whether this becomes `pub` is an open question of the public API surface.
     /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::i64,
@@ -158,7 +158,7 @@ impl Window {
     /// tree and so cannot see a private item here. The emitted crate
     /// is one crate per build, so `pub(crate)` reaches every such
     /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is Epic 10's call, still open.
+    /// Whether this becomes `pub` is an open question of the public API surface.
     /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::i64,
@@ -228,7 +228,7 @@ impl Average {
     /// tree and so cannot see a private item here. The emitted crate
     /// is one crate per build, so `pub(crate)` reaches every such
     /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is Epic 10's call, still open.
+    /// Whether this becomes `pub` is an open question of the public API surface.
     /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::i64,

@@ -1720,15 +1720,14 @@ fn write_response(
 /// the interaction face and the descriptors beside the domain types and the
 /// codec; TypeScript, proto3 and FlatBuffers are their own crates'
 /// `Backend`; `codegen-model` is [`codegen::ModelBackend`], the model
-/// written back. Since stage P4 of the lane P driver the Rust backend reads
-/// the request's model and nothing else, as `codegen-model` does and as a
-/// plugin must; the other three still read the raw IR, so each is
-/// constructed with a [`codegen::RawIr`] — the package and `others`, the
-/// caller's full package list ([`run_build`]), which proto3 and FlatBuffers
-/// read to resolve a cross-package reference themselves — and reads that in
-/// place of the request's model. A backend that cannot render this package
-/// answers with an error diagnostic and no file, and only its own artifact
-/// is skipped.
+/// written back. The Rust backend reads the request's model and nothing else,
+/// as `codegen-model` does and as a plugin must; the other three still read the
+/// raw IR, so each is constructed with a [`codegen::RawIr`] — the package and
+/// `others`, the caller's full package list ([`run_build`]), which proto3 and
+/// FlatBuffers read to resolve a cross-package reference themselves — and reads
+/// that in place of the request's model. A backend that cannot render this
+/// package answers with an error diagnostic and no file, and only its own
+/// artifact is skipped.
 ///
 /// [`Emit::Catalog`] calls no backend: it writes the bytes
 /// `ridl_descriptor::lower` returns to `<base>.catalog.binfb`, and writes

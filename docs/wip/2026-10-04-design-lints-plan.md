@@ -1838,6 +1838,46 @@ execution.
     supported. Root owns the post-pass-2 QUICK tests and documentation review;
     no third numbered review is requested.
 
+87. **Trace the CI span failure to the upstream fixture version before repair**
+    (2026-10-05). A fresh archive of branch head passes all 45 FlatBuffers
+    library tests. Main's PR #714 rewraps the shared fixture's initial comment,
+    adding three bytes before both diagnosed identifiers. Substituting that
+    exact Git blob only in the isolated copy reproduces all six CI failures;
+    serial and parallel repeats give the same result. The producer still reports
+    the exact `setTarget` and `CruiseControl` tokens. Covering backend runs
+    expose the same stale range pairs in five additional test files. Record the
+    source hashes, provenance, reproductions and ownership request in
+    `.superpowers/sdd/2026-10-04-design-lints-plan/pr712-ci-span-debug-report.md`.
+    No code repair is applied: the literals are correct for the present branch
+    fixture, and root must align the incoming fixture through integration and
+    extend ownership to those five assertion files before the complete repair.
+    Keep all exact diagnostic checks and preserve fixture and eval bytes. If
+    wrong, an unrelated compiler defect could be concealed; the byte-swap
+    reproduction and token checks distinguish that defect from source-version
+    drift. The sandbox cannot download the CI checkout log, so root must retain
+    the exact synthetic merge SHA before final CI handoff. Root owns scoped
+    QUICK review and CI verification; no third numbered review is requested.
+
+88. **Ruling: preserve the incoming fixture and locate exact spans
+    independently** (2026-10-05). Root confirmed that the failed Rust job
+    checked out synthetic merge `a31bc8f424e9c57c1a1203f8c10ab3e40f6a533c`,
+    combining the branch with main at
+    `0a83ae273fbd5c543c90e260dc26fe5c8dd0d9c9`, and integrated that main
+    revision without conflicts. Preserve the incoming fixture byte for byte. In
+    the six authorized backend assertion files, locate each shifted name through
+    a fixed declaration fragment in the source text, require that fragment to
+    occur exactly once, and retain exact token and full byte-range comparisons.
+    Do not obtain an expected range from the compiler, AST or diagnostic
+    producer. Keep every existing diagnostic inventory, message, severity, path,
+    label and fix assertion and all unaffected baseline ranges. This addresses
+    the legitimate three-byte upstream comment rewrap without another
+    comment-sensitive numeric update. If wrong, an ambiguous fragment could
+    weaken the check; explicit uniqueness and token assertions and isolated
+    wrong-span mutations must detect that error. Keep all eval bytes and unowned
+    working files at the initial merged-index state. Root owns the merge commit,
+    fresh scoped QUICK review, full verification and CI rerun; no staging,
+    commits or reviewer dispatch occurs in this repair.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:

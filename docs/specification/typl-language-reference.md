@@ -1542,11 +1542,12 @@ the boundary this deferral protects.
 
 **The target is anchored.** The `expr` core is the
 [expr-core Specification](expr-core-specification.md) (family overview §2;
-concept note open question 6), whose guaranteed subset is roadmap story E2 and
-whose function layer is E5.1. Sub-items (a) to (c) are constraint-position
-expressions and are the expr core's entirely. Sub-item (d)'s expression language
-is likewise the expr core's, but its **surface** — a struct-level `invariant`
-block — is a typl declaration shape and lands in §7 when the expr core does.
+concept note open question 6), whose guaranteed subset ships with the interface
+layer and whose function layer is not built. Sub-items (a) to (c) are
+constraint-position expressions and are the expr core's entirely. Sub-item (d)'s
+expression language is likewise the expr core's, but its **surface** — a
+struct-level `invariant` block — is a typl declaration shape and lands in §7
+when the expr core does.
 
 ### 17.8 Standards-Fixed Invalid Sentinel Values — deferred to v0.2
 
@@ -1613,8 +1614,8 @@ property, and the one ordering typl controls is a map's key order. The rule is
 
 **Deferred, v0.3:** a reproducible byte sequence for a transmitted unit is a
 property of an encoding and its frame, so the rule belongs to the frame
-specification (roadmap story E11.1) and to each projection record, not to this
-reference. **Written 2026-09-22**: that document is
+specification and to each projection record, not to this reference. **Written
+2026-09-22**: that document is
 [the frame specification](frame-specification.md), whose §4 makes the frame
 header canonical and leaves the payload's part to each projection record.
 

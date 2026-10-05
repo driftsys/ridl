@@ -1,4 +1,4 @@
-> **Built.** ridl has a working toolchain in this repository (epic E2): the five
+> **Built.** ridl has a working toolchain in this repository: the five
 > interaction kinds, timing annotations, contracts, interfaces and services, with
 > Rust and TypeScript code generation and `ridl diff`. There is no runtime you
 > can run a contract over — the transport bindings and the delivery semantics

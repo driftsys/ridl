@@ -1,5 +1,4 @@
-//! The narrow, total contract-clause translator (Lane M stage M3, plan
-//! "Contract clause bodies — a narrow, total translator").
+//! The narrow, total contract-clause translator.
 //!
 //! The IR carries a clause only as canonical ridl text in `Contract.source`,
 //! not as an expression tree — a later change replaces the text with
@@ -21,7 +20,7 @@
 //! [`GenerateError`] rather than dropped: a dropped clause would generate a
 //! provider that accepts arguments its own contract forbids.
 //!
-//! Since stage P4 the parser and the subject resolution are the lowering's
+//! The parser and the subject resolution are the lowering's
 //! (`ridl_ir::codegen`, design note D-9): the model carries either the
 //! accepted comparison or the reason the clause was refused, verbatim, and
 //! what is left here is the rendering — and the one rule this printer keeps
@@ -57,8 +56,8 @@ pub(crate) struct ClauseBody {
 
 /// Renders every clause of `kind` on one interaction into a method body.
 ///
-/// `params` is the interaction's declared parameters (M3 restricts a call to
-/// one). `reply` is the query's reply reference, present only for a query's
+/// `params` is the interaction's declared parameters (the face
+/// restricts a call to one). `reply` is the query's reply reference, present only for a query's
 /// `ensure`, so `result` can be resolved and refused everywhere else.
 pub(crate) fn translate(
     ctx: &Ctx,
@@ -212,8 +211,8 @@ fn literal_tokens(value: &str, backing: ScalarBacking) -> Option<TokenStream> {
 ///
 /// The lowering resolves a reference over the whole scope, and this backend
 /// resolves nothing across packages: a subject whose scalar is declared in
-/// another package is refused here, which is what it was before stage P4 and
-/// what byte identity requires. Lifting it is a change to what the generated
+/// another package is refused here, which is what this backend did before the
+/// lowering took over, and what byte identity requires. Lifting it is a change to what the generated
 /// crate contains, made on its own (design note §9 item 6).
 fn scalar_backing(ctx: &Ctx, reference: &v1::TypeRef) -> Option<ScalarBacking> {
     let Some(v1::declaration::Kind::Scalar(sc)) = ctx.local(reference)?.kind.as_ref() else {
@@ -259,7 +258,7 @@ mod tests {
 
     /// A package declaring one integer scalar, one float scalar and one
     /// interface whose single call carries the parameters and the clauses
-    /// under test. The clause translation is a model fact since stage P4, so
+    /// under test. The clause translation is a model fact, so
     /// a test states the source the lowering reads and reads the translation
     /// back out of the model.
     fn call_package(

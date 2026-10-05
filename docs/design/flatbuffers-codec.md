@@ -16,10 +16,10 @@ and its plan
 [`../archive/2026-09-20-flatbuffers-codec-plan.md`](../archive/2026-09-20-flatbuffers-codec-plan.md).
 
 **Every decision of that note is built.** The last was D-11, the generated
-interaction face moving off its `ReprC` placeholder and onto this codec, landed
-by stage K9b: the face names `::ridl_rt::encoding::FlatBuffers` at every buffer
-it sizes and every `Ref` it builds (through a per-package `pub type Wire` alias
-until 2026-09-29, when the
+interaction face moving off its `ReprC` placeholder and onto this codec, landed:
+the face names `::ridl_rt::encoding::FlatBuffers` at every buffer it sizes and
+every `Ref` it builds (through a per-package `pub type Wire` alias until
+2026-09-29, when the
 [generated-name collision design](../technotes/rust-backend-name-collisions.md)
 removed it, driftsys/ridl#588), and the hand-written `Payload<ReprC>`
 implementations its fixture carried are deleted. The projection decision that
@@ -51,7 +51,7 @@ bound are computed once, in `ridl-ir`, and read by the schema emitter and the
 codec emitter alike. They are not a public module of either backend: ADR-0020
 decision 9 makes a backend an executable rather than a library other crates
 link, so a dependency of one backend on another would be the wrong shape for
-step 2, and `ridl-descriptor` needs the same bound for the catalog (Epic 16).
+step 2, and `ridl-descriptor` reads the same bound for the catalog.
 
 **What is shared and what is not.** The projection owns the slot ids, the union
 discriminant and the size bound, because two emitters must agree on them. Which
@@ -163,7 +163,7 @@ what it produces is a suffix of the caller's buffer. `Encoded.bytes` is
 therefore a **subslice** of the output buffer, not a prefix of it — ADR-0021
 decision 7 carries that wording since its 2026-09-20 amendment. Every consumer
 must pass on the slice it was handed rather than re-slicing `&buf[..len]`; the
-generated face did the latter until stage K7 fixed it at all four send sites.
+generated face did the latter until a fix at all four send sites.
 `EncodeError::Capacity` is what a buffer smaller than the value produces, with
 no panic and no truncated write.
 
@@ -180,23 +180,24 @@ range, step, length and pattern constraints. Named scalar checks use a
 `fn check(value: &T)` emitted beside `new` in every constrained named scalar's
 `impl` block.
 
-**`check` is `pub(crate)` since 2026-09-21; whether it becomes `pub` is still
-Epic 10's call.** It carried no visibility modifier while every caller was a
-function generated into the same module, or a child `pub mod` of it. That
-stopped being true when driftsys/ridl#467 was closed: the codec of one package
-now resolves a reference into another package of the same build and calls that
-type's `check` through the emitted module tree, where a private item is
-unreachable. The emitted crate is one crate per build, so `pub(crate)` reaches
-every generated caller and adds nothing to the crate's public surface — which
-leaves open item 2 of the 2026-09-20 design note exactly where it was: making
-`check` `pub`, for a consumer validating a value it did not build, is a surface
-commitment Epic 10 takes, and `pub(crate)` does not take it. Every `__ridl_fb_*`
-function moved from a bare `fn` to `pub(crate)` in the same change and for the
-same reason. The named-scalar check hangs off the one `Codec::wire` site every
-position reaches, so it covers every position the projection admits a named
-scalar at — an inline field, a string's or a byte sequence's bytes, an array
-element, a map key, a map value, a tuple field, a nested table, a union's table
-arm and its boxed arm, and any of those behind an optional.
+**`check` is `pub(crate)` since 2026-09-21; whether it becomes `pub` is still an
+open question of the public surface.** It carried no visibility modifier while
+every caller was a function generated into the same module, or a child `pub mod`
+of it. That stopped being true when driftsys/ridl#467 was closed: the codec of
+one package now resolves a reference into another package of the same build and
+calls that type's `check` through the emitted module tree, where a private item
+is unreachable. The emitted crate is one crate per build, so `pub(crate)`
+reaches every generated caller and adds nothing to the crate's public surface —
+which leaves open item 2 of the 2026-09-20 design note exactly where it was:
+making `check` `pub`, for a consumer validating a value it did not build, is a
+surface commitment the public surface would take, and `pub(crate)` does not take
+it. Every `__ridl_fb_*` function moved from a bare `fn` to `pub(crate)` in the
+same change and for the same reason. The named-scalar check hangs off the one
+`Codec::wire` site every position reaches, so it covers every position the
+projection admits a named scalar at — an inline field, a string's or a byte
+sequence's bytes, an array element, a map key, a map value, a tuple field, a
+nested table, a union's table arm and its boxed arm, and any of those behind an
+optional.
 
 **Amended 2026-10-02 (driftsys/ridl#469 and #421).** Anonymous inline
 constraints are retained by wire construction and checked at the same positions
@@ -255,9 +256,9 @@ gets rather than over a second set written for it.
 The face names the encoding by its full path at each site: `MAX_BUFFER_SIZE`,
 `EVENT_SOURCE_BUFFER_SIZE`, every `Ref::encode` and `Ref::verify` the face
 builds name `::ridl_rt::encoding::FlatBuffers`, as the codec's own `Payload`
-implementations do. From stage K9b to 2026-09-29 they named it through a
-per-package alias, `pub type Wire`, which a declaration or an interface named
-`Wire` collided with; the
+implementations do. Until 2026-09-29 they named it through a per-package alias,
+`pub type Wire`, which a declaration or an interface named `Wire` collided with;
+the
 [generated-name collision design](../technotes/rust-backend-name-collisions.md)
 removed the alias (driftsys/ridl#588). The encoding is stated by
 `ridl_backend_rust::WireEncoding`, which defaults to `FlatBuffers` and reaches
@@ -271,7 +272,7 @@ parameter, is design note D-11 and
 **One consequence of the codec building at the tail reaches every consumer.**
 `Encoded.bytes` is a subslice of the output buffer, so a caller that
 reconstructs `&buf[..len]` sends leading bytes the encoder never wrote. The face
-passes the returned slice on unchanged at all four send sites (stage K7), and
+passes the returned slice on unchanged at all four send sites, and
 `the_encoded_bytes_are_not_a_prefix_of_the_buffer` in
 `crates/ridl-backend-rust/tests/interaction_face.rs` states the property
 directly: the equally long prefix of the same buffer fails `verify`.
@@ -354,9 +355,10 @@ Rust randomizes a `HashMap`'s iteration order per process.
 **Conformance is a round trip through a second implementation, not byte equality
 with one.** FlatBuffers fixes no canonical encoding: vtable sharing, field
 ordering and alignment slack are all writer choices, and two conforming writers
-differ. This is a weaker claim than the proto3 backend makes, where byte-level
-conformance against `protoc` is the acceptance check; the difference is in the
-formats, not in the rigor of the two checks.
+differ. This is a weaker claim than the one planned for the proto3 payload
+codec, which is not built (driftsys/ridl#264): its acceptance check will be
+byte-level conformance against `protoc`. The difference is in the formats, not
+in the rigor of the two checks.
 
 The second implementation is `planus`, already this repository's FlatBuffers
 oracle. `planus-codegen` turns the `.fbs` the schema backend emits for the
@@ -507,9 +509,9 @@ types against the new snapshot and the built-in `ridl.std`. The codec and the
 diff read one definition of "0 is legal", `ridl_ir::zero`: `zero_is_legal` in
 `codec.rs` calls `ridl_ir::zero::range_holds_zero`, and the lowering's enum zero
 member comes from `ridl_ir::zero::enum_zero_member`. Case 12 ties the two
-together over one fixture. The proto3 side meets the same reader rule in proto3
-terms, where it is forced: proto3 gives a non-optional scalar no presence, so an
-absent one is 0.
+together over one fixture. The proto3 side, when its codec is built
+(driftsys/ridl#264), will meet the same reader rule in proto3 terms, where it is
+forced: proto3 gives a non-optional scalar no presence, so an absent one is 0.
 
 **A foreign reader does not refuse.** The emitted `.fbs` gives a field such as
 `c : Level [1..10]` no default annotation — FlatBuffers has no way to mark a

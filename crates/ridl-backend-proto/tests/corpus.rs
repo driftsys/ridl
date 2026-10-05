@@ -70,19 +70,38 @@ fn compile_fixture(relative_to_fixtures: &str) -> ridl_ir::v2::Package {
         })
         .collect::<Vec<_>>();
     if relative_to_fixtures == "cruise.ridl" {
+        let declaration_name_range = |declaration: &str, name: &str| {
+            assert_eq!(
+                text.match_indices(declaration).count(),
+                1,
+                "the fixture declaration must be unique: {declaration}"
+            );
+            assert_eq!(
+                declaration.match_indices(name).count(),
+                1,
+                "the declaration name must be unique: {name}"
+            );
+            let start = text.find(declaration).unwrap() + declaration.find(name).unwrap();
+            let range = start..start + name.len();
+            assert_eq!(&text[range.clone()], name);
+            range
+        };
         let expected = [
             (
                 ridl_core::diag::DiagCode::TYPL_223,
                 "inconsistent-abbreviation",
                 "`set` in `setTarget` abbreviates `setpoint`, used in `Setpoint`",
-                1752..1761,
+                declaration_name_range(
+                    "command setTarget(desired: Speed) @[10ms..50ms]",
+                    "setTarget",
+                ),
                 "setTarget",
             ),
             (
                 ridl_core::diag::DiagCode::RIDL_414,
                 "low-cohesion-interface",
                 "interface `CruiseControl` splits into 3 groups of members that share no type: [currentSpeed, setTarget], [mode], [warning]",
-                1599..1612,
+                declaration_name_range("interface CruiseControl {", "CruiseControl"),
                 "CruiseControl",
             ),
         ];

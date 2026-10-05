@@ -508,7 +508,7 @@ impl<'a> Builder<'a> {
         // A vtable states its own size and its table's size as `u16`, so a
         // table larger than `u16::MAX` is not representable. The projection
         // guarantees it does not happen: a type whose table does not fit has
-        // no finite size bound, and stage K4 refuses it at generation time
+        // no finite size bound, and the Rust backend refuses it at generation time
         // with a diagnostic. This assertion catches a projection that stops
         // upholding that.
         debug_assert!(

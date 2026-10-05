@@ -747,7 +747,7 @@ still reported.
   heading, **composition changed**, likewise with no verdict, because it changes
   the derived links and not the contract.
 - Which of these changes are breaking, and for whom, is decided by the stability
-  policy (roadmap E4.5a), not here.
+  policy ([IR specification](ir-specification.md)), not here.
 
 ---
 

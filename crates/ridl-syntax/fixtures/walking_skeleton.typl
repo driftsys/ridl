@@ -1,4 +1,4 @@
-// Walking-skeleton fixture — docs/ROADMAP.md epic E0.
+// Walking-skeleton fixture.
 package fixtures
 
 type Speed: km/h [0.0..250.0 step 0.5]

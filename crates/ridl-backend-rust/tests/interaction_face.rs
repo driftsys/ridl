@@ -1,5 +1,5 @@
-//! The interaction-face round trip (Lane M stage M3, Task 5,
-//! `docs/design/interaction-face.md`; the approved design is
+//! The interaction-face round trip
+//! (`docs/design/interaction-face.md`; the approved design is
 //! `docs/archive/2026-09-16-interaction-face-v0-design.md` §7).
 //!
 //! It brings in the checked-in generated face of `tests/generated/` and runs
@@ -10,7 +10,7 @@
 //! succeeds, and dispatch's short-buffer behavior.
 //!
 //! **Every payload here is encoded by the generated FlatBuffers codec**
-//! (stage K9b, design note D-11). The hand-written `Payload<ReprC>` module
+//! (design note D-11). The hand-written `Payload<ReprC>` module
 //! this file carried until then is gone, and with it the `PAD` constant that
 //! made its `encode` return a subslice rather than a prefix. That guard is
 //! not lost: a FlatBuffers builder fills a buffer from its end, so what the
@@ -131,11 +131,12 @@ fn send_level_raw(port: &mut Loopback, level: i64) -> Correlation {
 )]
 #[allow(
     clippy::derivable_impls,
-    reason = "the domain-type Default emission (crate::defaults, predating M3) writes a manual \
-              impl rather than #[derive(Default)]; this is the first place that output is \
-              compiled in-tree, so it is the first place this lint sees it. Fixing the emitter \
-              is outside Lane M stage M3's scope: it is baseline domain-type emission every \
-              backend consumer shares, not face- or descriptor-specific."
+    reason = "the domain-type Default emission (crate::defaults, predating the face) \
+              writes a manual impl rather than #[derive(Default)]; this is the first \
+              place that output is compiled in-tree, so it is the first place this \
+              lint sees it. Fixing the emitter is outside the scope of the \
+              interaction face: it is baseline domain-type emission every backend \
+              consumer shares, not face- or descriptor-specific."
 )]
 mod generated {
     include!("generated/interaction_face.rs");
@@ -722,7 +723,7 @@ fn round_trip_short_caller_buffer_returns_zero_without_consuming_a_claim() {
 
 /// `Encoded.bytes` is a subslice of the output buffer and not necessarily a
 /// prefix of it (`crates/ridl-rt/src/payload.rs`, ADR-0021 decision 7's
-/// 2026-09-20 amendment). Until stage K9b this file's own throwaway
+/// 2026-09-20 amendment). This file once had its own throwaway
 /// `Payload<ReprC>` implementations wrote after four leading bytes so that
 /// the property held of them too; the generated FlatBuffers codec needs no
 /// such arrangement, because a FlatBuffers builder fills a buffer from its

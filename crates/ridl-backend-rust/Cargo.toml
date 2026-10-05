@@ -56,7 +56,7 @@ ridl-core = { path = "../ridl-core" }
 # face over. A dev-dependency for the same reason as `ridl-rt`
 # below: the backend emits text that links a runtime and links none itself.
 ridl-loopback = { path = "../ridl-loopback" }
-# The generated interaction face names `::ridl_rt` (Lane M stage M3). The
+# The generated interaction face names `::ridl_rt`. The
 # backend itself emits text that links `ridl-rt` and does not link it, so this
 # is a dev-dependency only: the integration tests that compile the checked-in
 # generated face need it, for the vocabulary the face names and for the port

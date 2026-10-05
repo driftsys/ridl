@@ -1,8 +1,8 @@
 # rsdl as built: the checks, the lowering and the diff
 
-How rsdl is implemented in this workspace, after lane B of the 2026-09-13 step-1
-coordination (driftsys/ridl#328) landed the rsdl checks, lowering and diff
-described here. Informative: the normative records are
+How rsdl is implemented in this workspace: the checks, the lowering and the
+diff, which landed under the 2026-09-13 step-1 coordination (driftsys/ridl#328).
+Informative: the normative records are
 [the rsdl language reference](../specification/rsdl-language-reference.md) for
 the language, and [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) for
 the IR carrier, the build gate and the diff. The plan the implementation
@@ -181,9 +181,9 @@ there is no runtime, and every fact it states about the lowered system and about
 
 - **A runtime's system descriptor.** rsdl §13 says a runtime's descriptor is an
   emitter over these facts, specified with the runtime. The runtime descriptors
-  design defines two artifacts and the roadmap plans only the catalog half (Epic
-  16); the per-deployment system descriptor takes its own rows now that Epic 6
-  has landed, and has none yet. No runtime reads the lowered system: the one in
-  this workspace, `ridl-loopback`, is given its catalog by its caller and reads
-  no descriptor at all.
+  design defines two artifacts and the roadmap plans only the catalog half; the
+  per-deployment system descriptor takes its own rows now that rsdl has landed,
+  and has none yet. No runtime reads the lowered system: the one in this
+  workspace, `ridl-loopback`, is given its catalog by its caller and reads no
+  descriptor at all.
 - **Backend namespace claims.** See RSDL-804 above.

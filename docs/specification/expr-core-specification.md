@@ -5,20 +5,19 @@ written once, surfacing in `require`/`ensure` contracts (ridl §13), in the
 availability and obligation positions of ridl's boundary model, and as the
 expression layer of rmdl functions and models (rmdl §4, which shares this
 grammar verbatim). One grammar, two layers: the **guaranteed subset** shipped
-with the interface layer (V1, epic E2) and the **function layer** that extends
-it (V2, story E5.1).
+with the interface layer (V1) and the **function layer** that extends it (V2).
 
 Version: 0.1.0 — Draft
 
 > **Provenance.** This document closes the "expr core specification — not
 > started" row of the family overview §2 inventory and the pending grammar
 > reference in ridl §13 and ridl Appendix C. It is written under ADR-0008
-> decision 10: E2.4 implements only the guaranteed subset and rejects every
-> other form with RIDL-306; this document fixes the full contract-term grammar
-> that subset is verified against. The V1 sections are **normative as
+> decision 10: the checker implements only the guaranteed subset and rejects
+> every other form with RIDL-306; this document fixes the full contract-term
+> grammar that subset is verified against. The V1 sections are **normative as
 > implemented**. The V2 sections are **forward-looking by design** — this is the
-> one document whose purpose is to fix the shape of a layer that lands later
-> (roadmap E5.1), the same posture as the rmdl and rsdl references.
+> one document whose purpose is to fix the shape of a layer that lands later,
+> the same posture as the rmdl and rsdl references.
 
 ---
 
@@ -71,29 +70,29 @@ the profile references and are not restated here.
 
 The grammar has two layers, released in sequence:
 
-| Layer                 | Release | Story      | Content                                                                                                                                                          |
-| --------------------- | ------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Guaranteed subset** | V1      | E2.4/E2.12 | comparison, boolean connectives, arithmetic, enum access, tuple-field access, duration comparison — the forms ridl §13 names as guaranteed-supported             |
-| **Function layer**    | V2      | E5.1       | `let` bindings, `if`/`case`/`match` expressions, total function definitions and calls, bounded combinators (`all`, `any`, `count`) over typl bounded collections |
+| Layer                 | Release | Status    | Content                                                                                                                                                          |
+| --------------------- | ------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Guaranteed subset** | V1      | Built     | comparison, boolean connectives, arithmetic, enum access, tuple-field access, duration comparison — the forms ridl §13 names as guaranteed-supported             |
+| **Function layer**    | V2      | Not built | `let` bindings, `if`/`case`/`match` expressions, total function definitions and calls, bounded combinators (`all`, `any`, `count`) over typl bounded collections |
 
 **Layer rule (normative).** The guaranteed subset is a **strict subset** of the
 function layer: every expression legal in V1 is legal in V2, parses to the same
 tree, types to the same type under the same environment, and evaluates to the
-same value. E5.1 extends the grammar; it never changes the meaning of a subset
-term. This is ADR-0008 decision 10's forward-compatibility requirement — the
-subset is never a throwaway.
+same value. The function layer extends the grammar; it never changes the meaning
+of a subset term. This is ADR-0008 decision 10's forward-compatibility
+requirement — the subset is never a throwaway.
 
 The asymmetry between the layers is deliberate:
 
 - The **V1 productions, typing rules, and evaluation domains in this document
-  are frozen** — the E2.4 checker (RIDL-306 boundary included) and the E2.11
-  evaluator implement them, and a change here is a contract change.
-- The **V2 productions are forward-looking**: E5.1 may refine them (and adds the
-  totality checks, RMDL-1xx, that only make sense with function definitions),
-  but it must preserve the layer rule above. The rmdl reference §3–§4 is the
-  semantic elaboration of the V2 layer; where this document and a landed E5.1
-  implementation would diverge, the divergence is resolved by editing this
-  document in the open, never silently.
+  are frozen** — the checker (RIDL-306 boundary included) and the evaluator
+  implement them, and a change here is a contract change.
+- The **V2 productions are forward-looking**: the function layer may refine them
+  (and adds the totality checks, RMDL-1xx, that only make sense with function
+  definitions), but it must preserve the layer rule above. The rmdl reference
+  §3–§4 is the semantic elaboration of the V2 layer; where this document and a
+  landed function-layer implementation would diverge, the divergence is resolved
+  by editing this document in the open, never silently.
 
 ---
 
@@ -101,7 +100,7 @@ The asymmetry between the layers is deliberate:
 
 ### 3.1 The guaranteed subset — V1 (normative as implemented)
 
-The subset productions, exactly as the E2 parser implements them
+The subset productions, exactly as the parser implements them
 (precedence-climbing; one production per precedence level):
 
 ```ebnf
@@ -147,43 +146,43 @@ Structural rules fixed by these productions:
   applies to **timing annotations only** — RIDL-102 fires in timing-annotation
   resolution (ridl §9, §16.1) — while the token itself (`int_lit` plus suffix,
   ridl Appendix C) admits zero in expression position. The ridl §2.1 sentence
-  needs the matching scope-narrowing edit; that is deferred to the E2 close-out
+  needs the matching scope-narrowing edit; that is deferred to the
   ridl-reference doc-sync (ADR-0008 decision 1), not made here.
 
-### 3.2 The function layer — V2 (E5.1, forward-looking)
+### 3.2 The function layer — V2 (forward-looking)
 
 The V2 layer only **adds alternatives** to the subset productions — no V1
 production changes shape, which is what makes the layer rule (§2) hold by
-construction. Every production below is marked `V2 (E5.1)` and is illegal until
-E5.1 lands (§8):
+construction. Every production below is marked `V2` and is illegal until the
+function layer lands (§8):
 
 ```ebnf
-(* V2 (E5.1) *) expr        = or_expr | if_expr | case_expr | block_expr ;
-(* V2 (E5.1) *) if_expr     = "if" expr "then" expr "else" expr ;
-(* V2 (E5.1) *) case_expr   = "case" expr "{" case_arm { case_arm } "}" ;
-(* V2 (E5.1) *) case_arm    = case_pattern "->" expr ;
-(* V2 (E5.1) *) case_pattern = SCREAMING_SNAKE_ID          (* enum member    *)
+(* V2 *) expr        = or_expr | if_expr | case_expr | block_expr ;
+(* V2 *) if_expr     = "if" expr "then" expr "else" expr ;
+(* V2 *) case_expr   = "case" expr "{" case_arm { case_arm } "}" ;
+(* V2 *) case_arm    = case_pattern "->" expr ;
+(* V2 *) case_pattern = SCREAMING_SNAKE_ID          (* enum member    *)
                              | camelCase_id camelCase_id   (* union arm bind *)
                              | "some" camelCase_id | "none" (* optionals     *)
                              | "else" ;                    (* catch-all      *)
-(* V2 (E5.1) *) block_expr  = "{" { let_binding } expr "}" ;
-(* V2 (E5.1) *) let_binding = "let" camelCase_id "=" expr ;
-(* V2 (E5.1) *) cmp_expr    = add_expr [ cmp_op add_expr
+(* V2 *) block_expr  = "{" { let_binding } expr "}" ;
+(* V2 *) let_binding = "let" camelCase_id "=" expr ;
+(* V2 *) cmp_expr    = add_expr [ cmp_op add_expr
                                        | "match" string_lit ] ;
-(* V2 (E5.1) *) cmp_op      = "==" | "!=" | "<" | "<=" | ">" | ">=" ;
-(* V2 (E5.1) *) primary     = literal | duration_lit | path_head
+(* V2 *) cmp_op      = "==" | "!=" | "<" | "<=" | ">" | ">=" ;
+(* V2 *) primary     = literal | duration_lit | path_head
                             | "(" expr ")"
                             | call_expr | combinator_call ;
-(* V2 (E5.1) *) call_expr   = camelCase_id "(" [ expr { "," expr } ] ")" ;
-(* V2 (E5.1) *) combinator_call = ( "all" | "any" | "count" )
+(* V2 *) call_expr   = camelCase_id "(" [ expr { "," expr } ] ")" ;
+(* V2 *) combinator_call = ( "all" | "any" | "count" )
                                   "(" expr [ "," fn_value ] ")" ;
-(* V2 (E5.1) *) fn_value    = camelCase_id
+(* V2 *) fn_value    = camelCase_id
                             | "function" "(" param_names ")" "=" expr ;
-(* V2 (E5.1) *) param_names = camelCase_id { "," camelCase_id } ;
-(* V2 (E5.1) *) function_def = "function" camelCase_id
+(* V2 *) param_names = camelCase_id { "," camelCase_id } ;
+(* V2 *) function_def = "function" camelCase_id
                                "(" [ fn_param { "," fn_param } ] ")"
                                ":" type_ref ( "=" expr | block_expr ) ;
-(* V2 (E5.1) *) fn_param    = camelCase_id ":" type_ref ;
+(* V2 *) fn_param    = camelCase_id ":" type_ref ;
 ```
 
 Reading notes on the V2 layer (semantics owned by the rmdl reference):
@@ -201,14 +200,13 @@ Reading notes on the V2 layer (semantics owned by the rmdl reference):
   predicate may **call** declared total functions (`call_expr`) — and nothing
   else (§4).
 - The bounded combinators named here (`all`, `any`, `count`) are the
-  contract-position set (roadmap E5.1). The full function-layer set — `map`,
-  `fold`, `any`, `all`, `count` over typl bounded collections — is rmdl §4.5;
-  anonymous `function(…) = expr` values are legal only as combinator arguments
-  (RMDL-109). Every bound is a typl bound, so every iteration count is
-  statically known.
+  contract-position set. The full function-layer set — `map`, `fold`, `any`,
+  `all`, `count` over typl bounded collections — is rmdl §4.5; anonymous
+  `function(…) = expr` values are legal only as combinator arguments (RMDL-109).
+  Every bound is a typl bound, so every iteration count is statically known.
 - rmdl §4.4's optional forms (`?:` and the `some`/`none` patterns above) arrive
-  with the same layer; the `?:` production is fixed by E5.1 together with the
-  optional typing rules.
+  with the same layer; the `?:` production is fixed by the function layer
+  together with the optional typing rules.
 - Keyword ownership stays with the profile references: `require`/`ensure` are
   registry words activated by ridl (ridl §2.3); the V2 words (`function`, `let`,
   `if`, `then`, `else`, `case`, `match`, …) enter through rmdl §2 and the typl
@@ -219,7 +217,8 @@ Reading notes on the V2 layer (semantics owned by the rmdl reference):
 ## 4. The Rejection List
 
 The following are excluded from `expr` **at every layer** — they are not pending
-features, and E5.1 does not lift them. This list is normative and permanent:
+features, and the function layer does not lift them. This list is normative and
+permanent:
 
 1. **Recursion**, direct or mutual (RMDL-101 once the function layer lands).
    Total functions cannot be self-referential; per-call WCET stays decidable.
@@ -241,9 +240,9 @@ features, and E5.1 does not lift them. This list is normative and permanent:
 
 ## 5. Typing Rules — the Guaranteed Subset
 
-These rules are normative for V1; the E2.4 checker implements them. Every
-violation in E2 surfaces as RIDL-306 (§8) with a message naming the offending
-form.
+These rules are normative for V1; the checker implements them. Every violation
+in the guaranteed subset surfaces as RIDL-306 (§8) with a message naming the
+offending form.
 
 ### 5.1 Type domains
 
@@ -259,7 +258,7 @@ A subset expression types into one of five domains:
 
 A reference typed outside these five domains is outside the subset. In
 particular, field access on a **struct-typed** reference (`filter.severity`) is
-grammatical (§3.1) but is not tuple-field access — it is RIDL-306 in E2.
+grammatical (§3.1) but is not tuple-field access — it is RIDL-306 today.
 
 ### 5.2 Nominal typing — no implicit cross-type anything
 
@@ -302,7 +301,7 @@ Rules the table implies, stated explicitly:
   type; when all operands are literals, the result is a bare numeric literal
   value (which continues to unify).
 - **Scalar multiplication across types** (`Speed * float`-typed value, rmdl
-  §3.3) is not in the subset — in E2 every non-literal arithmetic operand must
+  §3.3) is not in the subset — today every non-literal arithmetic operand must
   be of one type. The function layer lifts exactly the rmdl §3.3 cases.
 - **String and bytes operands have no operator in the subset.** `string_lit`
   parses (it is a typl literal), but any operator over strings or bytes is
@@ -314,7 +313,7 @@ Rules the table implies, stated explicitly:
 
 A contract expression resolves names against a fixed environment — and **nothing
 else**. There is no ambient scope, no global mutable state, no platform
-introspection. For the ridl `require`/`ensure` position (the E2 implemented
+introspection. For the ridl `require`/`ensure` position (the implemented
 carrier), the environment is, in resolution order:
 
 1. **Parameters** of the enclosing `command`/`query` (`camelCase_id`).
@@ -329,7 +328,7 @@ carrier), the environment is, in resolution order:
    (ADR-0002 import rules).
 5. **Enum types** (`CamelCase_id`), for `Enum.MEMBER` access.
 
-Any other name is an unresolved reference (RIDL-306 in E2). Other carrier
+Any other name is an unresolved reference (RIDL-306 today). Other carrier
 positions (ridl's availability and obligation attributes; rmdl function and
 model contracts, rmdl §9.2) define their own environments in their references,
 under the same closed-environment principle.
@@ -338,9 +337,9 @@ under the same closed-environment principle.
 
 ## 7. Evaluation Domains
 
-Evaluation semantics are normative for V1: the property runner (E2.11) and later
-the rmdl reference oracle (E5) must agree bit-for-bit, so the domains are exact
-— **no IEEE-754 arithmetic anywhere in the contract plane**.
+Evaluation semantics are normative for V1: the property runner and later the
+rmdl reference oracle must agree bit-for-bit, so the domains are exact — **no
+IEEE-754 arithmetic anywhere in the contract plane**.
 
 - **Numeric values are exact rationals.** Literals, constants, and sampled
   values evaluate as exact rational numbers (the typl exactness discipline:
@@ -374,7 +373,7 @@ the rmdl reference oracle (E5) must agree bit-for-bit, so the domains are exact
 
 ## 8. The RIDL-306 Boundary
 
-In E2, **any expression form outside the guaranteed subset is RIDL-306** (error)
+Today, **any expression form outside the guaranteed subset is RIDL-306** (error)
 — one code for the whole boundary, with a message naming the offending form.
 That includes, non-exhaustively:
 
@@ -390,8 +389,8 @@ That includes, non-exhaustively:
 | non-boolean root (§5.3)                                     | `require 3`                          |
 | string/bytes operands; enum ordering (§5.3)                 | `require name == "x"`                |
 
-The boundary is **lifted per-form as E5.1 lands**: when a V2 form is
-implemented, it leaves RIDL-306's scope; forms that remain illegal in the
+The boundary is **lifted per-form as the function layer lands**: when a V2 form
+is implemented, it leaves RIDL-306's scope; forms that remain illegal in the
 function layer move to their profile-assigned codes (RMDL-1xx, rmdl §11.1). The
 §4 rejection list is never lifted. Related but distinct: RIDL-305 (warning)
 flags an `ensure` that never references `result` — a well-typed but suspicious
@@ -439,12 +438,13 @@ that produced it:
    machine consumer, and a machine cannot consume what it cannot parse); and it
    silently becomes outdated as the interface evolves. The whole value of
    `require`/ `ensure` is that the compiler owns them.
-2. **The full E5 grammar now** (implement functions, conditionals, and
-   combinators in E2). Rejected: sequencing (ADR-0004, ADR-0008 decision 10).
-   The function layer is L-sized, needs the totality checks (RMDL-1xx) that only
-   make sense beside rmdl, and has no E2 consumer — the interface layer needs
-   predicates, not programs. E2 ships the subset that the contract positions
-   need; E5.1 extends it in place.
+2. **The full function-layer grammar now** (implement functions, conditionals,
+   and combinators in the interface layer). Rejected: sequencing (ADR-0004,
+   ADR-0008 decision 10). The function layer is L-sized, needs the totality
+   checks (RMDL-1xx) that only make sense beside rmdl, and has no
+   interface-layer consumer — the interface layer needs predicates, not
+   programs. The interface layer ships the subset that the contract positions
+   need; the function layer extends it in place.
 3. **An external assertion language** (OCL, JML-style clauses, CEL, or any
    embedded third-party expression language). Rejected: the one-grammar doctrine
    — one platform, four languages, **one grammar**, one IR. A second expression
