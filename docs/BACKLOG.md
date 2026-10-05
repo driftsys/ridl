@@ -47,10 +47,10 @@ These estimates help planning and do not set delivery dates.
    roadmap. E17.0 designs the system section of the codegen model and the rsdl
    deployment attributes for the queue depth override, the slot count and the
    call budget; then the system in the model, the payload sizes the model lacks
-   (#336, and #665 as an optional narrowing after #597), the frame header and
-   envelope sizes per transport binding (these wait on the WebSocket transport
-   #265), the sizing inputs, and a test plugin that computes the layouts.
-   `repr(C)` #317 adds its slot layout when it lands.
+   (#665 as an optional narrowing after the portable-pattern implementation of
+   #597), the frame header and envelope sizes per transport binding (these wait
+   on the WebSocket transport #265), the sizing inputs, and a test plugin that
+   computes the layouts. `repr(C)` #317 adds its slot layout when it lands.
 4. **Language finalization alongside the catalog:** finish constraint-change
    records and diff classification #255, and grammar/attribute work #276.
    Finalize reference status #320 after its prerequisites and remaining
@@ -114,8 +114,8 @@ place in the sequence.
 
 ## Open issues by priority
 
-Within P1, the table begins with the catalog dependency sequence. Within P2 and
-P3, the order uses the review’s advisory score:
+Within P1, the table begins with Epic 17, then the catalog dependency sequence.
+Within P2 and P3, the order uses the review’s advisory score:
 `(impact + risk) × (6 − effort)`, with each estimate on a 1–5 scale. The score
 does not override roadmap dependencies or maintainer decisions.
 
