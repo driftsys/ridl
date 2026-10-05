@@ -368,6 +368,14 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "maxUs": "1000000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "lockState.payload: LockState"
+              },
+              "flatbuffers": {
+                "bytes": "50"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -419,6 +427,14 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "maxUs": "500000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "bytes": "8"
+              },
+              "flatbuffers": {
+                "bytes": "60"
+              }
+            },
             "event": {
               "payload": {
                 "type": {
@@ -460,6 +476,14 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "lock.request: DoorId"
+              },
+              "flatbuffers": {
+                "bytes": "43"
+              }
             },
             "command": {
               "params": [
@@ -537,6 +561,14 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "readDoor.request: DoorId"
+              },
+              "flatbuffers": {
+                "unsized": "readDoor.reply: DoorReport | DoorFault"
+              }
             },
             "query": {
               "params": [
@@ -642,6 +674,14 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
             "row": 4,
             "doc": "",
             "labels": [],
+            "reservation": {
+              "proto3": {
+                "unsized": "doorCount.payload: DoorId"
+              },
+              "flatbuffers": {
+                "bytes": "43"
+              }
+            },
             "fixed": {
               "payload": {
                 "optional": false,
@@ -679,6 +719,14 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           }
         }
       ],
+      "tableBudget": {
+        "proto3": {
+          "unsized": "lockState"
+        },
+        "flatbuffers": {
+          "unsized": "readDoor"
+        }
+      },
       "declared": {
         "declared": "DoorControl",
         "snake": "door_control",
@@ -713,6 +761,14 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "minUs": "1000000",
               "maxUs": "10000000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "distance.payload: Odometer"
+              },
+              "flatbuffers": {
+                "bytes": "46"
+              }
             },
             "signal": {
               "payload": {
@@ -763,6 +819,14 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "fuelLevel.request: ()"
+              },
+              "flatbuffers": {
+                "unsized": "fuelLevel.request: ()"
+              }
             },
             "query": {
               "params": [],
@@ -842,6 +906,14 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           }
         }
       ],
+      "tableBudget": {
+        "proto3": {
+          "unsized": "distance"
+        },
+        "flatbuffers": {
+          "unsized": "fuelLevel"
+        }
+      },
       "declared": {
         "declared": "Telemetry",
         "snake": "telemetry",
@@ -1203,6 +1275,14 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "maxUs": "2000000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "foldAngle.payload: fleet.contracts.Percent"
+              },
+              "flatbuffers": {
+                "unsized": "foldAngle.payload: fleet.contracts.Percent"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -1253,6 +1333,14 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "fold.request: fleet.contracts.DoorId"
+              },
+              "flatbuffers": {
+                "unsized": "fold.request: fleet.contracts.DoorId"
+              }
             },
             "command": {
               "params": [
@@ -1333,6 +1421,14 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "readFold.request: fleet.contracts.DoorId"
+              },
+              "flatbuffers": {
+                "unsized": "readFold.request: fleet.contracts.DoorId"
+              }
             },
             "query": {
               "params": [
@@ -1477,6 +1573,14 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
             "row": 3,
             "doc": "",
             "labels": [],
+            "reservation": {
+              "proto3": {
+                "unsized": "mirrorCount.payload: fleet.contracts.DoorId"
+              },
+              "flatbuffers": {
+                "unsized": "mirrorCount.payload: fleet.contracts.DoorId"
+              }
+            },
             "fixed": {
               "payload": {
                 "optional": false,
@@ -1532,6 +1636,14 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "readDoor.request: fleet.contracts.DoorId"
+              },
+              "flatbuffers": {
+                "unsized": "readDoor.request: fleet.contracts.DoorId"
+              }
             },
             "query": {
               "params": [
@@ -1645,6 +1757,14 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "maxUs": "50000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "readLegacyDoor.request: fleet.contracts.DoorId"
+              },
+              "flatbuffers": {
+                "unsized": "readLegacyDoor.request: fleet.contracts.DoorId"
+              }
+            },
             "query": {
               "params": [
                 {
@@ -1740,6 +1860,14 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         }
       ],
       "inlineOfService": 4,
+      "tableBudget": {
+        "proto3": {
+          "unsized": "foldAngle"
+        },
+        "flatbuffers": {
+          "unsized": "foldAngle"
+        }
+      },
       "service": {
         "dotted": "fleet.vehicle.mirrors",
         "segments": [

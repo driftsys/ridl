@@ -453,6 +453,10 @@ message Interface {
   repeated InteractionSlot slots = 7;
   // Index into `Model.services`.
   optional uint32 inline_of_service = 8;
+  // The sum of the reservations of every live interaction, in `MEMBERS`
+  // order. A tombstone does not count. An interface with no live interaction
+  // has a table budget of zero bytes.
+  Reservation table_budget = 9;
   oneof identity {
     // An `interface` declaration.
     Spellings declared = 10;
@@ -481,6 +485,11 @@ message Interaction {
   optional string deprecated = 6;
   // Absent for a fixed, and for a call with no declared bound.
   Timing timing = 7;
+  // The memory a call table reserves for the member, per wire encoding: the
+  // sum of the sizes of its payloads. A signal, an event and a fixed member
+  // have one payload, a command has its request, and a query has its request
+  // and then its reply.
+  Reservation reservation = 8;
   oneof shape {
     SignalShape signal = 10;
     EventShape event = 11;
@@ -541,8 +550,31 @@ enum AbsentCause {
   ABSENT_CAUSE_NO_BOUND = 4;
   // The bound exceeds `u32::MAX`, or the nesting passes the sizer's depth.
   ABSENT_CAUSE_OVERFLOW = 5;
-  // A name that does not resolve, or a declaration with no root table.
+  // A name that does not resolve, or a declaration with no root form under
+  // the encoding. Under FlatBuffers that is a declaration with no root
+  // table. Under proto3 it is a declaration with no message at all, such as
+  // a constant or an interaction. The normative statement is the rustdoc of
+  // `ridl_ir::projection::size::AbsentCause::Unresolved`.
   ABSENT_CAUSE_UNRESOLVED = 6;
+}
+
+// A member's reservation under one encoding.
+message ReservationState {
+  oneof state {
+    // The saturating sum, in bytes, of the bounded sizes of the member's
+    // payloads.
+    uint64 bytes = 10;
+    // The first payload of the member whose state is not bounded, as
+    // `<member>.<role>: <type>`. For an interface's table budget, the name of
+    // the first live member whose reservation is unsized.
+    string unsized = 11;
+  }
+}
+
+// A reservation under each wire encoding.
+message Reservation {
+  ReservationState proto3 = 1;
+  ReservationState flatbuffers = 2;
 }
 
 message SignalShape {

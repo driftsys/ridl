@@ -1488,7 +1488,7 @@ fn call_shape(model: &v1::Model, position: usize) -> &v1::interaction::Shape {
     let v1::Model { interfaces, .. } = model;
     let interface = interfaces
         .iter()
-        .find(|interface| interface.slots.len() == 4)
+        .find(|interface| declared_name(interface) == "Calls")
         .expect("the Calls interface");
     match interface.slots[position].occupant.as_ref() {
         Some(v1::interaction_slot::Occupant::Interaction(interaction)) => {
@@ -1587,4 +1587,236 @@ fn absent_cause_pins_each_tag_to_its_schema_value() {
     }
     assert_eq!(v1::AbsentCause::NoBound as i32, 4);
     assert_eq!(v1::AbsentCause::Overflow as i32, 5);
+}
+
+/// The declared name of an `interface` declaration.
+fn declared_name(interface: &v1::Interface) -> &str {
+    match interface.identity.as_ref() {
+        Some(v1::interface::Identity::Declared(name)) => &name.declared,
+        _ => "",
+    }
+}
+
+/// The package of `call_package` plus three interfaces over `Pair`
+/// (bounded under both encodings) and `Tagged` (unbounded under both):
+///
+/// - `Tally`: a signal, a query with a request and a reply, a tombstone, and
+///   a command, in that order.
+/// - `Mixed`: a signal over `Pair`, a signal over `Tagged`, a signal over
+///   `Tagged` again.
+/// - `Gaps`: only a tombstone.
+fn budget_package() -> v2::Package {
+    let package = call_package();
+    let param = v2::Param {
+        name: "a".to_string(),
+        r#type: Some(named("Pair")),
+        ..Default::default()
+    };
+    let decl = |name: &str, kind: v2::decl::Kind| v2::Decl {
+        name: name.to_string(),
+        visibility: v2::Visibility::Public as i32,
+        kind: Some(kind),
+        ..Default::default()
+    };
+    let signal = |name: &str, payload: &str| {
+        decl(
+            name,
+            v2::decl::Kind::SignalDef(v2::SignalDef {
+                payload: payload.to_string(),
+                ..Default::default()
+            }),
+        )
+    };
+    let tombstone = |ordinal: u32| v2::Decl {
+        ordinal,
+        kind: Some(v2::decl::Kind::ReservedSlot(v2::Reserved {
+            ordinal,
+            name: Some("gone".to_string()),
+            value: None,
+        })),
+        ..Default::default()
+    };
+    let interface = |name: &str, number: u32, interactions: Vec<v2::Decl>| v2::Interface {
+        name: name.to_string(),
+        visibility: v2::Visibility::Public as i32,
+        interactions,
+        number,
+        ..Default::default()
+    };
+    let tally = interface(
+        "Tally",
+        3,
+        vec![
+            signal("level", "Pair"),
+            decl(
+                "ask",
+                v2::decl::Kind::QueryDef(v2::QueryDef {
+                    params: vec![param.clone()],
+                    return_type: Some(v2::ReturnType {
+                        kind: Some(v2::return_type::Kind::Value(named("Pair"))),
+                    }),
+                    ..Default::default()
+                }),
+            ),
+            tombstone(3),
+            decl(
+                "set",
+                v2::decl::Kind::CommandDef(v2::CommandDef {
+                    params: vec![param],
+                    ..Default::default()
+                }),
+            ),
+        ],
+    );
+    let mixed = interface(
+        "Mixed",
+        4,
+        vec![
+            signal("first", "Pair"),
+            signal("second", "Tagged"),
+            signal("third", "Tagged"),
+        ],
+    );
+    let gaps = interface("Gaps", 5, vec![tombstone(1)]);
+    let v2::Package { interfaces, .. } = package.clone();
+    v2::Package {
+        interfaces: interfaces.into_iter().chain([tally, mixed, gaps]).collect(),
+        ..package
+    }
+}
+
+fn interface_named<'m>(model: &'m v1::Model, name: &str) -> &'m v1::Interface {
+    let v1::Model { interfaces, .. } = model;
+    interfaces
+        .iter()
+        .find(|interface| declared_name(interface) == name)
+        .expect("the interface")
+}
+
+fn live_member<'m>(interface: &'m v1::Interface, name: &str) -> &'m v1::Interaction {
+    interface
+        .slots
+        .iter()
+        .find_map(|slot| match slot.occupant.as_ref() {
+            Some(v1::interaction_slot::Occupant::Interaction(interaction))
+                if interaction.name.as_ref().map(|n| n.declared.as_str()) == Some(name) =>
+            {
+                Some(&**interaction)
+            }
+            _ => None,
+        })
+        .expect("the live member")
+}
+
+/// The reservation state under one encoding.
+fn reserved(reservation: &Option<v1::Reservation>, proto3: bool) -> &v1::reservation_state::State {
+    let reservation = reservation.as_ref().expect("a reservation is written");
+    let chosen = if proto3 {
+        &reservation.proto3
+    } else {
+        &reservation.flatbuffers
+    };
+    chosen
+        .as_ref()
+        .and_then(|s| s.state.as_ref())
+        .expect("a state")
+}
+
+fn bytes(size: u64) -> v1::reservation_state::State {
+    v1::reservation_state::State::Bytes(size)
+}
+
+fn unsized_by(name: &str) -> v1::reservation_state::State {
+    v1::reservation_state::State::Unsized(name.to_string())
+}
+
+/// The bounded size of the `Pair` payload of the signal `level`.
+fn pair_size(model: &v1::Model, proto3: bool) -> u64 {
+    let level = live_member(interface_named(model, "Tally"), "level");
+    let Some(v1::interaction::Shape::Signal(signal)) = level.shape.as_ref() else {
+        panic!("a signal");
+    };
+    match state(&signal.payload.as_ref().expect("a payload").sizes, proto3) {
+        v1::size_state::State::Bounded(size) => u64::from(*size),
+        other => panic!("a bounded payload, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_query_reserves_request_plus_reply() {
+    let model = lower(&budget_package(), &[]);
+    let ask = live_member(interface_named(&model, "Tally"), "ask");
+    for proto3 in [true, false] {
+        let one = pair_size(&model, proto3);
+        assert!(one > 0, "the fixture payload has a size");
+        assert_eq!(reserved(&ask.reservation, proto3), &bytes(2 * one));
+    }
+}
+
+#[test]
+fn a_command_reserves_its_request_only() {
+    let model = lower(&budget_package(), &[]);
+    let set = live_member(interface_named(&model, "Tally"), "set");
+    let level = live_member(interface_named(&model, "Tally"), "level");
+    for proto3 in [true, false] {
+        let one = pair_size(&model, proto3);
+        assert_eq!(reserved(&set.reservation, proto3), &bytes(one));
+        assert_eq!(reserved(&level.reservation, proto3), &bytes(one));
+    }
+}
+
+#[test]
+fn a_table_budget_sums_every_live_member() {
+    let model = lower(&budget_package(), &[]);
+    let tally = interface_named(&model, "Tally");
+    for proto3 in [true, false] {
+        // level (1) + ask (2) + set (1)
+        let one = pair_size(&model, proto3);
+        assert_eq!(reserved(&tally.table_budget, proto3), &bytes(4 * one));
+    }
+}
+
+#[test]
+fn one_unsized_member_makes_the_budget_unsized() {
+    let model = lower(&budget_package(), &[]);
+    let mixed = interface_named(&model, "Mixed");
+    let second = live_member(mixed, "second");
+    for proto3 in [true, false] {
+        assert_eq!(
+            reserved(&second.reservation, proto3),
+            &unsized_by("second.payload: Tagged")
+        );
+        assert_eq!(reserved(&mixed.table_budget, proto3), &unsized_by("second"));
+    }
+}
+
+#[test]
+fn a_tombstone_does_not_count() {
+    let model = lower(&budget_package(), &[]);
+    let tally = interface_named(&model, "Tally");
+    assert_eq!(tally.slots.len(), 4, "the tombstone holds its slot");
+    let live_sum: u64 = tally
+        .slots
+        .iter()
+        .filter_map(|slot| match slot.occupant.as_ref() {
+            Some(v1::interaction_slot::Occupant::Interaction(interaction)) => {
+                match reserved(&interaction.reservation, true) {
+                    v1::reservation_state::State::Bytes(size) => Some(*size),
+                    v1::reservation_state::State::Unsized(_) => None,
+                }
+            }
+            _ => None,
+        })
+        .sum();
+    assert_eq!(reserved(&tally.table_budget, true), &bytes(live_sum));
+    let gaps = interface_named(&model, "Gaps");
+    assert_eq!(reserved(&gaps.table_budget, true), &bytes(0));
+    assert_eq!(reserved(&gaps.table_budget, false), &bytes(0));
+}
+
+#[test]
+fn a_query_with_no_return_type_has_undefined_reply_sizes() {
+    let sizes = super::lower::absent_sizes();
+    assert_eq!(state(&Some(sizes.clone()), true), &undefined());
+    assert_eq!(state(&Some(sizes), false), &undefined());
 }

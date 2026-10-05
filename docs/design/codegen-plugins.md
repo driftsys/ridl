@@ -106,6 +106,17 @@ unknown key, so a plugin that answers with a field this schema does not have is
 reported as malformed rather than silently accepted; a plugin's own reader
 should be lenient, per the IR specification §8.
 
+**Sizes and reservations.** The model states the maximum encoded size of every
+payload, of every command and query request, and of every query reply, once per
+wire encoding (`PayloadSizes`), as bounded, unbounded (FlatBuffers only) or
+absent with a cause. It also sums them: `Interaction.reservation` is the memory
+a call table reserves for one member, and `Interface.table_budget` is the memory
+for the interface, each as a byte count or as `unsized` with the name of the
+first payload or member that has no bounded size. A plugin that sizes storage
+reads these two fields and does not add the payload sizes itself. The sums and
+the states they read are described in
+[the catalog descriptor](catalog-descriptor.md#the-size-states).
+
 **The path rule** every host applies before it writes a file
 (`ridl_ir::codegen::check_path`): `/`-separated components, none empty, none `.`
 or `..`, no leading `/`, no drive letter, no backslash, no NUL. A response with

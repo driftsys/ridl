@@ -3512,6 +3512,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "10000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "currentSpeed.payload: veh.common.Speed"
+              },
+              "flatbuffers": {
+                "unsized": "currentSpeed.payload: veh.common.Speed"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -3563,6 +3571,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "minUs": "20000",
               "maxUs": "100000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "engineTemp.payload: veh.common.Temperature"
+              },
+              "flatbuffers": {
+                "unsized": "engineTemp.payload: veh.common.Temperature"
+              }
             },
             "signal": {
               "payload": {
@@ -3616,6 +3632,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "1000000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "warnings.payload: veh.common.WarningFlags"
+              },
+              "flatbuffers": {
+                "unsized": "warnings.payload: veh.common.WarningFlags"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -3668,6 +3692,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "500000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "bytes": "8"
+              },
+              "flatbuffers": {
+                "bytes": "53"
+              }
+            },
             "event": {
               "payload": {
                 "type": {
@@ -3710,6 +3742,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "minUs": "20000",
               "maxUs": "200000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "setGear.request: veh.common.GearPosition"
+              },
+              "flatbuffers": {
+                "unsized": "setGear.request: veh.common.GearPosition"
+              }
             },
             "command": {
               "params": [
@@ -3817,6 +3857,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "minUs": "10000",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "getAverageSpeed.request: ridl.std.Duration"
+              },
+              "flatbuffers": {
+                "unsized": "getAverageSpeed.request: ridl.std.Duration"
+              }
             },
             "query": {
               "params": [
@@ -3966,6 +4014,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "1000000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "streamFaults.request: DiagFilter"
+              },
+              "flatbuffers": {
+                "unsized": "streamFaults.request: DiagFilter"
+              }
+            },
             "query": {
               "params": [
                 {
@@ -4078,6 +4134,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "100000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "getFaultPage.request: DiagFilter"
+              },
+              "flatbuffers": {
+                "unsized": "getFaultPage.request: DiagFilter"
+              }
             },
             "query": {
               "params": [
@@ -4192,6 +4256,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "row": 8,
             "doc": "",
             "labels": [],
+            "reservation": {
+              "proto3": {
+                "unsized": "softwareVersion.payload: ridl.std.Version"
+              },
+              "flatbuffers": {
+                "unsized": "softwareVersion.payload: ridl.std.Version"
+              }
+            },
             "fixed": {
               "payload": {
                 "optional": false,
@@ -4243,6 +4315,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "row": 9,
             "doc": "",
             "labels": [],
+            "reservation": {
+              "proto3": {
+                "unsized": "capabilities.payload: unnamed type"
+              },
+              "flatbuffers": {
+                "unsized": "capabilities.payload: unnamed type"
+              }
+            },
             "fixed": {
               "payload": {
                 "optional": false,
@@ -4266,6 +4346,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           }
         }
       ],
+      "tableBudget": {
+        "proto3": {
+          "unsized": "currentSpeed"
+        },
+        "flatbuffers": {
+          "unsized": "currentSpeed"
+        }
+      },
       "declared": {
         "declared": "VehicleStatus",
         "snake": "vehicle_status",
@@ -4300,6 +4388,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "minUs": "100000",
               "maxUs": "1000000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "wheelTicks.payload: FanLevel"
+              },
+              "flatbuffers": {
+                "bytes": "43"
+              }
             },
             "signal": {
               "payload": {
@@ -4364,6 +4460,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "10000000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "wheelTemp.payload: veh.common.Temperature"
+              },
+              "flatbuffers": {
+                "unsized": "wheelTemp.payload: veh.common.Temperature"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -4422,6 +4526,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "5000000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "wheelSlipRate.payload: veh.common.Ratio"
+              },
+              "flatbuffers": {
+                "unsized": "wheelSlipRate.payload: veh.common.Ratio"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -4455,6 +4567,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           }
         }
       ],
+      "tableBudget": {
+        "proto3": {
+          "unsized": "wheelTicks"
+        },
+        "flatbuffers": {
+          "unsized": "wheelTemp"
+        }
+      },
       "declared": {
         "declared": "WheelHistory",
         "snake": "wheel_history",
@@ -4489,6 +4609,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "minUs": "100000",
               "maxUs": "1000000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "wheelTicks.payload: RawTickCount"
+              },
+              "flatbuffers": {
+                "bytes": "44"
+              }
             },
             "signal": {
               "payload": {
@@ -4541,6 +4669,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "500000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "bytes": "8"
+              },
+              "flatbuffers": {
+                "bytes": "54"
+              }
+            },
             "event": {
               "payload": {
                 "type": {
@@ -4582,6 +4718,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "readTicks.request: ()"
+              },
+              "flatbuffers": {
+                "unsized": "readTicks.request: ()"
+              }
             },
             "query": {
               "params": [],
@@ -4664,6 +4808,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "50000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "resetTicks.request: RawTickCount"
+              },
+              "flatbuffers": {
+                "bytes": "44"
+              }
+            },
             "command": {
               "params": [
                 {
@@ -4741,6 +4893,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "50000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "readSpan.request: ()"
+              },
+              "flatbuffers": {
+                "unsized": "readSpan.request: ()"
+              }
+            },
             "query": {
               "params": [],
               "reply": {
@@ -4793,6 +4953,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "row": 5,
             "doc": "",
             "labels": [],
+            "reservation": {
+              "proto3": {
+                "unsized": "tickBounds.payload: unnamed type"
+              },
+              "flatbuffers": {
+                "unsized": "tickBounds.payload: unnamed type"
+              }
+            },
             "fixed": {
               "payload": {
                 "optional": false,
@@ -4811,6 +4979,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           }
         }
       ],
+      "tableBudget": {
+        "proto3": {
+          "unsized": "wheelTicks"
+        },
+        "flatbuffers": {
+          "unsized": "readTicks"
+        }
+      },
       "declared": {
         "declared": "WheelDiagnostics",
         "snake": "wheel_diagnostics",
@@ -4846,6 +5022,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "10000000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "wheelHealth.payload: FanLevel"
+              },
+              "flatbuffers": {
+                "bytes": "43"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -4878,6 +5062,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           }
         }
       ],
+      "tableBudget": {
+        "proto3": {
+          "unsized": "wheelHealth"
+        },
+        "flatbuffers": {
+          "bytes": "43"
+        }
+      },
       "declared": {
         "declared": "WheelSummary",
         "snake": "wheel_summary",
@@ -4912,6 +5104,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "minUs": "100000",
               "maxUs": "1000000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "ticks.payload: FanLevel"
+              },
+              "flatbuffers": {
+                "bytes": "43"
+              }
             },
             "signal": {
               "payload": {
@@ -4982,6 +5182,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "500000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "bytes": "8"
+              },
+              "flatbuffers": {
+                "bytes": "54"
+              }
+            },
             "event": {
               "payload": {
                 "type": {
@@ -5007,6 +5215,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         }
       ],
       "inlineOfService": 0,
+      "tableBudget": {
+        "proto3": {
+          "unsized": "ticks"
+        },
+        "flatbuffers": {
+          "bytes": "97"
+        }
+      },
       "service": {
         "dotted": "veh.cluster.wheels",
         "segments": [
@@ -5044,6 +5260,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "minUs": "1000000",
               "maxUs": "1000000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "cabinTemp.payload: veh.common.Temperature"
+              },
+              "flatbuffers": {
+                "unsized": "cabinTemp.payload: veh.common.Temperature"
+              }
             },
             "signal": {
               "payload": {
@@ -5097,6 +5321,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "5000000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "targetTemp.payload: veh.common.Temperature"
+              },
+              "flatbuffers": {
+                "unsized": "targetTemp.payload: veh.common.Temperature"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -5147,6 +5379,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "minUs": "200000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "blowerDuty.payload: veh.common.Ratio"
+              },
+              "flatbuffers": {
+                "unsized": "blowerDuty.payload: veh.common.Ratio"
+              }
             },
             "signal": {
               "payload": {
@@ -5199,6 +5439,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "2000000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "fanLevel.payload: FanLevel"
+              },
+              "flatbuffers": {
+                "bytes": "43"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -5249,6 +5497,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "minUs": "500",
               "maxUs": "500",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "compressorLoad.payload: veh.common.Ratio"
+              },
+              "flatbuffers": {
+                "unsized": "compressorLoad.payload: veh.common.Ratio"
+              }
             },
             "signal": {
               "payload": {
@@ -5303,6 +5559,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "2000000",
               "defaultApplied": true
             },
+            "reservation": {
+              "proto3": {
+                "bytes": "8"
+              },
+              "flatbuffers": {
+                "bytes": "54"
+              }
+            },
             "event": {
               "payload": {
                 "type": {
@@ -5344,6 +5608,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "setTarget.request: veh.common.Temperature"
+              },
+              "flatbuffers": {
+                "unsized": "setTarget.request: veh.common.Temperature"
+              }
             },
             "command": {
               "params": [
@@ -5460,6 +5732,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "50000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "replayTrace.request: (samples)"
+              },
+              "flatbuffers": {
+                "unsized": "replayTrace.request: (samples)"
+              }
+            },
             "command": {
               "params": [
                 {
@@ -5519,6 +5799,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "streamFilterHistory.request: FanLevel"
+              },
+              "flatbuffers": {
+                "unsized": "streamFilterHistory.reply: unnamed type"
+              }
             },
             "query": {
               "params": [
@@ -5624,6 +5912,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "50000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "rebalance.request: (samples)"
+              },
+              "flatbuffers": {
+                "unsized": "rebalance.request: (samples)"
+              }
+            },
             "query": {
               "params": [
                 {
@@ -5711,6 +6007,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "50000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "getBounds.request: ()"
+              },
+              "flatbuffers": {
+                "unsized": "getBounds.request: ()"
+              }
+            },
             "query": {
               "params": [],
               "reply": {
@@ -5786,6 +6090,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "calibrate.request: FanLevel"
+              },
+              "flatbuffers": {
+                "unsized": "calibrate.reply: ClimateReport | HvacError"
+              }
             },
             "query": {
               "params": [
@@ -5896,6 +6208,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "50000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "getClimate.request: ()"
+              },
+              "flatbuffers": {
+                "unsized": "getClimate.request: ()"
+              }
+            },
             "query": {
               "params": [],
               "reply": {
@@ -5989,6 +6309,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "50000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "getCabinTemp.request: ()"
+              },
+              "flatbuffers": {
+                "unsized": "getCabinTemp.request: ()"
+              }
+            },
             "query": {
               "params": [],
               "reply": {
@@ -6068,6 +6396,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "row": 14,
             "doc": "Provisioned, immutable for the software-instance lifetime (ridl §8).",
             "labels": [],
+            "reservation": {
+              "proto3": {
+                "unsized": "unitSerial.payload: ridl.std.Label"
+              },
+              "flatbuffers": {
+                "unsized": "unitSerial.payload: ridl.std.Label"
+              }
+            },
             "fixed": {
               "payload": {
                 "optional": false,
@@ -6119,6 +6455,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "row": 15,
             "doc": "A collection-typed fixed.",
             "labels": [],
+            "reservation": {
+              "proto3": {
+                "unsized": "supportedModes.payload: unnamed type"
+              },
+              "flatbuffers": {
+                "unsized": "supportedModes.payload: unnamed type"
+              }
+            },
             "fixed": {
               "payload": {
                 "optional": false,
@@ -6159,6 +6503,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "setFan.request: FanLevel"
+              },
+              "flatbuffers": {
+                "bytes": "43"
+              }
             },
             "command": {
               "params": [
@@ -6248,6 +6600,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "trimFan.request: FanLevel"
+              },
+              "flatbuffers": {
+                "bytes": "43"
+              }
             },
             "command": {
               "params": [
@@ -6349,6 +6709,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "50000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "scaledFan.request: ()"
+              },
+              "flatbuffers": {
+                "unsized": "scaledFan.request: ()"
+              }
+            },
             "query": {
               "params": [],
               "reply": {
@@ -6423,6 +6791,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         }
       ],
       "inlineOfService": 3,
+      "tableBudget": {
+        "proto3": {
+          "unsized": "cabinTemp"
+        },
+        "flatbuffers": {
+          "unsized": "cabinTemp"
+        }
+      },
       "service": {
         "dotted": "veh.hvac.cabin",
         "segments": [

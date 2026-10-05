@@ -255,6 +255,31 @@ The Rust backend's `PayloadInfo.max_size.flatbuffers` is the codegen model's
 `Payload.flatbuffers_max_size`, the same `max_size` value. Its `proto3` stays
 `None`, because that backend emits no proto3 codec.
 
+**The codegen model carries the same states.** The model (`ridl.codegen.v1`)
+writes a `PayloadSizes` message, one `SizeState` per encoding, on every payload
+and on the request of every command and query and the reply of every query. It
+differs from the descriptor in one respect: the descriptor writes no row for an
+absent state, and the model writes the state, `absent` with an `AbsentCause`
+(the sizer's own causes, member for member), so that a plugin can tell a shape
+that no codec defines from a toolchain too old to report a size. A query whose
+reply has no return type takes the same absent state, with the cause
+`ABSENT_CAUSE_ENCODING_UNDEFINED`. The model sums these states into two totals,
+both per encoding:
+
+- **`Interaction.reservation`** is the saturating `u64` sum, in bytes, of the
+  bounded sizes of the member's payloads, in order: a signal, an event or a
+  fixed member has its one payload, a command has its request, and a query has
+  its request and then its reply. The first payload whose state is not bounded
+  makes the reservation `unsized`, naming `<member>.<role>: <type>`.
+- **`Interface.table_budget`** is the saturating sum of the reservations of the
+  live members in `MEMBERS` order. It is `unsized`, naming the first member
+  whose reservation is unsized. A tombstone does not count, and an interface
+  with no live member has a budget of zero bytes.
+
+These are the sums that `ridl_rt::contract::Member::reservation` and
+`table_budget` compute over `Interface::MEMBERS`, written once, so that the
+plugin that sizes a call table and the runtime that debits it agree.
+
 ## Verification before access, and `ridl describe`
 
 `ridl_descriptor::verify(bytes)` is the only entry to a read. It checks, in this
