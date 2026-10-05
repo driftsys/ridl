@@ -131,6 +131,11 @@ enum Command {
         /// regenerating it (CI mode, ADR-0002 §7).
         #[arg(long)]
         frozen: bool,
+        /// The deployment to carry in each codegen request. With one
+        /// deployment in the workspace it is selected without this flag; with
+        /// several, none is carried unless named.
+        #[arg(long, value_name = "NAME")]
+        deployment: Option<String>,
     },
     /// Run the property suite over a workspace: the range self-corpora and the
     /// contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on
@@ -275,6 +280,7 @@ fn main() -> ExitCode {
             plugin,
             plugin_timeout,
             frozen,
+            deployment,
         } => finish(ridlc::run_build_with(
             &path,
             &out_dir,
@@ -283,6 +289,7 @@ fn main() -> ExitCode {
             std::time::Duration::from_secs(plugin_timeout),
             frozen.into(),
             ApplyLints::Yes,
+            deployment.as_deref(),
         )),
         Command::Test {
             path,
@@ -641,6 +648,7 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
         std::time::Duration::from_secs(ridlc::plugin::DEFAULT_TIMEOUT_SECONDS),
         false.into(),
         ApplyLints::No,
+        None,
     ) {
         Ok(run) => run,
         Err(err) => {

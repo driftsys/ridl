@@ -741,6 +741,7 @@ pub fn run_build(
         Duration::from_secs(plugin::DEFAULT_TIMEOUT_SECONDS),
         frozen,
         ApplyLints::Yes,
+        None,
     )
 }
 
@@ -757,6 +758,15 @@ pub fn run_build(
 /// applied before the emit gate, so a lint at `deny` is an error that
 /// suppresses every artifact; with [`ApplyLints::No`], the diagnostics keep
 /// the severities the emit sites chose (ADR-0024 decision 8).
+///
+/// `deployment` names the deployment of the workspace's system that every
+/// codegen request carries ([`select_deployment`] holds the rule). A name the
+/// system does not declare is an I/O error, which the command reports with
+/// exit code 2 (ADR-0010 decision 1).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the build's options, passed once from each command"
+)]
 pub fn run_build_with(
     entry: &Path,
     out_dir: &Path,
@@ -765,6 +775,7 @@ pub fn run_build_with(
     plugin_timeout: Duration,
     frozen: Frozen,
     apply_lints: ApplyLints,
+    deployment: Option<&str>,
 ) -> std::io::Result<CliRun> {
     let mut db = RidlDatabase::default();
     let Compiled {
@@ -928,6 +939,41 @@ pub fn run_build_with(
         // region over.
         let others = catalog_scope(&packages, std_ir.as_ref());
 
+        // The lowered system, with the catalog hashes its regions carry. The
+        // region hashes must equal the hashes a `--emit catalog` build
+        // writes, so `ridl.std` is in their scope whenever a package
+        // references it: the `std_ir` above when a code emit computed it,
+        // otherwise checked here. Lowered once, for the deployment every
+        // request carries and for the system dump emits below. An error in
+        // the closure has already stopped the build above, so the lowering is
+        // `None` here only when the workspace declares no `system`.
+        let wants_system = generates_code
+            || deployment.is_some()
+            || emits.iter().any(|emit| emit.system_dump_suffix().is_some());
+        let checked_std;
+        let hash_std = match &std_ir {
+            Some(std_ir) => Some(std_ir),
+            None if references_std && wants_system => {
+                checked_std = check_package(&db, workspace, std, std).ir;
+                Some(&checked_std)
+            }
+            None => None,
+        };
+        let lowered_system = if wants_system {
+            lower_system(&system, &packages).map(|mut lowered| {
+                embed_catalog_hashes(&mut lowered, &packages, &catalog_scope(&packages, hash_std));
+                lowered
+            })
+        } else {
+            None
+        };
+        let selected = select_deployment(
+            lowered_system.as_ref(),
+            deployment,
+            &catalog_scope(&packages, hash_std),
+        )
+        .map_err(|err| std::io::Error::other(err.to_string()))?;
+
         for package in &checked {
             let base = if single_file {
                 file_stem.clone()
@@ -942,6 +988,7 @@ pub fn run_build_with(
                 emits,
                 &resolved_plugins,
                 plugin_timeout,
+                selected.as_ref(),
                 &mut diagnostics,
             )?;
         }
@@ -955,6 +1002,7 @@ pub fn run_build_with(
                 &code_emits,
                 &resolved_plugins,
                 plugin_timeout,
+                selected.as_ref(),
                 &mut diagnostics,
             )?;
         }
@@ -982,26 +1030,11 @@ pub fn run_build_with(
         }
 
         // The lowered system, beside the package IR, for each IR dump emit
-        // (rsdl reference §13). An error in the closure has already stopped
-        // the build above, so the lowering is `None` here only when the
-        // workspace declares no `system`. The region hashes must equal the
-        // hashes a `--emit catalog` build writes, so `ridl.std` is in their
-        // scope whenever a package references it: the `std_ir` above when a
-        // code emit computed it, otherwise checked here.
-        if emits.iter().any(|emit| emit.system_dump_suffix().is_some()) {
-            let checked_std;
-            let hash_std = match &std_ir {
-                Some(std_ir) => Some(std_ir),
-                None if references_std => {
-                    checked_std = check_package(&db, workspace, std, std).ir;
-                    Some(&checked_std)
-                }
-                None => None,
-            };
-            if let Some(mut lowered) = lower_system(&system, &packages) {
-                embed_catalog_hashes(&mut lowered, &packages, &catalog_scope(&packages, hash_std));
-                write_system_emits(out_dir, &lowered, emits, &mut diagnostics)?;
-            }
+        // (rsdl reference §13).
+        if emits.iter().any(|emit| emit.system_dump_suffix().is_some())
+            && let Some(lowered) = &lowered_system
+        {
+            write_system_emits(out_dir, lowered, emits, &mut diagnostics)?;
         }
     }
 
@@ -1606,6 +1639,7 @@ pub fn codegen_request(
     package: &ridl_ir::v2::Package,
     others: &[&ridl_ir::v2::Package],
     options: Vec<v1::BackendOption>,
+    deployment: Option<v1::Deployment>,
 ) -> v1::CodegenRequest {
     v1::CodegenRequest {
         schema: codegen::SCHEMA.to_string(),
@@ -1613,7 +1647,81 @@ pub fn codegen_request(
         model: Some(codegen::lower(package, others)),
         options,
         artifact_base: base.to_string(),
-        deployment: None,
+        deployment,
+    }
+}
+
+/// A `--deployment` name that no deployment of the system carries.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnknownDeployment {
+    /// The name the caller gave.
+    pub requested: String,
+    /// The names of the deployments the workspace declares, sorted.
+    pub known: Vec<String>,
+}
+
+impl std::fmt::Display for UnknownDeployment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.known.is_empty() {
+            write!(
+                f,
+                "no deployment named `{}`; the workspace declares no deployment",
+                self.requested
+            )
+        } else {
+            write!(
+                f,
+                "no deployment named `{}`; the system declares: {}",
+                self.requested,
+                self.known.join(", ")
+            )
+        }
+    }
+}
+
+impl std::error::Error for UnknownDeployment {}
+
+/// The deployment section every codegen request of one build carries.
+///
+/// With a `name`: the deployment of that name, or [`UnknownDeployment`] when
+/// the system declares none of that name (or there is no system). Without a
+/// `name`: the deployment when the system declares exactly one, and `None`
+/// for several deployments or no system, so that a request for such a
+/// workspace has no deployment section at all. `packages` holds every package
+/// of the workspace, `ridl.std` included.
+pub fn select_deployment(
+    system: Option<&ridl_ir::v2::System>,
+    name: Option<&str>,
+    packages: &[&ridl_ir::v2::Package],
+) -> Result<Option<v1::Deployment>, UnknownDeployment> {
+    let Some(system) = system else {
+        return match name {
+            Some(requested) => Err(UnknownDeployment {
+                requested: requested.to_string(),
+                known: Vec::new(),
+            }),
+            None => Ok(None),
+        };
+    };
+    match name {
+        Some(requested) => codegen::lower_deployment(system, requested, packages)
+            .map(Some)
+            .ok_or_else(|| {
+                let mut known: Vec<String> = system
+                    .deployments
+                    .iter()
+                    .map(|deployment| deployment.name.clone())
+                    .collect();
+                known.sort();
+                UnknownDeployment {
+                    requested: requested.to_string(),
+                    known,
+                }
+            }),
+        None => match system.deployments.as_slice() {
+            [only] => Ok(codegen::lower_deployment(system, &only.name, packages)),
+            _ => Ok(None),
+        },
     }
 }
 
@@ -1757,12 +1865,14 @@ fn write_emits(
     emits: &[Emit],
     plugins: &[plugin::Plugin],
     plugin_timeout: Duration,
+    deployment: Option<&v1::Deployment>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> std::io::Result<()> {
     // One request per package, built only when something reads it: an IR
     // dump alone lowers nothing.
     let needs_request = !plugins.is_empty() || emits.iter().any(|emit| !emit.is_ir_dump());
-    let request = needs_request.then(|| codegen_request(base, ir, others, Vec::new()));
+    let request =
+        needs_request.then(|| codegen_request(base, ir, others, Vec::new(), deployment.cloned()));
     let raw = codegen::RawIr {
         package: ir,
         others,

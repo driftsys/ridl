@@ -59,6 +59,11 @@ enum Command {
         /// regenerating it (CI mode, ADR-0002 §7).
         #[arg(long)]
         frozen: bool,
+        /// The deployment to carry in each codegen request. With one
+        /// deployment in the workspace it is selected without this flag; with
+        /// several, none is carried unless named.
+        #[arg(long, value_name = "NAME")]
+        deployment: Option<String>,
     },
 }
 
@@ -73,6 +78,7 @@ fn main() -> ExitCode {
             plugin,
             plugin_timeout,
             frozen,
+            deployment,
         } => ridlc::run_build_with(
             &path,
             &out_dir,
@@ -81,6 +87,7 @@ fn main() -> ExitCode {
             Duration::from_secs(plugin_timeout),
             Frozen::from(frozen),
             ApplyLints::Yes,
+            deployment.as_deref(),
         ),
     };
     finish(run)

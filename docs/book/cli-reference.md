@@ -573,6 +573,9 @@ Options:
       --frozen
           Verify remote imports against `ridl.lock` without fetching or regenerating it (CI mode, ADR-0002 §7)
 
+      --deployment <NAME>
+          The deployment to carry in each codegen request. With one deployment in the workspace it is selected without this flag; with several, none is carried unless named
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -581,6 +584,12 @@ Options:
 targets. `--frozen` is the same flag as on `ridl check`: it is
 [`ridlc build --frozen`](#ridlc-build), documented word for word since
 [ADR-0010][adr-0010].
+
+`--deployment NAME` picks the deployment of the workspace's system that every
+codegen request carries. Without it, the request carries the deployment when
+the system declares exactly one, and none when it declares several or the
+workspace has no system. A `NAME` that the system does not declare exits 2 and
+names the deployments it does declare.
 
 **`rust` is a language backend**, and it writes the whole generated surface of
 a package in one file: the domain types (a struct, an enum, an enum set, a
@@ -1851,6 +1860,9 @@ Options:
 
       --frozen
           Verify remote imports against `ridl.lock` without fetching or regenerating it (CI mode, ADR-0002 §7)
+
+      --deployment <NAME>
+          The deployment to carry in each codegen request. With one deployment in the workspace it is selected without this flag; with several, none is carried unless named
 
   -h, --help
           Print help (see a summary with '-h')

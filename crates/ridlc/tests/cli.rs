@@ -1516,3 +1516,21 @@ fn build_writes_the_catalog_hash_over_the_other_packages_of_the_build() {
         "veh.cluster's interfaces reach a declaration of veh.common"
     );
 }
+
+/// A `--deployment` value that no deployment carries is a bad flag value:
+/// exit 2, and the message names the known deployments (ADR-0010
+/// decision 1).
+#[test]
+fn build_with_an_unknown_deployment_exits_two_and_names_the_known_ones() {
+    let out = TempDir::new("unknown-deployment-out");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        "../../examples/cabin".as_ref(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--deployment".as_ref(),
+        "Nope".as_ref(),
+    ]);
+    assert_eq!(code, 2, "stderr:\n{stderr}");
+    assert!(stderr.contains("Bench"), "stderr:\n{stderr}");
+}
