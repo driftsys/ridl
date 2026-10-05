@@ -337,9 +337,9 @@ be generated, and in what order", which is what this record answers.
     underivable depth makes the build warn (RSDL-806), the request carry the
     depth absent with its cause, and a plugin that needs it refuse;
     infeasibility is not evaluated either, because it needs the same service
-    period and jitter, and stays with RSDL-801. This rule is evaluated again
-    when rsdl carries a service period, where RSDL-801 reopens. The design note
-    is `2026-10-05-layout-inputs-design.md` (D-5 and D-6).
+    period and jitter, and reopens with them (rsdl §12). This rule is evaluated
+    again when rsdl carries a service period, where RSDL-801 reopens. The design
+    note is `2026-10-05-layout-inputs-design.md` (D-5 and D-6).
 
 13. **A bridge keeps a domain-mediated reference path with generated streaming
     transcoders beside it.** Decode to the validated domain type and re-encode

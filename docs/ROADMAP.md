@@ -385,16 +385,16 @@ the remaining step 1 work in the [backlog](BACKLOG.md).
 **The plugin computes the layout; the toolchain supplies the inputs.** This
 repository does not choose a memory layout or a socket framing for a backend. It
 supplies the facts a backend computes them from, so that two plugins given the
-same request compute the same sizes. E17.0 decides whether the toolchain also
-tabulates derived values, such as a slot size per channel, under ADR-0020
-decision 8.
+same request compute the same sizes. E17.0 decided on 2026-10-05, under ADR-0020
+decision 8, that the toolchain tabulates every value that is a function of the
+IR, the lock, the deployment and the attributes, and that the plugin computes
+the slot size, the region layout and the message size.
 
 **The engine stays outside this repository.** The store, the seqlock, the
 session and the scheduler remain parked as `ridl-engine` (Epic 11). What moves
 here is the input a backend sizes them from. This changes the boundary that Epic
-11 states, so E17.0 records the change as an amendment of
-[ADR-0022](decisions/ADR-0022-rsdl-system-in-the-ir.md), or as a new decision
-record if the amendment does not fit.
+11 states, and E17.0 recorded the change on 2026-10-05 as
+[ADR-0022](decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 11.
 
 **The slot count and the call budget come from rsdl deployment attributes, and
 so does an override of the queue depth.** Sebastien chose this on 2026-10-05:
@@ -424,7 +424,7 @@ the lowered system IR (ADR-0022) and the
 | Crossing per link: same machine, different machine or off-board | in the system IR (`Link.crossing`); not in the codegen model                                                                                                                                                        |
 | Producers and consumers per channel                             | derivable from `Route` and `Link` in the system IR; not in the codegen model                                                                                                                                        |
 | Placement of a region in a process                              | machines and placements only; no concept of which process maps which region                                                                                                                                         |
-| Encoding per channel                                            | absent from both the IR and the codegen model; the encoding matrix is ADR-0020 decision 2                                                                                                                           |
+| Encoding per consumer link                                      | absent from both the IR and the codegen model; the encoding matrix is ADR-0020 decision 2                                                                                                                           |
 | Maximum payload size, FlatBuffers                               | in the codegen model (`Payload.flatbuffers_max_size`) for a payload that is one named type                                                                                                                          |
 | Maximum payload size, proto3                                    | in the catalog descriptor only; not in the codegen model                                                                                                                                                            |
 | Size of streams, multi-parameter requests, `T \| E` replies     | absent everywhere                                                                                                                                                                                                   |
