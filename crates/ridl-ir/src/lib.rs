@@ -2675,6 +2675,11 @@ mod system_round_trip {
                     instance: "backup".to_string(),
                     machine: "Cockpit".to_string(),
                     attributes: vec![attribute("linux", "cpuset", Some(list(vec![])))],
+                    sizing: Some(v2::Sizing {
+                        depth: Some(4_294_967_295),
+                        slots: Some(65_536),
+                        budget: Some(18_446_744_073_709_551_615),
+                    }),
                 }],
                 links: vec![link.clone()],
                 routes: vec![v2::Route {
@@ -2698,6 +2703,11 @@ mod system_round_trip {
                 doc_links: vec![doc_link()],
                 see: vec![doc_link()],
                 since: vec!["1.2".to_string()],
+                sizing: Some(v2::Sizing {
+                    depth: Some(3),
+                    slots: Some(8),
+                    budget: Some(4096),
+                }),
             }],
             doc: "Documented, see [Cruise].".to_string(),
             see: vec![doc_link()],
@@ -2734,6 +2744,10 @@ mod system_round_trip {
             json.contains("\"notYetRealizable\": true"),
             "fields render in lowerCamelCase, got:\n{json}"
         );
+        assert!(
+            json.contains("\"budget\": \"18446744073709551615\""),
+            "a 64-bit value renders as a string, got:\n{json}"
+        );
         assert_eq!(
             system,
             v2::system_from_json(&json).expect("the JSON parses")
@@ -2741,6 +2755,34 @@ mod system_round_trip {
         assert!(
             v2::system_from_json(&json.replacen("\"name\"", "\"nam\"", 1)).is_err(),
             "an unknown field is rejected"
+        );
+    }
+
+    /// An absent `sizing` and an empty one are different on the wire: a plugin
+    /// reads "nothing declared" and "declared nothing" apart, in the binary and
+    /// the JSON encodings.
+    #[test]
+    fn an_absent_sizing_and_an_empty_one_stay_distinct_through_the_encodings() {
+        let mut absent = fixture();
+        absent.deployments[0].sizing = None;
+        absent.deployments[0].placements[0].sizing = None;
+        let mut empty = absent.clone();
+        empty.deployments[0].sizing = Some(v2::Sizing::default());
+        empty.deployments[0].placements[0].sizing = Some(v2::Sizing::default());
+        for system in [&absent, &empty] {
+            let binary = v2::system_from_binary(v2::system_to_binary(system).as_slice())
+                .expect("decode must succeed");
+            assert_eq!(system, &binary);
+            let json = v2::system_to_json_pretty(system).expect("serializes as JSON");
+            assert_eq!(
+                system,
+                &v2::system_from_json(&json).expect("the JSON parses")
+            );
+        }
+        assert_ne!(
+            v2::system_to_binary(&absent),
+            v2::system_to_binary(&empty),
+            "the binary encodings differ"
         );
     }
 

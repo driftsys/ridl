@@ -311,6 +311,23 @@ message Deployment {
   repeated DocLink see = 13;
   // @since versions, in source order (ADR-0026).
   repeated string since = 14;
+  // The sizing keys of the `deployment` declaration (rsdl §5); absent when
+  // the declaration writes none of them.
+  optional Sizing sizing = 15;
+}
+
+// The sizing keys `depth`, `slots` and `budget` of a `deployment` declaration
+// or of a placement line (rsdl §5). Each field is present only when the key is
+// written. The two sites are carried independently; the codegen request's
+// deployment section resolves the precedence between them (see
+// docs/design/codegen-plugins.md).
+message Sizing {
+  // The ring depth of an event channel, 1 to 4294967295.
+  optional uint32 depth = 1;
+  // The call table size of a command or query channel, 1 to 65536.
+  optional uint32 slots = 2;
+  // The call table byte budget of a command or query channel, 1 to 2^64 - 1.
+  optional uint64 budget = 3;
 }
 
 // A `machine` declaration (rsdl §3.5).
@@ -340,6 +357,9 @@ message Placement {
   // The backend keys of the placement line that placed the instance (rsdl
   // §13).
   repeated Attribute attributes = 4;
+  // The sizing keys of the placement line that placed the instance (rsdl §5);
+  // absent when the line writes none of them.
+  optional Sizing sizing = 5;
 }
 
 // One end of a link: an instance and the machine it is placed on.

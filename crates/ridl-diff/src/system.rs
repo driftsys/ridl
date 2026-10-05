@@ -346,6 +346,7 @@ mod tests {
             instance: instance.to_string(),
             machine: machine.to_string(),
             attributes: Vec::new(),
+            sizing: None,
         }
     }
 
