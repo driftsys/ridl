@@ -408,10 +408,12 @@ written today.
   computed on the exact-decimal microsecond strings of `Timing` as integers,
   never in floating point.
 - **Underivable.** The value is absent when the timing has an explicit half-open
-  range, so one bound is missing. It is also absent when the quotient is zero: a
-  depth is at least 1, so a zero quotient is not a depth, and the emitter
-  records it exactly as it records a missing bound. A quotient that does not fit
-  in 32 bits is recorded the same way.
+  range, so one bound is missing, and when an event carries no timing at all. It
+  is also absent when the lower bound is zero, so there is no quotient; when an
+  operand is not `digits[.digits]`, or is too large to scale; when the quotient
+  is zero, because a depth is at least 1; and when the quotient does not fit in
+  32 bits. The emitter records every one of these the way it records a missing
+  bound.
 
 Every consumer link of an event channel carries the member's depth. The
 channel's ring depth is the maximum over its consumer links, with the source of
@@ -433,7 +435,9 @@ unspecified. A **signal or fixed channel** carries no sizing fields.
 workspace's system; a workspace has at most one system.
 
 - A workspace whose source declares exactly one deployment needs no flag: the
-  request carries it.
+  request carries it, unless an `RSDL-7xx` error removed that one deployment
+  from the system IR, in which case nothing is carried and the build reports
+  that error and exits 1.
 - A workspace whose source declares several deployments and no flag carries
   none. The count is the count the source declares, so a deployment an
   `RSDL-7xx` error removed from the system IR still counts: a workspace that

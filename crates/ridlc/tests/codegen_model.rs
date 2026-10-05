@@ -612,3 +612,301 @@ fn an_unknown_name_lists_the_known_deployments() {
         "{err}"
     );
 }
+
+/// The whole deployment section `examples/cabin` carries, end to end: the
+/// rsdl source, the lowering, and the emitter together, against a golden
+/// document.
+///
+/// The section's own tests in `crates/ridl-ir` build a `System` by hand, so
+/// none of them covers the path from an rsdl file to the bytes a plugin
+/// reads. This one does: the two interfaces with their numbers, the three
+/// placed instances with what each offers and maps, the five channels in
+/// their emitted order, and each channel's consumer links with their
+/// crossings, encodings and sizing. A signal channel's omitted sizing fields
+/// are part of the document, so a zero written in place of an absent value
+/// shows here too.
+///
+/// The catalog hash is content-addressed, so the golden would change with
+/// every edit to `examples/cabin/cabin.ridl`. Its length is checked and the
+/// bytes are then replaced, which is the one substitution this document
+/// makes.
+#[test]
+fn the_cabin_deployment_section_is_rendered_end_to_end() {
+    let cabin = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/cabin");
+    let (system, declared, packages) = system_and_packages(&cabin);
+    let refs: Vec<&v2::Package> = packages.iter().collect();
+    let mut deployment = ridlc::select_deployment(system.as_ref(), &declared, None, &refs)
+        .expect("no name is not an error")
+        .expect("the one deployment is selected");
+    for region in &mut deployment.regions {
+        assert_eq!(
+            region.hash.len(),
+            32,
+            "the driver embeds the 32-byte catalog hash"
+        );
+        region.hash = vec![1, 2, 3];
+    }
+    let request = v1::CodegenRequest {
+        deployment: Some(deployment),
+        ..Default::default()
+    };
+    let json = codegen::request_to_json(&request).expect("the request renders");
+    assert_eq!(
+        json,
+        r#"{
+  "schema": "",
+  "toolchain": "",
+  "options": [],
+  "artifactBase": "",
+  "deployment": {
+    "system": "veh.cabin.Vehicle",
+    "name": "Bench",
+    "regions": [
+      {
+        "catalog": "veh.cabin",
+        "hash": "AQID",
+        "interfaces": [
+          {
+            "name": "Cabin",
+            "number": 1,
+            "inline": false,
+            "provisional": true,
+            "service": "veh.cabin.control"
+          },
+          {
+            "name": "Horn",
+            "number": 2,
+            "inline": false,
+            "provisional": true,
+            "service": "veh.cabin.control"
+          }
+        ]
+      }
+    ],
+    "instances": [
+      {
+        "component": "veh.cabin.Climate",
+        "instance": "Unit",
+        "machine": "Hpc",
+        "external": false,
+        "offers": [
+          {
+            "catalog": "veh.cabin",
+            "number": 1,
+            "name": "Cabin",
+            "inline": false
+          },
+          {
+            "catalog": "veh.cabin",
+            "number": 2,
+            "name": "Horn",
+            "inline": false
+          }
+        ],
+        "maps": []
+      },
+      {
+        "component": "veh.cabin.Panel",
+        "instance": "Unit",
+        "machine": "Hpc",
+        "external": false,
+        "offers": [],
+        "maps": [
+          "veh.cabin"
+        ]
+      },
+      {
+        "component": "veh.cabin.Telemetry",
+        "instance": "Unit",
+        "machine": "Gateway",
+        "external": false,
+        "offers": [],
+        "maps": [
+          "veh.cabin"
+        ]
+      }
+    ],
+    "channels": [
+      {
+        "catalog": "veh.cabin",
+        "interfaceNumber": 1,
+        "interface": "Cabin",
+        "inline": false,
+        "memberOrdinal": 1,
+        "member": "temperature",
+        "kind": "KIND_SIGNAL",
+        "producer": {
+          "component": "veh.cabin.Climate",
+          "instance": "Unit",
+          "machine": "Hpc"
+        },
+        "consumers": [
+          {
+            "component": "veh.cabin.Panel",
+            "instance": "Unit",
+            "machine": "Hpc",
+            "crossing": "CROSSING_SAME_MACHINE",
+            "encoding": "ENCODING_FLATBUFFERS",
+            "slotsSource": "VALUE_SOURCE_UNSPECIFIED",
+            "budgetSource": "VALUE_SOURCE_UNSPECIFIED"
+          },
+          {
+            "component": "veh.cabin.Telemetry",
+            "instance": "Unit",
+            "machine": "Gateway",
+            "crossing": "CROSSING_DIFFERENT_MACHINE",
+            "encoding": "ENCODING_PROTO3",
+            "slotsSource": "VALUE_SOURCE_UNSPECIFIED",
+            "budgetSource": "VALUE_SOURCE_UNSPECIFIED"
+          }
+        ]
+      },
+      {
+        "catalog": "veh.cabin",
+        "interfaceNumber": 1,
+        "interface": "Cabin",
+        "inline": false,
+        "memberOrdinal": 2,
+        "member": "warning",
+        "kind": "KIND_EVENT",
+        "producer": {
+          "component": "veh.cabin.Climate",
+          "instance": "Unit",
+          "machine": "Hpc"
+        },
+        "consumers": [
+          {
+            "component": "veh.cabin.Panel",
+            "instance": "Unit",
+            "machine": "Hpc",
+            "crossing": "CROSSING_SAME_MACHINE",
+            "encoding": "ENCODING_FLATBUFFERS",
+            "depth": {
+              "value": 10,
+              "source": "VALUE_SOURCE_DERIVED"
+            },
+            "slotsSource": "VALUE_SOURCE_UNSPECIFIED",
+            "budgetSource": "VALUE_SOURCE_UNSPECIFIED"
+          },
+          {
+            "component": "veh.cabin.Telemetry",
+            "instance": "Unit",
+            "machine": "Gateway",
+            "crossing": "CROSSING_DIFFERENT_MACHINE",
+            "encoding": "ENCODING_PROTO3",
+            "depth": {
+              "value": 10,
+              "source": "VALUE_SOURCE_DERIVED"
+            },
+            "slotsSource": "VALUE_SOURCE_UNSPECIFIED",
+            "budgetSource": "VALUE_SOURCE_UNSPECIFIED"
+          }
+        ],
+        "depth": {
+          "value": 10,
+          "source": "VALUE_SOURCE_DERIVED"
+        }
+      },
+      {
+        "catalog": "veh.cabin",
+        "interfaceNumber": 1,
+        "interface": "Cabin",
+        "inline": false,
+        "memberOrdinal": 3,
+        "member": "setLevel",
+        "kind": "KIND_COMMAND",
+        "producer": {
+          "component": "veh.cabin.Climate",
+          "instance": "Unit",
+          "machine": "Hpc"
+        },
+        "consumers": [
+          {
+            "component": "veh.cabin.Panel",
+            "instance": "Unit",
+            "machine": "Hpc",
+            "crossing": "CROSSING_SAME_MACHINE",
+            "encoding": "ENCODING_FLATBUFFERS",
+            "slots": 16,
+            "slotsSource": "VALUE_SOURCE_DEFAULT",
+            "budgetSource": "VALUE_SOURCE_UNSPECIFIED"
+          },
+          {
+            "component": "veh.cabin.Telemetry",
+            "instance": "Unit",
+            "machine": "Gateway",
+            "crossing": "CROSSING_DIFFERENT_MACHINE",
+            "encoding": "ENCODING_PROTO3",
+            "slots": 16,
+            "slotsSource": "VALUE_SOURCE_DEFAULT",
+            "budgetSource": "VALUE_SOURCE_UNSPECIFIED"
+          }
+        ]
+      },
+      {
+        "catalog": "veh.cabin",
+        "interfaceNumber": 1,
+        "interface": "Cabin",
+        "inline": false,
+        "memberOrdinal": 4,
+        "member": "average",
+        "kind": "KIND_QUERY",
+        "producer": {
+          "component": "veh.cabin.Climate",
+          "instance": "Unit",
+          "machine": "Hpc"
+        },
+        "consumers": [
+          {
+            "component": "veh.cabin.Panel",
+            "instance": "Unit",
+            "machine": "Hpc",
+            "crossing": "CROSSING_SAME_MACHINE",
+            "encoding": "ENCODING_FLATBUFFERS",
+            "slots": 16,
+            "slotsSource": "VALUE_SOURCE_DEFAULT",
+            "budgetSource": "VALUE_SOURCE_UNSPECIFIED"
+          },
+          {
+            "component": "veh.cabin.Telemetry",
+            "instance": "Unit",
+            "machine": "Gateway",
+            "crossing": "CROSSING_DIFFERENT_MACHINE",
+            "encoding": "ENCODING_PROTO3",
+            "slots": 16,
+            "slotsSource": "VALUE_SOURCE_DEFAULT",
+            "budgetSource": "VALUE_SOURCE_UNSPECIFIED"
+          }
+        ]
+      },
+      {
+        "catalog": "veh.cabin",
+        "interfaceNumber": 2,
+        "interface": "Horn",
+        "inline": false,
+        "memberOrdinal": 1,
+        "member": "active",
+        "kind": "KIND_SIGNAL",
+        "producer": {
+          "component": "veh.cabin.Climate",
+          "instance": "Unit",
+          "machine": "Hpc"
+        },
+        "consumers": [
+          {
+            "component": "veh.cabin.Panel",
+            "instance": "Unit",
+            "machine": "Hpc",
+            "crossing": "CROSSING_SAME_MACHINE",
+            "encoding": "ENCODING_FLATBUFFERS",
+            "slotsSource": "VALUE_SOURCE_UNSPECIFIED",
+            "budgetSource": "VALUE_SOURCE_UNSPECIFIED"
+          }
+        ]
+      }
+    ],
+    "bindings": []
+  }
+}"#
+    );
+}

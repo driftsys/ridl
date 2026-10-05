@@ -66,6 +66,12 @@ mod tests {
         assert_eq!(ceil_ratio("1", "0"), None);
         assert_eq!(ceil_ratio("1e3", "1"), None);
         assert_eq!(ceil_ratio("4294967296", "1"), None);
+        // A quotient above the ceiling that a wrapping cast would not turn
+        // into zero: 4294967297 truncated to 32 bits is 1, which the zero
+        // filter lets through, so this is the witness that the conversion is
+        // checked rather than truncating.
+        assert_eq!(ceil_ratio("4294967297", "1"), None);
+        assert_eq!(ceil_ratio("8589934594", "2"), None);
     }
 
     #[test]
@@ -101,7 +107,8 @@ mod tests {
         assert_eq!(ceil_ratio(&huge, &huge), None);
         assert_eq!(ceil_ratio(&huge, "1"), None);
         assert_eq!(ceil_ratio("1", &huge), None);
-        // One digit fewer fits, so the shape itself is not what is rejected.
+        // Three digits fewer fits, so the shape itself is not what is
+        // rejected.
         let fits = format!("1{}", "0".repeat(37));
         assert_eq!(ceil_ratio(&fits, &fits), Some(1));
     }

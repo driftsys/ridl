@@ -1780,7 +1780,9 @@ impl std::error::Error for UnknownDeployment {}
 /// and the message is never rendered. Without a `name`: the deployment when
 /// the source declares
 /// exactly one, and `None` for several declarations or none, so that a request
-/// for such a workspace has no deployment section at all.
+/// for such a workspace has no deployment section at all. `None` as well when
+/// the source declares exactly one and the lowering dropped it, which is an
+/// RSDL-7xx error the caller already holds and reports.
 ///
 /// `packages` holds every package of the workspace, `ridl.std` included.
 pub fn select_deployment(

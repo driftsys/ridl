@@ -588,7 +588,9 @@ targets. `--frozen` is the same flag as on `ridl check`: it is
 `--deployment NAME` picks the deployment of the workspace's system that every
 codegen request carries. Without it, the request carries the deployment when
 the system declares exactly one, and none when it declares several or the
-workspace has no system. A `NAME` that the system does not declare exits 2 and
+workspace has no system. A single declared deployment that an `RSDL-7xx` error
+removed from the system is not carried either: the build reports that error and
+exits 1. A `NAME` that the system does not declare exits 2 and
 names the deployments it does declare, unless the build already has an error of
 its own: that error takes precedence, and the build reports it and exits 1.
 When no name can be right, the message says which reason it is — the workspace
@@ -694,8 +696,9 @@ protobuf JSON: `schema` (`"ridl.codegen.v1"`) and `toolchain` (this `ridl`'s
 version) first, then `model`, byte for byte the package's `codegen-model`
 artifact one indentation level deeper, `options` (empty from this command
 line; no flag sets one yet), `artifactBase`, the `<base>` of the emit list
-above, and `deployment`, the section `--deployment` selects, absent when no
-deployment is carried. It answers on its standard output with one
+above, and `deployment`, the deployment section — the one `--deployment`
+names, or, with no flag, the one the source declares when it declares exactly
+one — absent when no deployment is carried. It answers on its standard output with one
 `CodegenResponse`: `files`,
 each a `path` relative to `--out-dir` with a `text` or `binary` content, and
 `diagnostics`, each a `severity` and a `message`. `ridl` writes the files; the

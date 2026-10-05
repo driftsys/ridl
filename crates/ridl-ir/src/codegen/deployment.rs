@@ -209,6 +209,10 @@ fn channels(
                     instance: producer.instance.clone(),
                     machine: producer.machine.clone(),
                 }),
+                // Every link of this channel was given `bound`, so the
+                // aggregation answers `bound` for every input the emitter
+                // can build; `ring_depth` is where the rule itself is
+                // pinned.
                 depth: bound.map(|bound| ring_depth(&consumers, bound)),
                 consumers,
             });
@@ -346,8 +350,9 @@ fn depth_of(timing: Option<&v2::Timing>) -> v1::Depth {
 /// The source is the source of the link that supplies the maximum, so a
 /// declared depth on one link is reported as declared rather than as derived
 /// (`docs/design/codegen-plugins.md`, the deployment section, the depth
-/// rule). No rsdl key writes a declared depth yet, so every link of one
-/// channel carries the same derived value today.
+/// rule). Every consumer link of one channel is given the member's contract
+/// bound, so the maximum over the links of one channel is that bound, and
+/// nothing the emitter reads writes the declared source.
 ///
 /// A channel with no consumer link takes `bound`, the contract bound of its
 /// member: that is the value every consumer link of it would carry.
@@ -1717,9 +1722,10 @@ mod tests {
     /// of the link that supplies it, and absent as soon as one link's depth is
     /// absent.
     ///
-    /// No input of the emitter makes two links of one channel differ today:
-    /// every link carries the member's contract bound, and no rsdl key states
-    /// a depth. The rule is therefore pinned on the function.
+    /// No input of the emitter makes two links of one channel differ: every
+    /// link is given the member's contract bound. The rule is therefore
+    /// pinned on the function, and the aggregation cannot be told apart from
+    /// the bound itself through [`lower_deployment`].
     #[test]
     fn the_ring_depth_is_the_deepest_link_and_absent_when_any_link_is() {
         let derived = |value: u32| v1::Depth {
@@ -1762,6 +1768,143 @@ mod tests {
         assert_eq!(
             super::ring_depth(&[v1::Consumer::default()], bound),
             underivable
+        );
+    }
+
+    /// A derived depth needs both bounds, whichever one a half-open range
+    /// leaves out, and a lower bound of zero is not a divisor. `@[..50ms]`
+    /// and `@[100ms..]` are both source syntax, so both spellings reach this
+    /// function; neither bound has a default here.
+    #[test]
+    fn a_depth_is_derived_only_from_two_bounds_neither_of_which_defaults() {
+        let underivable = v1::Depth {
+            value: None,
+            source: v1::ValueSource::Underivable as i32,
+        };
+        let derived = v1::Depth {
+            value: Some(10),
+            source: v1::ValueSource::Derived as i32,
+        };
+        // `@[100ms..1s]`: both bounds.
+        let both = timing(Some("100000"), Some("1000000"));
+        assert_eq!(super::depth_of(Some(&both)), derived);
+        // `@[100ms..]`: no upper bound. An upper bound defaulted to the lower
+        // one would answer 1 here.
+        let no_max = timing(Some("100000"), None);
+        assert_eq!(super::depth_of(Some(&no_max)), underivable);
+        // `@[..1s]`: no lower bound. A lower bound defaulted to 1 microsecond
+        // would answer 1000000 here.
+        let no_min = timing(None, Some("1000000"));
+        assert_eq!(super::depth_of(Some(&no_min)), underivable);
+        // Neither bound, and no timing at all.
+        let neither = timing(None, None);
+        assert_eq!(super::depth_of(Some(&neither)), underivable);
+        assert_eq!(super::depth_of(None), underivable);
+        // A lower bound of zero: no quotient, and not treated as one.
+        let zero_min = timing(Some("0"), Some("1000000"));
+        assert_eq!(super::depth_of(Some(&zero_min)), underivable);
+    }
+
+    /// `inline` is read from the region entry whose catalog, number and name
+    /// all match the route's.
+    ///
+    /// The catalog term is the one a lowered system exercises: two catalogs
+    /// can hold an interface of the same number and the same name, and only
+    /// one of them is the route's. The number and the name each identify an
+    /// interface on their own within one catalog, so a pair that matches
+    /// neither entry reaches this lookup only in a system built by hand,
+    /// which is what the last two cases are.
+    #[test]
+    fn inline_is_read_from_the_entry_matching_catalog_number_and_name() {
+        let mut system = two_interface_system();
+        // `Horn`, number 2 of `veh.cabin`, is the one inline entry.
+        system.regions[0].interfaces[1].inline = true;
+        // Another catalog, walked first, whose entry carries the number and
+        // the name of `veh.cabin`'s `Climate` and is inline.
+        system.regions.insert(
+            0,
+            v2::Region {
+                catalog: "veh.aaa".to_string(),
+                interfaces: vec![v2::RegionInterface {
+                    name: INTERFACE.to_string(),
+                    inline: true,
+                    number: 1,
+                    provisional: false,
+                    service: "veh.aaa.climate".to_string(),
+                }],
+                hash: vec![9; 32],
+            },
+        );
+        let at = |interface: &str, number: u32| {
+            let route = two_interface_route(interface, number, "m", EVENT_ORDINAL, SERVICE);
+            super::inline_of(&system, &route)
+        };
+        // The route's catalog is `veh.cabin`, whose `Climate` is declared.
+        assert!(!at(INTERFACE, 1));
+        assert!(at(HORN, 2));
+        // A pair that matches no entry of the catalog is not inline.
+        assert!(!at(INTERFACE, 2));
+        assert!(!at(HORN, 1));
+    }
+
+    /// What an instance offers is walked in region order and then in
+    /// interface number order, which is neither the order the component
+    /// writes its `offers` lines in nor the reverse of the walk.
+    #[test]
+    fn what_an_instance_offers_is_in_region_order_then_interface_number_order() {
+        const AUX: &str = "Aux";
+        const AUX_CATALOG: &str = "veh.zzz";
+        const AUX_SERVICE: &str = "veh.zzz.aux";
+
+        let package = two_interface_package();
+        let mut system = two_interface_system();
+        // A second catalog, after `veh.cabin` in the region map, with one
+        // interface the provider also offers.
+        system.regions.push(v2::Region {
+            catalog: AUX_CATALOG.to_string(),
+            interfaces: vec![v2::RegionInterface {
+                name: AUX.to_string(),
+                inline: false,
+                number: 1,
+                provisional: false,
+                service: AUX_SERVICE.to_string(),
+            }],
+            hash: vec![5; 32],
+        });
+        // The offer lines are written in the reverse of the emitted order, so
+        // the list below is the walk's order and not the lines'.
+        let provider = &mut system.components[0];
+        provider.offers = [AUX_SERVICE, HORN_SERVICE, SERVICE]
+            .iter()
+            .map(|service| v2::Offer {
+                service: (*service).to_string(),
+                ..Default::default()
+            })
+            .collect();
+
+        let section = lower_deployment(&system, "prod", &[&package]).expect("the fixture lowers");
+        assert_eq!(
+            section.instances[0].offers,
+            [
+                v1::InterfaceKey {
+                    catalog: CATALOG.to_string(),
+                    number: 1,
+                    name: INTERFACE.to_string(),
+                    inline: false,
+                },
+                v1::InterfaceKey {
+                    catalog: CATALOG.to_string(),
+                    number: 2,
+                    name: HORN.to_string(),
+                    inline: false,
+                },
+                v1::InterfaceKey {
+                    catalog: AUX_CATALOG.to_string(),
+                    number: 1,
+                    name: AUX.to_string(),
+                    inline: false,
+                },
+            ]
         );
     }
 }

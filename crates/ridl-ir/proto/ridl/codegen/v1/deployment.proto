@@ -121,10 +121,13 @@ enum ValueSource {
   VALUE_SOURCE_DECLARED = 2;
   // A default, for example 16 slots.
   VALUE_SOURCE_DEFAULT = 3;
-  // The value is absent and nothing declared one: the timing has an explicit
-  // half-open range, so one bound is missing; or the quotient is zero, above
-  // the 32-bit ceiling, or not computable because an operand is not
-  // `digits[.digits]` or does not fit.
+  // The value is absent and nothing declared one. For a depth, in every case
+  // the emitter records the same way: the event carries no timing at all; the
+  // timing has an explicit half-open range, so one bound is missing; the
+  // lower bound is zero, so there is no quotient; an operand is not
+  // `digits[.digits]`, or does not fit; the quotient is zero, which is not a
+  // depth, because a depth is at least 1; or the quotient is above the
+  // 32-bit ceiling.
   VALUE_SOURCE_UNDERIVABLE = 4;
 }
 

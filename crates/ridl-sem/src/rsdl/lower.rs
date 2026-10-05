@@ -1558,6 +1558,96 @@ mod tests {
         );
     }
 
+    /// rsdl §13: the routing table's second term is the interface *number*,
+    /// not the interface name. The two orders agree in an unlocked catalog,
+    /// because the identity fold numbers the interfaces in name order. They
+    /// disagree once a lock pins the numbers an earlier declaration order
+    /// gave: here `interfaces.lock` pins `Zone` to 1 and `Cabin` to 2, so a
+    /// table sorted by name would hold `Cabin` first.
+    #[test]
+    fn the_routing_table_is_sorted_by_interface_number_and_not_by_name() {
+        let contracts = "package veh.topology\n\
+                         \n\
+                         type Flag: boolean\n\
+                         \n\
+                         interface Zone {\n\
+                         \x20 signal z: Flag @[100ms..1s]\n\
+                         }\n\
+                         \n\
+                         interface Cabin {\n\
+                         \x20 signal c: Flag @[100ms..1s]\n\
+                         }\n\
+                         \n\
+                         service veh.topology.hub : Zone, Cabin\n";
+        let topology = "package veh.topology\n\
+                        component Hub { offers veh.topology.hub }\n\
+                        component Screen { requires Zone, requires Cabin }\n\
+                        system Vehicle { Hub, Screen }\n\
+                        deployment Desk for Vehicle {\n\
+                        \x20 machine Top { Hub, Screen }\n\
+                        }\n";
+        let lock = "next 3\nZone 1\nCabin 2\n";
+
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let files = [
+            ("veh/topology/zones.ridl", contracts),
+            ("veh/topology/x.rsdl", topology),
+        ];
+        let inputs = files
+            .iter()
+            .map(|(path, text)| {
+                ridl_core::db::InputFile::new(&db, (*path).to_string(), text.to_string())
+            })
+            .collect();
+        let locked = ridl_core::package::Package::new(
+            &db,
+            "veh.topology".to_string(),
+            inputs,
+            ridl_core::package::PackageOrigin::WorkspaceMember,
+            BTreeMap::new(),
+            None,
+            Some(ridl_core::package::PackageLock {
+                path: "veh/topology/interfaces.lock".to_string(),
+                text: lock.to_string(),
+                lock: ridl_core::interface_lock::parse(lock).expect("the fixture lock parses"),
+            }),
+        );
+        let ws = Workspace::new(&db, vec![locked], BTreeMap::new());
+        let mut checked = check_system(&db, ws, std);
+        checked
+            .diagnostics
+            .retain(|diagnostic| diagnostic.code != DiagCode::TYPL_406);
+        assert!(!checked.closure_has_errors, "{:?}", checked.diagnostics);
+        let ir = check_package(&db, ws, locked, std).ir;
+        let system = lower_system(&checked, &[&ir]).expect("the closure lowers");
+
+        // The lock, not the name order, decides the numbers.
+        let numbers: Vec<(&str, u32)> = system.regions[0]
+            .interfaces
+            .iter()
+            .map(|interface| (interface.name.as_str(), interface.number))
+            .collect();
+        assert_eq!(numbers, [("Zone", 1), ("Cabin", 2)]);
+
+        let hub = vec!["veh.topology.Hub.Unit@Top".to_string()];
+        assert_eq!(
+            route_rows(&system.deployments[0]),
+            [
+                (
+                    "veh.topology",
+                    1,
+                    1,
+                    "Zone",
+                    "z",
+                    "veh.topology.hub",
+                    hub.clone()
+                ),
+                ("veh.topology", 2, 1, "Cabin", "c", "veh.topology.hub", hub),
+            ]
+        );
+    }
+
     /// Appendix A's distributions with their member lines and dependency, and
     /// their installation in each deployment (rsdl §3.3, §13, the
     /// "Distributions" item after the example).

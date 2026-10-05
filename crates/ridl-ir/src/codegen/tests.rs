@@ -2526,3 +2526,73 @@ fn the_deployment_sections_field_numbers_are_the_schemas() {
         ])
     );
 }
+
+/// Every message the deployment schema declares, read off the compiled
+/// descriptor.
+///
+/// The gate above reads a hand-written list of message names, so a message
+/// added to `proto/ridl/codegen/v1/deployment.proto` and left out of that
+/// list would be checked by nothing. This is the list the gate must cover.
+#[test]
+fn the_deployment_schema_declares_the_messages_the_field_gate_reads() {
+    let pool = v2::codegen_model_descriptor().parent_pool().clone();
+    let mut declared: Vec<String> = pool
+        .all_messages()
+        .filter(|message| message.parent_file().name() == "ridl/codegen/v1/deployment.proto")
+        .map(|message| message.full_name().to_string())
+        .collect();
+    declared.sort();
+    assert_eq!(
+        declared,
+        [
+            "ridl.codegen.v1.Binding",
+            "ridl.codegen.v1.Channel",
+            "ridl.codegen.v1.Consumer",
+            "ridl.codegen.v1.Deployment",
+            "ridl.codegen.v1.Depth",
+            "ridl.codegen.v1.Endpoint",
+            "ridl.codegen.v1.Instance",
+            "ridl.codegen.v1.InterfaceKey",
+            "ridl.codegen.v1.Region",
+            "ridl.codegen.v1.RegionInterface",
+        ]
+    );
+}
+
+/// The value number of every enum the deployment schema declares.
+///
+/// A plugin reads the number, so a renumber is a wire change and not a
+/// rename, and neither the JSON — keyed by the value's name — nor a round
+/// trip through this crate's own impls can show one. `Crossing` is restated
+/// with the IR's values (`proto/ridl/codegen/v1/deployment.proto`, the
+/// schema header), so each of its values is checked against the IR's too.
+#[test]
+fn the_deployment_sections_enum_values_are_the_schemas() {
+    assert_eq!(v1::Crossing::Unspecified as i32, 0);
+    assert_eq!(v1::Crossing::SameMachine as i32, 1);
+    assert_eq!(v1::Crossing::DifferentMachine as i32, 2);
+    assert_eq!(v1::Crossing::OffBoard as i32, 3);
+    let pairs = [
+        (v1::Crossing::Unspecified, v2::Crossing::Unspecified),
+        (v1::Crossing::SameMachine, v2::Crossing::SameMachine),
+        (
+            v1::Crossing::DifferentMachine,
+            v2::Crossing::DifferentMachine,
+        ),
+        (v1::Crossing::OffBoard, v2::Crossing::OffBoard),
+    ];
+    for (section, ir) in pairs {
+        assert_eq!(section as i32, ir as i32);
+    }
+
+    assert_eq!(v1::Encoding::Unspecified as i32, 0);
+    assert_eq!(v1::Encoding::Proto3 as i32, 1);
+    assert_eq!(v1::Encoding::Flatbuffers as i32, 2);
+    assert_eq!(v1::Encoding::ReprC as i32, 3);
+
+    assert_eq!(v1::ValueSource::Unspecified as i32, 0);
+    assert_eq!(v1::ValueSource::Derived as i32, 1);
+    assert_eq!(v1::ValueSource::Declared as i32, 2);
+    assert_eq!(v1::ValueSource::Default as i32, 3);
+    assert_eq!(v1::ValueSource::Underivable as i32, 4);
+}

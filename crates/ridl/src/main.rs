@@ -2516,8 +2516,8 @@ fn finish_check(run: CliRun, format: CheckFormat) -> ExitCode {
 }
 
 /// Renders a check/build run's diagnostics to stderr and turns the outcome into
-/// an exit code: 2 on an I/O error, 1 when any diagnostic is an error, 0
-/// otherwise.
+/// an exit code: 2 on an I/O error or a bad flag value, 1 when any diagnostic
+/// is an error, 0 otherwise.
 fn finish(run: std::io::Result<CliRun>) -> ExitCode {
     match run {
         Ok(run) => {

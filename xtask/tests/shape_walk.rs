@@ -211,13 +211,14 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-ir/src/codegen/deployment.rs",
-        lines: 16,
+        lines: 17,
         why: "three production lines read the region map's own \
               `Region.interfaces` field in the lowered system, which the \
               rsdl lowering already filled from a `shapes()` walk, not \
               `Package::interfaces`; the emitter reaches a package's \
-              interface bodies through `shapes()`. The other thirteen are \
-              test fixtures editing a package's named interfaces and a \
+              interface bodies through `shapes()`. One test line reads the \
+              emitted section's own `Region.interfaces`. The other thirteen \
+              are test fixtures editing a package's named interfaces and a \
               fixture system's region map — interface numbers, member \
               ordinals, member kinds, the provisional flag, and moving an \
               interface into a service's inline shape",
@@ -253,6 +254,13 @@ const ALLOWED: &[Allowed] = &[
               symbol already points at — an inline shape has no symbol, so \
               the RIDL-144 walk cannot need `shapes()`; plus nine test \
               assertions over the named store",
+    },
+    Allowed {
+        path: "crates/ridl-sem/src/rsdl/lower.rs",
+        lines: 1,
+        why: "a test reading the lowered system's own `Region.interfaces` \
+              field to state the interface numbers its fixture lock pins, \
+              not a read of `Package::interfaces`",
     },
     Allowed {
         path: "crates/ridl-sem/src/timing.rs",
