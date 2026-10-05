@@ -55,6 +55,7 @@ pub mod v1 {
     }
 }
 
+mod bindings;
 mod clauses;
 mod contract;
 mod deployment;

@@ -14,6 +14,7 @@
 //! emitter, never a second lowering), so it reads the system the way the rest
 //! of the toolchain does (`docs/technotes/rsdl-implementation.md`).
 
+use super::bindings::bindings;
 use super::depth::ceil_ratio;
 use super::v1;
 use crate::v2;
@@ -33,6 +34,17 @@ pub fn lower_deployment(
     name: &str,
     packages: &[&v2::Package],
 ) -> Option<v1::Deployment> {
+    lower_with_bindings(system, name, packages, bindings())
+}
+
+/// [`lower_deployment`] with the binding table given as `table` rather than
+/// the toolchain's own, already rendered.
+fn lower_with_bindings(
+    system: &v2::System,
+    name: &str,
+    packages: &[&v2::Package],
+    bindings: Vec<v1::Binding>,
+) -> Option<v1::Deployment> {
     let deployment = system
         .deployments
         .iter()
@@ -43,9 +55,7 @@ pub fn lower_deployment(
         regions: regions(system),
         instances: instances(system, deployment),
         channels: channels(system, deployment, packages),
-        // The binding table is empty: the toolchain holds no binding
-        // document yet, so there is no overhead to state (driftsys/ridl#265).
-        bindings: Vec::new(),
+        bindings,
     })
 }
 
@@ -377,7 +387,8 @@ fn ring_depth(consumers: &[v1::Consumer], bound: v1::Depth) -> v1::Depth {
 
 #[cfg(test)]
 mod tests {
-    use super::lower_deployment;
+    use super::{lower_deployment, lower_with_bindings};
+    use crate::codegen::bindings::{KNOWN, Known, bindings, render};
     use crate::codegen::v1;
     use crate::v2;
 
@@ -677,6 +688,40 @@ mod tests {
     }
 
     #[test]
+    fn the_binding_list_is_the_known_table_in_name_order() {
+        // The table is empty until a binding document exists
+        // (driftsys/ridl#265).
+        assert!(KNOWN.is_empty());
+        assert_eq!(section().bindings, bindings());
+        assert_eq!(bindings().len(), KNOWN.len());
+    }
+
+    #[test]
+    fn the_emitter_writes_the_rendered_table_it_is_given() {
+        let table = [
+            Known {
+                name: "websocket",
+                version: "1",
+                frame_header_max_bytes: Some(14),
+                envelope_bytes: None,
+            },
+            Known {
+                name: "tcp",
+                version: "2",
+                frame_header_max_bytes: None,
+                envelope_bytes: Some(8),
+            },
+        ];
+        let package = package();
+        let system = system();
+        let section = lower_with_bindings(&system, "prod", &[&package], render(&table))
+            .expect("the deployment is named prod");
+        assert_eq!(section.bindings, render(&table));
+        let names: Vec<&str> = section.bindings.iter().map(|b| b.name.as_str()).collect();
+        assert_eq!(names, ["tcp", "websocket"]);
+    }
+
+    #[test]
     fn an_unknown_deployment_name_gives_none() {
         let package = package();
         let system = system();
@@ -691,9 +736,6 @@ mod tests {
         assert_eq!(section.name, "prod");
         // Four members, each with two producer instances.
         assert_eq!(section.channels.len(), 8);
-        // The binding table is empty: no binding document exists yet
-        // (driftsys/ridl#265).
-        assert!(section.bindings.is_empty());
 
         let event = channels_of(&section, EVENT_ORDINAL);
         assert_eq!(event.len(), 2);
