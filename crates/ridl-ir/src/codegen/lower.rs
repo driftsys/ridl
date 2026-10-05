@@ -869,7 +869,10 @@ impl<'a> Lowering<'a> {
                 let sizes = fixed.payload.as_ref().map_or_else(absent_sizes, |ty| {
                     self.sizes(home, &PayloadShape::Field(ty), named_type(ty))
                 });
-                let text = fixed.payload.as_ref().map_or_else(String::new, field_text);
+                let text = fixed
+                    .payload
+                    .as_ref()
+                    .map_or_else(|| "no payload".to_string(), field_text);
                 (
                     v1::Kind::Fixed,
                     None,
@@ -1214,8 +1217,26 @@ fn params_text(params: &[v2::Param]) -> String {
     )
 }
 
+/// A field type as text: the reference of a named type, and the kind of any
+/// other type (an array also names its element).
 fn field_text(ty: &v2::FieldType) -> String {
-    named_type(ty).map_or_else(|| "unnamed type".to_string(), str::to_string)
+    use v2::field_type::Kind;
+    match ty.kind.as_ref() {
+        Some(Kind::Named(name)) => name.clone(),
+        Some(Kind::Primitive(_)) => "primitive".to_string(),
+        Some(Kind::InlineScalar(_)) => "inline scalar".to_string(),
+        Some(Kind::Tuple(_)) => "tuple".to_string(),
+        Some(Kind::Array(array)) => format!(
+            "array of {}",
+            array
+                .element
+                .as_ref()
+                .map_or_else(|| "no type".to_string(), |e| field_text(e))
+        ),
+        Some(Kind::Map(_)) => "map".to_string(),
+        Some(Kind::Stream(_)) => "stream".to_string(),
+        None => "no type".to_string(),
+    }
 }
 
 fn return_text(ret: &v2::ReturnType) -> String {
@@ -1308,7 +1329,7 @@ fn budget(slots: &[v1::InteractionSlot]) -> v1::Reservation {
 /// Both encodings absent because no codec defines the shape. A query with
 /// no return type takes this state, so that a reader can tell an undefined
 /// shape from a toolchain too old to report one.
-pub(crate) fn absent_sizes() -> v1::PayloadSizes {
+fn absent_sizes() -> v1::PayloadSizes {
     let state = || v1::SizeState {
         state: Some(v1::size_state::State::Absent(v1::SizeAbsent {
             cause: v1::AbsentCause::EncodingUndefined as i32,

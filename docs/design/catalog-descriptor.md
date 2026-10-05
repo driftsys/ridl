@@ -260,9 +260,9 @@ writes a `PayloadSizes` message, one `SizeState` per encoding, on every payload
 and on the request of every command and query and the reply of every query. It
 differs from the descriptor in one respect: the descriptor writes no row for an
 absent state, and the model writes the state, `absent` with an `AbsentCause`
-(the sizer's own causes, member for member), so that a plugin can tell a shape
-that no codec defines from a toolchain too old to report a size. A query whose
-reply has no return type takes the same absent state, with the cause
+(the sizer's own causes, unchanged), so that a plugin can tell a shape that no
+codec defines from a toolchain too old to report a size. A query whose reply has
+no return type takes the same absent state, with the cause
 `ABSENT_CAUSE_ENCODING_UNDEFINED`. The model sums these states into two totals,
 both per encoding:
 

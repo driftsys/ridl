@@ -1814,9 +1814,73 @@ fn a_tombstone_does_not_count() {
     assert_eq!(reserved(&gaps.table_budget, false), &bytes(0));
 }
 
+/// The `Bare` interface: a query with no parameter and no return type, and a
+/// fixed member with no payload. The ridl surface admits neither; the IR can
+/// carry both.
+fn bare_package() -> v2::Package {
+    let package = sized_package();
+    let decl = |name: &str, kind: v2::decl::Kind| v2::Decl {
+        name: name.to_string(),
+        visibility: v2::Visibility::Public as i32,
+        kind: Some(kind),
+        ..Default::default()
+    };
+    let bare = v2::Interface {
+        name: "Bare".to_string(),
+        visibility: v2::Visibility::Public as i32,
+        interactions: vec![
+            decl("blank", v2::decl::Kind::QueryDef(v2::QueryDef::default())),
+            decl("tick", v2::decl::Kind::FixedDef(v2::FixedDef::default())),
+        ],
+        number: 6,
+        ..Default::default()
+    };
+    let v2::Package { interfaces, .. } = package.clone();
+    v2::Package {
+        interfaces: interfaces.into_iter().chain([bare]).collect(),
+        ..package
+    }
+}
+
 #[test]
 fn a_query_with_no_return_type_has_undefined_reply_sizes() {
-    let sizes = super::lower::absent_sizes();
-    assert_eq!(state(&Some(sizes.clone()), true), &undefined());
-    assert_eq!(state(&Some(sizes), false), &undefined());
+    let model = lower(&bare_package(), &[]);
+    let blank = live_member(interface_named(&model, "Bare"), "blank");
+    let Some(v1::interaction::Shape::Query(query)) = blank.shape.as_ref() else {
+        panic!("a query");
+    };
+    let expected = v1::PayloadSizes {
+        proto3: Some(v1::SizeState {
+            state: Some(v1::size_state::State::Absent(v1::SizeAbsent {
+                cause: 1,
+                detail: None,
+            })),
+        }),
+        flatbuffers: Some(v1::SizeState {
+            state: Some(v1::size_state::State::Absent(v1::SizeAbsent {
+                cause: 1,
+                detail: None,
+            })),
+        }),
+    };
+    assert_eq!(query.reply_sizes, Some(expected));
+    // Neither payload is bounded: the first one, the request, is named.
+    for proto3 in [true, false] {
+        assert_eq!(
+            reserved(&blank.reservation, proto3),
+            &unsized_by("blank.request: ()")
+        );
+    }
+}
+
+#[test]
+fn a_fixed_member_with_no_payload_is_unsized_and_says_so() {
+    let model = lower(&bare_package(), &[]);
+    let tick = live_member(interface_named(&model, "Bare"), "tick");
+    for proto3 in [true, false] {
+        assert_eq!(
+            reserved(&tick.reservation, proto3),
+            &unsized_by("tick.payload: no payload")
+        );
+    }
 }

@@ -4317,10 +4317,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "labels": [],
             "reservation": {
               "proto3": {
-                "unsized": "capabilities.payload: unnamed type"
+                "unsized": "capabilities.payload: array of ridl.std.Label"
               },
               "flatbuffers": {
-                "unsized": "capabilities.payload: unnamed type"
+                "unsized": "capabilities.payload: array of ridl.std.Label"
               }
             },
             "fixed": {
@@ -4955,10 +4955,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "labels": [],
             "reservation": {
               "proto3": {
-                "unsized": "tickBounds.payload: unnamed type"
+                "unsized": "tickBounds.payload: array of tuple"
               },
               "flatbuffers": {
-                "unsized": "tickBounds.payload: unnamed type"
+                "unsized": "tickBounds.payload: array of tuple"
               }
             },
             "fixed": {
@@ -5805,7 +5805,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "streamFilterHistory.request: FanLevel"
               },
               "flatbuffers": {
-                "unsized": "streamFilterHistory.reply: unnamed type"
+                "unsized": "streamFilterHistory.reply: stream"
               }
             },
             "query": {
@@ -6457,10 +6457,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "labels": [],
             "reservation": {
               "proto3": {
-                "unsized": "supportedModes.payload: unnamed type"
+                "unsized": "supportedModes.payload: array of ridl.std.Label"
               },
               "flatbuffers": {
-                "unsized": "supportedModes.payload: unnamed type"
+                "unsized": "supportedModes.payload: array of ridl.std.Label"
               }
             },
             "fixed": {
