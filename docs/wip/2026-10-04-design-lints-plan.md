@@ -1810,6 +1810,22 @@ execution.
     behavior, lint levels and thresholds remain unchanged; root owns the full
     gate and unrestricted socket verification.
 
+85. **Ruling: align exact MCP diagnostic comparisons with the combined output**
+    (2026-10-05). After the completed integration review, root's full gate and
+    both focused reproductions fail two MCP literal-array comparisons. Their
+    four original diagnostic objects still match exactly; the output also has 23
+    incoming documentation warnings already allowed by the adjacent code
+    inventory. Preserve those four objects unchanged. Pin the complete ordered
+    27-code inventory and the documentation warnings' default severity, and
+    compare the full arrays with the compiler's JSON projection on both paths.
+    Apply the existing named fixture allowance only to the separate four-object
+    comparison. Keep every message, span, path, label and fix assertion and the
+    positive source-wrapper repair. If wrong, an extra diagnostic or incorrect
+    ordering could be concealed; full-array parity, the complete code inventory
+    and unchanged literal objects must expose it. Only test assertion code is
+    changed, with no production, fixture, lint-level or threshold edits. Root
+    owns the fresh scoped review and full gate rerun.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:

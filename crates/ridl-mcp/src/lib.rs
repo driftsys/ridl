@@ -510,19 +510,44 @@ mod tests {
         let result = RidlMcp::new().ridl_check(Parameters(params)).await.unwrap();
         let value = result.structured_content.unwrap();
         assert_eq!(value["diagnostics"], expected);
+        let all_diagnostics = value["diagnostics"].as_array().unwrap();
+        let missing_docs_code = ridl_core::lint::lint_by_name("missing-docs")
+            .unwrap()
+            .code
+            .as_str();
+        let expected_codes = std::iter::once("TYPL-103")
+            .chain(std::iter::repeat_n(missing_docs_code, 15))
+            .chain(std::iter::once("TYPL-011"))
+            .chain(std::iter::repeat_n(missing_docs_code, 8))
+            .chain(["TYPL-223", "RIDL-414"])
+            .collect::<Vec<_>>();
         assert_eq!(
-            value["diagnostics"]
-                .as_array()
-                .unwrap()
+            all_diagnostics
+                .iter()
+                .map(|diagnostic| diagnostic["code"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            expected_codes
+        );
+        assert!(
+            all_diagnostics
+                .iter()
+                .filter(|diagnostic| diagnostic["lint"] == "missing-docs")
+                .all(|diagnostic| diagnostic["severity"] == "warning")
+        );
+        // Keep the incoming fixture allowance while checking every other diagnostic exactly.
+        let exact_diagnostics = all_diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic["lint"] != "missing-docs")
+            .collect::<Vec<_>>();
+        assert_eq!(
+            exact_diagnostics
                 .iter()
                 .map(|d| d["code"].as_str().unwrap())
-                // TYPL-406 (`missing-docs`) is left out: the fixture has no docs.
-                .filter(|code| *code != "TYPL-406")
                 .collect::<Vec<_>>(),
             ["TYPL-103", "TYPL-011", "TYPL-223", "RIDL-414"]
         );
         assert_eq!(
-            value["diagnostics"],
+            serde_json::to_value(exact_diagnostics).unwrap(),
             serde_json::json!([
                 {
                     "code": "TYPL-103",
