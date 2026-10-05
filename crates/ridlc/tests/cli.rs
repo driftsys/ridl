@@ -1516,3 +1516,376 @@ fn build_writes_the_catalog_hash_over_the_other_packages_of_the_build() {
         "veh.cluster's interfaces reach a declaration of veh.common"
     );
 }
+
+/// A `--deployment` value that no deployment carries is a bad flag value:
+/// exit 2, and the message names the known deployments (ADR-0010
+/// decision 1).
+#[test]
+fn build_with_an_unknown_deployment_exits_two_and_names_the_known_ones() {
+    let out = TempDir::new("unknown-deployment-out");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        "../../examples/cabin".as_ref(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--deployment".as_ref(),
+        "Nope".as_ref(),
+    ]);
+    assert_eq!(code, 2, "stderr:\n{stderr}");
+    assert!(stderr.contains("Bench"), "stderr:\n{stderr}");
+}
+
+/// Runs `ridlc build <entry> --out-dir <out> --plugin dump=<script> <extra>`
+/// where the script stands in for a plugin: it saves each request it is given
+/// under `requests/` and answers with no files. Returns the parsed requests,
+/// the exit code and stderr. Unix only, for the script.
+#[cfg(unix)]
+fn build_dumping_requests(entry: &Path, extra: &[&str]) -> (Vec<serde_json::Value>, i32, String) {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let dir = TempDir::new("dump-requests");
+    let requests = dir.path().join("requests");
+    std::fs::create_dir_all(&requests).unwrap();
+    let script = dir.write(
+        "ridlc-gen-dump",
+        &format!(
+            "#!/bin/sh\ncat > '{}'/$$.json\n\
+             printf '{{\"files\": [], \"diagnostics\": []}}\\n'\n",
+            requests.display()
+        ),
+    );
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let out = TempDir::new("dump-requests-out");
+    let mut args: Vec<std::ffi::OsString> = vec![
+        "build".into(),
+        entry.into(),
+        "--out-dir".into(),
+        out.path().into(),
+        "--emit".into(),
+        "codegen-model".into(),
+        "--plugin".into(),
+        format!("dump={}", script.display()).into(),
+    ];
+    args.extend(extra.iter().map(Into::into));
+    let args: Vec<&std::ffi::OsStr> = args.iter().map(AsRef::as_ref).collect();
+    let (code, stderr) = ridlc(&args);
+    let parsed = std::fs::read_dir(&requests)
+        .unwrap()
+        .map(|file| {
+            let text = std::fs::read_to_string(file.unwrap().path()).unwrap();
+            serde_json::from_str(&text).expect("a request is JSON")
+        })
+        .collect();
+    (parsed, code, stderr)
+}
+
+/// Every request a build hands a plugin carries the selected deployment,
+/// whichever package the request is run for. Three cases: one deployment in
+/// the workspace and no flag, a flag that names one of two, and two
+/// deployments with no flag, which carries none.
+#[cfg(unix)]
+#[test]
+fn build_hands_every_plugin_request_the_selected_deployment() {
+    let (requests, code, stderr) = build_dumping_requests(Path::new("../../examples/cabin"), &[]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(!requests.is_empty());
+    for request in &requests {
+        assert_eq!(
+            request["deployment"]["name"], "Bench",
+            "{}",
+            request["artifactBase"]
+        );
+    }
+
+    let (requests, code, stderr) = build_dumping_requests(
+        Path::new("tests/corpus/rsdl-appendix-a"),
+        &["--deployment", "Production"],
+    );
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(!requests.is_empty());
+    for request in &requests {
+        assert_eq!(
+            request["deployment"]["name"], "Production",
+            "{}",
+            request["artifactBase"]
+        );
+    }
+
+    let (requests, code, stderr) =
+        build_dumping_requests(Path::new("tests/corpus/rsdl-appendix-a"), &[]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(!requests.is_empty());
+    for request in &requests {
+        assert!(
+            request.get("deployment").is_none(),
+            "{}",
+            request["artifactBase"]
+        );
+    }
+}
+
+/// A workspace with no system cannot name a deployment: exit 2, and the
+/// message says why. No output directory is created.
+#[test]
+fn build_with_a_deployment_flag_and_no_system_exits_two_and_says_why() {
+    let out = TempDir::new("no-system-deployment-out");
+    let fresh = out.path().join("fresh");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        "tests/corpus/veh-common".as_ref(),
+        "--out-dir".as_ref(),
+        fresh.as_os_str(),
+        "--deployment".as_ref(),
+        "X".as_ref(),
+    ]);
+    assert_eq!(code, 2, "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("the workspace declares no system, so no deployment can be named"),
+        "stderr:\n{stderr}"
+    );
+    assert!(!fresh.exists(), "a refused build creates no directory");
+}
+
+/// A deployment that an RSDL-7xx error dropped is declared in the source, so
+/// it is not an unknown name: the build reports the error, exits 1 and writes
+/// nothing.
+#[test]
+fn build_with_the_flag_naming_a_dropped_deployment_reports_the_rsdl_error() {
+    let dir = placement_workspace("system-dropped-flag", "system Vehicle { Lane, Panel }");
+    let out = TempDir::new("system-dropped-flag-out");
+    let fresh = out.path().join("fresh");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        dir.path().as_os_str(),
+        "--out-dir".as_ref(),
+        fresh.as_os_str(),
+        "--deployment".as_ref(),
+        "Bad".as_ref(),
+    ]);
+    assert_eq!(code, 1, "stderr:\n{stderr}");
+    assert!(stderr.contains("error[RSDL-701]"), "stderr:\n{stderr}");
+    assert!(
+        !stderr.contains("no deployment named"),
+        "the name is declared, stderr:\n{stderr}"
+    );
+    assert!(!fresh.exists(), "nothing is written");
+}
+
+/// A workspace that declares two deployments carries none in its requests,
+/// even when an `RSDL-7xx` error dropped one of them from the lowered system:
+/// the count that decides "exactly one deployment" is the count the source
+/// declares. The build still writes what the error does not block, and exits 1
+/// (rsdl reference §13).
+#[cfg(unix)]
+#[test]
+fn build_carries_no_deployment_when_two_are_declared_and_one_is_dropped() {
+    let dir = placement_workspace("two-declared-one-dropped", "system Vehicle { Lane, Panel }");
+    let (requests, code, stderr) = build_dumping_requests(dir.path(), &[]);
+    assert_eq!(code, 1, "stderr:\n{stderr}");
+    assert!(stderr.contains("error[RSDL-701]"), "stderr:\n{stderr}");
+    assert!(!requests.is_empty(), "the error blocks no package");
+    for request in &requests {
+        assert!(
+            request.get("deployment").is_none(),
+            "two deployments are declared, so none is carried: {}",
+            request["artifactBase"]
+        );
+    }
+}
+
+/// An unknown `--deployment` name in a workspace that also has an `RSDL-7xx`
+/// error on another deployment: the error takes precedence, so the build exits
+/// 1 reporting it and never calls the name a bad flag value.
+#[test]
+fn build_with_an_unknown_name_and_an_rsdl_error_reports_the_error() {
+    let dir = placement_workspace("unknown-and-dropped", "system Vehicle { Lane, Panel }");
+    let out = TempDir::new("unknown-and-dropped-out");
+    let fresh = out.path().join("fresh");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        dir.path().as_os_str(),
+        "--out-dir".as_ref(),
+        fresh.as_os_str(),
+        "--deployment".as_ref(),
+        "Nope".as_ref(),
+    ]);
+    assert_eq!(code, 1, "stderr:\n{stderr}");
+    assert!(stderr.contains("error[RSDL-701]"), "stderr:\n{stderr}");
+    assert!(
+        !stderr.contains("no deployment named"),
+        "the error takes precedence, stderr:\n{stderr}"
+    );
+    assert!(!fresh.exists(), "nothing is written");
+}
+
+/// A `--deployment` typo does not discard the diagnostics the compile already
+/// drew: every other post-compile failure of `run_build_with` keeps them.
+#[test]
+fn build_with_an_unknown_deployment_keeps_the_diagnostics_it_drew() {
+    let out = TempDir::new("unknown-keeps-diagnostics-out");
+    let cabin: &std::ffi::OsStr = "../../examples/cabin".as_ref();
+    let clean = out.path().join("clean");
+    let (code, without) = ridlc(&[
+        "build".as_ref(),
+        cabin,
+        "--out-dir".as_ref(),
+        clean.as_os_str(),
+    ]);
+    assert_eq!(code, 0, "stderr:\n{without}");
+    let expected = without.matches("TYPL-406").count();
+    assert!(expected > 0, "the example draws doc warnings:\n{without}");
+
+    let named = out.path().join("named");
+    let (code, with) = ridlc(&[
+        "build".as_ref(),
+        cabin,
+        "--out-dir".as_ref(),
+        named.as_os_str(),
+        "--deployment".as_ref(),
+        "Nope".as_ref(),
+    ]);
+    assert_eq!(code, 2, "stderr:\n{with}");
+    assert!(
+        with.contains("no deployment named `Nope`"),
+        "stderr:\n{with}"
+    );
+    assert_eq!(
+        with.matches("TYPL-406").count(),
+        expected,
+        "the bad flag value keeps the diagnostics:\nwith:\n{with}\nwithout:\n{without}"
+    );
+}
+
+/// Every region of the section a plugin is handed carries its catalog's
+/// 32-byte hash, which is 44 characters of base64 in the JSON. A plugin keys a
+/// region's layout on that hash, so an empty one is useless to it.
+#[cfg(unix)]
+#[test]
+fn build_hands_a_plugin_the_catalog_hash_of_every_region() {
+    let (requests, code, stderr) = build_dumping_requests(Path::new("../../examples/cabin"), &[]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(!requests.is_empty());
+    for request in &requests {
+        let regions = request["deployment"]["regions"]
+            .as_array()
+            .expect("the section carries its regions");
+        assert!(!regions.is_empty(), "{}", request["artifactBase"]);
+        for region in regions {
+            let hash = region["hash"].as_str().unwrap_or_default();
+            assert_eq!(
+                hash.len(),
+                44,
+                "32 bytes of base64 for `{}`",
+                region["catalog"]
+            );
+        }
+    }
+}
+
+/// Every request of one build carries the same section, the `ridl.std` request
+/// included (`docs/design/codegen-plugins.md`, the deployment section).
+#[cfg(unix)]
+#[test]
+fn the_standard_packages_request_carries_the_same_deployment() {
+    let dir = TempDir::new("std-request-deployment");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"veh.demo\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "lane.ridl",
+        "package veh.demo\n\n\
+         interface LaneAssist {\n  command choose(id: Uuid) @[..50ms]\n}\n\n\
+         service veh.demo.lane : LaneAssist\n",
+    );
+    dir.write(
+        "topology.rsdl",
+        "package veh.demo\n\n\
+         component Lane { offers veh.demo.lane }\n\
+         component Panel { requires LaneAssist }\n\
+         system Vehicle { Lane, Panel }\n\
+         deployment Good for Vehicle { machine A { Lane, Panel } }\n",
+    );
+    let (requests, code, stderr) = build_dumping_requests(dir.path(), &[]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    let standard = requests
+        .iter()
+        .find(|request| request["artifactBase"] == "ridl.std")
+        .expect("the catalog reaches `ridl.std`, so a plugin is run for it");
+    assert_eq!(standard["deployment"]["name"], "Good");
+    for request in &requests {
+        assert_eq!(
+            request["deployment"], standard["deployment"],
+            "{}",
+            request["artifactBase"]
+        );
+    }
+}
+
+/// A build with no emit and no plugin lowers the system because
+/// `--deployment` was given: the selection needs the lowered system, and
+/// nothing else in such a build asks for it. Both commands always pass an
+/// emit, so this is the library call's contract.
+#[test]
+fn a_build_with_no_emit_and_a_deployment_name_still_lowers_the_system() {
+    let out = TempDir::new("no-emit-deployment-out");
+    let run = ridlc::run_build_with(
+        Path::new("../../examples/cabin"),
+        out.path(),
+        &[],
+        &[],
+        std::time::Duration::from_secs(ridlc::plugin::DEFAULT_TIMEOUT_SECONDS),
+        ridl_core::Frozen::No,
+        ridlc::ApplyLints::Yes,
+        Some("Bench"),
+    )
+    .expect("the build runs");
+    assert!(!run.usage_error, "`Bench` is a declared deployment");
+    assert!(!run.has_error(), "the example is clean");
+}
+
+/// A workspace that declares a `system` and no `deployment` block cannot name
+/// a deployment either, and the message says which of the two reasons it is:
+/// the system is there, the deployment is not. Telling the reader that the
+/// workspace declares no system would send them to the wrong file.
+#[test]
+fn build_with_a_deployment_flag_and_a_system_with_no_deployment_says_which() {
+    let dir = TempDir::new("no-deployment-block");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"veh.demo\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "lane.ridl",
+        "package veh.demo\n\ntype Flag: boolean\n\n\
+         interface LaneAssist {\n  signal active: Flag @[100ms..1s]\n}\n\n\
+         service veh.demo.lane : LaneAssist\n",
+    );
+    dir.write(
+        "topology.rsdl",
+        "package veh.demo\n\n\
+         component Lane { offers veh.demo.lane }\n\
+         component Panel { requires LaneAssist }\n\
+         system Vehicle { Lane, Panel }\n",
+    );
+    let out = TempDir::new("no-deployment-block-out");
+    let fresh = out.path().join("fresh");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        dir.path().as_os_str(),
+        "--out-dir".as_ref(),
+        fresh.as_os_str(),
+        "--deployment".as_ref(),
+        "X".as_ref(),
+    ]);
+    assert_eq!(code, 2, "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("the system declares no deployment, so no deployment can be named"),
+        "stderr:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("declares no system"),
+        "the system is declared, stderr:\n{stderr}"
+    );
+    assert!(!fresh.exists(), "a refused build creates no directory");
+}

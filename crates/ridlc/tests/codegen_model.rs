@@ -479,3 +479,434 @@ fn with_sized_stack(test: impl FnOnce() + Send + 'static) {
         std::panic::resume_unwind(payload);
     }
 }
+
+/// The lowered system of `entry` under `ridlc/tests` or `examples`, the names
+/// of the deployments its source declares, and every package of its workspace
+/// with `ridl.std`: the inputs `select_deployment` reads.
+fn system_and_packages(entry: &Path) -> (Option<v2::System>, Vec<String>, Vec<v2::Package>) {
+    let mut db = RidlDatabase::default();
+    let output = ridlc::compile_workspace(&mut db, entry).expect("the entry loads");
+    let mut packages: Vec<v2::Package> = output
+        .checked
+        .iter()
+        .map(|checked| checked.ir.clone())
+        .collect();
+    packages.push(output.std_ir.clone());
+    (output.system, output.declared_deployments, packages)
+}
+
+fn corpus_entry(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("corpus")
+        .join(name)
+}
+
+/// `examples/cabin` declares one deployment, `Bench`, so a build without
+/// `--deployment` carries it.
+#[test]
+fn a_request_for_cabin_carries_its_one_deployment_without_a_flag() {
+    let cabin = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/cabin");
+    let (system, declared, packages) = system_and_packages(&cabin);
+    let refs: Vec<&v2::Package> = packages.iter().collect();
+    let deployment = ridlc::select_deployment(system.as_ref(), &declared, None, &refs)
+        .expect("no name is not an error")
+        .expect("the one deployment is selected");
+    assert_eq!(deployment.name, "Bench");
+    assert_eq!(deployment.channels.len(), 5);
+
+    let request = ridlc::codegen_request(
+        "veh.cabin",
+        &packages[0],
+        &refs[1..],
+        Vec::new(),
+        Some(deployment),
+    );
+    assert_eq!(
+        request
+            .deployment
+            .as_ref()
+            .map(|deployment| deployment.name.as_str()),
+        Some("Bench")
+    );
+}
+
+/// The request `codegen_request` builds for `name` with no deployment, next
+/// to the request written out field by field, and the production serializer's
+/// bytes for each. The deployment section is absent from the bytes.
+fn assert_request_without_deployment(entry: &str, name: &str) {
+    let (system, declared, packages) = system_and_packages(&corpus_entry(entry));
+    let refs: Vec<&v2::Package> = packages.iter().collect();
+    let selected =
+        ridlc::select_deployment(system.as_ref(), &declared, None, &refs).expect("not an error");
+    assert!(selected.is_none(), "{entry}: no deployment without a name");
+
+    let request = ridlc::codegen_request(name, &packages[0], &refs[1..], Vec::new(), selected);
+    let expected = v1::CodegenRequest {
+        schema: codegen::SCHEMA.to_string(),
+        toolchain: env!("CARGO_PKG_VERSION").to_string(),
+        model: Some(codegen::lower(&packages[0], &refs[1..])),
+        options: Vec::new(),
+        artifact_base: name.to_string(),
+        deployment: None,
+    };
+    assert_eq!(request, expected, "{entry}");
+    let json = codegen::request_to_json(&request).expect("the request serializes");
+    assert_eq!(
+        json,
+        codegen::request_to_json(&expected).expect("the literal serializes"),
+        "{entry}"
+    );
+    assert!(
+        !json.contains("\"deployment\""),
+        "{entry}: no deployment key in the request:\n{json}"
+    );
+}
+
+/// A workspace with no system builds the request it built before the
+/// deployment section existed.
+#[test]
+fn a_workspace_without_a_system_builds_the_request_of_today() {
+    assert_request_without_deployment("veh-common", "veh.common");
+}
+
+/// Appendix A declares `Production` and `Bench`; with no name the request
+/// carries neither.
+#[test]
+fn two_deployments_and_no_flag_select_none() {
+    let (system, declared, packages) = system_and_packages(&corpus_entry("rsdl-appendix-a"));
+    let refs: Vec<&v2::Package> = packages.iter().collect();
+    let selected =
+        ridlc::select_deployment(system.as_ref(), &declared, None, &refs).expect("not an error");
+    assert!(selected.is_none());
+    assert_request_without_deployment("rsdl-appendix-a", "veh.topology");
+}
+
+#[test]
+fn an_unknown_name_lists_the_known_deployments() {
+    let (system, declared, packages) = system_and_packages(&corpus_entry("rsdl-appendix-a"));
+    let refs: Vec<&v2::Package> = packages.iter().collect();
+    let err = ridlc::select_deployment(system.as_ref(), &declared, Some("Nope"), &refs)
+        .expect_err("no deployment is named Nope");
+    assert_eq!(
+        err,
+        ridlc::UnknownDeployment {
+            requested: "Nope".to_string(),
+            known: vec!["Bench".to_string(), "Production".to_string()],
+            has_system: true,
+        }
+    );
+    let named = ridlc::select_deployment(system.as_ref(), &declared, Some("Production"), &refs)
+        .expect("Production is declared")
+        .expect("and selected");
+    assert_eq!(named.name, "Production");
+
+    // The known names are sorted, whatever order the source declares them in.
+    let reversed = ["Zulu".to_string(), "Alpha".to_string()];
+    let err = ridlc::select_deployment(system.as_ref(), &reversed, Some("Nope"), &refs)
+        .expect_err("no deployment is named Nope");
+    assert_eq!(err.known, ["Alpha", "Zulu"]);
+    assert!(
+        err.to_string()
+            .ends_with("the system declares: Alpha, Zulu"),
+        "{err}"
+    );
+}
+
+/// The whole deployment section `examples/cabin` carries, end to end: the
+/// rsdl source, the lowering, and the emitter together, against a golden
+/// document.
+///
+/// The section's own tests in `crates/ridl-ir` build a `System` by hand, so
+/// none of them covers the path from an rsdl file to the bytes a plugin
+/// reads. This one does: the two interfaces with their numbers, the three
+/// placed instances with what each offers and maps, the five channels in
+/// their emitted order, and each channel's consumer links with their
+/// crossings, encodings and sizing. A signal channel's omitted sizing fields
+/// are part of the document, so a zero written in place of an absent value
+/// shows here too.
+///
+/// The catalog hash is content-addressed, so the golden would change with
+/// every edit to `examples/cabin/cabin.ridl`. Its length is checked and the
+/// bytes are then replaced, which is the one substitution this document
+/// makes.
+#[test]
+fn the_cabin_deployment_section_is_rendered_end_to_end() {
+    let cabin = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/cabin");
+    let (system, declared, packages) = system_and_packages(&cabin);
+    let refs: Vec<&v2::Package> = packages.iter().collect();
+    let mut deployment = ridlc::select_deployment(system.as_ref(), &declared, None, &refs)
+        .expect("no name is not an error")
+        .expect("the one deployment is selected");
+    for region in &mut deployment.regions {
+        assert_eq!(
+            region.hash.len(),
+            32,
+            "the driver embeds the 32-byte catalog hash"
+        );
+        region.hash = vec![1, 2, 3];
+    }
+    let request = v1::CodegenRequest {
+        deployment: Some(deployment),
+        ..Default::default()
+    };
+    let json = codegen::request_to_json(&request).expect("the request renders");
+    assert_eq!(
+        json,
+        r#"{
+  "schema": "",
+  "toolchain": "",
+  "options": [],
+  "artifactBase": "",
+  "deployment": {
+    "system": "veh.cabin.Vehicle",
+    "name": "Bench",
+    "regions": [
+      {
+        "catalog": "veh.cabin",
+        "hash": "AQID",
+        "interfaces": [
+          {
+            "name": "Cabin",
+            "number": 1,
+            "inline": false,
+            "provisional": true,
+            "service": "veh.cabin.control"
+          },
+          {
+            "name": "Horn",
+            "number": 2,
+            "inline": false,
+            "provisional": true,
+            "service": "veh.cabin.control"
+          }
+        ]
+      }
+    ],
+    "instances": [
+      {
+        "component": "veh.cabin.Climate",
+        "instance": "Unit",
+        "machine": "Hpc",
+        "external": false,
+        "offers": [
+          {
+            "catalog": "veh.cabin",
+            "number": 1,
+            "name": "Cabin",
+            "inline": false
+          },
+          {
+            "catalog": "veh.cabin",
+            "number": 2,
+            "name": "Horn",
+            "inline": false
+          }
+        ],
+        "maps": []
+      },
+      {
+        "component": "veh.cabin.Panel",
+        "instance": "Unit",
+        "machine": "Hpc",
+        "external": false,
+        "offers": [],
+        "maps": [
+          "veh.cabin"
+        ]
+      },
+      {
+        "component": "veh.cabin.Telemetry",
+        "instance": "Unit",
+        "machine": "Gateway",
+        "external": false,
+        "offers": [],
+        "maps": [
+          "veh.cabin"
+        ]
+      }
+    ],
+    "channels": [
+      {
+        "catalog": "veh.cabin",
+        "interfaceNumber": 1,
+        "interface": "Cabin",
+        "inline": false,
+        "memberOrdinal": 1,
+        "member": "temperature",
+        "kind": "KIND_SIGNAL",
+        "producer": {
+          "component": "veh.cabin.Climate",
+          "instance": "Unit",
+          "machine": "Hpc"
+        },
+        "consumers": [
+          {
+            "component": "veh.cabin.Panel",
+            "instance": "Unit",
+            "machine": "Hpc",
+            "crossing": "CROSSING_SAME_MACHINE",
+            "encoding": "ENCODING_FLATBUFFERS",
+            "slotsSource": "VALUE_SOURCE_UNSPECIFIED",
+            "budgetSource": "VALUE_SOURCE_UNSPECIFIED"
+          },
+          {
+            "component": "veh.cabin.Telemetry",
+            "instance": "Unit",
+            "machine": "Gateway",
+            "crossing": "CROSSING_DIFFERENT_MACHINE",
+            "encoding": "ENCODING_PROTO3",
+            "slotsSource": "VALUE_SOURCE_UNSPECIFIED",
+            "budgetSource": "VALUE_SOURCE_UNSPECIFIED"
+          }
+        ]
+      },
+      {
+        "catalog": "veh.cabin",
+        "interfaceNumber": 1,
+        "interface": "Cabin",
+        "inline": false,
+        "memberOrdinal": 2,
+        "member": "warning",
+        "kind": "KIND_EVENT",
+        "producer": {
+          "component": "veh.cabin.Climate",
+          "instance": "Unit",
+          "machine": "Hpc"
+        },
+        "consumers": [
+          {
+            "component": "veh.cabin.Panel",
+            "instance": "Unit",
+            "machine": "Hpc",
+            "crossing": "CROSSING_SAME_MACHINE",
+            "encoding": "ENCODING_FLATBUFFERS",
+            "depth": {
+              "value": 10,
+              "source": "VALUE_SOURCE_DERIVED"
+            },
+            "slotsSource": "VALUE_SOURCE_UNSPECIFIED",
+            "budgetSource": "VALUE_SOURCE_UNSPECIFIED"
+          },
+          {
+            "component": "veh.cabin.Telemetry",
+            "instance": "Unit",
+            "machine": "Gateway",
+            "crossing": "CROSSING_DIFFERENT_MACHINE",
+            "encoding": "ENCODING_PROTO3",
+            "depth": {
+              "value": 10,
+              "source": "VALUE_SOURCE_DERIVED"
+            },
+            "slotsSource": "VALUE_SOURCE_UNSPECIFIED",
+            "budgetSource": "VALUE_SOURCE_UNSPECIFIED"
+          }
+        ],
+        "depth": {
+          "value": 10,
+          "source": "VALUE_SOURCE_DERIVED"
+        }
+      },
+      {
+        "catalog": "veh.cabin",
+        "interfaceNumber": 1,
+        "interface": "Cabin",
+        "inline": false,
+        "memberOrdinal": 3,
+        "member": "setLevel",
+        "kind": "KIND_COMMAND",
+        "producer": {
+          "component": "veh.cabin.Climate",
+          "instance": "Unit",
+          "machine": "Hpc"
+        },
+        "consumers": [
+          {
+            "component": "veh.cabin.Panel",
+            "instance": "Unit",
+            "machine": "Hpc",
+            "crossing": "CROSSING_SAME_MACHINE",
+            "encoding": "ENCODING_FLATBUFFERS",
+            "slots": 16,
+            "slotsSource": "VALUE_SOURCE_DEFAULT",
+            "budgetSource": "VALUE_SOURCE_UNSPECIFIED"
+          },
+          {
+            "component": "veh.cabin.Telemetry",
+            "instance": "Unit",
+            "machine": "Gateway",
+            "crossing": "CROSSING_DIFFERENT_MACHINE",
+            "encoding": "ENCODING_PROTO3",
+            "slots": 16,
+            "slotsSource": "VALUE_SOURCE_DEFAULT",
+            "budgetSource": "VALUE_SOURCE_UNSPECIFIED"
+          }
+        ]
+      },
+      {
+        "catalog": "veh.cabin",
+        "interfaceNumber": 1,
+        "interface": "Cabin",
+        "inline": false,
+        "memberOrdinal": 4,
+        "member": "average",
+        "kind": "KIND_QUERY",
+        "producer": {
+          "component": "veh.cabin.Climate",
+          "instance": "Unit",
+          "machine": "Hpc"
+        },
+        "consumers": [
+          {
+            "component": "veh.cabin.Panel",
+            "instance": "Unit",
+            "machine": "Hpc",
+            "crossing": "CROSSING_SAME_MACHINE",
+            "encoding": "ENCODING_FLATBUFFERS",
+            "slots": 16,
+            "slotsSource": "VALUE_SOURCE_DEFAULT",
+            "budgetSource": "VALUE_SOURCE_UNSPECIFIED"
+          },
+          {
+            "component": "veh.cabin.Telemetry",
+            "instance": "Unit",
+            "machine": "Gateway",
+            "crossing": "CROSSING_DIFFERENT_MACHINE",
+            "encoding": "ENCODING_PROTO3",
+            "slots": 16,
+            "slotsSource": "VALUE_SOURCE_DEFAULT",
+            "budgetSource": "VALUE_SOURCE_UNSPECIFIED"
+          }
+        ]
+      },
+      {
+        "catalog": "veh.cabin",
+        "interfaceNumber": 2,
+        "interface": "Horn",
+        "inline": false,
+        "memberOrdinal": 1,
+        "member": "active",
+        "kind": "KIND_SIGNAL",
+        "producer": {
+          "component": "veh.cabin.Climate",
+          "instance": "Unit",
+          "machine": "Hpc"
+        },
+        "consumers": [
+          {
+            "component": "veh.cabin.Panel",
+            "instance": "Unit",
+            "machine": "Hpc",
+            "crossing": "CROSSING_SAME_MACHINE",
+            "encoding": "ENCODING_FLATBUFFERS",
+            "slotsSource": "VALUE_SOURCE_UNSPECIFIED",
+            "budgetSource": "VALUE_SOURCE_UNSPECIFIED"
+          }
+        ]
+      }
+    ],
+    "bindings": []
+  }
+}"#
+    );
+}

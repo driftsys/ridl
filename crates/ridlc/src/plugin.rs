@@ -470,6 +470,7 @@ mod tests {
             model: Some(v1::Model::default()),
             options: Vec::new(),
             artifact_base: "p".to_string(),
+            deployment: None,
         }
     }
 

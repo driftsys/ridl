@@ -66,3 +66,6 @@ interface Horn {
   /// The health of the horn.
   signal active: Health @10ms
 }
+
+/// The cabin's one service: both interfaces, provided by one component.
+service veh.cabin.control: Cabin, Horn

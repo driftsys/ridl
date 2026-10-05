@@ -110,17 +110,18 @@ never computes. `ridl_sem::lower_system` therefore leaves `Region.hash` empty
 and does not depend on `ridl-descriptor`. `ridlc` sets each region's hash with
 `ridl_ir::catalog_hash::catalog_hash` (ADR-0014 decision 15), through one
 helper, `embed_catalog_hashes`. `compile_workspace` and the corpus runner lower
-through `ridlc::lower_workspace_system`; the system write of `ridl build` lowers
-with `lower_system` and calls `embed_catalog_hashes` directly. It reuses the
-`ridl.std` IR when a code emit already checked it, and checks `ridl.std` itself
-when a package references it and no code emit ran. Every lowered system the
-toolchain returns or writes therefore carries its hashes. The hash is computed
-over the region's package and the same package list `ridl build --emit catalog`
-gives `ridl_descriptor::lower`, built by one helper, `catalog_scope`: every
-checked package of the workspace, then `ridl.std` when a package of the
-workspace references it. A region's hash therefore equals the hash in its
-catalog's descriptor, including in a build that emits only the IR and so writes
-no descriptor.
+through `ridlc::lower_workspace_system`; `ridl build` lowers with `lower_system`
+and calls `embed_catalog_hashes` directly, once, whenever the build needs the
+system at all — for a code emit, for a plugin, for `--deployment`, or for a
+system dump. It reuses the `ridl.std` IR when a code emit already checked it,
+and checks `ridl.std` itself when a package references it and no code emit ran.
+Every lowered system the toolchain returns or writes therefore carries its
+hashes. The hash is computed over the region's package and the same package list
+`ridl build --emit catalog` gives `ridl_descriptor::lower`, built by one helper,
+`catalog_scope`: every checked package of the workspace, then `ridl.std` when a
+package of the workspace references it. A region's hash therefore equals the
+hash in its catalog's descriptor, including in a build that emits only the IR
+and so writes no descriptor.
 
 `ridl build` writes the lowered system beside the package IR for each IR dump
 emit, under the suffixes `Emit::system_dump_suffix` names
@@ -185,5 +186,8 @@ there is no runtime, and every fact it states about the lowered system and about
   per-deployment system descriptor takes its own rows now that rsdl has landed,
   and has none yet. No runtime reads the lowered system: the one in this
   workspace, `ridl-loopback`, is given its catalog by its caller and reads no
-  descriptor at all.
+  descriptor at all. A codegen request does read the lowered system: its
+  deployment section is an emitter over it
+  ([the codegen plugin design](../design/codegen-plugins.md), "The deployment
+  section"), and no backend reads that section yet.
 - **Backend namespace claims.** See RSDL-804 above.

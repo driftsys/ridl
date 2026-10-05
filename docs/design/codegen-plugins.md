@@ -30,12 +30,12 @@ plugins; each waits to be ported. §6 says what each parity test proves.
 
 | What                                                                                                 | Where                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The schema: `CodegenRequest`, `CodegenResponse`, `GeneratedFile`, `Diagnostic`, `BackendOption`      | `crates/ridl-ir/proto/ridl/codegen/v1/plugin.proto`, in the package `ridl.codegen.v1` beside `model.proto`, compiled by the same `build.rs` and registered with the same `pbjson-build` builder                                                                                                                                                                                                       |
+| The schema: `CodegenRequest`, `CodegenResponse`, `GeneratedFile`, `Diagnostic`, `BackendOption`      | `crates/ridl-ir/proto/ridl/codegen/v1/plugin.proto`, with the deployment section's messages in `crates/ridl-ir/proto/ridl/codegen/v1/deployment.proto`, in the package `ridl.codegen.v1` beside `model.proto`, all compiled by the same `build.rs` and registered with the same `pbjson-build` builder                                                                                                |
 | The trait `Backend`, the transitional `RawIr`, `ModelBackend`, `SCHEMA`, the encodings, `check_path` | `crates/ridl-ir/src/codegen/contract.rs`, re-exported from `ridl_ir::codegen`                                                                                                                                                                                                                                                                                                                         |
 | The four in-tree backends behind the trait                                                           | `crates/ridl-backend-{rust,ts,proto,flatbuffers}/src/contract.rs`. Rust is `pub struct Backend` over the request's model alone; the other three are `pub struct Backend<'a>` over `RawIr`, `generate` (TypeScript) or `generate_with` (proto3, FlatBuffers)                                                                                                                                           |
 | The in-process host: one request per package, every emit through the trait, the response written     | `crates/ridlc/src/lib.rs` — `codegen_request`, `write_emits`, `write_response`, `run_build_with`                                                                                                                                                                                                                                                                                                      |
 | The process host: `ridlc-gen-<language>`, `PATH` lookup, the pipe, the timeout, the error            | `crates/ridlc/src/plugin.rs` — `PluginSpec`, `resolve`, `run`, `PluginError`                                                                                                                                                                                                                                                                                                                          |
-| The flags                                                                                            | `crates/ridlc/src/main.rs` and `crates/ridl/src/main.rs`, `--plugin` and `--plugin-timeout` on `build`; documented in [`docs/book/cli-reference.md`](../book/cli-reference.md)                                                                                                                                                                                                                        |
+| The flags                                                                                            | `crates/ridlc/src/main.rs` and `crates/ridl/src/main.rs`, `--plugin`, `--plugin-timeout` and `--deployment` on `build`; documented in [`docs/book/cli-reference.md`](../book/cli-reference.md)                                                                                                                                                                                                        |
 | The reference plugins                                                                                | `crates/ridlc-gen-model/`, a binary over `ModelBackend`, and `crates/ridlc-gen-rust/`, a binary over the Rust backend; both `publish = false`                                                                                                                                                                                                                                                         |
 | The parity tests                                                                                     | `crates/ridlc-gen-model/tests/parity.rs` and `crates/ridlc-gen-rust/tests/parity.rs`, each over every corpus package at the contract's level and every corpus entry at the command's level; the host's failure modes in `crates/ridlc/src/plugin.rs`'s tests; the flag's behaviour in `crates/ridlc/tests/cli.rs`; the messages' encodings and the path rule in `crates/ridl-ir/src/codegen/tests.rs` |
 
@@ -50,6 +50,7 @@ CodegenRequest {
   Model model = 3;                    // the package's lowered model
   repeated BackendOption options = 4; // {key, value}, sorted by key, keys unique
   string artifact_base = 5;           // what ridlc names this package's files after
+  optional Deployment deployment = 6; // one deployment of the system; absent when the build selects none (§7)
 }
 CodegenResponse {
   repeated GeneratedFile files = 1;   // {path, oneof content {text | binary}}
@@ -125,11 +126,11 @@ plugin and the path.
 
 ## 3. The in-process host
 
-``ridlc::codegen_request(base, package, others,
-options)`builds the one request
-per package — the model lowered once, over the same`others`every code emit
-reads, so the request's model is the artifact — and`write_emits`
-hands it to each selected backend through the trait:
+`ridlc::codegen_request(base, package, others, options, deployment)` builds the
+one request per package — the model lowered once, over the same `others` every
+code emit reads, so the request's model is the artifact, and the `deployment`
+section the build selected once, the same section in every request — and
+`write_emits` hands it to each selected backend through the trait:
 
 ```rust
 pub trait Backend {
@@ -309,7 +310,160 @@ what catches the model and a backend deriving one fact differently. The Rust
 backend's is deleted: every fact it compared is a function of the model by
 construction now, so the test could not fail.
 
-## 7. What a plugin author reads
+## 7. The deployment section
+
+`CodegenRequest` has an optional field `deployment` (number 6) of the message
+`Deployment`, declared in
+`crates/ridl-ir/proto/ridl/codegen/v1/deployment.proto` and imported by
+`plugin.proto`. It holds the facts of one concrete deployment of a system that a
+plugin needs to lay out memory for it. The emitter is
+`crates/ridl-ir/src/codegen/deployment.rs`, `lower_deployment`: an emitter over
+the lowered system artifact of the IR, as
+[ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 1 requires,
+and not a second lowering. `ridlc::select_deployment` in
+`crates/ridlc/src/lib.rs` chooses the deployment.
+
+The section is a field of the request beside the model and never a part of
+`Model`, so a model stays a function of its package and its scope, and
+`--emit codegen-model` is unchanged. Every request of one build carries the same
+section, whichever package the request is for. A plugin generating package P
+finds P's regions and P's messages in the section, and the payload sizes of P's
+messages in P's model: the section carries no payload size.
+
+**A request with no deployment is unchanged.** The field is absent, and the
+request is byte for byte the request written before the field existed. The field
+is additive under the compatibility rule of
+[the IR specification](../specification/ir-specification.md) §6. The generated
+reader of this toolchain rejects an unknown key, as §2 says, so an in-tree
+plugin is rebuilt with the schema; a plugin outside this workspace reads
+leniently and ignores a field it does not know.
+
+### What the section carries
+
+In this order:
+
+1. **Identity.** The system's qualified name and the deployment's bare name.
+2. **Regions**, in catalog name order. Each has the catalog name, the 32-byte
+   catalog hash, and the interfaces of the region in interface number order,
+   each with its name, number, `inline` and `provisional` flags and the closure
+   service that lists it.
+3. **Instances**, in the placement order of the system IR. Each has the
+   component, the instance name, the machine and the `external` flag, the
+   interfaces the instance offers (the regions whose slots it writes), and the
+   catalogs it maps (the catalogs its `requires` lines reach). An instance that
+   offers or maps nothing is listed with empty lists.
+4. **Channels**, in the order (catalog, interface number, member ordinal,
+   producer component, producer instance). A channel is one member of an
+   interface from one producer instance, with that member's kind, the producer
+   endpoint, and the consumer links in (component, instance) order. A consumer
+   link carries its crossing, its encoding and the sizing values of the
+   channel's kind. An event channel also carries its ring depth.
+5. **Bindings**, in binding name order.
+
+The section states no count that is the length of a list.
+
+**The order rule.** Every repeated field is in the order stated above, so two
+builds of one workspace write the same bytes. Reordering the placements in the
+source does not change the channels' order, because the order does not come from
+the placements. The lowering of the system writes the routes in (catalog,
+interface number, member ordinal) order, and the emitter sorts the producers of
+each route by (component, instance) and the consumer links of each channel by
+(component, instance).
+
+**One channel per producer instance.** A redundant provider set, one route whose
+producers are two instances of one component, gives two channels per member,
+each with its own consumer links. The links are not merged into one channel. A
+producer instance that no link names has a channel with no consumer link.
+
+### The encoding rule
+
+The encoding of a consumer link derives from its crossing and from nothing else,
+by the matrix of
+[ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+decision 2:
+
+| Crossing            | Encoding    |
+| ------------------- | ----------- |
+| `same machine`      | FlatBuffers |
+| `different machine` | proto3      |
+| `off-board`         | proto3      |
+
+A crossing that is unspecified or unknown gives the unspecified encoding. No
+link carries the `repr(C)` encoding: the enum value exists in the schema, and
+nothing selects it until driftsys/ridl#317. The choice between a shared-memory
+store and a local socket on one machine stays the plugin's. Both carry
+FlatBuffers, so the choice does not change a size.
+
+### The depth rule
+
+A `Depth` is an optional value and the source of that value. Two sources are
+written today.
+
+- **Derived.** An event's depth is the contract bound, `ceil(max / min)` over
+  the event's resolved timing
+  ([ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) decision
+  21). The resolved timing includes the default timing of
+  [the ridl language reference](../specification/ridl-language-reference.md)
+  §9.1, so an event written with no timing has both bounds. The quotient is
+  computed on the exact-decimal microsecond strings of `Timing` as integers,
+  never in floating point.
+- **Underivable.** The value is absent when the timing has an explicit half-open
+  range, so one bound is missing, and when an event carries no timing at all. It
+  is also absent when the lower bound is zero, so there is no quotient; when an
+  operand is not `digits[.digits]`, or is too large to scale; when the quotient
+  is zero, because a depth is at least 1; and when the quotient does not fit in
+  32 bits. The emitter records every one of these the way it records a missing
+  bound.
+
+Every consumer link of an event channel carries the member's depth. The
+channel's ring depth is the maximum over its consumer links, with the source of
+the link that supplies it, and it is absent when any link's depth is absent. An
+event channel with no consumer link takes the member's contract bound as its
+ring depth.
+
+The schema also names a declared source, for a value that an rsdl key states. No
+rsdl key states a depth today, so no value is written with it.
+
+A **command or query channel** carries sixteen slots on each consumer link, with
+the default source, and no budget: the budget is absent and its source is
+unspecified. A **signal or fixed channel** carries no sizing fields.
+
+### The selection
+
+`ridl build` and `ridlc build` take `--deployment NAME`
+([CLI reference](../book/cli-reference.md)). The flag names a deployment of the
+workspace's system; a workspace has at most one system.
+
+- A workspace whose source declares exactly one deployment needs no flag: the
+  request carries it, unless an `RSDL-7xx` error removed that one deployment
+  from the system IR, in which case nothing is carried and the build reports
+  that error and exits 1.
+- A workspace whose source declares several deployments and no flag carries
+  none. The count is the count the source declares, so a deployment an
+  `RSDL-7xx` error removed from the system IR still counts: a workspace that
+  declares two carries neither.
+- A workspace with no system and no flag carries none.
+- A `NAME` that the system does not declare exits 2 and names the deployments it
+  does declare, unless the build has already drawn an error of its own: that
+  error takes precedence, so the build reports it and exits 1.
+- A workspace with no system, and a workspace whose system declares no
+  `deployment` block, built with `--deployment` are the same bad flag value.
+  There is no deployment to name in either, so the message states which of the
+  two it is rather than listing nothing.
+- A deployment that an `RSDL-7xx` error removed from the system is not unknown:
+  the build reports that error and exits 1.
+
+### Bindings, and what is not built
+
+The `bindings` list is empty today. The emitter writes none.
+
+Nothing in the workspace reads the section: the Rust backend and the two
+reference plugins ignore it, and no `--emit` value writes the request out. The
+request is built in memory, and what a build hands a plugin is checked by
+running a plugin that saves each request it is given
+(`crates/ridlc/tests/cli.rs`).
+
+## 8. What a plugin author reads
 
 In order: [the IR specification](../specification/ir-specification.md) §7 and §8
 (read `schema` first; parse leniently; a fixture is a file `ridlc` wrote),
@@ -319,7 +473,7 @@ message by message), `crates/ridlc-gen-model/src/main.rs` (a complete plugin in
 sixty lines), and the [CLI reference](../book/cli-reference.md)'s `ridl build`
 section (how the plugin is found and what `ridlc` does with the response).
 
-## 8. Where the records and the code disagree
+## 9. Where the records and the code disagree
 
 1. **ADR-0020 decision 11's text before its amendment, the release-scope note
    §3.8's "Proof without a second language", and issue #322's `Done when` all

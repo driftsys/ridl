@@ -196,6 +196,7 @@ fn build_without_levels_writes_artifacts() {
         Duration::from_secs(10),
         Frozen::No,
         ApplyLints::No,
+        None,
     )
     .expect("the build runs");
     assert!(!run.has_error(), "unexpected error: {:?}", run.diagnostics);

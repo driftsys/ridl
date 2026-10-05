@@ -10,7 +10,8 @@ syntax = "proto3";
 // never touches the filesystem: `ridlc` writes every file the response
 // carries (ADR-0020 decision 9).
 //
-// The request carries the lowered model and the backend options, never the
+// The request carries the lowered model, the backend options and, when the
+// build selected one, the deployment section of `deployment.proto`, never the
 // raw IR. A backend that still needs a fact the
 // model does not state is a gap in the model, fixed in the model.
 //
@@ -23,6 +24,7 @@ syntax = "proto3";
 // start at 1; `oneof` members start at 10.
 package ridl.codegen.v1;
 
+import "ridl/codegen/v1/deployment.proto";
 import "ridl/codegen/v1/model.proto";
 
 // What a backend is asked to generate: one package's lowered model, the
@@ -50,6 +52,12 @@ message CodegenRequest {
   // output out another way, one file per declaration for example, is free
   // to ignore it.
   string artifact_base = 5;
+  // The deployment section: the facts of one concrete deployment of a system,
+  // for a plugin that lays out memory for it. It is a field of the request
+  // beside the model, not part of the model, and every request of one build
+  // carries the same section. Absent when the build selects no deployment; a
+  // request without it is the request that existed before the field.
+  optional Deployment deployment = 6;
 }
 
 // One backend option, as the host gives it. No flag sets one yet: the

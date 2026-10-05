@@ -87,7 +87,7 @@ fn the_plugin_answers_every_corpus_request_as_the_in_process_backend_does() {
     for (entry, packages) in corpus_packages() {
         let others: Vec<&v2::Package> = packages.iter().collect();
         for package in &packages {
-            let request = ridlc::codegen_request(&package.name, package, &others, Vec::new());
+            let request = ridlc::codegen_request(&package.name, package, &others, Vec::new(), None);
             let label = format!("{entry}: package {}", package.name);
 
             let in_process = ModelBackend.generate(&request);
@@ -163,6 +163,7 @@ fn a_build_through_the_plugin_writes_what_a_build_through_the_emit_writes() {
             TIMEOUT,
             ridl_core::Frozen::No,
             ridlc::ApplyLints::Yes,
+            None,
         )
         .expect("the build runs");
         let plugin_run = ridlc::run_build_with(
@@ -173,6 +174,7 @@ fn a_build_through_the_plugin_writes_what_a_build_through_the_emit_writes() {
             TIMEOUT,
             ridl_core::Frozen::No,
             ridlc::ApplyLints::Yes,
+            None,
         )
         .expect("the build runs");
 
@@ -218,6 +220,7 @@ fn the_plugin_refuses_a_schema_it_does_not_know_with_a_diagnostic_naming_both() 
         model: Some(v1::Model::default()),
         options: Vec::new(),
         artifact_base: "p".to_string(),
+        deployment: None,
     };
     let response = run(&plugin(), &request, TIMEOUT).expect("a response, not a host failure");
     assert!(codegen::has_error(&response));
@@ -238,6 +241,7 @@ fn the_plugin_refuses_an_option_it_does_not_know() {
             value: "2".to_string(),
         }],
         artifact_base: "p".to_string(),
+        deployment: None,
     };
     let response = run(&plugin(), &request, TIMEOUT).expect("a response, not a host failure");
     assert!(codegen::has_error(&response));

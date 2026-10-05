@@ -210,6 +210,20 @@ const ALLOWED: &[Allowed] = &[
               interfaces",
     },
     Allowed {
+        path: "crates/ridl-ir/src/codegen/deployment.rs",
+        lines: 17,
+        why: "three production lines read the region map's own \
+              `Region.interfaces` field in the lowered system, which the \
+              rsdl lowering already filled from a `shapes()` walk, not \
+              `Package::interfaces`; the emitter reaches a package's \
+              interface bodies through `shapes()`. One test line reads the \
+              emitted section's own `Region.interfaces`. The other thirteen \
+              are test fixtures editing a package's named interfaces and a \
+              fixture system's region map — interface numbers, member \
+              ordinals, member kinds, the provisional flag, and moving an \
+              interface into a service's inline shape",
+    },
+    Allowed {
         path: "crates/ridl-ir/src/lib.rs",
         lines: 9,
         why: "the IR-side `shapes()` helper itself; `referenced_packages`, \
@@ -242,6 +256,13 @@ const ALLOWED: &[Allowed] = &[
               assertions over the named store",
     },
     Allowed {
+        path: "crates/ridl-sem/src/rsdl/lower.rs",
+        lines: 1,
+        why: "a test reading the lowered system's own `Region.interfaces` \
+              field to state the interface numbers its fixture lock pins, \
+              not a read of `Package::interfaces`",
+    },
+    Allowed {
         path: "crates/ridl-sem/src/timing.rs",
         lines: 1,
         why: "a test helper taking the one interface its fixture declares",
@@ -257,6 +278,12 @@ const ALLOWED: &[Allowed] = &[
         why: "the cohesion lint measures declared interfaces only, as required \
               by the approved design-lints spec section 4.4; service inline \
               shapes are outside this check's scope",
+    },
+    Allowed {
+        path: "crates/ridlc/tests/cabin_example.rs",
+        lines: 1,
+        why: "the read is of the deployment region's interface list \
+              (`Region::interfaces`), not of `Package::interfaces`",
     },
     Allowed {
         path: "crates/ridlc/tests/codegen_model.rs",

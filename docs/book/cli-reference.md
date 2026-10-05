@@ -573,6 +573,9 @@ Options:
       --frozen
           Verify remote imports against `ridl.lock` without fetching or regenerating it (CI mode, ADR-0002 §7)
 
+      --deployment <NAME>
+          The deployment to carry in each codegen request. With one deployment in the workspace it is selected without this flag; with several, none is carried unless named
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -581,6 +584,19 @@ Options:
 targets. `--frozen` is the same flag as on `ridl check`: it is
 [`ridlc build --frozen`](#ridlc-build), documented word for word since
 [ADR-0010][adr-0010].
+
+`--deployment NAME` picks the deployment of the workspace's system that every
+codegen request carries. Without it, the request carries the deployment when
+the system declares exactly one, and none when it declares several or the
+workspace has no system. A single declared deployment that an `RSDL-7xx` error
+removed from the system is not carried either: the build reports that error and
+exits 1. A `NAME` that the system does not declare exits 2 and
+names the deployments it does declare, unless the build already has an error of
+its own: that error takes precedence, and the build reports it and exits 1.
+When no name can be right, the message says which reason it is — the workspace
+declares no system, or the system declares no deployment. A deployment that an
+`RSDL-7xx` error removed from the system is not unknown either: the build
+reports that error and exits 1.
 
 **`rust` is a language backend**, and it writes the whole generated surface of
 a package in one file: the domain types (a struct, an enum, an enum set, a
@@ -679,8 +695,11 @@ receives on its standard input one `ridl.codegen.v1.CodegenRequest` in canonical
 protobuf JSON: `schema` (`"ridl.codegen.v1"`) and `toolchain` (this `ridl`'s
 version) first, then `model`, byte for byte the package's `codegen-model`
 artifact one indentation level deeper, `options` (empty from this command
-line; no flag sets one yet) and `artifactBase`, the `<base>` of the emit list
-above. It answers on its standard output with one `CodegenResponse`: `files`,
+line; no flag sets one yet), `artifactBase`, the `<base>` of the emit list
+above, and `deployment`, the deployment section — the one `--deployment`
+names, or, with no flag, the one the source declares when it declares exactly
+one — absent when no deployment is carried. It answers on its standard output with one
+`CodegenResponse`: `files`,
 each a `path` relative to `--out-dir` with a `text` or `binary` content, and
 `diagnostics`, each a `severity` and a `message`. `ridl` writes the files; the
 plugin never touches the filesystem, so `--out-dir` means for a plugin exactly
@@ -1852,14 +1871,17 @@ Options:
       --frozen
           Verify remote imports against `ridl.lock` without fetching or regenerating it (CI mode, ADR-0002 §7)
 
+      --deployment <NAME>
+          The deployment to carry in each codegen request. With one deployment in the workspace it is selected without this flag; with several, none is carried unless named
+
   -h, --help
           Print help (see a summary with '-h')
 ```
 
 **It writes** the same artifacts as `ridl build` — and `ridl.lock` under the
 same `[imports]` condition — under the `--out-dir` you must now name
-explicitly. `--plugin` and `--plugin-timeout` are the same two flags as on
-[`ridl build`](#ridl-build), spelled and documented identically:
+explicitly. `--plugin`, `--plugin-timeout` and `--deployment` are the same three
+flags as on [`ridl build`](#ridl-build), spelled and documented identically:
 
 ```sh
 ridlc build . --out-dir out && find out -type f | sort

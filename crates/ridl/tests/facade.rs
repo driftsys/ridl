@@ -539,3 +539,37 @@ fn catalog_hash_is_the_same_whether_a_build_emits_proto_flatbuffers_or_both() {
     assert_ne!(proto, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=");
     assert_eq!(proto.len(), 44, "32 bytes are 44 base64 characters");
 }
+
+/// `ridl build --deployment NAME` reaches the build: a name the system does
+/// not declare is a bad flag value, and a name it declares is accepted.
+#[test]
+fn build_passes_the_deployment_name_to_the_compiler() {
+    let cabin = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/cabin");
+    let out = TempDir::new("deployment-flag-out");
+    let bad = out.path().join("bad");
+    let (code, stderr) = ridl(&[
+        "build".as_ref(),
+        cabin.as_os_str(),
+        "--out-dir".as_ref(),
+        bad.as_os_str(),
+        "--deployment".as_ref(),
+        "Nope".as_ref(),
+    ]);
+    assert_eq!(code, 2, "a bad flag value exits 2, stderr:\n{stderr}");
+    assert!(
+        stderr.contains("no deployment named `Nope`"),
+        "stderr:\n{stderr}"
+    );
+    assert!(stderr.contains("Bench"), "stderr:\n{stderr}");
+
+    let good = out.path().join("good");
+    let (code, stderr) = ridl(&[
+        "build".as_ref(),
+        cabin.as_os_str(),
+        "--out-dir".as_ref(),
+        good.as_os_str(),
+        "--deployment".as_ref(),
+        "Bench".as_ref(),
+    ]);
+    assert_eq!(code, 0, "a declared deployment exits 0, stderr:\n{stderr}");
+}

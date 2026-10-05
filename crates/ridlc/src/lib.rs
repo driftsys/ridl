@@ -171,6 +171,7 @@ pub fn check_source(path: &str, text: &str) -> CliRun {
         diagnostics: front.diagnostics,
         sources: front.sources,
         lints: LintScopes::default(),
+        usage_error: false,
     }
 }
 
@@ -325,6 +326,11 @@ pub struct WorkspaceOutput {
     /// workspace declares no `system` or an error in its closure blocks the
     /// lowering. A deployment an RSDL-7xx error blocks is absent from it.
     pub system: Option<ridl_ir::v2::System>,
+    /// The name of every `deployment` the source declares, in declaration
+    /// order — including one an RSDL-7xx error blocked, which `system` leaves
+    /// out. [`select_deployment`] counts these, not the lowered system's, to
+    /// decide whether the workspace has exactly one deployment.
+    pub declared_deployments: Vec<String>,
     /// The diagnostics with the severities the emit sites chose. The lint
     /// levels of `lints` are not applied here (ADR-0024 decision 8): a
     /// consumer that reports to a person or an agent applies them itself.
@@ -397,6 +403,7 @@ pub fn compile_workspace_with(
     // Reuse the standard IR query already evaluated by the design lint pass.
     let std_ir = check_package(&*db, workspace, std, std).ir;
     let packages: Vec<&ridl_ir::v2::Package> = checked.iter().map(|package| &package.ir).collect();
+    let declared_deployments = declared_deployments(&system);
     let system = lower_workspace_system(&system, &packages, &std_ir);
     Ok(WorkspaceOutput {
         checked,
@@ -404,6 +411,7 @@ pub fn compile_workspace_with(
         imports,
         std_ir,
         system,
+        declared_deployments,
         diagnostics,
         sources,
         lints,
@@ -650,6 +658,12 @@ pub struct CliRun {
     /// that adds a lint diagnostic after the run returns applies them once
     /// more over the whole list (ADR-0024 decision 6).
     pub lints: LintScopes,
+    /// Whether the run failed on a bad flag value rather than on anything in
+    /// the sources: exit code 2 (ADR-0010 decision 1). The reason is the last
+    /// diagnostic of `diagnostics`, so a caller renders the list as usual and
+    /// reads this only for the exit code. `run_check` and [`check_source`]
+    /// never set it.
+    pub usage_error: bool,
 }
 
 /// Whether [`run_build_with`] applies the lint levels of the loaded `[lints]`
@@ -700,6 +714,7 @@ pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
         diagnostics,
         sources,
         lints,
+        usage_error: false,
     })
 }
 
@@ -741,6 +756,7 @@ pub fn run_build(
         Duration::from_secs(plugin::DEFAULT_TIMEOUT_SECONDS),
         frozen,
         ApplyLints::Yes,
+        None,
     )
 }
 
@@ -757,6 +773,18 @@ pub fn run_build(
 /// applied before the emit gate, so a lint at `deny` is an error that
 /// suppresses every artifact; with [`ApplyLints::No`], the diagnostics keep
 /// the severities the emit sites chose (ADR-0024 decision 8).
+///
+/// `deployment` names the deployment of the workspace's system that every
+/// codegen request carries ([`select_deployment`] holds the rule). A name the
+/// system does not declare is a bad flag value: the returned run carries the
+/// reason as its last diagnostic and sets [`CliRun::usage_error`], which the
+/// command reports with exit code 2 (ADR-0010 decision 1). When the build has
+/// already drawn an error of its own, that error takes precedence: the run
+/// carries it, writes nothing, and exits 1.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the build's options, passed once from each command"
+)]
 pub fn run_build_with(
     entry: &Path,
     out_dir: &Path,
@@ -765,6 +793,7 @@ pub fn run_build_with(
     plugin_timeout: Duration,
     frozen: Frozen,
     apply_lints: ApplyLints,
+    deployment: Option<&str>,
 ) -> std::io::Result<CliRun> {
     let mut db = RidlDatabase::default();
     let Compiled {
@@ -859,38 +888,6 @@ pub fn run_build_with(
         ));
     }
     if succeeded {
-        std::fs::create_dir_all(out_dir)?;
-        let single_file = entry.is_file() && manifest_root_of(entry).is_none();
-        let file_stem = module_name_from_path(&entry.to_string_lossy());
-
-        // Whether this build owes the output directory a crate root and a
-        // manifest: generated Rust names a cross-package reference as
-        // `crate::veh::…` (`ridl_backend_rust::type_path`), so every package
-        // it emits must land inside one crate. Single-file mode keeps writing
-        // only `<stem>.rs`, matching the documented single-file asymmetry on
-        // `Emit::TypeScript`.
-        let writes_crate_files =
-            !single_file && emits.iter().any(|emit| matches!(emit, Emit::Rust));
-
-        // The overwrite gate runs before any write, not after the per-package
-        // loop: a refusal is a build that produced nothing, and a loop that
-        // had already written every `<package>.rs` into a hand-written crate
-        // would contradict that. `lib.rs` and `Cargo.toml` are not
-        // package-scoped names and `--out-dir` is any directory the caller
-        // names, so this is the check that keeps a build from truncating
-        // sources a person wrote.
-        if writes_crate_files {
-            let refusals = crate_file_refusals(out_dir)?;
-            if !refusals.is_empty() {
-                diagnostics.extend(refusals);
-                return Ok(CliRun {
-                    diagnostics,
-                    sources,
-                    lints,
-                });
-            }
-        }
-
         // `ridl.std` is deliberately absent from `checked` (it is not a
         // workspace member), so no loop over `checked` ever reaches it. A
         // consumer's generated code still references it, so the build
@@ -928,6 +925,107 @@ pub fn run_build_with(
         // region over.
         let others = catalog_scope(&packages, std_ir.as_ref());
 
+        // The lowered system, with the catalog hashes its regions carry. The
+        // region hashes must equal the hashes a `--emit catalog` build
+        // writes, so `ridl.std` is in their scope whenever a package
+        // references it: the `std_ir` above when a code emit computed it,
+        // otherwise checked here. Lowered once, for the deployment every
+        // request carries and for the system dump emits below. An error in
+        // the closure has already stopped the build above, so the lowering is
+        // `None` here only when the workspace declares no `system`.
+        let wants_system = generates_code
+            || deployment.is_some()
+            || emits.iter().any(|emit| emit.system_dump_suffix().is_some());
+        let checked_std;
+        let hash_std = match &std_ir {
+            Some(std_ir) => Some(std_ir),
+            None if references_std && wants_system => {
+                checked_std = check_package(&db, workspace, std, std).ir;
+                Some(&checked_std)
+            }
+            None => None,
+        };
+        let lowered_system = if wants_system {
+            lower_system(&system, &packages).map(|mut lowered| {
+                embed_catalog_hashes(&mut lowered, &packages, &catalog_scope(&packages, hash_std));
+                lowered
+            })
+        } else {
+            None
+        };
+        let selected = match select_deployment(
+            lowered_system.as_ref(),
+            &declared_deployments(&system),
+            deployment,
+            &catalog_scope(&packages, hash_std),
+        ) {
+            Ok(selected) => selected,
+            // A deployment an RSDL-7xx error dropped from the system is
+            // declared in the source, so its name is not unknown: the build
+            // reports that error and writes nothing (rsdl reference §13).
+            Err(_) if diagnostics.iter().any(|d| d.severity == Severity::Error) => {
+                return Ok(CliRun {
+                    diagnostics,
+                    sources,
+                    lints,
+                    usage_error: false,
+                });
+            }
+            // A name no source declares is a bad flag value (ADR-0010
+            // decision 1): exit 2, before the output directory is created.
+            // The diagnostics the compile already drew are kept and rendered
+            // with it, as they are on every other failure of this function:
+            // the flag value is wrong, which is no reason to hide a finding
+            // about the sources.
+            Err(err) => {
+                diagnostics.push(error_diagnostic(
+                    "",
+                    err.to_string(),
+                    FileId::DETACHED,
+                    TextRange::default(),
+                ));
+                return Ok(CliRun {
+                    diagnostics,
+                    sources,
+                    lints,
+                    usage_error: true,
+                });
+            }
+        };
+
+        std::fs::create_dir_all(out_dir)?;
+        let single_file = entry.is_file() && manifest_root_of(entry).is_none();
+        let file_stem = module_name_from_path(&entry.to_string_lossy());
+
+        // Whether this build owes the output directory a crate root and a
+        // manifest: generated Rust names a cross-package reference as
+        // `crate::veh::…` (`ridl_backend_rust::type_path`), so every package
+        // it emits must land inside one crate. Single-file mode keeps writing
+        // only `<stem>.rs`, matching the documented single-file asymmetry on
+        // `Emit::TypeScript`.
+        let writes_crate_files =
+            !single_file && emits.iter().any(|emit| matches!(emit, Emit::Rust));
+
+        // The overwrite gate runs before any write, not after the per-package
+        // loop: a refusal is a build that produced nothing, and a loop that
+        // had already written every `<package>.rs` into a hand-written crate
+        // would contradict that. `lib.rs` and `Cargo.toml` are not
+        // package-scoped names and `--out-dir` is any directory the caller
+        // names, so this is the check that keeps a build from truncating
+        // sources a person wrote.
+        if writes_crate_files {
+            let refusals = crate_file_refusals(out_dir)?;
+            if !refusals.is_empty() {
+                diagnostics.extend(refusals);
+                return Ok(CliRun {
+                    diagnostics,
+                    sources,
+                    lints,
+                    usage_error: false,
+                });
+            }
+        }
+
         for package in &checked {
             let base = if single_file {
                 file_stem.clone()
@@ -942,6 +1040,7 @@ pub fn run_build_with(
                 emits,
                 &resolved_plugins,
                 plugin_timeout,
+                selected.as_ref(),
                 &mut diagnostics,
             )?;
         }
@@ -955,6 +1054,7 @@ pub fn run_build_with(
                 &code_emits,
                 &resolved_plugins,
                 plugin_timeout,
+                selected.as_ref(),
                 &mut diagnostics,
             )?;
         }
@@ -982,26 +1082,11 @@ pub fn run_build_with(
         }
 
         // The lowered system, beside the package IR, for each IR dump emit
-        // (rsdl reference §13). An error in the closure has already stopped
-        // the build above, so the lowering is `None` here only when the
-        // workspace declares no `system`. The region hashes must equal the
-        // hashes a `--emit catalog` build writes, so `ridl.std` is in their
-        // scope whenever a package references it: the `std_ir` above when a
-        // code emit computed it, otherwise checked here.
-        if emits.iter().any(|emit| emit.system_dump_suffix().is_some()) {
-            let checked_std;
-            let hash_std = match &std_ir {
-                Some(std_ir) => Some(std_ir),
-                None if references_std => {
-                    checked_std = check_package(&db, workspace, std, std).ir;
-                    Some(&checked_std)
-                }
-                None => None,
-            };
-            if let Some(mut lowered) = lower_system(&system, &packages) {
-                embed_catalog_hashes(&mut lowered, &packages, &catalog_scope(&packages, hash_std));
-                write_system_emits(out_dir, &lowered, emits, &mut diagnostics)?;
-            }
+        // (rsdl reference §13).
+        if emits.iter().any(|emit| emit.system_dump_suffix().is_some())
+            && let Some(lowered) = &lowered_system
+        {
+            write_system_emits(out_dir, lowered, emits, &mut diagnostics)?;
         }
     }
 
@@ -1009,6 +1094,7 @@ pub fn run_build_with(
         diagnostics,
         sources,
         lints,
+        usage_error: false,
     })
 }
 
@@ -1324,6 +1410,22 @@ pub fn lower_workspace_system(
     Some(lowered)
 }
 
+/// The name of every `deployment` the checked model holds, in declaration
+/// order.
+///
+/// This is the count the source states. [`lower_system`] leaves out a
+/// deployment an RSDL-7xx error blocked (rsdl reference §13), so the lowered
+/// system's list is shorter than this one on such a build, and counting it
+/// would make a workspace that declares two deployments look like a workspace
+/// that declares one.
+fn declared_deployments(system: &CheckedSystem) -> Vec<String> {
+    system
+        .deployments
+        .iter()
+        .map(|deployment| deployment.name.name.clone())
+        .collect()
+}
+
 /// Sets each region's hash of `lowered` to the catalog hash of its package,
 /// computed over `others`, which [`catalog_scope`] builds.
 fn embed_catalog_hashes(
@@ -1606,6 +1708,7 @@ pub fn codegen_request(
     package: &ridl_ir::v2::Package,
     others: &[&ridl_ir::v2::Package],
     options: Vec<v1::BackendOption>,
+    deployment: Option<v1::Deployment>,
 ) -> v1::CodegenRequest {
     v1::CodegenRequest {
         schema: codegen::SCHEMA.to_string(),
@@ -1613,6 +1716,98 @@ pub fn codegen_request(
         model: Some(codegen::lower(package, others)),
         options,
         artifact_base: base.to_string(),
+        deployment,
+    }
+}
+
+/// A `--deployment` name that no deployment of the system carries.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnknownDeployment {
+    /// The name the caller gave.
+    pub requested: String,
+    /// The names of the deployments the workspace declares, sorted.
+    pub known: Vec<String>,
+    /// Whether the workspace has a `system` at all. With `known` empty, this
+    /// is what separates the two reasons no deployment can be named: no
+    /// `system` to carry one, or a `system` with no `deployment` block. Both
+    /// are reachable, and naming the wrong one sends a reader to the wrong
+    /// file.
+    pub has_system: bool,
+}
+
+impl std::fmt::Display for UnknownDeployment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match (self.known.is_empty(), self.has_system) {
+            (true, false) => write!(
+                f,
+                "no deployment named `{}`; the workspace declares no system, so no deployment can be named",
+                self.requested
+            ),
+            (true, true) => write!(
+                f,
+                "no deployment named `{}`; the system declares no deployment, so no deployment can be named",
+                self.requested
+            ),
+            (false, _) => write!(
+                f,
+                "no deployment named `{}`; the system declares: {}",
+                self.requested,
+                self.known.join(", ")
+            ),
+        }
+    }
+}
+
+impl std::error::Error for UnknownDeployment {}
+
+/// The deployment section every codegen request of one build carries.
+///
+/// `declared` is the name of every `deployment` the source declares, in any
+/// order ([`WorkspaceOutput::declared_deployments`]). It decides how many
+/// deployments the workspace has, and `system` — the lowered system, which
+/// leaves out a deployment an RSDL-7xx error blocked (rsdl reference §13) —
+/// supplies the facts of the one selected. Counting the lowered system's
+/// deployments instead would carry one deployment silently when the source
+/// declares two and an error dropped one.
+///
+/// With a `name`: the deployment of that name, or [`UnknownDeployment`] when
+/// the lowered system has none of that name. A name the source declares but
+/// the lowering dropped is such an error; the caller resolves that case by
+/// reporting the error it already holds, which takes precedence over the
+/// unknown name. The error reads `has_system` off `system`, which is also
+/// `None` when an error in the closure blocked the lowering (rsdl reference
+/// §13) — that case is an error, so the caller's precedence rule reports it
+/// and the message is never rendered. Without a `name`: the deployment when
+/// the source declares
+/// exactly one, and `None` for several declarations or none, so that a request
+/// for such a workspace has no deployment section at all. `None` as well when
+/// the source declares exactly one and the lowering dropped it, which is an
+/// RSDL-7xx error the caller already holds and reports.
+///
+/// `packages` holds every package of the workspace, `ridl.std` included.
+pub fn select_deployment(
+    system: Option<&ridl_ir::v2::System>,
+    declared: &[String],
+    name: Option<&str>,
+    packages: &[&ridl_ir::v2::Package],
+) -> Result<Option<v1::Deployment>, UnknownDeployment> {
+    let lowered = |wanted: &str| {
+        system.and_then(|system| codegen::lower_deployment(system, wanted, packages))
+    };
+    match name {
+        Some(requested) => lowered(requested).map(Some).ok_or_else(|| {
+            let mut known = declared.to_vec();
+            known.sort();
+            UnknownDeployment {
+                requested: requested.to_string(),
+                known,
+                has_system: system.is_some(),
+            }
+        }),
+        None => match declared {
+            [only] => Ok(lowered(only)),
+            _ => Ok(None),
+        },
     }
 }
 
@@ -1756,12 +1951,14 @@ fn write_emits(
     emits: &[Emit],
     plugins: &[plugin::Plugin],
     plugin_timeout: Duration,
+    deployment: Option<&v1::Deployment>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> std::io::Result<()> {
     // One request per package, built only when something reads it: an IR
     // dump alone lowers nothing.
     let needs_request = !plugins.is_empty() || emits.iter().any(|emit| !emit.is_ir_dump());
-    let request = needs_request.then(|| codegen_request(base, ir, others, Vec::new()));
+    let request =
+        needs_request.then(|| codegen_request(base, ir, others, Vec::new(), deployment.cloned()));
     let raw = codegen::RawIr {
         package: ir,
         others,

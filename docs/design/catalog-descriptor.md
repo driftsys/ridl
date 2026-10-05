@@ -172,7 +172,8 @@ carry it and `ridl-ir` is below all of them:
   `ridl_sem::lower_system` leaves it empty and does not depend on
   `ridl-descriptor`. `ridlc` fills it in `embed_catalog_hashes`, called by
   `lower_workspace_system` (which `compile_workspace`, and so `ridl diff`, uses)
-  and by the system write of `ridl build`.
+  and by `ridl build` whenever that build lowers the system — for a code emit,
+  for a plugin, for `--deployment`, or for a system dump.
 
 **One scope for every hash.** `catalog_scope` gives the descriptor and the
 regions the same packages: every checked package of the workspace, then
