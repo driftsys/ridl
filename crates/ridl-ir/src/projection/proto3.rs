@@ -1,17 +1,18 @@
 //! The proto3 projection facts, as ADR-0017 fixes them.
 //!
 //! Two readers have to agree on the scalar a typl type projects to: the
-//! `.proto` schema `ridl-backend-proto` writes, and the size bound
-//! `ridl-descriptor` derives for the catalog descriptor's proto3 column. They share no emission code, so what they share is
-//! this table: one function from a width, or from a backing without a width,
-//! to the proto3 scalar, and the largest encoding of one value of that scalar.
+//! `.proto` schema `ridl-backend-proto` writes, and the proto3 size bound
+//! [`crate::projection::size`] derives. They share no emission code, so what
+//! they share is this table: one function from a width, or from a backing
+//! without a width, to the proto3 scalar, and the largest encoding of one
+//! value of that scalar.
 //!
 //! Nothing here writes a line of schema text; the spelling the backend emits
 //! is [`Scalar::as_str`], and the backend is the only caller that emits it.
 //!
 //! The two field-number limits proto3 fixes live here for the same reason:
 //! the backend refuses a field number outside them (`check_field_number`),
-//! and the descriptor's sizer answers no bound for the same field.
+//! and the sizer answers no bound for the same field.
 
 use crate::v2;
 

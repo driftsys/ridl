@@ -694,7 +694,8 @@ fn map_key_text(
         }
     };
     // The admitted set is `Scalar::admitted_as_map_key` in `ridl-ir`, shared
-    // with the descriptor's proto3 size bound, which refuses the same keys.
+    // with `ridl_ir::projection::size`, whose proto3 sizer refuses the same
+    // keys.
     let text = match projected {
         Ok(scalar) if scalar.admitted_as_map_key() => return Ok(scalar.as_str().to_string()),
         Ok(scalar) => scalar.as_str().to_string(),
@@ -968,8 +969,8 @@ fn enum_set_field_type(esd: &v2::EnumSetDef) -> (String, Option<String>) {
 
 /// The proto3 scalar for a resolved typl width (typl Appendix D). The table
 /// is `ridl_ir::projection::proto3::scalar`, which holds it once for this
-/// emitter and for the proto3 size bound the catalog descriptor derives, so
-/// the two cannot disagree; the rationale for each row is documented there.
+/// emitter and for the proto3 size bound `ridl_ir::projection::size` derives,
+/// so the two cannot disagree; the rationale for each row is documented there.
 fn proto_scalar(td: &v2::TypeDef) -> &'static str {
     proto3::scalar(td).as_str()
 }

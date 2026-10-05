@@ -6,15 +6,17 @@
 //! identity to a target's shape — and because `ridl-ir` is the crate every
 //! consumer of a projection already depends on. The same holds for the facts
 //! below. `ridl-backend-flatbuffers` emits the `.fbs` schema from them,
-//! `ridl-backend-rust` emits the payload codec from them, and `ridl-descriptor` reads the same size bound for the catalog
-//! descriptor. None of those three may depend on either of the other
-//! two, so the facts cannot live in a backend.
+//! `ridl-backend-rust` emits the payload codec from them, and `ridl-descriptor`
+//! reads the same size bound for the catalog descriptor. None of those three
+//! may depend on either of the other two, so the facts cannot live in a
+//! backend.
 //!
 //! One submodule per target. [`flatbuffers`] reads ADR-0019's projection rules
 //! once, for both of the emitters that have to agree on them. [`proto3`] holds
-//! ADR-0017's scalar table once, for the `.proto` emitter and the descriptor's
-//! proto3 size bound. [`size`] states the maximum encoded size of a payload
-//! under each of those two encodings, over both of them.
+//! ADR-0017's scalar table once, for the `.proto` emitter and for [`size`].
+//! [`size`] states the maximum encoded size of a payload under each of those
+//! two encodings, over both of them; it is the one sizer, and the catalog
+//! descriptor and the codegen model both read it.
 
 pub mod flatbuffers;
 pub mod proto3;

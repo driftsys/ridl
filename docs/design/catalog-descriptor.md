@@ -270,15 +270,29 @@ both per encoding:
   bounded sizes of the member's payloads, in order: a signal, an event or a
   fixed member has its one payload, a command has its request, and a query has
   its request and then its reply. The first payload whose state is not bounded
-  makes the reservation `unsized`, naming `<member>.<role>: <type>`.
+  makes the reservation `unsized`, naming `<member>.<role>: <payload>`, where
+  `<payload>` is the type's reference when the payload is one named type and
+  otherwise what the shape is — a kind word, a parameter list or `()`. A member
+  of a kind this toolchain does not know is `unsized` naming
+  `<member>: no known payload shape`, never summed as zero. The field's own
+  comment in `ridl/codegen/v1/model.proto` lists every shape.
 - **`Interface.table_budget`** is the saturating sum of the reservations of the
   live members in `MEMBERS` order. It is `unsized`, naming the first member
   whose reservation is unsized. A tombstone does not count, and an interface
   with no live member has a budget of zero bytes.
 
-These are the sums that `ridl_rt::contract::Member::reservation` and
-`table_budget` compute over `Interface::MEMBERS`, written once, so that the
-plugin that sizes a call table and the runtime that debits it agree.
+These are the same two sums the runtime computes:
+`ridl_rt::contract::Member::reservation` over a member's payloads, and the free
+function `ridl_rt::contract::table_budget` over `Interface::MEMBERS`. The model
+states them per wire encoding, so a plugin reads them without walking the
+members itself.
+
+The two sides agree only where the runtime holds the same per-payload sizes the
+model holds. Today the Rust backend writes no proto3 size into a descriptor:
+`PayloadInfo::max_size` carries `proto3: None` for every payload, so the
+runtime's proto3 reservation is `Unsized` for every member a descriptor carries,
+while the model's proto3 column can carry a byte count. The FlatBuffers column
+is the one where both sides read the same number.
 
 ## Verification before access, and `ridl describe`
 

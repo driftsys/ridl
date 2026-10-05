@@ -1015,7 +1015,9 @@ impl<'a> Lowering<'a> {
 
     /// The state of `shape` under `encoding`, from the one sizer. An
     /// unbounded FlatBuffers state carries the same attribution a root
-    /// carries.
+    /// carries. `home` is the package `reference` is read from, for both
+    /// halves: the sizer resolves the payload's type name in it, and the
+    /// attribution resolves the same name in it.
     fn size_state(
         &self,
         home: &'a v2::Package,
@@ -1023,7 +1025,7 @@ impl<'a> Lowering<'a> {
         reference: Option<&str>,
         encoding: Encoding,
     ) -> v1::SizeState {
-        let state = match size::size_state(shape, &self.sizes, encoding) {
+        let state = match size::size_state(home, shape, &self.sizes, encoding) {
             SizeState::Bounded(size) => v1::size_state::State::Bounded(size),
             SizeState::Unbounded(cause) => {
                 let attribution = reference
@@ -1203,7 +1205,7 @@ fn constraint(source: &v2::Constraint) -> v1::Constraint {
 }
 
 /// One payload of a member: its role, the type as text, and its sizes.
-type MemberPayload = (&'static str, String, Option<v1::PayloadSizes>);
+pub(super) type MemberPayload = (&'static str, String, Option<v1::PayloadSizes>);
 
 /// The type of a call's request as text: the one named type, or the
 /// parameter names in parentheses.
@@ -1252,7 +1254,7 @@ fn return_text(ret: &v2::ReturnType) -> String {
 /// A member's reservation under each encoding. `payloads` is `None` for a
 /// member of a kind this lowering does not know; its reservation is then
 /// unsized, naming the member.
-fn reserve(member: &str, payloads: Option<&[MemberPayload]>) -> v1::Reservation {
+pub(super) fn reserve(member: &str, payloads: Option<&[MemberPayload]>) -> v1::Reservation {
     let state = |pick: fn(&v1::PayloadSizes) -> &Option<v1::SizeState>| {
         let Some(payloads) = payloads else {
             return unsized_reservation(format!("{member}: no known payload shape"));

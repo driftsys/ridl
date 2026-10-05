@@ -203,14 +203,19 @@ fn response(ret: &ReturnType, ctx: &Ctx<'_>) -> Payload {
 
 /// One row per encoding that has a state; no row for an encoding whose state
 /// is absent, which is every encoding of a payload that is not one named type
-/// (§4 answers 6 and 10).
+/// (`docs/design/catalog-descriptor.md`, the section "The size states").
 fn payload(role: &str, type_name: String, shape: &PayloadShape<'_>, ctx: &Ctx<'_>) -> Payload {
     Payload {
         role: role.to_owned(),
         type_name,
         max_sizes: COLUMNS
             .iter()
-            .filter_map(|&encoding| row(encoding, size_state(shape, ctx, encoding)))
+            .filter_map(|&encoding| {
+                row(
+                    encoding,
+                    size_state(ctx.packages().package, shape, ctx, encoding),
+                )
+            })
             .collect(),
     }
 }

@@ -7,10 +7,11 @@
 
 use crate::codegen::fb_unbounded;
 use crate::projection::flatbuffers::{MAX_ENCODABLE, max_size, root_table};
+use crate::v2::Package;
 
 use super::{AbsentCause, Ctx, SizeState, UnboundedCause};
 
-/// The state of the named type `type_name`: absent with
+/// The state of the named type `type_name`, read from `home`: absent with
 /// [`AbsentCause::Unresolved`] when the name does not resolve or the
 /// declaration has no FlatBuffers root (a constant, ADR-0013 decision 5, or
 /// an interaction); bounded with the projection's bound; unbounded, with the
@@ -19,8 +20,8 @@ use super::{AbsentCause, Ctx, SizeState, UnboundedCause};
 /// overflow or a bound above `MAX_ENCODABLE` all reach here as unbounded, so
 /// this state and the model `--emit codegen-model` writes agree on which
 /// payloads have a bound.
-pub(crate) fn state(type_name: &str, ctx: &Ctx<'_>) -> SizeState {
-    let Some((decl, declaring)) = ctx.resolve(ctx.packages().package, type_name) else {
+pub(crate) fn state<'a>(home: &'a Package, type_name: &str, ctx: &Ctx<'a>) -> SizeState {
+    let Some((decl, declaring)) = ctx.resolve(home, type_name) else {
         return SizeState::Absent(AbsentCause::Unresolved);
     };
     if root_table(decl).is_none() {
@@ -77,7 +78,7 @@ mod tests {
             )
             .unwrap_or_else(|| panic!("{name} is bounded in the fixture"));
             assert_eq!(
-                state(name, &ctx),
+                state(&package, name, &ctx),
                 SizeState::Bounded(u32::try_from(expected).unwrap()),
                 "{name}"
             );
@@ -94,7 +95,7 @@ mod tests {
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
         assert_eq!(
-            state("Open", &ctx),
+            state(&package, "Open", &ctx),
             SizeState::Unbounded(UnboundedCause::Member)
         );
     }
@@ -105,12 +106,12 @@ mod tests {
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
         assert_eq!(
-            state("Missing", &ctx),
+            state(&package, "Missing", &ctx),
             SizeState::Absent(AbsentCause::Unresolved)
         );
         // A constant projects no FlatBuffers declaration (ADR-0013 decision 5).
         assert_eq!(
-            state("LIMIT", &ctx),
+            state(&package, "LIMIT", &ctx),
             SizeState::Absent(AbsentCause::Unresolved)
         );
     }
@@ -123,7 +124,12 @@ mod tests {
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
         assert_eq!(
-            size_state(&PayloadShape::Named("Point"), &ctx, Encoding::FlatBuffers),
+            size_state(
+                &package,
+                &PayloadShape::Named("Point"),
+                &ctx,
+                Encoding::FlatBuffers
+            ),
             SizeState::Bounded(55)
         );
     }
@@ -157,11 +163,11 @@ mod tests {
         .expect("bounded in p too, with the wider `Inner`");
         assert_ne!(in_q, in_p, "the two `Inner`s differ in size");
         assert_eq!(
-            state("q.Thing", &ctx),
+            state(&root, "q.Thing", &ctx),
             SizeState::Bounded(u32::try_from(in_q).unwrap())
         );
         assert_eq!(
-            state("q.Loose", &ctx),
+            state(&root, "q.Loose", &ctx),
             SizeState::Unbounded(UnboundedCause::Member)
         );
     }
@@ -255,19 +261,19 @@ mod tests {
         let others = [&imported];
         let ctx = Ctx::new(&root, &others);
         assert_eq!(
-            state("NoType", &ctx),
+            state(&root, "NoType", &ctx),
             SizeState::Unbounded(UnboundedCause::Untyped)
         );
         assert_eq!(
-            state("Clash", &ctx),
+            state(&root, "Clash", &ctx),
             SizeState::Unbounded(UnboundedCause::Layout)
         );
         assert_eq!(
-            state("TooBig", &ctx),
+            state(&root, "TooBig", &ctx),
             SizeState::Unbounded(UnboundedCause::Aggregate)
         );
         assert_eq!(
-            state("Far", &ctx),
+            state(&root, "Far", &ctx),
             SizeState::Unbounded(UnboundedCause::Exempt)
         );
     }

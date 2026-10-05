@@ -544,11 +544,18 @@ enum AbsentCause {
   ABSENT_CAUSE_ENCODING_UNDEFINED = 1;
   // proto3 only: the type has no message of its own.
   ABSENT_CAUSE_NO_MESSAGE = 2;
-  // proto3 only: a member the proto backend refuses.
+  // proto3 only: every failure inside the message other than the depth
+  // limit — a member the proto backend refuses, a name inside the message
+  // that does not resolve, a member no proto3 leaf bounds, an enum value
+  // outside int32, and a `u64` sum or product inside the walk that does not
+  // fit. The normative statement is the rustdoc of
+  // `ridl_ir::projection::size::proto3::state`.
   ABSENT_CAUSE_REFUSED_MEMBER = 3;
   // A string or bytes with no length bound, or a type def with no width.
   ABSENT_CAUSE_NO_BOUND = 4;
-  // The bound exceeds `u32::MAX`, or the nesting passes the sizer's depth.
+  // proto3 only: the bound exceeds `u32::MAX`, or the nesting passes the
+  // sizer's depth limit. The FlatBuffers sizer reports a bound it cannot
+  // derive as unbounded, so it never writes this cause.
   ABSENT_CAUSE_OVERFLOW = 5;
   // A name that does not resolve, or a declaration with no root form under
   // the encoding. Under FlatBuffers that is a declaration with no root
@@ -564,9 +571,24 @@ message ReservationState {
     // The saturating sum, in bytes, of the bounded sizes of the member's
     // payloads.
     uint64 bytes = 10;
-    // The first payload of the member whose state is not bounded, as
-    // `<member>.<role>: <type>`. For an interface's table budget, the name of
-    // the first live member whose reservation is unsized.
+    // Why no sum exists. For a member's reservation it is one of two
+    // shapes:
+    //
+    //   `<member>.<role>: <payload>` — the first payload of the member whose
+    //   state is not bounded. `<role>` is `payload`, `request` or `reply`.
+    //   `<payload>` is the payload's type reference when it is one named
+    //   type, and otherwise what the shape is: the kind word `primitive`,
+    //   `inline scalar`, `tuple`, `map`, `stream`, `array of <element>`,
+    //   `no type` or `no payload`; the parameter list `(a, b)` of a request
+    //   of zero or of several parameters; `<ok> | <err>` for a fallible
+    //   reply; or `()` for a query with no declared return type.
+    //
+    //   `<member>: no known payload shape` — a member whose kind this
+    //   toolchain does not know. Its payloads are not listed, so it is
+    //   unsized rather than summed as zero.
+    //
+    // For an interface's table budget it is `<member>` alone: the name of the
+    // first live member whose reservation is unsized.
     string unsized = 11;
   }
 }
@@ -596,8 +618,16 @@ message CommandShape {
   // require only (RIDL-302).
   repeated Clause clauses = 3;
   // The size state of the request under each wire encoding, for every
-  // command. It is absent with a cause where the call has no parameter or
-  // several, because no codec defines the encoding of either shape.
+  // command. Where the request is exactly one named type, the state is that
+  // type's own, which may be absent under one encoding and present under the
+  // other: a named scalar is `ABSENT_CAUSE_NO_MESSAGE` under proto3 and
+  // bounded under FlatBuffers. Otherwise it is absent under both encodings:
+  // `ABSENT_CAUSE_ENCODING_UNDEFINED` for no parameter, for several
+  // parameters, for an untyped parameter, and for a single parameter that is
+  // a tuple, an array, a map, a stream, or a scalar a proto3 leaf bounds —
+  // no codec defines the encoding of any of those request shapes;
+  // `ABSENT_CAUSE_NO_BOUND` for a single parameter that is a scalar no proto3
+  // leaf bounds, such as a `string` with no length bound.
   PayloadSizes request_sizes = 4;
 }
 
@@ -612,8 +642,14 @@ message QueryShape {
   repeated Clause clauses = 5;
   // As for a command.
   PayloadSizes request_sizes = 6;
-  // The size state of the reply under each wire encoding. It is absent with
-  // a cause where the reply is fallible or is not one named type.
+  // The size state of the reply under each wire encoding, for every query,
+  // including a query with no declared return type. Where the reply is
+  // exactly one named type, the state is that type's own, under the same rule
+  // as `request_sizes`. Otherwise it is absent under both encodings:
+  // `ABSENT_CAUSE_ENCODING_UNDEFINED` for a fallible `T | E` reply, for no
+  // declared return type, and for a reply that is a tuple, an array, a map, a
+  // stream, or a scalar a proto3 leaf bounds; `ABSENT_CAUSE_NO_BOUND` for a
+  // reply that is a scalar no proto3 leaf bounds.
   PayloadSizes reply_sizes = 7;
 }
 

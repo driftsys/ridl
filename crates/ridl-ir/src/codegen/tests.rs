@@ -1585,8 +1585,15 @@ fn absent_cause_pins_each_tag_to_its_schema_value() {
     for (cause, expected) in pairs {
         assert_eq!(super::lower::absent_cause(cause), expected);
     }
+    // Every tag of the schema, including the unspecified zero: a plugin
+    // reads the number, so a renumber is a wire change, not a rename.
+    assert_eq!(v1::AbsentCause::Unspecified as i32, 0);
+    assert_eq!(v1::AbsentCause::EncodingUndefined as i32, 1);
+    assert_eq!(v1::AbsentCause::NoMessage as i32, 2);
+    assert_eq!(v1::AbsentCause::RefusedMember as i32, 3);
     assert_eq!(v1::AbsentCause::NoBound as i32, 4);
     assert_eq!(v1::AbsentCause::Overflow as i32, 5);
+    assert_eq!(v1::AbsentCause::Unresolved as i32, 6);
 }
 
 /// The declared name of an `interface` declaration.
@@ -1597,8 +1604,10 @@ fn declared_name(interface: &v1::Interface) -> &str {
     }
 }
 
-/// The package of `call_package` plus three interfaces over `Pair`
-/// (bounded under both encodings) and `Tagged` (unbounded under both):
+/// The package of `call_package` plus three interfaces over `Pair` (bounded
+/// under both encodings) and `Tagged` (which has no bounded state under
+/// either: absent with `REFUSED_MEMBER` under proto3, unbounded under
+/// FlatBuffers):
 ///
 /// - `Tally`: a signal, a query with a request and a reply, a tombstone, and
 ///   a command, in that order.
@@ -1881,6 +1890,204 @@ fn a_fixed_member_with_no_payload_is_unsized_and_says_so() {
         assert_eq!(
             reserved(&tick.reservation, proto3),
             &unsized_by("tick.payload: no payload")
+        );
+    }
+}
+
+/// The `Odd` interface: one member whose kind this lowering does not know,
+/// which the IR can carry and the ridl surface cannot express.
+fn odd_package() -> v2::Package {
+    let package = sized_package();
+    let odd = v2::Interface {
+        name: "Odd".to_string(),
+        visibility: v2::Visibility::Public as i32,
+        interactions: vec![v2::Decl {
+            name: "later".to_string(),
+            visibility: v2::Visibility::Public as i32,
+            kind: None,
+            ..Default::default()
+        }],
+        number: 7,
+        ..Default::default()
+    };
+    let v2::Package { interfaces, .. } = package.clone();
+    v2::Package {
+        interfaces: interfaces.into_iter().chain([odd]).collect(),
+        ..package
+    }
+}
+
+#[test]
+fn a_member_of_an_unknown_kind_is_unsized_and_not_zero() {
+    // A member kind a newer toolchain adds must never be summed as zero: a
+    // reservation that counted it as zero would be smaller than the truth
+    // and a plugin would reserve too little.
+    let model = lower(&odd_package(), &[]);
+    let odd = interface_named(&model, "Odd");
+    let later = live_member(odd, "later");
+    for proto3 in [true, false] {
+        assert_eq!(
+            reserved(&later.reservation, proto3),
+            &unsized_by("later: no known payload shape")
+        );
+        assert_eq!(reserved(&odd.table_budget, proto3), &unsized_by("later"));
+    }
+}
+
+#[test]
+fn each_encoding_lands_in_its_own_column() {
+    // `Tagged` holds a `string` with no length bound. Under proto3 that is a
+    // member no leaf bounds, so the state is absent with `REFUSED_MEMBER`;
+    // under FlatBuffers the same declaration is unbounded. The two states
+    // differ in kind, so a lowering that filled one column with the other
+    // encoding's sizer fails here.
+    let model = lower(&sized_package(), &[]);
+    let tagged = signal_payload(&model, 1);
+    assert_eq!(
+        state(&tagged.sizes, true),
+        &v1::size_state::State::Absent(v1::SizeAbsent {
+            cause: v1::AbsentCause::RefusedMember as i32,
+            detail: None,
+        })
+    );
+    assert!(matches!(
+        state(&tagged.sizes, false),
+        v1::size_state::State::Unbounded(_)
+    ));
+}
+
+/// The `Kinds` interface: four fixed members whose payloads are, in order, a
+/// primitive, an inline scalar, a map and an array of a named type. No codec
+/// defines a size for any of them, so each reservation is unsized and states
+/// the payload's kind.
+fn kinds_package() -> v2::Package {
+    let package = sized_package();
+    let primitive = v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Primitive(
+            v2::PrimitiveType::Boolean as i32,
+        )),
+    };
+    let inline = v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::InlineScalar(Box::new(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::Integer as i32,
+                )),
+            }),
+            width: Some(v2::type_def::Width::IntWidth(v2::IntWidth::U8 as i32)),
+            ..Default::default()
+        }))),
+    };
+    let map = v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
+            key: Some(Box::new(named("Label"))),
+            value: Some(Box::new(named("Pair"))),
+            min: 0,
+            max: 2,
+        }))),
+    };
+    let array = v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+            element: Some(Box::new(named("Pair"))),
+            min: 0,
+            max: 2,
+        }))),
+    };
+    let fixed = |name: &str, payload: v2::FieldType| v2::Decl {
+        name: name.to_string(),
+        visibility: v2::Visibility::Public as i32,
+        kind: Some(v2::decl::Kind::FixedDef(v2::FixedDef {
+            payload: Some(payload),
+        })),
+        ..Default::default()
+    };
+    let kinds = v2::Interface {
+        name: "Kinds".to_string(),
+        visibility: v2::Visibility::Public as i32,
+        interactions: vec![
+            fixed("flag", primitive),
+            fixed("count", inline),
+            fixed("table", map),
+            fixed("list", array),
+        ],
+        number: 8,
+        ..Default::default()
+    };
+    let v2::Package { interfaces, .. } = package.clone();
+    v2::Package {
+        interfaces: interfaces.into_iter().chain([kinds]).collect(),
+        ..package
+    }
+}
+
+#[test]
+fn an_unsized_fixed_member_states_the_kind_of_its_payload() {
+    // Each kind is named distinctly, so a lowering that spelled two kinds
+    // the same way fails here.
+    let model = lower(&kinds_package(), &[]);
+    let kinds = interface_named(&model, "Kinds");
+    let expected = [
+        ("flag", "flag.payload: primitive"),
+        ("count", "count.payload: inline scalar"),
+        ("table", "table.payload: map"),
+        ("list", "list.payload: array of Pair"),
+    ];
+    for (member, text) in expected {
+        for proto3 in [true, false] {
+            assert_eq!(
+                reserved(&live_member(kinds, member).reservation, proto3),
+                &unsized_by(text),
+                "{member}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_multi_parameter_request_names_every_parameter() {
+    // The request of a call with several parameters has no encoding, and the
+    // reservation spells the whole parameter list: a join that dropped a
+    // name, or kept only the first, fails here.
+    let model = lower(&call_package(), &[]);
+    let two = live_member(interface_named(&model, "Calls"), "two");
+    for proto3 in [true, false] {
+        assert_eq!(
+            reserved(&two.reservation, proto3),
+            &unsized_by("two.request: (a, b)")
+        );
+    }
+}
+
+#[test]
+fn a_reservation_sums_in_u64_above_the_u32_range() {
+    // Two payloads whose bounds are each the largest a `u32` carries sum
+    // past `u32::MAX`. The sum is a `u64`, so it is the exact total; a sum
+    // narrowed or clamped to `u32::MAX` fails here.
+    let bounded = |size: u32| {
+        Some(v1::PayloadSizes {
+            proto3: Some(v1::SizeState {
+                state: Some(v1::size_state::State::Bounded(size)),
+            }),
+            flatbuffers: Some(v1::SizeState {
+                state: Some(v1::size_state::State::Bounded(size)),
+            }),
+        })
+    };
+    let payloads = [
+        ("request", "Huge".to_string(), bounded(u32::MAX)),
+        ("reply", "Huge".to_string(), bounded(u32::MAX)),
+    ];
+    let reservation = super::lower::reserve("ask", Some(&payloads));
+    let expected = u64::from(u32::MAX) * 2;
+    assert!(expected > u64::from(u32::MAX));
+    for proto3 in [true, false] {
+        assert_eq!(
+            reserved(&Some(reservation.clone()), proto3),
+            &bytes(expected)
         );
     }
 }

@@ -96,9 +96,10 @@ impl<'a> Ctx<'a> {
     /// [`Ctx::resolve`] returned a declaration with. `max_size` resolves a
     /// bare name inside a declaration against the `package` of the
     /// `Packages` it is given, so a declaration from an imported package is
-    /// sized with this, not with [`Ctx::packages`] — the way the codegen
-    /// lowering roots its bound (`Lowering::payload` in `ridl-ir`). `None`
-    /// when `declaring` is not a package of this scope.
+    /// sized with this, not with the home the name was read from — the way
+    /// the codegen lowering roots its bound (`Lowering::payload` in
+    /// `crate::codegen`). `None` when `declaring` is not a package of this
+    /// scope.
     pub fn packages_for(&self, declaring: &Package) -> Option<Packages<'_>> {
         let position = self
             .scope
@@ -224,21 +225,34 @@ pub enum AbsentCause {
     Unresolved,
 }
 
-/// The state of `shape` under `encoding`.
+/// The state of `shape` under `encoding`, with the payload's type name read
+/// from `home`.
+///
+/// `home` is the package the shape's bare type name resolves in, the same
+/// package a caller resolves the payload's reference against. A caller that
+/// reads a reference from one package and sizes it against another gets two
+/// answers about one payload, so `home` is a parameter and not the root of
+/// the `Ctx`.
 ///
 /// A payload that is not one named type is absent under every encoding, with
 /// the cause `payload_name` gives it: this module states a size for a named
 /// type alone. `ReprC` is absent with [`AbsentCause::EncodingUndefined`]
 /// whatever the shape. The `proto3` and `flatbuffers` submodules hold the
 /// per-encoding rules, each in its own `state`.
-pub fn size_state(shape: &PayloadShape<'_>, ctx: &Ctx<'_>, encoding: Encoding) -> SizeState {
-    let sizer: fn(&str, &Ctx<'_>) -> SizeState = match encoding {
-        Encoding::Proto3 => proto3::state,
-        Encoding::FlatBuffers => flatbuffers::state,
+pub fn size_state<'a>(
+    home: &'a Package,
+    shape: &PayloadShape<'_>,
+    ctx: &Ctx<'a>,
+    encoding: Encoding,
+) -> SizeState {
+    type Sizer<'a> = fn(&'a Package, &str, &Ctx<'a>) -> SizeState;
+    let sizer: Sizer<'a> = match encoding {
+        Encoding::Proto3 => proto3::state as Sizer<'a>,
+        Encoding::FlatBuffers => flatbuffers::state as Sizer<'a>,
         Encoding::ReprC => return SizeState::Absent(AbsentCause::EncodingUndefined),
     };
     match payload_name(shape) {
-        Ok(name) => sizer(name, ctx),
+        Ok(name) => sizer(home, name, ctx),
         Err(cause) => SizeState::Absent(cause),
     }
 }
@@ -250,8 +264,8 @@ pub fn size_state(shape: &PayloadShape<'_>, ctx: &Ctx<'_>, encoding: Encoding) -
 /// the multiplier and the absence
 /// (`string_max_bytes_agrees_with_the_flatbuffers_projection`). The
 /// compiler writes typl §4.4's `[0..256]` default into `len_max`, so a
-/// compiled package never reaches the `None`. No `match` narrowing (driver §4
-/// answer 7; #665).
+/// compiled package never reaches the `None`. No `match` narrowing yet
+/// (driftsys/ridl#665).
 pub fn string_max_bytes(constraint: Option<&Constraint>) -> Option<u64> {
     constraint?.len_max?.checked_mul(4)
 }
@@ -274,9 +288,9 @@ pub(crate) enum Leaf<'a> {
     /// scalar of its width (`enum_set_field_type` in the proto backend).
     Scalar(Scalar),
     /// A string or bytes value: its maximum byte length. The leaf model
-    /// counts in `u64`, as the FlatBuffers projection does; the descriptor's
-    /// sizes are `u32` (driver §4 answer 5), and the proto3 sizer narrows the
-    /// value when it writes a row.
+    /// counts in `u64`, as the FlatBuffers projection does; a bounded
+    /// [`SizeState`] is a `u32`, and [`proto3::state`] narrows the value when
+    /// it answers, with [`AbsentCause::Overflow`] when it does not fit.
     Blob(u64),
     /// An enum: its smallest and largest live member values, both 0 when it
     /// has no member, which decide the varint length. `retired_in_int32` is
@@ -326,7 +340,8 @@ pub(crate) fn leaf_of_field_type<'a>(
         field_type::Kind::Tuple(def) => Some(Leaf::Tuple { def, home }),
         field_type::Kind::Array(def) => Some(Leaf::Array { def, home }),
         field_type::Kind::Map(def) => Some(Leaf::Map { def, home }),
-        // A stream has absent sizes (driver §4 answer 10).
+        // A stream has no defined encoding, so its sizes are absent
+        // (driftsys/ridl#336).
         field_type::Kind::Stream(_) => None,
     }
 }
@@ -541,7 +556,7 @@ mod tests {
             string_max_bytes(Some(&constraint(Some(17), None))),
             Some(68)
         );
-        // No `match` narrowing in E16 (driver §4 answer 7; driftsys/ridl#665).
+        // No `match` narrowing yet (driftsys/ridl#665).
         assert_eq!(
             string_max_bytes(Some(&constraint(Some(17), Some("^[A-Z0-9]{17}$")))),
             Some(68)
@@ -1239,7 +1254,7 @@ mod tests {
                 &ctx
             )
             .is_none(),
-            "a stream has absent sizes (driver §4 answer 10)"
+            "a stream has no defined encoding, so its sizes are absent"
         );
         assert!(
             leaf_of_field_type(
@@ -1272,13 +1287,52 @@ mod tests {
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
         assert_eq!(
-            size_state(&PayloadShape::Named("Point"), &ctx, Encoding::ReprC),
+            size_state(
+                &package,
+                &PayloadShape::Named("Point"),
+                &ctx,
+                Encoding::ReprC
+            ),
             SizeState::Absent(AbsentCause::EncodingUndefined)
         );
     }
 
     /// The two encodings a state is defined for.
     const WIRE: [Encoding; 2] = [Encoding::Proto3, Encoding::FlatBuffers];
+
+    #[test]
+    fn the_home_decides_which_package_a_bare_payload_name_is_read_from() {
+        // `Point` is declared in `q` alone. Read from `q` the bare name
+        // resolves and both encodings answer a bound; read from the root `p`
+        // it resolves nowhere. A sizer that read the name from the root of
+        // the `Ctx` instead of its `home` answers the same state for both.
+        let root = package("p", vec![]);
+        let other = package(
+            "q",
+            vec![decl(
+                "Point",
+                Some(decl::Kind::StructDef(one_field_struct(primitive(
+                    PrimitiveType::Boolean,
+                )))),
+            )],
+        );
+        let others = [&other];
+        let ctx = Ctx::new(&root, &others);
+        for encoding in WIRE {
+            assert!(
+                matches!(
+                    size_state(&other, &PayloadShape::Named("Point"), &ctx, encoding),
+                    SizeState::Bounded(_)
+                ),
+                "{encoding:?}, read from q"
+            );
+            assert_eq!(
+                size_state(&root, &PayloadShape::Named("Point"), &ctx, encoding),
+                SizeState::Absent(AbsentCause::Unresolved),
+                "{encoding:?}, read from p"
+            );
+        }
+    }
 
     #[test]
     fn a_named_scalar_has_no_proto3_message() {
@@ -1291,11 +1345,11 @@ mod tests {
         let ctx = Ctx::new(&package, &others);
         let shape = PayloadShape::Named("Vin");
         assert_eq!(
-            size_state(&shape, &ctx, Encoding::Proto3),
+            size_state(&package, &shape, &ctx, Encoding::Proto3),
             SizeState::Absent(AbsentCause::NoMessage)
         );
         assert!(matches!(
-            size_state(&shape, &ctx, Encoding::FlatBuffers),
+            size_state(&package, &shape, &ctx, Encoding::FlatBuffers),
             SizeState::Bounded(_)
         ));
     }
@@ -1313,7 +1367,7 @@ mod tests {
         };
         for encoding in WIRE {
             assert_eq!(
-                size_state(&PayloadShape::Field(&stream), &ctx, encoding),
+                size_state(&package, &PayloadShape::Field(&stream), &ctx, encoding),
                 SizeState::Absent(AbsentCause::EncodingUndefined),
                 "{encoding:?}"
             );
@@ -1328,12 +1382,12 @@ mod tests {
         let params = [param("at", Some(named("Point"))), param("to", None)];
         for encoding in WIRE {
             assert_eq!(
-                size_state(&PayloadShape::Params(&params), &ctx, encoding),
+                size_state(&package, &PayloadShape::Params(&params), &ctx, encoding),
                 SizeState::Absent(AbsentCause::EncodingUndefined),
                 "{encoding:?}"
             );
             assert_eq!(
-                size_state(&PayloadShape::Params(&[]), &ctx, encoding),
+                size_state(&package, &PayloadShape::Params(&[]), &ctx, encoding),
                 SizeState::Absent(AbsentCause::EncodingUndefined),
                 "{encoding:?}, zero parameters"
             );
@@ -1353,7 +1407,7 @@ mod tests {
         };
         for encoding in WIRE {
             assert_eq!(
-                size_state(&PayloadShape::Return(&fallible), &ctx, encoding),
+                size_state(&package, &PayloadShape::Return(&fallible), &ctx, encoding),
                 SizeState::Absent(AbsentCause::EncodingUndefined),
                 "{encoding:?}"
             );
@@ -1375,12 +1429,12 @@ mod tests {
         };
         for encoding in WIRE {
             assert_eq!(
-                size_state(&PayloadShape::Field(&bare), &ctx, encoding),
+                size_state(&package, &PayloadShape::Field(&bare), &ctx, encoding),
                 SizeState::Absent(AbsentCause::NoBound),
                 "{encoding:?}, a bare `string`"
             );
             assert_eq!(
-                size_state(&PayloadShape::Field(&inline), &ctx, encoding),
+                size_state(&package, &PayloadShape::Field(&inline), &ctx, encoding),
                 SizeState::Absent(AbsentCause::NoBound),
                 "{encoding:?}, an inline `string` with no bound"
             );

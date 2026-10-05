@@ -65,6 +65,7 @@ fn every_generated_max_size_is_the_descriptors_flatbuffers_bound() {
     for (type_name, value) in pairs {
         assert_eq!(
             size_state(
+                &package,
                 &PayloadShape::Named(&type_name),
                 &ctx,
                 Encoding::FlatBuffers
