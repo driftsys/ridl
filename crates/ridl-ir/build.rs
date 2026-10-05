@@ -31,6 +31,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "proto/ridl/ir/v2/ir.proto",
         "proto/ridl/ir/v2/system.proto",
         "proto/ridl/codegen/v1/model.proto",
+        "proto/ridl/codegen/v1/deployment.proto",
         "proto/ridl/codegen/v1/plugin.proto",
     ];
     let include = "proto";

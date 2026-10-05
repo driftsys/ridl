@@ -970,6 +970,7 @@ fn a_request_round_trips_and_leads_with_its_two_version_fields() {
             value: "flatbuffers".to_string(),
         }],
         artifact_base: "veh.common".to_string(),
+        deployment: None,
     };
     let json = super::request_to_json(&request).expect("the request renders");
     assert_eq!(
@@ -1095,6 +1096,7 @@ fn the_model_backend_writes_the_model_back() {
         model: Some(model()),
         options: Vec::new(),
         artifact_base: "veh.common".to_string(),
+        deployment: None,
     };
     let response = super::ModelBackend.generate(&request);
     assert_eq!(super::ModelBackend.language(), "model");
@@ -2176,4 +2178,42 @@ fn a_reservation_sums_in_u64_above_the_u32_range() {
             &bytes(expected)
         );
     }
+}
+
+/// A request with the fields every request carries and no deployment.
+fn minimal_request() -> v1::CodegenRequest {
+    v1::CodegenRequest {
+        schema: super::SCHEMA.to_string(),
+        toolchain: "t".to_string(),
+        model: Some(v1::Model::default()),
+        options: vec![],
+        artifact_base: "a".to_string(),
+        deployment: None,
+    }
+}
+
+/// A request with no deployment is the request that existed before the
+/// deployment section: its JSON has no `deployment` key.
+#[test]
+fn a_request_without_a_deployment_serializes_as_before() {
+    let json = super::request_to_json(&minimal_request()).expect("the request renders");
+    assert!(!json.contains("deployment"), "{json}");
+}
+
+#[test]
+fn a_request_with_a_deployment_round_trips() {
+    let deployment = v1::Deployment {
+        system: "veh.cabin.Vehicle".to_string(),
+        name: "Bench".to_string(),
+        ..Default::default()
+    };
+    let request = v1::CodegenRequest {
+        deployment: Some(deployment),
+        ..minimal_request()
+    };
+    let json = super::request_to_json(&request).expect("the request renders");
+    assert_eq!(
+        super::request_from_json(&json).expect("the JSON parses back"),
+        request
+    );
 }

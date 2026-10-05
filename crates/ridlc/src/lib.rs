@@ -1613,6 +1613,7 @@ pub fn codegen_request(
         model: Some(codegen::lower(package, others)),
         options,
         artifact_base: base.to_string(),
+        deployment: None,
     }
 }
 
