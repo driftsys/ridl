@@ -251,12 +251,18 @@ fn inline_of(system: &v2::System, route: &v2::Route) -> bool {
 /// The kind and the resolved timing of the route's member.
 ///
 /// The interface is found in the package the route names as its catalog, by
-/// interface number and identity name together — the number is the routing
-/// identity and the name tells two shapes apart when a package was compiled
-/// before its lock was folded in and every number is still 0. The member is
-/// found by ordinal. A route whose interface or member is not found gives
-/// `KIND_UNSPECIFIED` and no timing, so the channel is still emitted with its
-/// producer and its consumer links and carries no sizing it cannot justify.
+/// its identity name alone — the interface's own name, or the owning
+/// service's dotted name for an inline shape. That name is unique within a
+/// catalog, so it is the whole key. The interface number is deliberately not
+/// part of it: a package set whose numbers differ from the lowered system's,
+/// which a stale or differently locked package gives, would then match
+/// nothing and the channel would lose its kind and its sizing with no
+/// diagnostic.
+///
+/// The member is found by ordinal. A route whose interface or member is not
+/// found gives `KIND_UNSPECIFIED` and no timing, so the channel is still
+/// emitted with its key, its producer and its consumer links, and carries no
+/// sizing it cannot justify.
 fn member_kind<'a>(
     packages: &[&'a v2::Package],
     route: &v2::Route,
@@ -266,9 +272,7 @@ fn member_kind<'a>(
         .copied()
         .filter(|package| package.name == route.catalog)
         .flat_map(v2::Package::shapes)
-        .find(|shape| {
-            shape.interface.number == route.interface_number && shape.name == route.interface
-        });
+        .find(|shape| shape.name == route.interface);
     let Some(shape) = found else {
         return (v1::Kind::Unspecified, None);
     };
@@ -904,5 +908,163 @@ mod tests {
             crate::codegen::request_to_json(&request).expect("the request renders")
         };
         assert_eq!(normalized(first), normalized(second));
+    }
+
+    #[test]
+    fn a_route_whose_interface_is_not_among_the_packages_keeps_its_channel() {
+        let system = system();
+        // The caller hands in no package at all: nothing declares the route's
+        // interface, so no member kind and no timing can be read.
+        let section = lower_deployment(&system, "prod", &[]).expect("the fixture lowers");
+        assert_eq!(section.channels.len(), 8);
+        for channel in &section.channels {
+            // The key, the producer and the consumer links are still written.
+            assert_eq!(channel.catalog, CATALOG);
+            assert_eq!(channel.interface_number, 1);
+            assert_eq!(channel.interface, INTERFACE);
+            assert!(channel.producer.is_some());
+            assert_eq!(channel.consumers.len(), 3);
+            // The kind is unspecified and no sizing value is invented.
+            assert_eq!(channel.kind, v1::Kind::Unspecified as i32);
+            assert_eq!(channel.depth, None);
+            for consumer in &channel.consumers {
+                // The crossing and the encoding do not depend on the member.
+                assert_ne!(consumer.encoding, v1::Encoding::Unspecified as i32);
+                assert_eq!(consumer.depth, None);
+                assert_eq!(consumer.slots, None);
+                assert_eq!(consumer.slots_source, v1::ValueSource::Unspecified as i32);
+                assert_eq!(consumer.budget, None);
+                assert_eq!(consumer.budget_source, v1::ValueSource::Unspecified as i32);
+            }
+        }
+        // `inline` still comes from the region map, which the system carries.
+        assert!(section.channels.iter().all(|channel| !channel.inline));
+    }
+
+    #[test]
+    fn a_route_matches_its_interface_whatever_number_the_package_carries() {
+        let mut package = package();
+        // A package compiled against another lock, or before its own lock was
+        // folded in: the number differs from the route's, the identity name
+        // does not.
+        package.interfaces[0].number = 0;
+        package.interfaces[0].provisional = true;
+        let system = system();
+        let section = lower_deployment(&system, "prod", &[&package]).expect("the fixture lowers");
+        let channel = channel_of(&section, EVENT_ORDINAL, "primary");
+        assert_eq!(channel.kind, v1::Kind::Event as i32);
+        // The channel's key stays the route's, not the package's.
+        assert_eq!(channel.interface_number, 1);
+        assert_eq!(
+            channel.depth,
+            Some(v1::Depth {
+                value: Some(10),
+                source: v1::ValueSource::Derived as i32,
+            })
+        );
+    }
+
+    #[test]
+    fn a_producer_instance_no_link_names_has_a_channel_with_no_consumer() {
+        let package = package();
+        let mut system = system();
+        // Every link of the backup instance is dropped: the instance is still
+        // placed and still produces, so its channels are still emitted.
+        system.deployments[0].links.retain(|link| {
+            link.producer
+                .as_ref()
+                .is_some_and(|end| end.instance != "backup")
+        });
+        let section = lower_deployment(&system, "prod", &[&package]).expect("the fixture lowers");
+        assert_eq!(section.channels.len(), 8);
+
+        let event = channel_of(&section, EVENT_ORDINAL, "backup");
+        assert!(event.consumers.is_empty());
+        // With no consumer link, the ring depth is the member's contract
+        // bound, which is what every link of it would carry.
+        assert_eq!(
+            event.depth,
+            Some(v1::Depth {
+                value: Some(10),
+                source: v1::ValueSource::Derived as i32,
+            })
+        );
+        let half_open = channel_of(&section, HALF_OPEN_ORDINAL, "backup");
+        assert!(half_open.consumers.is_empty());
+        assert_eq!(
+            half_open.depth,
+            Some(v1::Depth {
+                value: None,
+                source: v1::ValueSource::Underivable as i32,
+            })
+        );
+        let query = channel_of(&section, QUERY_ORDINAL, "backup");
+        assert!(query.consumers.is_empty());
+        assert_eq!(query.depth, None);
+        // The other producer instance keeps every link it had.
+        assert_eq!(
+            channel_of(&section, EVENT_ORDINAL, "primary")
+                .consumers
+                .len(),
+            3
+        );
+    }
+
+    #[test]
+    fn an_inline_service_shape_is_matched_by_its_dotted_name() {
+        // The interface moves into the service's inline shape, where
+        // `Interface.name` is empty and the identity name is the service's
+        // dotted name (ridl §14.5).
+        let mut package = package();
+        let mut interface = package.interfaces.remove(0);
+        interface.name = String::new();
+        package.services = vec![v2::Service {
+            name: SERVICE.to_string(),
+            shapes: vec![v2::ServiceShape {
+                kind: Some(v2::service_shape::Kind::Inline(interface)),
+            }],
+            ..Default::default()
+        }];
+
+        let mut system = system();
+        let inline_ref = v2::InterfaceRef {
+            catalog: CATALOG.to_string(),
+            name: SERVICE.to_string(),
+            inline: true,
+        };
+        system.regions[0].interfaces[0].name = SERVICE.to_string();
+        system.regions[0].interfaces[0].inline = true;
+        for region_interface in &mut system.regions[0].interfaces {
+            region_interface.inline = true;
+        }
+        for component in &mut system.components {
+            for require in &mut component.requires {
+                require.interface = Some(inline_ref.clone());
+            }
+        }
+        let deployment = &mut system.deployments[0];
+        for link in &mut deployment.links {
+            link.interface = Some(inline_ref.clone());
+        }
+        for route in &mut deployment.routes {
+            route.interface = SERVICE.to_string();
+        }
+
+        let section = lower_deployment(&system, "prod", &[&package]).expect("the fixture lowers");
+        let channel = channel_of(&section, EVENT_ORDINAL, "primary");
+        assert!(channel.inline);
+        assert_eq!(channel.interface, SERVICE);
+        assert_eq!(channel.kind, v1::Kind::Event as i32);
+        // The links are matched on the same triple, so none is lost.
+        assert_eq!(channel.consumers.len(), 3);
+        assert_eq!(
+            section.instances[0].offers,
+            [v1::InterfaceKey {
+                catalog: CATALOG.to_string(),
+                number: 1,
+                name: SERVICE.to_string(),
+                inline: true,
+            }]
+        );
     }
 }

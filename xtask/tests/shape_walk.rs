@@ -211,12 +211,15 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-ir/src/codegen/deployment.rs",
-        lines: 3,
-        why: "the region map's own `Region.interfaces` field in the lowered \
-              system, which the rsdl lowering already filled from a \
-              `shapes()` walk, not a read of `Package::interfaces`; the \
-              emitter reaches a package's interface bodies through \
-              `shapes()`",
+        lines: 9,
+        why: "three production lines read the region map's own \
+              `Region.interfaces` field in the lowered system, which the \
+              rsdl lowering already filled from a `shapes()` walk, not \
+              `Package::interfaces`; the emitter reaches a package's \
+              interface bodies through `shapes()`. The other six are test \
+              fixtures editing a package's named interfaces and a \
+              fixture system's region map, one of them to move the \
+              interface into a service's inline shape",
     },
     Allowed {
         path: "crates/ridl-ir/src/lib.rs",
