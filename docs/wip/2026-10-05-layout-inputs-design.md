@@ -73,7 +73,10 @@ new message of package `ridl.codegen.v1`, in a new file
 `plugin.proto`. The change is additive under the IR stability design D-5 and the
 IR specification §6: a new field with a never-used number, whose absence means
 what today's request means (no deployment). A request written with no deployment
-is byte for byte today's request.
+is byte for byte today's request. The toolchain's own generated reader stays
+strict and rejects an unknown key (ADR-0014); the in-tree plugins are rebuilt
+with it, and a plugin outside this workspace reads leniently, as the IR
+specification §8 and the model's own field comments already require.
 
 `Model` is unchanged by this decision. It stays one package lowered over a
 stated scope, so `ridl build --emit codegen-model`, `ridl baseline` and every
@@ -374,15 +377,19 @@ old toolchain from an undefined shape.
 
 ### D-8. Reservation and table budget are tabulated in the model
 
-For each command and query, the model carries `Reservation`: per encoding, the
-request bound plus the reply bound in bytes (a `uint64`, as `table_budget`
-returns), or `unsized` naming the payload that has no bounded state. For each
-interface, the model carries the table budget: per encoding, the sum of its call
-members' reservations, or `unsized` naming the first member that is. These are
-`ridl_rt::contract::Member::reservation` and `table_budget` computed once, so
-that the plugin that sizes a call table's storage and the runtime that debits
-the budget agree. A command's reply bound is zero: §6.1 promises an
-acknowledgment and no reply payload.
+For each live interaction, the model carries `Reservation`: per encoding, the
+saturating sum of the bounded sizes of the member's payloads in bytes (a
+`uint64`, as `Member::reservation` returns), or `unsized` naming the first
+payload with no bounded state. The payloads are the ones the Rust backend's
+descriptors list today: a signal's, an event's or a fixed member's one payload;
+a command's request alone, because §6.1 promises an acknowledgment and no reply
+payload; a query's request then its reply. For each interface, the model carries
+the table budget: per encoding, the saturating sum of the reservations of every
+live member, in `MEMBERS` order, or `unsized` naming the first member that is.
+These are `ridl_rt::contract::Member::reservation` and `table_budget` over
+`Interface::MEMBERS`, computed once, so that the plugin that sizes a call
+table's storage and the runtime that debits the budget agree on the same
+numbers.
 
 **Alternatives considered.** Leaving the two sums to the plugin. Rejected: the
 sums are a contract of ridl-rt, and two plugins must not disagree on them.
@@ -620,9 +627,9 @@ message Reservation {
 
 // Added fields:
 //   Payload:       PayloadSizes sizes = 3;
-//   CommandShape:  PayloadSizes request_sizes = 4;  Reservation reservation = 5;
+//   Interaction:   Reservation reservation = 8;
+//   CommandShape:  PayloadSizes request_sizes = 4;
 //   QueryShape:    PayloadSizes request_sizes = 6;  PayloadSizes reply_sizes = 7;
-//                  Reservation reservation = 8;
 //   Interface:     Reservation table_budget = 9;
 ```
 
@@ -649,10 +656,17 @@ message Sizing {
   (D-11) and passes the same value to every package's request.
 - The binding table (D-9) is a `const` in `ridl_ir::codegen`, empty until E17.3.
 - The size states (D-7, D-8) are computed in `ridl_ir::codegen::lower` through
-  the sizer `ridl-descriptor` already exposes; if that creates a dependency
-  cycle (`ridl-descriptor` depends on `ridl-ir`), the sizer moves into `ridl-ir`
-  and `ridl-descriptor` re-exports it, as the catalog hash already does
-  (ADR-0022 decision 7, note of 2026-10-04).
+  the sizer. The sizer lives in `crates/ridl-descriptor/src/size.rs` today and
+  `ridl-descriptor` depends on `ridl-ir`, so it moves into `ridl-ir` as
+  `ridl_ir::projection::size`, with its own `Encoding`, `SizeState` and
+  `UnboundedCause` types, and `ridl-descriptor` maps them onto its generated
+  FlatBuffers enums, as the catalog hash already moved (ADR-0022 decision 7,
+  note of 2026-10-04). One sizer, two emitters.
+- `ceil(max_us / min_us)` needs integer arithmetic on the exact-decimal strings
+  of `Timing`, and `ridl-ir` has no decimal parser; the emitter gets one,
+  `ridl_ir::codegen::depth::ceil_ratio(max_us: &str, min_us: &str) -> Option<u32>`,
+  which scales both operands to a common number of fractional digits and divides
+  in `u128`.
 - The rsdl checks (D-6) live in `crates/ridl-sem/src/rsdl/attrs.rs` (the
   allow-list and RSDL-709) and `mod.rs` (RSDL-805 and RSDL-806, which read the
   package IR's timing); the lowering into `Sizing` in `lower.rs`.
