@@ -309,7 +309,140 @@ what catches the model and a backend deriving one fact differently. The Rust
 backend's is deleted: every fact it compared is a function of the model by
 construction now, so the test could not fail.
 
-## 7. What a plugin author reads
+## 7. The deployment section
+
+`CodegenRequest` has an optional field `deployment` (number 6) of the message
+`Deployment`, declared in
+`crates/ridl-ir/proto/ridl/codegen/v1/deployment.proto` and imported by
+`plugin.proto`. It holds the facts of one concrete deployment of a system that a
+plugin needs to lay out memory for it. The emitter is
+`crates/ridl-ir/src/codegen/deployment.rs`, `lower_deployment`: an emitter over
+the lowered system artifact of the IR, as
+[ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 1 requires,
+and not a second lowering. `ridlc::select_deployment` in
+`crates/ridlc/src/lib.rs` chooses the deployment.
+
+The section is a field of the request beside the model and never a part of
+`Model`, so a model stays a function of its package and its scope, and
+`--emit codegen-model` is unchanged. Every request of one build carries the same
+section, whichever package the request is for. A plugin generating package P
+finds P's regions and P's messages in the section, and the payload sizes of P's
+messages in P's model: the section carries no payload size.
+
+**A request with no deployment is unchanged.** The field is absent, and the
+request is byte for byte the request written before the field existed. The field
+is additive under the compatibility rule of
+[the IR specification](../specification/ir-specification.md) §6. The generated
+reader of this toolchain rejects an unknown key, as §2 says, so an in-tree
+plugin is rebuilt with the schema; a plugin outside this workspace reads
+leniently and ignores a field it does not know.
+
+### What the section carries
+
+In this order:
+
+1. **Identity.** The system's qualified name and the deployment's bare name.
+2. **Regions**, in catalog name order. Each has the catalog name, the 32-byte
+   catalog hash, and the interfaces of the region in interface number order,
+   each with its name, number, `inline` and `provisional` flags and the closure
+   service that lists it.
+3. **Instances**, in the placement order of the system IR. Each has the
+   component, the instance name, the machine and the `external` flag, the
+   interfaces the instance offers (the regions whose slots it writes), and the
+   catalogs it maps (the catalogs its `requires` lines reach). An instance that
+   offers or maps nothing is listed with empty lists.
+4. **Channels**, in the order (catalog, interface number, member ordinal,
+   producer component, producer instance). A channel is one member of an
+   interface from one producer instance, with that member's kind, the producer
+   endpoint, and the consumer links in (component, instance) order. A consumer
+   link carries its crossing, its encoding and the sizing values of the
+   channel's kind. An event channel also carries its ring depth.
+5. **Bindings**, in binding name order.
+
+The section states no count that is the length of a list.
+
+**The order rule.** Every repeated field is in the order stated above, so two
+builds of one workspace write the same bytes. Reordering the placements in the
+source does not change the channels' order, because the emitter sorts them by
+the key above and not by the order it read them in.
+
+**One channel per producer instance.** A redundant provider set, one route whose
+producers are two instances of one component, gives two channels per member,
+each with its own consumer links. The links are not merged into one channel. A
+producer instance that no link names has a channel with no consumer link.
+
+### The encoding rule
+
+The encoding of a consumer link derives from its crossing and from nothing else,
+by the matrix of
+[ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+decision 2:
+
+| Crossing            | Encoding    |
+| ------------------- | ----------- |
+| `same machine`      | FlatBuffers |
+| `different machine` | proto3      |
+| `off-board`         | proto3      |
+
+No link carries the `repr(C)` encoding: the enum value exists in the schema, and
+nothing selects it. The choice between a shared-memory store and a local socket
+on one machine stays the plugin's. Both carry FlatBuffers, so the choice does
+not change a size.
+
+### The depth rule
+
+A `Depth` is an optional value and the source of that value. Two sources are
+written today.
+
+- **Derived.** An event's depth is the contract bound, `ceil(max / min)` over
+  the event's resolved timing
+  ([ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) decision
+  21). The resolved timing includes the defaults of the rsdl reference, so an
+  event written with no timing has both bounds. The quotient is computed on the
+  exact-decimal microsecond strings of `Timing` as integers, never in floating
+  point.
+- **Underivable.** The value is absent when the timing has an explicit half-open
+  range, so one bound is missing. It is also absent when the quotient is zero: a
+  depth is at least 1, so a zero quotient is not a depth, and the emitter
+  records it exactly as it records a missing bound. A quotient that does not fit
+  in 32 bits is recorded the same way.
+
+Every consumer link of an event channel carries the member's depth. The
+channel's ring depth is the maximum over its consumer links, and it is absent
+when any link's depth is absent. An event channel with no consumer link takes
+the member's contract bound as its ring depth.
+
+The schema also names a declared source, for a value that an rsdl key states. No
+rsdl key states a depth today, so no value is written with it.
+
+A **command or query channel** carries sixteen slots on each consumer link, with
+the default source, and no budget: the budget is absent and its source is
+unspecified. A **signal or fixed channel** carries no sizing fields.
+
+### The selection
+
+`ridl build` and `ridlc build` take `--deployment NAME`
+([CLI reference](../book/cli-reference.md)). The flag names a deployment of the
+workspace's system; a workspace has at most one system.
+
+- A workspace with exactly one deployment needs no flag: the request carries it.
+- A workspace with several deployments and no flag carries none.
+- A workspace with no system and no flag carries none.
+- A `NAME` that the system does not declare exits 2 and names the deployments it
+  does declare. A workspace with no system built with `--deployment` is the same
+  error, and its message says that no deployment can be named.
+- A deployment that an `RSDL-7xx` error removed from the system is not unknown:
+  the build reports that error and exits 1.
+
+### Bindings, and what is not built
+
+The `bindings` list is empty today. The emitter writes none.
+
+Nothing in the workspace reads the section: the Rust backend and the two
+reference plugins ignore it, and no `--emit` value writes the request out. The
+request is built in memory, and a test plugin reads it in process.
+
+## 8. What a plugin author reads
 
 In order: [the IR specification](../specification/ir-specification.md) §7 and §8
 (read `schema` first; parse leniently; a fixture is a file `ridlc` wrote),
@@ -319,7 +452,7 @@ message by message), `crates/ridlc-gen-model/src/main.rs` (a complete plugin in
 sixty lines), and the [CLI reference](../book/cli-reference.md)'s `ridl build`
 section (how the plugin is found and what `ridlc` does with the response).
 
-## 8. Where the records and the code disagree
+## 9. Where the records and the code disagree
 
 1. **ADR-0020 decision 11's text before its amendment, the release-scope note
    §3.8's "Proof without a second language", and issue #322's `Done when` all

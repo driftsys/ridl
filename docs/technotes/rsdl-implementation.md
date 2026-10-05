@@ -185,5 +185,8 @@ there is no runtime, and every fact it states about the lowered system and about
   per-deployment system descriptor takes its own rows now that rsdl has landed,
   and has none yet. No runtime reads the lowered system: the one in this
   workspace, `ridl-loopback`, is given its catalog by its caller and reads no
-  descriptor at all.
+  descriptor at all. A codegen request does read the lowered system: its
+  deployment section is an emitter over it
+  ([the codegen plugin design](../design/codegen-plugins.md), "The deployment
+  section"), and no backend reads that section yet.
 - **Backend namespace claims.** See RSDL-804 above.
