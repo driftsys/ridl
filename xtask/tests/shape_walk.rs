@@ -224,6 +224,13 @@ const ALLOWED: &[Allowed] = &[
               interface",
     },
     Allowed {
+        path: "crates/ridl-mcp/src/metrics.rs",
+        lines: 1,
+        why: "the metrics tool reports declared interfaces with qualified names \
+              and the shared cohesion groups; the approved design-lints spec \
+              sections 4.4 and 6 exclude service inline shapes from this metric",
+    },
+    Allowed {
         path: "crates/ridl-sem/src/check.rs",
         lines: 11,
         why: "the lowering that PRODUCES `Package.interfaces` (a service's \
@@ -245,6 +252,13 @@ const ALLOWED: &[Allowed] = &[
         why: "the AST-side helper itself",
     },
     Allowed {
+        path: "crates/ridlc/src/design_lints/cohesion.rs",
+        lines: 1,
+        why: "the cohesion lint measures declared interfaces only, as required \
+              by the approved design-lints spec section 4.4; service inline \
+              shapes are outside this check's scope",
+    },
+    Allowed {
         path: "crates/ridlc/tests/codegen_model.rs",
         lines: 3,
         why: "the reads are of `ridl_ir::codegen::v1::Model::interfaces`, not \
@@ -256,6 +270,14 @@ const ALLOWED: &[Allowed] = &[
         path: "crates/ridlc/tests/corpus.rs",
         lines: 1,
         why: "a test reading one slot out of a single-interface fixture",
+    },
+    Allowed {
+        path: "crates/ridlc/tests/design_lints.rs",
+        lines: 7,
+        why: "cohesion fixtures read or clone their single declared interface \
+              to test the public grouping function, and mutate the standard \
+              package's declared interface to test its exclusion; the inline \
+              service exclusion fixture is checked separately through the pass",
     },
     Allowed {
         path: "crates/ridlc/tests/totality.rs",

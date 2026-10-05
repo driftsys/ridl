@@ -1,7 +1,7 @@
 # ridl-mcp
 
 The RIDL MCP server (ADR-0005 Layer B): `ridl mcp` serves the Model Context
-Protocol over stdio with eight read-only tools. It is a thin consumer of the
+Protocol over stdio with nine read-only tools. It is a thin consumer of the
 shared compiler crates — the same parser, resolver, and checker `ridl check` and
 `ridl lsp` use.
 
@@ -156,6 +156,23 @@ also depends on the packages of its declared member components. The graph keeps
 qualifiers that name unresolved or remote packages outside the workspace. When
 the loaded workspace contains `.rsdl` files and no system was lowered, the
 workspace carries the same no-system note as `ridl_references`.
+
+### `ridl_metrics`
+
+Input: `path`. Result: `{packages, interfaces, workspace}`. Each package has
+`name`, `fanIn`, `fanOut`, `instability` and sorted `dependsOn`. Dependencies
+use the same references and rsdl component uses as `ridl_dependencies`, filtered
+to workspace targets. External qualifiers and `ridl.std` do not contribute.
+Instability is `fanOut / (fanIn + fanOut)`, or `null` when both counts are zero.
+
+Each declared interface has its canonical `name`, total `members` count and
+`groups` of members connected by directly shared named types. Primitives and
+`ridl.std` types do not connect members; members without a remaining named type
+are omitted from groups but count toward `members`. Group members are sorted;
+groups follow their earliest member in source order. Packages and interfaces are
+sorted by name. Metrics have no threshold and remain available regardless of
+lint levels. This tool reads saved source through the common snapshot loader and
+takes no overlays.
 
 ### `ridl_diff`
 

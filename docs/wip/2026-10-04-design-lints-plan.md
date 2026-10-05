@@ -738,6 +738,8 @@ execution.
    internal callers would disagree; alias parity prevents this with no new
    `ridl` subcommand or flag.
 
+### Corpus and evaluation lane
+
 8. **Pin the ROS 2 port and its complete selected inventory** (Task 1).
    `ros2/common_interfaces` is pinned to
    `d8dde22160f26cf4fd8f1f8dcd819637b1b88405`, `ros-navigation/navigation2` to
@@ -1009,6 +1011,872 @@ execution.
     pass. Run focused validation tests with the corpus compiler test excluded,
     Clippy and static checks; no corpus checks, rubric authoring, full gate or
     review dispatch occurs in this correction.
+
+### Checks and metrics lane
+
+8. **Task 5: retain the canonical JSON reference walker in `ridlc`** (approved
+   ownership extension, 2026-10-04). Promote `serde` from a development
+   dependency and add `serde_json` as a workspace dependency of `ridlc`,
+   updating its lockfile entry. This preserves the released reference traversal
+   instead of introducing an unrelated typed-walker rewrite. The cost is two
+   direct library dependencies; both already exist in the workspace dependency
+   graph.
+
+9. **Task 6: allocate candidate codes once** (2026-10-04). The catalogue and
+   every open pull request diff were checked before allocation. Reserve TYPL-222
+   for `inconsistent-unit`, TYPL-223 for `inconsistent-abbreviation`, TYPL-224
+   for `duplicate-shape`, RIDL-414 for `low-cohesion-interface`, and RIDL-415
+   for `package-fan-out`. Task 6 registers only `inconsistent-unit`, at Info;
+   later tasks register their own rows. The allocation respects the separately
+   reserved codes. A conflicting allocation would make catalogue identity
+   ambiguous; the catalogue uniqueness guard and the pre-allocation audit cover
+   that risk.
+10. **Task 6: synchronize the language server lockfile entry** (approved
+    ownership extension, 2026-10-04). Adding the prescribed `ridlc` dependency
+    to `crates/ridl-lsp/Cargo.toml` also adds it to that package's dependency
+    list in `Cargo.lock`. No other lockfile entry changes. Omitting this would
+    fail the locked dependency gate.
+11. **Task 6: test resolved units using the current grammar and IR**
+    (2026-10-04). The grammar has import aliases, not `type Alias = Speed`; the
+    alias fixture therefore imports a unit type from another package under an
+    alias, which the checker canonicalizes. Optionality is the `?` suffix and an
+    IR flag; arrays and maps use bracket syntax. The source grammar admits
+    inline constrained primitives but no inline unit scalar. A checked-IR
+    fixture sets an inline scalar's backing to a unit, then exercises the public
+    shared pass and its rendered finding. This covers that IR branch without
+    adding grammar or IR variants. If wrong, aliases or inline scalar units
+    would be omitted from the finding counts; the positive tests cover both.
+12. **Task 6: intern spans while constructing the shared context** (2026-10-04).
+    The exported pass accepts mutable access to the caller's source map;
+    `SiteIndex` interns source spans before the immutable `Ctx` is passed to
+    checks. Checks need no interior mutability or second source map. A
+    mismatched source map would report the wrong file or range; shared-map and
+    unsaved-overlay tests check both.
+
+13. **Task 6: synchronize the SARIF catalogue snapshot** (approved ownership
+    extension, 2026-10-04). The existing `sarif_shape` snapshot lists the entire
+    diagnostic catalogue. Registering TYPL-222 adds its rule and shifts the
+    later rule indices; only that addition and its derived indices are updated.
+    The first covering test run detected the stale snapshot. The silence fixture
+    filters by registered candidate lint names, so later candidates join the
+    assertion when registered without introducing uncatalogued code literals
+    into Rust sources.
+
+14. **Task 6: synchronize the language reference catalogue** (approved ownership
+    extension, 2026-10-04). The existing compiler corpus test checks every TYPL
+    and RIDL catalogue row against its language reference's §16 table. Add
+    TYPL-222 there with the same summary and Info severity, and update the
+    family overview's diagnostic index as its footer requires. This is catalogue
+    synchronization, with no language-surface change. Later Tasks 7 to 10 must
+    update the matching reference table and SARIF snapshot when registering
+    their rows; Task 14 must maintain those same gates when changing severities
+    or removing candidates.
+
+15. **Task 6 review fixes: cover the compiler and CLI reporting boundary**
+    (approved ownership extension, 2026-10-04). Add an integration test to
+    `crates/ridl/tests/lints.rs` for TYPL-222 at `info`, `allow` and `deny`. The
+    test checks catalogue severity on raw compilation, effective severity from
+    the command driver, and the binary's JSON report and exit code. Without this
+    boundary check, editor tests could pass while the command line dropped
+    findings or failed to apply levels. Existing CLI tests remain unchanged.
+
+16. **Task 7: enumerate identifiers from the existing site index** (approved
+    ownership extension, 2026-10-04). Add a read-only `identifiers` method to
+    `sites.rs`, returning `IdSite` values with package, qualified identity,
+    token name and span. This preserves the lookups and standard-package
+    exclusion rather than duplicating AST or IR traversal. Only the token name
+    is split into words; package and owner names establish deterministic site
+    order. A changed identity or span could misreport the abbreviated site;
+    category and exact-span integration tests cover that risk.
+17. **Task 7: preserve a final single capital in a word** (2026-10-04). ASCII
+    case splitting keeps a final single capital with its preceding word, so
+    `SoC` becomes `soc`, as the reviewed test requires. Acronym-to-title
+    boundaries split `GPSFix` into `gps` and `fix`; digits and underscores
+    separate words and are dropped. This general rule uses no dictionary or
+    exception list. The cost is that a final single capital is not a separate
+    word; the shared helper's explicit examples pin this interpretation.
+18. **Task 7: emit one finding per site and matching word pair** (2026-10-04).
+    Repeated occurrences of one word in an identifier are deduplicated. Distinct
+    longer matches each produce a finding, in lexical word order, with the
+    representative identifier chosen by qualified-site order. This makes
+    findings reproducible and preserves every qualifying prefix pair. The cost
+    is multiple findings when a short word has multiple expansions; the
+    repeated-word and multiple-expansion test covers that behavior.
+19. **Task 7: synchronize the catalogue's derived records** (approved ownership
+    extension, 2026-10-04). TYPL-223 is registered at provisional Info in the
+    catalogue, expected lint set, book table and typl reference table. The SARIF
+    snapshot adds only that rule and adjusts its later indices. The family
+    overview's existing typl §16.3 and book pointer already covers this row; its
+    required sections were checked and need no additional edit. Stale derived
+    records would fail the existing catalogue guards.
+20. **Task 7: correct the pipeline comments** (approved documentation-only
+    extension, 2026-10-04). The semantic workspace module and compiler pipeline
+    documentation now distinguish semantic workspace passes from the shared
+    design lint pass. Incorrect comments could mislead later integration; this
+    correction changes no behavior and does not alter the deferred ADR-0008
+    prose.
+
+21. **Task 7: allow observed findings on exact book fences** (approved scope
+    extension, 2026-10-04). The covering CLI suite found 47 TYPL-223 diagnostics
+    across the existing shared book workspace. Add this code only to the
+    affected fence markers in `getting-started.md` (lines 217, 322, 359, 397,
+    434, 466, 574, 627, 647, 842, 872, 1013, 1118 and 1230) and `rsdl.md` (line
+    25), preserving example identifiers and the harness's bidirectional
+    allowance checks. The full book harness verifies that each marker is
+    necessary. No global suppression is added. Task 14 must remove these precise
+    added allowances if calibration drops the abbreviation lint.
+
+22. **Task 7: synchronize the existing MCP server expectations** (approved scope
+    extension, 2026-10-04). The existing server fixture's `readSpeed` query
+    abbreviates `Reading`, so the compiler now reports TYPL-223 there. Update
+    the exact code list in the structured compile-error diff test, and assert
+    the precise code, lint, severity, message and source span in the read-only
+    tool test. Preserve the fixture and tree metadata equality, plus every
+    existing lookup and diff assertion. Ignoring the additional diagnostic would
+    weaken the reporting contract; exact assertions preserve it.
+
+23. **Task 7 review fix: include all named composite children** (2026-10-04).
+    The normative §4.2 inventory includes every declared identifier, including
+    enumset bits and union arms. The shared source index now records those child
+    tokens in a separate map and includes them in identifier enumeration,
+    preserving the existing enum-only `variant` lookup and qualified ordering.
+    The positive fixture asserts both exact token ranges; its negative fixture
+    asserts no findings when no expansion exists. Omitting those categories
+    would silently miss legitimate findings; the new test failed before this fix
+    and passes afterward. The book harness then observed three newly covered
+    findings on the existing `AccessFlags` fence at `getting-started.md:421`.
+    Add only its exact TYPL-223 allowance, preserving source and harness
+    behavior. Task 14 must remove this allowance too if calibration drops the
+    lint.
+24. **Task 7 review fix: pin exclusion and representative choice** (2026-10-04).
+    Controlled standard-package fixtures test both standard expansion/user
+    abbreviation and standard abbreviation/user expansion, alongside a user-only
+    positive control. Deleting the standard-package guard makes the test fail.
+    Two expansion owners `a.Z.temperatureEarly` and `b.A.temperatureLate` test
+    the first qualified representative with reversed source-set input order, an
+    exact message and primary range, and the existing empty label list.
+    Replacing first-wins insertion with overwrite makes this test fail. This
+    adds coverage without changing the label contract.
+
+25. **Task 8: compare canonical nominal type identities** (2026-10-04). Checked
+    references already resolve import aliases, but local references can remain
+    bare. Qualify every named reference with its owning package, recursively
+    through tuples, arrays, maps and streams, before using the existing IR JSON
+    serialization as a type key. Optionality and container bounds remain part of
+    the key; field ordinals, initial values and docs do not. Named types retain
+    nominal identity rather than being expanded into their definitions. Losing
+    qualification would merge distinct types from different packages; the
+    same-simple-name negative fixture and imported alias positive fixture detect
+    that error.
+26. **Task 8: preserve source order within sorted packages** (2026-10-04). Sort
+    checked packages by name and traverse each package's checked declarations in
+    their existing source order, retaining the first shape as the
+    representative. All later matches label that first declaration. Compare
+    sorted field pairs and sorted variant names, ignoring enum values.
+    Reordering declarations by their names would select the wrong
+    representative; the `Z`, `A`, `B` enum fixture detects that error.
+27. **Task 8: synchronize the catalogue's derived records** (approved ownership
+    extension, 2026-10-04). Register TYPL-224 at provisional Info, with both
+    search-start thresholds at 2, in the catalogue, expected lint set, book
+    table and typl reference table. Add its SARIF rule and adjust only the two
+    derived result indices. The family overview's required sections were
+    checked; its existing typl §16.3 and book pointer already covers this row.
+
+28. **Task 8: allow the observed duplicate enum on its book fence** (approved
+    scope extension, 2026-10-04). The covering CLI suite reports TYPL-224 on
+    `veh.powertrain.GearPosition` at `getting-started.md:1039`, matching
+    `veh.common.GearPosition`. Add only TYPL-224 to the fence starting at line
+    1013, preserving its RIDL-406 and TYPL-223 allowances and all source text.
+    The book harness verifies that the allowance is necessary. Task 14 must
+    revalidate and remove this precise added allowance if calibration drops
+    duplicate-shape or its chosen variant threshold suppresses this finding.
+
+29. **Task 8: synchronize an existing backend test's Task 7 finding** (approved
+    test-only scope extension, 2026-10-04). The broad workspace suite found six
+    FlatBuffers tests whose shared `cruise_package` helper requires no
+    diagnostics. Its source now legitimately reports one TYPL-223 Info on
+    `setTarget`. Preserve the source and assert exactly that code, lint
+    identity, severity, message, fixture path, byte range 1768..1777, token, and
+    empty labels and fixits. All other diagnostics remain rejected, and the
+    separate cross-package helper still requires an empty list. The affected
+    tests rerun against these assertions. Task 14 must remove this specific
+    expectation if calibration drops the abbreviation check, or update its exact
+    provisional Info assertion if calibration changes the catalogue severity.
+
+30. **Task 8: synchronize the same finding in backend integration helpers**
+    (approved test-only scope extension, 2026-10-04). The resumed workspace
+    suite passes the FlatBuffers unit tests and reaches the equivalent
+    no-diagnostic assertion in
+    `crates/ridl-backend-flatbuffers/tests/corpus.rs`. Its counterpart in
+    `crates/ridl-backend-proto/tests/corpus.rs` shares the fixture. Both helpers
+    now assert the exact TYPL-223 finding of decision 29 only for `cruise.ridl`;
+    all other fixture diagnostics must still be empty. Source and
+    generated-output snapshots remain unchanged. Task 14 must synchronize these
+    two exact expectations if the check drops or its severity changes.
+
+31. **Task 8: synchronize the remaining shared-fixture model tests** (approved
+    bounded test-only scope extension, 2026-10-04). Inspection of every Rust
+    reference to `cruise.ridl` found three remaining no-diagnostic helpers:
+    `crates/ridl-backend-flatbuffers/tests/model_drift.rs`,
+    `crates/ridl-backend-proto/tests/model_drift.rs`, and
+    `crates/ridl-backend-ts/tests/model_drift.rs`. Apply decision 29's exact
+    known finding only to that fixture, retaining empty diagnostics for every
+    other fixture and preserving source, backend production and snapshots.
+    Together with decisions 29 and 30 this synchronizes six helper files. Task
+    14 must remove these exact expectations if the abbreviation check drops or
+    update their provisional Info severity if its catalogue level changes. The
+    affected suites and one final workspace run verify the batch.
+
+32. **Task 8 review fix: pin type association and nested nominal identity**
+    (2026-10-04). Add a swapped field/type-pair negative and reordered positive,
+    plus a negative where differently qualified same-named types have identical
+    one-field definitions below the shape threshold. Local/import-alias
+    positives cover tuple children, map keys, map values and stream elements.
+    The stream fixture uses the existing checked-IR variant because streams are
+    interaction-only in source. A metadata fixture changes source field order
+    and initial values, sets distinct checked-IR documentation, and asserts all
+    three metadata differences while preserving the field/type set. Independent
+    name/type sorting, removal of each nested qualification branch, and
+    expansion of nominal references into definitions must fail their exact
+    targeted tests. These fixtures close the review's three important coverage
+    gaps without changing production behavior.
+33. **Task 8 review fix: exercise inline pattern references in checked IR**
+    (2026-10-04). Inline string scalar fields are forbidden in source, so copy
+    two valid named string type definitions using one regex constant into the
+    existing inline-scalar IR variant. Set the controlled references explicitly
+    to local and canonical qualified forms of that one constant, independently
+    of the spelling retained by the checker. This isolates the inline-scalar
+    qualification branch, whose removal must fail the positive duplicate
+    assertion. No grammar or production code changes. The shared test setup
+    accepts an IR amendment after checking, then runs the public pass with the
+    same source-indexed sites and render map.
+
+34. **Controller: route the remaining Task 7 MCP expectations to Task 11**
+    (2026-10-04). The existing exact code arrays in `ridl-mcp/src/diff.rs` and
+    `ridl-mcp/src/lib.rs` still omit the known TYPL-223 finding. Task 11 owns
+    their precise synchronization while preserving source, spans and all other
+    assertions. Task 9 leaves these files unchanged and does not claim a green
+    workspace suite. The final PR still requires `just verify`.
+35. **Task 9: expose the shared cohesion metric at the crate boundary**
+    (approved ownership extension, 2026-10-04). Re-export `cohesion_groups` from
+    `ridlc/src/lib.rs` beside `check_design_lints`, with the prescribed
+    `(&Package, &Interface) -> Vec<Vec<String>>` signature over checked IR. Task
+    11 can consume it without duplicating grouping or adding hidden resolution
+    context. An integration test calls this public API directly.
+36. **Task 9: share nominal qualification and preserve source group order**
+    (2026-10-04). Move Task 8's unchanged local-name qualification helper into
+    the shared module and use it in both checks. Visit references inside
+    anonymous containers but never expand named definitions or treat pattern
+    constants as types. Exclude exactly the `ridl.std` owner. Union-find roots
+    retain the earliest member index, then each group's member names are sorted.
+    Missing transitive links, lost qualification or lexical group ordering would
+    change the metric; direct, alias and ordering fixtures detect those errors.
+    Map-key, map-value and query-parameter traversal each have a mutation check:
+    removing one branch fails the public API fixture's hand-written group
+    assertion, and restoring it passes.
+37. **Task 9: synchronize the candidate's catalogue records** (approved
+    ownership extension, 2026-10-04). Register RIDL-414 at provisional Info,
+    with search-start thresholds of two groups and one member in the smallest
+    group. Add the catalogue pair, book row, ridl reference row and SARIF rule,
+    and extend the overview's diagnostic index to ridl §16.4. Task 14 must
+    synchronize these records with the selected severity or remove the lint
+    emitter and records if calibration drops it, retaining the public metric.
+
+38. **Task 9: synchronize the diagnostic coverage index and observed book
+    findings** (approved bounded extension, 2026-10-04). Add RIDL-414 to
+    `RIDL_PROFILE_CODES` as `Elsewhere`, pointing at
+    `crates/ridlc/tests/design_lints.rs` and its exact positive test. The
+    existing showcase remains unchanged. The book harness observed eleven
+    RIDL-414 findings. Add only their allowances to `getting-started.md` fence
+    starts 322, 450, 466, 499, 673, 842, 952, 1013, 1118 and 1230, and `rsdl.md`
+    fence start 25. Preserve every other allowance, example source and the
+    bidirectional harness. Task 14 must revalidate these exact markers and
+    remove any whose finding disappears after threshold selection or lint
+    removal; selected severity must also be synchronized with the catalogue,
+    reference, book row, SARIF rule and precise provisional Info test.
+
+39. **Task 9: preserve the baseline tests' exact output contract** (approved
+    test-only extension, 2026-10-04). The full CLI suite finds RIDL-414 in the
+    unchanged `BASE` and `REORDERED` fixtures of `baseline_desk.rs`.
+    `check_without_a_baseline_is_unchanged` and
+    `auto_discovery_of_an_empty_baseline_directory_stays_silent` retain their
+    commands, success status and empty stdout. Replace their empty stderr
+    expectation with the complete single rendered Info note: the code, groups,
+    exact fixture path, declaration line and column, token underline and lint
+    hint. Any extra diagnostic or baseline report still fails. Task 14 must
+    restore empty stderr if the lint drops or its chosen thresholds suppress
+    this finding, or update this exact note if its severity changes.
+
+40. **Task 9: synchronize the CLI server fixture's cohesion finding** (approved
+    test-only extension, 2026-10-04). In `crates/ridl/tests/servers.rs`, add
+    RIDL-414 to the exact compile-error code array and add its complete Info
+    diagnostic to the read-only tool test. It names `Status`, five groups and
+    `b/b.ridl` line 16, columns 11 to 17, with empty labels and fixes. Preserve
+    the existing TYPL-223 expectation, fixture source, tree metadata equality
+    and every lookup/diff assertion. Task 14 must remove these additions if the
+    lint drops or its thresholds suppress the finding, or synchronize the exact
+    severity if its final level changes.
+
+41. **Task 9 review fix: distinguish package exclusion from type exclusion**
+    (2026-10-04). Amend the controlled standard-package interface to reference
+    two nonstandard nominal types and assert its public metric has exactly two
+    singleton groups. The shared diagnostic pass must still exclude that
+    package. Removing only its package filter survives: `SiteIndex` also omits
+    standard-package spans, so the emitter cannot report that interface. The
+    original review's single-filter mutation claim therefore does not identify
+    an observable defect. A second fixture retains and connects types owned by
+    `ridl.std.extra`, while exact `ridl.std.Duration` references are excluded.
+    Replacing exact owner equality with a prefix check fails that group's
+    literal assertion. Production is restored byte for byte after mutation
+    checks; the committed fix changes only tests and this record.
+
+42. **Task 10: report the shared graph's workspace-only fan-out** (2026-10-04).
+    Register RIDL-415 at provisional Info and set `PACKAGE_FAN_OUT_MAX` to the
+    search start of three. Iterate the shared ordered workspace graph once,
+    count its distinct dependency targets, and report only counts greater than
+    three. Use `SiteIndex::package_line` for the first file in path order, even
+    when only a later file contains imports. The tests present packages and
+    imports in nonlexical order, repeat a target reference, and reference a
+    standard type: the exact message still lists four distinct workspace targets
+    in lexical order. A separate boundary test retains three targets without a
+    finding. The shared graph's existing tests cover external-target filtering
+    and component-use edges; this task does not duplicate or change that
+    computation.
+43. **Task 10: synchronize the candidate's exact diagnostic records** (approved
+    bounded extension, 2026-10-04). Add the catalogue pair, book row, ridl
+    reference row, SARIF rule and derived rule index, and diagnostic coverage
+    index entry for RIDL-415. The overview now names package coupling alongside
+    interface design lints at ridl §16.4. Preserve all fixture sources and
+    unrelated expectations. Task 14 must synchronize the final level across
+    these records and the exact provisional Info assertion, or remove the lint
+    records and emitter if calibration drops it. Threshold changes must
+    revalidate the exact fan-out fixtures and any later counts or allowances.
+
+44. **Task 10 review fix: pin workspace filtering at the lint consumer**
+    (2026-10-04). The original three fan-out fixtures contain no external
+    targets, so assigning the complete graph to the shared context survives
+    them. Add a controlled shared-pass fixture with three workspace targets and
+    the qualified external reference `foreign.deep.Remote`. Its complete graph
+    has the literal targets `a`, `b`, `c` and `foreign.deep`; its workspace
+    graph has only `a`, `b` and `c`. RIDL-415 must remain absent. Supply the
+    external reference in checked IR after checking valid fixture sources,
+    because the external package is unavailable for normal resolution. A
+    temporary-copy mutation that passes the complete graph to the consumer must
+    fail the diagnostic assertion. Actual production files remain byte exact.
+    Task 14 must revalidate this threshold fixture during calibration; no corpus
+    checks or rubric access are part of this correction.
+
+45. **Execution transport after collaboration thread exhaustion** (2026-10-04).
+    Retained completed collaboration threads blocked fresh spawns and followup
+    to the original worker. Fresh Codex CLI processes run implementers and
+    reviewers with the same briefs or the exact installed specialist developer
+    instructions. Review coverage and remote/canonical ledger preflight remain
+    explicit prerequisites. If this transport is wrong, the risk is incomplete
+    review; it does not authorize skipping a review seat. Root inspects and
+    commits this prepared correction, then obtains a fresh scoped review before
+    Task 11. There is no repeat QUICK over this QUICK fix.
+
+46. **Recover from the commit hook's stash rejection** (2026-10-04). The
+    formatter passed, but the fix-mode hook rejected the commit because its
+    stash was no longer at the top of the shared stack. Keep the prepared
+    changes and leave other stashes untouched. Run the required formatter and
+    commit-message checks directly, then commit the same checked files with
+    automatic hooks disabled for that invocation. The fresh scoped reviewer
+    checks the resulting correction and this record. If the checks differ from
+    the hook's configured commands, this recovery could omit a required check;
+    compare the commands before committing.
+
+47. **Task 11: consume the existing public re-export** (2026-10-04).
+    `design_lints` is private and `cohesion_groups` is already re-exported at
+    `ridlc::cohesion_groups`. Use that public entry point with each declared
+    `Package.interfaces` entry, matching the shared cohesion check. Do not
+    include service-inline shapes as declared interfaces. Compute package
+    metrics from `workspace_package_edges(package_edges(...))`, retaining the
+    complete graph in the dependency tool. Sort packages and canonical interface
+    names; preserve the shared function's group ordering. A mistaken distinction
+    between declared and inline interfaces would change the published metric
+    inventory.
+
+48. **Task 11: retain the approved path-only input** (2026-10-04). The approved
+    section 6 and Task 11 interface specify `MetricsInput { path }`. Follow that
+    interface through the common snapshot loader with no overlays, and document
+    this exception to the existing path tools' overlay support. Return the
+    common workspace status, including errors and warnings, rather than reducing
+    it to the illustrative root and notes fields. Pin the schema by adding only
+    the new tool; compare every pre-existing entry for equality. If overlays are
+    required later, they can be added as an optional field under ADR-0025
+    decision 9.
+
+49. **Task 11: synchronize the authorized MCP diagnostic expectations**
+    (2026-10-04). The actual diagnostic sequence in the unchanged fixture is
+    TYPL-103, TYPL-011, TYPL-223 and RIDL-414. Update
+    `path_mode_check_matches_to_json` and the existing diff test
+    `diff_with_a_side_that_does_not_compile_carries_diagnostics` (the brief
+    names it `compile_errors_preserve_structured_diagnostics`) to pin the
+    complete code, message, severity, lint, span, labels, fixes and ordering.
+    Preserve the fixtures, structured-error and side-message assertions. Task 14
+    must remove candidate expectations if calibration drops or suppresses those
+    findings, or synchronize their exact final severity, message and ordering.
+
+50. **Task 11: report the sandbox verification limit** (2026-10-04). The full
+    focused MCP suite reaches
+    `snapshot::tests::a_remote_import_is_reported_and_not_fetched`, whose
+    loopback `TcpListener::bind` is rejected with `PermissionDenied` and
+    `Operation not permitted` by this execution sandbox. Preserve that test
+    unchanged, record the unfiltered failure, and run the remaining MCP suite
+    with that single test excluded. Root must rerun the unfiltered suite in an
+    environment that permits the listener before claiming its offline regression
+    passed. This exclusion does not verify the listener-based no-fetch
+    assertion.
+
+51. **Task 11: make the no-findings test a single-package fixture**
+    (2026-10-04). A source-file path within a package manifest loads that
+    package and its subpackages under the existing discovery rule. The copied
+    fixture's `a/sub` therefore made the initial one-package assertion fail.
+    Remove that directory only in the temporary copy before loading the source
+    file; preserve all tracked fixtures and the production loader. The resulting
+    assertion pins empty interfaces, zero edges and null instability with no
+    diagnostics.
+
+52. **Run configured commit checks without the shared stash operation**
+    (2026-10-04). For prepared CLI output, run the configured `prim .` formatter
+    and `git std lint --file` check directly before committing. Disable the
+    automatic hook invocation only after both commands pass. This avoids the
+    stash rejection recorded in decision 46 without omitting a required check.
+    Compare the hook configuration each time; if it gains another command, that
+    command must also run before this procedure is used.
+
+53. **Task 11 fix round 1: synchronize the CLI inventory and coverage**
+    (2026-10-04). Reproduce the stale exact CLI tool-name assertion, then add
+    only `ridl_metrics`, preserving the eight original names. Add its
+    saved-source call to the end-to-end read-only enumeration, with complete
+    package, interface and workspace expectations and text/structured equality.
+    Update the three current tool inventories and the MCP design's nine-tool
+    test description. Repair that record's pre-existing unused-import
+    description to name the already implemented lint. No schema or producer
+    behavior changes.
+
+54. **Task 11 fix round 1: verify the QUICK test claims with mutations**
+    (2026-10-04). In a source copy under this plan's absolute scratch directory,
+    with a separate target directory outside the production cache, all seven
+    alleged mutations survive the original metrics tests. Strengthen assertions
+    against literal public output and demonstrate that the mutations fail them.
+    Independently remove component requirements and system-member contributions
+    in the copied producer; the new system-only edge test must fail for each.
+    Never mutate the assigned worktree's production sources. Restore each copied
+    source and wait for every mutation process before final green validation.
+
+55. **Task 11 fix round 1: use existing fixtures for the public contracts**
+    (2026-10-04). Extend the temporary mixed-edge fixture with another referring
+    subpackage so fan-in two and fan-out one give instability one third. Extend
+    the cohesion fixture with a single connected group and exercise its actual
+    handler, including the member-path workspace note. Use the existing
+    diagnostic fixture for nonzero error and warning counts, and the timing
+    fixture under allow and deny to prove unchanged metrics while `ridl_check`
+    applies levels. The full saved-source handler inventory also excludes the
+    existing inline service. These protect public behavior without new APIs or
+    tracked fixture edits. Task 14 must synchronize literal workspace diagnostic
+    counts if final candidate severities change them; edge counts, interface
+    groups and membership remain independent of candidate thresholds and levels.
+
+56. **Task 11 fix round 1: keep verification focused** (2026-10-04). Run the
+    metrics and CLI server tests and scoped static checks. Preserve the
+    loopback-listener test and report any sandbox failure in the unfiltered MCP
+    suite for root's unrestricted rerun. No full workspace gate, repeat QUICK,
+    reviewer dispatch, merge or commit belongs to this implementer fix round.
+    Root inspects and commits the prepared changes and obtains the fresh scoped
+    review. The original normative specification and producer contracts remain
+    unchanged.
+
+### Main integration (checks and metrics lane, continued)
+
+57. **Separate root Git metadata operations from worker resolution**
+    (2026-10-04). The restricted worker cannot write the shared worktree Git
+    metadata. Root initialized the exact no-commit merge of
+    `d694fba2720fa6c307561d28b790e1fd2ac1e584` into
+    `b91965de3d57ddd9c840e8685b419f4add5295a5` in its unrestricted session. This
+    worker resolves authorized working-tree files and runs focused checks; root
+    inspects and stages those files, supplies the staged tree and metadata
+    evidence, and obtains the fresh integration review. No worker Git metadata
+    mutation, commit, shared stash operation or reviewer dispatch is authorized.
+    If this transport is wrong, unresolved index entries could be mistaken for a
+    prepared merge; root must verify the staged tree and exact MERGE_HEAD before
+    committing. Sandbox-blocked loopback tests require root's unchanged
+    unrestricted rerun.
+
+58. **Preserve both execution lanes and the additive integration contracts**
+    (2026-10-04). Use main's exact approved prefix before this execution section
+    and retain common decisions 1 to 7 once. Preserve corpus and evaluation
+    decisions 8 to 25 and checks and metrics decisions 8 to 56 in separate
+    labelled lanes with their original numbers and full text. The lane records
+    retain completion evidence when main's prefix has unchecked historical task
+    boxes. Preserve the Pull requests section unchanged. Merge the compiler
+    manifest additively: retain descriptor runtime support, normal serde and
+    serde_json dependencies, inherited insta JSON support and the main
+    pulldown-cmark test dependency; remove the redundant development serde
+    declaration because the normal dependency already supplies it. Keep the
+    automatic lockfile. Retain main's removal of shipped story IDs in the design
+    index together with the nine-tool count and metrics category. Mechanical
+    comparison confirms the automatically merged MCP schema preserves all eight
+    main entries exactly and adds the branch's unchanged metrics entry, so no
+    schema correction is needed. If wrong, execution references, dependency
+    availability or released tool semantics could regress; byte-level record and
+    eval preservation checks, locked metadata, focused tests and static gates
+    provide the required evidence. Task12 and candidate corpus dumps remain
+    outside this integration.
+
+### Checks and metrics lane continuation
+
+59. **Task 12: use the public CLI JSON contract without compiler dependencies**
+    (2026-10-04). Add normal `serde`, `serde_json` and `toml` dependencies to
+    xtask, using typed finding and metric records. Build the CLI with the locked
+    dependency graph into an output-local target directory, copy each corpus
+    workspace into an output-local temporary directory, append the five `warn`
+    settings, and remove the copies when the command returns. Refuse an existing
+    corpus lint table rather than replacing it. If wrong, a dependency boundary
+    or corpus input could change; resolved dependency inspection, the existing
+    oracle tests and an unchanged-evals comparison provide evidence.
+
+60. **Task 12: reconstruct stable primary byte ranges from source positions**
+    (2026-10-04). The existing JSON diagnostic contract exposes one-based line
+    and Unicode character columns rather than byte ranges. Convert both ends
+    using the copied UTF-8 source, reject invalid positions and outside paths,
+    and assign zero-based occurrence indices in deterministic source order.
+    Normalize temporary workspace prefixes in diagnostic messages. If wrong,
+    labels could attach to different findings; the UTF-8 range test and two
+    byte-identical actual dumps test this transport without changing the CLI.
+
+61. **Task 12: specify the reviewed recall join without creating actual labels**
+    (2026-10-04). Document `[[item]]` inventory rows with `issue`, `alias` and
+    `excluded` kinds, workspace and reason; aliases name their canonical issue.
+    Document one `[[check]]` per check with a complete set of `[[check.issue]]`
+    applicability rows, reasons and matching finding IDs. Validate every
+    numbered review item, canonical alias ordering, finding workspaces, final
+    labels, retained metric metadata and all applicability rows. Actual labels
+    and the actual recall mapping remain later work. If wrong, the later mapping
+    would fail validation or recall would be miscounted; synthetic input and
+    rejection tests pin the format without editing committed rubrics.
+
+62. **Task 12: search only boundaries that change retained findings**
+    (2026-10-04). Include search-start values and observed coordinate
+    boundaries, retaining independent struct and enum thresholds and both
+    cohesion coordinates. Select the highest qualifying level, then the pair
+    retaining the most findings, with the approved coordinate tie breaks. Apply
+    the under-ten Info cap to the retained sample. Recall counts distinct
+    applicable issues independently of labels and never affects selection. If
+    wrong, thresholds or levels would differ on the same labels; the
+    hand-counted precision fixture, paired searches and recall tests verify the
+    procedure.
+
+63. **Task 12: preserve authorized output and complete the actual dump**
+    (2026-10-04). Keep build targets, temporary fixtures, command logs, the five
+    actual finding arrays and the task report under this plan's scratch
+    directory. Validate each array against this worktree's source and repeat the
+    dump with new temporary roots. Both actual dumps are byte-identical and the
+    tracked eval files remain unchanged. No labels, production thresholds,
+    levels or calibration records are written. Root inspects and commits the
+    prepared output; this worker creates no reviewers or Git metadata changes.
+    If wrong, the evidence could violate its independent review barrier;
+    output-path and unchanged-input checks provide the required evidence.
+
+64. **Task 12: preserve the separate integration guard repair** (2026-10-04).
+    All calibration and code generation unit tests pass, as do the runnable
+    oracle boundary tests and focused clippy. The first complete xtask test run
+    failed `every_direct_interfaces_read_is_justified`: the integrated cohesion,
+    metrics and design-lint tests were absent from the guard's table. Running
+    the unchanged HEAD guard reproduced that failure. A separate lane then
+    updated `xtask/tests/shape_walk.rs` during handoff; this worker preserved
+    that edit without writing the file. The complete locked package rerun now
+    passes nineteen tests, with the generated-crate oracle explicitly ignored
+    because it requires demo output. If ownership is confused, the worker could
+    claim another lane's repair or revert it; the report distinguishes the six
+    worker files, baseline failure evidence and the separate guard change.
+
+65. **Register intentional declared-interface reads in the shape-walk guard**
+    (integration compatibility repair). The approved check and metrics scope
+    excludes inline service shapes. Register the cohesion helper's one read, the
+    metrics tool's one read and seven fixture reads with their precise reasons.
+    Keep every existing entry and the exact inventory assertions. A separate
+    worker owns only this guard file; the calibration worker preserves its
+    change. The focused guards pass, and an isolated additional fixture read
+    fails at eight against seven. If the declared-interface scope is wrong, an
+    allowance could hide an omitted inline shape; the fresh review must compare
+    each reason with approved sections 4.4 and 6.
+
+66. **Task 12 fix round 1: own the executable calibration tests** (2026-10-04).
+    Place actual caller tests in `xtask/tests/calibrate_cli.rs`. They invoke the
+    built xtask executable against isolated synthetic workspaces and a small
+    offline compiler protocol fixture, exercising dispatch, alias and write
+    behavior, copying, manifest edits, target selection, refusals, cleanup and
+    delayed publication. Calibration reads the caller's current workspace
+    directory, as the README's root invocation requires, rather than the path
+    embedded when xtask was built. No test-only flag or environment override is
+    added to production. This worker owns the new caller test file and preserves
+    the other workers' test edits. If the runtime-root choice is wrong, callers
+    invoking calibration from a subdirectory must move to the documented root;
+    the executable tests pin the explicit root-directory behavior.
+
+67. **Task 12 fix round 1: reject contained destinations before side effects**
+    (2026-10-04). Resolve existing path components and symlink ancestors without
+    creating directories; handle missing components followed by parent steps
+    before checking containment against the canonical corpus directory. Reject
+    the corpus itself and every descendant before directory creation or Cargo.
+    Require the first cohesion group opening bracket, preserving the existing
+    closing-bracket, member and group-count validation. The docs observation is
+    the same parser defect and is fixed once. If wrong, a dump could change its
+    own source or accept malformed metadata; synthetic helper and executable
+    tests assert strict rejection and unchanged source trees.
+
+68. **Task 12 fix round 1: pin the reviewed numerical and validation
+    boundaries** (2026-10-04). Use same-line multibyte span starts and
+    endpoints, exact 50% precision and nine-finding cap cases,
+    recall-independent selection with full, partial and zero recall, matching
+    below-start messages, conflicting shape-pair ties, omitted excluded
+    inventory items, reversed/cross-workspace aliases and consistent numeric
+    occurrence gaps. Cohesion size zero is already rejected by the nonempty
+    group parser; the valid one-group message tests its independent group-count
+    search start. If wrong, tests could fail at an earlier unrelated guard while
+    leaving the reviewed behavior unpinned; the cases supply otherwise valid
+    inputs and isolate the relevant guard.
+
+69. **Task 12 fix round 1: preserve the actual finding evidence** (2026-10-04).
+    Run mutation probes only on scratch copies of xtask, with isolated targets
+    and synthetic inputs, then restore those copied controls. Never mutate live
+    source for an experiment, run actual corpus checks again, or change retained
+    arrays, rubric text, labels, levels or thresholds. Keep focused tests,
+    clippy, formatting, mutation logs and per-finding responses in the plan
+    scratch. Root owns review and commits. If wrong, the fixes could invalidate
+    independent evidence or overwrite another lane; hash/input comparisons and
+    the exact worker file list distinguish this round's changes from concurrent
+    edits.
+
+70. **Preserve precise backend diagnostic expectations** (2026-10-04). The
+    unchanged shared fixtures legitimately emit the new cohesion Info. Update
+    the five affected backend test helpers to assert the complete diagnostic
+    inventory, code, level, lint name, message, source path, byte range, source
+    slice and empty labels and fixes. Preserve the abbreviation diagnostic and
+    reject every unexpected extra diagnostic. Incoming main removed a fixture
+    comment, so use byte coordinates from the current unchanged fixture. Replace
+    obsolete baseline silence with its exact sole cohesion diagnostic. If wrong,
+    assertions could conceal a compiler defect; the independent review must
+    check the groups against the source and spec. Both affected backend packages
+    passed all 110 tests without fixture edits.
+
+71. **Restart only the Task 12 handoff step** (2026-10-04). The original
+    implementer stopped producing output after the final green tests. Interrupt
+    only its identified CLI process and resume the same session to write the
+    missing reports, using medium effort for this administrative step. Reuse the
+    completed test and isolated mutation logs; do not repeat checks or change
+    code. If wrong, an incomplete operation could be mistaken for success;
+    require exact commands, results and remaining issues in the handoff and
+    fresh scoped review before completing the task.
+
+72. **Synchronize the remaining backend fixture assertion** (2026-10-04). Full
+    verification exposed the same stale cruise diagnostic expectation in the
+    TypeScript model-drift test. Apply the same precise ordered two-Info
+    expectation as the independently reviewed backend repair, retaining source
+    identity, byte ranges, messages, lint names and empty labels and fixes. Keep
+    the fixture and production code unchanged. The affected package passed all
+    30 tests. A bounded search found no other stale helper. If wrong, the
+    updated assertion could conceal a compiler defect; require a fresh scoped
+    review before relying on the full verification result.
+
+73. **Repair all ten confirmed PR 712 findings in one owned wave** (2026-10-04).
+    The fresh primary finding and refuter evidence is normative. Shadow
+    measurement information isolation was imperfect; preserve its original
+    artifact, but do not use it as normative review evidence. Keep the approved
+    spec, task text, prior decisions, corpus, labels and original finding arrays
+    unchanged. Use only the authorized scratch directory and no other worktree.
+    If wrong, the repair could invalidate independent calibration evidence or
+    overwrite another contributor's work; compare preserved hashes and the exact
+    tracked file list before handoff.
+
+74. **Validate every existing dump publication and build destination before side
+    effects** (2026-10-04, F01). Keep the outer containment check and inspect
+    each output JSON file and the full existing target tree without following
+    links. Reject symlinks and nonregular destinations; on Unix reject hard
+    links with aliases outside the validated tree. Cargo-created hard links
+    entirely within its target are safe and required for target reuse. Stage
+    arrays in the private temporary copy directory and rename them into place.
+    Keep the reusable target and the README's corpus isolation contract. If too
+    strict, an intentionally linked build cache needs a real directory; if too
+    weak, Cargo or publication could overwrite sources. Synthetic executable
+    fixtures pin unchanged corpus and rejection before Cargo writes.
+
+75. **Include indented numbered rubric items in the complete recall inventory**
+    (2026-10-04, F02). Remove leading whitespace before parsing the unchanged
+    numbered item syntax; retain integer, strength, duplicate ID and complete
+    inventory/applicability validation. If wrong, omitted items can inflate
+    recall or invalid inventories can be accepted. Test indented valid items,
+    omitted classifications, omitted applicability and malformed item records.
+
+76. **Pin recall columns, occurrence order and cross-workspace joins directly**
+    (2026-10-04, F04-F06). Assert recall numerator, denominator, ratio and the
+    exact alias candidate row. Use distinct same-span messages in both compiler
+    orders with exact occurrence IDs across temporary roots. Reject an otherwise
+    valid, unique finding from another workspace with the exact join error.
+    Production calibration ordering and joins remain unchanged. If wrong, the
+    tests could pass on precision or an unrelated validation error; isolated
+    copied-source mutations check those specific failure paths.
+
+77. **Index each named tuple-field occurrence through supported nested types**
+    (2026-10-04, F09). Walk typed tuple-field AST nodes below winning
+    definitions and interaction members, retain their owner path and exact
+    name-token span, and keep repeated names in separate tuples as separate
+    sites. Preserve all existing identifier collections and messages. Tuple
+    fields nested inside a stream are not accepted source syntax; cover
+    supported tuples, optional nesting, arrays, map values, fixed payloads and
+    query returns. If wrong, abbreviation findings would be missing, duplicated
+    or attached to an outer declaration; exact span and repeated-name
+    regressions pin the inventory.
+
+78. **Exclude standard unit provenance at user-owned sites** (2026-10-04, F10).
+    Check the resolved defining package of the named IR type before reading its
+    unit. Optionality and import aliases retain that canonical package. A local
+    type named Duration remains eligible. Disk loading makes standard names
+    implicit and rejects an explicit standard-package import; test alias
+    resolution with an otherwise valid controlled standard package in the shared
+    pass, and test implicit/qualified standard references through workspace
+    compilation. If wrong, standard sites change unit majorities or legitimate
+    user findings disappear; the two regressions distinguish both outcomes.
+
+79. **Exercise the real reporting callers without changing working wiring**
+    (2026-10-04, F07-F08). Add above-threshold component-requires and
+    system-member fan-out assertions through compiler compilation and LSP
+    initialization, and a positive unit diagnostic through the public MCP source
+    wrapper. Pin URI/path, span, message and level. Both system callers and the
+    wrapper already report the required findings, so leave the three
+    conditionally owned production files unchanged. If wrong, helper-only
+    coverage could conceal a dropped system argument or source diagnostic;
+    copied caller mutations must fail.
+
+80. **Explain the book's intentional diagnostic allowances locally**
+    (2026-10-04, F03). Explain the retained temp/Temperature abbreviation near
+    the vocabulary example and the abbreviation and three disconnected type
+    groups near Sampling. Keep the source blocks and allowances unchanged. If
+    wrong, the book would allow a finding its prose does not explain; inspect
+    the examples and run only their compiled-example harness.
+
+81. **Report the sandbox-denied socket test without changing its assertions**
+    (2026-10-04). The full MCP library run passes 87 tests, including the new
+    source-wrapper regression; `a_remote_import_is_reported_and_not_fetched`
+    fails at binding `127.0.0.1:0` with PermissionDenied. Leave that test intact
+    for the primary driver to rerun where the bind is permitted. Focused caller,
+    compiler, calibration, executable, book and Clippy checks provide the repair
+    evidence. If the failure has another cause, the primary rerun must expose
+    it; do not claim a green full MCP library suite or weaken the runtime check.
+
+82. **Ruling: preserve both diagnostic contracts in the main integration**
+    (2026-10-05). Keep every incoming documentation change outside the twelve
+    conflict regions. Combine the independent LSP and CLI test additions, lint
+    catalogue expectations and book rows. Retain the exact ordered design
+    diagnostic expectations in backend and CLI fixtures while excluding only the
+    incoming `missing-docs` allowance by its registered lint name; do not change
+    source fixtures, lint levels or thresholds. Derive SARIF result indices from
+    the combined rule list, giving 69 and 155. This preserves the branch's
+    design checks and main's documentation behavior without allocating a
+    reserved code or investigating the separate feature. If wrong, an unexpected
+    design diagnostic or incoming regression could be concealed; exact
+    diagnostic inventories, catalogue guards, protocol tests and byte
+    preservation comparisons provide evidence. Root owns staging, fresh review,
+    unrestricted socket reruns and the final gate.
+
+83. **Ruling: retain the complete metrics warning count after integration**
+    (2026-10-05). The first CLI server run fails the exact metrics object in
+    `every_tool_leaves_the_tree_unchanged`: the unchanged fixture now reports 22
+    incoming documentation warnings, while the previous expectation is zero.
+    Update only that literal count in the owned server test. Preserve package
+    metrics, interface groups, all other workspace fields, fixture bytes and
+    read-only assertions. The separate exact design diagnostic assertion still
+    rejects every unexpected non-documentation diagnostic. If wrong, the metrics
+    status could report an incorrect warning count; the complete object
+    assertion and the focused server rerun must detect it. No producer, lint
+    level or threshold changes are justified.
+
+84. **Ruling: synchronize the authorized remaining integration expectations**
+    (2026-10-05). The user extended ownership to metrics test expectations and
+    documentation-example fence allowances and explanations after the first
+    integration exposed four stale metrics assertions and four unallowed book
+    diagnostics. Pin the complete metrics objects against observed workspace
+    discovery, warning counts and sibling interfaces. Replace the empty
+    diagnostic assertion with the exact sole documentation warning, including
+    its source span and fix. Preserve every fixture source and the final
+    read-only comparison. Add only the observed unit, abbreviation and cohesion
+    allowance codes to the three affected whole-file fences, with literal local
+    explanations. Keep every source block and all incoming feature content. If
+    wrong, an incorrect status or unrelated diagnostic could be accepted;
+    complete object and diagnostic inventories, the bidirectional book harness
+    and byte-level source preservation checks must expose that error. Production
+    behavior, lint levels and thresholds remain unchanged; root owns the full
+    gate and unrestricted socket verification.
+
+85. **Ruling: align exact MCP diagnostic comparisons with the combined output**
+    (2026-10-05). After the completed integration review, root's full gate and
+    both focused reproductions fail two MCP literal-array comparisons. Their
+    four original diagnostic objects still match exactly; the output also has 23
+    incoming documentation warnings already allowed by the adjacent code
+    inventory. Preserve those four objects unchanged. Pin the complete ordered
+    27-code inventory and the documentation warnings' default severity, and
+    compare the full arrays with the compiler's JSON projection on both paths.
+    Apply the existing named fixture allowance only to the separate four-object
+    comparison. Keep every message, span, path, label and fix assertion and the
+    positive source-wrapper repair. If wrong, an extra diagnostic or incorrect
+    ordering could be concealed; full-array parity, the complete code inventory
+    and unchanged literal objects must expose it. Only test assertion code is
+    changed, with no production, fixture, lint-level or threshold edits. Root
+    owns the fresh scoped review and full gate rerun.
+
+86. **Ruling: address both remaining Minor findings** (2026-10-05). Correct the
+    scalar vocabulary's factual abbreviation explanation and add a focused
+    successful dump regression that retains an open handle to the previous
+    regular output file. This pins destination-file replacement, exact output
+    and containment without changing production behavior or existing tests.
+    Address both findings rather than defer debt because the prose is incorrect
+    and in-place publication must fail the regression. If wrong, the added test
+    may constrain portable filesystem behavior; scope the retained-handle and
+    file-identity assertions to Unix, where replacement of an open file is
+    supported. Root owns the post-pass-2 QUICK tests and documentation review;
+    no third numbered review is requested.
+
+87. **Trace the CI span failure to the upstream fixture version before repair**
+    (2026-10-05). A fresh archive of branch head passes all 45 FlatBuffers
+    library tests. Main's PR #714 rewraps the shared fixture's initial comment,
+    adding three bytes before both diagnosed identifiers. Substituting that
+    exact Git blob only in the isolated copy reproduces all six CI failures;
+    serial and parallel repeats give the same result. The producer still reports
+    the exact `setTarget` and `CruiseControl` tokens. Covering backend runs
+    expose the same stale range pairs in five additional test files. Record the
+    source hashes, provenance, reproductions and ownership request in
+    `.superpowers/sdd/2026-10-04-design-lints-plan/pr712-ci-span-debug-report.md`.
+    No code repair is applied: the literals are correct for the present branch
+    fixture, and root must align the incoming fixture through integration and
+    extend ownership to those five assertion files before the complete repair.
+    Keep all exact diagnostic checks and preserve fixture and eval bytes. If
+    wrong, an unrelated compiler defect could be concealed; the byte-swap
+    reproduction and token checks distinguish that defect from source-version
+    drift. The sandbox cannot download the CI checkout log, so root must retain
+    the exact synthetic merge SHA before final CI handoff. Root owns scoped
+    QUICK review and CI verification; no third numbered review is requested.
+
+88. **Ruling: preserve the incoming fixture and locate exact spans
+    independently** (2026-10-05). Root confirmed that the failed Rust job
+    checked out synthetic merge `a31bc8f424e9c57c1a1203f8c10ab3e40f6a533c`,
+    combining the branch with main at
+    `0a83ae273fbd5c543c90e260dc26fe5c8dd0d9c9`, and integrated that main
+    revision without conflicts. Preserve the incoming fixture byte for byte. In
+    the six authorized backend assertion files, locate each shifted name through
+    a fixed declaration fragment in the source text, require that fragment to
+    occur exactly once, and retain exact token and full byte-range comparisons.
+    Do not obtain an expected range from the compiler, AST or diagnostic
+    producer. Keep every existing diagnostic inventory, message, severity, path,
+    label and fix assertion and all unaffected baseline ranges. This addresses
+    the legitimate three-byte upstream comment rewrap without another
+    comment-sensitive numeric update. If wrong, an ambiguous fragment could
+    weaken the check; explicit uniqueness and token assertions and isolated
+    wrong-span mutations must detect that error. Keep all eval bytes and unowned
+    working files at the initial merged-index state. Root owns the merge commit,
+    fresh scoped QUICK review, full verification and CI rerun; no staging,
+    commits or reviewer dispatch occurs in this repair.
 
 ## Pull requests
 

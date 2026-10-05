@@ -2,9 +2,10 @@
 use crate::query::{self, Item, NameInput, find};
 use crate::snapshot::{Snapshot, ToolError};
 use crate::types::{Location, OverlayInput, WorkspaceStatus};
+use ridlc::deps::{component_requires, package_edges};
 use rmcp::schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Serialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
@@ -57,82 +58,13 @@ pub struct PackageDeps {
     pub dependents: Vec<String>,
 }
 
-/// Walks the IR's canonical protobuf JSON reference fields recursively.
-/// Interaction boundaries retain their names; units and documentation are not references.
+/// References of an MCP query item, using the shared canonical IR walk.
 pub fn references_of(own_package: &str, item: Item<'_>) -> Vec<(Option<String>, String)> {
-    let value = match item {
-        Item::Decl(d) => serde_json::to_value(d),
-        Item::Interface(i) => serde_json::to_value(i),
-        Item::Service(s) => serde_json::to_value(s),
+    match item {
+        Item::Decl(decl) => ridlc::deps::references_of(own_package, decl),
+        Item::Interface(interface) => ridlc::deps::references_of(own_package, interface),
+        Item::Service(service) => ridlc::deps::references_of(own_package, service),
     }
-    .expect("IR items serialize");
-    fn walk(
-        own: &str,
-        value: &serde_json::Value,
-        interaction: Option<&str>,
-        out: &mut Vec<(Option<String>, String)>,
-    ) {
-        match value {
-            serde_json::Value::Object(object) => {
-                for (key, value) in object {
-                    if key == "interactions" {
-                        if let Some(interactions) = value.as_array() {
-                            for item in interactions {
-                                walk(own, item, item["name"].as_str(), out);
-                            }
-                        }
-                    } else if key == "fallible" {
-                        if let Some(fallible) = value.as_object() {
-                            for key in ["ok", "err"] {
-                                if let Some(name) = fallible
-                                    .get(key)
-                                    .and_then(serde_json::Value::as_str)
-                                    .filter(|n| !n.is_empty())
-                                {
-                                    let canonical = if name.contains('.') {
-                                        name.to_string()
-                                    } else {
-                                        format!("{own}.{name}")
-                                    };
-                                    out.push((interaction.map(str::to_string), canonical));
-                                }
-                            }
-                        }
-                    } else if matches!(
-                        key.as_str(),
-                        "named"
-                            | "typeRef"
-                            | "backingEnum"
-                            | "patternConst"
-                            | "interfaceRef"
-                            | "payload"
-                    ) {
-                        if let Some(name) = value.as_str().filter(|n| !n.is_empty()) {
-                            let canonical = if name.contains('.') {
-                                name.to_string()
-                            } else {
-                                format!("{own}.{name}")
-                            };
-                            out.push((interaction.map(str::to_string), canonical));
-                        } else {
-                            walk(own, value, interaction, out);
-                        }
-                    } else {
-                        walk(own, value, interaction, out);
-                    }
-                }
-            }
-            serde_json::Value::Array(values) => {
-                for value in values {
-                    walk(own, value, interaction, out);
-                }
-            }
-            _ => {}
-        }
-    }
-    let mut out = Vec::new();
-    walk(own_package, &value, None, &mut out);
-    out
 }
 fn items(package: &ridl_ir::v2::Package) -> impl Iterator<Item = Item<'_>> {
     package
@@ -147,43 +79,6 @@ fn items(package: &ridl_ir::v2::Package) -> impl Iterator<Item = Item<'_>> {
         )
         .chain(package.services.iter().map(Item::Service))
 }
-/// Every (component package, component name, required interface) triple of
-/// the lowered system, per spec §4.4: declared components only, required
-/// interfaces that are present and not inline, as `{catalog}.{name}`.
-fn component_requires(system: &ridl_ir::v2::System) -> Vec<(String, String, String)> {
-    system
-        .components
-        .iter()
-        .filter(|c| !c.package.is_empty())
-        .flat_map(|component| {
-            component.requires.iter().filter_map(|require| {
-                let interface = require.interface.as_ref()?;
-                (!interface.inline).then(|| {
-                    (
-                        component.package.clone(),
-                        component.name.clone(),
-                        format!("{}.{}", interface.catalog, interface.name),
-                    )
-                })
-            })
-        })
-        .collect()
-}
-
-/// (system package, member component package) pairs, per spec §4.4.
-fn system_member_packages(system: &ridl_ir::v2::System) -> Vec<(String, String)> {
-    system
-        .members
-        .iter()
-        .filter_map(|member| {
-            let component = system.components.iter().find(|c| {
-                !c.package.is_empty() && format!("{}.{}", c.package, c.name) == member.component
-            })?;
-            Some((system.package.clone(), component.package.clone()))
-        })
-        .collect()
-}
-
 pub fn references(snap: &Snapshot, input: &NameInput) -> Result<ReferencesOutput, ToolError> {
     let found = find(snap, &input.name, input.from.as_deref())?;
     let target = format!("{}.{}", found.package, found.item.name());
@@ -261,58 +156,29 @@ pub fn dependencies(
             query::packages(snap)
         )));
     }
+    let edges = package_edges(&snap.output.checked, snap.output.system.as_ref());
+    let mut dependents: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+    for (own, targets) in &edges {
+        for target in targets {
+            dependents.entry(target).or_default().insert(own);
+        }
+    }
     let mut packages: Vec<_> = snap
         .output
         .checked
         .iter()
         .enumerate()
-        .map(|(i, c)| {
-            let depends_on: BTreeSet<String> = items(&c.ir)
-                .flat_map(|item| references_of(&c.ir.name, item))
-                .filter_map(|(_, reference)| {
-                    let (prefix, _) = reference.rsplit_once('.')?;
-                    (prefix != c.ir.name && prefix != "ridl.std").then(|| prefix.to_string())
-                })
-                .collect();
-            PackageDeps {
-                name: c.ir.name.clone(),
-                imports: snap.output.imports[i].keys().cloned().collect(),
-                depends_on: depends_on.into_iter().collect(),
-                dependents: Vec::new(),
-            }
+        .map(|(i, checked)| PackageDeps {
+            name: checked.ir.name.clone(),
+            imports: snap.output.imports[i].keys().cloned().collect(),
+            depends_on: edges[&checked.ir.name].iter().cloned().collect(),
+            dependents: dependents
+                .get(checked.ir.name.as_str())
+                .into_iter()
+                .flat_map(|names| names.iter().map(|name| name.to_string()))
+                .collect(),
         })
         .collect();
-    if let Some(system) = &snap.output.system {
-        let edges = component_requires(system)
-            .into_iter()
-            .filter_map(|(package, _, reference)| {
-                let (catalog, _) = reference.rsplit_once('.')?;
-                Some((package, catalog.to_string()))
-            })
-            .chain(system_member_packages(system));
-        for (own, target) in edges {
-            if target != own
-                && target != "ridl.std"
-                && let Some(package) = packages.iter_mut().find(|p| p.name == own)
-            {
-                package.depends_on.push(target);
-            }
-        }
-        for package in &mut packages {
-            package.depends_on.sort();
-            package.depends_on.dedup();
-        }
-    }
-    for i in 0..packages.len() {
-        let mut dependents = packages
-            .iter()
-            .filter(|p| p.depends_on.contains(&packages[i].name))
-            .map(|p| p.name.clone())
-            .collect::<Vec<_>>();
-        dependents.sort();
-        dependents.dedup();
-        packages[i].dependents = dependents;
-    }
     packages.sort_by(|a, b| a.name.cmp(&b.name));
     if let Some(package) = &input.package {
         packages.retain(|p| &p.name == package);
@@ -803,5 +669,22 @@ mod tests {
         assert!(pairs(&out).contains(&("fx.a", "HealthSet", None)));
         let out = references(&snap(), &input("HEALTH_PATTERN")).unwrap();
         assert_eq!(pairs(&out), [("fx.a", "HealthCode", None)]);
+    }
+
+    #[test]
+    fn dependencies_preserve_all_workspace_dependents_before_package_filtering() {
+        let snap = snapshot(
+            &fixture("ws"),
+            &[OverlayInput {
+                path: format!("{}/a/sub/sub.ridl", fixture("ws")),
+                source: "package fx.a.sub\nimport fx.a.Reading\nstruct Sample {\n  reading: Reading\n}\n".into(),
+            }],
+        ).unwrap();
+        assert_eq!(snap.status().errors, 0);
+        for package in [None, Some("fx.a")] {
+            let output = deps(&snap, package);
+            let a = output.packages.iter().find(|p| p.name == "fx.a").unwrap();
+            assert_eq!(a.dependents, ["fx.a.sub", "fx.b"]);
+        }
     }
 }

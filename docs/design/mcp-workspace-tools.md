@@ -1,6 +1,6 @@
 # The MCP workspace tools: as built
 
-`ridl mcp` serves eight read-only tools over a workspace on disk. This record
+`ridl mcp` serves nine read-only tools over a workspace on disk. This record
 describes them as built: the common rules, the tools, where the code lives, the
 errors, the compatibility with `ridl check`, and the tests. The code and its
 tests are the source of truth. The binding choices are in
@@ -21,6 +21,7 @@ not repeat. Built by driftsys/ridl#668 and #677.
 | `ridl_list_interactions` | `interface`; optional `from`                                       | the interface header and its interactions in source order                    |
 | `ridl_references`        | `name`; optional `from`                                            | each declaration, interaction or component that uses the target              |
 | `ridl_dependencies`      | optional `package`                                                 | each package's imports, dependencies and dependents                          |
+| `ridl_metrics`           | none; takes `path` only                                            | package fan-in, fan-out, instability and interface cohesion groups           |
 | `ridl_diff`              | `old`, `new`: an `.ir.json` file, a snapshot directory or a source | what `ridl diff --format json` prints; overlays apply to a source `new` only |
 
 ## 2. Common rules
@@ -30,8 +31,9 @@ not repeat. Built by driftsys/ridl#668 and #677.
   path resolves against the server's working directory. The tool descriptions
   and the server's `instructions` string tell the agent to pass the workspace
   root.
-- **`overlays`.** Every tool that takes `path`, and `ridl_diff`, also takes
+- **`overlays`.** Every path tool except `ridl_metrics`, and `ridl_diff`, takes
   optional `overlays: [{path, source}]`, the unsaved text of a file (§4.1).
+  `ridl_metrics` takes only `path` and reads saved source.
 - **Output.** Every tool returns MCP structured content with an output schema,
   and the same JSON as text content for hosts that ignore structured content.
 - **Workspace status.** A result built from a workspace carries
@@ -89,8 +91,18 @@ The behaviour that is not in the README:
   walk plus the rsdl edges above. A qualifier that names no workspace package
   stays as written. `dependents` is computed over the whole workspace before a
   `package` filter is applied. The tool reports the graph; a package import
-  cycle is already an error (TYPL-004) and an unused import would be a lint
-  (piece 1b); neither is a tool result.
+  cycle is already an error (TYPL-004) and an unused import is the
+  `unused-import` lint; neither is a tool result.
+- **`ridl_metrics`** applies `ridlc::deps::workspace_package_edges` to the
+  complete `package_edges` graph. Its `dependsOn`, fan-in, fan-out and
+  instability use workspace targets only; the dependency tool retains external
+  qualifiers. Instability is fan-out divided by the sum of fan-in and fan-out,
+  or null when both are zero. Each declared interface reports its total member
+  count and `ridlc::cohesion_groups`, without a threshold. Standard types do not
+  link members; members with no remaining named type are omitted from groups.
+  Packages and interfaces are sorted by canonical name. Members within groups
+  are sorted, and groups follow their earliest member in source order. Metrics
+  are independent of lint levels and return the common workspace status.
 - **`ridl_diff`** accepts what `ridl diff <old> <new>` accepts, through
   `ridlc::load_diff_side`, and returns what `ridl_diff::render_json` writes,
   with the standard IR passed as context (driftsys/ridl#598). A comparison
@@ -156,11 +168,11 @@ depends only on `ridl-ir`, `serde` and `serde_json`, so there is no cycle.
   them (ADR-0024 decision 8).
 - `query.rs` holds the lookups (`find`, `resolve`, `describe_type`,
   `list_interactions`), `refs.rs` the reference and dependency walks,
-  `explain.rs`, `diff.rs` and `types.rs` the rest. These hold no MCP type and
-  are unit-tested directly. The lookups and walks are functions from a
-  `&Snapshot` and the tool input to the tool's result type. `explain()` and
-  `diff()` take no `Snapshot`, and `diff()` reads the disk through
-  `load_diff_side`.
+  `metrics.rs` the package and interface metrics, and `explain.rs`, `diff.rs`
+  and `types.rs` the rest. These hold no MCP type and are unit-tested directly.
+  The lookups and walks are functions from a `&Snapshot` and the tool input to
+  the tool's result type. `explain()` and `diff()` take no `Snapshot`, and
+  `diff()` reads the disk through `load_diff_side`.
 - `lib.rs` has one `#[tool]` method per tool. Each runs its work (`snapshot` and
   the query, or for `ridl_explain`, `ridl_diff` and source-mode `ridl_check` the
   function without a snapshot) in `tokio::task::spawn_blocking`, and converts a
@@ -262,7 +274,11 @@ All are Rust tests, so `just test` runs them.
   `ridl_diff` agrees with `ridl diff --format json`; an overlay that introduces
   an error is reported and the file on disk is unchanged; after one call of each
   tool the fixture's files, sizes and modification times are unchanged; and
-  `tools/list` names the eight tools. The unit test `the_tool_list_is_pinned` in
+  `tools/list` names the nine tools. The unit test `the_tool_list_is_pinned` in
   `crates/ridl-mcp/src/lib.rs` pins the response to `tools.json`.
+- Inline tests in `metrics.rs` pin workspace-only edges against the dependency
+  tool, null instability for a disconnected package, cohesion group order, empty
+  interfaces, and unchanged file contents, sizes and modification times after a
+  handler call. The tool-list unit test pins the additive ninth tool.
 - The `ridl diff` tests of `crates/ridl/tests/` pass unchanged after the move of
   the diff loader.

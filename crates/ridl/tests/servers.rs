@@ -109,6 +109,7 @@ async fn ridl_mcp_advertises_ridl_check() {
                 "ridl_diff",
                 "ridl_explain",
                 "ridl_list_interactions",
+                "ridl_metrics",
                 "ridl_references",
                 "ridl_resolve"
             ]
@@ -549,7 +550,7 @@ async fn diff_compile_errors_preserve_structured_diagnostics() {
                     // TYPL-406 (`missing-docs`) is left out: the fixture has no docs.
                     .filter(|code| *code != "TYPL-406")
                     .collect::<Vec<_>>(),
-                ["TYPL-103", "TYPL-011"]
+                ["TYPL-103", "TYPL-011", "TYPL-223", "RIDL-414"]
             );
         }
         client.cancel().await.unwrap();
@@ -635,6 +636,7 @@ async fn every_tool_leaves_the_tree_unchanged() {
                 "ridl_dependencies",
                 json!({"path":temp.0,"overlays":overlays}),
             ),
+            ("ridl_metrics", json!({"path":temp.0})),
             (
                 "ridl_diff",
                 json!({"old":temp.0,"new":temp.0,"overlays":overlays}),
@@ -646,15 +648,40 @@ async fn every_tool_leaves_the_tree_unchanged() {
             let output = result.structured_content.unwrap();
             assert_eq!(text, output, "{name}");
             match name {
-                // TYPL-406 (`missing-docs`) is left out: the fixture has no docs.
-                "ridl_check" => assert!(
-                    output["diagnostics"]
+                "ridl_check" => {
+                    // Preserve the incoming allowance for undocumented fixture items.
+                    let diagnostics = output["diagnostics"]
                         .as_array()
                         .expect("a diagnostics array")
                         .iter()
-                        .all(|diagnostic| diagnostic["code"] == "TYPL-406"),
-                    "{output}"
-                ),
+                        .filter(|diagnostic| diagnostic["lint"] != "missing-docs")
+                        .collect::<Vec<_>>();
+                    assert_eq!(serde_json::to_value(diagnostics).unwrap(), json!([{
+                        "code": "TYPL-223",
+                        "severity": "info",
+                        "lint": "inconsistent-abbreviation",
+                        "message": "`read` in `readSpeed` abbreviates `reading`, used in `Reading`",
+                        "span": {
+                            "path": interface_path,
+                            "start": {"line": 28, "column": 9},
+                            "end": {"line": 28, "column": 18},
+                        },
+                        "labels": [],
+                        "fixes": [],
+                    }, {
+                        "code": "RIDL-414",
+                        "severity": "info",
+                        "lint": "low-cohesion-interface",
+                        "message": "interface `Status` splits into 5 groups of members that share no type: [speed], [reading], [setLevel], [outcome], [probe]",
+                        "span": {
+                            "path": interface_path,
+                            "start": {"line": 16, "column": 11},
+                            "end": {"line": 16, "column": 17},
+                        },
+                        "labels": [],
+                        "fixes": [],
+                    }]));
+                },
                 "ridl_explain" => {
                     assert_eq!(output["kind"], "diagnostic");
                     assert_eq!(output["code"], "TYPL-002");
@@ -683,6 +710,16 @@ async fn every_tool_leaves_the_tree_unchanged() {
                     let package = output["packages"].as_array().unwrap().iter().find(|p| p["name"] == "fx.b").unwrap();
                     assert_eq!(package["depends_on"], json!(["fx.a", "fx.a.sub"]));
                 },
+                "ridl_metrics" => assert_eq!(output, json!({
+                    "packages": [
+                        {"name":"fx.a", "fanIn":1, "fanOut":0, "instability":0.0, "dependsOn":[]},
+                        {"name":"fx.a.sub", "fanIn":0, "fanOut":0, "instability":null, "dependsOn":[]},
+                        {"name":"fx.b", "fanIn":0, "fanOut":1, "instability":1.0, "dependsOn":["fx.a"]}
+                    ],
+                    "interfaces": [{"name":"fx.b.Status", "members":5,
+                        "groups":[["speed"],["reading"],["setLevel"],["outcome"]]}],
+                    "workspace": {"root":temp.0, "errors":0, "warnings":22, "notes":[]}
+                })),
                 "ridl_diff" => assert_eq!(output["verdict"], "breaking"),
                 _ => unreachable!(),
             }

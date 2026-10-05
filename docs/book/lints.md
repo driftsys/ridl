@@ -129,6 +129,9 @@ MANI-010 is itself a lint, so the table can set its level.
 | `unbounded-length` | TYPL-103 | warn | `string`/`bytes` without explicit bounds |
 | `no-init-value` | TYPL-115 | info | type has no derivable init value and no declared `= value` |
 | `duplicate-reserved` | TYPL-211 | warn | duplicate `reserved` entry |
+| `inconsistent-unit` | TYPL-222 | info | one field name used with different units |
+| `inconsistent-abbreviation` | TYPL-223 | info | inconsistent identifier abbreviation |
+| `duplicate-shape` | TYPL-224 | info | duplicate declaration shape |
 | `broken-doc-link` | TYPL-401 | warn | doc link or `@see` target that does not resolve |
 | `detached-doc-comment` | TYPL-404 | warn | blank line between a doc comment and its carrier |
 | `deprecated-without-reason` | TYPL-405 | warn | `@deprecated` doc tag without a reason string |
@@ -148,6 +151,8 @@ MANI-010 is itself a lint, so the table can set its level.
 | `shared-error-type` | RIDL-405 | info | one `error` type shared across unrelated failure domains |
 | `redeclared-envelope-metadata` | RIDL-406 | info | payload struct re-declares envelope metadata |
 | `ordinal-changed` | RIDL-407 | warn | interaction, struct field, or union arm ordinal changed against the published baseline |
+| `low-cohesion-interface` | RIDL-414 | info | interface members form disconnected type-sharing groups |
+| `package-fan-out` | RIDL-415 | info | package depends on too many workspace packages |
 | `redundant-provider-set` | RSDL-409 | warn | a `requires` resolves to a redundant provider set |
 | `unclaimed-backend-key` | RSDL-804 | warn | a backend key whose namespace no configured backend claims |
 | `unknown-manifest-key` | MANI-005 | warn | unknown manifest key |

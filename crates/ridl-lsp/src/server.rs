@@ -56,7 +56,8 @@ use ridl_core::lint::{LintScopes, apply_lint_levels};
 use ridl_core::package::{Package, PackageOrigin, Workspace};
 use ridl_core::{LoadedWorkspace, find_root, load_workspace, profile_of_path, std_package};
 use ridl_sem::{
-    CheckedWorkspace, check_package, check_workspace, resolve_package, unclaimed_backend_keys,
+    CheckedWorkspace, check_package, check_workspace, lower_system, resolve_package,
+    unclaimed_backend_keys,
 };
 use ridl_syntax::Profile;
 use ridl_syntax::ast::{AstNode as _, SourceFile};
@@ -677,8 +678,16 @@ impl ServerState {
         // package's lock is not one of those files.
         let mut workspace_render_ids: Vec<FileId> = Vec::new();
         let workspace_packages = self.workspace.packages(db).len();
-        let packages = self.workspace.packages(db).iter().copied();
-        for (index, package) in packages.chain(overlay_packages).enumerate() {
+        let packages: Vec<_> = self
+            .workspace
+            .packages(db)
+            .iter()
+            .copied()
+            .chain(overlay_packages)
+            .collect();
+        let mut resolutions = Vec::with_capacity(packages.len());
+        let mut checked = Vec::with_capacity(packages.len());
+        for (index, package) in packages.iter().copied().enumerate() {
             let files = package.files(db).clone();
             let mut render_ids = Vec::with_capacity(files.len() + 1);
             for file in &files {
@@ -722,9 +731,17 @@ impl ServerState {
             }
 
             let resolution = resolve_package(db, self.workspace, package, self.std);
-            all.extend(remap_diagnostics(resolution.diagnostics, &render_ids));
-            let checked = check_package(db, self.workspace, package, self.std);
-            all.extend(remap_diagnostics(checked.diagnostics.clone(), &render_ids));
+            all.extend(remap_diagnostics(
+                resolution.diagnostics.clone(),
+                &render_ids,
+            ));
+            resolutions.push(resolution);
+            let checked_package = check_package(db, self.workspace, package, self.std);
+            all.extend(remap_diagnostics(
+                checked_package.diagnostics.clone(),
+                &render_ids,
+            ));
+            checked.push(checked_package);
         }
         // The workspace-wide passes — the service catalog and the rsdl system
         // query — run once over the workspace, as in `ridlc`; a standalone
@@ -746,6 +763,34 @@ impl ServerState {
             &BTreeSet::new(),
             &mut sources,
         ));
+        let std_ir = check_package(db, self.workspace, self.std, self.std).ir;
+        let ir_packages: Vec<_> = checked[..workspace_packages]
+            .iter()
+            .map(|package| &package.ir)
+            .collect();
+        let lowered_system = lower_system(&system, &ir_packages);
+        all.extend(ridlc::check_design_lints(
+            db,
+            &packages[..workspace_packages],
+            &checked[..workspace_packages],
+            &resolutions[..workspace_packages],
+            &std_ir,
+            lowered_system.as_ref(),
+            &mut sources,
+        ));
+        // Each standalone overlay is an independent one-package source set.
+        // Workspace overlays already update their existing database inputs.
+        for index in workspace_packages..packages.len() {
+            all.extend(ridlc::check_design_lints(
+                db,
+                &packages[index..index + 1],
+                &checked[index..index + 1],
+                &resolutions[index..index + 1],
+                &std_ir,
+                None,
+                &mut sources,
+            ));
+        }
         // The `[lints]` levels, resolved through the paths this source map
         // recorded for every file, including an overlay's (ADR-0024
         // decision 6). `allow` removes a diagnostic before conversion, so it is

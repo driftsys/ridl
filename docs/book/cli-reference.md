@@ -1587,7 +1587,7 @@ Options:
   -h, --help  Print help
 ```
 
-`ridl mcp` serves the Model Context Protocol over stdio with eight tools:
+`ridl mcp` serves the Model Context Protocol over stdio with nine tools:
 
 - `ridl_check` checks workspace files or a source text.
 - `ridl_explain` explains a diagnostic code or diff category.
@@ -1596,6 +1596,7 @@ Options:
 - `ridl_list_interactions` lists an interface's interactions.
 - `ridl_references` lists declarations and interactions using a declaration.
 - `ridl_dependencies` lists package dependencies and dependents.
+- `ridl_metrics` reports package coupling and interface cohesion groups.
 - `ridl_diff` compares source workspaces or IR snapshots.
 
 Behavior lives in `crates/ridl-mcp`; this subcommand builds the Tokio runtime

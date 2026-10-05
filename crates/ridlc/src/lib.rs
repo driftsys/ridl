@@ -3,8 +3,9 @@
 //! [`compile`] runs the pipeline end to end over a single source file: it wraps
 //! the source in a single-file synthetic package, resolves it
 //! ([`resolve_package`]), checks and lowers it to IR v2 ([`check_package`]),
-//! runs the workspace-wide passes over it ([`check_workspace`]), and generates
-//! Rust source. The function is total: it never panics. Every parser,
+//! runs the semantic workspace passes ([`check_workspace`]) and design lints
+//! ([`check_design_lints`]), and generates Rust source. The function is total:
+//! it never panics. Every parser,
 //! resolver, and checker diagnostic is a coded [`Diagnostic`]
 //! collected into [`CompileOutput::diagnostics`]; if the Rust backend fails,
 //! its error joins that list and [`CompileOutput::rust_source`] is left
@@ -43,6 +44,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+pub mod deps;
+mod design_lints;
+pub use design_lints::{check_design_lints, cohesion_groups};
 pub mod diff_side;
 pub use diff_side::{DiffSide, DiffSideError, load_diff_side};
 pub mod plugin;
@@ -173,10 +177,11 @@ pub fn check_source(path: &str, text: &str) -> CliRun {
 /// Compiles `text` (registered under `path`) end to end.
 ///
 /// The pipeline is `parse_file` (through the salsa database) →
-/// `resolve_package` → `check_package` → `check_workspace` → `generate`.
+/// `resolve_package` → `check_package` → `check_workspace` →
+/// `check_design_lints` → `generate`.
 /// Diagnostics are concatenated in that order: parser errors first, then
-/// resolver, then checker, then the workspace-wide passes and RSDL-804, then
-/// any Rust backend error. The source becomes a single-file synthetic package
+/// resolver, then checker, then semantic workspace passes, RSDL-804 and design
+/// lints, then any Rust backend error. The source becomes a single-file synthetic package
 /// named from its `package` declaration, falling back to the path's file stem
 /// — the loader's single-file rule.
 ///
@@ -389,8 +394,7 @@ pub fn compile_workspace_with(
         lints,
         report_scope,
     } = load_and_check(db, entry, overlays)?;
-    // `ridl.std` is checked here rather than in `load_and_check` so the command
-    // drivers, which never look at its IR, do not pay for the pass.
+    // Reuse the standard IR query already evaluated by the design lint pass.
     let std_ir = check_package(&*db, workspace, std, std).ir;
     let packages: Vec<&ridl_ir::v2::Package> = checked.iter().map(|package| &package.ir).collect();
     let system = lower_workspace_system(&system, &packages, &std_ir);
@@ -1502,6 +1506,19 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         db,
         &system,
         &BTreeSet::new(),
+        &mut sources,
+    ));
+
+    let std_ir = check_package(db, workspace, std, std).ir;
+    let ir_packages: Vec<_> = checked.iter().map(|package| &package.ir).collect();
+    let lowered_system = lower_system(&system, &ir_packages);
+    diagnostics.extend(check_design_lints(
+        db,
+        &packages,
+        &checked,
+        &resolutions,
+        &std_ir,
+        lowered_system.as_ref(),
         &mut sources,
     ));
 

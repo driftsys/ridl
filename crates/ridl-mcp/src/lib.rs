@@ -1,11 +1,12 @@
 //! The RIDL MCP server (ADR-0005 Layer B).
 //!
-//! Eight read-only workspace tools expose checks, declarations, references,
+//! Nine read-only workspace tools expose checks, declarations, references,
 //! dependencies and compatibility comparisons over stdio behind `ridl mcp`.
 //! The server consumes the shared compiler crates and their canonical IR JSON.
 
 pub mod diff;
 pub mod explain;
+pub mod metrics;
 pub mod query;
 pub mod refs;
 pub mod snapshot;
@@ -210,6 +211,26 @@ impl RidlMcp {
             Err(error) => Ok(error.into_result()),
         }
     }
+    #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<metrics::MetricsOutput>(), description = "Report workspace package fan-in, fan-out, instability and interface cohesion groups. Pass the workspace root as `path`. Read-only and offline.")]
+    async fn ridl_metrics(
+        &self,
+        Parameters(input): Parameters<metrics::MetricsInput>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let output = tokio::task::spawn_blocking(move || {
+            let snap = snapshot(&input.path, &[])?;
+            metrics::metrics(&snap, &input)
+        })
+        .await
+        .map_err(checker_failed)?;
+        match output {
+            Ok(output) => {
+                let value = serde_json::to_value(&output)
+                    .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+                Ok(CallToolResult::structured(value))
+            }
+            Err(error) => Ok(error.into_result()),
+        }
+    }
     #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<query::ResolveOutput>(), description = "Resolve a declaration by name. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.")]
     async fn ridl_resolve(
         &self,
@@ -372,6 +393,7 @@ impl ServerHandler for RidlMcp {
                  ridl_list_interactions: list an interface's interactions.\n\
                  ridl_references: list declarations and interactions using a declaration.\n\
                  ridl_dependencies: list package dependencies and dependents.\n\
+                 ridl_metrics: report package coupling and interface cohesion.\n\
                  ridl_diff: compare source workspaces or IR snapshots.\n\
                  Pass the workspace root (the directory that holds its ridl.toml) as `path`. Tools are read-only: they never write files and never fetch remote imports. Use `overlays` to check unsaved text.",
             )
@@ -460,6 +482,7 @@ mod tests {
                 "ridl_diff",
                 "ridl_explain",
                 "ridl_list_interactions",
+                "ridl_metrics",
                 "ridl_references",
                 "ridl_resolve"
             ]
@@ -487,16 +510,121 @@ mod tests {
         let result = RidlMcp::new().ridl_check(Parameters(params)).await.unwrap();
         let value = result.structured_content.unwrap();
         assert_eq!(value["diagnostics"], expected);
+        let all_diagnostics = value["diagnostics"].as_array().unwrap();
+        let missing_docs_code = ridl_core::lint::lint_by_name("missing-docs")
+            .unwrap()
+            .code
+            .as_str();
+        let expected_codes = std::iter::once("TYPL-103")
+            .chain(std::iter::repeat_n(missing_docs_code, 15))
+            .chain(std::iter::once("TYPL-011"))
+            .chain(std::iter::repeat_n(missing_docs_code, 8))
+            .chain(["TYPL-223", "RIDL-414"])
+            .collect::<Vec<_>>();
         assert_eq!(
-            value["diagnostics"]
-                .as_array()
-                .unwrap()
+            all_diagnostics
+                .iter()
+                .map(|diagnostic| diagnostic["code"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            expected_codes
+        );
+        assert!(
+            all_diagnostics
+                .iter()
+                .filter(|diagnostic| diagnostic["lint"] == "missing-docs")
+                .all(|diagnostic| diagnostic["severity"] == "warning")
+        );
+        // Keep the incoming fixture allowance while checking every other diagnostic exactly.
+        let exact_diagnostics = all_diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic["lint"] != "missing-docs")
+            .collect::<Vec<_>>();
+        assert_eq!(
+            exact_diagnostics
                 .iter()
                 .map(|d| d["code"].as_str().unwrap())
-                // TYPL-406 (`missing-docs`) is left out: the fixture has no docs.
-                .filter(|code| *code != "TYPL-406")
                 .collect::<Vec<_>>(),
-            ["TYPL-103", "TYPL-011"]
+            ["TYPL-103", "TYPL-011", "TYPL-223", "RIDL-414"]
+        );
+        assert_eq!(
+            serde_json::to_value(exact_diagnostics).unwrap(),
+            serde_json::json!([
+                {
+                    "code": "TYPL-103",
+                    "severity": "warning",
+                    "lint": "unbounded-length",
+                    "message": "`string` without explicit bounds; the default `[0..256]` applies",
+                    "span": {
+                        "path": format!("{}/a/a.ridl", path),
+                        "start": {
+                            "line": 25,
+                            "column": 11
+                        },
+                        "end": {
+                            "line": 25,
+                            "column": 17
+                        }
+                    },
+                    "labels": [],
+                    "fixes": []
+                },
+                {
+                    "code": "TYPL-011",
+                    "severity": "error",
+                    "message": "unknown type name `Missing`",
+                    "span": {
+                        "path": format!("{}/b/b.ridl", path),
+                        "start": {
+                            "line": 18,
+                            "column": 25
+                        },
+                        "end": {
+                            "line": 18,
+                            "column": 32
+                        }
+                    },
+                    "labels": [],
+                    "fixes": []
+                },
+                {
+                    "code": "TYPL-223",
+                    "severity": "info",
+                    "lint": "inconsistent-abbreviation",
+                    "message": "`read` in `readSpeed` abbreviates `reading`, used in `Reading`",
+                    "span": {
+                        "path": format!("{}/b/b.ridl", path),
+                        "start": {
+                            "line": 25,
+                            "column": 9
+                        },
+                        "end": {
+                            "line": 25,
+                            "column": 18
+                        }
+                    },
+                    "labels": [],
+                    "fixes": []
+                },
+                {
+                    "code": "RIDL-414",
+                    "severity": "info",
+                    "lint": "low-cohesion-interface",
+                    "message": "interface `Status` splits into 4 groups of members that share no type: [speed], [reading], [setLevel], [outcome]",
+                    "span": {
+                        "path": format!("{}/b/b.ridl", path),
+                        "start": {
+                            "line": 14,
+                            "column": 11
+                        },
+                        "end": {
+                            "line": 14,
+                            "column": 17
+                        }
+                    },
+                    "labels": [],
+                    "fixes": []
+                }
+            ])
         );
     }
 
@@ -783,6 +911,50 @@ mod tests {
             serde_json::from_str(&block.text).expect("the block holds JSON");
         assert_eq!(value["diagnostics"][0]["code"], json!("FORM-101"));
         assert_eq!(value["diagnostics"][0]["span"]["path"], json!("input.typl"));
+    }
+
+    #[tokio::test]
+    async fn source_mode_public_wrapper_reports_positive_design_diagnostic() {
+        let source = "package p\ntype Speed: km/h [0.0..250.0 step 0.5]\ntype SpeedMs: m/s [0.0..100.0 step 0.5]\nstruct First { speed: Speed }\nstruct Second { speed: Speed }\nstruct Third { speed: SpeedMs }\n";
+        let result = RidlMcp::new()
+            .ridl_check(Parameters(CheckParams {
+                source: Some(source.into()),
+                profile: Some(Profile::Ridl),
+                path: None,
+                overlays: None,
+            }))
+            .await
+            .unwrap();
+        assert_eq!(result.is_error, Some(false));
+        let [ContentBlock::Text(block)] = result.content.as_slice() else {
+            panic!("one JSON text block")
+        };
+        let value: serde_json::Value = serde_json::from_str(&block.text).unwrap();
+        assert!(value.get("workspace").is_none());
+        let diagnostics = value["diagnostics"].as_array().unwrap();
+        assert!(
+            !diagnostics.iter().any(|d| d["severity"] == "error"),
+            "{value}"
+        );
+        let design = diagnostics
+            .iter()
+            .filter(|d| d["code"] == "TYPL-222")
+            .collect::<Vec<_>>();
+        assert_eq!(design.len(), 1, "{value}");
+        assert_eq!(design[0]["lint"], "inconsistent-unit");
+        assert_eq!(design[0]["severity"], "info");
+        assert_eq!(
+            design[0]["message"],
+            "`speed` uses `m/s` here; elsewhere `speed` uses `km/h`"
+        );
+        assert_eq!(
+            design[0]["span"],
+            json!({"path":"input.ridl", "start":{"line":6,"column":16}, "end":{"line":6,"column":21}})
+        );
+        assert_eq!(
+            design[0]["labels"][0]["span"],
+            json!({"path":"input.ridl", "start":{"line":4,"column":16}, "end":{"line":4,"column":21}})
+        );
     }
 
     /// The check the panic test installs: it panics on one sentinel source

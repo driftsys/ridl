@@ -1,11 +1,9 @@
-//! The workspace-wide passes: the ones that run once over the whole workspace,
-//! after the per-package `resolve_package` and `check_package`. Every driver
-//! that reports diagnostics — `ridlc`, which `ridl check` and the `ridl_check`
-//! MCP tool share, and the language server — runs them through
-//! [`check_workspace`], so a later workspace-wide pass reaches each face at
-//! once (issues #345, #386). The language server's hover and navigation read
-//! `check_system` and `service_catalog` directly, for the model rather than
-//! the diagnostics.
+//! The semantic workspace passes, after per-package resolution and checking.
+//! Compiler and language-server drivers call [`check_workspace`] for the service
+//! catalog and system diagnostics. Design lints run separately through
+//! `ridlc::check_design_lints`, using checked IR and the current source map.
+//! The language server's hover and navigation read `check_system` and
+//! `service_catalog` directly for the model rather than the diagnostics.
 
 use ridl_core::diag::Diagnostic;
 use ridl_core::package::{Package, Workspace, service_catalog};

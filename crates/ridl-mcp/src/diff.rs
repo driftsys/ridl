@@ -121,16 +121,135 @@ mod tests {
         {
             ToolError::WithData { message, data } => {
                 assert_eq!(message, "the new side does not compile");
+                let path = fixture("ws-diag");
+                let compiled = ridlc::compile_workspace(
+                    &mut ridl_core::RidlDatabase::default(),
+                    std::path::Path::new(&path),
+                )
+                .unwrap();
                 assert_eq!(
-                    data["diagnostics"]
-                        .as_array()
-                        .unwrap()
+                    data["diagnostics"],
+                    serde_json::to_value(ridl_core::diag::to_json(
+                        &compiled.diagnostics,
+                        &compiled.sources,
+                    ))
+                    .unwrap()
+                );
+                let all_diagnostics = data["diagnostics"].as_array().unwrap();
+                let missing_docs_code = ridl_core::lint::lint_by_name("missing-docs")
+                    .unwrap()
+                    .code
+                    .as_str();
+                let expected_codes = std::iter::once("TYPL-103")
+                    .chain(std::iter::repeat_n(missing_docs_code, 15))
+                    .chain(std::iter::once("TYPL-011"))
+                    .chain(std::iter::repeat_n(missing_docs_code, 8))
+                    .chain(["TYPL-223", "RIDL-414"])
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    all_diagnostics
+                        .iter()
+                        .map(|diagnostic| diagnostic["code"].as_str().unwrap())
+                        .collect::<Vec<_>>(),
+                    expected_codes
+                );
+                assert!(
+                    all_diagnostics
+                        .iter()
+                        .filter(|diagnostic| diagnostic["lint"] == "missing-docs")
+                        .all(|diagnostic| diagnostic["severity"] == "warning")
+                );
+                // Keep the incoming fixture allowance while checking every other diagnostic exactly.
+                let exact_diagnostics = all_diagnostics
+                    .iter()
+                    .filter(|diagnostic| diagnostic["lint"] != "missing-docs")
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    exact_diagnostics
                         .iter()
                         .map(|d| d["code"].as_str().unwrap())
-                        // TYPL-406 (`missing-docs`) is left out: the fixture has no docs.
-                        .filter(|code| *code != "TYPL-406")
                         .collect::<Vec<_>>(),
-                    ["TYPL-103", "TYPL-011"]
+                    ["TYPL-103", "TYPL-011", "TYPL-223", "RIDL-414"]
+                );
+                assert_eq!(
+                    serde_json::to_value(exact_diagnostics).unwrap(),
+                    serde_json::json!([
+                        {
+                            "code": "TYPL-103",
+                            "severity": "warning",
+                            "lint": "unbounded-length",
+                            "message": "`string` without explicit bounds; the default `[0..256]` applies",
+                            "span": {
+                                "path": format!("{}/a/a.ridl", fixture("ws-diag")),
+                                "start": {
+                                    "line": 25,
+                                    "column": 11
+                                },
+                                "end": {
+                                    "line": 25,
+                                    "column": 17
+                                }
+                            },
+                            "labels": [],
+                            "fixes": []
+                        },
+                        {
+                            "code": "TYPL-011",
+                            "severity": "error",
+                            "message": "unknown type name `Missing`",
+                            "span": {
+                                "path": format!("{}/b/b.ridl", fixture("ws-diag")),
+                                "start": {
+                                    "line": 18,
+                                    "column": 25
+                                },
+                                "end": {
+                                    "line": 18,
+                                    "column": 32
+                                }
+                            },
+                            "labels": [],
+                            "fixes": []
+                        },
+                        {
+                            "code": "TYPL-223",
+                            "severity": "info",
+                            "lint": "inconsistent-abbreviation",
+                            "message": "`read` in `readSpeed` abbreviates `reading`, used in `Reading`",
+                            "span": {
+                                "path": format!("{}/b/b.ridl", fixture("ws-diag")),
+                                "start": {
+                                    "line": 25,
+                                    "column": 9
+                                },
+                                "end": {
+                                    "line": 25,
+                                    "column": 18
+                                }
+                            },
+                            "labels": [],
+                            "fixes": []
+                        },
+                        {
+                            "code": "RIDL-414",
+                            "severity": "info",
+                            "lint": "low-cohesion-interface",
+                            "message": "interface `Status` splits into 4 groups of members that share no type: [speed], [reading], [setLevel], [outcome]",
+                            "span": {
+                                "path": format!("{}/b/b.ridl", fixture("ws-diag")),
+                                "start": {
+                                    "line": 14,
+                                    "column": 11
+                                },
+                                "end": {
+                                    "line": 14,
+                                    "column": 17
+                                }
+                            },
+                            "labels": [],
+                            "fixes": []
+                        }
+                    ])
                 );
             }
             _ => panic!("expected diagnostics"),

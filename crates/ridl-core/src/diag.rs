@@ -502,6 +502,21 @@ diag_codes! {
         TYPL_220 = "TYPL-220", Error,
             "regex pattern the Rust `regex` crate cannot compile";
 
+        /// One exact site name is used with different canonical units across
+        /// the checked workspace. Emitted by the design lint pass.
+        TYPL_222 = "TYPL-222", Info,
+            "one field name used with different units", lint = "inconsistent-unit";
+
+        /// An identifier word abbreviates another word in the checked workspace.
+        /// Emitted by the design lint pass.
+        TYPL_223 = "TYPL-223", Info,
+            "inconsistent identifier abbreviation", lint = "inconsistent-abbreviation";
+
+        /// Two differently named declarations have equal field or variant sets.
+        /// Emitted by the design lint pass.
+        TYPL_224 = "TYPL-224", Info,
+            "duplicate declaration shape", lint = "duplicate-shape";
+
         /// Stream type `<T>` outside interaction position (typl §16.4, ridl
         /// §12.3). Emitted by the parser in a `.typl` parse (E2 task 2) and by
         /// the checker for struct fields and collections in a `.ridl` file
@@ -981,6 +996,16 @@ diag_codes! {
         /// parameters still lower — this check reports and does not drop.
         RIDL_413 = "RIDL-413", Error,
             "parameter name declared twice in one parameter list";
+
+        /// A declared interface has disconnected groups of members under
+        /// direct named-type sharing. Provisional Info during calibration.
+        RIDL_414 = "RIDL-414", Info,
+            "interface members form disconnected type-sharing groups", lint = "low-cohesion-interface";
+
+        /// A package depends on more workspace packages than the threshold.
+        /// Provisional Info during calibration.
+        RIDL_415 = "RIDL-415", Info,
+            "package depends on too many workspace packages", lint = "package-fan-out";
     }
 
     /// The rsdl catalogue: every `RSDL-` code declared in this module, with the
@@ -1955,6 +1980,9 @@ mod tests {
             ("TYPL-103", "unbounded-length"),
             ("TYPL-115", "no-init-value"),
             ("TYPL-211", "duplicate-reserved"),
+            ("TYPL-222", "inconsistent-unit"),
+            ("TYPL-223", "inconsistent-abbreviation"),
+            ("TYPL-224", "duplicate-shape"),
             ("TYPL-401", "broken-doc-link"),
             ("TYPL-404", "detached-doc-comment"),
             ("TYPL-405", "deprecated-without-reason"),
@@ -1974,6 +2002,8 @@ mod tests {
             ("RIDL-405", "shared-error-type"),
             ("RIDL-406", "redeclared-envelope-metadata"),
             ("RIDL-407", "ordinal-changed"),
+            ("RIDL-414", "low-cohesion-interface"),
+            ("RIDL-415", "package-fan-out"),
             ("RSDL-409", "redundant-provider-set"),
             ("RSDL-804", "unclaimed-backend-key"),
             ("MANI-005", "unknown-manifest-key"),

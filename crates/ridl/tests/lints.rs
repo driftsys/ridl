@@ -874,6 +874,94 @@ fn deny_lint_does_not_skip_desk_check() {
     );
 }
 
+#[test]
+fn inconsistent_unit_levels_reach_compiler_and_cli_reports() {
+    let source = "package a\ntype Speed: km/h [0.0..250.0 step 0.5]\ntype SpeedMs: m/s [0.0..100.0 step 0.5]\nstruct First { speed: Speed }\nstruct Second { speed: Speed }\nstruct Third { speed: SpeedMs }\n";
+    for (level, expected_count, expected_severity, expected_exit) in [
+        ("info", 1, "info", 0),
+        ("allow", 0, "info", 0),
+        ("deny", 1, "error", 1),
+    ] {
+        let dir = TempDir::new("unit-levels");
+        dir.write("ridl.toml", &format!("[package]\nname = \"a\"\nversion = \"1.0.0\"\n[lints]\ninconsistent-unit = \"{level}\"\n"));
+        dir.write("source.ridl", source);
+        // Compilation preserves the catalogue severity for every level.
+        let compiled =
+            ridlc::compile_workspace(&mut ridl_core::RidlDatabase::default(), dir.path()).unwrap();
+        // Preserve the incoming allowance for undocumented fixture items.
+        let compiled_diagnostics = compiled
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| {
+                diagnostic.code != ridl_core::lint::lint_by_name("missing-docs").unwrap().code
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(compiled_diagnostics.len(), 1, "{:?}", compiled_diagnostics);
+        assert_eq!(compiled_diagnostics[0].code.as_str(), "TYPL-222");
+        assert_eq!(
+            compiled_diagnostics[0].severity,
+            ridl_core::diag::Severity::Info
+        );
+
+        // The shared command driver applies levels; the binary must agree.
+        let run = ridlc::run_check(dir.path(), ridl_core::Frozen::Yes).unwrap();
+        // Preserve the incoming allowance for undocumented fixture items.
+        let run_diagnostics = run
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| {
+                diagnostic.code != ridl_core::lint::lint_by_name("missing-docs").unwrap().code
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            run_diagnostics.len(),
+            expected_count,
+            "{level}: {:?}",
+            run_diagnostics
+        );
+        assert_eq!(run.has_error(), expected_exit == 1);
+        if let Some(diagnostic) = run_diagnostics.first() {
+            assert_eq!(diagnostic.code.as_str(), "TYPL-222");
+            assert_eq!(
+                diagnostic.severity,
+                if level == "deny" {
+                    ridl_core::diag::Severity::Error
+                } else {
+                    ridl_core::diag::Severity::Info
+                }
+            );
+        }
+        let (exit, stdout, stderr) = ridl(&[
+            "check".as_ref(),
+            "--format".as_ref(),
+            "json".as_ref(),
+            dir.path().as_os_str(),
+        ]);
+        assert_eq!(exit, expected_exit, "{level}: {stderr}");
+        let diagnostics: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+        let diagnostics = diagnostics
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|diagnostic| diagnostic["lint"] != "missing-docs")
+            .collect::<Vec<_>>();
+        assert_eq!(
+            diagnostics.len(),
+            expected_count,
+            "{level}: {diagnostics:?}"
+        );
+        if let Some(diagnostic) = diagnostics.first() {
+            assert_eq!(diagnostic["code"], "TYPL-222");
+            assert_eq!(diagnostic["lint"], "inconsistent-unit");
+            assert_eq!(diagnostic["severity"], expected_severity);
+            assert_eq!(
+                diagnostic["message"],
+                "`speed` uses `m/s` here; elsewhere `speed` uses `km/h`"
+            );
+        }
+    }
+}
+
 /// A type documented with a `/** */` block, which draws TYPL-410
 /// (`doc-comment-style`, `allow` by default) and nothing else.
 const BLOCK_DOC_SOURCE: &str = "package demo\n\n/** A speed. */\ntype Speed: integer [0..300]\n";

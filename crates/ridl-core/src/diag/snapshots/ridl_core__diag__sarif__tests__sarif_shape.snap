@@ -506,6 +506,36 @@ expression: log
               }
             },
             {
+              "id": "TYPL-222",
+              "name": "inconsistent-unit",
+              "shortDescription": {
+                "text": "one field name used with different units"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "TYPL-223",
+              "name": "inconsistent-abbreviation",
+              "shortDescription": {
+                "text": "inconsistent identifier abbreviation"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "TYPL-224",
+              "name": "duplicate-shape",
+              "shortDescription": {
+                "text": "duplicate declaration shape"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
               "id": "TYPL-301",
               "shortDescription": {
                 "text": "stream type `<T>` outside interaction position"
@@ -1002,6 +1032,26 @@ expression: log
               }
             },
             {
+              "id": "RIDL-414",
+              "name": "low-cohesion-interface",
+              "shortDescription": {
+                "text": "interface members form disconnected type-sharing groups"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "RIDL-415",
+              "name": "package-fan-out",
+              "shortDescription": {
+                "text": "package depends on too many workspace packages"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
               "id": "RSDL-305",
               "shortDescription": {
                 "text": "`instances` is not a parenthesised list of one or more camelCase names"
@@ -1439,7 +1489,7 @@ expression: log
       "results": [
         {
           "ruleId": "RIDL-100",
-          "ruleIndex": 66,
+          "ruleIndex": 69,
           "level": "warning",
           "message": {
             "text": "signal without a timing annotation"
@@ -1504,7 +1554,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 150,
+          "ruleIndex": 155,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

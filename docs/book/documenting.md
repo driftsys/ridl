@@ -25,7 +25,7 @@ is no `ridl doc` command that writes a documentation site.
 A doc comment is written on the lines directly above the item it documents.
 Here is a small package with every item documented:
 
-```ridl
+```ridl,allow=RIDL-414
 package docs.cruise
 
 /// A vehicle speed over ground, as the brake controller computes it from the
@@ -74,6 +74,11 @@ interface CruiseControl {
   ) @[..100ms]
 }
 ```
+
+The `low-cohesion-interface` lint reports two type-sharing groups here:
+`status` uses `CruiseState`, and `setLever` uses `LeverCmd`. This example
+keeps both members together to show documentation on an interface and its
+interactions.
 
 The rest of this chapter takes the parts of this example one at a time.
 
@@ -272,7 +277,8 @@ is `allow` by default, so it is reported only when a project sets its level. The
 | `malformed-doc-tag`         | TYPL-409 | warn    | `@see` or `@since` has a missing or malformed value                              |
 | `doc-comment-style`         | TYPL-410 | allow   | a doc comment is written as `/** */`                                             |
 
-The examples below each draw one lint on purpose.
+The examples below each draw one documentation lint on purpose. Some also draw
+the design lints explained beside their source blocks.
 
 ### `missing-docs`
 
@@ -280,7 +286,7 @@ The examples below each draw one lint on purpose.
 the editor inserts an empty `///` line above the item. Here `Odometer` has no
 doc, and `internal` exempts `Raw` and its field:
 
-```ridl,allow=TYPL-406
+```ridl,allow=TYPL-406,allow=TYPL-222
 package docs.missing
 
 type Odometer: km [0.0..1000000.0 step 0.1]
@@ -290,6 +296,10 @@ internal struct Raw {
   value: Odometer
 }
 ```
+
+The `inconsistent-unit` lint also reports `value` here. It uses `km`, while
+fields named `value` in other book examples use `km/h`. The book checks its
+whole-file examples as one workspace.
 
 When you check from inside a workspace member, `ridl check`, `ridl build`,
 `ridl lock` and the MCP tool `ridl_check` report only the diagnostics of files
@@ -340,7 +350,7 @@ type FanStep: integer [0..7]
 
 A doc comment at the end of a body has no item after it:
 
-```ridl,allow=TYPL-407
+```ridl,allow=TYPL-407,allow=TYPL-223
 package docs.misplaced
 
 /// The wiper speed.
@@ -354,6 +364,10 @@ enum WiperSpeed {
   /// A fourth speed is planned.
 }
 ```
+
+The `inconsistent-abbreviation` lint also reports `OFF` here: `off` is a strict
+prefix of `offroad` in `OFFROAD` and `offset` in other book examples. These
+names are retained in this documentation example.
 
 ### `unknown-doc-tag` and `malformed-doc-tag`
 
