@@ -404,12 +404,12 @@ mod tests {
     fn one_field_struct(ty: FieldType) -> StructDef {
         StructDef {
             members: vec![StructMember {
-                member: Some(struct_member::Member::Field(Field {
+                member: Some(struct_member::Member::Field(Box::new(Field {
                     name: "f".to_owned(),
                     ordinal: 1,
                     r#type: Some(ty),
                     ..Default::default()
-                })),
+                }))),
             }],
             fixed_layout: false,
         }
@@ -431,6 +431,9 @@ mod tests {
                     name: format!("V{}", value.unsigned_abs()),
                     value,
                     doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 })
                 .collect(),
             reserved: Vec::new(),
@@ -562,17 +565,29 @@ mod tests {
         let one = [Param {
             name: "at".to_owned(),
             r#type: Some(named("Point")),
+            doc: String::new(),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         }];
         let two = [
             one[0].clone(),
             Param {
                 name: "flag".to_owned(),
                 r#type: Some(primitive.clone()),
+                doc: String::new(),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
             },
         ];
         let untyped_param = [Param {
             name: "at".to_owned(),
             r#type: None,
+            doc: String::new(),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         }];
         let value = ReturnType {
             kind: Some(return_type::Kind::Value(named("Point"))),
@@ -1362,12 +1377,12 @@ pub(crate) mod tests_support {
     /// `Shape = Point | Coord`; `const LIMIT`.
     pub(crate) fn fixture() -> Package {
         let field = |name: &str, ordinal: u32, ty: FieldType| StructMember {
-            member: Some(struct_member::Member::Field(Field {
+            member: Some(struct_member::Member::Field(Box::new(Field {
                 name: name.to_owned(),
                 ordinal,
                 r#type: Some(ty),
                 ..Default::default()
-            })),
+            }))),
         };
         let arm = |name: &str, ordinal: u32, type_ref: &str| UnionArm {
             name: name.to_owned(),
@@ -1454,12 +1469,12 @@ pub(crate) mod tests_support {
     pub(crate) fn two_package_fixture() -> (Package, Package) {
         let one_field = |name: &str, ty: FieldType| StructDef {
             members: vec![StructMember {
-                member: Some(struct_member::Member::Field(Field {
+                member: Some(struct_member::Member::Field(Box::new(Field {
                     name: name.to_owned(),
                     ordinal: 1,
                     r#type: Some(ty),
                     ..Default::default()
-                })),
+                }))),
             }],
             fixed_layout: false,
         };
@@ -1515,7 +1530,7 @@ pub(crate) mod tests_support {
                 name: "Open".to_owned(),
                 kind: Some(decl::Kind::StructDef(StructDef {
                     members: vec![StructMember {
-                        member: Some(struct_member::Member::Field(Field {
+                        member: Some(struct_member::Member::Field(Box::new(Field {
                             name: "text".to_owned(),
                             ordinal: 1,
                             r#type: Some(FieldType {
@@ -1525,7 +1540,7 @@ pub(crate) mod tests_support {
                                 )),
                             }),
                             ..Default::default()
-                        })),
+                        }))),
                     }],
                     fixed_layout: false,
                 })),

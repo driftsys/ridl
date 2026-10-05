@@ -94,7 +94,10 @@ The harness is fail-closed. Each of these is an error rather than a silent skip:
   same fence;
 - **any** diagnostic the block did not name — error, warning, note, or one of
   the uncoded diagnostics, which can never be allowed because they have no code
-  to name;
+  to name. The one exception is TYPL-406 (`missing-docs`): the harness leaves it
+  out of a block whose fence does not name `allow=TYPL-406`, so that an example
+  can leave items undocumented; a block that names it is checked for it like any
+  other code;
 - an `allow=` naming a code the block does **not** draw, so a marker cannot
   outlive the example it was written for;
 - an `import` naming a package no block declares, a name no block in that
@@ -194,7 +197,7 @@ Run `just --list` for the full set. The common ones:
 | `just demo`            | generate the cabin example's crate and run the program that links it — each round trip's value is matched, and a missing one or a non-zero exit fails; it also checks that no planus crate is in the generated crate's dependency graph                                                                                                                              |
 | `just build`           | `toolchain-check` + `gate-parity` + `install-check` + `fmt-check` + `book-check` + `link-check` + `doc-path-check` + `story-id-check` + `compile` + `test` + `lint` + `wasm-check` + `compat-check` + `demo` + `check` — the full local gate                                                                                                                         |
 | `just lint-commits`    | `git std lint` over the commits on top of a base branch                                                                                                                                                                                                                                                                                                              |
-| `just pre-push`        | `lint-commits` + the static-check members of `build`, keeping `compile` — skips `test`, `wasm-check`, `compat-check`, `demo`, and `install-check` — wired as the pre-push hook                                                                                                                                                                                       |
+| `just pre-push`        | `lint-commits` + the static-check members of `build`, skips `compile`, `lint`, `test`, `wasm-check`, `compat-check`, `demo`, and `install-check` — wired as the pre-push hook                                                                                                                                                                                        |
 | `just verify`          | `lint-commits` + `build` — run before a PR                                                                                                                                                                                                                                                                                                                           |
 | `just book`            | serve the mdBook docs locally                                                                                                                                                                                                                                                                                                                                        |
 | `just release`         | `git std bump` — version, changelog, tag                                                                                                                                                                                                                                                                                                                             |

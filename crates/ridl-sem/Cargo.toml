@@ -17,6 +17,11 @@ num-rational.workspace = true
 # (ADR-0007 decision 5, the same discipline the fs/fetch gates follow). The
 # `std` feature is all the strategy builders and the test runner need.
 proptest = { workspace = true, features = ["std"], optional = true }
+# The doc scanner (`docs.rs`) reads a doc comment as CommonMark to find the
+# link candidates outside code spans and fenced blocks (ADR-0026). The
+# workspace entry turns the default features off; the parser alone builds
+# for wasm32-unknown-unknown.
+pulldown-cmark.workspace = true
 regress.workspace = true
 # A pattern is also compiled with `regex`, the crate the Rust backend's
 # generated code compiles it with, so a pattern that crate refuses is TYPL-220

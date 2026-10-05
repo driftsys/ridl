@@ -1,6 +1,6 @@
 //! A stateless checked workspace and the locations its symbols refer to.
 use crate::types::{Location, OverlayInput, Position, WorkspaceStatus};
-use ridl_core::{InputFile, ManifestKind, RidlDatabase, Severity};
+use ridl_core::{InputFile, RidlDatabase, Severity};
 use rmcp::model::{CallToolResult, ContentBlock};
 use rowan::TextRange;
 use std::path::{Path, PathBuf};
@@ -55,30 +55,22 @@ pub fn snapshot(path: &str, overlays: &[OverlayInput]) -> Result<Snapshot, ToolE
         }
         ToolError::Request(message)
     })?;
+    // An entry inside a workspace member loads the whole workspace and
+    // reports on the member only, as `ridl check` does (ADR-0024 decision 9,
+    // as ADR-0026 amends it). The lookup tools still see every member.
+    let mut output = output;
+    ridlc::retain_in_report_scope(
+        &mut output.diagnostics,
+        &output.sources,
+        output.report_scope.as_deref(),
+    );
     let root = if entry.is_file() {
-        entry.parent().and_then(ridl_core::find_manifest_root)
+        entry.parent().and_then(ridl_core::find_root)
     } else {
-        ridl_core::find_manifest_root(entry)
+        ridl_core::find_root(entry)
     }
     .unwrap_or_else(|| entry.to_path_buf());
     let mut notes = Vec::new();
-    fn kind(path: &Path) -> Option<ManifestKind> {
-        let text = std::fs::read_to_string(path.join("ridl.toml")).ok()?;
-        ridl_core::parse_manifest(ridl_core::FileId::DETACHED, &text)
-            .0
-            .map(|m| m.kind)
-    }
-    if matches!(kind(&root), Some(ManifestKind::Package { .. })) {
-        let absolute = root
-            .canonicalize()
-            .map_err(|e| ToolError::Request(e.to_string()))?;
-        for ancestor in absolute.ancestors().skip(1) {
-            if matches!(kind(ancestor), Some(ManifestKind::Workspace { .. })) {
-                notes.push(format!("loaded the package at `{}` alone, so imports of its sibling workspace members do not resolve (driftsys/ridl#529); pass the workspace root `{}` as `path` instead", root.display(), ancestor.display()));
-                break;
-            }
-        }
-    }
     if output.system.is_none()
         && output
             .sources
@@ -93,6 +85,19 @@ pub fn snapshot(path: &str, overlays: &[OverlayInput]) -> Result<Snapshot, ToolE
         root,
         notes,
     })
+}
+/// The snapshot a lookup tool reads (`ridl_references`, `ridl_dependencies`,
+/// `ridl_resolve`, `ridl_describe_type`, `ridl_list_interactions`). These
+/// tools apply no lint levels (ADR-0024 decision 8), so a lint that is
+/// `allow` by default is left out of the diagnostics they count, as on every
+/// other path that applies no levels (ADR-0026 decision 8). Otherwise
+/// `workspace.warnings` would count a lint that no project turned on.
+/// `ridl_check` calls [`snapshot`] instead, because it applies the levels
+/// itself and must see such a lint when a project sets it.
+pub fn lookup_snapshot(path: &str, overlays: &[OverlayInput]) -> Result<Snapshot, ToolError> {
+    let mut snap = snapshot(path, overlays)?;
+    ridl_core::lint::drop_allowed_by_default(&mut snap.output.diagnostics);
+    Ok(snap)
 }
 impl Snapshot {
     pub fn status(&self) -> WorkspaceStatus {
@@ -139,6 +144,14 @@ pub(crate) mod tests {
     pub fn fixture(name: &str) -> String {
         format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"))
     }
+    /// `snap` without its TYPL-406 (`missing-docs`) diagnostics, for a test
+    /// that counts warnings over a fixture that leaves items undocumented.
+    pub fn without_missing_docs(mut snap: Snapshot) -> Snapshot {
+        snap.output
+            .diagnostics
+            .retain(|diagnostic| diagnostic.code.as_str() != "TYPL-406");
+        snap
+    }
     pub struct TempWorkspace(pub PathBuf);
     impl TempWorkspace {
         pub fn copy(name: &str) -> Self {
@@ -171,7 +184,7 @@ pub(crate) mod tests {
     }
     #[test]
     fn snapshot_of_the_fixture_is_clean() {
-        let snap = snapshot(&fixture("ws"), &[]).unwrap();
+        let snap = without_missing_docs(snapshot(&fixture("ws"), &[]).unwrap());
         let status = snap.status();
         assert_eq!(status.errors, 0);
         assert_eq!(status.warnings, 0);
@@ -185,13 +198,31 @@ pub(crate) mod tests {
             ["fx.a", "fx.a.sub", "fx.b"]
         );
     }
+    /// A member path loads its workspace (ADR-0002 §4): `fx.b`'s imports of
+    /// its sibling `fx.a` resolve, no note says the package loaded alone, and
+    /// the status root is the workspace root.
     #[test]
-    fn a_member_path_draws_the_529_note() {
+    fn a_member_path_resolves_a_sibling_import() {
         let snap = snapshot(&format!("{}/b", fixture("ws")), &[]).unwrap();
-        assert_eq!(snap.notes.len(), 1);
-        assert!(snap.notes[0].contains("driftsys/ridl#529"));
-        assert!(snap.notes[0].contains(&fixture("ws")));
-        assert!(snap.status().errors > 0);
+        assert!(snap.notes.is_empty(), "{:?}", snap.notes);
+        assert_eq!(snap.status().errors, 0);
+        assert_eq!(snap.root, PathBuf::from(fixture("ws")));
+        assert!(snap.output.checked.iter().any(|c| c.ir.name == "fx.a"));
+    }
+    /// A member path reports only the member's diagnostics: an error in the
+    /// sibling `a` is not counted when the path is `b`.
+    #[test]
+    fn a_member_path_reports_only_the_member() {
+        let copy = TempWorkspace::copy("ws");
+        fs::write(
+            copy.0.join("a/broken.ridl"),
+            "package fx.a\ntype Broken: Missing\n",
+        )
+        .unwrap();
+        let from_root = snapshot(copy.0.to_str().unwrap(), &[]).unwrap();
+        assert!(from_root.status().errors > 0);
+        let from_b = snapshot(copy.0.join("b").to_str().unwrap(), &[]).unwrap();
+        assert_eq!(from_b.status().errors, 0);
     }
     #[test]
     fn an_overlay_error_is_reported_and_disk_is_unchanged() {
@@ -248,7 +279,7 @@ pub(crate) mod tests {
     }
     #[test]
     fn workspace_status_counts_errors_and_warnings_separately() {
-        let snapshot = snapshot(&fixture("ws-diag"), &[]).unwrap();
+        let snapshot = without_missing_docs(snapshot(&fixture("ws-diag"), &[]).unwrap());
         assert_eq!(snapshot.status().errors, 1);
         assert_eq!(snapshot.status().warnings, 1);
     }
@@ -326,9 +357,11 @@ pub(crate) mod tests {
             "start": {"line": line, "column": column},
             "end": {"line": line, "column": column + name.chars().count()}})
     }
+    /// A file in a workspace member has the workspace root as its root
+    /// (ADR-0002 §4).
     #[test]
     fn snapshot_root_of_a_file_path() {
         let snap = snapshot(&format!("{}/b/b.ridl", fixture("ws")), &[]).unwrap();
-        assert_eq!(snap.root, PathBuf::from(format!("{}/b", fixture("ws"))));
+        assert_eq!(snap.root, PathBuf::from(fixture("ws")));
     }
 }

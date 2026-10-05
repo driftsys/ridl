@@ -1766,6 +1766,50 @@ execution.
     evidence. If the failure has another cause, the primary rerun must expose
     it; do not claim a green full MCP library suite or weaken the runtime check.
 
+82. **Ruling: preserve both diagnostic contracts in the main integration**
+    (2026-10-05). Keep every incoming documentation change outside the twelve
+    conflict regions. Combine the independent LSP and CLI test additions, lint
+    catalogue expectations and book rows. Retain the exact ordered design
+    diagnostic expectations in backend and CLI fixtures while excluding only the
+    incoming `missing-docs` allowance by its registered lint name; do not change
+    source fixtures, lint levels or thresholds. Derive SARIF result indices from
+    the combined rule list, giving 69 and 155. This preserves the branch's
+    design checks and main's documentation behavior without allocating a
+    reserved code or investigating the separate feature. If wrong, an unexpected
+    design diagnostic or incoming regression could be concealed; exact
+    diagnostic inventories, catalogue guards, protocol tests and byte
+    preservation comparisons provide evidence. Root owns staging, fresh review,
+    unrestricted socket reruns and the final gate.
+
+83. **Ruling: retain the complete metrics warning count after integration**
+    (2026-10-05). The first CLI server run fails the exact metrics object in
+    `every_tool_leaves_the_tree_unchanged`: the unchanged fixture now reports 22
+    incoming documentation warnings, while the previous expectation is zero.
+    Update only that literal count in the owned server test. Preserve package
+    metrics, interface groups, all other workspace fields, fixture bytes and
+    read-only assertions. The separate exact design diagnostic assertion still
+    rejects every unexpected non-documentation diagnostic. If wrong, the metrics
+    status could report an incorrect warning count; the complete object
+    assertion and the focused server rerun must detect it. No producer, lint
+    level or threshold changes are justified.
+
+84. **Ruling: synchronize the authorized remaining integration expectations**
+    (2026-10-05). The user extended ownership to metrics test expectations and
+    documentation-example fence allowances and explanations after the first
+    integration exposed four stale metrics assertions and four unallowed book
+    diagnostics. Pin the complete metrics objects against observed workspace
+    discovery, warning counts and sibling interfaces. Replace the empty
+    diagnostic assertion with the exact sole documentation warning, including
+    its source span and fix. Preserve every fixture source and the final
+    read-only comparison. Add only the observed unit, abbreviation and cohesion
+    allowance codes to the three affected whole-file fences, with literal local
+    explanations. Keep every source block and all incoming feature content. If
+    wrong, an incorrect status or unrelated diagnostic could be accepted;
+    complete object and diagnostic inventories, the bidirectional book harness
+    and byte-level source preservation checks must expose that error. Production
+    behavior, lint levels and thresholds remain unchanged; root owns the full
+    gate and unrestricted socket verification.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:

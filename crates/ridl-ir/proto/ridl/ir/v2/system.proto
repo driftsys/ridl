@@ -48,6 +48,9 @@ syntax = "proto3";
 // start at 10.
 package ridl.ir.v2;
 
+// `DocLink` is declared in `ir.proto`.
+import "ridl/ir/v2/ir.proto";
+
 // The lowered system: the closure facts, then one `Deployment` per
 // deployment the lowering was not blocked for (rsdl §13, "Errors and
 // warnings").
@@ -82,6 +85,14 @@ message System {
   // Every deployment `for` the system whose lowering no RSDL-7xx error
   // blocked, in package, then file, then source order (rsdl §13).
   repeated Deployment deployments = 11;
+  // Doc comment body in CommonMark; empty when absent (ADR-0026).
+  string doc = 12;
+  // Resolved doc links in `doc`, in source order (ADR-0026).
+  repeated DocLink links = 13;
+  // Resolved @see targets, in source order (ADR-0026).
+  repeated DocLink see = 14;
+  // @since versions, in source order (ADR-0026).
+  repeated string since = 15;
 }
 
 // A member line of a `system` or a `distribution` body (rsdl §4): the
@@ -90,6 +101,14 @@ message MemberLine {
   // The qualified component name.
   string component = 1;
   repeated Attribute attributes = 2;
+  // Doc comment body in CommonMark; empty when absent (ADR-0026).
+  string doc = 3;
+  // Resolved doc links in `doc`, in source order (ADR-0026).
+  repeated DocLink links = 4;
+  // Resolved @see targets, in source order (ADR-0026).
+  repeated DocLink see = 5;
+  // @since versions, in source order (ADR-0026).
+  repeated string since = 6;
 }
 
 // One component of the closure (rsdl §3.2, §6, §7).
@@ -118,6 +137,14 @@ message Component {
   repeated string labels = 8;
   // The declaration's backend keys (rsdl §5).
   repeated Attribute attributes = 9;
+  // Doc comment body in CommonMark; empty when absent (ADR-0026).
+  string doc = 10;
+  // Resolved doc links in `doc`, in source order (ADR-0026).
+  repeated DocLink links = 11;
+  // Resolved @see targets, in source order (ADR-0026).
+  repeated DocLink see = 12;
+  // @since versions, in source order (ADR-0026).
+  repeated string since = 13;
 }
 
 // An `offers` line (rsdl §3.2).
@@ -125,6 +152,14 @@ message Offer {
   // The service's dotted name.
   string service = 1;
   repeated Attribute attributes = 2;
+  // Doc comment body in CommonMark; empty when absent (ADR-0026).
+  string doc = 3;
+  // Resolved doc links in `doc`, in source order (ADR-0026).
+  repeated DocLink links = 4;
+  // Resolved @see targets, in source order (ADR-0026).
+  repeated DocLink see = 5;
+  // @since versions, in source order (ADR-0026).
+  repeated string since = 6;
 }
 
 // A `requires` line, resolved over the closure (rsdl §8): the interface it
@@ -138,6 +173,14 @@ message Require {
   // The offering component's qualified name.
   string producer = 3;
   repeated Attribute attributes = 4;
+  // Doc comment body in CommonMark; empty when absent (ADR-0026).
+  string doc = 5;
+  // Resolved doc links in `doc`, in source order (ADR-0026).
+  repeated DocLink links = 6;
+  // Resolved @see targets, in source order (ADR-0026).
+  repeated DocLink see = 7;
+  // @since versions, in source order (ADR-0026).
+  repeated string since = 8;
 }
 
 // An interface by identity (rsdl §11, vocabulary V-16): the catalog that
@@ -222,6 +265,14 @@ message Distribution {
   repeated string depends_on = 4;
   repeated string labels = 5;
   repeated Attribute attributes = 6;
+  // Doc comment body in CommonMark; empty when absent (ADR-0026).
+  string doc = 7;
+  // Resolved doc links in `doc`, in source order (ADR-0026).
+  repeated DocLink links = 8;
+  // Resolved @see targets, in source order (ADR-0026).
+  repeated DocLink see = 9;
+  // @since versions, in source order (ADR-0026).
+  repeated string since = 10;
 }
 
 // One placement of the system (rsdl §3.4, §9, §10, §13).
@@ -250,6 +301,16 @@ message Deployment {
   // `System.distributions` order. Empty when the workspace declares no
   // distribution.
   repeated Installation installations = 10;
+  // Doc comment body in CommonMark; empty when absent (ADR-0026).
+  string doc = 11;
+  // Resolved doc links in `doc`, in source order (ADR-0026). Named
+  // `doc_links`, not `links` as on every other doc carrier, because
+  // `links` is the link set above.
+  repeated DocLink doc_links = 12;
+  // Resolved @see targets, in source order (ADR-0026).
+  repeated DocLink see = 13;
+  // @since versions, in source order (ADR-0026).
+  repeated string since = 14;
 }
 
 // A `machine` declaration (rsdl §3.5).
@@ -260,6 +321,14 @@ message Machine {
   bool external = 2;
   repeated string labels = 3;
   repeated Attribute attributes = 4;
+  // Doc comment body in CommonMark; empty when absent (ADR-0026).
+  string doc = 5;
+  // Resolved doc links in `doc`, in source order (ADR-0026).
+  repeated DocLink links = 6;
+  // Resolved @see targets, in source order (ADR-0026).
+  repeated DocLink see = 7;
+  // @since versions, in source order (ADR-0026).
+  repeated string since = 8;
 }
 
 // One instance on one machine (rsdl §9).

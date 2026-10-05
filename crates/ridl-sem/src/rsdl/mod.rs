@@ -18,6 +18,7 @@ mod attrs;
 mod closure;
 mod collect;
 mod distribution;
+mod doc_links;
 mod lower;
 mod placement;
 mod resolve;
@@ -34,10 +35,15 @@ pub use target::{ReferenceTarget, Target, reference_at};
 
 use std::collections::{BTreeSet, HashMap};
 
-use ridl_core::db::InputFile;
+use ridl_core::db::{InputFile, profile_of_path};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span};
 use ridl_core::package::{Package, Workspace, service_catalog};
+use ridl_ir::v2;
+use ridl_syntax::Profile;
 use rowan::TextRange;
+
+use crate::docs::DocInfo;
+use crate::resolve::source_file;
 
 /// The name of the unit instance: the one instance of a component that
 /// declares no `instances` (rsdl §7). It is never written in source; a written
@@ -53,6 +59,8 @@ pub const UNIT_INSTANCE: &str = "Unit";
 pub fn check_system(db: &dyn salsa::Database, ws: Workspace, std: Package) -> CheckedSystem {
     let mut reporter = Reporter::new(db, ws);
     let mut system = collect::collect(db, ws, &mut reporter);
+    lint_docs(db, ws, &mut reporter);
+    doc_links::resolve(db, ws, std, &mut system, &mut reporter);
     collect::check_declaration_names(db, ws, &system, &mut reporter);
     let catalog = service_catalog(db, ws, std);
     let mut lookup = closure::Lookup::new(db, ws, std, &system, &catalog);
@@ -74,6 +82,27 @@ pub fn check_system(db: &dyn salsa::Database, ws: Workspace, std: Package) -> Ch
     });
     system.diagnostics = reporter.diagnostics;
     system
+}
+
+/// Runs the doc lints (ADR-0026) over every `.rsdl` file of `ws`, in
+/// package-then-file order. `check_package` lints the other files.
+fn lint_docs(db: &dyn salsa::Database, ws: Workspace, reporter: &mut Reporter) {
+    for package in ws.packages(db) {
+        for file in package.files(db) {
+            if profile_of_path(file.path(db)) != Profile::Rsdl {
+                continue;
+            }
+            let file_id = reporter
+                .file_ids
+                .get(file)
+                .copied()
+                .unwrap_or(FileId::DETACHED);
+            let source = source_file(db, *file);
+            reporter
+                .diagnostics
+                .extend(crate::doc_lint::lint_rsdl_file(&source, file_id));
+        }
+    }
 }
 
 /// The checked rsdl model of one workspace. Each list holds its declarations
@@ -205,6 +234,12 @@ pub struct SystemDecl {
     /// The member lines, in source order.
     pub members: Vec<MemberRef>,
     pub attrs: DeclAttrs,
+    /// The doc comment (typl §14, ADR-0026).
+    pub doc: DocInfo,
+    /// The resolved doc links of the body, for the IR (ADR-0026).
+    pub links: Vec<v2::DocLink>,
+    /// The resolved `@see` targets, for the IR (ADR-0026).
+    pub see: Vec<v2::DocLink>,
 }
 
 /// A `component` declaration (rsdl §3.2).
@@ -225,6 +260,12 @@ pub struct ComponentDecl {
     /// and still sets the flag.
     pub external: bool,
     pub attrs: DeclAttrs,
+    /// The doc comment (typl §14, ADR-0026).
+    pub doc: DocInfo,
+    /// The resolved doc links of the body, for the IR (ADR-0026).
+    pub links: Vec<v2::DocLink>,
+    /// The resolved `@see` targets, for the IR (ADR-0026).
+    pub see: Vec<v2::DocLink>,
 }
 
 /// A `distribution` declaration (rsdl §3.3).
@@ -236,6 +277,12 @@ pub struct DistributionDecl {
     /// `None` when `tier` is absent, or when its value drew RSDL-908.
     pub tier: Option<Tier>,
     pub attrs: DeclAttrs,
+    /// The doc comment (typl §14, ADR-0026).
+    pub doc: DocInfo,
+    /// The resolved doc links of the body, for the IR (ADR-0026).
+    pub links: Vec<v2::DocLink>,
+    /// The resolved `@see` targets, for the IR (ADR-0026).
+    pub see: Vec<v2::DocLink>,
 }
 
 /// A `deployment` declaration and its machines (rsdl §3.4).
@@ -247,6 +294,12 @@ pub struct DeploymentDecl {
     pub system: Option<Reference>,
     pub machines: Vec<MachineDecl>,
     pub attrs: DeclAttrs,
+    /// The doc comment (typl §14, ADR-0026).
+    pub doc: DocInfo,
+    /// The resolved doc links of the body, for the IR (ADR-0026).
+    pub links: Vec<v2::DocLink>,
+    /// The resolved `@see` targets, for the IR (ADR-0026).
+    pub see: Vec<v2::DocLink>,
 }
 
 /// A `machine` declaration inside a deployment (rsdl §3.5).
@@ -258,6 +311,12 @@ pub struct MachineDecl {
     /// The `external` flag, read as on a component.
     pub external: bool,
     pub attrs: DeclAttrs,
+    /// The doc comment (typl §14, ADR-0026).
+    pub doc: DocInfo,
+    /// The resolved doc links of the body, for the IR (ADR-0026).
+    pub links: Vec<v2::DocLink>,
+    /// The resolved `@see` targets, for the IR (ADR-0026).
+    pub see: Vec<v2::DocLink>,
 }
 
 /// One body line: a member line of a `system`, `distribution` or `machine`,
@@ -267,6 +326,12 @@ pub struct MachineDecl {
 pub struct MemberRef {
     pub reference: Reference,
     pub backend_keys: Vec<BackendKey>,
+    /// The line's doc comment (typl §14, ADR-0026).
+    pub doc: DocInfo,
+    /// The resolved doc links of the line, for the IR (ADR-0026).
+    pub links: Vec<v2::DocLink>,
+    /// The resolved `@see` targets, for the IR (ADR-0026).
+    pub see: Vec<v2::DocLink>,
 }
 
 /// A reference as written (rsdl §4): its dotted segments, its site, and the
@@ -458,7 +523,9 @@ mod tests {
         )
     }
 
-    /// Checks a workspace made of `packages`, each `(name, files)`.
+    /// Checks a workspace made of `packages`, each `(name, files)`. TYPL-406
+    /// (`missing-docs`) is left out: the fixtures have no docs, and these
+    /// tests are about the rsdl checks.
     fn check(packages: &[(&str, &[(&str, &str)])]) -> CheckedSystem {
         let mut db = RidlDatabase::default();
         let std = std_package(&mut db);
@@ -467,7 +534,11 @@ mod tests {
             .map(|(name, files)| package(&db, name, files))
             .collect();
         let ws = Workspace::new(&db, packages, BTreeMap::new());
-        check_system(&db, ws, std)
+        let mut system = check_system(&db, ws, std);
+        system
+            .diagnostics
+            .retain(|diagnostic| diagnostic.code != DiagCode::TYPL_406);
+        system
     }
 
     fn codes(system: &CheckedSystem) -> Vec<&str> {
@@ -527,6 +598,27 @@ deployment Production for Vehicle {
 
     fn texts(lines: &[MemberRef]) -> Vec<String> {
         lines.iter().map(|line| line.reference.text()).collect()
+    }
+
+    /// The doc lints run over each `.rsdl` file once: `check_system` reports
+    /// the `/** */` doc of the `.rsdl` file against that file's id, and leaves
+    /// the `.typl` file to `check_package`.
+    #[test]
+    fn a_block_doc_in_an_rsdl_file_draws_typl_410_once() {
+        let typl = "package veh\n\n/** A speed. */\ntype Speed: integer [0..300]\n";
+        let rsdl = "package veh\n\n/** The panel. */\ncomponent Panel {}\n";
+        let system = check(&[("veh", &[("veh/a.typl", typl), ("veh/b.rsdl", rsdl)])]);
+        let found: Vec<&Diagnostic> = system
+            .diagnostics
+            .iter()
+            .filter(|d| d.code == DiagCode::TYPL_410)
+            .collect();
+        assert_eq!(found.len(), 1, "{:?}", system.diagnostics);
+        let mut sources = SourceMap::new();
+        sources.file_id("veh/a.typl", typl);
+        let rsdl_id = sources.file_id("veh/b.rsdl", rsdl);
+        assert_eq!(found[0].primary.file, rsdl_id);
+        assert_eq!(found[0].fixits[0].replacement, "/// The panel.");
     }
 
     #[test]

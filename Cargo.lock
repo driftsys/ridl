@@ -2171,6 +2171,7 @@ dependencies = [
  "num-bigint",
  "num-rational",
  "proptest",
+ "pulldown-cmark",
  "regex",
  "regress",
  "ridl-core",

@@ -24,6 +24,12 @@ and
 [`docs/archive/2026-10-03-lint-foundation-plan.md`](../archive/2026-10-03-lint-foundation-plan.md);
 the design's §10 holds the alternatives, restated below.
 
+Amended by [ADR-0026](ADR-0026-doc-comments.md) (documentation in the source): a
+catalogue row may declare `allow` as its default level (decisions 1, 8, 12 and
+15). TYPL-410 (`doc-comment-style`) is the first row that does. ADR-0026 also
+replaces decision 9: entering at a workspace member loads its workspace, and
+reports on the member (issue #529).
+
 It amends two records in place, in the same change:
 [ADR-0002](ADR-0002-module-system.md) §4 (the `[lints]` table and its resolution
 order) and [ADR-0010](ADR-0010-cli-conventions.md) decision 1 (a lint at `deny`
@@ -56,11 +62,15 @@ decision n** for n from 1 to 9, so a citation of "D-8" is a citation of decision
 1. **Every Warning and Info catalogue code is a lint** (design D-1). Each gets a
    stable kebab-case name, carried by its row in the diagnostic catalogue, and
    its catalogue severity is its default level (Warning is `warn`, Info is
-   `info`). An Error code is never a lint and can never be configured. There is
-   one diagnostic channel and one catalogue; a lint is a catalogue row that has
-   a name. A catalogue guard test keeps the names well formed: every Warning or
-   Info row has one, no Error row has one, every name matches
-   `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`, and no two rows share one.
+   `info`), unless the row declares `allow` as its default (`default = allow`
+   after the lint name, amended by ADR-0026). Only a Warning or Info row may
+   declare it, which a catalogue guard test checks. A lint that is `allow` by
+   default is reported only when a project sets its level. An Error code is
+   never a lint and can never be configured. There is one diagnostic channel and
+   one catalogue; a lint is a catalogue row that has a name. A catalogue guard
+   test keeps the names well formed: every Warning or Info row has one, no Error
+   row has one, every name matches `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`, and no two
+   rows share one.
 
    One consequence the maintainer accepted: RIDL-407 (`ordinal-changed`), the
    warning of the `ridl check --baseline` gate, is a lint, so a project can set
@@ -127,15 +137,20 @@ decision n** for n from 1 to 9, so a citation of "D-8" is a citation of decision
    compiles with the severities the emit sites chose, so a lint at `deny` never
    makes one of them fail or exit 2. A `[lints]` table is a reporting setting;
    it does not change whether a workspace compiles. ADR-0010 decision 1 states
-   the exit-code consequence.
+   the exit-code consequence. These commands still leave out a lint whose
+   default is `allow` (decision 1), so that default holds on every path (amended
+   by ADR-0026).
 
-9. **Entering at a workspace member loads the member alone** (design D-9).
-   `ridl check <member>`, `ridl check` on a file inside a member, the MCP path
-   mode on a member, and an editor opened on a member load the member as a
-   standalone package, so the workspace root's `[lints]` does not apply. This is
-   how `[defaults].timing` and `[imports]` behave, and it is part of the
-   language server gap #529, which stays open. This decision does not change the
-   loader's root discovery.
+9. **Entering at a workspace member loads its workspace, and reports on the
+   member** (replaced by ADR-0026; the original decision, design D-9, loaded the
+   member alone). `ridl check <member>`, `ridl check` on a file inside a member,
+   the MCP path mode on a member, and an editor opened on a member load the
+   workspace whose `members` names the member, by the root discovery rule of
+   ADR-0002 §4. The workspace root's `[lints]`, `[defaults].timing` and
+   `[imports]` therefore apply to the member, and its imports of sibling members
+   resolve. `ridl check`, `ridl build`, `ridl lock` and the MCP path mode report
+   only the diagnostics of files under the member; the language server publishes
+   the diagnostics of every loaded file.
 
 10. **A diagnostic takes the levels of the directory that owns its primary span,
     and the root's table covers the whole root tree** (design §5.2 and §6.1; the
@@ -164,11 +179,12 @@ decision n** for n from 1 to 9, so a citation of "D-8" is a citation of decision
     can reuse it, and uses no SARIF crate. `tool.driver.rules` lists every
     catalogue row, errors included. A rule's `defaultConfiguration.level` is
     mapped directly from the catalogue severity (Error to `error`, Warning to
-    `warning`, Info to `note`), and a result's `level` from its effective
-    severity by the same mapping. `columnKind` is `unicodeCodePoints`, because
-    RIDL columns count characters. The log carries no fix-its, and an `allow`ed
-    diagnostic does not appear. A diagnostic with no path in the source map has
-    no `locations`.
+    `warning`, Info to `note`), or is `none` for a row whose default is `allow`
+    (amended by ADR-0026), and a result's `level` from its effective severity by
+    the same mapping. `columnKind` is `unicodeCodePoints`, because RIDL columns
+    count characters. The log carries no fix-its, and an `allow`ed diagnostic
+    does not appear. A diagnostic with no path in the source map has no
+    `locations`.
 
 13. **SARIF artifact URIs have one base, the working directory.** A file under
     the working directory is a URI relative to it, with `/` separators and every
@@ -194,7 +210,10 @@ decision n** for n from 1 to 9, so a citation of "D-8" is a citation of decision
 
 15. **`default_level` returns `Option<LintLevel>`, `None` for an Error row.** An
     Error row is not a lint and has no level; the type states that, and no
-    caller can read a level off an Error code by mistake.
+    caller can read a level off an Error code by mistake. For a row that
+    declares `allow` as its default, `default_level` returns
+    `Some(LintLevel::Allow)`; for any other Warning or Info row, it returns the
+    level of the catalogue severity (amended by ADR-0026).
 
 16. **ADR-0010's sentence names the two servers.** In the amended decision 1,
     "the other subcommands do not apply lint levels" excludes `ridl lsp` and
@@ -238,7 +257,8 @@ From the design's §10. The numbers are the decisions that reject them.
   Would give a member entry point the same levels as a root entry point, but it
   changes the loader's root discovery, and with it how `[defaults].timing` and
   `[imports]` behave at a member, which belongs with the work on #529. Rejected
-  for this record (decision 9).
+  for this record (decision 9); ADR-0026 later took this option with the work on
+  #529.
 - **A SARIF crate** (`serde-sarif`). The subset used is a few structs; a
   dependency is not worth it (decision 12).
 
@@ -261,7 +281,8 @@ stage driver recorded none for them at implementation.
 - Known limitations, both of the language server: it reads the `[lints]` tables
   once, when it loads the workspace, so an edit to a table takes effect after a
   restart; and it does not canonicalise paths when it looks up a scope. The
-  member entry point gap (decision 9) is #529.
+  member entry point gap of the original decision 9 was #529, which ADR-0026
+  closes.
 - Diagnostic codes written in Markdown stay unguarded (#191) except the lint
   table of the book, which `book_lints.rs` compares with the catalogue.
 
@@ -272,6 +293,9 @@ stage driver recorded none for them at implementation.
 - [ADR-0010](ADR-0010-cli-conventions.md) decision 1 — exit codes; amended.
 - [ADR-0005](ADR-0005-agent-enablement.md) §7 — the agent-legibility invariants,
   including the contract stability policy.
+- [ADR-0026](ADR-0026-doc-comments.md) decisions 8 and 10 — the lint that is
+  `allow` by default, and root discovery from a workspace member; they amend
+  decisions 1, 8, 12 and 15 and replace decision 9.
 - [The lints page](../book/lints.md) and
   [the CLI reference](../book/cli-reference.md).
 - [The toolchain architecture technote](../technotes/walking-skeleton-architecture.md)

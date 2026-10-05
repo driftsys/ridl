@@ -3,8 +3,10 @@
 A lint is a diagnostic that a project can turn off, report at a different
 severity, or turn into an error. Every warning and every info diagnostic in the
 catalogue is a lint: each has a stable kebab-case name, and its catalogue
-severity is its default level. An error diagnostic is never a lint, and its
-severity cannot be changed.
+severity is its default level, unless the table at the end of this page gives
+its default as `allow`. A lint that is `allow` by default is reported only when
+a project sets its level. An error diagnostic is never a lint, and its severity
+cannot be changed.
 
 The lint name appears in every report of a lint diagnostic. The JSON report of
 [`ridl check --format json`](cli-reference.md#ridl-check) carries it in the
@@ -68,19 +70,22 @@ so a project's `[lints]` never applies to code outside its directory. When there
 is no manifest at all, for example `ridl check` on a single file outside any
 package, the default levels apply.
 
-**The levels follow the entry point.** Running `ridl check` on a workspace
-member or on a file inside a member, opening an editor on a member, or passing
-a member as the `path` of the MCP tool `ridl_check` loads the member as a
-standalone package. The workspace root's `[lints]` table does not apply in that
-case; only the member's own table does. Check from the workspace root to get
-the root's levels. `[defaults].timing` and `[imports]` behave the same way.
+**A member loads its workspace.** Running `ridl check` on a workspace member
+or on a file inside a member, opening an editor on a member, or passing a
+member as the `path` of the MCP tool `ridl_check` loads the workspace whose
+`members` lists the member. The workspace root's `[lints]` table applies to the
+member, and the member's own table is applied over it, as in a check from the
+root. `[defaults].timing` and `[imports]` behave the same way. The command
+reports only the diagnostics of files under the member; check from the
+workspace root to see every member's diagnostics. A package that no workspace
+lists stays standalone, and the search for a workspace stops at the first
+`[workspace]` manifest and at a directory that holds `.git`.
 
 **Known limitations of the language server.** The language server reads the
 `[lints]` tables once, when it loads the workspace: at start, or when the first
 file is opened. An edit to a `[lints]` table takes effect in the editor after
-the server restarts. An editor opened on
-a workspace member loads the member alone, as described above; this is part of
-the language server gap tracked in issue #529, which stays open.
+the server restarts. The language server publishes the diagnostics of every
+loaded member, also when the editor is opened on one member.
 
 ## Where levels apply
 
@@ -96,7 +101,8 @@ Levels apply where diagnostics are reported to a person or an agent:
 Every other command reports the severities the emit sites chose: `ridl diff`,
 `ridl test`, `ridl baseline`, `ridl lock`, the MCP tool `ridl_diff` and the MCP
 lookup tools. A lint at `deny` never makes one of them fail. The text note that
-names the lint still appears in their output.
+names the lint still appears in their output. A lint that is `allow` by default
+is left out of their output, as it is everywhere else.
 
 ## Mistakes in `[lints]`
 
@@ -126,8 +132,14 @@ MANI-010 is itself a lint, so the table can set its level.
 | `inconsistent-unit` | TYPL-222 | info | one field name used with different units |
 | `inconsistent-abbreviation` | TYPL-223 | info | inconsistent identifier abbreviation |
 | `duplicate-shape` | TYPL-224 | info | duplicate declaration shape |
-| `detached-doc-comment` | TYPL-404 | warn | blank line between a doc comment and its definition |
+| `broken-doc-link` | TYPL-401 | warn | doc link or `@see` target that does not resolve |
+| `detached-doc-comment` | TYPL-404 | warn | blank line between a doc comment and its carrier |
 | `deprecated-without-reason` | TYPL-405 | warn | `@deprecated` doc tag without a reason string |
+| `missing-docs` | TYPL-406 | warn | item without a doc comment |
+| `misplaced-doc-comment` | TYPL-407 | warn | doc comment in a position that is not a carrier |
+| `unknown-doc-tag` | TYPL-408 | warn | doc tag other than `@see`, `@since`, `@deprecated` and `@labels` |
+| `malformed-doc-tag` | TYPL-409 | warn | `@see` or `@since` with a missing or malformed value |
+| `doc-comment-style` | TYPL-410 | allow | doc comment written as `/** */` |
 | `missing-timing` | RIDL-100 | warn | `signal` or `event` without a timing annotation |
 | `degenerate-timing-range` | RIDL-108 | warn | degenerate timing range `@[X..X]` |
 | `missing-response-bound` | RIDL-112 | warn | `command` or `query` with no declared response bound |

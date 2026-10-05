@@ -414,7 +414,8 @@ mod tests {
     }
 
     /// Checks one package assembled from several named `.ridl` files, in the
-    /// order given.
+    /// order given. TYPL-406 (`missing-docs`) is left out: the fixtures have
+    /// no docs, and these tests are about the other lints.
     fn check_ridl_files(files: &[(&str, &str)]) -> CheckedPackage {
         let mut db = RidlDatabase::default();
         let std = std_package(&mut db);
@@ -432,7 +433,11 @@ mod tests {
             None,
         );
         let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
-        check_package(&db, ws, pkg, std)
+        let mut checked = check_package(&db, ws, pkg, std);
+        checked
+            .diagnostics
+            .retain(|diagnostic| diagnostic.code != DiagCode::TYPL_406);
+        checked
     }
 
     /// The diagnostic codes, in order.

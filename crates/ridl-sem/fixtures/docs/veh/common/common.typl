@@ -1,0 +1,53 @@
+package veh.common
+
+/// Vehicle speed over ground, bounded by [MAX_SPEED].
+/// @since 1.0
+type Speed : km/h [0.0..250.0 step 0.5]
+
+/// The upper bound of [Speed].
+/// @see Speed
+const MAX_SPEED : Speed = 250.0
+
+/// A gear selector position; [Gear.PARK] is the init value.
+/// @labels QM
+enum Gear {
+  /// Parked. Every [GearSet] holds this value.
+  PARK = 1
+  /// Driving forward.
+  /// @since 1.1
+  DRIVE = 2
+}
+
+/// The gears a transmission supports: a set of [Gear].
+enumset GearSet : Gear
+
+/// Explicit bits.
+enumset Flags {
+  /// The first bit, beside [Flags.SECOND].
+  FIRST = 0
+  /// The second bit.
+  SECOND = 1
+}
+
+/// A pose: [Pose.x] and [Pose.y] are metres.
+/// @deprecated "use the ridl.std types"
+/// @since 2.0
+struct Pose {
+  /// East, read at the current [Speed] in the current [veh.common.Gear].
+  /// @deprecated "use y"
+  x: integer [0..100]
+  /// North.
+  /// @labels ASIL_B
+  y: integer [0..100]
+  /// Retired, see [Pose.x].
+  reserved z
+}
+
+/// Either shape, see [`Shape.pose`].
+union Shape {
+  /// A pose, as a [Pose].
+  /// @see Gear
+  pose: Pose
+  /// A speed.
+  speed: Speed
+}

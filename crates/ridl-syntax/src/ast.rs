@@ -346,20 +346,27 @@ pub trait HasDocComments: AstNode {
     /// The `DocComment` tokens in the trivia run immediately preceding
     /// this node, in source order.
     fn doc_comments(&self) -> Vec<SyntaxToken> {
-        let mut out = Vec::new();
-        let mut cursor = self.syntax().prev_sibling_or_token();
-        while let Some(rowan::NodeOrToken::Token(token)) = cursor {
-            if !token.kind().is_trivia() {
-                break;
-            }
-            if token.kind() == SyntaxKind::DocComment {
-                out.push(token.clone());
-            }
-            cursor = token.prev_sibling_or_token();
-        }
-        out.reverse();
-        out
+        doc_comments_before(self.syntax())
     }
+}
+
+/// The `DocComment` tokens in the trivia run immediately preceding `node`,
+/// in source order — the walk behind [`HasDocComments::doc_comments`], for a
+/// pass that reads a carrier off the untyped tree.
+pub fn doc_comments_before(node: &SyntaxNode) -> Vec<SyntaxToken> {
+    let mut out = Vec::new();
+    let mut cursor = node.prev_sibling_or_token();
+    while let Some(rowan::NodeOrToken::Token(token)) = cursor {
+        if !token.kind().is_trivia() {
+            break;
+        }
+        if token.kind() == SyntaxKind::DocComment {
+            out.push(token.clone());
+        }
+        cursor = token.prev_sibling_or_token();
+    }
+    out.reverse();
+    out
 }
 
 impl HasName for TypeDef {}
@@ -407,6 +414,14 @@ impl HasDocComments for QueryDef {}
 impl HasDocComments for FixedDef {}
 impl HasDocComments for InterfaceMember {}
 impl HasDocComments for ServiceDef {}
+// The members (typl §14, ADR-0026): a struct field, a `reserved` entry, an
+// enum value, an enumset bit, a union arm and a call parameter.
+impl HasDocComments for FieldDef {}
+impl HasDocComments for ReservedEntry {}
+impl HasDocComments for EnumValue {}
+impl HasDocComments for EnumSetBit {}
+impl HasDocComments for UnionArm {}
+impl HasDocComments for Param {}
 
 impl HasDocComments for SystemDef {}
 impl HasDocComments for ComponentDef {}
@@ -838,6 +853,44 @@ mod tests {
         b.finish_node();
         b.finish_node();
         SyntaxNode::new_root(b.finish())
+    }
+
+    /// Every member carrier of typl §14 (ADR-0026) reads its doc comment off
+    /// the parsed tree: the parser flushes the trivia before a member to the
+    /// body node, so the comment is the member's previous sibling.
+    #[test]
+    fn member_doc_comments_attach_to_their_nodes() {
+        let text = "package app\n\
+            struct S {\n  /// Doc 1.\n  a: boolean\n  /// Doc 2.\n  reserved b\n}\n\
+            enum E {\n  /// Doc 3.\n  A = 1\n}\n\
+            enumset F {\n  /// Doc 4.\n  X = 0\n}\n\
+            union U {\n  /// Doc 5.\n  a: S\n}\n\
+            interface I {\n  command c(\n    /// Doc 6.\n    a: S\n  ) @[..50ms]\n}\n";
+        let parse = crate::parse(text, crate::Profile::Ridl);
+        assert_eq!(parse.errors(), &[], "the fixture parses");
+        let root = parse.syntax();
+        let docs_of = |kind: SyntaxKind| -> Vec<String> {
+            root.descendants()
+                .filter(|node| node.kind() == kind)
+                .flat_map(|node| doc_comments_before(&node))
+                .map(|token| token.text().to_string())
+                .collect()
+        };
+        assert_eq!(docs_of(SyntaxKind::FieldDef), ["/// Doc 1."]);
+        assert_eq!(docs_of(SyntaxKind::ReservedEntry), ["/// Doc 2."]);
+        assert_eq!(docs_of(SyntaxKind::EnumValue), ["/// Doc 3."]);
+        assert_eq!(docs_of(SyntaxKind::EnumSetBit), ["/// Doc 4."]);
+        assert_eq!(docs_of(SyntaxKind::UnionArm), ["/// Doc 5."]);
+        assert_eq!(docs_of(SyntaxKind::Param), ["/// Doc 6."]);
+        let param = root
+            .descendants()
+            .find_map(Param::cast)
+            .expect("the fixture has a parameter");
+        assert_eq!(
+            param.doc_comments().len(),
+            1,
+            "the trait reads the same run"
+        );
     }
 
     #[test]

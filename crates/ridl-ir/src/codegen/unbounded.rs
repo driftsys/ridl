@@ -102,13 +102,13 @@ pub fn attribute(package: &v2::Package, decl: &v2::Decl) -> v1::FbUnbounded {
                     .iter()
                     .map(|member| match &member.member {
                         Some(v2::struct_member::Member::Field(field)) => v2::StructMember {
-                            member: Some(v2::struct_member::Member::Field(v2::Field {
+                            member: Some(v2::struct_member::Member::Field(Box::new(v2::Field {
                                 r#type: field
                                     .r#type
                                     .as_ref()
                                     .map(|ty| lower_bound_stand_in(package, ty)),
-                                ..field.clone()
-                            })),
+                                ..(**field).clone()
+                            }))),
                         },
                         _ => member.clone(),
                     })
@@ -270,11 +270,11 @@ fn probe(package: &v2::Package, ty: &v2::FieldType) -> Option<u64> {
     let probe = v2::Decl {
         kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
             members: vec![v2::StructMember {
-                member: Some(v2::struct_member::Member::Field(v2::Field {
+                member: Some(v2::struct_member::Member::Field(Box::new(v2::Field {
                     ordinal: 1,
                     r#type: Some(ty.clone()),
                     ..Default::default()
-                })),
+                }))),
             }],
             fixed_layout: false,
         })),

@@ -1838,14 +1838,12 @@ lint-commits base="main":
         git std lint --range "$ref"..HEAD
     fi
 
-# Lint and static-check gate before pushing — skips `test`, `wasm-check`,
-# `compat-check`, `demo`, and `install-check`. `compile` stays in (ahead of
-# `lint`) so a `Cargo.lock` that a manifest change left stale fails on its
-# `--locked` guard instead of being silently rewritten by `lint`'s unlocked
-# `cargo clippy`. Wired as the pre-push hook (.githooks/pre-push.hooks). CI
-# (ci.yml) still runs the full `just build` gate on the PR; `just verify` runs
-# that same gate locally before opening one.
-pre-push: lint-commits toolchain-check gate-parity fmt-check check doc-path-check story-id-check link-check book-check compile lint
+# Lint and static-check gate before pushing — skips `compile`, `lint`,
+# `test`, `wasm-check`, `compat-check`, `demo`, and `install-check`. Wired as the
+# pre-push hook (.githooks/pre-push.hooks). CI (ci.yml) still runs the full
+# `just build` gate on the PR; `just verify` runs that same gate locally before
+# opening one.
+pre-push: lint-commits toolchain-check gate-parity fmt-check check doc-path-check story-id-check link-check book-check
 
 # Commit-message lint over commits not yet on origin/main, then build.
 # Run before opening a PR.

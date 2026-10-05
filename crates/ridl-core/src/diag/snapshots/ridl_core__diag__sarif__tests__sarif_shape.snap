@@ -572,10 +572,20 @@ expression: log
               }
             },
             {
+              "id": "TYPL-401",
+              "name": "broken-doc-link",
+              "shortDescription": {
+                "text": "doc link or `@see` target that does not resolve"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
               "id": "TYPL-404",
               "name": "detached-doc-comment",
               "shortDescription": {
-                "text": "blank line between a doc comment and its definition"
+                "text": "blank line between a doc comment and its carrier"
               },
               "defaultConfiguration": {
                 "level": "warning"
@@ -589,6 +599,56 @@ expression: log
               },
               "defaultConfiguration": {
                 "level": "warning"
+              }
+            },
+            {
+              "id": "TYPL-406",
+              "name": "missing-docs",
+              "shortDescription": {
+                "text": "item without a doc comment"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "TYPL-407",
+              "name": "misplaced-doc-comment",
+              "shortDescription": {
+                "text": "doc comment in a position that is not a carrier"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "TYPL-408",
+              "name": "unknown-doc-tag",
+              "shortDescription": {
+                "text": "doc tag other than `@see`, `@since`, `@deprecated` and `@labels`"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "TYPL-409",
+              "name": "malformed-doc-tag",
+              "shortDescription": {
+                "text": "`@see` or `@since` with a missing or malformed value"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "TYPL-410",
+              "name": "doc-comment-style",
+              "shortDescription": {
+                "text": "doc comment written as `/** */`"
+              },
+              "defaultConfiguration": {
+                "level": "none"
               }
             },
             {
@@ -1429,7 +1489,7 @@ expression: log
       "results": [
         {
           "ruleId": "RIDL-100",
-          "ruleIndex": 63,
+          "ruleIndex": 69,
           "level": "warning",
           "message": {
             "text": "signal without a timing annotation"
@@ -1494,7 +1554,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 149,
+          "ruleIndex": 155,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

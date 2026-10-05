@@ -196,25 +196,23 @@ mod tests {
             .unwrap();
         assert_eq!(result.is_error, Some(false));
         let output = result.structured_content.unwrap();
-        assert_eq!(output["workspace"]["root"], path);
-        assert_eq!(output["workspace"]["errors"], 0);
-        assert_eq!(output["workspace"]["warnings"], 0);
-        let notes = output["workspace"]["notes"].as_array().unwrap();
-        assert_eq!(notes.len(), 1);
-        assert!(notes[0].as_str().unwrap().contains("driftsys/ridl#529"));
-        assert!(
-            notes[0]
-                .as_str()
-                .unwrap()
-                .contains(copy.0.to_str().unwrap())
-        );
         assert_eq!(
-            output["interfaces"],
-            json!([
-                {"name":"fx.a.Cohesive", "members":2, "groups":[["left", "right"]]},
-                {"name":"fx.a.Empty", "members":0, "groups":[]},
-                {"name":"fx.a.Split", "members":4, "groups":[["y","z"],["a"]]}
-            ])
+            output,
+            json!({
+                "packages": [
+                    {"name":"fx.a", "fanIn":0, "fanOut":0, "instability":null, "dependsOn":[]},
+                    {"name":"fx.a.sub", "fanIn":0, "fanOut":0, "instability":null, "dependsOn":[]},
+                    {"name":"fx.b", "fanIn":0, "fanOut":0, "instability":null, "dependsOn":[]}
+                ],
+                "interfaces": [
+                    {"name":"fx.a.Cohesive", "members":2, "groups":[["left", "right"]]},
+                    {"name":"fx.a.Empty", "members":0, "groups":[]},
+                    {"name":"fx.a.Split", "members":4, "groups":[["y","z"],["a"]]},
+                    {"name":"fx.b.Status", "members":5,
+                        "groups":[["speed"],["reading"],["setLevel"],["outcome"]]}
+                ],
+                "workspace": {"root":copy.0, "errors":0, "warnings":12, "notes":[]}
+            })
         );
     }
 
@@ -300,7 +298,7 @@ mod tests {
         assert_eq!(
             result.structured_content.unwrap()["workspace"],
             json!({
-                "root":path, "errors":1, "warnings":1, "notes":[]
+                "root":path, "errors":1, "warnings":24, "notes":[]
             })
         );
     }
@@ -359,14 +357,47 @@ mod tests {
         fs::write(&file, "package fx.a\ntype Count: integer [0..10]\n").unwrap();
         let path = file.to_str().unwrap();
         let snap = snapshot(path, &[]).unwrap();
-        assert!(snap.output.diagnostics.is_empty());
+        let missing_docs = ridl_core::lint::lint_by_name("missing-docs").unwrap();
         assert_eq!(
-            value(&snap, path)["packages"],
-            json!([
-                {"name":"fx.a", "fanIn":0, "fanOut":0, "instability":null, "dependsOn":[]}
-            ])
+            serde_json::to_value(ridl_core::diag::to_json(
+                &snap.output.diagnostics,
+                &snap.output.sources,
+            ))
+            .unwrap(),
+            json!([{
+                "code": missing_docs.code.as_str(),
+                "severity": "warning",
+                "lint": "missing-docs",
+                "message": "`Count` has no doc comment",
+                "span": {
+                    "path": file,
+                    "start": {"line":2, "column":6},
+                    "end": {"line":2, "column":11}
+                },
+                "labels": [],
+                "fixes": [{
+                    "label": "add a doc comment",
+                    "replacement": "/// \n",
+                    "span": {
+                        "path": file,
+                        "start": {"line":2, "column":1},
+                        "end": {"line":2, "column":1}
+                    }
+                }]
+            }])
         );
-        assert_eq!(value(&snap, path)["interfaces"], json!([]));
+        assert_eq!(
+            value(&snap, path),
+            json!({
+                "packages": [
+                    {"name":"fx.a", "fanIn":0, "fanOut":0, "instability":null, "dependsOn":[]},
+                    {"name":"fx.b", "fanIn":0, "fanOut":0, "instability":null, "dependsOn":[]}
+                ],
+                "interfaces": [{"name":"fx.b.Status", "members":5,
+                    "groups":[["speed"],["reading"],["setLevel"],["outcome"]]}],
+                "workspace": {"root":copy.0, "errors":0, "warnings":1, "notes":[]}
+            })
+        );
     }
 
     #[tokio::test]
@@ -429,7 +460,7 @@ mod tests {
                 ],
                 "interfaces": [{"name":"fx.b.Status", "members":5,
                     "groups":[["speed"],["reading"],["setLevel"],["outcome"]]}],
-                "workspace": {"root":copy.0, "errors":0, "warnings":0, "notes":[]}
+                "workspace": {"root":copy.0, "errors":0, "warnings":22, "notes":[]}
             })
         );
         assert_eq!(

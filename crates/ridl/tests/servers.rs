@@ -127,11 +127,15 @@ async fn ridl_check_returns_the_diagnostic_contract() {
         let output = call_ridl_check(&client, BROKEN_TYPL, "typl").await;
         client.cancel().await.expect("shutdown");
 
-        let diagnostics = output["diagnostics"]
+        // TYPL-406 (`missing-docs`) is left out: the fixture has no docs.
+        let diagnostics: Vec<&serde_json::Value> = output["diagnostics"]
             .as_array()
-            .unwrap_or_else(|| panic!("a diagnostics array: {output}"));
+            .unwrap_or_else(|| panic!("a diagnostics array: {output}"))
+            .iter()
+            .filter(|diagnostic| diagnostic["code"] != "TYPL-406")
+            .collect();
         assert_eq!(diagnostics.len(), 1, "{output}");
-        let diagnostic = &diagnostics[0];
+        let diagnostic = diagnostics[0];
         assert_eq!(diagnostic["code"], "FORM-101", "{output}");
         assert_eq!(diagnostic["severity"], "error", "{output}");
         assert_eq!(diagnostic["span"]["path"], "input.typl", "{output}");
@@ -200,11 +204,13 @@ async fn assert_faces_agree(file_name: &str, source: &str, profile: &str, codes:
 
     // The CLI's codes are pinned, or the equality below would pass over a
     // fixture that stopped drawing the diagnostic it is here for.
+    // TYPL-406 (`missing-docs`) is left out: the fixture has no docs.
     let cli_codes: Vec<&str> = cli
         .as_array()
         .into_iter()
         .flatten()
         .filter_map(|diagnostic| diagnostic["code"].as_str())
+        .filter(|code| *code != "TYPL-406")
         .collect();
     assert_eq!(cli_codes, codes, "{cli}");
     blank_span_paths(&mut cli);
@@ -541,6 +547,8 @@ async fn diff_compile_errors_preserve_structured_diagnostics() {
                     .unwrap()
                     .iter()
                     .map(|d| d["code"].as_str().unwrap())
+                    // TYPL-406 (`missing-docs`) is left out: the fixture has no docs.
+                    .filter(|code| *code != "TYPL-406")
                     .collect::<Vec<_>>(),
                 ["TYPL-103", "TYPL-011", "TYPL-223", "RIDL-414"]
             );
@@ -641,7 +649,14 @@ async fn every_tool_leaves_the_tree_unchanged() {
             assert_eq!(text, output, "{name}");
             match name {
                 "ridl_check" => {
-                    assert_eq!(output["diagnostics"], json!([{
+                    // Preserve the incoming allowance for undocumented fixture items.
+                    let diagnostics = output["diagnostics"]
+                        .as_array()
+                        .expect("a diagnostics array")
+                        .iter()
+                        .filter(|diagnostic| diagnostic["lint"] != "missing-docs")
+                        .collect::<Vec<_>>();
+                    assert_eq!(serde_json::to_value(diagnostics).unwrap(), json!([{
                         "code": "TYPL-223",
                         "severity": "info",
                         "lint": "inconsistent-abbreviation",
@@ -703,7 +718,7 @@ async fn every_tool_leaves_the_tree_unchanged() {
                     ],
                     "interfaces": [{"name":"fx.b.Status", "members":5,
                         "groups":[["speed"],["reading"],["setLevel"],["outcome"]]}],
-                    "workspace": {"root":temp.0, "errors":0, "warnings":0, "notes":[]}
+                    "workspace": {"root":temp.0, "errors":0, "warnings":22, "notes":[]}
                 })),
                 "ridl_diff" => assert_eq!(output["verdict"], "breaking"),
                 _ => unreachable!(),
@@ -1031,10 +1046,12 @@ fn cli_code_severity_pairs(root: &Path) -> Vec<(String, u8)> {
     assert_eq!(cli.status.code(), Some(1), "{cli:?}");
     let diagnostics: serde_json::Value =
         serde_json::from_slice(&cli.stdout).expect("the CLI prints JSON to stdout");
+    // TYPL-406 (`missing-docs`) is left out: the fixture has no docs.
     let mut pairs: Vec<(String, u8)> = diagnostics
         .as_array()
         .expect("a JSON array")
         .iter()
+        .filter(|diagnostic| diagnostic["code"] != "TYPL-406")
         .map(|diagnostic| {
             let code = diagnostic["code"].as_str().expect("a code").to_string();
             let severity = match diagnostic["severity"].as_str() {
@@ -1052,10 +1069,12 @@ fn cli_code_severity_pairs(root: &Path) -> Vec<(String, u8)> {
 
 /// The `(code, severity)` pairs of one `publishDiagnostics` parameter object.
 fn published_code_severity_pairs(params: &serde_json::Value) -> Vec<(String, u8)> {
+    // TYPL-406 (`missing-docs`) is left out: the fixture has no docs.
     params["diagnostics"]
         .as_array()
         .expect("a diagnostics array")
         .iter()
+        .filter(|diagnostic| diagnostic["code"] != "TYPL-406")
         .map(|diagnostic| {
             let code = diagnostic["code"].as_str().expect("a code").to_string();
             let severity = diagnostic["severity"].as_u64().expect("a numeric severity") as u8;

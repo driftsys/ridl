@@ -203,7 +203,7 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-ir/src/catalog_hash.rs",
-        lines: 34,
+        lines: 36,
         why: "the reduced package's own `interfaces` field, which the hash \
               fills from a `shapes()` walk, sorts and blanks; the rest are \
               test fixtures that build or edit a package's named \
@@ -287,10 +287,12 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-diff/src/tests.rs",
-        lines: 3,
-        why: "a test mutating one fixture interface, plus two lines in the \
+        lines: 6,
+        why: "a test mutating one fixture interface, two lines in the \
               name-stability test indexing into the single fixture interface \
-              both the old and new packages share",
+              both the old and new packages share, and three lines in the \
+              doc-field tests editing the single fixture interface or its \
+              one interaction",
     },
     Allowed {
         path: "crates/ridl-diff/src/classify/classify_tests.rs",

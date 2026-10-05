@@ -127,6 +127,8 @@ fn ridl_check_reports_form_102_for_every_long_chain_shape() {
             .expect("a JSON array")
             .iter()
             .filter_map(|diagnostic| diagnostic["code"].as_str())
+            // TYPL-406 (`missing-docs`) is left out: the fixture has no docs.
+            .filter(|code| *code != "TYPL-406")
             .collect();
         // Exactly the parse refusal: the checker does not type-check the
         // truncated prefix, which would draw a false RIDL-306 on a sum whose

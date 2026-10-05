@@ -821,6 +821,9 @@ fn union_decl(name: &str, arms: &[(&str, u32, &str)]) -> v2::Decl {
                     ordinal: *ordinal,
                     type_ref: type_ref.to_string(),
                     doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 })
                 .collect(),
             is_result: false,
@@ -883,12 +886,12 @@ fn struct_with_union_between_scalars() -> v2::Package {
 
 fn field_member(name: &str, ordinal: u32, r#type: v2::FieldType) -> v2::StructMember {
     v2::StructMember {
-        member: Some(v2::struct_member::Member::Field(v2::Field {
+        member: Some(v2::struct_member::Member::Field(Box::new(v2::Field {
             name: name.to_string(),
             ordinal,
             r#type: Some(r#type),
             ..Default::default()
-        })),
+        }))),
     }
 }
 
@@ -1053,6 +1056,9 @@ fn enum_values(values: Vec<(&str, i64)>) -> Vec<v2::EnumValue> {
             name: name.to_string(),
             value,
             doc: String::new(),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         })
         .collect()
 }
@@ -1864,6 +1870,14 @@ fn cruise_package() -> v2::Package {
         .join("../ridl-backend-proto/tests/fixtures/cruise.ridl");
     let text = std::fs::read_to_string(&path).expect("read the fixture");
     let output = ridlc::compile(&path.display().to_string(), &text);
+    // Preserve the incoming allowance for undocumented fixture items.
+    let diagnostics = output
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| {
+            diagnostic.code != ridl_core::lint::lint_by_name("missing-docs").unwrap().code
+        })
+        .collect::<Vec<_>>();
     let expected = [
         (
             ridl_core::diag::DiagCode::TYPL_223,
@@ -1880,15 +1894,8 @@ fn cruise_package() -> v2::Package {
             "CruiseControl",
         ),
     ];
-    assert_eq!(
-        output.diagnostics.len(),
-        expected.len(),
-        "{:?}",
-        output.diagnostics
-    );
-    for (diagnostic, (code, lint, message, range, identifier)) in
-        output.diagnostics.iter().zip(expected)
-    {
+    assert_eq!(diagnostics.len(), expected.len(), "{:?}", diagnostics);
+    for (diagnostic, (code, lint, message, range, identifier)) in diagnostics.iter().zip(expected) {
         assert_eq!(diagnostic.code, code);
         assert_eq!(diagnostic.severity, ridl_core::diag::Severity::Info);
         assert_eq!(ridl_core::lint::lint_by_name(lint).unwrap().code, code);
@@ -1917,8 +1924,12 @@ fn cross_package_fixture() -> (v2::Package, v2::Package) {
     let entry = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../ridl-backend-proto/tests/fixtures/cross-package");
     let output = ridlc::compile_workspace(&mut db, &entry).expect("load the fixture");
+    // TYPL-406 (`missing-docs`) is left out: the fixtures have no docs.
     assert!(
-        output.diagnostics.is_empty(),
+        output
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.code.as_str() == "TYPL-406"),
         "the fixture compiles clean, got: {:?}",
         output.diagnostics
     );

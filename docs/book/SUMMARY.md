@@ -4,6 +4,7 @@
 - [Reading guide](reading-guide.md)
 - [Getting started](getting-started.md)
 - [Describing a system](rsdl.md)
+- [Documenting your API](documenting.md)
 - [CLI reference](cli-reference.md)
 - [Lints](lints.md)
 

@@ -220,15 +220,14 @@ new side, and the diagnostics are in the error's structured content).
 
 ### 5.3 Notes
 
-`workspace.notes` carries two notes. The first: when `path` loaded a package
-manifest and a `ridl.toml` with a `[workspace]` table exists above it, the note
-says the member was loaded alone, that its sibling members do not resolve
-(driftsys/ridl#529), and names the workspace root to pass instead. The second:
-when the workspace has `.rsdl` files and no system was lowered, the note says
-that rsdl uses were not counted, because the workspace declares no `system` or
-an error in its closure blocked the lowering, and tells the agent to run
-`ridl_check`. The field is a list of strings, so a later note is not a schema
-change.
+`workspace.notes` carries one note. (A path inside a workspace member loads the
+member's workspace, ADR-0002 §4, so it needs no note; `workspace.errors` and
+`workspace.warnings` then count the diagnostics of files under the member only.)
+The note: when the workspace has `.rsdl` files and no system was lowered, the
+note says that rsdl uses were not counted, because the workspace declares no
+`system` or an error in its closure blocked the lowering, and tells the agent to
+run `ridl_check`. The field is a list of strings, so a later note is not a
+schema change.
 
 ## 6. Compatibility with `ridl check`
 

@@ -71,6 +71,7 @@ use ridl_core::diag::{
     DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, house_style_message,
     remap_diagnostics, render,
 };
+use ridl_core::lint::apply_lint_levels;
 use ridl_core::package::Package;
 use ridl_core::{RidlDatabase, load_workspace, parse_file, std_package};
 use ridl_sem::{
@@ -207,6 +208,14 @@ fn compile_entry(entry: &Path) -> Compiled {
         &BTreeSet::new(),
         &mut sources,
     ));
+    // The lint levels apply as `ridlc check` applies them (ADR-0024 decision
+    // 6), so a lint that is `allow` by default, such as TYPL-410, is absent
+    // from the snapshot as it is from the command's report.
+    apply_lint_levels(&mut diagnostics, &sources, &loaded.lints);
+    // TYPL-406 (`missing-docs`) is left out: the corpus entries are fixtures
+    // for other checks and leave their items undocumented. The lint itself is
+    // tested in `ridl_sem::doc_lint` and `crates/ridl/tests/lints.rs`.
+    diagnostics.retain(|diagnostic| diagnostic.code.as_str() != "TYPL-406");
 
     // IR JSON and generated Rust are recorded only for an entry that compiles
     // without errors. For a clean entry these are the full-pipeline golden. For
@@ -2220,10 +2229,12 @@ fn reserved_accepts_every_meaningful_form() {
          signal d : L @1s\n}\n";
     let output = ridlc::compile("app.ridl", source);
 
+    // TYPL-406 (`missing-docs`) is left out: the fixture has no docs.
     let codes: Vec<&str> = output
         .diagnostics
         .iter()
         .map(|diagnostic| diagnostic.code.as_str())
+        .filter(|code| *code != "TYPL-406")
         .collect();
     assert!(
         codes.is_empty(),
@@ -2262,10 +2273,12 @@ fn reserved_integer_in_a_struct_or_union_is_inert() {
         let source = format!("package app\ntype L: integer [0..7]\n{body}\n");
         let output = ridlc::compile("app.typl", &source);
 
+        // TYPL-406 (`missing-docs`) is left out: the fixture has no docs.
         let codes: Vec<&str> = output
             .diagnostics
             .iter()
             .map(|diagnostic| diagnostic.code.as_str())
+            .filter(|code| *code != "TYPL-406")
             .collect();
         assert!(
             codes.is_empty(),

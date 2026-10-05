@@ -81,14 +81,17 @@ pub fn lint_of(code: DiagCode) -> Option<&'static CatalogEntry> {
     lint_entries().find(|entry| entry.code == code)
 }
 
-/// The default level of a lint: its catalogue severity, Warning as `Warn`
-/// and Info as `Info`. No lint defaults to `Deny`. An Error row is not a
-/// lint and has no level, so it returns `None`.
+/// The default level of a lint: `Allow` when its row declares
+/// `default = allow` (ADR-0024 decision 1), and otherwise its catalogue
+/// severity, Warning as `Warn` and Info as `Info`. No lint defaults to
+/// `Deny`. An Error row is not a lint and has no level, so it returns `None`
+/// (ADR-0024 decision 15).
 pub fn default_level(entry: &CatalogEntry) -> Option<LintLevel> {
     match entry.severity {
+        Severity::Error => None,
+        _ if entry.allow_by_default => Some(LintLevel::Allow),
         Severity::Info => Some(LintLevel::Info),
         Severity::Warning => Some(LintLevel::Warn),
-        Severity::Error => None,
     }
 }
 
@@ -186,6 +189,18 @@ pub fn apply_lint_levels(
     });
 }
 
+/// Removes every diagnostic whose lint is `allow` by default (ADR-0024
+/// decision 1) and leaves every other diagnostic unchanged.
+///
+/// A path that applies no `[lints]` levels (ADR-0024 decision 8) reports the
+/// severities the emit sites chose. An emit site gives an allow-by-default
+/// lint a Warning severity, which is not its default level, so such a path
+/// calls this function to keep that lint silent as its default requires.
+pub fn drop_allowed_by_default(diagnostics: &mut Vec<Diagnostic>) {
+    diagnostics
+        .retain(|diagnostic| !lint_of(diagnostic.code).is_some_and(|entry| entry.allow_by_default));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -241,6 +256,38 @@ mod tests {
         assert_eq!(default_level(info), Some(LintLevel::Info));
         let warn = lint_of(DiagCode::RIDL_100).expect("RIDL-100 is a lint");
         assert_eq!(default_level(warn), Some(LintLevel::Warn));
+    }
+
+    #[test]
+    fn a_row_declared_allow_defaults_to_allow() {
+        let style = lint_by_name("doc-comment-style").expect("doc-comment-style is a lint");
+        assert_eq!(default_level(style), Some(LintLevel::Allow));
+        assert_eq!(LintLevels::default().level(style), Some(LintLevel::Allow));
+        let detached = lint_of(DiagCode::TYPL_404).expect("TYPL-404 is a lint");
+        assert_eq!(default_level(detached), Some(LintLevel::Warn));
+    }
+
+    #[test]
+    fn drop_allowed_by_default_removes_only_allow_by_default_lints() {
+        let diagnostic = |code: DiagCode, severity: Severity| Diagnostic {
+            code,
+            severity,
+            message: String::new(),
+            primary: Span {
+                file: FileId::DETACHED,
+                range: TextRange::empty(TextSize::from(0)),
+            },
+            labels: Vec::new(),
+            fixits: Vec::new(),
+        };
+        let mut diagnostics = vec![
+            diagnostic(DiagCode::TYPL_410, Severity::Warning),
+            diagnostic(DiagCode::TYPL_404, Severity::Warning),
+            diagnostic(DiagCode::RIDL_101, Severity::Error),
+        ];
+        drop_allowed_by_default(&mut diagnostics);
+        let codes: Vec<&str> = diagnostics.iter().map(|d| d.code.as_str()).collect();
+        assert_eq!(codes, ["TYPL-404", "RIDL-101"]);
     }
 
     /// The row of an Error code, which has no lint name.

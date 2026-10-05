@@ -37,15 +37,16 @@ use ridl_ir::name::{camel_case, pascal_case, snake_case};
 use ridl_ir::v2;
 use ridl_syntax::ast::{self, AstNode, Definition, HasDocComments, HasModifiers, HasName};
 use ridl_syntax::{Profile, SyntaxKind};
-use rowan::{NodeOrToken, TextRange};
+use rowan::TextRange;
 
+use crate::doc_lint;
 use crate::docs;
 use crate::expr::{self, ContractScope, ExprType};
 use crate::init;
 use crate::lint;
 use crate::resolve::{
     Resolution, Symbol, SymbolKind, declared_name, declared_symbols, name_range,
-    qualified_segments, resolve_package, significant_text, source_file,
+    qualified_segments, resolve_doc_info, resolve_package, significant_text, source_file,
 };
 use crate::scalar::{
     DiagKind, ExactValue, FloatRange, IntRange, derive_float_width, derive_int_width,
@@ -219,6 +220,8 @@ pub fn check_package(
     // The ridl lint pass: four advisory codes over the interaction
     // declarations, emitted as ordinary diagnostics once lowering has settled.
     lint::lint_package(&mut checker, &files);
+    // The doc lints (ADR-0026) over the package's `.typl` and `.ridl` files.
+    doc_lint::lint_package(&mut checker, &files);
 
     // The interface identity fold (lock design §3, §4, §8): every declared
     // interface and every inline shape gets its number from the package's
@@ -500,9 +503,9 @@ pub(crate) struct Checker<'db> {
     pkg: Package,
     package_name: String,
     resolution: Resolution,
-    file_ids: Vec<FileId>,
+    pub(crate) file_ids: Vec<FileId>,
     pub(crate) current_file: usize,
-    diagnostics: Vec<Diagnostic>,
+    pub(crate) diagnostics: Vec<Diagnostic>,
     /// The resolved package timing default (ridl §9.1): the parsed
     /// `[defaults].timing` or the built-in `[100ms..1000ms]`, applied to every
     /// untimed signal and event (E2 task 9).
@@ -942,6 +945,53 @@ impl Checker<'_> {
 
     // --- declarations -----------------------------------------------------
 
+    /// TYPL-405: a `@deprecated` with no reason string on the carrier `name`,
+    /// reported at `range`. Every carrier whose IR message has a `deprecated`
+    /// field — a declaration, an interaction, an interface, a service and a
+    /// struct field — is still marked deprecated, with an empty reason.
+    fn deprecated_without_reason(
+        &mut self,
+        doc_info: &docs::DocInfo,
+        name: &str,
+        range: TextRange,
+    ) {
+        if doc_info.deprecated_missing_reason() {
+            self.warning(
+                DiagCode::TYPL_405,
+                range,
+                format!("`@deprecated` on `{name}` has no reason string"),
+            );
+        }
+    }
+
+    /// The IR `links` and `see` of a carrier's doc (typl §14, ADR-0026): every
+    /// link candidate and `@see` target is resolved, a resolved one is stored,
+    /// and each one that is not is TYPL-401 at the candidate's span, with the
+    /// reason.
+    fn doc_links(&mut self, doc_info: &docs::DocInfo) -> (Vec<v2::DocLink>, Vec<v2::DocLink>) {
+        let resolved = resolve_doc_info(
+            self.db,
+            self.ws,
+            self.std,
+            self.pkg,
+            &self.resolution,
+            doc_info,
+        );
+        for (range, message) in resolved.broken {
+            self.warning(DiagCode::TYPL_401, range, message);
+        }
+        (resolved.links, resolved.see)
+    }
+
+    /// Resolves the doc links of a struct, enum or union `reserved` entry for
+    /// the diagnostics alone (typl §14, ADR-0026): the entry is a carrier, but
+    /// the IR `Reserved` message has no doc field, so nothing is stored. An
+    /// interface tombstone lowers as a `Decl` and keeps its doc there.
+    fn reserved_doc_links(&mut self, entry: &ast::ReservedEntry) {
+        let doc_info = docs::scan(&entry.doc_comments());
+        self.doc_links(&doc_info);
+    }
+
     fn lower_definition(&mut self, definition: &Definition) -> Option<v2::Decl> {
         let name = declared_name(definition)?;
         let kind = match definition {
@@ -972,24 +1022,12 @@ impl Checker<'_> {
             v2::Visibility::Public
         };
 
-        // Doc-comment body, @labels, and @deprecated (typl §14). TYPL-405 warns
-        // when @deprecated carries no reason string; TYPL-404 warns on a blank
-        // line between the doc comment and the definition (§16.5).
+        // Doc-comment body, @labels, @deprecated and @since (typl §14,
+        // ADR-0026). TYPL-405 warns when @deprecated carries no reason string;
+        // the other doc lints run in `doc_lint`.
         let doc_info = docs::scan(&definition.doc_comments());
-        if doc_info.deprecated_missing_reason() {
-            self.warning(
-                DiagCode::TYPL_405,
-                name_range(definition),
-                format!("`@deprecated` on `{name}` has no reason string"),
-            );
-        }
-        if blank_line_before_definition(definition) {
-            self.warning(
-                DiagCode::TYPL_404,
-                name_range(definition),
-                format!("blank line between the doc comment and `{name}`"),
-            );
-        }
+        let (links, see) = self.doc_links(&doc_info);
+        self.deprecated_without_reason(&doc_info, &name, name_range(definition));
 
         Some(v2::Decl {
             name,
@@ -1002,6 +1040,9 @@ impl Checker<'_> {
             // (ridl §11).
             ordinal: 0,
             kind: Some(kind),
+            links,
+            see,
+            since: doc_info.since,
         })
     }
 
@@ -2148,6 +2189,7 @@ impl Checker<'_> {
                     // A tombstone implies evolution; an evolved struct is
                     // never emitted as a fixed inline layout.
                     fixed = false;
+                    self.reserved_doc_links(&entry);
                     members.push(v2::StructMember {
                         member: Some(v2::struct_member::Member::Reserved(lower_reserved(
                             &entry, ordinal,
@@ -2193,7 +2235,7 @@ impl Checker<'_> {
                         fixed = false;
                     }
                     members.push(v2::StructMember {
-                        member: Some(v2::struct_member::Member::Field(lowered)),
+                        member: Some(v2::struct_member::Member::Field(Box::new(lowered))),
                     });
                 }
             }
@@ -2251,15 +2293,28 @@ impl Checker<'_> {
             Some(init) => Some(init),
             None => lowered.as_ref().map(|l| self.derive_field_init(&l.ty)),
         };
+        // The field's own doc envelope (typl §14, ADR-0026): the IR carries
+        // `labels` and `deprecated` on a field, so the tags fill them as on a
+        // declaration.
+        let doc_info = docs::scan(&field.doc_comments());
+        let (links, see) = self.doc_links(&doc_info);
+        self.deprecated_without_reason(
+            &doc_info,
+            &name,
+            member_name_range(field.name(), field.syntax()),
+        );
         v2::Field {
             name,
             ordinal,
             r#type: lowered.map(|l| l.ty),
             declared_init,
             init,
-            doc: String::new(),
-            labels: Vec::new(),
-            deprecated: None,
+            doc: doc_info.doc,
+            labels: doc_info.labels,
+            deprecated: doc_info.deprecated,
+            links,
+            see,
+            since: doc_info.since,
         }
     }
 
@@ -2957,6 +3012,7 @@ impl Checker<'_> {
             if let Some(entry) = ast::ReservedEntry::cast(child.clone()) {
                 // The retired identity of an enum tombstone is the value, not
                 // an ordinal slot (§7.4).
+                self.reserved_doc_links(&entry);
                 reserved.push(lower_reserved(&entry, 0));
                 continue;
             }
@@ -3040,10 +3096,15 @@ impl Checker<'_> {
             if !duplicate_name {
                 self.check_enum_value_projection(&name, name_range, &mut pascal_values);
             }
+            let doc_info = docs::scan(&value_node.doc_comments());
+            let (links, see) = self.doc_links(&doc_info);
             values.push(v2::EnumValue {
                 name,
                 value,
-                doc: String::new(),
+                doc: doc_info.doc,
+                links,
+                see,
+                since: doc_info.since,
             });
         }
         v2::EnumDef { values, reserved }
@@ -3078,6 +3139,9 @@ impl Checker<'_> {
                                 name,
                                 value: bit,
                                 doc: String::new(),
+                                links: Vec::new(),
+                                see: Vec::new(),
+                                since: Vec::new(),
                             });
                         }
                     }
@@ -3151,10 +3215,15 @@ impl Checker<'_> {
                         format!("duplicate enumset bit position {value}"),
                     );
                 }
+                let doc_info = docs::scan(&bit.doc_comments());
+                let (links, see) = self.doc_links(&doc_info);
                 bits.push(v2::EnumValue {
                     name,
                     value,
-                    doc: String::new(),
+                    doc: doc_info.doc,
+                    links,
+                    see,
+                    since: doc_info.since,
                 });
             }
         }
@@ -3212,6 +3281,7 @@ impl Checker<'_> {
         for child in decl.syntax().children() {
             if let Some(entry) = ast::ReservedEntry::cast(child.clone()) {
                 ordinal += 1;
+                self.reserved_doc_links(&entry);
                 reserved.push(lower_reserved(&entry, ordinal));
                 continue;
             }
@@ -3272,11 +3342,16 @@ impl Checker<'_> {
             if let Some(is_error) = arm_is_error {
                 resolved_kinds.push(is_error);
             }
+            let doc_info = docs::scan(&arm.doc_comments());
+            let (links, see) = self.doc_links(&doc_info);
             arms.push(v2::UnionArm {
                 name,
                 ordinal,
                 type_ref,
-                doc: String::new(),
+                doc: doc_info.doc,
+                links,
+                see,
+                since: doc_info.since,
             });
         }
 
@@ -3663,13 +3738,16 @@ impl Checker<'_> {
         self.interface_internal = false;
 
         let doc_info = docs::scan(&def.doc_comments());
+        let (links, see) = self.doc_links(&doc_info);
+        let name = declared_name(def).unwrap_or_default();
+        self.deprecated_without_reason(&doc_info, &name, name_range(def));
         let visibility = if def.is_internal() {
             v2::Visibility::Internal
         } else {
             v2::Visibility::Public
         };
         v2::Interface {
-            name: declared_name(def).unwrap_or_default(),
+            name,
             visibility: visibility as i32,
             doc: doc_info.doc,
             labels: doc_info.labels,
@@ -3679,6 +3757,9 @@ impl Checker<'_> {
             // fold that reads the lock sets both.
             number: 0,
             provisional: false,
+            links,
+            see,
+            since: doc_info.since,
         }
     }
 
@@ -3710,6 +3791,12 @@ impl Checker<'_> {
             }
         };
         let doc_info = docs::scan(&member.doc_comments());
+        let (links, see) = self.doc_links(&doc_info);
+        self.deprecated_without_reason(
+            &doc_info,
+            &interaction_name,
+            member_name_range(member.name(), member.syntax()),
+        );
         v2::Decl {
             // A tombstone's `Decl` name stays empty — the retired name lives
             // in `Reserved.name` (typl §7.4).
@@ -3724,6 +3811,9 @@ impl Checker<'_> {
             deprecated: doc_info.deprecated,
             ordinal,
             kind: Some(kind),
+            links,
+            see,
+            since: doc_info.since,
         }
     }
 
@@ -3753,6 +3843,15 @@ impl Checker<'_> {
             self.check_service_name(dotted);
         }
         let doc_info = docs::scan(&service.doc_comments());
+        let (links, see) = self.doc_links(&doc_info);
+        self.deprecated_without_reason(
+            &doc_info,
+            &name,
+            dotted.as_ref().map_or_else(
+                || service.syntax().text_range(),
+                |dotted| dotted.syntax().text_range(),
+            ),
+        );
         // The `:` token discriminates the two forms. A service the parser
         // recovered with neither form reads as an empty inline shape, the
         // reading `SourceFile::shapes` takes too.
@@ -3773,6 +3872,9 @@ impl Checker<'_> {
             labels: doc_info.labels,
             deprecated: doc_info.deprecated,
             shapes,
+            links,
+            see,
+            since: doc_info.since,
         }
     }
 
@@ -4239,6 +4341,9 @@ impl Checker<'_> {
             // (lock design §3); the fold that reads the lock sets both.
             number: 0,
             provisional: false,
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         }
     }
 
@@ -5174,7 +5279,16 @@ impl Checker<'_> {
                     Some(ast::ParamType::Stream(stream)) => Some(self.lower_stream(&stream)),
                     None => None,
                 };
-                v2::Param { name, r#type }
+                let doc_info = docs::scan(&param.doc_comments());
+                let (links, see) = self.doc_links(&doc_info);
+                v2::Param {
+                    name,
+                    r#type,
+                    doc: doc_info.doc,
+                    links,
+                    see,
+                    since: doc_info.since,
+                }
             })
             .collect()
     }
@@ -5716,23 +5830,6 @@ fn regex_crate_refusal(error: &regex::Error) -> String {
     }
 }
 
-/// Whether a blank line separates `definition`'s doc comment from the
-/// definition (TYPL-404). Only meaningful when a doc comment is attached; the
-/// check reads the whitespace token immediately before the definition — two or
-/// more newlines is a blank line. Doc comments are trivia, so the AST attaches
-/// them across the blank line even though the spec warns about the gap.
-fn blank_line_before_definition(definition: &Definition) -> bool {
-    if definition.doc_comments().is_empty() {
-        return false;
-    }
-    matches!(
-        definition.syntax().prev_sibling_or_token(),
-        Some(NodeOrToken::Token(token))
-            if token.kind() == SyntaxKind::Whitespace
-                && token.text().matches('\n').count() >= 2
-    )
-}
-
 /// The declared name of a body member (field, arm, enum value, bit,
 /// tombstone) — these nodes carry a `name()` accessor but not the `HasName`
 /// trait.
@@ -6097,8 +6194,27 @@ mod tests {
         }
     }
 
-    /// The checker diagnostic codes, in order.
+    /// The checker diagnostic codes, in order, without TYPL-406
+    /// (`missing-docs`): most fixtures here have no docs, and a test of the
+    /// lint itself reads [`codes_all`].
     fn codes(checked: &CheckedPackage) -> Vec<&str> {
+        codes_all(checked)
+            .into_iter()
+            .filter(|code| *code != "TYPL-406")
+            .collect()
+    }
+
+    /// `checked` without its TYPL-406 (`missing-docs`) diagnostics, for a
+    /// test that reads `diagnostics` directly on a fixture with no docs.
+    fn without_missing_docs(mut checked: CheckedPackage) -> CheckedPackage {
+        checked
+            .diagnostics
+            .retain(|diagnostic| diagnostic.code != DiagCode::TYPL_406);
+        checked
+    }
+
+    /// Every checker diagnostic code, in order, TYPL-406 included.
+    fn codes_all(checked: &CheckedPackage) -> Vec<&str> {
         checked
             .diagnostics
             .iter()
@@ -6156,6 +6272,7 @@ mod tests {
     #[test]
     fn appendix_b_lowers_clean_end_to_end() {
         let checked = check_source("veh.common", APPENDIX_B);
+        let checked = without_missing_docs(checked);
         assert!(
             checked.diagnostics.is_empty(),
             "Appendix B must lower clean, got: {:?}",
@@ -6436,6 +6553,7 @@ mod tests {
     #[test]
     fn written_but_unresolved_bound_defers_and_reports() {
         let checked = check_source("app", "package app\ntype X : integer [0..TYPO]\n");
+        let checked = without_missing_docs(checked);
         let def = type_def(&checked, "X");
         assert_eq!(
             def.width, None,
@@ -6549,6 +6667,7 @@ mod tests {
     #[test]
     fn unknown_type_reference_keeps_the_description_first_shape() {
         let checked = check_source("app", "package app\nconst X: Missing = 1.0\n");
+        let checked = without_missing_docs(checked);
         assert_eq!(checked.diagnostics.len(), 1);
         assert_eq!(codes(&checked), vec!["TYPL-011"]);
         assert_eq!(
@@ -6563,6 +6682,7 @@ mod tests {
             "app",
             "package app\ntype Speed: km/h [0.0..250.0 step 0.5]\nconst MAX_SPEED: Speed = 250.0\nconst A: MAX_SPEED = 1.0\n",
         );
+        let checked = without_missing_docs(checked);
         assert_eq!(checked.diagnostics.len(), 1);
         assert!(checked.diagnostics[0].code.is_empty());
         assert_eq!(
@@ -6700,6 +6820,7 @@ mod tests {
     fn typl_218_reports_every_repeat_against_the_first_declaration() {
         let source = "package app\nenumset W { A = 0, A = 1, A = 2 }\n";
         let checked = check_source("app", source);
+        let checked = without_missing_docs(checked);
         assert_eq!(codes(&checked), vec!["TYPL-218", "TYPL-218"]);
         let first = source.find("A =").expect("the first bit is in the source");
         for diagnostic in &checked.diagnostics {
@@ -7573,6 +7694,7 @@ mod tests {
             "app",
             &enum_source_3("checkEngine", "CHECK_ENGINE", "Check_Engine"),
         );
+        let checked = without_missing_docs(checked);
         assert_eq!(
             codes(&checked),
             vec!["RIDL-149", "RIDL-149"],
@@ -7662,6 +7784,7 @@ mod tests {
     fn typl_216_reports_every_repeat_against_the_first_declaration() {
         let source = enum_source_3("A", "A", "A");
         let checked = check_source("app", &source);
+        let checked = without_missing_docs(checked);
         assert_eq!(
             codes(&checked),
             vec!["TYPL-216", "TYPL-216"],
@@ -7845,6 +7968,7 @@ mod tests {
     fn typl_217_reports_every_repeat_against_the_first_declaration() {
         let source = union_source_3("fooBar", "fooBar", "fooBar");
         let checked = check_source("app", &source);
+        let checked = without_missing_docs(checked);
         assert_eq!(
             codes(&checked),
             vec!["TYPL-217", "TYPL-217"],
@@ -8122,6 +8246,7 @@ mod tests {
                value : integer [0..1]\n\
              }\n";
         let checked = check_source("app", source);
+        let checked = without_missing_docs(checked);
         assert_eq!(
             codes(&checked),
             vec!["TYPL-215", "TYPL-215"],
@@ -8270,6 +8395,7 @@ mod tests {
                bounds : (a : Speed, a : Speed, a : Speed)\n\
              }\n";
         let checked = check_source("app", source);
+        let checked = without_missing_docs(checked);
         assert_eq!(
             codes(&checked),
             vec!["TYPL-215", "TYPL-215"],
@@ -8494,6 +8620,7 @@ mod tests {
              value : Speed) @[..500ms]\n}}\n"
         );
         let checked = check_ridl("app", &source);
+        let checked = without_missing_docs(checked);
         assert_eq!(
             codes(&checked),
             vec!["RIDL-413", "RIDL-413"],
@@ -9624,6 +9751,329 @@ mod tests {
         );
     }
 
+    /// Every member carrier of ADR-0026 reads its doc into the IR: a struct
+    /// field, an enum value, an enumset bit, a union arm and a command
+    /// parameter.
+    #[test]
+    fn member_docs_reach_the_ir() {
+        let checked = check_ridl(
+            "app",
+            "package app\n\
+             struct S {\n  /// Doc 1.\n  a: boolean\n}\n\
+             enum E {\n  /// Doc 2.\n  A = 1\n}\n\
+             enumset F {\n  /// Doc 3.\n  X = 0\n}\n\
+             union U {\n  /// Doc 4.\n  s: S\n}\n\
+             interface I {\n  command c(\n    /// Doc 5.\n    a: S\n  ) @[..50ms]\n}\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let Some(v2::struct_member::Member::Field(field)) =
+            &struct_def(&checked, "S").members[0].member
+        else {
+            panic!("`S` has a field");
+        };
+        assert_eq!(field.doc, "Doc 1.");
+        assert_eq!(enum_def(&checked, "E").values[0].doc, "Doc 2.");
+        let Some(v2::decl::Kind::EnumSetDef(set)) = &decl(&checked, "F").kind else {
+            panic!("`F` is an enumset");
+        };
+        assert_eq!(set.bits[0].doc, "Doc 3.");
+        assert_eq!(union_def(&checked, "U").arms[0].doc, "Doc 4.");
+        let Some(v2::decl::Kind::CommandDef(command)) = &interaction(&checked, "c").kind else {
+            panic!("`c` is a command");
+        };
+        assert_eq!(command.params[0].doc, "Doc 5.");
+    }
+
+    /// A struct field's `@labels` and `@deprecated` fill the field's own IR
+    /// fields (typl §14, ADR-0026).
+    #[test]
+    fn field_labels_and_deprecated_fill_the_ir() {
+        let checked = check_source(
+            "app",
+            "package app\nstruct S {\n  /// A flag.\n  /// @labels A, B\n  /// @deprecated \"x\"\n  a: boolean\n}\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let Some(v2::struct_member::Member::Field(field)) =
+            &struct_def(&checked, "S").members[0].member
+        else {
+            panic!("`S` has a field");
+        };
+        assert_eq!(field.doc, "A flag.");
+        assert_eq!(field.labels, ["A", "B"]);
+        assert_eq!(field.deprecated.as_deref(), Some("x"));
+    }
+
+    /// TYPL-405 on a field, at the field's name, as on a declaration.
+    #[test]
+    fn typl_405_bare_deprecated_on_a_field() {
+        let text = "package app\nstruct S {\n  /// @deprecated\n  a: boolean\n}\n";
+        let checked = check_source("app", text);
+        assert_eq!(codes(&checked), vec!["TYPL-405"]);
+        let diagnostic = &checked.diagnostics[0];
+        assert_eq!(diagnostic.severity, Severity::Warning);
+        let range = diagnostic.primary.range;
+        assert_eq!(
+            &text[usize::from(range.start())..usize::from(range.end())],
+            "a"
+        );
+        assert!(diagnostic.message.contains("`a`"), "{}", diagnostic.message);
+        let Some(v2::struct_member::Member::Field(field)) =
+            &struct_def(&checked, "S").members[0].member
+        else {
+            panic!("`S` has a field");
+        };
+        assert_eq!(field.deprecated.as_deref(), Some(""));
+    }
+
+    /// TYPL-405 on an interaction and on an interface, which also carry
+    /// `deprecated`.
+    #[test]
+    fn typl_405_bare_deprecated_on_an_interaction_and_an_interface() {
+        let text = format!(
+            "{PRELUDE}/// @deprecated\ninterface I {{\n  /// @deprecated\n  signal speed : Speed @10ms\n}}\n"
+        );
+        let checked = check_ridl("app", &text);
+        let checked = without_missing_docs(checked);
+        assert_eq!(codes(&checked), vec!["TYPL-405", "TYPL-405"]);
+        // The interface's envelope lowers after its members, so its
+        // diagnostic comes second; the renderer sorts by position.
+        let spans: Vec<&str> = checked
+            .diagnostics
+            .iter()
+            .map(|diagnostic| {
+                let range = diagnostic.primary.range;
+                &text[usize::from(range.start())..usize::from(range.end())]
+            })
+            .collect();
+        assert_eq!(spans, ["speed", "I"]);
+        assert_eq!(
+            interaction(&checked, "speed").deprecated.as_deref(),
+            Some("")
+        );
+    }
+
+    #[test]
+    fn since_reaches_the_ir() {
+        let checked = check_source(
+            "app",
+            "package app\n/// A pair.\n/// @since 1.2\nstruct S {\n  a: boolean\n}\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let decl = decl(&checked, "S");
+        assert_eq!(decl.doc, "A pair.");
+        assert_eq!(decl.since, ["1.2"]);
+    }
+
+    /// Two packages: `veh` with an enum and an `internal` type, and `app`,
+    /// which holds `text` and imports nothing.
+    fn check_beside_veh(text: &str) -> CheckedPackage {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let veh = package(
+            &db,
+            "veh",
+            "package veh\nenum Gear { PARK = 1, DRIVE = 2 }\ninternal type Raw : integer [0..1]\n",
+        );
+        let app = package(&db, "app", text);
+        let ws = Workspace::new(&db, vec![veh, app], BTreeMap::new());
+        check_package(&db, ws, app, std)
+    }
+
+    /// The source text a diagnostic's primary span covers.
+    fn primary_text<'a>(text: &'a str, diagnostic: &Diagnostic) -> &'a str {
+        let range = diagnostic.primary.range;
+        &text[usize::from(range.start())..usize::from(range.end())]
+    }
+
+    #[test]
+    fn see_resolves_and_reaches_the_ir() {
+        let checked = check_beside_veh(
+            "package app\n/// A gear.\n/// @see veh.Gear\n/// @see veh.Gear.PARK\nstruct S {\n  a: boolean\n}\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let decl = decl(&checked, "S");
+        assert_eq!(decl.doc, "A gear.");
+        assert_eq!(
+            decl.see,
+            [
+                v2::DocLink {
+                    text: "veh.Gear".into(),
+                    offset: 0,
+                    len: 0,
+                    target: "veh.Gear".into(),
+                },
+                v2::DocLink {
+                    text: "veh.Gear.PARK".into(),
+                    offset: 0,
+                    len: 0,
+                    target: "veh.Gear.PARK".into(),
+                },
+            ]
+        );
+        assert!(decl.links.is_empty());
+    }
+
+    /// IR `offset` and `len` are byte offsets into `doc`, so a multi-byte
+    /// character before the link does not shift them.
+    #[test]
+    fn links_reach_the_ir_with_byte_offsets() {
+        let checked = check_source(
+            "app",
+            "package app\ntype Speed : km/h [0.0..250.0 step 0.5]\n/// Größe in [Speed].\nstruct S {\n  a: boolean\n}\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let decl = decl(&checked, "S");
+        assert_eq!(decl.doc, "Größe in [Speed].");
+        let open = decl.doc.find('[').expect("the doc keeps the link");
+        assert_eq!(open, 11, "byte index, not character index");
+        assert_eq!(
+            decl.links,
+            [v2::DocLink {
+                text: "Speed".into(),
+                offset: open as u32,
+                len: 7,
+                target: "app.Speed".into(),
+            }]
+        );
+        assert_eq!(&decl.doc[open..open + 7], "[Speed]");
+    }
+
+    #[test]
+    fn unresolved_link_is_not_stored() {
+        let text =
+            "package app\n/// See [Nope] and [Gear].\n/// @see Also\nenum Gear {\n  PARK = 1\n}\n";
+        let checked = check_source("app", text);
+        let checked = without_missing_docs(checked);
+        assert_eq!(codes(&checked), vec!["TYPL-401", "TYPL-401"]);
+        let spans: Vec<&str> = checked
+            .diagnostics
+            .iter()
+            .map(|diagnostic| primary_text(text, diagnostic))
+            .collect();
+        assert_eq!(spans, ["[Nope]", "Also"]);
+        assert!(
+            checked
+                .diagnostics
+                .iter()
+                .all(|diagnostic| diagnostic.severity == Severity::Warning)
+        );
+        assert!(
+            checked.diagnostics[0].message.contains("doc link `Nope`"),
+            "{}",
+            checked.diagnostics[0].message
+        );
+        assert!(
+            checked.diagnostics[1]
+                .message
+                .contains("`@see` target `Also`"),
+            "{}",
+            checked.diagnostics[1].message
+        );
+        let decl = decl(&checked, "Gear");
+        assert_eq!(decl.links.len(), 1);
+        assert_eq!(decl.links[0].target, "app.Gear");
+        assert!(decl.see.is_empty());
+    }
+
+    /// TYPL-401 names the reason: an `internal` declaration of another
+    /// package, or a declaration with no such member.
+    #[test]
+    fn typl_401_names_the_reason() {
+        let text =
+            "package app\n/// [veh.Raw] and [veh.Gear.NEUTRAL].\nstruct S {\n  a: boolean\n}\n";
+        let checked = check_beside_veh(text);
+        assert_eq!(codes(&checked), vec!["TYPL-401", "TYPL-401"]);
+        assert_eq!(primary_text(text, &checked.diagnostics[0]), "[veh.Raw]");
+        assert!(
+            checked.diagnostics[0].message.contains("`internal`"),
+            "{}",
+            checked.diagnostics[0].message
+        );
+        assert_eq!(
+            primary_text(text, &checked.diagnostics[1]),
+            "[veh.Gear.NEUTRAL]"
+        );
+        assert!(
+            checked.diagnostics[1]
+                .message
+                .contains("`veh.Gear` has no member `NEUTRAL`"),
+            "{}",
+            checked.diagnostics[1].message
+        );
+        assert!(decl(&checked, "S").links.is_empty());
+    }
+
+    /// Links on every member carrier reach the IR: a field, an enum value, an
+    /// enumset bit, a union arm, an interaction and a call parameter.
+    #[test]
+    fn member_doc_links_reach_the_ir() {
+        let text = format!(
+            "{PRELUDE}struct S {{\n  /// Field [Speed].\n  a: Speed\n}}\n\
+             enum E {{\n  /// Value [S.a].\n  A = 1\n}}\n\
+             enumset F {{\n  /// Bit [E.A].\n  X = 0\n}}\n\
+             union U {{\n  /// Arm [E].\n  s: S\n}}\n\
+             interface I {{\n  /// Command [U.s].\n  /// @see S\n  command c(\n    /// Param [F.X].\n    a: S\n  ) @[..50ms]\n}}\n"
+        );
+        let checked = check_ridl("app", &text);
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let Some(v2::struct_member::Member::Field(field)) =
+            &struct_def(&checked, "S").members[0].member
+        else {
+            panic!("`S` has a field");
+        };
+        assert_eq!(field.links[0].target, "app.Speed");
+        assert_eq!(enum_def(&checked, "E").values[0].links[0].target, "app.S.a");
+        let Some(v2::decl::Kind::EnumSetDef(set)) = &decl(&checked, "F").kind else {
+            panic!("`F` is an enumset");
+        };
+        assert_eq!(set.bits[0].links[0].target, "app.E.A");
+        assert_eq!(union_def(&checked, "U").arms[0].links[0].target, "app.E");
+        let command = interaction(&checked, "c");
+        assert_eq!(command.links[0].target, "app.U.s");
+        assert_eq!(command.see[0].target, "app.S");
+        let Some(v2::decl::Kind::CommandDef(def)) = &command.kind else {
+            panic!("`c` is a command");
+        };
+        assert_eq!(def.params[0].links[0].target, "app.F.X");
+    }
+
+    /// A `reserved` entry of a struct, an enum or a union is a carrier with no
+    /// IR doc field, so its links are resolved for the diagnostic only: a
+    /// broken link or `@see` there is TYPL-401, like everywhere else.
+    #[test]
+    fn broken_link_on_a_reserved_entry_is_typl_401() {
+        let text = "package app\n\
+                    struct S {\n  /// Replaced by [Nope].\n  reserved z\n  a: boolean\n}\n\
+                    enum E {\n  /// Gone, see [S].\n  /// @see Missing\n  reserved OLD\n  A = 1\n}\n\
+                    union U {\n  /// Was [Absent].\n  reserved w\n  s: S\n}\n";
+        let checked = check_source("app", text);
+        let checked = without_missing_docs(checked);
+        assert_eq!(codes(&checked), vec!["TYPL-401", "TYPL-401", "TYPL-401"]);
+        let spans: Vec<&str> = checked
+            .diagnostics
+            .iter()
+            .map(|diagnostic| primary_text(text, diagnostic))
+            .collect();
+        assert_eq!(spans, ["[Nope]", "Missing", "[Absent]"]);
+    }
+
+    /// `@deprecated` and `@labels` keep today's behaviour beside the new tags
+    /// (ADR-0026): the reason and the labels fill their fields, and a tag line
+    /// is not in the body.
+    #[test]
+    fn deprecated_and_labels_unchanged() {
+        let checked = check_source(
+            "app",
+            "package app\n/// A speed.\n/// @labels A, B\n/// @deprecated \"use Velocity\"\n/// @since 2.0\ntype Speed : km/h [0.0..250.0 step 0.5]\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let decl = decl(&checked, "Speed");
+        assert_eq!(decl.doc, "A speed.");
+        assert_eq!(decl.labels, ["A", "B"]);
+        assert_eq!(decl.deprecated.as_deref(), Some("use Velocity"));
+        assert_eq!(decl.since, ["2.0"]);
+    }
+
     #[test]
     fn doc_body_lands_in_the_ir() {
         let checked = check_source(
@@ -10284,11 +10734,13 @@ mod tests {
         check_package(&db, ws, pkg, std)
     }
 
-    /// The diagnostic messages, in order.
+    /// The diagnostic messages, in order, without those of TYPL-406
+    /// (`missing-docs`), as [`codes`] leaves them out.
     fn messages(checked: &CheckedPackage) -> Vec<&str> {
         checked
             .diagnostics
             .iter()
+            .filter(|diagnostic| diagnostic.code != DiagCode::TYPL_406)
             .map(|diagnostic| diagnostic.message.as_str())
             .collect()
     }
@@ -10968,6 +11420,7 @@ mod tests {
             ),
         ] {
             let checked = check_ridl("app", &source);
+            let checked = without_missing_docs(checked);
             assert!(
                 !checked.diagnostics.is_empty(),
                 "{name} must draw a diagnostic",
@@ -12101,6 +12554,7 @@ interface I {\n\
     #[test]
     fn interface_in_type_position_is_rejected() {
         let checked = check_ridl("app", "package app\ninterface I { }\nstruct S { f: I }\n");
+        let checked = without_missing_docs(checked);
         assert_eq!(
             messages(&checked),
             vec!["expected a type, but `I` names an interface"],
@@ -12127,6 +12581,7 @@ interface I {\n\
         );
         let ws = Workspace::new(&db, vec![app, veh], BTreeMap::new());
         let checked = check_package(&db, ws, app, std);
+        let checked = without_missing_docs(checked);
         assert!(
             checked.diagnostics.is_empty(),
             "the imported payload resolves, got: {:?}",
@@ -12200,6 +12655,7 @@ interface I {\n\
         for (position, body, written) in positions {
             let source = format!("{PRELUDE}{body}");
             let checked = check_ridl("app", &source);
+            let checked = without_missing_docs(checked);
             assert_eq!(codes(&checked), vec!["TYPL-011"], "{position}");
             assert_eq!(
                 messages(&checked),
@@ -12235,6 +12691,7 @@ interface I {\n\
         );
         let ws = Workspace::new(&db, vec![app, veh], BTreeMap::new());
         let checked = check_package(&db, ws, app, std);
+        let checked = without_missing_docs(checked);
         assert_eq!(codes(&checked), vec!["TYPL-011"]);
         assert_eq!(
             messages(&checked),
@@ -12260,6 +12717,7 @@ interface I {\n\
         let app = ridl_package(&db, "app", source);
         let ws = Workspace::new(&db, vec![app, veh], BTreeMap::new());
         let checked = check_package(&db, ws, app, std);
+        let checked = without_missing_docs(checked);
         assert_eq!(codes(&checked), vec!["TYPL-011"]);
         assert_eq!(messages(&checked), vec!["unknown type name `Hidden`"]);
         let range = checked.diagnostics[0].primary.range;
@@ -12473,8 +12931,10 @@ interface VehicleStatus {
         // that general form §6.1 made canonical in return position (ADR-0008
         // decisions 1 and 19), so the lint no longer fires. RIDL-308 keeps a
         // living example in the ridl diagnostic showcase, which provokes it
-        // independently.
-        assert!(codes(&checked).is_empty(), "{:?}", checked.diagnostics);
+        // independently. Its interface doc is a `/** */` block, which draws
+        // TYPL-410 (`doc-comment-style`); that lint is `allow` by default, so
+        // a driver drops it and it is not an advisory the appendix shows.
+        assert_eq!(codes(&checked), ["TYPL-410"], "{:?}", checked.diagnostics);
         assert_eq!(checked.ir.name, "veh.cluster");
         assert_eq!(checked.ir.interfaces.len(), 1);
         let interface = &checked.ir.interfaces[0];
@@ -12823,6 +13283,7 @@ interface VehicleStatus {
         let text =
             format!("{PRELUDE}interface I {{\n  signal alpha : Speed\n  event beta : Speed\n}}\n");
         let checked = check_ridl("app", &text);
+        let checked = without_missing_docs(checked);
         assert_eq!(codes(&checked), vec!["RIDL-100", "RIDL-100"]);
 
         let spans: Vec<&str> = checked
@@ -13353,6 +13814,7 @@ interface VehicleStatus {
         );
         let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
         let checked = check_package(&db, ws, pkg, std);
+        let checked = without_missing_docs(checked);
         assert!(
             checked.diagnostics.is_empty(),
             "got: {:?}",
@@ -13427,6 +13889,7 @@ interface VehicleStatus {
         );
         let ws = Workspace::new(&db, vec![app, veh], BTreeMap::new());
         let checked = check_package(&db, ws, app, std);
+        let checked = without_missing_docs(checked);
         assert!(
             checked.diagnostics.is_empty(),
             "got: {:?}",
@@ -14009,6 +14472,7 @@ interface VehicleStatus {
         let ws = Workspace::new(&db, vec![common, adas], BTreeMap::new());
 
         let checked = check_package(&db, ws, adas, std);
+        let checked = without_missing_docs(checked);
         let catalog = service_catalog(&db, ws, std);
 
         assert!(
@@ -14040,6 +14504,7 @@ interface VehicleStatus {
         let ws = Workspace::new(&db, vec![common, adas], BTreeMap::new());
 
         let checked = check_package(&db, ws, adas, std);
+        let checked = without_missing_docs(checked);
         let catalog = service_catalog(&db, ws, std);
 
         assert!(
@@ -14064,6 +14529,7 @@ interface VehicleStatus {
                 "{PRELUDE}interface I {{\n  signal a : Speed @10ms\n}}\nservice veh.X.y : I\n"
             ),
         );
+        let checked = without_missing_docs(checked);
         let messages = messages(&checked);
         assert_eq!(messages.len(), 1, "got: {:?}", checked.diagnostics);
         assert!(
@@ -14393,6 +14859,7 @@ interface cabin { signal i : State @[100ms..1s] }
     fn an_orphan_entry_names_retire_alone() {
         let lock = "next 5\nCabin 1\nLegacy 2\nZone 3\nservice:veh.hvac.rear 4\n";
         let checked = check_ridl_with_lock("veh.hvac", &[("hvac.ridl", NUMBERED)], lock);
+        let checked = without_missing_docs(checked);
         assert_eq!(codes(&checked), ["RIDL-409"]);
         let diagnostic = &checked.diagnostics[0];
         assert_eq!(diagnostic.severity, Severity::Error);
@@ -14427,6 +14894,7 @@ interface cabin { signal i : State @[100ms..1s] }
     fn an_orphan_entry_beside_an_unentered_declaration_names_both_commands() {
         let lock = "next 4\nCabin 1\nLegacy 2\nservice:veh.hvac.old 3\n";
         let checked = check_ridl_with_lock("veh.hvac", &[("hvac.ridl", NUMBERED)], lock);
+        let checked = without_missing_docs(checked);
         assert_eq!(codes(&checked), ["RIDL-409", "RIDL-409"]);
         assert_eq!(
             messages(&checked),

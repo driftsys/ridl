@@ -54,7 +54,9 @@ pub fn heading_text(heading: SystemHeading) -> &'static str {
 /// Compares two lowered systems: the composition changes first, in the new
 /// closure's order and then the removed components, and then the placement
 /// changes, deployment by deployment in the new system's order and then the
-/// removed deployments.
+/// removed deployments. The doc fields (`doc`, the doc links, `see`,
+/// `since`) are never read: a doc edit is neither a placement nor a
+/// composition change, and a system change has no verdict (ADR-0026).
 pub fn diff_systems(old: &System, new: &System) -> Vec<SystemChange> {
     let mut changes = Vec::new();
     for component in &new.components {
@@ -293,6 +295,10 @@ mod tests {
                 .map(|service| v2::Offer {
                     service: service.to_string(),
                     attributes: Vec::new(),
+                    doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 })
                 .collect(),
             requires: requires
@@ -306,10 +312,18 @@ mod tests {
                     service: String::new(),
                     producer: String::new(),
                     attributes: Vec::new(),
+                    doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
                 })
                 .collect(),
             labels: Vec::new(),
             attributes: Vec::new(),
+            doc: String::new(),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         }
     }
 
@@ -319,6 +333,10 @@ mod tests {
             external,
             labels: Vec::new(),
             attributes: Vec::new(),
+            doc: String::new(),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         }
     }
 
@@ -394,6 +412,53 @@ mod tests {
             regions: vec![region(2)],
             ..base()
         };
+        assert!(diff_systems(&old, &new).is_empty());
+    }
+
+    /// A doc edit is neither a placement nor a composition change, so the
+    /// doc fields of every system message are ignored (ADR-0026).
+    #[test]
+    fn system_doc_changes_are_not_reported() {
+        let see = v2::DocLink {
+            text: "Other".to_string(),
+            target: "veh.topology.Other".to_string(),
+            ..Default::default()
+        };
+        macro_rules! document {
+            ($carrier:expr) => {{
+                let carrier = &mut $carrier;
+                carrier.doc = "documented".to_string();
+                carrier.links.push(see.clone());
+                carrier.see.push(see.clone());
+                carrier.since.push("1.2".to_string());
+            }};
+        }
+        let mut old = base();
+        old.members.push(v2::MemberLine {
+            component: "veh.topology.Cruise".to_string(),
+            ..Default::default()
+        });
+        old.distributions.push(v2::Distribution {
+            name: "Adas".to_string(),
+            package: "veh.topology".to_string(),
+            members: old.members.clone(),
+            ..Default::default()
+        });
+        let mut new = old.clone();
+        document!(new);
+        document!(new.members[0]);
+        document!(new.components[0]);
+        document!(new.components[0].offers[0]);
+        document!(new.components[0].requires[0]);
+        document!(new.distributions[0]);
+        document!(new.distributions[0].members[0]);
+        let deployment = &mut new.deployments[0];
+        deployment.doc = "documented".to_string();
+        deployment.doc_links.push(see.clone());
+        deployment.see.push(see.clone());
+        deployment.since.push("1.2".to_string());
+        document!(new.deployments[0].machines[0]);
+        assert_ne!(old, new);
         assert!(diff_systems(&old, &new).is_empty());
     }
 
@@ -486,6 +551,10 @@ mod tests {
         new.components[1].offers.push(v2::Offer {
             service: "veh.hmi.panel".to_string(),
             attributes: Vec::new(),
+            doc: String::new(),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
         });
         new.components
             .push(component("Lane", &["Unit"], &["veh.adas.lane"], &[]));

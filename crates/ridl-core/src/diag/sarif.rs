@@ -162,7 +162,13 @@ fn rule(entry: &CatalogEntry) -> Rule {
             text: entry.summary.to_string(),
         },
         default_configuration: Configuration {
-            level: sarif_level(entry.severity),
+            // A lint that is `allow` by default is off until a project turns
+            // it on, which SARIF writes as the level `none`.
+            level: if entry.allow_by_default {
+                "none"
+            } else {
+                sarif_level(entry.severity)
+            },
         },
     }
 }
@@ -494,6 +500,17 @@ mod tests {
         assert_eq!(rule["name"], "missing-timing");
         assert_eq!(rule["defaultConfiguration"]["level"], "warning");
         assert!(rules.iter().all(|rule| rule.get("helpUri").is_none()));
+        // A row whose default is `allow` has the SARIF level `none`
+        // (ADR-0024 decision 12); a Warning row keeps `warning`.
+        let rule_level = |id: &str| {
+            rules
+                .iter()
+                .find(|rule| rule["id"] == id)
+                .unwrap_or_else(|| panic!("a {id} rule"))["defaultConfiguration"]["level"]
+                .clone()
+        };
+        assert_eq!(rule_level("TYPL-410"), "none");
+        assert_eq!(rule_level("TYPL-404"), "warning");
         let error_rule = rules
             .iter()
             .find(|rule| rule["id"] == "MANI-101")

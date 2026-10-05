@@ -357,6 +357,14 @@ fn compile_fixture(relative_to_fixtures: &str) -> v2::Package {
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
     let output = ridlc::compile(&path.display().to_string(), &text);
+    // Preserve the incoming allowance for undocumented fixture items.
+    let diagnostics = output
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| {
+            diagnostic.code != ridl_core::lint::lint_by_name("missing-docs").unwrap().code
+        })
+        .collect::<Vec<_>>();
     if relative_to_fixtures == "cruise.ridl" {
         let expected = [
             (
@@ -374,14 +382,9 @@ fn compile_fixture(relative_to_fixtures: &str) -> v2::Package {
                 "CruiseControl",
             ),
         ];
-        assert_eq!(
-            output.diagnostics.len(),
-            expected.len(),
-            "{:?}",
-            output.diagnostics
-        );
+        assert_eq!(diagnostics.len(), expected.len(), "{:?}", diagnostics);
         for (diagnostic, (code, lint, message, range, identifier)) in
-            output.diagnostics.iter().zip(expected)
+            diagnostics.iter().zip(expected)
         {
             assert_eq!(diagnostic.code, code);
             assert_eq!(diagnostic.severity, ridl_core::diag::Severity::Info);
@@ -402,10 +405,10 @@ fn compile_fixture(relative_to_fixtures: &str) -> v2::Package {
         }
     } else {
         assert!(
-            output.diagnostics.is_empty(),
+            diagnostics.is_empty(),
             "{} must compile with no diagnostic, got: {:?}",
             path.display(),
-            output.diagnostics,
+            diagnostics,
         );
     }
     output.package
@@ -435,8 +438,12 @@ fn a_cross_package_schema_states_the_facts_the_model_states() {
         .join("../ridl-backend-proto/tests/fixtures/cross-package");
     let output = ridlc::compile_workspace(&mut db, &entry)
         .unwrap_or_else(|error| panic!("load {}: {error}", entry.display()));
+    // TYPL-406 (`missing-docs`) is left out: the fixtures have no docs.
     assert!(
-        output.diagnostics.is_empty(),
+        output
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.code.as_str() == "TYPL-406"),
         "the cross-package fixture must compile with no diagnostic, got: {:?}",
         output.diagnostics,
     );
@@ -549,12 +556,14 @@ fn an_optional_scalar_or_enum_field_takes_null_in_the_schema_and_the_model() {
     // absent half there, and a vector no absent element. It reports the first
     // one it meets. The schema backend emits both fields all the same, and the
     // schema is what is under test here, so those refusals are the only
-    // diagnostics allowed.
+    // diagnostics allowed, with TYPL-406 (`missing-docs`): the fixture has no
+    // docs.
     let unexpected: Vec<_> = output
         .diagnostics
         .iter()
         .filter(|diagnostic| {
-            !diagnostic.message.starts_with("a map value is optional")
+            diagnostic.code.as_str() != "TYPL-406"
+                && !diagnostic.message.starts_with("a map value is optional")
                 && !diagnostic
                     .message
                     .starts_with("an array element is optional")

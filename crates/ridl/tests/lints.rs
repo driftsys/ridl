@@ -245,11 +245,11 @@ fn test_ignores_deny() {
     );
 }
 
-/// Entering at a workspace member loads the member alone (ADR-0024 decision 9),
-/// so the root's `[lints]` does not apply: the root's `deny` is an exit 1 from
-/// the root, and from the member RIDL-100 stays at its default Warning, exit 0.
+/// Entering at a workspace member loads its workspace (ADR-0024 decision 9,
+/// as ADR-0026 amends it), so the root's `[lints]` applies to the member: the
+/// root's `deny` is an exit 1 from the root and from the member alike.
 #[test]
-fn member_entry_ignores_root_lints() {
+fn member_entry_applies_root_lints() {
     let dir = TempDir::new("member-entry");
     dir.write(
         "ridl.toml",
@@ -268,13 +268,159 @@ fn member_entry_ignores_root_lints() {
     let (code, _, stderr) = ridl(&["check".as_ref(), member.as_os_str()]);
 
     assert_eq!(
-        code, 0,
-        "from the member, the root's table is ignored:\n{stderr}"
+        code, 1,
+        "from the member, the root's deny applies:\n{stderr}"
     );
     assert!(
-        stderr.contains("warning[RIDL-100]"),
-        "the lint is at its default Warning:\n{stderr}"
+        stderr.contains("error[RIDL-100]"),
+        "the lint is an error at the root's level:\n{stderr}"
     );
+}
+
+/// A two-member workspace: `a` imports `Speed` from `b`, and `b` also holds
+/// a file with an error. Returns the workspace root.
+fn sibling_workspace(dir: &TempDir) -> PathBuf {
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
+    dir.write(
+        "a/ridl.toml",
+        "[package]\nname = \"a\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "a/a.typl",
+        "package a\nimport b.Speed\nstruct Cabin { primary: Speed }\n",
+    );
+    dir.write(
+        "b/ridl.toml",
+        "[package]\nname = \"b\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("b/speed.typl", "package b\ntype Speed: integer [0..300]\n");
+    dir.write(
+        "b/broken.typl",
+        "package b\nstruct Broken { field: Missing }\n",
+    );
+    dir.path().to_path_buf()
+}
+
+/// Checking a member reports only the diagnostics of files under the member:
+/// the error in member `b` is not shown when checking `a`, and the exit code
+/// is 0. From the root, the same error is shown and the exit code is 1.
+#[test]
+fn member_entry_reports_only_the_member() {
+    let dir = TempDir::new("member-scope");
+    let root = sibling_workspace(&dir);
+
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 1, "from the root, b's error is reported:\n{stderr}");
+    assert!(stderr.contains("broken.typl"), "{stderr}");
+
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.join("a").as_os_str()]);
+    assert_eq!(code, 0, "from a, b's error is not reported:\n{stderr}");
+    assert!(!stderr.contains("broken.typl"), "{stderr}");
+}
+
+/// A build entered at a member writes the whole workspace, so an error in
+/// another member still blocks every artifact. The build says why and exits
+/// 1, without showing the other member's diagnostics.
+#[test]
+fn member_build_writes_nothing_when_another_member_has_an_error() {
+    let dir = TempDir::new("member-build");
+    let root = sibling_workspace(&dir);
+    let out = TempDir::new("member-build-out");
+
+    let (code, _, stderr) = ridl(&[
+        "build".as_ref(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "ir-json".as_ref(),
+        root.join("a").as_os_str(),
+    ]);
+
+    assert_eq!(code, 1, "{stderr}");
+    assert!(
+        stderr.contains("another member of the workspace has an error"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("broken.typl"), "{stderr}");
+    let written: Vec<PathBuf> = std::fs::read_dir(out.path())
+        .expect("the out dir is readable")
+        .map(|entry| entry.expect("a readable entry").path())
+        .collect();
+    assert!(written.is_empty(), "the build wrote: {written:?}");
+}
+
+/// A build entered at a member, while another member holds an RSDL-7xx
+/// error, writes the packages and the system without the blocked deployment
+/// (rsdl reference §13). The build exits 1 and says that another member has
+/// an error, without showing it.
+#[test]
+fn member_build_exits_1_when_another_member_leaves_out_a_deployment() {
+    let dir = TempDir::new("member-build-rsdl");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"demo\"]\n");
+    dir.write(
+        "a/ridl.toml",
+        "[package]\nname = \"a\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("a/a.typl", "package a\ntype Level: integer [0..3]\n");
+    dir.write(
+        "demo/ridl.toml",
+        "[package]\nname = \"veh.demo\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "demo/lane.ridl",
+        "package veh.demo\n\ntype Flag: boolean\n\n\
+         interface LaneAssist {\n  signal active: Flag @[100ms..1s]\n}\n\n\
+         service veh.demo.lane : LaneAssist\n",
+    );
+    // `Panel` is not placed in `Bad`: RSDL-701 blocks that deployment only.
+    dir.write(
+        "demo/topology.rsdl",
+        "package veh.demo\n\n\
+         component Lane { offers veh.demo.lane }\n\
+         component Panel { requires LaneAssist }\n\
+         system Vehicle { Lane, Panel }\n\
+         deployment Good for Vehicle { machine A { Lane, Panel } }\n\
+         deployment Bad for Vehicle { machine A { Lane } }\n",
+    );
+    let out = TempDir::new("member-build-rsdl-out");
+
+    let (code, _, stderr) = ridl(&[
+        "build".as_ref(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "ir-json".as_ref(),
+        dir.path().join("a").as_os_str(),
+    ]);
+
+    assert_eq!(code, 1, "{stderr}");
+    assert!(
+        stderr.contains("another member of the workspace has an error"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("RSDL-701"), "{stderr}");
+    assert!(
+        out.path().join("a.ir.json").is_file(),
+        "the packages are written"
+    );
+    let json = std::fs::read_to_string(out.path().join("veh.demo.Vehicle.system.json"))
+        .expect("the system is written");
+    assert!(json.contains("Good") && !json.contains("\"Bad\""), "{json}");
+}
+
+/// A member entry resolves an import of a sibling member, from a relative
+/// entry inside the member as well (`ridl check .` from `a`).
+#[test]
+fn member_entry_resolves_a_sibling_import() {
+    let dir = TempDir::new("member-sibling");
+    let root = sibling_workspace(&dir);
+    std::fs::remove_file(root.join("b/broken.typl")).expect("remove the broken file");
+
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.join("a").as_os_str()]);
+    assert_eq!(code, 0, "b.Speed resolves from a:\n{stderr}");
+
+    let (code, _, stderr) = ridl_in(Some(&root.join("a")), &["check".as_ref(), ".".as_ref()]);
+    assert_eq!(code, 0, "b.Speed resolves from `.` inside a:\n{stderr}");
 }
 
 #[test]
@@ -742,23 +888,39 @@ fn inconsistent_unit_levels_reach_compiler_and_cli_reports() {
         // Compilation preserves the catalogue severity for every level.
         let compiled =
             ridlc::compile_workspace(&mut ridl_core::RidlDatabase::default(), dir.path()).unwrap();
-        assert_eq!(compiled.diagnostics.len(), 1, "{:?}", compiled.diagnostics);
-        assert_eq!(compiled.diagnostics[0].code.as_str(), "TYPL-222");
+        // Preserve the incoming allowance for undocumented fixture items.
+        let compiled_diagnostics = compiled
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| {
+                diagnostic.code != ridl_core::lint::lint_by_name("missing-docs").unwrap().code
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(compiled_diagnostics.len(), 1, "{:?}", compiled_diagnostics);
+        assert_eq!(compiled_diagnostics[0].code.as_str(), "TYPL-222");
         assert_eq!(
-            compiled.diagnostics[0].severity,
+            compiled_diagnostics[0].severity,
             ridl_core::diag::Severity::Info
         );
 
         // The shared command driver applies levels; the binary must agree.
         let run = ridlc::run_check(dir.path(), ridl_core::Frozen::Yes).unwrap();
+        // Preserve the incoming allowance for undocumented fixture items.
+        let run_diagnostics = run
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| {
+                diagnostic.code != ridl_core::lint::lint_by_name("missing-docs").unwrap().code
+            })
+            .collect::<Vec<_>>();
         assert_eq!(
-            run.diagnostics.len(),
+            run_diagnostics.len(),
             expected_count,
             "{level}: {:?}",
-            run.diagnostics
+            run_diagnostics
         );
         assert_eq!(run.has_error(), expected_exit == 1);
-        if let Some(diagnostic) = run.diagnostics.first() {
+        if let Some(diagnostic) = run_diagnostics.first() {
             assert_eq!(diagnostic.code.as_str(), "TYPL-222");
             assert_eq!(
                 diagnostic.severity,
@@ -777,7 +939,12 @@ fn inconsistent_unit_levels_reach_compiler_and_cli_reports() {
         ]);
         assert_eq!(exit, expected_exit, "{level}: {stderr}");
         let diagnostics: serde_json::Value = serde_json::from_str(&stdout).unwrap();
-        let diagnostics = diagnostics.as_array().unwrap();
+        let diagnostics = diagnostics
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|diagnostic| diagnostic["lint"] != "missing-docs")
+            .collect::<Vec<_>>();
         assert_eq!(
             diagnostics.len(),
             expected_count,
@@ -793,4 +960,180 @@ fn inconsistent_unit_levels_reach_compiler_and_cli_reports() {
             );
         }
     }
+}
+
+/// A type documented with a `/** */` block, which draws TYPL-410
+/// (`doc-comment-style`, `allow` by default) and nothing else.
+const BLOCK_DOC_SOURCE: &str = "package demo\n\n/** A speed. */\ntype Speed: integer [0..300]\n";
+
+/// A workspace with one member whose only file is [`BLOCK_DOC_SOURCE`] and
+/// whose manifest ends with `lints`. Returns the workspace root.
+fn block_doc_workspace(dir: &TempDir, lints: &str) -> PathBuf {
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"speed\"]\n");
+    dir.write(
+        "speed/ridl.toml",
+        &format!("[package]\nname = \"demo\"\nversion = \"1.0.0\"\n{lints}"),
+    );
+    dir.write("speed/speed.typl", BLOCK_DOC_SOURCE);
+    dir.path().to_path_buf()
+}
+
+#[test]
+fn doc_comment_style_is_silent_by_default() {
+    let dir = TempDir::new("doc-style-default");
+    let root = block_doc_workspace(&dir, "");
+
+    let (code, stdout, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 0, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert!(
+        !stderr.contains("TYPL-410") && !stdout.contains("TYPL-410"),
+        "a lint that is allowed by default is not reported:\n{stderr}"
+    );
+}
+
+#[test]
+fn doc_comment_style_at_warn_is_reported() {
+    let dir = TempDir::new("doc-style-warn");
+    let root = block_doc_workspace(&dir, "\n[lints]\ndoc-comment-style = \"warn\"\n");
+
+    let (code, stdout, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 0, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert!(
+        stderr.contains("warning[TYPL-410]"),
+        "the lint at warn is rendered as a warning:\n{stderr}"
+    );
+}
+
+#[test]
+fn doc_comment_style_at_deny_exits_1() {
+    let dir = TempDir::new("doc-style-deny");
+    let root = block_doc_workspace(&dir, "\n[lints]\ndoc-comment-style = \"deny\"\n");
+
+    let (code, stdout, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 1, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert!(
+        stderr.contains("error[TYPL-410]"),
+        "the lint at deny is rendered as an error:\n{stderr}"
+    );
+}
+
+/// The commands that apply no `[lints]` levels (ADR-0024 decision 8) still
+/// leave out a lint that is `allow` by default: `ridl baseline` and
+/// `ridl lock` render the warnings of the compile.
+#[test]
+fn doc_comment_style_is_silent_in_baseline_and_lock() {
+    let dir = TempDir::new("doc-style-baseline");
+    let root = block_doc_workspace(&dir, "");
+
+    let (code, stdout, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert!(
+        !stderr.contains("TYPL-410"),
+        "`ridl lock` does not report an allow-by-default lint:\n{stderr}"
+    );
+
+    let (code, stdout, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert!(
+        !stderr.contains("TYPL-410"),
+        "`ridl baseline` does not report an allow-by-default lint:\n{stderr}"
+    );
+}
+
+/// `ridl diff` renders the diagnostics of a side that does not compile, with
+/// no `[lints]` levels; an allow-by-default lint is left out of them.
+#[test]
+fn doc_comment_style_is_silent_in_a_diff_compile_error() {
+    let dir = TempDir::new("doc-style-diff");
+    let old = dir.write("old/speed.typl", BLOCK_DOC_SOURCE);
+    let new = dir.write(
+        "new/speed.typl",
+        &format!("{BLOCK_DOC_SOURCE}type Broken: Missing\n"),
+    );
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+
+    assert_eq!(code, 2, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert!(
+        stderr.contains("error"),
+        "the new side does not compile:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("TYPL-410"),
+        "`ridl diff` does not report an allow-by-default lint:\n{stderr}"
+    );
+}
+
+/// A two-member workspace for `missing-docs`: member `a` is documented and
+/// imports `Speed` from member `b`, whose declarations have no docs. Returns
+/// the workspace root.
+fn undocumented_dependency_workspace(dir: &TempDir) -> PathBuf {
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
+    dir.write(
+        "a/ridl.toml",
+        "[package]\nname = \"a\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "a/a.typl",
+        "package a\nimport b.Speed\n/// The cabin.\nstruct Cabin {\n  /// The primary speed.\n  \
+         primary: Speed\n}\n",
+    );
+    dir.write(
+        "b/ridl.toml",
+        "[package]\nname = \"b\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "b/speed.typl",
+        "package b\ntype Speed: integer [0..300]\nstruct Pair {\n  left: Speed\n}\n",
+    );
+    dir.path().to_path_buf()
+}
+
+/// TYPL-406 obeys ADR-0024 decision 10: checking member `a` does not report
+/// the undocumented items of member `b`, which is outside the entry's
+/// directory tree. From the root, the same items are reported.
+#[test]
+fn missing_docs_skips_dependencies() {
+    let dir = TempDir::new("missing-docs-deps");
+    let root = undocumented_dependency_workspace(&dir);
+
+    let (code, stdout, stderr) = ridl(&["check".as_ref(), root.join("a").as_os_str()]);
+    assert_eq!(code, 0, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert!(
+        !stderr.contains("TYPL-406") && !stdout.contains("TYPL-406"),
+        "the dependency's undocumented items are not reported:\n{stderr}"
+    );
+
+    let (code, stdout, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert_eq!(
+        stderr.matches("warning[TYPL-406]").count(),
+        3,
+        "from the root, `Speed`, `Pair` and `left` are reported:\n{stderr}"
+    );
+}
+
+#[test]
+fn missing_docs_at_allow_is_silent() {
+    let dir = TempDir::new("missing-docs-allow");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"b\"]\n");
+    dir.write(
+        "b/ridl.toml",
+        "[package]\nname = \"b\"\nversion = \"1.0.0\"\n\n[lints]\nmissing-docs = \"allow\"\n",
+    );
+    dir.write(
+        "b/speed.typl",
+        "package b\ntype Speed: integer [0..300]\nstruct Pair {\n  left: Speed\n}\n",
+    );
+
+    let (code, stdout, stderr) = ridl(&["check".as_ref(), dir.path().as_os_str()]);
+
+    assert_eq!(code, 0, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert!(
+        !stderr.contains("TYPL-406") && !stdout.contains("TYPL-406"),
+        "a lint at allow is not reported:\n{stderr}"
+    );
 }

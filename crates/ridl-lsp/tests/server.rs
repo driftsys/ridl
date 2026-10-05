@@ -127,6 +127,17 @@ fn shut_down(client: &Connection, id: i32) {
     notify::<lt::notification::Exit>(client, ());
 }
 
+/// The diagnostics other than TYPL-406 (`missing-docs`), which [`codes`]
+/// leaves out too.
+fn without_missing_docs(diagnostics: &[lt::Diagnostic]) -> Vec<&lt::Diagnostic> {
+    diagnostics
+        .iter()
+        .filter(|diagnostic| {
+            diagnostic.code != Some(lt::NumberOrString::String("TYPL-406".to_string()))
+        })
+        .collect()
+}
+
 fn codes(diagnostics: &[lt::Diagnostic]) -> Vec<&str> {
     diagnostics
         .iter()
@@ -134,6 +145,9 @@ fn codes(diagnostics: &[lt::Diagnostic]) -> Vec<&str> {
             Some(lt::NumberOrString::String(code)) => code.as_str(),
             other => panic!("expected a string code, got {other:?}"),
         })
+        // TYPL-406 (`missing-docs`) is left out: most fixtures here leave
+        // their items undocumented.
+        .filter(|code| *code != "TYPL-406")
         .collect()
 }
 
@@ -639,7 +653,7 @@ fn diagnostics_and_code_actions_over_an_in_memory_connection() {
     );
     let opened = next_publish(&client, &file_uri);
     assert_eq!(codes(&opened.diagnostics), vec!["FORM-101", "TYPL-302"]);
-    for diagnostic in &opened.diagnostics {
+    for diagnostic in without_missing_docs(&opened.diagnostics) {
         assert_eq!(
             diagnostic.range,
             range((1, 24), (1, 28)),
@@ -690,9 +704,9 @@ fn diagnostics_and_code_actions_over_an_in_memory_connection() {
     );
     let fixed = next_publish(&client, &file_uri);
     assert_eq!(
-        fixed.diagnostics,
-        Vec::new(),
-        "the fixed file publishes an empty diagnostic list",
+        without_missing_docs(&fixed.diagnostics),
+        Vec::<&lt::Diagnostic>::new(),
+        "the fixed file publishes no diagnostic other than TYPL-406",
     );
 
     shut_down(&client, 3);
@@ -966,6 +980,125 @@ fn an_unloadable_manifest_above_an_opened_file_shows_the_error_once() {
     );
 
     shut_down(&client, 5);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// The hover markdown on `Speed` in `app/lib.typl` of [`write_workspace`].
+fn hover_on_app_speed(client: &Connection, id: i32, app: lt::Uri) -> String {
+    let hover = hover_at(client, id, app, pos(2, 26)).expect("Speed has hover content");
+    match hover.contents {
+        lt::HoverContents::Markup(markup) => markup.value,
+        other => panic!("expected markdown hover, got {other:?}"),
+    }
+}
+
+/// A file in a workspace member loads the member's workspace (ADR-0002 §4,
+/// issue #529), so its import of the sibling member `veh.common` resolves:
+/// whether the editor is opened at the member directory, or the client sends
+/// no root and the member file is the first one opened.
+#[test]
+fn a_member_file_resolves_an_import_of_a_sibling_member() {
+    let dir = TempDir::new("member-sibling");
+    let (_veh, app) = write_workspace(&dir);
+
+    let (client, server) = start(uri_of(&dir.path().join("app")));
+    did_open(&client, &app, APP);
+    let value = hover_on_app_speed(&client, 2, app.clone());
+    assert!(
+        value.contains("Vehicle speed over ground"),
+        "the doc of the sibling's type: {value}",
+    );
+    shut_down(&client, 3);
+    server.join().expect("thread joins").expect("clean exit");
+
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+    did_open(&client, &app, APP);
+    let value = hover_on_app_speed(&client, 2, app);
+    assert!(
+        value.contains("Vehicle speed over ground"),
+        "the doc of the sibling's type: {value}",
+    );
+    shut_down(&client, 3);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// The editor is opened at a workspace member whose root `ridl.toml` cannot
+/// be read: the load error is shown once, at initialize, and names the root
+/// manifest; opening a member file does not show it again.
+#[test]
+fn a_member_with_an_unparsable_root_manifest_shows_one_error() {
+    let dir = TempDir::new("member-bad-root");
+    std::fs::write(dir.path().join("ridl.toml"), [0xff, 0xfe]).expect("write the manifest");
+    std::fs::create_dir_all(dir.path().join("app")).expect("create app");
+    dir.write(
+        "app/ridl.toml",
+        "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+    );
+    let app = uri_of(&dir.write("app/lib.typl", APP));
+    let (client, server) = start(uri_of(&dir.path().join("app")));
+
+    did_open(&client, &app, APP);
+    let shown = show_messages_before_answer(&client, 2);
+    assert_eq!(shown.len(), 1, "one message: {shown:?}");
+    let manifest = dir.path().join("ridl.toml").display().to_string();
+    assert!(
+        shown[0].message.contains(&format!("`{manifest}`")),
+        "the message names the root manifest: {}",
+        shown[0].message,
+    );
+
+    shut_down(&client, 3);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// The editor is opened at a workspace member whose root `ridl.toml` has a
+/// TOML syntax error: the load reads no package, so it is a load error. It is
+/// shown once and names the root manifest.
+#[test]
+fn a_member_with_a_root_manifest_syntax_error_shows_one_error() {
+    let dir = TempDir::new("member-syntax-root");
+    dir.write("ridl.toml", "[workspace\nmembers = [\"app\"]\n");
+    std::fs::create_dir_all(dir.path().join("app")).expect("create app");
+    dir.write(
+        "app/ridl.toml",
+        "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+    );
+    let app = uri_of(&dir.write("app/lib.typl", APP));
+    let (client, server) = start(uri_of(&dir.path().join("app")));
+
+    did_open(&client, &app, APP);
+    let shown = show_messages_before_answer(&client, 2);
+    assert_eq!(shown.len(), 1, "one message: {shown:?}");
+    let manifest = dir.path().join("ridl.toml").display().to_string();
+    assert!(
+        shown[0].message.contains(&format!("`{manifest}`")),
+        "the message names the root manifest: {}",
+        shown[0].message,
+    );
+
+    shut_down(&client, 3);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// The editor is opened at a directory whose `ridl.toml` cannot be read:
+/// the initialize notice shows the error, and the first `didOpen` under the
+/// same manifest does not show it again (issue #529, gap 2).
+#[test]
+fn the_initialize_notice_and_did_open_do_not_repeat_a_load_error() {
+    let dir = TempDir::new("repeat-load-error");
+    std::fs::create_dir_all(dir.path().join("project")).expect("create project");
+    std::fs::write(dir.path().join("project/ridl.toml"), [0xff, 0xfe]).expect("write the manifest");
+    let first = dir.write("project/first.typl", BROKEN);
+    let (client, server) = start(uri_of(&dir.path().join("project")));
+
+    did_open(&client, &uri_of(&first), BROKEN);
+    let shown = show_messages_before_answer(&client, 2);
+    assert_eq!(shown.len(), 1, "one message: {shown:?}");
+    assert_eq!(shown[0].typ, lt::MessageType::WARNING);
+
+    shut_down(&client, 3);
     server.join().expect("thread joins").expect("clean exit");
 }
 
@@ -2663,21 +2796,29 @@ const RSDL_SYSTEM: &str = "package veh.topology\n\
 \n\
 import veh.adas.LaneAssist\n\
 \n\
+/// A component.\n\
 component Cruise [ instances = (primary, backup) ] {\n\
 \x20 offers veh.adas.cruise\n\
 \x20 requires LaneAssist\n\
 }\n\
 \n\
+/// A component.\n\
 component Lane { offers veh.adas.lane }\n\
 \n\
+/// A component.\n\
 component Panel { requires veh.adas.LaneAssist, requires veh.adas.access }\n\
 \n\
+/// The system.\n\
 system Vehicle { Cruise, Lane, Panel, veh.adas.access }\n\
 \n\
+/// The distribution.\n\
 distribution Adas { veh.adas.access, Cruise, Lane, Panel }\n\
 \n\
+/// The deployment.\n\
 deployment Production for Vehicle {\n\
+\x20 /// A machine.\n\
 \x20 machine Hpc { Cruise.primary, Lane, veh.adas.access }\n\
+\x20 /// A machine.\n\
 \x20 machine Cockpit { Cruise.backup, Panel [ linux.cpuset = (2, 3) ] }\n\
 }\n";
 
@@ -2923,7 +3064,7 @@ fn hover_on_an_rsdl_reference_renders_the_named_declaration() {
             13,
             "requires veh.adas.LaneAssist",
             20,
-            &["`veh.adas.LaneAssist`", "interface"],
+            &["interface veh.adas.LaneAssist"],
         ),
         (
             14,
@@ -3011,11 +3152,13 @@ fn a_lock_diagnostic_is_published_under_the_lock_files_uri() {
 // --- the service catalog (issue #386) --------------------------------------
 
 /// The first member of the catalog fixture: it declares the service `x.s`.
-const CATALOG_A: &str = "package a\ninterface I {}\nservice x.s : I\n";
+const CATALOG_A: &str =
+    "package a\n/// An interface.\ninterface I {}\n/// A service.\nservice x.s : I\n";
 
 /// The second member of the catalog fixture: it declares `x.s` again, which
 /// the flat global service namespace refuses (RIDL-140).
-const CATALOG_B: &str = "package b\ninterface J {}\nservice x.s : J\n";
+const CATALOG_B: &str =
+    "package b\n/// An interface.\ninterface J {}\n/// A service.\nservice x.s : J\n";
 
 /// The `interfaces.lock` that `ridl lock` writes for [`CATALOG_A`].
 const CATALOG_LOCK: &str =
@@ -3857,4 +4000,1421 @@ fn fan_out_through_lsp_counts_system_requires_and_member_edges() {
     }
     shut_down(&client, 302);
     server.join().unwrap().unwrap();
+}
+
+// --- docs in the source: hover, completion and quick fixes (ADR-0026) ------
+
+/// The vocabulary of the docs fixture: a doc on a type, an enum value, an
+/// enumset bit, a struct field, a union arm, and a declaration with every
+/// tag that hover shows. `LIMIT`'s doc holds a two-byte `ö` and a `ß` before
+/// its link, so the link's byte offset and its character offset differ.
+const DOC_VOCAB: &str = "package veh.common\n\
+\n\
+/// Vehicle speed over ground.\n\
+type Speed : km/h [0.0..250.0 step 0.5]\n\
+\n\
+/// A gear selector position.\n\
+enum Gear {\n\
+\x20 /// Parked.\n\
+\x20 PARK = 1\n\
+\x20 /// Driving forward.\n\
+\x20 DRIVE = 2\n\
+}\n\
+\n\
+/// Explicit bits.\n\
+enumset Flags {\n\
+\x20 /// The first bit.\n\
+\x20 FIRST = 0\n\
+}\n\
+\n\
+/// One motion sample.\n\
+struct Motion {\n\
+\x20 /// Current speed.\n\
+\x20 speed: Speed\n\
+\x20 /// The gear in use, a [Gear].\n\
+\x20 gear: Gear\n\
+}\n\
+\n\
+/// Either reading.\n\
+union Reading {\n\
+\x20 /// A speed reading.\n\
+\x20 speed: Speed\n\
+}\n\
+\n\
+/// Gr\u{f6}\u{df}e: [Speed]\n\
+const LIMIT : Speed = 100.0\n\
+\n\
+/// An old speed.\n\
+/// @since 1.1\n\
+/// @labels QM\n\
+/// @deprecated \"use Speed\"\n\
+type OldSpeed : km/h [0.0..100.0]\n";
+
+/// The contract of the docs fixture: a command with one documented
+/// parameter and one parameter without a doc.
+const DOC_CONTRACT: &str = "package veh.adas\n\
+\n\
+import veh.common.Speed\n\
+\n\
+/// Cruise control.\n\
+interface CruiseControl {\n\
+\x20 /// Sets the target.\n\
+\x20 command setTarget(\n\
+\x20   /// The target to hold.\n\
+\x20   target: Speed\n\
+\x20   limit: Speed\n\
+\x20 ) @[..50ms]\n\
+}\n";
+
+/// Writes the docs fixture as a two-member workspace and returns the
+/// `(vocabulary, contract)` file URIs.
+fn write_doc_workspace(dir: &TempDir) -> (lt::Uri, lt::Uri) {
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"veh-common\", \"adas\"]\n",
+    );
+    for (member, package) in [("veh-common", "veh.common"), ("adas", "veh.adas")] {
+        std::fs::create_dir_all(dir.path().join(member)).expect("create the member directory");
+        dir.write(
+            &format!("{member}/ridl.toml"),
+            &format!("[package]\nname = \"{package}\"\nversion = \"1.0.0\"\n"),
+        );
+    }
+    let vocab = dir.write("veh-common/lib.typl", DOC_VOCAB);
+    let contract = dir.write("adas/adas.ridl", DOC_CONTRACT);
+    (uri_of(&vocab), uri_of(&contract))
+}
+
+/// Hover on a struct field shows its doc, then a **Contract** list with the
+/// rules of its type, `Speed`.
+#[test]
+fn hover_on_a_field_shows_doc_and_contract() {
+    let dir = TempDir::new("doc-field");
+    let (vocab, _contract) = write_doc_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(&client, 10, vocab, pos_in(DOC_VOCAB, "speed: Speed", 0, 1));
+    assert!(value.contains("speed"), "names the field: {value}");
+    assert!(value.contains("#1"), "keeps the ordinal: {value}");
+    let doc = value.find("Current speed.").expect("the field's doc");
+    let contract = value.find("**Contract**").expect("a Contract section");
+    assert!(doc < contract, "the doc comes before the Contract: {value}");
+    assert!(
+        value[contract..].contains("- range 0 ..= 250"),
+        "the range of `Speed`: {value}"
+    );
+    assert!(
+        value[contract..].contains("- unit km/h"),
+        "the unit of `Speed`: {value}"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on an enum value, an enumset bit, a union arm and a documented
+/// parameter shows the doc of each.
+#[test]
+fn hover_on_an_enum_value_union_arm_and_parameter() {
+    let dir = TempDir::new("doc-members");
+    let (vocab, contract) = write_doc_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(&client, 10, vocab.clone(), pos_in(DOC_VOCAB, "PARK", 0, 1));
+    assert!(value.contains("PARK"), "names the value: {value}");
+    assert!(value.contains("Parked."), "the value's doc: {value}");
+    assert!(
+        !value.contains("Driving forward."),
+        "only this value: {value}"
+    );
+
+    let value = hover_markdown(&client, 11, vocab.clone(), pos_in(DOC_VOCAB, "FIRST", 0, 1));
+    assert!(value.contains("The first bit."), "the bit's doc: {value}");
+
+    // The union arm `speed`, the second `speed: Speed` in the file.
+    let value = hover_markdown(&client, 12, vocab, pos_in(DOC_VOCAB, "speed: Speed", 1, 1));
+    assert!(value.contains("A speed reading."), "the arm's doc: {value}");
+    assert!(!value.contains("Current speed."), "not the field: {value}");
+
+    let value = hover_markdown(
+        &client,
+        13,
+        contract,
+        pos_in(DOC_CONTRACT, "target: Speed", 0, 1),
+    );
+    assert!(
+        value.contains("The target to hold."),
+        "the parameter's doc: {value}"
+    );
+    assert!(
+        !value.contains("From `Speed`:"),
+        "a documented parameter does not fall back: {value}"
+    );
+    assert!(
+        value.contains("**Contract**") && value.contains("- range 0 ..= 250"),
+        "the parameter's type rules: {value}"
+    );
+
+    shut_down(&client, 14);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A parameter with no doc shows the doc of its type under the line
+/// "From `Speed`:".
+#[test]
+fn hover_on_a_parameter_without_doc_falls_back_to_its_type() {
+    let dir = TempDir::new("doc-param");
+    let (_vocab, contract) = write_doc_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(
+        &client,
+        10,
+        contract,
+        pos_in(DOC_CONTRACT, "limit: Speed", 0, 1),
+    );
+    let from = value.find("From `Speed`:").expect("the fallback line");
+    let doc = value
+        .find("Vehicle speed over ground.")
+        .expect("the type's doc");
+    assert!(from < doc, "the type's doc follows the line: {value}");
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A doc link renders as a Markdown link to the target's file, with a
+/// 1-based line fragment.
+#[test]
+fn hover_renders_a_doc_link_as_a_markdown_link() {
+    let dir = TempDir::new("doc-link");
+    let (vocab, _contract) = write_doc_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(
+        &client,
+        10,
+        vocab.clone(),
+        pos_in(DOC_VOCAB, "gear: Gear", 0, 1),
+    );
+    let line = find_pos(DOC_VOCAB, "enum Gear", 0).line + 1;
+    let expected = format!("The gear in use, a [Gear]({}#L{line}).", vocab.as_str());
+    assert!(
+        value.contains(&expected),
+        "expected `{expected}` in: {value}"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// The doc link after `Größe: ` is replaced at its byte offset, and its
+/// target line is the line of `type Speed` (Review Focus 3).
+#[test]
+fn hover_link_after_multibyte_text() {
+    let dir = TempDir::new("doc-utf8");
+    let (vocab, _contract) = write_doc_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(&client, 10, vocab.clone(), pos_in(DOC_VOCAB, "LIMIT", 0, 1));
+    let line = find_pos(DOC_VOCAB, "type Speed", 0).line + 1;
+    let expected = format!("Gr\u{f6}\u{df}e: [Speed]({}#L{line})", vocab.as_str());
+    assert!(
+        value.contains(&expected),
+        "expected `{expected}` in: {value}"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover shows, in order: the signature, the doc, the Contract, then
+/// `@since`, the labels and the deprecation reason.
+#[test]
+fn hover_shows_since_labels_and_deprecation_in_order() {
+    let dir = TempDir::new("doc-order");
+    let (vocab, _contract) = write_doc_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(&client, 10, vocab, pos_in(DOC_VOCAB, "OldSpeed", 0, 1));
+    let positions: Vec<usize> = [
+        "type veh.common.OldSpeed",
+        "An old speed.",
+        "**Contract**",
+        "**Since:** 1.1",
+        "**Labels:** QM",
+        "**Deprecated:** use Speed",
+    ]
+    .iter()
+    .map(|part| {
+        value
+            .find(part)
+            .unwrap_or_else(|| panic!("`{part}` in: {value}"))
+    })
+    .collect();
+    assert!(
+        positions.windows(2).all(|pair| pair[0] < pair[1]),
+        "the sections are in order: {value}"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on an rsdl component — on a reference to it and on its own name —
+/// shows its doc; hover on the system shows the system's doc.
+#[test]
+fn hover_on_an_rsdl_component_shows_its_doc() {
+    let dir = TempDir::new("doc-rsdl");
+    let (_contracts, system) = write_rsdl_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(
+        &client,
+        10,
+        system.clone(),
+        pos_in(RSDL_SYSTEM, "{ Cruise, Lane", 0, 3),
+    );
+    assert!(value.contains("component veh.topology.Cruise"), "{value}");
+    assert!(
+        value.contains("A component."),
+        "the component's doc: {value}"
+    );
+
+    let value = hover_markdown(
+        &client,
+        11,
+        system.clone(),
+        pos_in(RSDL_SYSTEM, "component Lane", 0, 11),
+    );
+    assert!(value.contains("component veh.topology.Lane"), "{value}");
+    assert!(
+        value.contains("A component."),
+        "the declaration's doc: {value}"
+    );
+
+    let value = hover_markdown(
+        &client,
+        12,
+        system,
+        pos_in(RSDL_SYSTEM, "for Vehicle", 0, 5),
+    );
+    assert!(value.contains("The system."), "the system's doc: {value}");
+
+    shut_down(&client, 13);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on an interface's name shows its doc.
+#[test]
+fn hover_on_an_interface_shows_its_doc() {
+    let dir = TempDir::new("doc-interface");
+    let (_vocab, contract) = write_doc_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(
+        &client,
+        10,
+        contract,
+        pos_in(DOC_CONTRACT, "CruiseControl", 0, 1),
+    );
+    assert!(
+        value.contains("interface veh.adas.CruiseControl"),
+        "{value}"
+    );
+    assert!(
+        value.contains("Cruise control."),
+        "the interface's doc: {value}"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on the name of a distribution, a deployment and a machine shows the
+/// doc of each, and hover on a body line with a doc shows that doc below the
+/// hover of the declaration the line names.
+#[test]
+fn hover_on_rsdl_declaration_names_and_lines_shows_their_docs() {
+    let dir = TempDir::new("doc-rsdl-names");
+    let (_contracts, _system) = write_rsdl_workspace(&dir);
+    let text = RSDL_SYSTEM.replace(
+        "system Vehicle { Cruise,",
+        "system Vehicle {\n  /// Cruise is on board.\n  Cruise,",
+    );
+    let system = uri_of(&dir.write("topology/system.rsdl", &text));
+    let (client, server) = start(uri_of(dir.path()));
+
+    let cases: [(i32, &str, &str); 3] = [
+        (10, "distribution Adas", "The distribution."),
+        (11, "deployment Production", "The deployment."),
+        (12, "machine Hpc", "A machine."),
+    ];
+    for (id, needle, doc) in cases {
+        let (keyword, name) = needle.split_once(' ').expect("a keyword and a name");
+        let cursor = pos_in(&text, needle, 0, keyword.len() as u32 + 2);
+        let value = hover_markdown(&client, id, system.clone(), cursor);
+        assert!(
+            value.contains(&format!("{keyword} veh.topology.")),
+            "{value}"
+        );
+        assert!(value.contains(name), "{value}");
+        assert!(value.contains(doc), "`{doc}` at `{needle}`: {value}");
+    }
+
+    let value = hover_markdown(&client, 13, system, pos_in(&text, "  Cruise,", 0, 3));
+    let component = value
+        .find("component veh.topology.Cruise")
+        .expect("the component's hover");
+    let line = value.find("Cruise is on board.").expect("the line's doc");
+    assert!(component < line, "the line's doc follows: {value}");
+
+    shut_down(&client, 14);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A completion item for a named type carries the type's doc as its
+/// `documentation`, without the Contract list.
+#[test]
+fn completion_items_carry_documentation() {
+    let uri = path_to_uri("/ridl-lsp-complete-doc/types.typl").expect("an absolute synthetic path");
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+
+    // `struct Holder { item: }` on line 3; a cursor at column 22 sits just
+    // past `: `.
+    let text =
+        "package demo\n/// Vehicle speed.\ntype Speed: integer [0..10]\nstruct Holder { item: }\n";
+    did_open(&client, &uri, text);
+    let items = complete_at(&client, 10, uri.clone(), pos(3, 22));
+    let speed = items
+        .iter()
+        .find(|item| item.label == "Speed")
+        .expect("`Speed` is offered");
+    let documentation = match &speed.documentation {
+        Some(lt::Documentation::MarkupContent(markup)) => {
+            assert_eq!(markup.kind, lt::MarkupKind::Markdown);
+            markup.value.clone()
+        }
+        other => panic!("expected markdown documentation, got {other:?}"),
+    };
+    assert_eq!(documentation, "Vehicle speed.");
+    assert!(!documentation.contains("Contract"));
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Sends a code-action request over `range` and returns the quick fixes.
+fn code_actions_at(
+    client: &Connection,
+    id: i32,
+    uri: &lt::Uri,
+    range: lt::Range,
+) -> Vec<lt::CodeAction> {
+    request::<lt::request::CodeActionRequest>(
+        client,
+        id,
+        lt::CodeActionParams {
+            text_document: lt::TextDocumentIdentifier { uri: uri.clone() },
+            range,
+            context: lt::CodeActionContext::default(),
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        },
+    );
+    let response = next_response(client);
+    let actions: Vec<lt::CodeActionOrCommand> =
+        serde_json::from_value(response.response_result.expect("code actions succeed"))
+            .expect("a valid code action list");
+    actions
+        .into_iter()
+        .map(|action| match action {
+            lt::CodeActionOrCommand::CodeAction(action) => action,
+            other => panic!("expected a code action, got {other:?}"),
+        })
+        .collect()
+}
+
+/// The one text edit a quick fix makes in `uri`.
+fn single_edit(action: &lt::CodeAction, uri: &lt::Uri) -> lt::TextEdit {
+    let edits = edits_for(action.edit.as_ref().expect("the fix edits"), uri);
+    assert_eq!(edits.len(), 1, "one edit: {edits:?}");
+    edits[0].clone()
+}
+
+/// A `missing-docs` (TYPL-406) diagnostic offers a quick fix that inserts a
+/// `///` line above the item, at the item's indentation.
+#[test]
+fn missing_docs_offers_a_quick_fix_that_inserts_a_doc_line() {
+    let dir = TempDir::new("doc-fix-406");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n",
+    );
+    let text = "package demo\n\n/// A holder.\nstruct Holder {\n  item: integer\n}\n";
+    let file = uri_of(&dir.write("demo.typl", text));
+    let (client, server) = start(uri_of(dir.path()));
+
+    let published = next_publish(&client, &file);
+    let diagnostic = published
+        .diagnostics
+        .iter()
+        .find(|d| d.code == Some(lt::NumberOrString::String("TYPL-406".to_string())))
+        .expect("TYPL-406 on the undocumented field");
+    assert_eq!(diagnostic.range, range_of(text, "item", 0));
+
+    let actions = code_actions_at(&client, 10, &file, diagnostic.range);
+    assert_eq!(actions.len(), 1, "one quick fix: {actions:?}");
+    assert_eq!(actions[0].kind, Some(lt::CodeActionKind::QUICKFIX));
+    let edit = single_edit(&actions[0], &file);
+    assert_eq!(
+        edit.range,
+        range((4, 0), (4, 0)),
+        "at the start of the line"
+    );
+    assert_eq!(edit.new_text, "  /// \n", "a `///` line at the indentation");
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A `doc-comment-style` (TYPL-410) diagnostic, raised with the lint at
+/// `warn`, offers a quick fix that rewrites the `/** */` comment as `///`
+/// lines.
+#[test]
+fn doc_comment_style_offers_a_quick_fix_that_rewrites_the_comment() {
+    let dir = TempDir::new("doc-fix-410");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n\n[lints]\ndoc-comment-style = \"warn\"\n",
+    );
+    let text = "package demo\n\n/**\n * A speed.\n * In km/h.\n */\ntype Speed: integer [0..10]\n";
+    let file = uri_of(&dir.write("demo.typl", text));
+    let (client, server) = start(uri_of(dir.path()));
+
+    let published = next_publish(&client, &file);
+    let diagnostic = published
+        .diagnostics
+        .iter()
+        .find(|d| d.code == Some(lt::NumberOrString::String("TYPL-410".to_string())))
+        .expect("TYPL-410 at `warn`");
+    assert_eq!(diagnostic.severity, Some(lt::DiagnosticSeverity::WARNING));
+    assert_eq!(diagnostic.range, range((2, 0), (5, 3)), "the whole comment");
+
+    let actions = code_actions_at(&client, 10, &file, diagnostic.range);
+    assert_eq!(actions.len(), 1, "one quick fix: {actions:?}");
+    let edit = single_edit(&actions[0], &file);
+    assert_eq!(edit.range, range((2, 0), (5, 3)));
+    assert_eq!(edit.new_text, "/// A speed.\n/// In km/h.");
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A package whose contract clauses use members: parameters, an interaction
+/// of the same shape, and enum values, bare and qualified.
+const CONTRACT_USES: &str = "package demo\n\
+\n\
+/// A speed.\n\
+type Speed : km/h [0.0..250.0]\n\
+\n\
+/// A gear.\n\
+enum Gear {\n\
+\x20 /// Parked.\n\
+\x20 PARK = 1\n\
+\x20 /// Driving.\n\
+\x20 DRIVE = 2\n\
+}\n\
+\n\
+/// The controls.\n\
+interface Controls {\n\
+\x20 /// The current speed.\n\
+\x20 signal currentSpeed : Speed @10ms\n\
+\x20 /// Sets the target.\n\
+\x20 command setTarget(\n\
+\x20   /// The target to hold.\n\
+\x20   target: Speed\n\
+\x20   limit: Speed\n\
+\x20 ) [\n\
+\x20   require target <= limit\n\
+\x20 ] @[..50ms]\n\
+\x20 /// Sets the gear.\n\
+\x20 command setGear(position: Gear) [\n\
+\x20   require position != Gear.PARK || currentSpeed == 0.0\n\
+\x20   require position != demo.Gear.DRIVE\n\
+\x20 ] @[..50ms]\n\
+}\n";
+
+/// Writes `text` as the one file of a single-package workspace `demo` and
+/// returns its URI.
+fn write_demo_file(dir: &TempDir, name: &str, text: &str) -> lt::Uri {
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n",
+    );
+    uri_of(&dir.write(name, text))
+}
+
+/// Hover on a parameter used in a `require` clause shows the parameter's
+/// hover: its own doc, or the doc of its type when it has none.
+#[test]
+fn hover_on_a_parameter_used_in_a_contract() {
+    let dir = TempDir::new("doc-use-param");
+    let file = write_demo_file(&dir, "demo.ridl", CONTRACT_USES);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(
+        &client,
+        10,
+        file.clone(),
+        pos_in(CONTRACT_USES, "target <= limit", 0, 1),
+    );
+    assert!(value.contains("param Controls.setTarget.target"), "{value}");
+    assert!(value.contains("The target to hold."), "{value}");
+
+    let value = hover_markdown(&client, 11, file, pos_in(CONTRACT_USES, "limit\n", 0, 1));
+    assert!(value.contains("param Controls.setTarget.limit"), "{value}");
+    assert!(value.contains("From `Speed`:"), "{value}");
+
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on an interaction of the same shape read in a `require` clause
+/// shows the interaction's hover.
+#[test]
+fn hover_on_an_interaction_used_in_a_contract() {
+    let dir = TempDir::new("doc-use-signal");
+    let file = write_demo_file(&dir, "demo.ridl", CONTRACT_USES);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(
+        &client,
+        10,
+        file,
+        pos_in(CONTRACT_USES, "currentSpeed ==", 0, 1),
+    );
+    assert!(value.contains("signal Controls.currentSpeed"), "{value}");
+    assert!(value.contains("The current speed."), "{value}");
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on the member of an enum access in a `require` clause, bare
+/// (`Gear.PARK`) or qualified (`demo.Gear.DRIVE`), shows the enum value's
+/// hover; hover on the parameter at the head of a comparison does not take
+/// the enum value.
+#[test]
+fn hover_on_an_enum_value_used_in_a_contract() {
+    let dir = TempDir::new("doc-use-enum");
+    let file = write_demo_file(&dir, "demo.ridl", CONTRACT_USES);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(
+        &client,
+        10,
+        file.clone(),
+        pos_in(CONTRACT_USES, "Gear.PARK ||", 0, 6),
+    );
+    assert!(value.contains("demo.Gear.PARK = 1"), "{value}");
+    assert!(value.contains("Parked."), "{value}");
+
+    let value = hover_markdown(
+        &client,
+        11,
+        file,
+        pos_in(CONTRACT_USES, "demo.Gear.DRIVE", 0, 11),
+    );
+    assert!(value.contains("demo.Gear.DRIVE = 2"), "{value}");
+    assert!(value.contains("Driving."), "{value}");
+
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A doc link to an interaction whose name a parameter of an earlier
+/// interaction also spells points at the interaction, not the parameter.
+#[test]
+fn a_doc_link_to_a_member_skips_a_parameter_of_the_same_name() {
+    let dir = TempDir::new("doc-link-member");
+    let text = "package demo\n\
+/// See [I.mode].\n\
+interface I {\n\
+\x20 command set(mode: Mode) @[..50ms]\n\
+\x20 query mode(): Mode @[..50ms]\n\
+}\n\
+/// A mode.\n\
+type Mode : integer [0..3]\n";
+    let file = write_demo_file(&dir, "demo.ridl", text);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let value = hover_markdown(&client, 10, file.clone(), pos_in(text, "I {", 0, 0));
+    let line = find_pos(text, "query mode", 0).line + 1;
+    let expected = format!("See [I.mode]({}#L{line}).", file.as_str());
+    assert!(
+        value.contains(&expected),
+        "expected `{expected}` in: {value}"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+// --- doc links in the editor (ADR-0026) -----------------------------------
+
+/// The vocabulary of the doc-links fixture: `Speed`, `Gear`, and a struct
+/// whose docs link to both — one link after multibyte text (Review Focus 3).
+const LINK_VOCAB: &str = "package veh.common\n\
+\n\
+/// Vehicle speed over ground.\n\
+type Speed : km/h [0.0..250.0 step 0.5]\n\
+\n\
+/// A gear selector position.\n\
+enum Gear {\n\
+\x20 /// Parked.\n\
+\x20 PARK = 1\n\
+\x20 /// Driving forward.\n\
+\x20 DRIVE = 2\n\
+}\n\
+\n\
+/// One motion sample: the [Speed] and the [Gear.PARK] case.\n\
+/// @see Gear\n\
+struct Motion {\n\
+\x20 /// Gr\u{f6}\u{df}e: [Speed]\n\
+\x20 speed: Speed\n\
+\x20 gear: Gear\n\
+}\n";
+
+/// The sibling member of the doc-links fixture: its docs link to the
+/// vocabulary's declarations through an import, qualified, and with `@see`.
+const LINK_APP: &str = "package veh.adas\n\
+\n\
+import veh.common.Speed\n\
+\n\
+/// Cruise control over [Speed] and [veh.common.Gear].\n\
+/// @see veh.common.Gear.DRIVE\n\
+interface CruiseControl {\n\
+\x20 /// The target [`Speed`].\n\
+\x20 signal target : Speed @[100ms..1s]\n\
+}\n";
+
+/// Writes the doc-links fixture as a two-member workspace and returns the
+/// `(vocabulary, app)` file URIs.
+fn write_link_workspace(dir: &TempDir) -> (lt::Uri, lt::Uri) {
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"veh-common\", \"adas\"]\n",
+    );
+    for (member, package) in [("veh-common", "veh.common"), ("adas", "veh.adas")] {
+        std::fs::create_dir_all(dir.path().join(member)).expect("create the member directory");
+        dir.write(
+            &format!("{member}/ridl.toml"),
+            &format!("[package]\nname = \"{package}\"\nversion = \"1.0.0\"\n"),
+        );
+    }
+    let vocab = dir.write("veh-common/lib.typl", LINK_VOCAB);
+    let app = dir.write("adas/adas.ridl", LINK_APP);
+    (uri_of(&vocab), uri_of(&app))
+}
+
+/// The position right after the `occurrence`-th match of `needle`.
+fn pos_after(text: &str, needle: &str, occurrence: usize) -> lt::Position {
+    pos_in(
+        text,
+        needle,
+        occurrence,
+        needle.encode_utf16().count() as u32,
+    )
+}
+
+/// Completion after `[` in a doc comment lists the names the doc-link
+/// resolver can reach: a local declaration, an imported one, and the
+/// workspace packages; after a package path, that package's public names.
+#[test]
+fn completion_after_bracket_in_a_doc_lists_reachable_names() {
+    let dir = TempDir::new("doc-complete-bracket");
+    let (_vocab, app) = write_link_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let text = "package veh.adas\n\
+\n\
+import veh.common.Speed\n\
+\n\
+/// See [\n\
+/// Or [veh.common.\n\
+interface CruiseControl {\n\
+\x20 signal target : Speed @[100ms..1s]\n\
+}\n";
+    did_open(&client, &app, text);
+
+    let items = complete_at(&client, 10, app.clone(), pos_after(text, "See [", 0));
+    let offered = labels(&items);
+    assert!(
+        offered.contains(&"CruiseControl"),
+        "a local declaration: {offered:?}"
+    );
+    assert!(
+        offered.contains(&"Speed"),
+        "an imported declaration: {offered:?}"
+    );
+    assert!(
+        offered.contains(&"veh.common"),
+        "a workspace package: {offered:?}"
+    );
+    assert_eq!(
+        kind_of(&items, "veh.common"),
+        Some(lt::CompletionItemKind::MODULE),
+        "a package is kind-annotated as a module",
+    );
+
+    let items = complete_at(&client, 12, app.clone(), pos_after(text, "[veh.common.", 0));
+    let offered = labels(&items);
+    assert_eq!(
+        offered,
+        vec!["Gear", "Motion", "Speed"],
+        "the package's public declarations"
+    );
+
+    shut_down(&client, 13);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Completion after `.` in a doc link whose path names a declaration lists
+/// that declaration's members: an enum's values, an interface's interactions.
+#[test]
+fn completion_after_dot_in_a_doc_link_lists_members() {
+    let dir = TempDir::new("doc-complete-member");
+    let (_vocab, app) = write_link_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let text = "package veh.adas\n\
+\n\
+import veh.common.Speed\n\
+\n\
+/// See [veh.common.Gear.\n\
+/// Or [CruiseControl.\n\
+interface CruiseControl {\n\
+\x20 signal target : Speed @[100ms..1s]\n\
+}\n";
+    did_open(&client, &app, text);
+
+    let items = complete_at(
+        &client,
+        10,
+        app.clone(),
+        pos_after(text, "[veh.common.Gear.", 0),
+    );
+    assert_eq!(labels(&items), vec!["DRIVE", "PARK"], "the enum's values");
+    assert_eq!(
+        kind_of(&items, "PARK"),
+        Some(lt::CompletionItemKind::ENUM_MEMBER),
+        "an enum value is kind-annotated as an enum member",
+    );
+
+    let items = complete_at(
+        &client,
+        12,
+        app.clone(),
+        pos_after(text, "[CruiseControl.", 0),
+    );
+    assert_eq!(
+        labels(&items),
+        vec!["target"],
+        "the interface's interactions"
+    );
+
+    shut_down(&client, 13);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// `@` at the start of a doc line completes exactly the four doc tags; an
+/// `@` elsewhere in the prose completes nothing.
+#[test]
+fn completion_after_at_on_a_doc_line_lists_tags() {
+    let dir = TempDir::new("doc-complete-tag");
+    let (_vocab, app) = write_link_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let text = "package veh.adas\n\
+\n\
+import veh.common.Speed\n\
+\n\
+/// Cruise control.\n\
+/// @\n\
+/// @si\n\
+/// mail me @\n\
+interface CruiseControl {\n\
+\x20 signal target : Speed @[100ms..1s]\n\
+}\n";
+    did_open(&client, &app, text);
+
+    let items = complete_at(
+        &client,
+        11,
+        app.clone(),
+        pos(find_pos(text, "/// @\n", 0).line, 5),
+    );
+    assert_eq!(
+        labels(&items),
+        vec!["deprecated", "labels", "see", "since"],
+        "exactly the four doc tags"
+    );
+
+    let items = complete_at(&client, 12, app.clone(), pos_after(text, "/// @si", 0));
+    assert_eq!(
+        labels(&items),
+        vec!["deprecated", "labels", "see", "since"],
+        "a partial tag still lists the four tags"
+    );
+
+    let items = complete_at(&client, 13, app.clone(), pos_after(text, "mail me @", 0));
+    assert!(
+        labels(&items).is_empty(),
+        "an `@` inside the prose completes nothing: {:?}",
+        labels(&items)
+    );
+
+    shut_down(&client, 14);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// The location a goto-definition response carries.
+fn scalar_location(response: Option<lt::GotoDefinitionResponse>) -> lt::Location {
+    match response.expect("the position has a definition") {
+        lt::GotoDefinitionResponse::Scalar(location) => location,
+        other => panic!("expected a single location, got {other:?}"),
+    }
+}
+
+/// Goto-definition on a qualified doc link lands on the declaration's name
+/// in the other member; on a member link after multibyte text (Review
+/// Focus 3) and on an `@see` target it lands on the named member.
+#[test]
+fn goto_definition_on_a_doc_link() {
+    let dir = TempDir::new("doc-goto");
+    let (vocab, app) = write_link_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    // `[veh.common.Gear]` in the app: the cursor on `Gear`.
+    let location = scalar_location(definition_at(
+        &client,
+        10,
+        app.clone(),
+        pos_in(LINK_APP, "[veh.common.Gear]", 0, 13),
+    ));
+    assert_eq!(location.uri.as_str(), vocab.as_str());
+    assert_eq!(location.range, range_of(LINK_VOCAB, "Gear", 0));
+
+    // `Größe: [Speed]`: the request position is a UTF-16 column.
+    let location = scalar_location(definition_at(
+        &client,
+        11,
+        vocab.clone(),
+        pos_in(LINK_VOCAB, "Gr\u{f6}\u{df}e: [Speed]", 0, 9),
+    ));
+    assert_eq!(location.uri.as_str(), vocab.as_str());
+    assert_eq!(location.range, range_of(LINK_VOCAB, "Speed", 0));
+
+    // `@see veh.common.Gear.DRIVE` in the app lands on the value `DRIVE`.
+    let location = scalar_location(definition_at(
+        &client,
+        12,
+        app.clone(),
+        pos_in(LINK_APP, "@see veh.common.Gear.DRIVE", 0, 22),
+    ));
+    assert_eq!(location.uri.as_str(), vocab.as_str());
+    assert_eq!(location.range, range_of(LINK_VOCAB, "DRIVE", 0));
+
+    shut_down(&client, 13);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Find-references on `Speed` includes every doc link that resolves to it,
+/// in both members, at the UTF-16 column of the name (Review Focus 3); a
+/// references request started from a doc link gives the same answer.
+#[test]
+fn references_include_doc_links() {
+    let dir = TempDir::new("doc-references");
+    let (vocab, app) = write_link_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let expected = [
+        (vocab.clone(), range_of(LINK_VOCAB, "Speed", 1)), // `[Speed]` in Motion's doc
+        (vocab.clone(), range_of(LINK_VOCAB, "Speed", 2)), // `Größe: [Speed]`
+        (vocab.clone(), range_of(LINK_VOCAB, "Speed", 3)), // `speed: Speed`
+        (app.clone(), range_of(LINK_APP, "Speed", 1)),     // `[Speed]`
+        (app.clone(), range_of(LINK_APP, "Speed", 2)),     // `` [`Speed`] ``
+        (app.clone(), range_of(LINK_APP, "Speed", 3)),     // `target : Speed`
+    ];
+    let as_pairs = |locations: Vec<lt::Location>| -> Vec<(String, lt::Range)> {
+        let mut pairs: Vec<_> = locations
+            .into_iter()
+            .map(|location| (location.uri.as_str().to_string(), location.range))
+            .collect();
+        pairs.sort_by(|a, b| {
+            a.0.cmp(&b.0).then(
+                (a.1.start.line, a.1.start.character).cmp(&(b.1.start.line, b.1.start.character)),
+            )
+        });
+        pairs
+    };
+    let mut want: Vec<(String, lt::Range)> = expected
+        .iter()
+        .map(|(uri, range)| (uri.as_str().to_string(), *range))
+        .collect();
+    want.sort_by(|a, b| {
+        a.0.cmp(&b.0)
+            .then((a.1.start.line, a.1.start.character).cmp(&(b.1.start.line, b.1.start.character)))
+    });
+
+    // From the declaration.
+    let found = references_at(
+        &client,
+        10,
+        vocab.clone(),
+        pos_in(LINK_VOCAB, "type Speed", 0, 6),
+        false,
+    )
+    .expect("references are found");
+    assert_eq!(as_pairs(found), want, "from the declaration");
+
+    // From a doc link.
+    let found = references_at(
+        &client,
+        11,
+        app.clone(),
+        pos_in(LINK_APP, "[`Speed`]", 0, 3),
+        false,
+    )
+    .expect("references are found from a doc link");
+    assert_eq!(as_pairs(found), want, "from a doc link");
+
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Renaming `Speed` rewrites its doc links along with its declaration and
+/// references, and a rename may start from a doc link.
+#[test]
+fn rename_updates_doc_links() {
+    let dir = TempDir::new("doc-rename");
+    let (vocab, app) = write_link_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    // prepareRename on a doc link reports the name span inside the link.
+    let prepared = prepare_rename_at(
+        &client,
+        9,
+        vocab.clone(),
+        pos_in(LINK_VOCAB, "[Speed]", 0, 3),
+    );
+    assert_eq!(
+        prepared,
+        Some(lt::PrepareRenameResponse::Range(range_of(
+            LINK_VOCAB, "Speed", 1
+        ))),
+        "the doc link's name span"
+    );
+
+    let edit = rename_at(
+        &client,
+        10,
+        vocab.clone(),
+        pos_in(LINK_VOCAB, "[Speed]", 0, 3),
+        "Velocity",
+    );
+
+    let vocab_edits: Vec<lt::Range> = edits_for(&edit, &vocab)
+        .into_iter()
+        .map(|e| e.range)
+        .collect();
+    assert_eq!(
+        vocab_edits,
+        vec![
+            range_of(LINK_VOCAB, "Speed", 0), // the declaration
+            range_of(LINK_VOCAB, "Speed", 1), // `[Speed]`
+            range_of(LINK_VOCAB, "Speed", 2), // `Größe: [Speed]`
+            range_of(LINK_VOCAB, "Speed", 3), // `speed: Speed`
+        ],
+        "the vocabulary's edits"
+    );
+    let app_edits: Vec<lt::Range> = edits_for(&edit, &app)
+        .into_iter()
+        .map(|e| e.range)
+        .collect();
+    assert_eq!(
+        app_edits,
+        vec![
+            range_of(LINK_APP, "Speed", 0), // the import line
+            range_of(LINK_APP, "Speed", 1), // `[Speed]`
+            range_of(LINK_APP, "Speed", 2), // `` [`Speed`] ``
+            range_of(LINK_APP, "Speed", 3), // `target : Speed`
+        ],
+        "the app's edits"
+    );
+    assert!(
+        edits_for(&edit, &vocab)
+            .iter()
+            .chain(edits_for(&edit, &app).iter())
+            .all(|e| e.new_text == "Velocity"),
+        "every edit inserts the new name"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Renaming `Gear` from its declaration rewrites the `Gear` segment — and
+/// only that segment — of the qualified link and the `@see` target in the
+/// sibling member, and of the member link `[Gear.PARK]` (Review Focus 5).
+#[test]
+fn rename_updates_a_doc_link_in_a_sibling_member() {
+    let dir = TempDir::new("doc-rename-sibling");
+    let (vocab, app) = write_link_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let edit = rename_at(
+        &client,
+        10,
+        vocab.clone(),
+        pos_in(LINK_VOCAB, "enum Gear", 0, 6),
+        "Selector",
+    );
+
+    let app_edits: Vec<lt::Range> = edits_for(&edit, &app)
+        .into_iter()
+        .map(|e| e.range)
+        .collect();
+    assert_eq!(
+        app_edits,
+        vec![
+            range_of(LINK_APP, "Gear", 0), // `[veh.common.Gear]`
+            range_of(LINK_APP, "Gear", 1), // `@see veh.common.Gear.DRIVE`
+        ],
+        "the sibling member's doc links, the `Gear` segment only"
+    );
+
+    let vocab_edits: Vec<lt::Range> = edits_for(&edit, &vocab)
+        .into_iter()
+        .map(|e| e.range)
+        .collect();
+    assert_eq!(
+        vocab_edits,
+        vec![
+            range_of(LINK_VOCAB, "Gear", 0), // the declaration
+            range_of(LINK_VOCAB, "Gear", 1), // `[Gear.PARK]`
+            range_of(LINK_VOCAB, "Gear", 2), // `@see Gear`
+            range_of(LINK_VOCAB, "Gear", 3), // `gear: Gear`
+        ],
+        "the vocabulary's edits"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A doc link written with an import alias (`[Velocity]` for
+/// `import veh.common.Speed as Velocity`) resolves to the aliased
+/// declaration, and a rename of that declaration leaves the link as written,
+/// as it leaves a type reference through the alias: rewriting it would name
+/// a declaration the file does not import.
+#[test]
+fn rename_leaves_an_aliased_doc_link_intact() {
+    let dir = TempDir::new("doc-rename-alias");
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"veh-common\", \"app\"]\n",
+    );
+    std::fs::create_dir_all(dir.path().join("veh-common")).expect("create veh-common");
+    std::fs::create_dir_all(dir.path().join("app")).expect("create app");
+    dir.write(
+        "veh-common/ridl.toml",
+        "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n",
+    );
+    let veh = dir.write(
+        "veh-common/lib.typl",
+        "package veh.common\n/// A speed.\ntype Speed: km/h\n",
+    );
+    dir.write(
+        "app/ridl.toml",
+        "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+    );
+    let app_text = "package app\n\
+                    import veh.common.Speed as Velocity\n\
+                    /// The cabin, keyed by its [Velocity].\n\
+                    /// @see Velocity\n\
+                    struct Cabin { primary: Velocity }\n";
+    let app = dir.write("app/lib.typl", app_text);
+    let veh_uri = uri_of(&veh);
+    let app_uri = uri_of(&app);
+    let (client, server) = start(uri_of(dir.path()));
+
+    // The aliased link resolves: it is a reference of `Speed`.
+    let found =
+        references_at(&client, 9, veh_uri.clone(), pos(2, 6), false).expect("references are found");
+    assert!(
+        found.iter().any(|location| location.uri == app_uri
+            && location.range == range_of(app_text, "Velocity", 1)),
+        "the `[Velocity]` link is a reference of `Speed`: {found:?}"
+    );
+
+    let edit = rename_at(&client, 10, veh_uri.clone(), pos(2, 6), "Rapidity");
+
+    let veh_edits = edits_for(&edit, &veh_uri);
+    assert_eq!(veh_edits.len(), 1, "the declaration only: {veh_edits:?}");
+
+    // In app, only the import line's imported-name segment is rewritten; the
+    // doc link, the `@see` target and the type reference keep the alias.
+    let app_edits = edits_for(&edit, &app_uri);
+    assert_eq!(
+        app_edits.iter().map(|edit| edit.range).collect::<Vec<_>>(),
+        vec![range_of(app_text, "Speed", 0)],
+        "only the import segment: {app_edits:?}"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Two packages each declare a `Level` and link to their own with `[Level]`.
+/// The references and the rename of one package's `Level` stop at that
+/// package: the other package's link resolves to a different declaration
+/// of the same name.
+#[test]
+fn doc_link_references_and_rename_stay_in_the_declaring_package() {
+    let dir = TempDir::new("doc-link-same-name");
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"veh-common\", \"adas\"]\n",
+    );
+    for (member, package) in [("veh-common", "veh.common"), ("adas", "veh.adas")] {
+        std::fs::create_dir_all(dir.path().join(member)).expect("create the member directory");
+        dir.write(
+            &format!("{member}/ridl.toml"),
+            &format!("[package]\nname = \"{package}\"\nversion = \"1.0.0\"\n"),
+        );
+    }
+    let vocab_text = "package veh.common\n\
+                      /// A level.\n\
+                      type Level: integer [0..3]\n\
+                      /// A pose, with its [Level].\n\
+                      struct Pose { level: Level }\n";
+    let adas_text = "package veh.adas\n\
+                     /// A level of the driver assistance.\n\
+                     type Level: integer [0..5]\n\
+                     /// A profile, with its [Level].\n\
+                     struct Profile { level: Level }\n";
+    let vocab = uri_of(&dir.write("veh-common/lib.typl", vocab_text));
+    let adas = uri_of(&dir.write("adas/adas.typl", adas_text));
+    let (client, server) = start(uri_of(dir.path()));
+
+    let found = references_at(
+        &client,
+        9,
+        vocab.clone(),
+        pos_in(vocab_text, "type Level", 0, 5),
+        false,
+    )
+    .expect("references are found");
+    let mut pairs: Vec<(String, lt::Range)> = found
+        .into_iter()
+        .map(|location| (location.uri.as_str().to_string(), location.range))
+        .collect();
+    pairs.sort_by(|a, b| {
+        a.0.cmp(&b.0)
+            .then((a.1.start.line, a.1.start.character).cmp(&(b.1.start.line, b.1.start.character)))
+    });
+    assert_eq!(
+        pairs,
+        vec![
+            (vocab.as_str().to_string(), range_of(vocab_text, "Level", 1)), // `[Level]`
+            (vocab.as_str().to_string(), range_of(vocab_text, "Level", 2)), // `level: Level`
+        ],
+        "the references stay in veh.common"
+    );
+
+    let edit = rename_at(
+        &client,
+        10,
+        vocab.clone(),
+        pos_in(vocab_text, "type Level", 0, 5),
+        "Grade",
+    );
+    assert_eq!(
+        edits_for(&edit, &vocab)
+            .iter()
+            .map(|edit| edit.range)
+            .collect::<Vec<_>>(),
+        vec![
+            range_of(vocab_text, "Level", 0), // the declaration
+            range_of(vocab_text, "Level", 1), // `[Level]`
+            range_of(vocab_text, "Level", 2), // `level: Level`
+        ],
+        "the vocabulary's edits"
+    );
+    assert_eq!(
+        edits_for(&edit, &adas),
+        Vec::<lt::TextEdit>::new(),
+        "no edit touches veh.adas"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on a doc link shows the target's hover — a declaration's for a
+/// declaration link, a member's for an `@see` member target — anchored to
+/// the link's span.
+#[test]
+fn hover_on_a_doc_link_shows_the_target() {
+    let dir = TempDir::new("doc-hover-link");
+    let (_vocab, app) = write_link_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let hover = hover_at(
+        &client,
+        10,
+        app.clone(),
+        pos_in(LINK_APP, "[veh.common.Gear]", 0, 13),
+    )
+    .expect("a doc link has hover content");
+    let value = match hover.contents {
+        lt::HoverContents::Markup(markup) => markup.value,
+        other => panic!("expected markdown hover, got {other:?}"),
+    };
+    assert!(
+        value.contains("enum veh.common.Gear") && value.contains("A gear selector position."),
+        "the target's hover: {value}"
+    );
+    assert_eq!(
+        hover.range,
+        Some(range_of(LINK_APP, "[veh.common.Gear]", 0)),
+        "anchored to the whole link"
+    );
+
+    let value = hover_markdown(
+        &client,
+        11,
+        app.clone(),
+        pos_in(LINK_APP, "@see veh.common.Gear.DRIVE", 0, 22),
+    );
+    assert!(
+        value.contains("Driving forward."),
+        "the member's hover: {value}"
+    );
+
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// The server advertises `[` and `@` as completion trigger characters, so
+/// a client asks for completion as soon as a doc link or a doc tag starts.
+#[test]
+fn completion_triggers_on_a_doc_link_and_a_doc_tag() {
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    let capabilities = initialize(&client, None);
+    let triggers = capabilities
+        .completion_provider
+        .expect("completion is advertised")
+        .trigger_characters
+        .expect("trigger characters are advertised");
+    for trigger in ["[", "@", "."] {
+        assert!(
+            triggers.iter().any(|t| t == trigger),
+            "`{trigger}` is a trigger character: {triggers:?}"
+        );
+    }
+    shut_down(&client, 1);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// An rsdl declaration is a doc carrier too (ADR-0026 decision 1): a doc link in an
+/// `.rsdl` file navigates, hovers, completes and is renamed like one in a
+/// typl or ridl file.
+#[test]
+fn doc_links_work_in_an_rsdl_file() {
+    let dir = TempDir::new("doc-link-rsdl");
+    let (contracts, system) = write_rsdl_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let text = "package veh.topology\n\
+\n\
+import veh.adas.LaneAssist\n\
+\n\
+/// Keeps the lane with [LaneAssist].\n\
+/// See [\n\
+component Lane { requires LaneAssist }\n\
+\n\
+/// The system.\n\
+system Vehicle { Lane }\n";
+    did_open(&client, &system, text);
+
+    // Go-to-definition on the link lands on the interface's name.
+    let location = scalar_location(definition_at(
+        &client,
+        10,
+        system.clone(),
+        pos_in(text, "[LaneAssist]", 0, 4),
+    ));
+    assert_eq!(location.uri.as_str(), contracts.as_str());
+    assert_eq!(
+        location.range,
+        range_of(RSDL_CONTRACTS, "LaneAssist", 0),
+        "the interface declaration"
+    );
+
+    // Hover on the link shows the interface's hover, anchored to the link.
+    let hover = hover_at(
+        &client,
+        11,
+        system.clone(),
+        pos_in(text, "[LaneAssist]", 0, 4),
+    )
+    .expect("a doc link in an rsdl file has hover content");
+    let value = match hover.contents {
+        lt::HoverContents::Markup(markup) => markup.value,
+        other => panic!("expected markdown hover, got {other:?}"),
+    };
+    assert!(
+        value.contains("interface veh.adas.LaneAssist"),
+        "the target's hover: {value}"
+    );
+    assert_eq!(hover.range, Some(range_of(text, "[LaneAssist]", 0)));
+
+    // Completion after `[` reaches the imported interface and the packages.
+    let items = complete_at(&client, 12, system.clone(), pos_after(text, "See [", 0));
+    let offered = labels(&items);
+    assert!(
+        offered.contains(&"LaneAssist") && offered.contains(&"veh.adas"),
+        "reachable names in an rsdl doc: {offered:?}"
+    );
+
+    // Renaming the interface from its declaration rewrites the rsdl doc link.
+    let edit = rename_at(
+        &client,
+        13,
+        contracts.clone(),
+        pos_in(RSDL_CONTRACTS, "interface LaneAssist", 0, 12),
+        "LaneKeeping",
+    );
+    let system_edits: Vec<lt::Range> = edits_for(&edit, &system)
+        .into_iter()
+        .map(|e| e.range)
+        .collect();
+    assert_eq!(
+        system_edits,
+        vec![
+            range_of(text, "LaneAssist", 0), // the import line
+            range_of(text, "LaneAssist", 1), // the doc link
+            range_of(text, "LaneAssist", 2), // `requires LaneAssist`
+        ],
+        "the rsdl buffer's edits"
+    );
+
+    shut_down(&client, 14);
+    server.join().expect("thread joins").expect("clean exit");
 }

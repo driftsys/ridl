@@ -7,11 +7,22 @@ use std::process::Command;
 
 const FIXTURE: &str = include_str!("../../ridl-syntax/fixtures/walking_skeleton.typl");
 
+/// `ridlc::compile`, with TYPL-406 (`missing-docs`) left out of the
+/// diagnostics: these fixtures leave their items undocumented, and the lint is
+/// tested in `ridl_sem::doc_lint`.
+fn compile(path: &str, text: &str) -> ridlc::CompileOutput {
+    let mut output = ridlc::compile(path, text);
+    output
+        .diagnostics
+        .retain(|diagnostic| diagnostic.code.as_str() != "TYPL-406");
+    output
+}
+
 /// Compiling the fixture produces no diagnostics, and its generated Rust and
 /// lowered IR v2 package match the committed snapshots.
 #[test]
 fn fixture_compiles_to_committed_snapshots() {
-    let output = ridlc::compile("walking_skeleton.typl", FIXTURE);
+    let output = compile("walking_skeleton.typl", FIXTURE);
 
     assert!(
         output.diagnostics.is_empty(),
@@ -34,7 +45,7 @@ fn fixture_compiles_to_committed_snapshots() {
 /// valid Rust with no diagnostic.
 #[test]
 fn keyword_type_name_is_raw_escaped() {
-    let output = ridlc::compile(
+    let output = compile(
         "keyword.typl",
         "package p\ntype fn: m [0.0..1.0 step 0.1]\n",
     );
@@ -58,7 +69,7 @@ fn keyword_type_name_is_raw_escaped() {
 /// render snapshot pins the terminal output: two clean blocks, one caret each.
 #[test]
 fn duration_in_constraint_yields_two_coded_diagnostics() {
-    let output = ridlc::compile("example.typl", "package p\ntype X: integer [0..10ms]\n");
+    let output = compile("example.typl", "package p\ntype X: integer [0..10ms]\n");
 
     let codes: Vec<&str> = output
         .diagnostics
@@ -107,7 +118,7 @@ fn no_nameless_interaction_reaches_the_ir_through_compile() {
         let source = format!("package app\ntype Speed: km/h [0.0..300.0 step 0.5]\n{body}");
         // A panic here fails the test, which is the point: `compile` must
         // return for every one of these.
-        let output = ridlc::compile("app.ridl", &source);
+        let output = compile("app.ridl", &source);
 
         // `Package::shapes` — an `interface` body and a service's inline shape
         // alike, since the recovery paths below reach both.
@@ -141,7 +152,7 @@ fn a_nameless_service_does_not_lower() {
         "interface I {\n  signal a : Speed @10ms\n}\nservice : I\n",
     ] {
         let source = format!("package app\ntype Speed: km/h [0.0..300.0 step 0.5]\n{body}");
-        let output = ridlc::compile("app.ridl", &source);
+        let output = compile("app.ridl", &source);
 
         assert!(
             output.package.services.is_empty(),

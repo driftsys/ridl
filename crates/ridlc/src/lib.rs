@@ -55,7 +55,7 @@ use ridl_core::db::InputFile;
 use ridl_core::diag::{
     DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, house_style_message, remap_diagnostics,
 };
-use ridl_core::lint::{LintScopes, apply_lint_levels};
+use ridl_core::lint::{LintScopes, apply_lint_levels, drop_allowed_by_default};
 use ridl_core::package::{Package, PackageOrigin, Workspace};
 use ridl_core::{
     Cache, Frozen, LoadedWorkspace, ManifestKind, RidlDatabase, materialize_imports, parse_file,
@@ -134,6 +134,7 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
             // No manifest: the registry defaults apply (ADR-0024
             // decision 10).
             lints: LintScopes::default(),
+            report_scope: None,
         },
     );
     // The callers, `check_source` and `compile`, report their diagnostics, so
@@ -332,6 +333,11 @@ pub struct WorkspaceOutput {
     /// The lint scopes the loader resolved from every `[lints]` table, for a
     /// consumer that reports `diagnostics` (ADR-0024 decision 6).
     pub lints: LintScopes,
+    /// The member directory the entry lies in
+    /// ([`LoadedWorkspace::report_scope`]). `diagnostics` covers the whole
+    /// workspace; a consumer that reports them passes this to
+    /// [`retain_in_report_scope`].
+    pub report_scope: Option<PathBuf>,
 }
 
 /// The lowered IR of the built-in `ridl.std` package (typl Appendix A), checked
@@ -386,6 +392,7 @@ pub fn compile_workspace_with(
         diagnostics,
         sources,
         lints,
+        report_scope,
     } = load_and_check(db, entry, overlays)?;
     // Reuse the standard IR query already evaluated by the design lint pass.
     let std_ir = check_package(&*db, workspace, std, std).ir;
@@ -400,7 +407,47 @@ pub fn compile_workspace_with(
         diagnostics,
         sources,
         lints,
+        report_scope,
     })
+}
+
+/// Keeps the diagnostics a command reports for an entry inside a workspace
+/// member: those whose primary span is in a file under `scope`, the member
+/// directory ([`LoadedWorkspace::report_scope`]), and those on the workspace
+/// root's `ridl.toml` — the `ridl.toml` of a directory above `scope` — because
+/// the root's `[imports]`, `[lints]` and `members` govern the member, so a
+/// problem there (MANI-007, for one) is the member's to see. A diagnostic
+/// with no file path is kept. With `scope` `None` every diagnostic is kept.
+/// The whole workspace is still loaded and checked; this only narrows what is
+/// reported (ADR-0024 decision 9, as ADR-0026 amends it).
+pub fn retain_in_report_scope(
+    diagnostics: &mut Vec<Diagnostic>,
+    sources: &SourceMap,
+    scope: Option<&Path>,
+) {
+    diagnostics.retain(|diagnostic| in_report_scope(diagnostic, sources, scope));
+}
+
+/// Whether [`retain_in_report_scope`] keeps `diagnostic`.
+fn in_report_scope(diagnostic: &Diagnostic, sources: &SourceMap, scope: Option<&Path>) -> bool {
+    let Some(scope) = scope else {
+        return true;
+    };
+    match sources.path(diagnostic.primary.file) {
+        Some(path) => {
+            let path = Path::new(path);
+            path.starts_with(scope) || is_manifest_above(path, scope)
+        }
+        None => true,
+    }
+}
+
+/// Whether `path` is the `ridl.toml` of a directory at or above `scope`: the
+/// workspace root's manifest, for a member scope. A sibling member's manifest
+/// is not, because its directory is beside `scope`, not above it.
+fn is_manifest_above(path: &Path, scope: &Path) -> bool {
+    path.file_name().is_some_and(|name| name == "ridl.toml")
+        && path.parent().is_some_and(|dir| scope.starts_with(dir))
 }
 
 /// A build artifact `ridlc build --emit` can write for each package.
@@ -630,8 +677,9 @@ impl CliRun {
 /// Runs `check`: loads, resolves, and checks the workspace at `entry`, then
 /// materializes remote imports against `ridl.lock` (regenerating it on a clean
 /// non-frozen run), and applies the lint levels of every `[lints]` table
-/// (ADR-0024 decision 6). Returns every diagnostic and the source map
-/// for rendering.
+/// (ADR-0024 decision 6). Returns the diagnostics and the source map for
+/// rendering; for an entry inside a workspace member, the compile diagnostics
+/// are those of the member's files ([`retain_in_report_scope`]).
 pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
     let mut db = RidlDatabase::default();
     let Compiled {
@@ -639,8 +687,13 @@ pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
         mut diagnostics,
         sources,
         lints,
+        report_scope,
         ..
     } = load_and_check(&mut db, entry, &[]).map_err(load_io_error)?;
+    // An entry inside a member reports on the member only (ADR-0024 decision
+    // 9, as ADR-0026 amends it). The lockfile diagnostics concern the whole
+    // workspace, so they are added after the filter.
+    retain_in_report_scope(&mut diagnostics, &sources, report_scope.as_deref());
     diagnostics.extend(materialize_and_lock(&db, workspace, entry, frozen));
     apply_lint_levels(&mut diagnostics, &sources, &lints);
     Ok(CliRun {
@@ -722,8 +775,20 @@ pub fn run_build_with(
         mut diagnostics,
         sources,
         lints,
+        report_scope,
         ..
     } = load_and_check(&mut db, entry, &[]).map_err(load_io_error)?;
+
+    // An entry inside a member reports on the member only (ADR-0024 decision
+    // 9, as ADR-0026 amends it). The diagnostics of the other members are
+    // kept aside: an error there still blocks every artifact below, because
+    // the build writes the whole workspace.
+    let mut outside_scope: Vec<Diagnostic> = diagnostics
+        .iter()
+        .filter(|diagnostic| !in_report_scope(diagnostic, &sources, report_scope.as_deref()))
+        .cloned()
+        .collect();
+    retain_in_report_scope(&mut diagnostics, &sources, report_scope.as_deref());
 
     // Materialize remote imports and round-trip the lockfile before the emit
     // gate, so any error it raises (a manifest, lockfile, or fetch problem,
@@ -757,6 +822,9 @@ pub fn run_build_with(
     // docs/archive/2026-10-03-lint-foundation-plan.md).
     if apply_lints == ApplyLints::Yes {
         apply_lint_levels(&mut diagnostics, &sources, &lints);
+        apply_lint_levels(&mut outside_scope, &sources, &lints);
+    } else {
+        drop_allowed_by_default(&mut diagnostics);
     }
 
     // A build must not emit artifacts for a workspace that failed: code
@@ -770,7 +838,26 @@ pub fn run_build_with(
     // blocks the lowering of its own deployment only. Every package and the
     // system's other deployments are sound, so they are written, and the
     // error still makes the build exit 1.
-    let succeeded = !diagnostics.iter().any(blocks_every_artifact);
+    //
+    // For an entry inside a member, the other members' diagnostics are not
+    // reported, but they gate the same way. Any error among them makes the
+    // build exit 1 with one detached error that says so: either nothing was
+    // written, or (an RSDL-7xx error) a deployment was left out of the system.
+    let succeeded = !diagnostics.iter().any(blocks_every_artifact)
+        && !outside_scope.iter().any(blocks_every_artifact);
+    if outside_scope
+        .iter()
+        .any(|diagnostic| diagnostic.severity == Severity::Error)
+    {
+        diagnostics.push(error_diagnostic(
+            "",
+            "another member of the workspace has an error, so this build wrote nothing or left \
+             out what that error blocks; run `ridl check` on the workspace root to see it"
+                .to_string(),
+            FileId::DETACHED,
+            TextRange::default(),
+        ));
+    }
     if succeeded {
         std::fs::create_dir_all(out_dir)?;
         let single_file = entry.is_file() && manifest_root_of(entry).is_none();
@@ -1312,6 +1399,9 @@ struct Compiled {
     /// The lint scopes the loader resolved, carried out unapplied for the
     /// entry points that report diagnostics (ADR-0024 decision 6).
     lints: LintScopes,
+    /// The member directory the entry lies in
+    /// ([`LoadedWorkspace::report_scope`]).
+    report_scope: Option<PathBuf>,
 }
 
 /// Loads the workspace at `entry` and runs parse, resolve, and check over every
@@ -1338,6 +1428,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         mut diagnostics,
         mut sources,
         lints,
+        report_scope,
     } = loaded;
 
     let packages = workspace.packages(db).clone();
@@ -1441,6 +1532,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         diagnostics,
         sources,
         lints,
+        report_scope,
     }
 }
 
@@ -1847,24 +1939,17 @@ fn ir_dump_path(out_dir: &Path, base: &str, emit: Emit) -> PathBuf {
     out_dir.join(format!("{base}{suffix}"))
 }
 
-/// The manifest root governing `entry` — the nearest directory at or above it
-/// that holds a `ridl.toml`, where `ridl.lock` lives. `None` means single-file
-/// mode: a `.typl` file with no manifest anywhere up the tree.
+/// The manifest root governing `entry` — the root the loader loads from
+/// ([`ridl_core::find_root`]), where `ridl.lock` lives. `None` means
+/// single-file mode: a `.typl` file with no manifest anywhere up the tree.
 fn manifest_root_of(entry: &Path) -> Option<PathBuf> {
     if entry.is_file() {
-        entry.parent().and_then(find_ridl_toml_root)
+        entry.parent().and_then(ridl_core::find_root)
     } else if entry.is_dir() {
-        find_ridl_toml_root(entry)
+        ridl_core::find_root(entry)
     } else {
         None
     }
-}
-
-/// The nearest directory at or above `dir` that contains a `ridl.toml`.
-fn find_ridl_toml_root(dir: &Path) -> Option<PathBuf> {
-    dir.ancestors()
-        .find(|candidate| candidate.join("ridl.toml").is_file())
-        .map(Path::to_path_buf)
 }
 
 /// A detached warning [`Diagnostic`] — no source span, for a problem (a failed

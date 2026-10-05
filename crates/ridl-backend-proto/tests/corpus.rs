@@ -61,6 +61,14 @@ fn compile_fixture(relative_to_fixtures: &str) -> ridl_ir::v2::Package {
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
     let output = ridlc::compile(&path.display().to_string(), &text);
+    // Preserve the incoming allowance for undocumented fixture items.
+    let diagnostics = output
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| {
+            diagnostic.code != ridl_core::lint::lint_by_name("missing-docs").unwrap().code
+        })
+        .collect::<Vec<_>>();
     if relative_to_fixtures == "cruise.ridl" {
         let expected = [
             (
@@ -78,14 +86,9 @@ fn compile_fixture(relative_to_fixtures: &str) -> ridl_ir::v2::Package {
                 "CruiseControl",
             ),
         ];
-        assert_eq!(
-            output.diagnostics.len(),
-            expected.len(),
-            "{:?}",
-            output.diagnostics
-        );
+        assert_eq!(diagnostics.len(), expected.len(), "{:?}", diagnostics);
         for (diagnostic, (code, lint, message, range, identifier)) in
-            output.diagnostics.iter().zip(expected)
+            diagnostics.iter().zip(expected)
         {
             assert_eq!(diagnostic.code, code);
             assert_eq!(diagnostic.severity, ridl_core::diag::Severity::Info);
@@ -105,8 +108,8 @@ fn compile_fixture(relative_to_fixtures: &str) -> ridl_ir::v2::Package {
             assert!(diagnostic.fixits.is_empty());
         }
     } else if relative_to_fixtures == "../../../ridl/tests/baseline-corpus/cluster.ridl" {
-        assert_eq!(output.diagnostics.len(), 1, "{:?}", output.diagnostics);
-        let diagnostic = &output.diagnostics[0];
+        assert_eq!(diagnostics.len(), 1, "{:?}", diagnostics);
+        let diagnostic = &diagnostics[0];
         assert_eq!(diagnostic.code, ridl_core::diag::DiagCode::RIDL_414);
         assert_eq!(diagnostic.severity, ridl_core::diag::Severity::Info);
         let lint = ridl_core::lint::lint_by_name("low-cohesion-interface").unwrap();
@@ -134,10 +137,10 @@ fn compile_fixture(relative_to_fixtures: &str) -> ridl_ir::v2::Package {
         assert!(diagnostic.fixits.is_empty());
     } else {
         assert!(
-            output.diagnostics.is_empty(),
+            diagnostics.is_empty(),
             "{} must compile with no diagnostic, got: {:?}",
             path.display(),
-            output.diagnostics,
+            diagnostics,
         );
     }
     output.package
@@ -185,8 +188,12 @@ fn the_cross_package_workspace_emits_valid_proto3() {
     let entry = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cross-package");
     let output = ridlc::compile_workspace(&mut db, &entry)
         .unwrap_or_else(|error| panic!("load {}: {error}", entry.display()));
+    // TYPL-406 (`missing-docs`) is left out: the fixtures have no docs.
     assert!(
-        output.diagnostics.is_empty(),
+        output
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.code.as_str() == "TYPL-406"),
         "the cross-package fixture must compile with no diagnostic, got: {:?}",
         output.diagnostics,
     );

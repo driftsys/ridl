@@ -189,6 +189,17 @@ and the opening brace (general form §4.4). Bodies follow R8: newline and comma
 interchangeable, trailing comma legal, no semicolons. Doc comments (typl §14)
 may precede any declaration or body line.
 
+**Doc comments.** Each of the five declarations and each body line — a member
+line, an `offers` or `requires` line, and a placement line — is a doc carrier
+(typl §14.4). Every declaration must have a doc: rsdl has no visibility, so
+`missing-docs` (TYPL-406) covers all five. A body line takes a doc and never
+requires one. The docs of the declarations, of the `system` and `distribution`
+member lines, and of the `offers` and `requires` lines reach the lowered system
+(§13); the doc of a placement line is checked and shown by the editor, and the
+lowered system has no field for it. A doc link in an `.rsdl` file resolves in
+the view of the package that declares the line, as in a ridl file (typl §14.5),
+and draws TYPL-401 when it does not resolve.
+
 | Declaration    | Clause       | Body holds                                            | rsdl-owned keys                                 |
 | -------------- | ------------ | ----------------------------------------------------- | ----------------------------------------------- |
 | `system`       | —            | member lines: components, lone services (§4)          | `labels`, `deprecated`; one slot reserved (§12) |
@@ -702,6 +713,12 @@ Per deployment:
   deployment). RSDL-901 is checked over this fact. Absent when the workspace
   declares no distribution.
 - **The catalog hashes** of every catalog in the region map, as received.
+- **The docs** — the doc text, the resolved doc links, the `@see` targets and
+  the `@since` versions of the system, each component and its `offers` and
+  `requires` lines, each distribution, each `system` and `distribution` member
+  line, each deployment and each machine (typl §14, ADR-0026). They are
+  documentation only: no other fact depends on them, and `ridl diff` at the
+  system ignores them.
 
 **Errors and warnings.** An error in the closure — RSDL-3xx, 4xx, 5xx, 6xx or
 9xx — blocks lowering for every deployment. An error in one deployment —
@@ -766,10 +783,12 @@ retired code is kept in the table and never reused. Grouped by hundreds:
                                         9xx  distribution
 
 An `.rsdl` file also draws the namespaces no profile owns, `FORM-` and `MANI-`,
-tabulated once in the family overview §7. The attribute-block rules FORM-106
-(unknown key), FORM-107 (key not allowed on this declaration kind) and FORM-108
-(duplicate key) cover the rsdl-owned keys of §5; no `RSDL-` code is minted for
-them. Codes not shown in any table were never allocated.
+tabulated once in the family overview §7, and the documentation codes of typl
+§16.5 (TYPL-401 and TYPL-404 to TYPL-410), because doc comments are typl §14 in
+every language of the family. The attribute-block rules FORM-106 (unknown key),
+FORM-107 (key not allowed on this declaration kind) and FORM-108 (duplicate key)
+cover the rsdl-owned keys of §5; no `RSDL-` code is minted for them. Codes not
+shown in any table were never allocated.
 
 ### 16.1 Codes in force
 

@@ -193,12 +193,12 @@ mod tests {
 
     fn member(name: &str, ordinal: u32, ty: Option<FieldType>) -> StructMember {
         StructMember {
-            member: Some(struct_member::Member::Field(Field {
+            member: Some(struct_member::Member::Field(Box::new(Field {
                 name: name.to_owned(),
                 ordinal,
                 r#type: ty,
                 ..Default::default()
-            })),
+            }))),
         }
     }
 

@@ -1122,26 +1122,20 @@ fn baseline_location(entry: &Path, flag: Option<&Path>) -> Result<Option<PathBuf
 }
 
 /// `.ridl/baseline/` at the workspace root (ADR-0008 decision 14). The root is
-/// the nearest directory at or above `entry` holding a `ridl.toml` — the same
-/// root the compile scopes itself to — falling back to `entry`'s own directory
-/// when there is no manifest anywhere above it (single-file mode).
+/// the one the compile loads from ([`ridl_core::find_root`]), so an entry
+/// inside a workspace member uses the workspace root's baseline, falling back
+/// to `entry`'s own directory when there is no manifest anywhere above it
+/// (single-file mode).
 fn default_baseline_dir(entry: &Path) -> PathBuf {
     let start = if entry.is_file() {
         entry.parent().unwrap_or(Path::new(".")).to_path_buf()
     } else {
         entry.to_path_buf()
     };
-    let mut cursor = start.as_path();
-    loop {
-        if cursor.join("ridl.toml").is_file() {
-            return cursor.join(".ridl").join("baseline");
-        }
-        match cursor.parent() {
-            Some(parent) => cursor = parent,
-            None => break,
-        }
-    }
-    start.join(".ridl").join("baseline")
+    ridl_core::find_root(&start)
+        .unwrap_or(start)
+        .join(".ridl")
+        .join("baseline")
 }
 
 /// Compares the checked workspace against the baseline at `location`, appends
@@ -1170,17 +1164,26 @@ fn desk_check(
     }
 
     let mut db = ridl_core::RidlDatabase::default();
-    let current: Vec<ridl_ir::v2::Package> = match ridlc::compile_workspace(&mut db, entry) {
-        Ok(output) => output
-            .checked
-            .into_iter()
-            .map(|checked| checked.ir)
-            .collect(),
+    let output = match ridlc::compile_workspace(&mut db, entry) {
+        Ok(output) => output,
         Err(err) => {
             eprintln!("error: {}: {err}", entry.display());
             return Err(ExitCode::from(2));
         }
     };
+    // The caller's gate read the diagnostics of the entry's member only. The
+    // desk check compares the whole workspace, so it runs only when no member
+    // has an error other than RIDL-409. These diagnostics carry the emit
+    // severities, so a lint is never an error here.
+    if !lock::only_lock_orphans(&output.diagnostics) {
+        return Ok(());
+    }
+    let report_scope = output.report_scope;
+    let current: Vec<ridl_ir::v2::Package> = output
+        .checked
+        .into_iter()
+        .map(|checked| checked.ir)
+        .collect();
 
     // `ridl.std` is context, as in `run_diff`, so the desk reads the verdict
     // the gate gives (driftsys/ridl#598).
@@ -1210,6 +1213,9 @@ fn desk_check(
             fixits: Vec::new(),
         });
     }
+    // An entry inside a member reports on the member only (ADR-0024 decision
+    // 9, as ADR-0026 amends it).
+    ridlc::retain_in_report_scope(&mut warnings, &run.sources, report_scope.as_deref());
     run.diagnostics.extend(warnings);
     rename_labels(&baseline, &current, &index, run);
     Ok(())
@@ -2378,8 +2384,8 @@ impl DeclIndex {
     }
 }
 
-/// The directory tree [`DeclIndex::build`] indexes for `entry`: the manifest
-/// root at or above it, the root [`ridl_core::load_workspace`] compiles from.
+/// The directory tree [`DeclIndex::build`] indexes for `entry`: the root
+/// [`ridl_core::load_workspace`] compiles from ([`ridl_core::find_root`]).
 /// The compile covers the whole root whatever entry names it, so an entry at
 /// a file or a subdirectory would otherwise leave a change in a file above or
 /// beside it with a detached span, which no `[lints]` scope reaches. A file
@@ -2390,7 +2396,7 @@ fn index_root(entry: &Path) -> PathBuf {
     } else {
         Some(entry)
     };
-    dir.and_then(ridl_core::find_manifest_root)
+    dir.and_then(ridl_core::find_root)
         .unwrap_or_else(|| entry.to_path_buf())
 }
 

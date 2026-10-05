@@ -17,6 +17,12 @@ raised to `deny` exits 1 in `ridl check`, `ridl build`, `ridlc check` and
 `ridlc build`, and that of the other subcommands only the `ridl lsp` and
 `ridl mcp` servers apply lint levels, with no effect on their exit code.
 
+Amended 2026-10-04 (issue driftsys/ridl#708): decision 8, the consequence that
+repeats it, and the ADR-0007 entry in References describe the `0.0.0` version as
+the state when the ADR was written. [ADR-0007](ADR-0007-e1-execution.md)
+decision 14's 2026-09-21 amendment retired the `0.0.0` pin, so each of the three
+now carries an amendment note that states what `--version` prints today.
+
 ## Context
 
 Issue driftsys/ridl#194, found while writing the book's CLI reference (PR
@@ -339,7 +345,8 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
      scenario (a) all five report
      `` error: no `ridl.toml` found at or
      above `<path>` `` — exit 2 is
-     right, the cause is wrong: `find_manifest_root` cannot distinguish "no
+     right, the cause is wrong: `ridl_core::find_root` (named
+     `find_manifest_root` when this record was written) cannot distinguish "no
      manifest here" from "cannot read this directory to look for one," and
      reports the former unconditionally. In scenario (b) all five report a bare
      `error: Permission denied (os error 13)`, naming no path at all.
@@ -451,6 +458,17 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    than riding in on this one. Recorded here as the concrete deferred option,
    not implemented.
 
+   _Amended (2026-10-04)._ The `0.0.0` above is the state when this decision was
+   written. The workspace version is now set once, in `[workspace.package]` of
+   the root `Cargo.toml`, and `just release` bumps it
+   ([ADR-0007](ADR-0007-e1-execution.md) decision 14, amendment of 2026-09-21).
+   `ridlc --version` prints that crate version. `ridl --version` prints the
+   value of `RIDL_BUILD_VERSION`, which `crates/ridl/build.rs` sets to the
+   environment variable of that name when it is not empty or whitespace only
+   (the release workflow sets it to the `editor-v*` tag) and to the crate
+   version otherwise. The build-metadata suffix above is still not implemented,
+   so the version still does not name a commit.
+
 ## Consequences
 
 - Positive: `ridl fmt` now fails closed on a path it cannot read — exit 2 in
@@ -480,7 +498,10 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
   maintainer cuts a release. A bug report that includes `ridl --version` output
   cannot be matched to a commit from that string alone. Not closed here — see
   Decision 8, which also records the concrete build-metadata-suffix fix as
-  deferred rather than implemented.
+  deferred rather than implemented. _Amended (2026-10-04)._ The `0.0.0` was the
+  state when this ADR was written; Decision 8's amendment states what
+  `--version` prints now. The gap that a commit cannot be derived from the
+  string remains.
 - Negative / accepted: this ADR documents the 0/1/2 shape of `ridl check`,
   `build`, `baseline`, `test`, and `fmt`, and `ridlc`'s ordinary
   (non-`--frozen`) check/build behavior, as current, verified fact, not as a
@@ -506,9 +527,9 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
   a nested subdirectory is.
 - ADR-0002 — Module system; §7 is where `--frozen`'s CI-mode meaning comes from,
   and where `ridlc --frozen`'s own stability (Decision 5) is grounded.
-- ADR-0007 — E1 execution; decision 14 pins the workspace version at `0.0.0`
-  until a maintainer cuts a release, which is why Decision 8 above is not closed
-  here.
+- ADR-0007 — E1 execution; decision 14 pinned the workspace version at `0.0.0`
+  until a maintainer cut a release, which is why Decision 8 above was not closed
+  here. Its 2026-09-21 amendment retired that pin; see Decision 8's amendment.
 - ADR-0008 — E2 execution; decision 9 is the `ridl diff` / `ridlc --frozen`
   stability contract this ADR generalises around without reopening (Decision 5
   above).

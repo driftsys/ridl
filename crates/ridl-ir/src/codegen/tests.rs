@@ -80,6 +80,9 @@ fn value(name: &str, value: i64) -> v2::EnumValue {
         name: name.to_string(),
         value,
         doc: String::new(),
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
     }
 }
 
@@ -92,7 +95,7 @@ fn named(reference: &str) -> v2::FieldType {
 
 fn member(ordinal: u32, name: &str, ty: v2::FieldType) -> v2::StructMember {
     v2::StructMember {
-        member: Some(v2::struct_member::Member::Field(v2::Field {
+        member: Some(v2::struct_member::Member::Field(Box::new(v2::Field {
             name: name.to_string(),
             ordinal,
             r#type: Some(ty),
@@ -101,7 +104,7 @@ fn member(ordinal: u32, name: &str, ty: v2::FieldType) -> v2::StructMember {
                 value: None,
             }),
             ..Default::default()
-        })),
+        }))),
     }
 }
 
@@ -388,6 +391,9 @@ fn package_a() -> v2::Package {
                         ordinal: 1,
                         type_ref: "Small".to_string(),
                         doc: String::new(),
+                        links: Vec::new(),
+                        see: Vec::new(),
+                        since: Vec::new(),
                     }],
                     is_result: false,
                     reserved: vec![],
@@ -572,12 +578,18 @@ fn a_projected_enum_reference_is_foreign_by_its_declaring_package() {
                             ordinal: 1,
                             type_ref: "a.Gear".to_string(),
                             doc: String::new(),
+                            links: Vec::new(),
+                            see: Vec::new(),
+                            since: Vec::new(),
                         },
                         v2::UnionArm {
                             name: "own".to_string(),
                             ordinal: 2,
                             type_ref: "Own".to_string(),
                             doc: String::new(),
+                            links: Vec::new(),
+                            see: Vec::new(),
+                            since: Vec::new(),
                         },
                         // The scope's own enum, spelled with its package: the
                         // spelling a text test for a dot calls foreign while
@@ -587,6 +599,9 @@ fn a_projected_enum_reference_is_foreign_by_its_declaring_package() {
                             ordinal: 3,
                             type_ref: "b.Own".to_string(),
                             doc: String::new(),
+                            links: Vec::new(),
+                            see: Vec::new(),
+                            since: Vec::new(),
                         },
                     ],
                     is_result: false,

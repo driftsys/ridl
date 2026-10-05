@@ -9,6 +9,10 @@
 //! package references in the fixed order of ADR-0002 §5: workspace member →
 //! the package's own `[imports]` → the workspace `[imports]` → error.
 //!
+//! [`resolve_doc_link`] resolves the target of a doc link or an `@see` tag
+//! (typl §14, ADR-0026) against that view, for the checker and the language
+//! server alike.
+//!
 //! The single-file resolver lived here until the checker moved onto the
 //! package model; the package checker (`check`) is its replacement.
 //!
@@ -21,11 +25,15 @@ use ridl_core::db::InputFile;
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span};
 use ridl_core::package::{Package, Workspace, package_of};
 use ridl_core::parse_file;
+use ridl_ir::v2;
 use ridl_syntax::ast::{
-    AstNode, Definition, HasModifiers, HasName, Import, InterfaceDef, QualifiedName, SourceFile,
+    self, AstNode, Definition, HasModifiers, HasName, Import, InterfaceDef, QualifiedName,
+    SourceFile,
 };
 use ridl_syntax::{SyntaxKind, SyntaxNode};
 use rowan::TextRange;
+
+use crate::docs::DocInfo;
 
 /// The kind of a declared name — one variant per typl definition keyword,
 /// plus the ridl `interface` declaration.
@@ -786,6 +794,299 @@ fn diagnostic(
     }
 }
 
+// ==========================================================================
+// Doc links (typl §14, ADR-0026)
+// ==========================================================================
+
+/// The target of a doc link or an `@see` tag (typl §14, ADR-0026): a
+/// declaration, and the member of it the last segment names when there is
+/// one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkTarget {
+    pub symbol: Symbol,
+    /// A field, enum value, enumset bit, union arm or interaction of
+    /// `symbol`.
+    pub member: Option<String>,
+}
+
+impl LinkTarget {
+    /// The canonical qualified name the IR stores: `pkg.Name`, or
+    /// `pkg.Name.member`. Always qualified, also for a same-package target.
+    pub fn canonical(&self) -> String {
+        match &self.member {
+            Some(member) => format!("{}.{}.{}", self.symbol.package, self.symbol.name, member),
+            None => format!("{}.{}", self.symbol.package, self.symbol.name),
+        }
+    }
+}
+
+/// Why a doc link did not resolve (TYPL-401).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinkError {
+    /// No declaration of that name is reachable from the package.
+    Unresolved,
+    /// The declaration is `internal` in a package other than the link's own.
+    NotVisible,
+    /// The declaration exists but has no member of the last segment's name.
+    NoSuchMember,
+}
+
+impl LinkError {
+    /// The TYPL-401 message for a `what` ("doc link" or "`@see` target")
+    /// written as `written`.
+    pub fn message(self, what: &str, written: &str) -> String {
+        match self {
+            Self::Unresolved => format!("{what} `{written}` does not resolve to a declaration"),
+            Self::NotVisible => {
+                format!("{what} `{written}` names an `internal` declaration of another package")
+            }
+            Self::NoSuchMember => {
+                let (declaration, member) = written.rsplit_once('.').unwrap_or((written, ""));
+                format!("{what} `{written}`: `{declaration}` has no member `{member}`")
+            }
+        }
+    }
+}
+
+/// Resolves the dotted `segments` of a doc link or an `@see` tag written in
+/// `pkg`, whose resolved view is `resolution` (typl §14, ADR-0026).
+///
+/// The segments are read as a type reference reads them first: a single
+/// segment is a bare name in the package's view (local, then imported — an
+/// alias is followed to its declaration — then `ridl.std`); more segments are
+/// a package path and a declaration name, where the path may name the
+/// package itself, `ridl.std` or any workspace member, imported or not. When
+/// that reading fails, the last segment is read as a member — a field, enum
+/// value, enumset bit, union arm or interaction — of the declaration the
+/// segments before it name. A declaration that is `internal` in another
+/// package is [`LinkError::NotVisible`].
+///
+/// The language server calls this for navigation, rename and completion; the
+/// checker calls it for every link candidate and raises TYPL-401 for an
+/// error. The parameters are those of [`resolve_package`], plus the
+/// resolution it already holds.
+pub fn resolve_doc_link(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    pkg: Package,
+    resolution: &Resolution,
+    segments: &[String],
+) -> Result<LinkTarget, LinkError> {
+    let (name, path) = segments.split_last().ok_or(LinkError::Unresolved)?;
+    let whole = resolve_declaration(db, ws, std, pkg, resolution, path, name);
+    if let Ok(symbol) = whole {
+        return Ok(LinkTarget {
+            symbol,
+            member: None,
+        });
+    }
+    let with_member =
+        path.split_last()
+            .ok_or(LinkError::Unresolved)
+            .and_then(|(declaration, path)| {
+                let symbol = resolve_declaration(db, ws, std, pkg, resolution, path, declaration)?;
+                if doc_link_members(db, ws, std, pkg, &symbol).contains(name) {
+                    Ok(LinkTarget {
+                        symbol,
+                        member: Some(name.clone()),
+                    })
+                } else {
+                    Err(LinkError::NoSuchMember)
+                }
+            });
+    match (whole, with_member) {
+        (_, Ok(target)) => Ok(target),
+        // A whole-path reading that found the declaration but could not
+        // follow it is the more specific report.
+        (Err(LinkError::NotVisible), _) => Err(LinkError::NotVisible),
+        (_, Err(error)) => Err(error),
+    }
+}
+
+/// A declaration named `name` in the package `path` names, or in `pkg`'s own
+/// view when `path` is empty.
+fn resolve_declaration(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    pkg: Package,
+    resolution: &Resolution,
+    path: &[String],
+    name: &str,
+) -> Result<Symbol, LinkError> {
+    if path.is_empty() {
+        // The package's view already leaves out the `internal` declarations
+        // of other packages.
+        return resolution
+            .symbols
+            .get(name)
+            .cloned()
+            .ok_or(LinkError::Unresolved);
+    }
+    let target = package_named(db, ws, std, pkg, &path.join(".")).ok_or(LinkError::Unresolved)?;
+    let symbol = declared_symbols(db, target)
+        .remove(name)
+        .ok_or(LinkError::Unresolved)?;
+    if symbol.internal && target != pkg {
+        return Err(LinkError::NotVisible);
+    }
+    Ok(symbol)
+}
+
+/// The package `name` names from `pkg`: `pkg` itself, the embedded
+/// `ridl.std`, or a workspace member (ADR-0002 §5 step 1). A remote
+/// `[imports]` entry (steps 2 and 3) is not materialized, so a path into one
+/// resolves nowhere, as a type reference into one does today.
+fn package_named(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    pkg: Package,
+    name: &str,
+) -> Option<Package> {
+    if name == pkg.name(db) {
+        Some(pkg)
+    } else if name == std.name(db) {
+        Some(std)
+    } else {
+        package_of(db, ws, name.to_string())
+    }
+}
+
+/// The member names a doc link may name on `symbol`'s declaration (typl §14,
+/// ADR-0026): a struct's fields, an enum's values, an enumset's bits — the
+/// backing enum's values for a derived enumset — a union's arms, and an
+/// interface's interactions. A `reserved` tombstone is not a member; a
+/// `type` and a `const` have none. Read from the syntax tree, which the
+/// checker has not finished lowering when it resolves a same-package link.
+pub fn doc_link_members(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    pkg: Package,
+    symbol: &Symbol,
+) -> Vec<String> {
+    let source = source_file(db, symbol.file);
+    let Some(declaration) =
+        declarations(&source).find(|declaration| declaration.name_range() == symbol.range)
+    else {
+        return Vec::new();
+    };
+    let names = |nodes: &mut dyn Iterator<Item = Option<String>>| nodes.flatten().collect();
+    match declaration {
+        Declaration::Interface(def) => names(&mut def.members().map(|member| match member {
+            ast::InterfaceMember::Reserved(_) => None,
+            _ => declared_name(&member),
+        })),
+        Declaration::Definition(Definition::Struct(def)) => {
+            names(&mut def.members().map(|member| match member {
+                ast::StructMember::Field(field) => name_text(field.name()),
+                ast::StructMember::Reserved(_) => None,
+            }))
+        }
+        Declaration::Definition(Definition::Enum(def)) => {
+            names(&mut def.values().map(|value| name_text(value.name())))
+        }
+        Declaration::Definition(Definition::Union(def)) => {
+            names(&mut def.arms().map(|arm| name_text(arm.name())))
+        }
+        Declaration::Definition(Definition::EnumSet(def)) => match def.backing_ref() {
+            None => names(&mut def.bits().map(|bit| name_text(bit.name()))),
+            // The derived form (typl §9.2) copies the backing enum's values.
+            // The reference is resolved in the declaring package's view.
+            Some(backing) => backing_enum_values(db, ws, std, pkg, symbol, &backing),
+        },
+        Declaration::Definition(Definition::Type(_) | Definition::Const(_)) => Vec::new(),
+    }
+}
+
+/// The text of a member's `Name` node, or `None` on a malformed tree.
+fn name_text(name: Option<ast::Name>) -> Option<String> {
+    Some(name?.ident_token()?.text().to_string())
+}
+
+/// The values of the enum `backing` names from the package that declares
+/// `enumset` (a derived enumset, typl §9.2), or none when the reference does
+/// not resolve to an enum — that is the declaring package's own TYPL error.
+fn backing_enum_values(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    pkg: Package,
+    enumset: &Symbol,
+    backing: &ast::PathType,
+) -> Vec<String> {
+    let Some(declaring) = package_named(db, ws, std, pkg, &enumset.package) else {
+        return Vec::new();
+    };
+    let Some(qualified) = backing.qualified_name() else {
+        return Vec::new();
+    };
+    let segments = qualified_segments(&qualified);
+    let Some((name, path)) = segments.split_last() else {
+        return Vec::new();
+    };
+    let resolution = resolve_package(db, ws, declaring, std);
+    match resolve_declaration(db, ws, std, declaring, &resolution, path, name) {
+        Ok(symbol) if symbol.kind == SymbolKind::Enum => {
+            doc_link_members(db, ws, std, declaring, &symbol)
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// The IR doc links of one carrier, and the candidates that did not resolve.
+pub(crate) struct DocLinks {
+    /// The resolved link candidates of the body, in source order.
+    pub links: Vec<v2::DocLink>,
+    /// The resolved `@see` targets, in source order.
+    pub see: Vec<v2::DocLink>,
+    /// Each candidate that did not resolve, as the span of the whole
+    /// construct and the TYPL-401 message, in source order.
+    pub broken: Vec<(TextRange, String)>,
+}
+
+/// Resolves every link candidate and every `@see` target of `info`, read in
+/// `pkg` (typl §14, ADR-0026): a resolved one becomes the IR `DocLink` with
+/// its byte range in the doc, and each error is reported in `broken` for
+/// the caller to raise as TYPL-401. A link that did not resolve is not
+/// stored.
+pub(crate) fn resolve_doc_info(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    pkg: Package,
+    resolution: &Resolution,
+    info: &DocInfo,
+) -> DocLinks {
+    let mut out = DocLinks {
+        links: Vec::new(),
+        see: Vec::new(),
+        broken: Vec::new(),
+    };
+    for (candidates, what, stored) in [
+        (&info.links, "doc link", &mut out.links),
+        (&info.see, "`@see` target", &mut out.see),
+    ] {
+        for candidate in candidates {
+            match resolve_doc_link(db, ws, std, pkg, resolution, &candidate.segments) {
+                Ok(target) => stored.push(v2::DocLink {
+                    text: candidate.text.clone(),
+                    offset: candidate.doc_range.start as u32,
+                    len: candidate.doc_range.len() as u32,
+                    target: target.canonical(),
+                }),
+                Err(error) => out.broken.push((
+                    candidate.source,
+                    error.message(what, &candidate.segments.join(".")),
+                )),
+            }
+        }
+    }
+    out
+}
+
 // --- shared AST helpers (also used by the package checker) ----------------
 
 /// The declared name of a definition, or `None` on a malformed tree.
@@ -1469,6 +1770,202 @@ mod package_tests {
             resolution.diagnostics[0].message.contains("PARK"),
             "the genuinely unreferenced import is the one flagged, got: {:?}",
             resolution.diagnostics,
+        );
+    }
+
+    // --- doc links (typl §14, ADR-0026) -----------------------------------
+
+    /// The canonical target of the doc link `written`, read from `pkg`.
+    fn link_target(
+        db: &RidlDatabase,
+        ws: Workspace,
+        std: Package,
+        pkg: Package,
+        written: &str,
+    ) -> Result<String, LinkError> {
+        let resolution = resolve_package(db, ws, pkg, std);
+        let segments: Vec<String> = written.split('.').map(str::to_string).collect();
+        resolve_doc_link(db, ws, std, pkg, &resolution, &segments).map(|target| target.canonical())
+    }
+
+    /// `veh` declares an enum, a derived enumset, a struct, a union and an
+    /// `internal` type; `app` imports `veh.Gear` under an alias and declares
+    /// an `internal` struct of its own.
+    fn link_workspace(db: &mut RidlDatabase) -> (Package, Package, Package, Workspace) {
+        let std = std_package(db);
+        let veh = package(
+            db,
+            "veh",
+            "package veh\n\
+             enum Gear { PARK = 1, DRIVE = 2 }\n\
+             enumset GearSet : Gear\n\
+             struct Pose { x: integer [0..10], y: integer [0..10] }\n\
+             union Shape { pose: Pose }\n\
+             internal type Raw : integer [0..1]\n",
+        );
+        let app = package(
+            db,
+            "app",
+            "package app\nimport veh.Gear as G\ninternal struct Local { g: G }\n",
+        );
+        let ws = Workspace::new(db, vec![veh, app], BTreeMap::new());
+        (std, veh, app, ws)
+    }
+
+    #[test]
+    fn link_bare_local() {
+        let mut db = RidlDatabase::default();
+        let (std, veh, _, ws) = link_workspace(&mut db);
+        assert_eq!(
+            link_target(&db, ws, std, veh, "Pose"),
+            Ok("veh.Pose".into())
+        );
+    }
+
+    #[test]
+    fn link_through_alias() {
+        let mut db = RidlDatabase::default();
+        let (std, _, app, ws) = link_workspace(&mut db);
+        assert_eq!(link_target(&db, ws, std, app, "G"), Ok("veh.Gear".into()));
+        assert_eq!(
+            link_target(&db, ws, std, app, "G.PARK"),
+            Ok("veh.Gear.PARK".into())
+        );
+    }
+
+    #[test]
+    fn link_qualified_without_import() {
+        let mut db = RidlDatabase::default();
+        let (std, _, app, ws) = link_workspace(&mut db);
+        assert_eq!(
+            link_target(&db, ws, std, app, "veh.Pose"),
+            Ok("veh.Pose".into())
+        );
+        assert_eq!(
+            link_target(&db, ws, std, app, "veh.Gear.DRIVE"),
+            Ok("veh.Gear.DRIVE".into())
+        );
+    }
+
+    #[test]
+    fn link_to_member() {
+        let mut db = RidlDatabase::default();
+        let (std, veh, _, ws) = link_workspace(&mut db);
+        for (written, canonical) in [
+            ("Gear.PARK", "veh.Gear.PARK"),
+            ("Pose.x", "veh.Pose.x"),
+            ("Shape.pose", "veh.Shape.pose"),
+            // A derived enumset's bits are the backing enum's values.
+            ("GearSet.DRIVE", "veh.GearSet.DRIVE"),
+        ] {
+            assert_eq!(
+                link_target(&db, ws, std, veh, written),
+                Ok(canonical.into()),
+                "{written}"
+            );
+        }
+    }
+
+    #[test]
+    fn link_to_interaction() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let cruise = ridl_package(
+            &db,
+            "cruise",
+            "package cruise\ntype Lever : integer [0..3]\n\
+             interface Cruise {\n  command setLever(cmd: Lever) @[..50ms]\n  reserved old\n}\n",
+        );
+        let ws = Workspace::new(&db, vec![cruise], BTreeMap::new());
+        assert_eq!(
+            link_target(&db, ws, std, cruise, "Cruise.setLever"),
+            Ok("cruise.Cruise.setLever".into())
+        );
+        // A `reserved` tombstone is not a member.
+        assert_eq!(
+            link_target(&db, ws, std, cruise, "Cruise.old"),
+            Err(LinkError::NoSuchMember)
+        );
+    }
+
+    #[test]
+    fn link_no_such_member() {
+        let mut db = RidlDatabase::default();
+        let (std, veh, _, ws) = link_workspace(&mut db);
+        assert_eq!(
+            link_target(&db, ws, std, veh, "Gear.NEUTRAL"),
+            Err(LinkError::NoSuchMember)
+        );
+        // A `type` has no members.
+        assert_eq!(
+            link_target(&db, ws, std, veh, "Raw.x"),
+            Err(LinkError::NoSuchMember)
+        );
+        assert_eq!(
+            link_target(&db, ws, std, veh, "Nope.x"),
+            Err(LinkError::Unresolved)
+        );
+        assert_eq!(
+            link_target(&db, ws, std, veh, "Nope"),
+            Err(LinkError::Unresolved)
+        );
+    }
+
+    #[test]
+    fn link_internal_other_package() {
+        let mut db = RidlDatabase::default();
+        let (std, _, app, ws) = link_workspace(&mut db);
+        assert_eq!(
+            link_target(&db, ws, std, app, "veh.Raw"),
+            Err(LinkError::NotVisible)
+        );
+    }
+
+    #[test]
+    fn link_internal_same_package() {
+        let mut db = RidlDatabase::default();
+        let (std, veh, app, ws) = link_workspace(&mut db);
+        assert_eq!(
+            link_target(&db, ws, std, app, "Local"),
+            Ok("app.Local".into())
+        );
+        assert_eq!(
+            link_target(&db, ws, std, app, "app.Local"),
+            Ok("app.Local".into())
+        );
+        assert_eq!(
+            link_target(&db, ws, std, veh, "veh.Raw"),
+            Ok("veh.Raw".into())
+        );
+    }
+
+    #[test]
+    fn link_to_std() {
+        let mut db = RidlDatabase::default();
+        let (std, _, app, ws) = link_workspace(&mut db);
+        assert_eq!(
+            link_target(&db, ws, std, app, "Timestamp"),
+            Ok("ridl.std.Timestamp".into())
+        );
+        assert_eq!(
+            link_target(&db, ws, std, app, "ridl.std.Timestamp"),
+            Ok("ridl.std.Timestamp".into())
+        );
+    }
+
+    #[test]
+    fn link_error_messages_name_the_reason() {
+        assert_eq!(
+            LinkError::Unresolved.message("doc link", "Nope"),
+            "doc link `Nope` does not resolve to a declaration"
+        );
+        assert_eq!(
+            LinkError::NotVisible.message("`@see` target", "veh.Raw"),
+            "`@see` target `veh.Raw` names an `internal` declaration of another package"
+        );
+        assert_eq!(
+            LinkError::NoSuchMember.message("doc link", "veh.Gear.NEUTRAL"),
+            "doc link `veh.Gear.NEUTRAL`: `veh.Gear` has no member `NEUTRAL`"
         );
     }
 }

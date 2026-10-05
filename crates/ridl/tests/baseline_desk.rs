@@ -43,10 +43,17 @@ impl Drop for TempDir {
 
 /// Runs `ridl` with `args`, returning `(exit_code, stdout, stderr)`.
 fn ridl(args: &[&std::ffi::OsStr]) -> (i32, String, String) {
-    let output = Command::new(env!("CARGO_BIN_EXE_ridl"))
-        .args(args)
-        .output()
-        .expect("the ridl binary must run");
+    ridl_in(None, args)
+}
+
+/// Runs `ridl` with `args` from `current_dir` when one is given.
+fn ridl_in(current_dir: Option<&Path>, args: &[&std::ffi::OsStr]) -> (i32, String, String) {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_ridl"));
+    command.args(args);
+    if let Some(dir) = current_dir {
+        command.current_dir(dir);
+    }
+    let output = command.output().expect("the ridl binary must run");
     let code = output.status.code().expect("the process exits with a code");
     (
         code,
@@ -55,7 +62,10 @@ fn ridl(args: &[&std::ffi::OsStr]) -> (i32, String, String) {
     )
 }
 
-const MANIFEST: &str = "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n";
+/// The fixtures leave their items undocumented, so the manifest sets
+/// `missing-docs` (TYPL-406) to `allow`: a clean check stays silent.
+const MANIFEST: &str = "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n\n\
+                        [lints]\nmissing-docs = \"allow\"\n";
 
 /// The published shape: three interactions at ordinals 1, 2, 3.
 const BASE: &str = "package veh.cluster
@@ -2678,4 +2688,130 @@ fn check_reports_an_explicit_baseline_snapshot_it_cannot_stat() {
             .is_symlink(),
         "the symlink is left as it is",
     );
+}
+
+// A workspace member as the entry (ADR-0002 §4, issue #529).
+
+/// The second member's source, with its two events in `first`, `second`
+/// order, or swapped.
+fn other_source(first: &str, second: &str) -> String {
+    format!(
+        "package veh.other
+type Flag: integer [0..1]
+interface OtherStatus {{
+  event {first}: Flag @[100ms..1s]
+  event {second}: Flag @[100ms..1s]
+}}
+"
+    )
+}
+
+/// A workspace with the members `cluster` (`veh.cluster`, [`BASE`]) and
+/// `other` (`veh.other`), locked, with the baseline published from the root.
+fn member_workspace(dir: &TempDir) -> PathBuf {
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"cluster\", \"other\"]\n",
+    );
+    dir.write("cluster/ridl.toml", MANIFEST);
+    dir.write("cluster/cluster.ridl", BASE);
+    dir.write(
+        "other/ridl.toml",
+        "[package]\nname = \"veh.other\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("other/other.ridl", &other_source("alpha", "beta"));
+    let root = dir.path().to_path_buf();
+    lock(&root);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+    root
+}
+
+/// The desk check from a member reports the RIDL-407 of that member only;
+/// from the root it reports both members'.
+#[test]
+fn a_member_check_reports_only_the_member_desk_warnings() {
+    let dir = TempDir::new("member-desk");
+    let root = member_workspace(&dir);
+    dir.write("cluster/cluster.ridl", REORDERED);
+    dir.write("other/other.ridl", &other_source("beta", "alpha"));
+
+    let (_, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    assert!(stderr.contains("`doorClosed` has moved"), "{stderr}");
+    assert!(stderr.contains("in `OtherStatus`"), "{stderr}");
+
+    let baseline = root.join(".ridl/baseline");
+    let (code, _, stderr) = ridl(&[
+        "check".as_ref(),
+        root.join("cluster").as_os_str(),
+        "--baseline".as_ref(),
+        baseline.as_os_str(),
+    ]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stderr.contains("`doorClosed` has moved"), "{stderr}");
+    assert!(!stderr.contains("OtherStatus"), "{stderr}");
+
+    // Without `--baseline`, a member entry finds the workspace root's
+    // `.ridl/baseline/`.
+    let (_, _, stderr) = ridl(&["check".as_ref(), root.join("cluster").as_os_str()]);
+    assert!(stderr.contains("`doorClosed` has moved"), "{stderr}");
+}
+
+/// A relative member path from the workspace root (`ridl check cluster`)
+/// finds the root as the empty parent of `cluster`, and the desk check still
+/// reads the workspace's files, so each RIDL-407 carries its file and line.
+#[test]
+fn a_relative_member_entry_from_the_root_keeps_the_desk_warning_spans() {
+    let dir = TempDir::new("member-desk-relative");
+    let root = member_workspace(&dir);
+    dir.write("cluster/cluster.ridl", REORDERED);
+
+    let (code, _, stderr) = ridl_in(Some(&root), &["check".as_ref(), "cluster".as_ref()]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stderr.contains("`doorClosed` has moved"), "{stderr}");
+    assert!(
+        stderr.contains("cluster.ridl:"),
+        "the warning names its file and line:\n{stderr}"
+    );
+}
+
+/// The desk check compares the whole workspace, so it does not run while
+/// another member has a compile error, even though a check of the member
+/// does not report that error.
+#[test]
+fn a_member_check_skips_the_desk_check_while_another_member_has_an_error() {
+    let dir = TempDir::new("member-desk-error");
+    let root = member_workspace(&dir);
+    dir.write("cluster/cluster.ridl", REORDERED);
+    dir.write(
+        "other/broken.ridl",
+        "package veh.other\ntype Broken: Missing\n",
+    );
+
+    // `--baseline` names the directory, so the test does not depend on which
+    // directory a member entry finds by default.
+    let baseline = root.join(".ridl/baseline");
+    let (code, _, stderr) = ridl(&[
+        "check".as_ref(),
+        root.join("cluster").as_os_str(),
+        "--baseline".as_ref(),
+        baseline.as_os_str(),
+    ]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(!stderr.contains("RIDL-407"), "{stderr}");
+    assert!(!stderr.contains("broken.ridl"), "{stderr}");
+}
+
+/// `ridl baseline` on a member publishes to the workspace root's
+/// `.ridl/baseline/`, the directory a check from the root reads.
+#[test]
+fn a_member_baseline_is_published_at_the_workspace_root() {
+    let dir = TempDir::new("member-baseline");
+    let root = member_workspace(&dir);
+    std::fs::remove_dir_all(root.join(".ridl")).expect("remove the root baseline");
+
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.join("cluster").as_os_str()]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(root.join(".ridl/baseline/veh.cluster.ir.json").is_file());
+    assert!(!root.join("cluster/.ridl").exists());
 }

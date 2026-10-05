@@ -13,8 +13,11 @@
 //!   documented. The exit-code table's 0, 1 and 2 cells are not compared. The
 //!   `lsp` and `mcp` servers are exempt from the table, because their exit
 //!   codes are stated in their own sections.
-//! - **Prose.** Every long flag named in an inline code span or in a `sh`
-//!   fence must exist, and the prose count of emit targets must match.
+//! - **Prose.** Every long flag named in a `sh` fence must be accepted by the
+//!   subcommand of the command that names it, and every long flag named in an
+//!   inline code span must be accepted by some command. A flag no command
+//!   accepts is exempt only on a line that holds its context. The prose count
+//!   of emit targets must match.
 //! - **The version line.** `<program> --version` is compared with the binary's
 //!   version masked as `X.Y.Z`; the book holds the literal `X.Y.Z`.
 //!
@@ -441,42 +444,122 @@ fn real_flags(exe: &Path) -> BTreeSet<String> {
     out
 }
 
-/// Fails for each long flag the book names in an inline code span or a `sh`
-/// fence that no
-/// command of the binary, and no `other_program` transcript in the book,
-/// accepts. `foreign` lists flags the book names that no command accepts:
-/// flags of other programs, and flags named only to say they do not exist.
+/// The `(context, flag)` pairs of flags the book names that no command
+/// accepts: flags of other programs, and flags named only to say they do not
+/// exist. A pair exempts `flag` only on a line that contains `context`: for a
+/// `sh` fence, the command (one side of `&&`, `||`, `|` or `;`) that names it;
+/// for an inline code span, the page line that holds it.
+pub type Foreign<'a> = &'a [(&'a str, &'a str)];
+
+fn is_exempt(foreign: Foreign, line: &str, flag: &str) -> bool {
+    foreign
+        .iter()
+        .any(|(context, name)| *name == flag && line.contains(context))
+}
+
+/// The long flags of the command line `command` (space-joined names after the
+/// program) of `program`: from the binary's help when `program` is `own`, else
+/// from the book's transcript of that command.
+fn command_flags(
+    page: &Page,
+    exe: &Path,
+    own: &str,
+    program: &str,
+    command: &str,
+) -> BTreeSet<String> {
+    if program == own {
+        let mut args: Vec<&str> = command.split_whitespace().collect();
+        args.push("--help");
+        return long_flags(&run(exe, &args).1);
+    }
+    help_transcripts(page)
+        .iter()
+        .filter(|t| t.argv[0] == program && t.argv[1..t.argv.len() - 1].join(" ") == command)
+        .flat_map(|t| long_flags(&t.expected))
+        .collect()
+}
+
+/// Fails for each long flag the book names in a `sh` fence that the command
+/// it follows does not accept, and for each long flag named in an inline code
+/// span that no command of the binary (`own`), and no `other` program
+/// transcript in the book, accepts. A fence line is split into its commands;
+/// each command of `own` or `other` is checked against its own subcommand's
+/// flags, and a command of any other program accepts only a `foreign` flag.
 pub fn prose_flag_failures(
     page: &Page,
     exe: &Path,
-    other_program: &str,
-    foreign: &[&str],
+    own: &str,
+    other: &str,
+    foreign: Foreign,
 ) -> Vec<String> {
     let mut known = real_flags(exe);
+    let mut commands: BTreeSet<(String, String)> = real_commands(exe)
+        .into_iter()
+        .map(|c| (own.to_string(), c))
+        .collect();
+    commands.insert((own.to_string(), String::new()));
     for transcript in help_transcripts(page) {
-        if transcript.argv[0] == other_program {
+        if transcript.argv[0] == other {
             known.extend(long_flags(&transcript.expected));
+            commands.insert((
+                other.to_string(),
+                transcript.argv[1..transcript.argv.len() - 1].join(" "),
+            ));
         }
     }
     let mut failures = Vec::new();
     for fence in fences(page).iter().filter(|f| f.info == "sh") {
-        for flag in long_flags(&fence.body) {
-            if !known.contains(&flag) && !foreign.contains(&flag.as_str()) {
-                failures.push(format!(
-                    "{}:{}: `{flag}` is used in a `sh` fence, but no command of the binary or of `{other_program}` accepts it",
-                    page.name, fence.line
-                ));
+        for (index, text) in fence.body.lines().enumerate() {
+            let line = fence.line + 1 + index;
+            let split = text
+                .replace("&&", "\n")
+                .replace("||", "\n")
+                .replace(['|', ';'], "\n");
+            for command in split.lines().map(str::trim) {
+                let mut words = command.split_whitespace();
+                let Some(first) = words.next() else { continue };
+                let program = first.rsplit('/').next().unwrap_or(first);
+                let is_ours = program == own || program == other;
+                let mut path = String::new();
+                for word in words.take_while(|w| !w.starts_with('-')) {
+                    let next = if path.is_empty() {
+                        word.to_string()
+                    } else {
+                        format!("{path} {word}")
+                    };
+                    if !commands.contains(&(program.to_string(), next.clone())) {
+                        break;
+                    }
+                    path = next;
+                }
+                let accepted = if is_ours {
+                    command_flags(page, exe, own, program, &path)
+                } else {
+                    BTreeSet::new()
+                };
+                for flag in long_flags(command) {
+                    if accepted.contains(&flag) || is_exempt(foreign, command, &flag) {
+                        continue;
+                    }
+                    let name = format!("{program} {path}").trim_end().to_string();
+                    failures.push(format!(
+                        "{}:{line}: `{flag}` is used in a `sh` fence on `{name}`, which does not accept it",
+                        page.name
+                    ));
+                }
             }
         }
     }
+    let other_program = other;
     for (event, range) in Parser::new_ext(&page.text, MDBOOK_OPTIONS).into_offset_iter() {
         if let Event::Code(code) = event {
             for flag in long_flags(&code) {
-                if !known.contains(&flag) && !foreign.contains(&flag.as_str()) {
+                let line = line_of(&page.text, range.start);
+                let text = page.text.lines().nth(line - 1).unwrap_or("");
+                if !known.contains(&flag) && !is_exempt(foreign, text, &flag) {
                     failures.push(format!(
-                        "{}:{}: `{flag}` is named in the book, but no command of the binary or of `{other_program}` accepts it",
-                        page.name,
-                        line_of(&page.text, range.start)
+                        "{}:{line}: `{flag}` is named in the book, but no command of the binary or of `{other_program}` accepts it",
+                        page.name
                     ));
                 }
             }
