@@ -456,7 +456,7 @@ fn the_pipeline_generate_stays_clean_of_the_face() {
 }
 
 /// The codec reaches both entry points, and reaches the companion one from
-/// the same emitter: stage K9b moved the face onto the FlatBuffers codec, so
+/// the same emitter: the face is built over the FlatBuffers codec, so
 /// the face is appended to the pipeline entry point's own items rather than
 /// compiled over implementations written for it.
 #[test]

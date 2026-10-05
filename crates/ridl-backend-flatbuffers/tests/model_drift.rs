@@ -15,7 +15,7 @@
 //! field's type text is what the model's `FbWire` spells. Beyond the tables:
 //! each union's member names, and each interface's identity table.
 //!
-//! It is the form of drift test stage P2b can write. When a backend stops
+//! It is the form of drift test that the model's own tests cannot write. When a backend stops
 //! deriving a fact and reads it from the model instead, that fact is a
 //! function of the model by construction and leaves this file.
 

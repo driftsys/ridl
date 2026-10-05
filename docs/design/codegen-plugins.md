@@ -59,12 +59,12 @@ CodegenResponse {
 
 **`version` became `schema` and `toolchain`.** ADR-0020 decision 9 and the
 driver write the request as `{version, model, options}`. The IR specification
-§7, written by stage P1b, replaced the one field with two before this stage
-started, with its reason: a bare number does not say which schema it counts, the
-package name does, and a toolchain version is a different fact a consumer must
-not refuse on. The request follows the specification. A consumer refuses a
-`schema` it does not know with a diagnostic naming both values (the reference
-plugin does, §5) and does not refuse on `toolchain`.
+§7, replaced the one field with two before the plugin design started, with its
+reason: a bare number does not say which schema it counts, the package name
+does, and a toolchain version is a different fact a consumer must not refuse on.
+The request follows the specification. A consumer refuses a `schema` it does not
+know with a diagnostic naming both values (the reference plugin does, §5) and
+does not refuse on `toolchain`.
 
 **`artifact_base` is the one field the driver's shape does not name.** `ridlc`
 names a package's artifacts after the package name in package and workspace mode

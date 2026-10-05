@@ -248,8 +248,8 @@ them.
   now; when a gap is real, link its tracking issue (`driftsys/ridl#N`). State a
   fact once, in the record that owns it, and link to that record from elsewhere
   instead of restating it. `just story-id-check` enforces the first rule for
-  dotted story ids and for the plan names `epic E<n>`, `stage <Letter><n>` and
-  `lane <Letter>`.
+  dotted story ids and for the plan names `epic E<n>`, `stage <Letter><n>[a-z]`
+  and `lane <Letter>`.
 - Documents are prose, in Markdown, under `docs/`. The specs read as one system:
   doctrines are indexed once in the overview, cited from each reference — keep
   that discipline when editing.

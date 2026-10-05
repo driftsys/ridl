@@ -358,7 +358,7 @@ fn face_gap(interface: &v1::Interface, err: &GenerateError) -> FaceGap {
 ///
 /// There is one codec emitter and one call to it, which is why the face
 /// compiles over the codec `generate` emits rather than over one written for
-/// it (design note D-11, stage K9b).
+/// it (design note D-11).
 ///
 /// The claim tables run first, before the domain types and the codec
 /// (`claims::check`). `interfaces` are the interfaces whose descriptors and
@@ -428,7 +428,7 @@ impl WireEncoding {
 ///
 /// This does not emit the codec. [`package_items`] appends it, for both entry
 /// points: the codec is `generate`'s output (design note D-1 as amended), and
-/// the face compiles over that same output (D-11, stage K9b).
+/// the face compiles over that same output (D-11).
 fn domain_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
     let mut items: Vec<TokenStream> = Vec::new();
     for decl in &ctx.model.declarations {

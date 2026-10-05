@@ -139,12 +139,12 @@ test:
 # makes the generated Rust compiled to wasm32 the codec a TypeScript consumer
 # loads, so the obligation reaches what the backend emits and not only the
 # crates that emit it — but a generated package is text with no manifest, and
-# `cargo check -p` takes packages. E11.7 stage K8 took the other shape:
+# `cargo check -p` takes packages. The chosen shape is the other one:
 # `the_generated_codec_checks_for_wasm32` in
 # `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs` runs the same
 # check (`rustc --target wasm32-unknown-unknown --emit=metadata`, which is
 # the unit of work `cargo check` performs) over the emitted source, through
-# stage K3's bare-`rustc` proof mechanism. It runs under `just test`. The
+# the bare-`rustc` proof mechanism. It runs under `just test`. The
 # alternative, an example crate under `crates/` holding a checked-in
 # generated fixture so it could join the `-p` list, was rejected: it would
 # add a workspace member and a second copy of the fixture to keep in step,
@@ -372,8 +372,7 @@ compat-check: toolchain-check
 # The planus check is `xtask/tests/oracle_boundary.rs`'s
 # `the_generated_crate_reaches_no_planus_crate`, which is ignored for a plain
 # `cargo test` because it needs the generated crate this recipe writes. A
-# generated package must not depend on planus (lane E16 driver, section 4,
-# answer 8).
+# generated package must not depend on planus (ADR-0014 decision 15).
 #
 # The lock pins `ridl-rt`, whose version this recipe does not own, and the
 # generated crate, whose dependencies come from the emitter. A version bump or
@@ -1355,8 +1354,9 @@ doc-path-check root="":
 # - A story id: an `E`, one or more digits, a dot, one or more digits and an
 #   optional lowercase letter (`E2.8b`).
 # - A plan name: the word `epic` followed by an epic (`epic E11`, `Epic 10`),
-#   the word `stage` followed by a letter and digits (`stage K3`), or the word
-#   `lane` followed by one capital letter (`lane M`). The word matches in any
+#   the word `stage` followed by a letter, digits and an optional lowercase
+#   letter (`stage K3`, `stage K9b`), or the word `lane` followed by one capital
+#   letter (`lane M`). The word and the letter are separated by one space. The word matches in any
 #   case; the letter does not, so prose such as "a lane a vehicle takes" is not
 #   a plan name.
 #
@@ -1385,8 +1385,12 @@ story-id-check root="":
     # The scanned trees. Each must match a tracked file, so a renamed tree
     # fails the gate instead of leaving it scanning nothing.
     scanned=(crates xtask examples editors/vscode/src docs/book docs/design docs/technotes)
+    # Printed by the fixtures when every case passed. The no-argument form
+    # fails unless it saw this line, so removing or skipping the fixtures call
+    # fails the recipe instead of passing unnoticed.
+    fixtures_marker="story-id-check: fixtures passed."
     id_re='(^|[^A-Za-z0-9_])E[0-9]+\.[0-9]+[a-z]?([^A-Za-z0-9_]|$)'
-    plan_re='(^|[^A-Za-z0-9_])([Ee][Pp][Ii][Cc] E?[0-9]+|[Ss][Tt][Aa][Gg][Ee] [A-Z][0-9]+|[Ll][Aa][Nn][Ee] [A-Z])([^A-Za-z0-9_]|$)'
+    plan_re='(^|[^A-Za-z0-9_])([Ee][Pp][Ii][Cc] E?[0-9]+|[Ss][Tt][Aa][Gg][Ee] [A-Z][0-9]+[a-z]?|[Ll][Aa][Nn][Ee] [A-Z])([^A-Za-z0-9_]|$)'
     # A git call that ignores an inherited git environment. A hook exports
     # GIT_DIR, which `git -C` does not override; see doc-path-check.
     git_at() {
@@ -1415,6 +1419,12 @@ story-id-check root="":
                 exit 1
             fi
         done
+        while IFS= read -r spec; do
+            if [ -z "$(git_at . -c core.quotePath=off ls-files -- "$spec")" ]; then
+                echo "story-id-check: a book file includes '$spec', which is not a tracked file; correct the include." >&2
+                exit 1
+            fi
+        done < <(included_specs)
         found="$({ git_at . -c core.quotePath=off ls-files -z -- "${scanned[@]}"
                 included_specs | tr '\n' '\0'; } | scan)"
         if [ -n "$found" ]; then
@@ -1444,9 +1454,9 @@ story-id-check root="":
         # Phrases that read like a plan name and are not one: no match for the
         # letter or digit class, a lowercase letter, a bare number, and a letter
         # directly before the word or after the name.
-        plan_clean="a lane a vehicle takes, lane m, stage 2, stage K, stage K3x, epic poem, epic e1, upstage K3, plane M, lane Mx"
+        plan_clean="a lane a vehicle takes, lane m, stage 2, stage K, stage k3, stage K3xy, lane  M, epic poem, epic e1, upstage K3, plane M, lane Mx"
         # Phrases that are a plan name, in the cases the pattern states.
-        plan_names=("epic E11" "Epic 10" "EPIC E1" "stage K3" "Stage P4" "STAGE M3" "lane M" "Lane P" "(lane Q's")
+        plan_names=("epic E11" "Epic 10" "EPIC E1" "stage K3" "stage K3x" "stage K9b" "Stage P4" "STAGE M3" "lane M" "Lane P" "(lane Q's")
         root="$work/fixture"
         report="$work/report"
         clean_tree() {
@@ -1504,7 +1514,7 @@ story-id-check root="":
             cat "$report" >&2
             exit 1
         fi
-        # Each plan name alone is enough to fail the gate, in each scanned tree.
+        # Each plan name alone is enough to fail the gate.
         for phrase in "${plan_names[@]}"; do
             clean_tree
             printf '%s\n' "// see $phrase" > "$root/crates/clean.txt"
@@ -1529,7 +1539,16 @@ story-id-check root="":
             cat "$report" >&2
             exit 1
         fi
-        rm "$root/$d/book/inc.md" "$root/$d/specification/inc.md"
+        # A book include that names no tracked file fails the gate.
+        printf '%s\n' "$open$open#include ../specification/gone.md}}" > "$root/$d/book/gone.md"
+        git_at "$root" -c core.excludesFile=/dev/null add -A
+        if "{{just_executable()}}" story-id-check "$root" >"$report" 2>&1 \
+            || ! grep -q -- "includes '$d/specification/gone.md', which is not a tracked file" "$report"; then
+            echo "story-id-check: the gate no longer fails on a book include that resolves to no file:" >&2
+            cat "$report" >&2
+            exit 1
+        fi
+        rm "$root/$d/book/inc.md" "$root/$d/specification/inc.md" "$root/$d/book/gone.md"
         # With one file in the list, the match still names the file.
         single="$work/single"
         mkdir -p "$single"
@@ -1568,12 +1587,18 @@ story-id-check root="":
             cat "$report" >&2
             exit 1
         fi
+        echo "$fixtures_marker"
     )
     if [ -n "{{root}}" ]; then
         run_gate "{{root}}"
     else
+        seen=""
         if [ -z "${RIDL_STORY_ID_NESTED:-}" ]; then
-            fixtures
+            seen="$(fixtures)"
+        fi
+        if [ -z "${RIDL_STORY_ID_NESTED:-}" ] && [ "$seen" != "$fixtures_marker" ]; then
+            echo "story-id-check: the fixtures did not run to the end." >&2
+            exit 1
         fi
         run_gate .
     fi

@@ -2563,7 +2563,7 @@ impl<'a> Codec<'a> {
     /// a bare scalar at a field position, so before ADR-0019 decision 8 none of
     /// them had a root and none of them carried a codec — which is what left
     /// the generated face on its `ReprC` placeholder (driftsys/ridl#470, closed
-    /// by stage K9b, which moved the face onto this codec). The
+    /// by moving the face onto this codec). The
     /// box is `table <Name>Box { value: <resolved type> (id: 0); }`, the same
     /// table decision 2 gives a non-table union arm, so the three bodies are
     /// the same three [`Codec::union_arm`] writes for that arm — read at the

@@ -595,7 +595,7 @@ included. There is one codec emitter and one call to it, so the face compiles
 over the same implementations a consumer of `generate` gets rather than over a
 second set written for it, and the checked-in fixture stays a single `include!`.
 
-**From stage K9b to 2026-09-29 the face named the encoding through one alias**,
+**Until 2026-09-29 the face named the encoding through one alias**,
 `pub type Wire = ::ridl_rt::encoding::FlatBuffers;`, emitted once per package at
 package scope. An unprefixed item at package scope is a name a declaration or an
 interface can carry, and `Wire` collided with both (driftsys/ridl#476, #588);

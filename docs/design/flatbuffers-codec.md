@@ -16,10 +16,10 @@ and its plan
 [`../archive/2026-09-20-flatbuffers-codec-plan.md`](../archive/2026-09-20-flatbuffers-codec-plan.md).
 
 **Every decision of that note is built.** The last was D-11, the generated
-interaction face moving off its `ReprC` placeholder and onto this codec, landed
-by stage K9b: the face names `::ridl_rt::encoding::FlatBuffers` at every buffer
-it sizes and every `Ref` it builds (through a per-package `pub type Wire` alias
-until 2026-09-29, when the
+interaction face moving off its `ReprC` placeholder and onto this codec, landed:
+the face names `::ridl_rt::encoding::FlatBuffers` at every buffer it sizes and
+every `Ref` it builds (through a per-package `pub type Wire` alias until
+2026-09-29, when the
 [generated-name collision design](../technotes/rust-backend-name-collisions.md)
 removed it, driftsys/ridl#588), and the hand-written `Payload<ReprC>`
 implementations its fixture carried are deleted. The projection decision that
@@ -256,9 +256,9 @@ gets rather than over a second set written for it.
 The face names the encoding by its full path at each site: `MAX_BUFFER_SIZE`,
 `EVENT_SOURCE_BUFFER_SIZE`, every `Ref::encode` and `Ref::verify` the face
 builds name `::ridl_rt::encoding::FlatBuffers`, as the codec's own `Payload`
-implementations do. From stage K9b to 2026-09-29 they named it through a
-per-package alias, `pub type Wire`, which a declaration or an interface named
-`Wire` collided with; the
+implementations do. Until 2026-09-29 they named it through a per-package alias,
+`pub type Wire`, which a declaration or an interface named `Wire` collided with;
+the
 [generated-name collision design](../technotes/rust-backend-name-collisions.md)
 removed the alias (driftsys/ridl#588). The encoding is stated by
 `ridl_backend_rust::WireEncoding`, which defaults to `FlatBuffers` and reaches

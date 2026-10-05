@@ -1401,9 +1401,19 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
     let call_shape_note = &call_shape_note[call_shape_note
         .rfind("Interface `WheelDiagnostics`")
         .expect("the call-shape note's headline")..];
+    let call_shape_reason = &call_shape_note[..call_shape_note
+        .find("A call the face cannot carry")
+        .expect("the call-shape owner line")];
     assert!(
-        call_shape_note.contains("driftsys/ridl#713"),
-        "the call-shape note names its own issue, got:\n{call_shape_note}"
+        call_shape_reason.contains("driftsys/ridl#713"),
+        "the refusal reason names the argument-struct issue, got:\n{call_shape_reason}"
+    );
+    let call_shape_owner = &call_shape_note[call_shape_note
+        .find("A call the face cannot carry")
+        .expect("the call-shape owner line")..];
+    assert!(
+        call_shape_owner.contains("driftsys/ridl#713"),
+        "the call-shape owner line names its own issue, got:\n{call_shape_owner}"
     );
     for (which, text) in [("clause", note), ("call-shape", call_shape_note)] {
         assert!(

@@ -10,7 +10,7 @@
 //! succeeds, and dispatch's short-buffer behavior.
 //!
 //! **Every payload here is encoded by the generated FlatBuffers codec**
-//! (stage K9b, design note D-11). The hand-written `Payload<ReprC>` module
+//! (design note D-11). The hand-written `Payload<ReprC>` module
 //! this file carried until then is gone, and with it the `PAD` constant that
 //! made its `encode` return a subslice rather than a prefix. That guard is
 //! not lost: a FlatBuffers builder fills a buffer from its end, so what the
@@ -723,7 +723,7 @@ fn round_trip_short_caller_buffer_returns_zero_without_consuming_a_claim() {
 
 /// `Encoded.bytes` is a subslice of the output buffer and not necessarily a
 /// prefix of it (`crates/ridl-rt/src/payload.rs`, ADR-0021 decision 7's
-/// 2026-09-20 amendment). Until stage K9b this file's own throwaway
+/// 2026-09-20 amendment). This file once had its own throwaway
 /// `Payload<ReprC>` implementations wrote after four leading bytes so that
 /// the property held of them too; the generated FlatBuffers codec needs no
 /// such arrangement, because a FlatBuffers builder fills a buffer from its

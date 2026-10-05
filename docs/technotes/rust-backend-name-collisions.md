@@ -133,9 +133,9 @@ the others are choices of the Rust backend.
 3. TYPL-215 covers a tuple's fields; no new code.
 4. A collision of two ridl-derived names is a build error of the package, from
    one claim table per Rust namespace.
-5. The `pub type Wire` alias is removed. This reversed interaction-face decision
-   5, which refused a package that used the name, and `refuse_wire_collision` is
-   gone.
+5. The `pub type Wire` alias is removed. This reversed interaction-face design
+   rule 5, which refused a package that used the name, and
+   `refuse_wire_collision` is gone.
 6. `bytes` moves to `ridl_rt::payload::View<'a>`.
 7. The keyword escape is injective by one more `_`.
 8. Primitive names are written `::core::primitive::<name>` in package scope. The

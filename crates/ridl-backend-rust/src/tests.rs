@@ -5811,3 +5811,28 @@ fn a_withheld_declaration_claims_no_view_name() {
         "the codec of `Line` must be withheld, or this test proves nothing:\n{source}"
     );
 }
+
+/// The owner line of a skipped-interface note for a refusal that no owner
+/// claims names the reason and no tracking issue, and cites neither of the
+/// two issues that own the other gaps.
+#[test]
+fn a_skipped_interface_note_without_an_owner_names_no_issue() {
+    use crate::{GenerateError, skipped_interface_note};
+    use ridl_ir::codegen::v1;
+
+    let note = skipped_interface_note(
+        &v1::Interface::default(),
+        &GenerateError {
+            message: "a refusal nobody owns".to_string(),
+        },
+    )
+    .to_string();
+    assert!(
+        note.contains("No tracking issue owns this one"),
+        "got: {note}"
+    );
+    assert!(
+        !note.contains("driftsys/ridl#713") && !note.contains("driftsys/ridl#704"),
+        "got: {note}"
+    );
+}
