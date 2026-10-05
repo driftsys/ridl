@@ -2,7 +2,8 @@
 
 use ridl_descriptor::lower::LowerError;
 use ridl_descriptor::{
-    CatalogRef, Encoding, InterfaceRef, Kind, SCHEMA_VERSION, SizeStateTag, lower, verify,
+    CatalogRef, Encoding, InterfaceRef, Kind, SCHEMA_VERSION, SizeStateTag, UnboundedCause, lower,
+    verify,
 };
 use ridl_ir::projection::flatbuffers::{Packages, max_size};
 use ridl_ir::v2::{
@@ -322,13 +323,17 @@ fn the_descriptor_carries_every_member_of_every_kind() {
     );
 }
 
-/// The descriptor's first interface: `Vehicle` in every fixture here.
+/// The descriptor's first interface: `Vehicle` in most fixtures here.
 fn vehicle(catalog: CatalogRef<'_>) -> InterfaceRef<'_> {
     catalog.interfaces().unwrap().get(0).unwrap().unwrap()
 }
 
-/// The rows of one payload: (encoding, state, bytes).
-fn rows(payload: ridl_descriptor::PayloadRef<'_>) -> Vec<(Encoding, SizeStateTag, u32)> {
+/// The whole of every row of one payload: (encoding, state, bytes, cause).
+/// Every field the schema carries, so a row that changed any one of them
+/// fails the assertion.
+fn rows(
+    payload: ridl_descriptor::PayloadRef<'_>,
+) -> Vec<(Encoding, SizeStateTag, u32, UnboundedCause)> {
     payload
         .max_sizes()
         .unwrap()
@@ -339,6 +344,7 @@ fn rows(payload: ridl_descriptor::PayloadRef<'_>) -> Vec<(Encoding, SizeStateTag
                 s.encoding().unwrap(),
                 s.state().unwrap(),
                 s.bytes().unwrap(),
+                s.cause().unwrap(),
             )
         })
         .collect()
@@ -356,11 +362,17 @@ fn a_named_type_payload_has_a_row_per_sized_encoding_and_no_repr_c() {
         rows(payload),
         vec![
             // ADR-0017: i16 projects to sint32, at most 5 bytes; (1-byte tag + 5) x 2 fields = 12.
-            (Encoding::Proto3, SizeStateTag::Bounded, 12),
+            (
+                Encoding::Proto3,
+                SizeStateTag::Bounded,
+                12,
+                UnboundedCause::Unspecified
+            ),
             (
                 Encoding::FlatBuffers,
                 SizeStateTag::Bounded,
-                point_fb_bound(&package)
+                point_fb_bound(&package),
+                UnboundedCause::Unspecified
             ),
         ]
     );
@@ -368,7 +380,8 @@ fn a_named_type_payload_has_a_row_per_sized_encoding_and_no_repr_c() {
 
 #[test]
 fn a_request_of_one_named_parameter_is_sized_and_of_several_is_absent() {
-    let bytes = lower(&package(), &[]).unwrap();
+    let package = package();
+    let bytes = lower(&package, &[]).unwrap();
     let catalog = verify(&bytes).unwrap();
     let members = vehicle(catalog).members().unwrap();
     let move_to = members
@@ -381,7 +394,25 @@ fn a_request_of_one_named_parameter_is_sized_and_of_several_is_absent() {
         .unwrap()
         .unwrap();
     assert_eq!(move_to.type_name().unwrap(), "Point");
-    assert_eq!(rows(move_to).len(), 2);
+    // Which encodings and which byte counts, not how many rows: the request
+    // of one named parameter carries that type's own two rows.
+    assert_eq!(
+        rows(move_to),
+        vec![
+            (
+                Encoding::Proto3,
+                SizeStateTag::Bounded,
+                12,
+                UnboundedCause::Unspecified
+            ),
+            (
+                Encoding::FlatBuffers,
+                SizeStateTag::Bounded,
+                point_fb_bound(&package),
+                UnboundedCause::Unspecified
+            ),
+        ]
+    );
     let move_both = members
         .get(6)
         .unwrap()
@@ -394,7 +425,7 @@ fn a_request_of_one_named_parameter_is_sized_and_of_several_is_absent() {
     assert_eq!(move_both.type_name().unwrap(), "(a: Point, b: Point)");
     assert!(
         rows(move_both).is_empty(),
-        "several parameters: driver §4 answer 6"
+        "several parameters: `docs/design/catalog-descriptor.md`"
     );
 }
 
@@ -415,7 +446,71 @@ fn a_fallible_reply_is_absent() {
     assert_eq!(reply.type_name().unwrap(), "Point | Coord");
     assert!(
         rows(reply).is_empty(),
-        "an inline `T | E`: driver §4 answer 6"
+        "an inline `T | E`: `docs/design/catalog-descriptor.md`"
+    );
+}
+
+/// `Open { text: string }` with no length bound on the string, behind the one
+/// event of one interface. The FlatBuffers projection cannot bound that
+/// member, so this is the package that reaches the lowering's unbounded arm.
+fn unbounded_payload_package() -> Package {
+    Package {
+        name: "veh.open".to_owned(),
+        decls: vec![Decl {
+            name: "Open".to_owned(),
+            kind: Some(decl::Kind::StructDef(StructDef {
+                members: vec![StructMember {
+                    member: Some(struct_member::Member::Field(Box::new(Field {
+                        name: "text".to_owned(),
+                        ordinal: 1,
+                        r#type: Some(FieldType {
+                            optional: false,
+                            kind: Some(field_type::Kind::Primitive(PrimitiveType::String as i32)),
+                        }),
+                        ..Default::default()
+                    }))),
+                }],
+                fixed_layout: false,
+            })),
+            ..Default::default()
+        }],
+        interfaces: vec![Interface {
+            name: "Opener".to_owned(),
+            number: 1,
+            provisional: false,
+            interactions: vec![interaction(
+                "opened",
+                1,
+                decl::Kind::EventDef(EventDef {
+                    payload: "Open".to_owned(),
+                    timing: None,
+                }),
+            )],
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
+}
+
+#[test]
+fn an_unbounded_payload_lowers_to_one_unbounded_flatbuffers_row() {
+    // The lowering's unbounded arm, end to end through `lower`: the state,
+    // the cause and the byte count of the row it writes. A lowering that
+    // wrote `Bounded`, the unspecified cause, or any byte count other than 0
+    // fails here. proto3 refuses a member no leaf bounds, so its state is
+    // absent and writes no row at all.
+    let bytes = lower(&unbounded_payload_package(), &[]).unwrap();
+    let catalog = verify(&bytes).unwrap();
+    let payload = payload_at(catalog, 0, 0);
+    assert_eq!(payload.type_name().unwrap(), "Open");
+    assert_eq!(
+        rows(payload),
+        vec![(
+            Encoding::FlatBuffers,
+            SizeStateTag::Unbounded,
+            0,
+            UnboundedCause::Member
+        )]
     );
 }
 
@@ -578,11 +673,17 @@ fn a_query_response_of_one_named_type_is_sized() {
     assert_eq!(
         rows(response),
         vec![
-            (Encoding::Proto3, SizeStateTag::Bounded, 12),
+            (
+                Encoding::Proto3,
+                SizeStateTag::Bounded,
+                12,
+                UnboundedCause::Unspecified
+            ),
             (
                 Encoding::FlatBuffers,
                 SizeStateTag::Bounded,
-                point_fb_bound(&package)
+                point_fb_bound(&package),
+                UnboundedCause::Unspecified
             ),
         ]
     );
@@ -637,11 +738,17 @@ fn a_payload_from_another_package_is_sized_and_hashed_through_others() {
     assert_eq!(
         rows(payload),
         vec![
-            (Encoding::Proto3, SizeStateTag::Bounded, 12),
+            (
+                Encoding::Proto3,
+                SizeStateTag::Bounded,
+                12,
+                UnboundedCause::Unspecified
+            ),
             (
                 Encoding::FlatBuffers,
                 SizeStateTag::Bounded,
-                point_fb_bound(&geo)
+                point_fb_bound(&geo),
+                UnboundedCause::Unspecified
             ),
         ]
     );

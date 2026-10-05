@@ -14,7 +14,9 @@
 //! reads the projection's bound and the codegen model's cause. A request of
 //! zero or several parameters, an inline `T | E` reply and a stream payload
 //! are absent with [`AbsentCause::EncodingUndefined`] until a record defines
-//! their encoding (driftsys/ridl#336 for streams).
+//! their encoding (driftsys/ridl#336 for streams), as is every other shape
+//! that is not one named type and whose encoding no codec defines;
+//! [`AbsentCause`] lists every case of every cause.
 //!
 //! The absence is a state of its own, not a missing value: a consumer must be
 //! able to tell "no bound exists" from "this toolchain computed none, for this
@@ -203,16 +205,26 @@ pub enum SizeState {
 /// Why a payload has no size state under an encoding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AbsentCause {
-    /// No codec defines the encoding of the shape: a stream payload, a
-    /// request of zero or of several parameters, an inline `T | E` reply,
-    /// or the `repr(C)` encoding.
+    /// No codec defines the encoding of the shape. Every case: the
+    /// `repr(C)` encoding, whatever the shape; a request of zero or of
+    /// several parameters; a parameter, a reply or a fixed payload that
+    /// declares no type; a fallible `T | E` reply; a return type that
+    /// declares no reply type; a payload, a parameter or a reply that is a
+    /// tuple, an array, a map or a stream; and a payload, a parameter or a
+    /// reply that is a bare scalar some proto3 leaf bounds, which has a size
+    /// of its own but no defined payload encoding.
     EncodingUndefined,
     /// proto3 only: the type has no message of its own. ADR-0017 decision 1
     /// inlines a named scalar and an enum set into their field (decision 2
     /// rejects a wrapper message), and an enum is a declared `enum`.
     NoMessage,
-    /// proto3 only: a member of the message is one the proto backend
-    /// refuses, or one it accepts that no proto3 leaf bounds.
+    /// proto3 only: a failure inside the message other than the depth limit
+    /// and an overflowing bound, which are [`AbsentCause::Overflow`]. Every
+    /// case: a member the proto backend refuses, a name inside the message
+    /// that does not resolve, a member no proto3 leaf bounds, an enum value
+    /// outside int32, and a `u64` sum or product inside the walk that does
+    /// not fit. This variant's text is the normative statement of the cause;
+    /// the proto3 sizer's `state` implements it.
     RefusedMember,
     /// A `string` or `bytes` with no length bound, or a type def with no
     /// width: the value itself has no size.
@@ -221,7 +233,9 @@ pub enum AbsentCause {
     /// depth limit.
     Overflow,
     /// The name does not resolve, or the declaration it names has no root
-    /// form under the encoding.
+    /// form under the encoding: under FlatBuffers a declaration with no root
+    /// table, under proto3 a declaration with no message at all, such as a
+    /// constant or an interaction.
     Unresolved,
 }
 
@@ -1437,6 +1451,46 @@ mod tests {
                 size_state(&package, &PayloadShape::Field(&inline), &ctx, encoding),
                 SizeState::Absent(AbsentCause::NoBound),
                 "{encoding:?}, an inline `string` with no bound"
+            );
+        }
+    }
+
+    #[test]
+    fn an_unbounded_string_request_has_no_bound_rather_than_no_encoding() {
+        // `command set(name: string)`. The one parameter is a scalar, so no
+        // codec defines the request's encoding — but the value itself has no
+        // size either, and the narrower cause is the one a consumer needs:
+        // bounding the string would not give the shape an encoding, while
+        // defining the encoding would not give the value a bound. A
+        // `payload_name` that answered `EncodingUndefined` for this shape
+        // fails here.
+        let package = tests_support::fixture();
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        let params = [param("name", Some(primitive(PrimitiveType::String)))];
+        for encoding in WIRE {
+            assert_eq!(
+                size_state(&package, &PayloadShape::Params(&params), &ctx, encoding),
+                SizeState::Absent(AbsentCause::NoBound),
+                "{encoding:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_unbounded_string_reply_has_no_bound_rather_than_no_encoding() {
+        // `query name() -> string`, the reply half of the shape above.
+        let package = tests_support::fixture();
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        let value = ReturnType {
+            kind: Some(return_type::Kind::Value(primitive(PrimitiveType::String))),
+        };
+        for encoding in WIRE {
+            assert_eq!(
+                size_state(&package, &PayloadShape::Return(&value), &ctx, encoding),
+                SizeState::Absent(AbsentCause::NoBound),
+                "{encoding:?}"
             );
         }
     }

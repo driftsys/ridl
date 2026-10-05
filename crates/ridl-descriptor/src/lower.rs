@@ -1,6 +1,8 @@
 //! IR → catalog descriptor (spec D-4, D-6, D-9). One lowering writes the
 //! whole file; the toolchain version stamped in it is this crate's. The
-//! numbers and the retired list are the IR's (driver §4 answer 3).
+//! numbers and the retired list are the IR's
+//! (`docs/design/catalog-descriptor.md`, the section "What a catalog
+//! contains").
 
 use std::fmt;
 
@@ -172,7 +174,8 @@ fn member_of(decl: &Decl, ctx: &Ctx<'_>) -> Option<Member> {
 }
 
 /// The request payload: one parameter is spelled as its type, several as
-/// `(a: T, b: U)`; only one named parameter is sized (§4 answer 6).
+/// `(a: T, b: U)`; only one named parameter is sized
+/// (`docs/design/catalog-descriptor.md`, the section "The size states").
 fn request(params: &[Param], ctx: &Ctx<'_>) -> Payload {
     let name = match params {
         [single] => single.r#type.as_ref().map(spell).unwrap_or_default(),

@@ -288,11 +288,14 @@ states them per wire encoding, so a plugin reads them without walking the
 members itself.
 
 The two sides agree only where the runtime holds the same per-payload sizes the
-model holds. Today the Rust backend writes no proto3 size into a descriptor:
-`PayloadInfo::max_size` carries `proto3: None` for every payload, so the
-runtime's proto3 reservation is `Unsized` for every member a descriptor carries,
-while the model's proto3 column can carry a byte count. The FlatBuffers column
-is the one where both sides read the same number.
+model holds. Today the Rust backend writes no proto3 size into the runtime
+member table it generates: the `PayloadInfo::max_size` of that table carries
+`proto3: None` for every payload (`descriptors.rs` in `ridl-backend-rust`), so
+the runtime's proto3 reservation is `Unsized` for every member of a generated
+table, while the model's proto3 column can carry a byte count. The catalog
+descriptor this record describes is a different artifact, and it does write a
+proto3 row (`lower.rs` in `ridl-descriptor`). The FlatBuffers column is the one
+where the runtime table and the model read the same number.
 
 ## Verification before access, and `ridl describe`
 

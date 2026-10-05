@@ -1416,8 +1416,9 @@ fn an_unbounded_payload_keeps_its_cause_in_the_state() {
 
 /// `sized_package` plus one interface `Calls` holding, in order: a command
 /// with two parameters, a command with the one parameter `Pair`, a query
-/// with no parameter returning `Pair`, and a query over `Pair` with the
-/// fallible reply `Pair | Pair`.
+/// with no parameter returning `Pair`, a query over `Pair` with the
+/// fallible reply `Pair | Pair`, and a query over `Pair` returning `Tagged`,
+/// which has no FlatBuffers bound.
 fn call_package() -> v2::Package {
     let param = |name: &str| v2::Param {
         name: name.to_string(),
@@ -1471,6 +1472,16 @@ fn call_package() -> v2::Package {
                 v2::decl::Kind::QueryDef(v2::QueryDef {
                     params: vec![param("a")],
                     return_type: Some(fallible),
+                    ..Default::default()
+                }),
+            ),
+            decl(
+                "loose",
+                v2::decl::Kind::QueryDef(v2::QueryDef {
+                    params: vec![param("a")],
+                    return_type: Some(v2::ReturnType {
+                        kind: Some(v2::return_type::Kind::Value(named("Tagged"))),
+                    }),
                     ..Default::default()
                 }),
             ),
@@ -1566,6 +1577,59 @@ fn a_fallible_query_reply_is_undefined() {
     assert_eq!(state(&query.reply_sizes, true), &undefined());
     assert_eq!(state(&query.reply_sizes, false), &undefined());
     assert_eq!(query.request_sizes, query.request.as_ref().unwrap().sizes);
+}
+
+#[test]
+fn an_unbounded_query_reply_keeps_the_replys_own_attribution() {
+    // The reply's unbounded state is attributed to the reply type, not to
+    // the cause alone: the attribution carries the member that cannot be
+    // bounded. A lowering that sized the reply without its named type would
+    // write the bare cause with no member, and fails here.
+    let model = lower(&call_package(), &[]);
+    let v1::interaction::Shape::Query(query) = call_shape(&model, 4) else {
+        panic!("a query");
+    };
+    let reference = query
+        .reply_payload
+        .as_ref()
+        .expect("the reply is one named type")
+        .r#type
+        .as_ref()
+        .expect("a type");
+    let root = model
+        .flatbuffers
+        .as_ref()
+        .expect("the projection is lowered")
+        .roots
+        .iter()
+        .find(|root| root.declaration == reference.index)
+        .expect("a root for the reply type");
+    let Some(v1::fb_root::Bound::Unbounded(expected)) = root.bound.as_ref() else {
+        panic!("the root is unbounded");
+    };
+    assert!(
+        expected.member.is_some(),
+        "the attribution names the member that cannot be bounded"
+    );
+    assert_eq!(
+        state(&query.reply_sizes, false),
+        &v1::size_state::State::Unbounded(expected.clone())
+    );
+}
+
+#[test]
+fn a_query_with_no_return_type_spells_its_reply_as_a_unit() {
+    // The request is bounded, so the reservation walks past it and names the
+    // reply: that is the only place the reply's text is visible. A reply text
+    // spelled any other way fails here.
+    let model = lower(&bare_package(), &[]);
+    let quiet = live_member(interface_named(&model, "Bare"), "quiet");
+    for proto3 in [true, false] {
+        assert_eq!(
+            reserved(&quiet.reservation, proto3),
+            &unsized_by("quiet.reply: ()")
+        );
+    }
 }
 
 #[test]
@@ -1823,9 +1887,10 @@ fn a_tombstone_does_not_count() {
     assert_eq!(reserved(&gaps.table_budget, false), &bytes(0));
 }
 
-/// The `Bare` interface: a query with no parameter and no return type, and a
-/// fixed member with no payload. The ridl surface admits neither; the IR can
-/// carry both.
+/// The `Bare` interface: a query with no parameter and no return type, a
+/// fixed member with no payload, and a query whose one `Pair` parameter is
+/// bounded and which declares no return type. The ridl surface admits none of
+/// the three; the IR can carry all three.
 fn bare_package() -> v2::Package {
     let package = sized_package();
     let decl = |name: &str, kind: v2::decl::Kind| v2::Decl {
@@ -1840,6 +1905,17 @@ fn bare_package() -> v2::Package {
         interactions: vec![
             decl("blank", v2::decl::Kind::QueryDef(v2::QueryDef::default())),
             decl("tick", v2::decl::Kind::FixedDef(v2::FixedDef::default())),
+            decl(
+                "quiet",
+                v2::decl::Kind::QueryDef(v2::QueryDef {
+                    params: vec![v2::Param {
+                        name: "a".to_string(),
+                        r#type: Some(named("Pair")),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
+            ),
         ],
         number: 6,
         ..Default::default()
@@ -1956,10 +2032,10 @@ fn each_encoding_lands_in_its_own_column() {
     ));
 }
 
-/// The `Kinds` interface: four fixed members whose payloads are, in order, a
-/// primitive, an inline scalar, a map and an array of a named type. No codec
-/// defines a size for any of them, so each reservation is unsized and states
-/// the payload's kind.
+/// The `Kinds` interface: five fixed members whose payloads are, in order, a
+/// primitive, an inline scalar, a map, an array of a named type, and a
+/// payload position that declares no type at all. No codec defines a size for
+/// any of them, so each reservation is unsized and states the payload's kind.
 fn kinds_package() -> v2::Package {
     let package = sized_package();
     let primitive = v2::FieldType {
@@ -2013,6 +2089,13 @@ fn kinds_package() -> v2::Package {
             fixed("count", inline),
             fixed("table", map),
             fixed("list", array),
+            fixed(
+                "void",
+                v2::FieldType {
+                    optional: false,
+                    kind: None,
+                },
+            ),
         ],
         number: 8,
         ..Default::default()
@@ -2035,6 +2118,9 @@ fn an_unsized_fixed_member_states_the_kind_of_its_payload() {
         ("count", "count.payload: inline scalar"),
         ("table", "table.payload: map"),
         ("list", "list.payload: array of Pair"),
+        // A field position with no kind at all: its own word, not `map` and
+        // not `no payload`, which is the member that carries no payload.
+        ("void", "void.payload: no type"),
     ];
     for (member, text) in expected {
         for proto3 in [true, false] {
