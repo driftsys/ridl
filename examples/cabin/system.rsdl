@@ -1,0 +1,19 @@
+package veh.cabin
+
+/// The vehicle: the three components the cabin example deploys.
+system Vehicle { Climate, Panel, Telemetry }
+
+/// Provides the cabin's one service.
+component Climate   { offers veh.cabin.control }
+/// Consumes the cabin interface and the horn interface.
+component Panel     { requires Cabin
+                      requires Horn }
+/// Consumes the cabin interface from another machine.
+component Telemetry { requires Cabin }
+
+/// The bench deployment: two machines, one with the service provider and the
+/// panel, one with the telemetry component.
+deployment Bench for Vehicle {
+  machine Hpc     { Climate, Panel }
+  machine Gateway { Telemetry }
+}

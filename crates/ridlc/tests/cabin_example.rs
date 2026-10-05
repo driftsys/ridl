@@ -197,3 +197,31 @@ fn the_emitted_cabin_crate_runs_six_round_trips_against_a_consumer() {
         );
     }
 }
+
+/// The cabin workspace declares one system with one deployment, `Bench`, whose
+/// three consumer links cover both crossing kinds: two on one machine and one
+/// between machines. Later tests read this deployment by name.
+#[test]
+fn cabin_lowers_one_deployment_with_three_links() {
+    use ridl_ir::v2::Crossing;
+
+    let output = ridlc::compile_workspace(&mut ridl_core::RidlDatabase::default(), &example_dir())
+        .expect("the cabin workspace loads");
+    let system = output.system.expect("the cabin workspace lowers a system");
+
+    assert_eq!(system.deployments.len(), 1);
+    let bench = &system.deployments[0];
+    assert_eq!(bench.name, "Bench");
+    let crossings: Vec<i32> = bench.links.iter().map(|link| link.crossing).collect();
+    assert_eq!(
+        crossings,
+        vec![
+            Crossing::SameMachine as i32,
+            Crossing::SameMachine as i32,
+            Crossing::DifferentMachine as i32,
+        ]
+    );
+    assert_eq!(system.regions.len(), 1);
+    assert_eq!(system.regions[0].catalog, "veh.cabin");
+    assert_eq!(system.regions[0].interfaces.len(), 2);
+}
