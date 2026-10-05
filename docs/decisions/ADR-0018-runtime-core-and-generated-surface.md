@@ -333,11 +333,13 @@ be generated, and in what order", which is what this record answers.
     below the bound draws RSDL-805. The slot count of the call table and its
     byte budget, which no record sourced, are the `slots` and `budget` keys on
     the same sites, with the defaults the design fixes (16 slots, no budget).
-    "An underivable depth is a deploy-time error" becomes: the build warns
-    (RSDL-806), the request carries the depth absent with its cause, and a
-    plugin that needs it refuses. This rule is evaluated again when rsdl carries
-    a service period, where RSDL-801 reopens. The design note is
-    `2026-10-05-layout-inputs-design.md` (D-5 and D-6).
+    "An underivable or infeasible depth is a deploy-time error" becomes: an
+    underivable depth makes the build warn (RSDL-806), the request carry the
+    depth absent with its cause, and a plugin that needs it refuse;
+    infeasibility is not evaluated either, because it needs the same service
+    period and jitter, and stays with RSDL-801. This rule is evaluated again
+    when rsdl carries a service period, where RSDL-801 reopens. The design note
+    is `2026-10-05-layout-inputs-design.md` (D-5 and D-6).
 
 13. **A bridge keeps a domain-mediated reference path with generated streaming
     transcoders beside it.** Decode to the validated domain type and re-encode

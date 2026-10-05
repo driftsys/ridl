@@ -376,8 +376,8 @@ the status in the code and the rejected alternatives in short form.
   system descriptor's catalog hashes with its embedded catalogs). Its file
   identifier and extension are not chosen. Decided on 2026-10-05
   (driftsys/ridl#715): it stays unbuilt while the layout inputs for backend
-  plugins land. The per-deployment facts a backend needs reach it through the
-  codegen request's deployment section
+  plugins land. The per-deployment facts a backend needs are to reach it through
+  the codegen request's deployment section, which driftsys/ridl#716 builds
   ([ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 11,
   [`codegen-plugins.md`](codegen-plugins.md)); a descriptor file would be a
   second emitter over the same system IR, built when a runtime that reads one

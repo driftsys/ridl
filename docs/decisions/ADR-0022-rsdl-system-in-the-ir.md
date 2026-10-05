@@ -91,6 +91,12 @@ nothing.
    neither. The model carries no doc comment for an rsdl declaration, so the
    message has no `doc` field.
 
+   **Note (2026-10-05, decision 11).** `Deployment.sizing` and
+   `Placement.sizing` carry the declared `depth`, `slots` and `budget` as
+   dedicated fields. rsdl §13 lists them once the rsdl sizing keys land
+   (driftsys/ridl#719), so the rule reads over the amended §13; until then the
+   two fields are the one fact this message states that §13 does not.
+
 4. **Identity in the message is by qualified name, with `inline` beside it.** A
    component is `pkg.Name`, or the owning service's dotted name for the implicit
    component (rsdl §6); the case of the last segment tells the two apart. A
@@ -195,14 +201,14 @@ nothing.
     the emitter decision 1 anticipated, with a backend rather than a runtime as
     its reader. `System` changes only to carry the declared sizing values,
     `Deployment.sizing` and `Placement.sizing`, as dedicated fields the way
-    `instances` and `external` are, not as attribute-map entries. **The boundary
-    with the engine moves.** The store, the seqlock, the ring and the scheduler
-    stay parked as `ridl-engine`; the values they are sized from are tabulated
-    here. The system descriptor file of the runtime descriptors design stays
-    unbuilt: it would be a second emitter over the same message, built when a
-    runtime that reads one exists (`docs/design/catalog-descriptor.md`, "Not
-    built"). The design note is `2026-10-05-layout-inputs-design.md`, archived
-    when its lane closes.
+    `instances` and `external` are, not as attribute-map entries. This narrows
+    decision 3 (see its note). **The boundary with the engine moves.** The
+    store, the seqlock, the ring and the scheduler stay parked as `ridl-engine`;
+    the values they are sized from are tabulated here. The system descriptor
+    file of the runtime descriptors design stays unbuilt: it would be a second
+    emitter over the same message, built when a runtime that reads one exists
+    (`docs/design/catalog-descriptor.md`, "Not built"). The design note is
+    `2026-10-05-layout-inputs-design.md`, archived when its lane closes.
 
 ## Consequences
 
@@ -243,6 +249,7 @@ nothing.
 | [ADR-0015](ADR-0015-qos-absorption-and-rpc-bounds.md) decision 21                    | a 2026-10-05 amendment: the depth is tabulated into the request and declarable as an rsdl override (decision 11)                                                                              |
 | [ADR-0018](ADR-0018-runtime-core-and-generated-surface.md) decision 12               | a 2026-10-05 amendment: which depth rule the toolchain evaluates, and the `depth`, `slots` and `budget` sources (decision 11)                                                                 |
 | [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decision 9 | a 2026-10-05 amendment: the request carries the deployment section (decision 11)                                                                                                              |
+| rsdl language reference §13                                                          | driftsys/ridl#719 adds the declared sizing values to the lowered facts (decision 11, the note under decision 3)                                                                               |
 | [ADR-0010](ADR-0010-cli-conventions.md) the `build` row                              | unchanged by decision 8 — the exit code is still 1 on any error; what is written on an RSDL-7xx error is stated here, since that row never stated what is written                             |
 
 ## References
