@@ -8,9 +8,8 @@ syntax = "proto3";
 // written from the lowered system, once per build: every request of one build
 // carries the same section, whichever package the request is for. A plugin
 // generating package P finds P's regions and P's messages here and their
-// payload sizes in P's model. The design note is
-// `docs/wip/2026-10-05-layout-inputs-design.md`; its §4 D-1 and D-2 are the
-// placement and the content, and its §5.1 is this file.
+// payload sizes in P's model. The design record is
+// `docs/design/codegen-plugins.md`, section "The deployment section".
 //
 // Order rule: every repeated field below is in the order its comment names,
 // so that two runs write the same bytes. The section states no count that is

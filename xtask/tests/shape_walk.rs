@@ -259,6 +259,12 @@ const ALLOWED: &[Allowed] = &[
               shapes are outside this check's scope",
     },
     Allowed {
+        path: "crates/ridlc/tests/cabin_example.rs",
+        lines: 1,
+        why: "the read is of the deployment region's interface list \
+              (`Region::interfaces`), not of `Package::interfaces`",
+    },
+    Allowed {
         path: "crates/ridlc/tests/codegen_model.rs",
         lines: 3,
         why: "the reads are of `ridl_ir::codegen::v1::Model::interfaces`, not \
