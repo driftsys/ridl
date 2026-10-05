@@ -836,6 +836,50 @@ mod tests {
         assert_eq!(value["diagnostics"][0]["span"]["path"], json!("input.typl"));
     }
 
+    #[tokio::test]
+    async fn source_mode_public_wrapper_reports_positive_design_diagnostic() {
+        let source = "package p\ntype Speed: km/h [0.0..250.0 step 0.5]\ntype SpeedMs: m/s [0.0..100.0 step 0.5]\nstruct First { speed: Speed }\nstruct Second { speed: Speed }\nstruct Third { speed: SpeedMs }\n";
+        let result = RidlMcp::new()
+            .ridl_check(Parameters(CheckParams {
+                source: Some(source.into()),
+                profile: Some(Profile::Ridl),
+                path: None,
+                overlays: None,
+            }))
+            .await
+            .unwrap();
+        assert_eq!(result.is_error, Some(false));
+        let [ContentBlock::Text(block)] = result.content.as_slice() else {
+            panic!("one JSON text block")
+        };
+        let value: serde_json::Value = serde_json::from_str(&block.text).unwrap();
+        assert!(value.get("workspace").is_none());
+        let diagnostics = value["diagnostics"].as_array().unwrap();
+        assert!(
+            !diagnostics.iter().any(|d| d["severity"] == "error"),
+            "{value}"
+        );
+        let design = diagnostics
+            .iter()
+            .filter(|d| d["code"] == "TYPL-222")
+            .collect::<Vec<_>>();
+        assert_eq!(design.len(), 1, "{value}");
+        assert_eq!(design[0]["lint"], "inconsistent-unit");
+        assert_eq!(design[0]["severity"], "info");
+        assert_eq!(
+            design[0]["message"],
+            "`speed` uses `m/s` here; elsewhere `speed` uses `km/h`"
+        );
+        assert_eq!(
+            design[0]["span"],
+            json!({"path":"input.ridl", "start":{"line":6,"column":16}, "end":{"line":6,"column":21}})
+        );
+        assert_eq!(
+            design[0]["labels"][0]["span"],
+            json!({"path":"input.ridl", "start":{"line":4,"column":16}, "end":{"line":4,"column":21}})
+        );
+    }
+
     /// The check the panic test installs: it panics on one sentinel source
     /// and is the real [`check`] on every other, so one server can show both
     /// the failed call and the call after it.

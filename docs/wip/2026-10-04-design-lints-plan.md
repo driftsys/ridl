@@ -1681,6 +1681,91 @@ execution.
     updated assertion could conceal a compiler defect; require a fresh scoped
     review before relying on the full verification result.
 
+73. **Repair all ten confirmed PR 712 findings in one owned wave** (2026-10-04).
+    The fresh primary finding and refuter evidence is normative. Shadow
+    measurement information isolation was imperfect; preserve its original
+    artifact, but do not use it as normative review evidence. Keep the approved
+    spec, task text, prior decisions, corpus, labels and original finding arrays
+    unchanged. Use only the authorized scratch directory and no other worktree.
+    If wrong, the repair could invalidate independent calibration evidence or
+    overwrite another contributor's work; compare preserved hashes and the exact
+    tracked file list before handoff.
+
+74. **Validate every existing dump publication and build destination before side
+    effects** (2026-10-04, F01). Keep the outer containment check and inspect
+    each output JSON file and the full existing target tree without following
+    links. Reject symlinks and nonregular destinations; on Unix reject hard
+    links with aliases outside the validated tree. Cargo-created hard links
+    entirely within its target are safe and required for target reuse. Stage
+    arrays in the private temporary copy directory and rename them into place.
+    Keep the reusable target and the README's corpus isolation contract. If too
+    strict, an intentionally linked build cache needs a real directory; if too
+    weak, Cargo or publication could overwrite sources. Synthetic executable
+    fixtures pin unchanged corpus and rejection before Cargo writes.
+
+75. **Include indented numbered rubric items in the complete recall inventory**
+    (2026-10-04, F02). Remove leading whitespace before parsing the unchanged
+    numbered item syntax; retain integer, strength, duplicate ID and complete
+    inventory/applicability validation. If wrong, omitted items can inflate
+    recall or invalid inventories can be accepted. Test indented valid items,
+    omitted classifications, omitted applicability and malformed item records.
+
+76. **Pin recall columns, occurrence order and cross-workspace joins directly**
+    (2026-10-04, F04-F06). Assert recall numerator, denominator, ratio and the
+    exact alias candidate row. Use distinct same-span messages in both compiler
+    orders with exact occurrence IDs across temporary roots. Reject an otherwise
+    valid, unique finding from another workspace with the exact join error.
+    Production calibration ordering and joins remain unchanged. If wrong, the
+    tests could pass on precision or an unrelated validation error; isolated
+    copied-source mutations check those specific failure paths.
+
+77. **Index each named tuple-field occurrence through supported nested types**
+    (2026-10-04, F09). Walk typed tuple-field AST nodes below winning
+    definitions and interaction members, retain their owner path and exact
+    name-token span, and keep repeated names in separate tuples as separate
+    sites. Preserve all existing identifier collections and messages. Tuple
+    fields nested inside a stream are not accepted source syntax; cover
+    supported tuples, optional nesting, arrays, map values, fixed payloads and
+    query returns. If wrong, abbreviation findings would be missing, duplicated
+    or attached to an outer declaration; exact span and repeated-name
+    regressions pin the inventory.
+
+78. **Exclude standard unit provenance at user-owned sites** (2026-10-04, F10).
+    Check the resolved defining package of the named IR type before reading its
+    unit. Optionality and import aliases retain that canonical package. A local
+    type named Duration remains eligible. Disk loading makes standard names
+    implicit and rejects an explicit standard-package import; test alias
+    resolution with an otherwise valid controlled standard package in the shared
+    pass, and test implicit/qualified standard references through workspace
+    compilation. If wrong, standard sites change unit majorities or legitimate
+    user findings disappear; the two regressions distinguish both outcomes.
+
+79. **Exercise the real reporting callers without changing working wiring**
+    (2026-10-04, F07-F08). Add above-threshold component-requires and
+    system-member fan-out assertions through compiler compilation and LSP
+    initialization, and a positive unit diagnostic through the public MCP source
+    wrapper. Pin URI/path, span, message and level. Both system callers and the
+    wrapper already report the required findings, so leave the three
+    conditionally owned production files unchanged. If wrong, helper-only
+    coverage could conceal a dropped system argument or source diagnostic;
+    copied caller mutations must fail.
+
+80. **Explain the book's intentional diagnostic allowances locally**
+    (2026-10-04, F03). Explain the retained temp/Temperature abbreviation near
+    the vocabulary example and the abbreviation and three disconnected type
+    groups near Sampling. Keep the source blocks and allowances unchanged. If
+    wrong, the book would allow a finding its prose does not explain; inspect
+    the examples and run only their compiled-example harness.
+
+81. **Report the sandbox-denied socket test without changing its assertions**
+    (2026-10-04). The full MCP library run passes 87 tests, including the new
+    source-wrapper regression; `a_remote_import_is_reported_and_not_fetched`
+    fails at binding `127.0.0.1:0` with PermissionDenied. Leave that test intact
+    for the primary driver to rerun where the bind is permitted. Focused caller,
+    compiler, calibration, executable, book and Clippy checks provide the repair
+    evidence. If the failure has another cause, the primary rerun must expose
+    it; do not claim a green full MCP library suite or weaken the runtime check.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:

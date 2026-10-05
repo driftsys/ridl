@@ -356,3 +356,65 @@ fn executable_dump_refuses_corpus_symlinks_and_removes_copies() {
             .all(|c| !out.join(format!("{c}.json")).exists())
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn executable_dump_rejects_linked_publication_and_build_destinations_before_side_effects() {
+    for destination in [
+        "inconsistent-unit.json",
+        "package-fan-out.json",
+        ".calibrate-target",
+        ".calibrate-target/debug",
+        ".calibrate-target/debug/ridl",
+        ".calibrate-target/debug/build/linked-output",
+    ] {
+        let fixture = Fixture::dump();
+        let out = fixture.0.join("out");
+        fs::create_dir(&out).unwrap();
+        let link = out.join(destination);
+        fs::create_dir_all(link.parent().unwrap()).unwrap();
+        let source = if destination.ends_with(".json") || destination.ends_with("/ridl") {
+            fixture.0.join("evals/corpus/alpha/p/a.typl")
+        } else {
+            fixture.0.join("evals/corpus/alpha")
+        };
+        std::os::unix::fs::symlink(&source, &link).unwrap();
+        let before = snapshot(&fixture.0);
+        let output = fixture.command(&["calibrate", "dump", "out"]);
+        let after = snapshot(&fixture.0);
+        let changed = before
+            .keys()
+            .chain(after.keys())
+            .filter(|p| before.get(*p) != after.get(*p))
+            .collect::<std::collections::BTreeSet<_>>();
+        assert!(
+            changed.is_empty(),
+            "unsafe side effects for {destination}: {changed:?}"
+        );
+        assert_eq!(output.status.code(), Some(2), "{destination}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("symlink"),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn executable_dump_rejects_hard_linked_files_before_build_or_publication() {
+    for destination in ["package-fan-out.json", ".calibrate-target/debug/ridl"] {
+        let fixture = Fixture::dump();
+        let link = fixture.0.join("out").join(destination);
+        fs::create_dir_all(link.parent().unwrap()).unwrap();
+        fs::hard_link(fixture.0.join("evals/corpus/alpha/p/a.typl"), &link).unwrap();
+        let before = snapshot(&fixture.0);
+        let output = fixture.command(&["calibrate", "dump", "out"]);
+        assert!(
+            snapshot(&fixture.0) == before,
+            "side effect for {destination}"
+        );
+        assert_eq!(output.status.code(), Some(2));
+        assert!(String::from_utf8_lossy(&output.stderr).contains("hard link"));
+    }
+}

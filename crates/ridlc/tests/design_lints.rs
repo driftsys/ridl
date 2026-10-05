@@ -1383,3 +1383,180 @@ fn fan_out_excludes_external_targets_at_the_workspace_maximum() {
     );
     assert!(fan_out(&diagnostics).is_empty(), "{diagnostics:?}");
 }
+
+#[test]
+fn abbreviation_indexes_named_tuple_fields_recursively_with_exact_spans() {
+    for declaration in [
+        "struct Reading { sample: (temp: boolean) }",
+        "struct Reading { sample: (nested: (temp: boolean)?) }",
+        "struct Reading { sample: [(temp: boolean); 2] }",
+        "struct Reading { sample: [integer: (temp: boolean); 2] }",
+        "struct Reading { sample: (nested: [(temp: boolean); 2]) }",
+        "interface Reading { fixed sample: [(temp: boolean); 2] }",
+        "interface Reading { query sample(): (nested: (temp: boolean)) @[..1s] }",
+    ] {
+        let source =
+            format!("package a\nstruct Vocabulary {{ temperature: boolean }}\n{declaration}\n");
+        let out = workspace(&[("a", &source)]);
+        let found = abbreviations(&out.diagnostics);
+        assert_eq!(found.len(), 1, "{declaration}: {:?}", out.diagnostics);
+        assert_eq!(
+            found[0].message,
+            "`temp` in `temp` abbreviates `temperature`, used in `temperature`"
+        );
+        let start = source.find("temp:").unwrap();
+        assert_eq!(
+            site(&out.sources, found[0].primary),
+            ("a/source.ridl".into(), start..start + 4)
+        );
+        assert!(found[0].labels.is_empty());
+        assert!(found[0].fixits.is_empty());
+    }
+}
+
+#[test]
+fn abbreviation_keeps_repeated_tuple_field_names_at_distinct_sites() {
+    let source = "package a\nstruct Vocabulary { temperature: boolean }\nstruct Reading { sample: (temp: boolean, nested: (temp: boolean)) }\n";
+    let out = workspace(&[("a", source)]);
+    let found = abbreviations(&out.diagnostics);
+    assert_eq!(found.len(), 2, "{:?}", out.diagnostics);
+    let mut spans = found
+        .iter()
+        .map(|d| site(&out.sources, d.primary).1)
+        .collect::<Vec<_>>();
+    spans.sort_by_key(|r| r.start);
+    assert_eq!(
+        spans,
+        source
+            .match_indices("temp:")
+            .map(|(n, _)| n..n + 4)
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn inconsistent_unit_excludes_resolved_standard_types_at_user_sites() {
+    let source = "package a\ntype Seconds: s [0.0..100.0 step 0.5]\nstruct User { wait: Seconds }\nstruct Implicit { wait: Duration }\nstruct Explicit { wait: ridl.std.Duration? }\ninterface Timers { command schedule(wait: ridl.std.Duration) @[..1s] event wait: ridl.std.Duration @[100ms..1s] }\n";
+    let out = workspace(&[("a", source)]);
+    assert!(units(&out.diagnostics).is_empty(), "{:?}", out.diagnostics);
+}
+
+#[test]
+fn inconsistent_unit_excludes_standard_import_aliases_without_excluding_user_names() {
+    let source = "package a\nimport ridl.std.Duration as StandardTime\ntype Duration: s [0.0..100.0 step 0.5]\ntype Tick: ms [0.0..100.0 step 0.5]\nstruct First { wait: Duration }\nstruct Second { wait: Duration? }\nstruct Third { wait: Tick }\nstruct Standard { wait: StandardTime? }\ninterface Timers { command schedule(wait: StandardTime) @[..1s] fixed wait: StandardTime }\n";
+    // A controlled standard package makes its import available to the resolver;
+    // disk workspace loading exposes standard names implicitly instead.
+    let (diagnostics, sources) = abbreviation_source_set(&[
+        (
+            "ridl.std",
+            "package ridl.std\ntype Duration: ms [0.0..100.0 step 0.5]\n",
+        ),
+        ("a", source),
+    ]);
+    let found = units(&diagnostics);
+    assert_eq!(found.len(), 1, "{diagnostics:?}");
+    assert_eq!(
+        found[0].message,
+        "`wait` uses `ms` here; elsewhere `wait` uses `s`"
+    );
+    let start = source.find("wait: Tick").unwrap();
+    assert_eq!(
+        site(&sources, found[0].primary),
+        ("a/source.ridl".into(), start..start + 4)
+    );
+}
+
+#[test]
+fn fan_out_through_real_compiler_counts_only_system_requires_and_member_edges() {
+    let output = workspace_files(&[
+        (
+            "a",
+            vec![
+                (
+                    "source.ridl",
+                    "package a\ninterface I {}\nservice a.feed: I\n",
+                ),
+                (
+                    "component.rsdl",
+                    "package a\ncomponent Producer { offers a.feed }\n",
+                ),
+            ],
+        ),
+        (
+            "b",
+            vec![
+                (
+                    "source.ridl",
+                    "package b\ninterface I {}\nservice b.feed: I\n",
+                ),
+                (
+                    "component.rsdl",
+                    "package b\ncomponent Producer { offers b.feed }\n",
+                ),
+            ],
+        ),
+        (
+            "c",
+            vec![
+                (
+                    "source.ridl",
+                    "package c\ninterface I {}\nservice c.feed: I\n",
+                ),
+                (
+                    "component.rsdl",
+                    "package c\ncomponent Producer { offers c.feed }\n",
+                ),
+            ],
+        ),
+        (
+            "d",
+            vec![
+                (
+                    "source.ridl",
+                    "package d\ninterface I {}\nservice d.feed: I\n",
+                ),
+                (
+                    "component.rsdl",
+                    "package d\ncomponent Producer { offers d.feed }\n",
+                ),
+            ],
+        ),
+        (
+            "e",
+            vec![(
+                "component.rsdl",
+                "package e\ncomponent Consumer [ external ] { requires a.I requires b.I requires c.I requires d.I }\n",
+            )],
+        ),
+        (
+            "top",
+            vec![(
+                "system.rsdl",
+                "package top\nsystem Example { a.Producer b.Producer c.Producer d.Producer e.Consumer }\n",
+            )],
+        ),
+    ]);
+    assert!(output.system.is_some());
+    let without_system = ridlc::deps::package_edges(&output.checked, None);
+    assert!(
+        without_system.values().all(|targets| targets.is_empty()),
+        "{without_system:?}"
+    );
+    let found = fan_out(&output.diagnostics);
+    assert_eq!(found.len(), 2, "{:?}", output.diagnostics);
+    for (package, file, count, targets) in [
+        ("e", "component.rsdl", 4, "a, b, c, d"),
+        ("top", "system.rsdl", 5, "a, b, c, d, e"),
+    ] {
+        let message =
+            format!("package `{package}` depends on {count} workspace packages: {targets}");
+        let d = found.iter().find(|d| d.message == message).unwrap();
+        assert_eq!(d.severity, Severity::Info);
+        assert_eq!(
+            site(&output.sources, d.primary),
+            (format!("{package}/{file}"), 0..8 + package.len())
+        );
+        assert!(d.labels.is_empty());
+        assert!(d.fixits.is_empty());
+    }
+}

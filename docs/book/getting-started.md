@@ -212,7 +212,9 @@ trust the compiler here: the constraint is what the check is about, and the
 reference's own Appendix B writes `frame : bytes [8]`. Named types remain the
 recommendation everywhere, and they are mandatory on a boundary.
 
-Add a second file, `veh/common/scalars.ridl`:
+Add a second file, `veh/common/scalars.ridl`. This vocabulary draws
+TYPL-223 (`inconsistent-abbreviation`) because the later examples use `temp`
+with `Temperature`. The examples retain both forms to show the diagnostic.
 
 ```ridl,allow=TYPL-223
 package veh.common
@@ -318,6 +320,11 @@ demands on a binding (see the note above — no binding exists yet):
   contract requires occurrences to be queued rather than coalesced, and forbids
   late-joiner delivery. An occurrence that happened before you subscribed did
   not happen to you.
+
+This example draws TYPL-223 (`inconsistent-abbreviation`) for `engineTemp`
+and `Temperature`. It also draws RIDL-414 (`low-cohesion-interface`): the speed,
+temperature and fuel members form separate groups because they share no named
+type. The example retains those groups to compare signal timing forms.
 
 ```ridl,allow=TYPL-223,allow=RIDL-414
 package veh.cluster

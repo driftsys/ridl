@@ -23,7 +23,13 @@ cargo xtask calibrate dump <out-dir>
 Before creating any directory or invoking Cargo, this command resolves the
 output destination, including existing symlink ancestors and missing path
 components, and rejects a destination at or below the canonical `evals/corpus/`
-directory. This keeps copied workspaces and build output outside the corpus.
+directory. It also rejects symlinks in any existing output JSON file or anywhere
+inside `.calibrate-target`. On Unix, it rejects hard links to files outside the
+validated target tree and hard-linked output JSON files. Cargo may retain hard
+links whose aliases are all inside the target tree. All of these checks run
+before directory creation or Cargo. This keeps copied workspaces and build
+output outside the corpus. Arrays are staged in the private temporary directory
+and published by replacing each destination file.
 
 This command builds `ridl-cli` with the locked dependency graph, using
 `<out-dir>/.calibrate-target` as a separate build directory. It copies every

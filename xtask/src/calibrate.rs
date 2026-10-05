@@ -562,8 +562,71 @@ fn checked_dump_destination(root: &Path, out: &Path) -> Result<PathBuf> {
     Ok(resolved)
 }
 
+/// Check every existing destination before Cargo or publication can follow it.
+/// Build artifacts may be nested arbitrarily, so checking only the target root
+/// does not protect a previously populated target directory.
+fn check_dump_tree(path: &Path, directory: bool) -> Result<()> {
+    #[derive(Default)]
+    struct Links {
+        #[cfg(unix)]
+        files: BTreeMap<(u64, u64), (u64, usize)>,
+    }
+    fn walk(path: &Path, directory: bool, links: &mut Links) -> Result<()> {
+        let metadata = match std::fs::symlink_metadata(path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error.into()),
+        };
+        if metadata.is_symlink() {
+            return Err(format!("dump destination contains a symlink: {}", path.display()).into());
+        }
+        if directory && metadata.is_dir() {
+            for child in sorted_entries(path)? {
+                let is_directory = std::fs::symlink_metadata(&child)?.is_dir();
+                walk(&child, is_directory, links)?;
+            }
+        } else if !directory && metadata.is_file() {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::MetadataExt;
+                if metadata.nlink() > 1 {
+                    let counts = links
+                        .files
+                        .entry((metadata.dev(), metadata.ino()))
+                        .or_insert((metadata.nlink(), 0));
+                    counts.1 += 1;
+                }
+            }
+        } else {
+            return Err(format!("invalid dump destination type: {}", path.display()).into());
+        }
+        Ok(())
+    }
+    let mut links = Links::default();
+    walk(path, directory, &mut links)?;
+    // Cargo links artifacts within its target tree. An alias outside that tree
+    // could be a corpus source and must not receive an in-place build write.
+    #[cfg(unix)]
+    if links
+        .files
+        .values()
+        .any(|(total, inside)| *total != *inside as u64)
+    {
+        return Err(format!(
+            "dump destination contains an external hard link: {}",
+            path.display()
+        )
+        .into());
+    }
+    Ok(())
+}
+
 fn dump(root: &Path, out: &Path) -> Result<()> {
     let out = checked_dump_destination(root, out)?;
+    check_dump_tree(&out.join(".calibrate-target"), true)?;
+    for check in CHECKS {
+        check_dump_tree(&out.join(format!("{check}.json")), false)?;
+    }
     std::fs::create_dir_all(&out)?;
     let out = out.canonicalize()?;
     let target = out.join(".calibrate-target");
@@ -634,10 +697,12 @@ fn dump(root: &Path, out: &Path) -> Result<()> {
     // Validate every workspace before publishing any of the five arrays.
     for (check, findings) in all {
         let path = out.join(format!("{check}.json"));
+        let staged = scratch.0.join(format!("{check}.json"));
         std::fs::write(
-            &path,
+            &staged,
             format!("{}\n", serde_json::to_string_pretty(&findings)?),
         )?;
+        std::fs::rename(staged, &path)?;
         println!("{}: {} findings", path.display(), findings.len());
     }
     Ok(())
@@ -778,7 +843,7 @@ fn rubric_items(root: &Path) -> Result<BTreeMap<String, String>> {
         let text = std::fs::read_to_string(task.join("rubric.md"))?;
         let mut count = 0;
         for line in text.lines() {
-            let Some((n, rest)) = line.split_once(". ") else {
+            let Some((n, rest)) = line.trim_start().split_once(". ") else {
                 continue;
             };
             if !n.bytes().all(|c| c.is_ascii_digit()) || n.is_empty() {
@@ -1049,6 +1114,38 @@ mod tests {
             results.push(serde_json::to_value(records).unwrap());
         }
         assert_eq!(results[0], results[1]);
+    }
+    #[test]
+    fn dump_same_span_occurrences_preserve_compiler_order_for_distinct_messages() {
+        let mut results = Vec::new();
+        for _ in 0..2 {
+            let fixture = Fixture::new();
+            fixture.write("p/a.typl", "package p;\n");
+            let first = "`temp` in `tempReading` abbreviates `temperature`, used in `temperature`";
+            let second = "`temp` in `tempReading` abbreviates `temporary`, used in `temporary`";
+            let diagnostic = |message| serde_json::json!({"severity":"warning","lint":"inconsistent-abbreviation","message":message,"span":{"path":fixture.0.join("p/a.typl"),"start":{"line":1,"column":1},"end":{"line":1,"column":8}}});
+            // Compiler order deliberately disagrees with message lexical order.
+            for messages in [[second, first], [first, second]] {
+                let records = records_from_json(
+                    &fixture.0,
+                    "fixture",
+                    &serde_json::to_vec(&messages.map(diagnostic)).unwrap(),
+                )
+                .unwrap();
+                let findings = &records["inconsistent-abbreviation"];
+                assert_eq!(findings.len(), 2);
+                for (index, message) in messages.iter().enumerate() {
+                    assert_eq!(
+                        findings[index].id,
+                        format!("inconsistent-abbreviation:fixture:p/a.typl:0-7:{index}")
+                    );
+                    assert_eq!(&findings[index].message, message);
+                }
+                results.push(serde_json::to_value(records).unwrap());
+            }
+        }
+        assert_eq!(results[0], results[2]);
+        assert_eq!(results[1], results[3]);
     }
     fn calibration_fixture() -> Fixture {
         let fixture = Fixture::new();
@@ -1395,6 +1492,67 @@ mod tests {
         );
     }
     #[test]
+    fn recall_inventory_includes_indented_rubric_items_and_requires_the_complete_join() {
+        let fixture = calibration_fixture();
+        fixture.write(
+            "evals/tasks/review-0001/rubric.md",
+            "  1. **must** identify one issue.\n   2. **must not** change a name.\n",
+        );
+        let (mut recall, labels) = recall_inputs(&fixture);
+        validate_recall(&fixture.0, &recall, &labels).unwrap();
+        recall.item.remove(1);
+        assert!(
+            validate_recall(&fixture.0, &recall, &labels)
+                .unwrap_err()
+                .to_string()
+                .contains("classify every")
+        );
+        let (mut recall, labels) = recall_inputs(&fixture);
+        recall.item[1].kind = "issue".into();
+        assert!(
+            validate_recall(&fixture.0, &recall, &labels)
+                .unwrap_err()
+                .to_string()
+                .contains("missing applicability")
+        );
+        for rubric in [
+            "  1. identify an issue.\n",
+            "  01. **must** identify an issue.\n",
+            "  1. **must** identify an issue.\n  1. **should** repeat it.\n",
+        ] {
+            fixture.write("evals/tasks/review-0001/rubric.md", rubric);
+            assert!(rubric_items(&fixture.0).is_err(), "{rubric}");
+        }
+    }
+    #[test]
+    fn recall_rejects_an_otherwise_valid_finding_from_another_workspace() {
+        let fixture = calibration_fixture();
+        fixture.write("evals/corpus/other/p/a.typl", "package p;\n");
+        let (recall, mut labels) = recall_inputs(&fixture);
+        let findings = labels.get_mut("package-fan-out").unwrap();
+        let mut foreign = findings[0].clone();
+        foreign.workspace = "other".into();
+        foreign.id = foreign.id.replace(":fixture:", ":other:");
+        validate_finding(&fixture.0, "package-fan-out", &foreign).unwrap();
+        findings.push(foreign.clone());
+        // Both finding records are valid; the original complete join is valid.
+        validate_recall(&fixture.0, &recall, &labels).unwrap();
+        let mut foreign_join = recall;
+        foreign_join
+            .check
+            .iter_mut()
+            .find(|c| c.name == "package-fan-out")
+            .unwrap()
+            .issue[0]
+            .findings = vec![foreign.id];
+        assert_eq!(
+            validate_recall(&fixture.0, &foreign_join, &labels)
+                .unwrap_err()
+                .to_string(),
+            "duplicate or cross-workspace recall finding"
+        );
+    }
+    #[test]
     fn aliases_require_lexical_order_and_the_same_workspace() {
         let fixture = calibration_fixture();
         let (mut recall, labels) = recall_inputs(&fixture);
@@ -1676,7 +1834,25 @@ mod tests {
             "kind = \"alias\"\ncanonical = \"review-0001:1\"",
         );
         fixture.write(path, &alias);
-        assert!(read_calibration(&fixture.0).unwrap().contains("100.00%"));
+        let (recall, labels) = recall_inputs(&fixture);
+        validate_recall(&fixture.0, &recall, &labels).unwrap();
+        let issues = &recall
+            .check
+            .iter()
+            .find(|c| c.name == "package-fan-out")
+            .unwrap()
+            .issue;
+        let rows = candidates("package-fan-out", &labels["package-fan-out"], issues);
+        assert_eq!((rows[0].detected, rows[0].applicable), (1, 1));
+        assert_eq!(rows[0].recall(), "100.00%");
+        let summary = read_calibration(&fixture.0).unwrap();
+        let section = summary.split("## package-fan-out\n").nth(1).unwrap();
+        assert!(
+            section
+                .lines()
+                .any(|line| line == "| fan-out > 3 | 1 | 1 | 100.00% | 1 | 1 | 100.00% | Info |"),
+            "{section}"
+        );
         for bad in [
             alias.replace(
                 "canonical = \"review-0001:1\"",

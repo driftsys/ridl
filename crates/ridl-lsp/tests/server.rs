@@ -3787,3 +3787,74 @@ fn design_lints_keep_two_standalone_overlays_separate() {
     shut_down(&client, 22);
     server.join().unwrap().unwrap();
 }
+
+#[test]
+fn fan_out_through_lsp_counts_system_requires_and_member_edges() {
+    let dir = TempDir::new("design-system-fan-out");
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"a\", \"b\", \"c\", \"d\", \"e\", \"top\"]\n",
+    );
+    for package in ["a", "b", "c", "d", "e", "top"] {
+        std::fs::create_dir(dir.path().join(package)).unwrap();
+        dir.write(
+            &format!("{package}/ridl.toml"),
+            &format!("[package]\nname = \"{package}\"\nversion = \"1.0.0\"\n"),
+        );
+    }
+    for package in ["a", "b", "c", "d"] {
+        dir.write(
+            &format!("{package}/source.ridl"),
+            &format!("package {package}\ninterface I {{}}\nservice {package}.feed: I\n"),
+        );
+        dir.write(
+            &format!("{package}/component.rsdl"),
+            &format!("package {package}\ncomponent Producer {{ offers {package}.feed }}\n"),
+        );
+    }
+    let component = "package e\ncomponent Consumer [ external ] { requires a.I requires b.I requires c.I requires d.I }\n";
+    let component_uri = uri_of(&dir.write("e/component.rsdl", component));
+    let system =
+        "package top\nsystem Example { a.Producer b.Producer c.Producer d.Producer e.Consumer }\n";
+    let system_uri = uri_of(&dir.write("top/system.rsdl", system));
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, Some(uri_of(dir.path())));
+    // Read all initial publications through a protocol barrier, so URI order
+    // cannot cause either positive assertion to consume the other's result.
+    let publishes = published_before_barrier(&client, 301, &system_uri);
+    for (uri, text, package, count, targets) in [
+        (&component_uri, component, "e", 4, "a, b, c, d"),
+        (&system_uri, system, "top", 5, "a, b, c, d, e"),
+    ] {
+        let published = publishes
+            .iter()
+            .find(|p| &p.uri == uri)
+            .expect("published system source");
+        assert!(
+            !published
+                .diagnostics
+                .iter()
+                .any(|d| d.severity == Some(lt::DiagnosticSeverity::ERROR)),
+            "{:?}",
+            published.diagnostics
+        );
+        let found = published
+            .diagnostics
+            .iter()
+            .filter(|d| d.code == Some(lt::NumberOrString::String("RIDL-415".into())))
+            .collect::<Vec<_>>();
+        assert_eq!(found.len(), 1, "{:?}", published.diagnostics);
+        assert_eq!(
+            found[0].message,
+            format!("package `{package}` depends on {count} workspace packages: {targets}")
+        );
+        assert_eq!(
+            found[0].range,
+            range_of(text, &format!("package {package}"), 0)
+        );
+        assert_eq!(found[0].severity, Some(lt::DiagnosticSeverity::INFORMATION));
+    }
+    shut_down(&client, 302);
+    server.join().unwrap().unwrap();
+}

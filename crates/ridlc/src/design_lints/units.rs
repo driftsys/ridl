@@ -24,11 +24,12 @@ pub(crate) fn unit_of(ctx: &Ctx<'_>, pkg: &str, ty: &v2::FieldType) -> Option<St
 
 fn named_unit(ctx: &Ctx<'_>, pkg: &str, name: &str) -> Option<String> {
     let (pkg, name) = name.rsplit_once('.').unwrap_or((pkg, name));
-    let package = if pkg == "ridl.std" {
-        ctx.std_ir
-    } else {
-        &ctx.checked.iter().find(|p| p.ir.name == pkg)?.ir
-    };
+    // Checked names retain their defining package through import aliases and
+    // optionality. Exclude standard provenance even at a user-owned site.
+    if pkg == "ridl.std" {
+        return None;
+    }
+    let package = &ctx.checked.iter().find(|p| p.ir.name == pkg)?.ir;
     let decl = package.decls.iter().find(|decl| decl.name == name)?;
     match decl.kind.as_ref()? {
         decl::Kind::TypeDef(scalar) => scalar_unit(scalar),
