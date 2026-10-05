@@ -7,8 +7,7 @@
 
 use std::path::Path;
 
-use ridl_descriptor::Encoding;
-use ridl_descriptor::size::{Ctx, SizeState, size_state};
+use ridl_ir::projection::size::{Ctx, Encoding, PayloadShape, SizeState, size_state};
 
 /// The corpus package's IR snapshot.
 fn corpus() -> ridl_ir::v2::Package {
@@ -65,8 +64,12 @@ fn every_generated_max_size_is_the_descriptors_flatbuffers_bound() {
     let ctx = Ctx::new(&package, &others);
     for (type_name, value) in pairs {
         assert_eq!(
-            size_state(&type_name, &ctx, Encoding::FlatBuffers),
-            Some(SizeState::Bounded(value)),
+            size_state(
+                &PayloadShape::Named(&type_name),
+                &ctx,
+                Encoding::FlatBuffers
+            ),
+            SizeState::Bounded(value),
             "{type_name}"
         );
     }

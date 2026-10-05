@@ -45,9 +45,9 @@ Sebastien reviews the lane's delegated decisions in the driver's
 | `finish`, `verify`, `SCHEMA_VERSION`, `FILE_IDENTIFIER`, `FILE_SUFFIX`           | `crates/ridl-descriptor/src/lib.rs`                          |
 | The lowering from the IR (`lower`, `LowerError`, the `type_name` spelling)       | `crates/ridl-descriptor/src/lower.rs`                        |
 | The interface numbers, copied from the IR                                        | `crates/ridl-descriptor/src/number.rs`                       |
-| The size context, the leaf model, the string byte capacity                       | `crates/ridl-descriptor/src/size.rs`                         |
-| The proto3 column                                                                | `crates/ridl-descriptor/src/size/proto3.rs`                  |
-| The FlatBuffers column                                                           | `crates/ridl-descriptor/src/size/flatbuffers.rs`             |
+| The size states, the size context, the leaf model, the string byte capacity      | `crates/ridl-ir/src/projection/size.rs`                      |
+| The proto3 state                                                                 | `crates/ridl-ir/src/projection/size/proto3.rs`               |
+| The FlatBuffers state                                                            | `crates/ridl-ir/src/projection/size/flatbuffers.rs`          |
 | The JSON view                                                                    | `crates/ridl-descriptor/src/describe.rs`                     |
 | The catalog hash (re-exported as `ridl_descriptor::hash`)                        | `crates/ridl-ir/src/catalog_hash.rs`                         |
 | The proto3 scalar table and field-number limits both sides read                  | `crates/ridl-ir/src/projection/proto3.rs`                    |
@@ -204,8 +204,13 @@ per payload and encoding:
   framing excluded;
 - **unbounded**: `bytes` is 0 and `cause` says why.
 
+The states are `ridl_ir::projection::size`'s. The sizer is a projection, read by
+this descriptor and by every other consumer of the same bound. It answers
+`Bounded`, `Unbounded` with a cause, or `Absent` with a cause of its own, and
+this descriptor writes no row for an absent state.
+
 **The descriptor defines no wire shape.** Only a payload that is one named type
-is sized (`named_payload`), through the projection the wire backend emits:
+is sized, through the projection the wire backend emits:
 
 - **FlatBuffers** is `ridl_ir::projection::flatbuffers::max_size`, the one
   implementation of the bound, which the Rust codec's `MAX_SIZE` is emitted from
@@ -227,10 +232,11 @@ is sized (`named_payload`), through the projection the wire backend emits:
   outside int32, a field number protobuf reserves or exceeds), when a member has
   no proto3 bound (a `string` or `bytes` with no length bound, a type def with
   no width), when the nesting passes `MAX_DEPTH`, or when the bound overflows
-  `u64` or exceeds `u32::MAX`. The `size_state` rustdoc in `size.rs` has the
-  full list. The proto3 sizer counts tags and varint widths at their maximum,
-  and remembers each named struct and union it has sized within one call, so a
-  type that several paths share is walked once.
+  `u64` or exceeds `u32::MAX`. The rustdoc of `state` in
+  `crates/ridl-ir/src/projection/size/proto3.rs` has the full list. The proto3
+  sizer counts tags and varint widths at their maximum, and remembers each named
+  struct and union it has sized within one call, so a type that several paths
+  share is walked once.
 - **repr(C)** has no row until driftsys/ridl#317 defines the layout.
 
 **Absent by shape.** A stream payload (`<T>`), a request of zero or of several
@@ -335,7 +341,7 @@ inline shape, although the catalog descriptor carries that shape
 | What the lowering writes, per kind and shape; stable bytes across runs              | `crates/ridl-descriptor/tests/lower.rs`                                          |
 | The pinned corpus hash                                                              | `crates/ridl-descriptor/tests/golden_hash.rs`                                    |
 | Every `MAX_SIZE` the Rust backend writes equals the descriptor's FlatBuffers bound  | `crates/ridl-descriptor/tests/codec_agreement.rs`                                |
-| The two size columns, the leaf model, the string capacity                           | unit tests in `crates/ridl-descriptor/src/size.rs` and `src/size/`               |
+| The two size states, the leaf model, the string capacity                            | unit tests in `crates/ridl-ir/src/projection/size.rs` and `size/`                |
 | The JSON view                                                                       | unit tests in `crates/ridl-descriptor/src/describe.rs`                           |
 | The emit, the hash equal to the face's, and `ridl describe` (exit codes, snapshot)  | `crates/ridl/tests/describe_cli.rs`                                              |
 | The hash does not depend on which wire schema a build emits (driftsys/ridl#275)     | `crates/ridl/tests/facade.rs`                                                    |

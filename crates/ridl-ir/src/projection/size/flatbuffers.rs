@@ -1,31 +1,37 @@
 //! The FlatBuffers state of a named-type payload: the projection's own bound
-//! (`ridl_ir::projection::flatbuffers::max_size`, the one implementation of
-//! the bound — `docs/design/flatbuffers-codec.md`, design D-6),
+//! ([`crate::projection::flatbuffers::max_size`], the one implementation of
+//! the bound — `docs/design/flatbuffers-codec.md`),
 //! and the codegen model's cause when there is none. Nothing is derived here:
 //! a second derivation would be two implementations of one rule, and a silent
 //! disagreement the moment either changed.
 
-use ridl_ir::codegen::fb_unbounded;
-use ridl_ir::codegen::v1::FbUnboundedCause;
-use ridl_ir::projection::flatbuffers::{MAX_ENCODABLE, max_size, root_table};
+use crate::codegen::fb_unbounded;
+use crate::projection::flatbuffers::{MAX_ENCODABLE, max_size, root_table};
 
-use super::{Ctx, SizeState};
-use crate::UnboundedCause;
+use super::{AbsentCause, Ctx, SizeState, UnboundedCause};
 
-/// The state of the named type `type_name`: absent when the name does not
-/// resolve or the declaration has no FlatBuffers root (a constant, ADR-0013
-/// decision 5, or an interaction); bounded with the projection's bound;
-/// unbounded, with the cause the codegen model reports for the same
-/// declaration, when the projection answers `None` — an unresolved
-/// reference, a cycle, a `u64` overflow or a bound above `MAX_ENCODABLE`
-/// all reach here as unbounded rows, so the descriptor's column and the
-/// model `--emit codegen-model` writes agree on which payloads have a bound.
-pub(crate) fn state(type_name: &str, ctx: &Ctx<'_>) -> Option<SizeState> {
-    let (decl, declaring) = ctx.resolve(ctx.packages().package, type_name)?;
-    root_table(decl)?;
+/// The state of the named type `type_name`: absent with
+/// [`AbsentCause::Unresolved`] when the name does not resolve or the
+/// declaration has no FlatBuffers root (a constant, ADR-0013 decision 5, or
+/// an interaction); bounded with the projection's bound; unbounded, with the
+/// cause the codegen model reports for the same declaration, when the
+/// projection answers `None` — an unresolved reference, a cycle, a `u64`
+/// overflow or a bound above `MAX_ENCODABLE` all reach here as unbounded, so
+/// this state and the model `--emit codegen-model` writes agree on which
+/// payloads have a bound.
+pub(crate) fn state(type_name: &str, ctx: &Ctx<'_>) -> SizeState {
+    let Some((decl, declaring)) = ctx.resolve(ctx.packages().package, type_name) else {
+        return SizeState::Absent(AbsentCause::Unresolved);
+    };
+    if root_table(decl).is_none() {
+        return SizeState::Absent(AbsentCause::Unresolved);
+    }
     // Rooted at the declaring package: a bare name inside an imported
     // declaration resolves in that package, as the codegen lowering does.
-    Some(match max_size(ctx.packages_for(declaring)?, decl) {
+    let Some(packages) = ctx.packages_for(declaring) else {
+        return SizeState::Absent(AbsentCause::Unresolved);
+    };
+    match max_size(packages, decl) {
         Some(bytes) => {
             debug_assert!(bytes <= MAX_ENCODABLE);
             SizeState::Bounded(
@@ -33,29 +39,24 @@ pub(crate) fn state(type_name: &str, ctx: &Ctx<'_>) -> Option<SizeState> {
             )
         }
         None => SizeState::Unbounded(cause_of(fb_unbounded(declaring, decl).cause)),
-    })
+    }
 }
 
-/// The schema's enum mirrors the model's, member for member.
+/// The model writes the cause as its tag; a tag the model does not define is
+/// reported as unspecified.
 fn cause_of(cause: i32) -> UnboundedCause {
-    match FbUnboundedCause::try_from(cause) {
-        Ok(FbUnboundedCause::Member) => UnboundedCause::Member,
-        Ok(FbUnboundedCause::Untyped) => UnboundedCause::Untyped,
-        Ok(FbUnboundedCause::Layout) => UnboundedCause::Layout,
-        Ok(FbUnboundedCause::Aggregate) => UnboundedCause::Aggregate,
-        Ok(FbUnboundedCause::Exempt) => UnboundedCause::Exempt,
-        Ok(FbUnboundedCause::Unspecified) | Err(_) => UnboundedCause::Unspecified,
-    }
+    UnboundedCause::try_from(cause).unwrap_or(UnboundedCause::Unspecified)
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::tests_support::*;
+    use super::super::{
+        AbsentCause, Ctx, Encoding, PayloadShape, SizeState, UnboundedCause, size_state,
+    };
     use super::*;
-    use crate::size::tests_support::*;
-    use crate::size::{Ctx, SizeState, size_state};
-    use crate::{Encoding, UnboundedCause};
-    use ridl_ir::projection::flatbuffers::{Packages, max_size};
-    use ridl_ir::v2::{
+    use crate::projection::flatbuffers::{Packages, max_size};
+    use crate::v2::{
         Backing, Constraint, Decl, Field, FieldType, Package, PrimitiveType, StructDef,
         StructMember, TypeDef, backing, decl, struct_member,
     };
@@ -77,7 +78,7 @@ mod tests {
             .unwrap_or_else(|| panic!("{name} is bounded in the fixture"));
             assert_eq!(
                 state(name, &ctx),
-                Some(SizeState::Bounded(u32::try_from(expected).unwrap())),
+                SizeState::Bounded(u32::try_from(expected).unwrap()),
                 "{name}"
             );
         }
@@ -94,7 +95,7 @@ mod tests {
         let ctx = Ctx::new(&package, &others);
         assert_eq!(
             state("Open", &ctx),
-            Some(SizeState::Unbounded(UnboundedCause::Member))
+            SizeState::Unbounded(UnboundedCause::Member)
         );
     }
 
@@ -103,9 +104,15 @@ mod tests {
         let package = fixture();
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Missing", &ctx), None);
+        assert_eq!(
+            state("Missing", &ctx),
+            SizeState::Absent(AbsentCause::Unresolved)
+        );
         // A constant projects no FlatBuffers declaration (ADR-0013 decision 5).
-        assert_eq!(state("LIMIT", &ctx), None);
+        assert_eq!(
+            state("LIMIT", &ctx),
+            SizeState::Absent(AbsentCause::Unresolved)
+        );
     }
 
     #[test]
@@ -116,10 +123,9 @@ mod tests {
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
         assert_eq!(
-            size_state("Point", &ctx, Encoding::FlatBuffers),
-            Some(SizeState::Bounded(55))
+            size_state(&PayloadShape::Named("Point"), &ctx, Encoding::FlatBuffers),
+            SizeState::Bounded(55)
         );
-        assert_eq!(size_state("Point", &ctx, Encoding::ReprC), None);
     }
 
     #[test]
@@ -152,26 +158,25 @@ mod tests {
         assert_ne!(in_q, in_p, "the two `Inner`s differ in size");
         assert_eq!(
             state("q.Thing", &ctx),
-            Some(SizeState::Bounded(u32::try_from(in_q).unwrap()))
+            SizeState::Bounded(u32::try_from(in_q).unwrap())
         );
         assert_eq!(
             state("q.Loose", &ctx),
-            Some(SizeState::Unbounded(UnboundedCause::Member))
+            SizeState::Unbounded(UnboundedCause::Member)
         );
     }
 
     #[test]
-    fn every_model_cause_maps_to_its_schema_member() {
-        use ridl_ir::codegen::v1::FbUnboundedCause as Model;
-        for (model, schema) in [
-            (Model::Member, UnboundedCause::Member),
-            (Model::Untyped, UnboundedCause::Untyped),
-            (Model::Layout, UnboundedCause::Layout),
-            (Model::Aggregate, UnboundedCause::Aggregate),
-            (Model::Exempt, UnboundedCause::Exempt),
-            (Model::Unspecified, UnboundedCause::Unspecified),
+    fn every_model_cause_reads_back_as_itself() {
+        for model in [
+            UnboundedCause::Member,
+            UnboundedCause::Untyped,
+            UnboundedCause::Layout,
+            UnboundedCause::Aggregate,
+            UnboundedCause::Exempt,
+            UnboundedCause::Unspecified,
         ] {
-            assert_eq!(cause_of(model as i32), schema, "{model:?}");
+            assert_eq!(cause_of(model as i32), model, "{model:?}");
         }
         assert_eq!(
             cause_of(99),
@@ -251,19 +256,19 @@ mod tests {
         let ctx = Ctx::new(&root, &others);
         assert_eq!(
             state("NoType", &ctx),
-            Some(SizeState::Unbounded(UnboundedCause::Untyped))
+            SizeState::Unbounded(UnboundedCause::Untyped)
         );
         assert_eq!(
             state("Clash", &ctx),
-            Some(SizeState::Unbounded(UnboundedCause::Layout))
+            SizeState::Unbounded(UnboundedCause::Layout)
         );
         assert_eq!(
             state("TooBig", &ctx),
-            Some(SizeState::Unbounded(UnboundedCause::Aggregate))
+            SizeState::Unbounded(UnboundedCause::Aggregate)
         );
         assert_eq!(
             state("Far", &ctx),
-            Some(SizeState::Unbounded(UnboundedCause::Exempt))
+            SizeState::Unbounded(UnboundedCause::Exempt)
         );
     }
 }

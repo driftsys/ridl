@@ -1,32 +1,41 @@
-//! The size state of a payload, per core encoding (spec D-6, as re-baselined
-//! on 2026-10-03): absent (no row), bounded with a byte count, or unbounded
-//! with a cause (driver §4 answer 5). A bound is an upper bound: the largest
-//! legal value of the payload encodes to at most that many bytes under the
-//! projection the wire backend emits (ADR-0017 for proto3, ADR-0019 for
-//! FlatBuffers). Envelope and framing are excluded (spec D-7). `repr(C)` has
-//! no state until the layout is defined (driftsys/ridl#317).
+//! The size state of a payload, per core encoding: bounded with a byte
+//! count, unbounded with a cause, or absent with a cause. A bound is an upper
+//! bound: the largest legal value of the payload encodes to at most that many
+//! bytes under the projection the wire backend emits (ADR-0017 for proto3,
+//! ADR-0019 for FlatBuffers). Envelope and framing are excluded.
+//! [`Encoding::ReprC`] has no state until the layout is defined
+//! (driftsys/ridl#317).
 //!
-//! The descriptor defines no wire shape (§4 answer 6): only a payload that is
-//! one named type is sized, through the projections —
-//! `ridl_ir::projection::flatbuffers::max_size` (ADR-0019 decision 8) in
+//! Only a payload that is one named type is sized, through the projections —
+//! [`crate::projection::flatbuffers::max_size`] (ADR-0019 decision 8) in
 //! `flatbuffers`, and ADR-0017's projection in `proto3`. This module holds the
 //! context both sizers resolve names with, the string capacity, and the leaf
 //! model `proto3` counts over; `flatbuffers` counts nothing of its own, it
 //! reads the projection's bound and the codegen model's cause. A request of
 //! zero or several parameters, an inline `T | E` reply and a stream payload
-//! (§4 answer 10) are absent until a record defines their encoding.
+//! are absent with [`AbsentCause::EncodingUndefined`] until a record defines
+//! their encoding (driftsys/ridl#336 for streams).
+//!
+//! The absence is a state of its own, not a missing value: a consumer must be
+//! able to tell "no bound exists" from "this toolchain computed none, for this
+//! reason". `ridl-descriptor` writes no row for an absent state and a row for
+//! each of the other two (`docs/design/catalog-descriptor.md`, the section
+//! "The size states").
 
 pub(crate) mod flatbuffers;
 pub(crate) mod proto3;
 
-use ridl_ir::projection::flatbuffers::Packages;
-use ridl_ir::projection::proto3::{self as proto3_projection, Scalar};
-use ridl_ir::v2::{
+use crate::projection::flatbuffers::Packages;
+use crate::projection::proto3::{self as proto3_projection, Scalar};
+use crate::v2::{
     ArrayType, Constraint, Decl, FieldType, MapType, Package, Param, PrimitiveType, ReturnType,
     StructDef, TupleType, TypeDef, UnionDef, backing, decl, field_type, return_type,
 };
 
-use crate::{Encoding, UnboundedCause};
+/// Why a declaration has no FlatBuffers bound: the attribution the codegen
+/// model carries, which is the one attribution of a missing bound
+/// ([`crate::codegen::fb_unbounded`]).
+pub use crate::codegen::v1::FbUnboundedCause as UnboundedCause;
 
 /// Name resolution over a package and the packages it imports, and the
 /// projection's view of the same scope.
@@ -114,51 +123,123 @@ pub enum PayloadShape<'a> {
     Return(&'a ReturnType),
 }
 
-/// The one named type a payload is, or `None` when the payload is not one
-/// named type and so has absent sizes (driver §4 answers 6 and 10).
-pub fn named_payload<'a>(shape: &PayloadShape<'a>) -> Option<&'a str> {
+/// The one named type a payload is, or the cause of its absent state when
+/// the payload is not one named type.
+fn payload_name<'a>(shape: &PayloadShape<'a>) -> Result<&'a str, AbsentCause> {
     match shape {
-        PayloadShape::Named(name) => Some(name),
+        PayloadShape::Named(name) => Ok(name),
         PayloadShape::Field(ty) => named_field(ty),
-        PayloadShape::Params([single]) => single.r#type.as_ref().and_then(named_field),
-        PayloadShape::Params(_) => None,
-        PayloadShape::Return(ret) => match ret.kind.as_ref()? {
-            return_type::Kind::Value(ty) => named_field(ty),
-            return_type::Kind::Fallible(_) => None,
+        PayloadShape::Params([single]) => match single.r#type.as_ref() {
+            Some(ty) => named_field(ty),
+            None => Err(AbsentCause::EncodingUndefined),
+        },
+        // Zero parameters and several parameters: no codec defines the
+        // encoding of either request shape.
+        PayloadShape::Params(_) => Err(AbsentCause::EncodingUndefined),
+        PayloadShape::Return(ret) => match ret.kind.as_ref() {
+            Some(return_type::Kind::Value(ty)) => named_field(ty),
+            Some(return_type::Kind::Fallible(_)) | None => Err(AbsentCause::EncodingUndefined),
         },
     }
 }
 
-fn named_field(ty: &FieldType) -> Option<&str> {
-    match ty.kind.as_ref()? {
-        field_type::Kind::Named(name) => Some(name),
-        _ => None,
+/// The named type a field position is, or the cause of its absent state. A
+/// `string` or `bytes` with no length bound and a type def with no width have
+/// no size under any encoding, which is [`AbsentCause::NoBound`]; every other
+/// shape that is not one named type has no defined encoding.
+fn named_field(ty: &FieldType) -> Result<&str, AbsentCause> {
+    match ty.kind.as_ref() {
+        Some(field_type::Kind::Named(name)) => Ok(name),
+        Some(field_type::Kind::Primitive(primitive)) => {
+            Err(no_bound_or_undefined(leaf_of_primitive(*primitive)))
+        }
+        Some(field_type::Kind::InlineScalar(def)) => {
+            Err(no_bound_or_undefined(leaf_of_type_def(def)))
+        }
+        Some(
+            field_type::Kind::Tuple(_)
+            | field_type::Kind::Array(_)
+            | field_type::Kind::Map(_)
+            | field_type::Kind::Stream(_),
+        )
+        | None => Err(AbsentCause::EncodingUndefined),
     }
 }
 
-/// One payload's state under one encoding; the row is absent when the
-/// toolchain computed no state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SizeState {
-    Bounded(u32),
-    Unbounded(UnboundedCause),
+/// A scalar position with no leaf is a value no proto3 leaf bounds, which is
+/// a value with no size at all: `NoBound`. A scalar with a leaf has a size,
+/// but no codec defines the encoding of a payload that is a bare scalar.
+fn no_bound_or_undefined(leaf: Option<Leaf<'_>>) -> AbsentCause {
+    match leaf {
+        Some(_) => AbsentCause::EncodingUndefined,
+        None => AbsentCause::NoBound,
+    }
 }
 
-/// The state of the named type `type_name` under `encoding`: `None` when
-/// this toolchain computes no state. For every encoding: the name does not
-/// resolve, or the projection has no root form for the type. For `ReprC`:
-/// always, the layout is undefined until it is defined (driftsys/ridl#317). For `Proto3`, where no
-/// unbounded state exists (`proto3::state`): the type is not a struct or a
-/// union; a member of its message is one the proto backend refuses, or one
-/// the backend accepts that no proto3 leaf bounds (a `string` or `bytes`
-/// with no length bound, a type def with no width); an enum value it reaches
-/// is outside int32; the `u64` arithmetic overflows; the nesting passes
-/// `MAX_DEPTH`; or the bound is above `u32::MAX`.
-pub fn size_state(type_name: &str, ctx: &Ctx<'_>, encoding: Encoding) -> Option<SizeState> {
-    match encoding {
-        Encoding::Proto3 => proto3::state(type_name, ctx),
-        Encoding::FlatBuffers => flatbuffers::state(type_name, ctx),
-        Encoding::ReprC => None,
+/// A core encoding a payload's size is stated for. No encoding is defined
+/// for [`Encoding::ReprC`]: it has no layout until driftsys/ridl#317 lands,
+/// and [`size_state`] answers [`AbsentCause::EncodingUndefined`] for it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Encoding {
+    Proto3,
+    FlatBuffers,
+    ReprC,
+}
+
+/// One payload's state under one encoding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SizeState {
+    /// The maximum encoded size in bytes, envelope and framing excluded.
+    Bounded(u32),
+    /// No finite bound exists, with the attribution of the missing bound.
+    /// FlatBuffers only: typl bounds every collection, so a proto3 message
+    /// is bounded or absent.
+    Unbounded(UnboundedCause),
+    /// This toolchain states no size, with the reason it states none.
+    Absent(AbsentCause),
+}
+
+/// Why a payload has no size state under an encoding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AbsentCause {
+    /// No codec defines the encoding of the shape: a stream payload, a
+    /// request of zero or of several parameters, an inline `T | E` reply,
+    /// or the `repr(C)` encoding.
+    EncodingUndefined,
+    /// proto3 only: the type has no message of its own. ADR-0017 decision 1
+    /// inlines a named scalar and an enum set into their field (decision 2
+    /// rejects a wrapper message), and an enum is a declared `enum`.
+    NoMessage,
+    /// proto3 only: a member of the message is one the proto backend
+    /// refuses, or one it accepts that no proto3 leaf bounds.
+    RefusedMember,
+    /// A `string` or `bytes` with no length bound, or a type def with no
+    /// width: the value itself has no size.
+    NoBound,
+    /// The bound does not fit in a `u32`, or the nesting passes the sizer's
+    /// depth limit.
+    Overflow,
+    /// The name does not resolve, or the declaration it names has no root
+    /// form under the encoding.
+    Unresolved,
+}
+
+/// The state of `shape` under `encoding`.
+///
+/// A payload that is not one named type is absent under every encoding, with
+/// the cause `payload_name` gives it: this module states a size for a named
+/// type alone. `ReprC` is absent with [`AbsentCause::EncodingUndefined`]
+/// whatever the shape. The `proto3` and `flatbuffers` submodules hold the
+/// per-encoding rules, each in its own `state`.
+pub fn size_state(shape: &PayloadShape<'_>, ctx: &Ctx<'_>, encoding: Encoding) -> SizeState {
+    let sizer: fn(&str, &Ctx<'_>) -> SizeState = match encoding {
+        Encoding::Proto3 => proto3::state,
+        Encoding::FlatBuffers => flatbuffers::state,
+        Encoding::ReprC => return SizeState::Absent(AbsentCause::EncodingUndefined),
+    };
+    match payload_name(shape) {
+        Ok(name) => sizer(name, ctx),
+        Err(cause) => SizeState::Absent(cause),
     }
 }
 
@@ -188,7 +269,7 @@ pub fn string_max_bytes(constraint: Option<&Constraint>) -> Option<u64> {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Leaf<'a> {
     /// A scalar with a largest encoding, as the proto backend spells it
-    /// (`ridl_ir::projection::proto3`): never `string` or `bytes`, which are
+    /// ([`crate::projection::proto3`]): never `string` or `bytes`, which are
     /// a [`Leaf::Blob`] when a constraint bounds them. An enum set is the
     /// scalar of its width (`enum_set_field_type` in the proto backend).
     Scalar(Scalar),
@@ -331,8 +412,8 @@ fn leaf_of_type_def<'a>(def: &'a TypeDef) -> Option<Leaf<'a>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ridl_ir::projection::flatbuffers::max_size;
-    use ridl_ir::v2::{
+    use crate::projection::flatbuffers::max_size;
+    use crate::v2::{
         Backing, CommandDef, ConstDef, EnumDef, EnumSetDef, EnumValue, EventDef, FallibleType,
         Field, FixedDef, FloatWidth, IntWidth, Package, Param, PrimitiveType, QueryDef, Reserved,
         ReturnType, SignalDef, StreamType, StructMember, TupleField, field_type, return_type,
@@ -419,6 +500,14 @@ mod tests {
         Package {
             name: name.to_owned(),
             decls,
+            ..Default::default()
+        }
+    }
+
+    fn param(name: &str, ty: Option<FieldType>) -> Param {
+        Param {
+            name: name.to_owned(),
+            r#type: ty,
             ..Default::default()
         }
     }
@@ -603,45 +692,51 @@ mod tests {
         };
         let untyped = ReturnType { kind: None };
 
-        assert_eq!(named_payload(&PayloadShape::Named("Point")), Some("Point"));
+        assert_eq!(payload_name(&PayloadShape::Named("Point")), Ok("Point"));
         assert_eq!(
-            named_payload(&PayloadShape::Field(&named("Point"))),
-            Some("Point")
+            payload_name(&PayloadShape::Field(&named("Point"))),
+            Ok("Point")
         );
         assert_eq!(
-            named_payload(&PayloadShape::Field(&primitive)),
-            None,
+            payload_name(&PayloadShape::Field(&primitive)),
+            Err(AbsentCause::EncodingUndefined),
             "not a named type"
         );
         assert_eq!(
-            named_payload(&PayloadShape::Field(&stream)),
-            None,
-            "a stream: §4 answer 10"
+            payload_name(&PayloadShape::Field(&stream)),
+            Err(AbsentCause::EncodingUndefined),
+            "a stream: no codec defines its encoding"
         );
-        assert_eq!(named_payload(&PayloadShape::Params(&one)), Some("Point"));
+        assert_eq!(payload_name(&PayloadShape::Params(&one)), Ok("Point"));
         assert_eq!(
-            named_payload(&PayloadShape::Params(&two)),
-            None,
-            "several parameters: §4 answer 6"
+            payload_name(&PayloadShape::Params(&two)),
+            Err(AbsentCause::EncodingUndefined),
+            "several parameters"
         );
         assert_eq!(
-            named_payload(&PayloadShape::Params(&[])),
-            None,
+            payload_name(&PayloadShape::Params(&[])),
+            Err(AbsentCause::EncodingUndefined),
             "zero parameters"
         );
         assert_eq!(
-            named_payload(&PayloadShape::Params(&untyped_param)),
-            None,
+            payload_name(&PayloadShape::Params(&untyped_param)),
+            Err(AbsentCause::EncodingUndefined),
             "one parameter with no type"
         );
-        assert_eq!(named_payload(&PayloadShape::Return(&value)), Some("Point"));
+        assert_eq!(payload_name(&PayloadShape::Return(&value)), Ok("Point"));
         assert_eq!(
-            named_payload(&PayloadShape::Return(&fallible)),
-            None,
-            "an inline `T | E`: §4 answer 6"
+            payload_name(&PayloadShape::Return(&fallible)),
+            Err(AbsentCause::EncodingUndefined),
+            "an inline `T | E`"
         );
-        assert_eq!(named_payload(&PayloadShape::Return(&streamed)), None);
-        assert_eq!(named_payload(&PayloadShape::Return(&untyped)), None);
+        assert_eq!(
+            payload_name(&PayloadShape::Return(&streamed)),
+            Err(AbsentCause::EncodingUndefined)
+        );
+        assert_eq!(
+            payload_name(&PayloadShape::Return(&untyped)),
+            Err(AbsentCause::EncodingUndefined)
+        );
     }
 
     #[test]
@@ -684,7 +779,7 @@ mod tests {
     #[test]
     fn a_type_def_leaf_follows_its_backing_and_width() {
         // The scalar is the proto backend's (`proto_scalar`); the table itself
-        // is pinned in `ridl_ir::projection::proto3`. What this test pins is
+        // is pinned in [`crate::projection::proto3`]. What this test pins is
         // which types have a leaf at all, and which are a `Blob`.
         let prim = |p: PrimitiveType| backing::Kind::Primitive(p as i32);
         let int_width = |w: IntWidth| Some(type_def::Width::IntWidth(w as i32));
@@ -1161,7 +1256,7 @@ mod tests {
     }
 
     #[test]
-    fn the_repr_c_column_is_absent() {
+    fn repr_c_is_absent_with_encoding_undefined() {
         // `Point` resolves, so a `ReprC` arm routed to a sizer would reach
         // that sizer, and both sizers answer a bound for it; such a routing
         // fails this test.
@@ -1176,7 +1271,120 @@ mod tests {
         );
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(size_state("Point", &ctx, Encoding::ReprC), None);
+        assert_eq!(
+            size_state(&PayloadShape::Named("Point"), &ctx, Encoding::ReprC),
+            SizeState::Absent(AbsentCause::EncodingUndefined)
+        );
+    }
+
+    /// The two encodings a state is defined for.
+    const WIRE: [Encoding; 2] = [Encoding::Proto3, Encoding::FlatBuffers];
+
+    #[test]
+    fn a_named_scalar_has_no_proto3_message() {
+        // ADR-0017 decision 1 inlines a named scalar into its field and
+        // decision 2 rejects a wrapper message, so proto3 has no message to
+        // size. ADR-0019 decision 8 gives the same scalar a box table, so
+        // FlatBuffers does have a bound.
+        let package = tests_support::fixture();
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        let shape = PayloadShape::Named("Vin");
+        assert_eq!(
+            size_state(&shape, &ctx, Encoding::Proto3),
+            SizeState::Absent(AbsentCause::NoMessage)
+        );
+        assert!(matches!(
+            size_state(&shape, &ctx, Encoding::FlatBuffers),
+            SizeState::Bounded(_)
+        ));
+    }
+
+    #[test]
+    fn a_stream_payload_is_undefined_in_both_encodings() {
+        let package = tests_support::fixture();
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        let stream = FieldType {
+            optional: false,
+            kind: Some(field_type::Kind::Stream(StreamType {
+                element: Some(stream_type::Element::Named("Point".to_owned())),
+            })),
+        };
+        for encoding in WIRE {
+            assert_eq!(
+                size_state(&PayloadShape::Field(&stream), &ctx, encoding),
+                SizeState::Absent(AbsentCause::EncodingUndefined),
+                "{encoding:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn two_parameters_are_undefined_in_both_encodings() {
+        let package = tests_support::fixture();
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        let params = [param("at", Some(named("Point"))), param("to", None)];
+        for encoding in WIRE {
+            assert_eq!(
+                size_state(&PayloadShape::Params(&params), &ctx, encoding),
+                SizeState::Absent(AbsentCause::EncodingUndefined),
+                "{encoding:?}"
+            );
+            assert_eq!(
+                size_state(&PayloadShape::Params(&[]), &ctx, encoding),
+                SizeState::Absent(AbsentCause::EncodingUndefined),
+                "{encoding:?}, zero parameters"
+            );
+        }
+    }
+
+    #[test]
+    fn a_fallible_reply_is_undefined_in_both_encodings() {
+        let package = tests_support::fixture();
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        let fallible = ReturnType {
+            kind: Some(return_type::Kind::Fallible(FallibleType {
+                ok: "Point".to_owned(),
+                err: "Coord".to_owned(),
+            })),
+        };
+        for encoding in WIRE {
+            assert_eq!(
+                size_state(&PayloadShape::Return(&fallible), &ctx, encoding),
+                SizeState::Absent(AbsentCause::EncodingUndefined),
+                "{encoding:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_unbounded_string_has_no_bound() {
+        // A `string` with no length bound has no size under either encoding:
+        // neither the bare primitive nor an inline scalar that carries no
+        // `len_max`.
+        let package = tests_support::fixture();
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        let bare = primitive(PrimitiveType::String);
+        let inline = FieldType {
+            optional: false,
+            kind: Some(field_type::Kind::InlineScalar(Box::new(string_def(None)))),
+        };
+        for encoding in WIRE {
+            assert_eq!(
+                size_state(&PayloadShape::Field(&bare), &ctx, encoding),
+                SizeState::Absent(AbsentCause::NoBound),
+                "{encoding:?}, a bare `string`"
+            );
+            assert_eq!(
+                size_state(&PayloadShape::Field(&inline), &ctx, encoding),
+                SizeState::Absent(AbsentCause::NoBound),
+                "{encoding:?}, an inline `string` with no bound"
+            );
+        }
     }
 
     #[test]
@@ -1296,7 +1504,7 @@ mod tests {
 
 #[cfg(test)]
 pub(crate) mod tests_support {
-    use ridl_ir::v2::{
+    use crate::v2::{
         ArrayType, Backing, ConstDef, Constraint, Decl, Field, FieldType, IntWidth, MapType,
         Package, PrimitiveType, StructDef, StructMember, TypeDef, UnionArm, UnionDef, backing,
         decl, field_type, struct_member, type_def,

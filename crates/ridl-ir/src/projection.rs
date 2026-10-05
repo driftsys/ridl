@@ -13,7 +13,9 @@
 //! One submodule per target. [`flatbuffers`] reads ADR-0019's projection rules
 //! once, for both of the emitters that have to agree on them. [`proto3`] holds
 //! ADR-0017's scalar table once, for the `.proto` emitter and the descriptor's
-//! proto3 size bound.
+//! proto3 size bound. [`size`] states the maximum encoded size of a payload
+//! under each of those two encodings, over both of them.
 
 pub mod flatbuffers;
 pub mod proto3;
+pub mod size;
