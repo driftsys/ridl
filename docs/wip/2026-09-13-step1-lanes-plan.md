@@ -255,8 +255,9 @@ catalog hash (E16.2).
 
 ### Lane S — layout inputs for backend plugins (priority 1)
 
-Driver prompt: not written yet; S1 writes it. Stories: Epic 17 in the roadmap,
-E17.0 to E17.5, driftsys/ridl#715 to driftsys/ridl#720.
+Driver prompt: `2026-10-05-layout-inputs-plan.md`, whose §1 is the stage driver,
+with the design `2026-10-05-layout-inputs-design.md`. Stories: Epic 17 in the
+roadmap, E17.0 to E17.5, driftsys/ridl#715 to driftsys/ridl#720.
 
 **Added 2026-10-05, as priority 1.** A backend plugin must compute and generate
 a deployment's shared-memory layouts and socket message layouts from its
@@ -270,7 +271,7 @@ gap.
 | S1    | E17.0, the design under `docs/wip/`: the system section of the codegen model, the rsdl deployment attributes for the depth override, slot count and call budget, which derived values the toolchain tabulates, the amendments of ADR-0015 decision 21, ADR-0018 and ADR-0022; then the plan                                      | Fable for the sizing source and the model shape; Opus for the rest | now              |
 | S2    | E17.1 the system in the codegen model, with an rsdl system and one deployment added to `examples/cabin`; E17.2 the missing payload sizes (#665 as an optional narrowing after the portable-pattern implementation of #597); E17.3 the frame header and envelope sizes per transport binding (waits on E11.9, #265) — in parallel | Sonnet stage agents, Opus reviews                                  | S1 merged        |
 | S3    | E17.4 the sizing inputs, their checks and their defaults                                                                                                                                                                                                                                                                         | Fable for the checks; Sonnet for the plumbing                      | E17.1 merged     |
-| S4    | E17.5 the test plugin that computes the layouts, the system descriptor file if S1 keeps it, the records; garden S1                                                                                                                                                                                                               | Opus for the test plugin and its fixture; Sonnet for the rest      | S2 and S3 merged |
+| S4    | E17.5 the test plugin that computes the layouts, the records; garden S1                                                                                                                                                                                                                                                          | Opus for the test plugin and its fixture; Sonnet for the rest      | S2 and S3 merged |
 
 **The gate inside the lane is S1.** The sizing inputs are rsdl deployment
 attributes (Sebastien, 2026-10-05), so S3 changes Lane B's rsdl grammar and

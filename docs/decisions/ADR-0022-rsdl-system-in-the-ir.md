@@ -33,6 +33,11 @@ verdict. This record fixes the engineering choices those sections leave open.
 its 2026-09-18 amendment; decision 2 below states why it is written by the IR
 dump emits and nothing more.
 
+Amended 2026-10-05 by lane S's design (driftsys/ridl#715): decision 11 adds the
+codegen request's deployment section as an emitter over `System`, the declared
+sizing values as dedicated fields, and the moved boundary with the engine. It
+amends ADR-0015 decision 21, ADR-0018 decision 12 and ADR-0020 decision 9.
+
 ## Context
 
 rsdl §13 states the lowering as facts and leaves their carrier open: "a
@@ -85,6 +90,12 @@ nothing.
    rsdl-owned keys consumed into checks (rsdl §5, RSDL-901), and §13 lists
    neither. The model carries no doc comment for an rsdl declaration, so the
    message has no `doc` field.
+
+   **Note (2026-10-05, decision 11).** `Deployment.sizing` and
+   `Placement.sizing` carry the declared `depth`, `slots` and `budget` as
+   dedicated fields. rsdl §13 lists them once the rsdl sizing keys land
+   (driftsys/ridl#719), so the rule reads over the amended §13; until then the
+   two fields are the one fact this message states that §13 does not.
 
 4. **Identity in the message is by qualified name, with `inline` beside it.** A
    component is `pkg.Name`, or the owning service's dotted name for the implicit
@@ -175,6 +186,30 @@ nothing.
     unallowed diagnostic — the harness adds no rule of its own. `AGENTS.md` and
     `CONTRIBUTING.md` state the rule for contributors.
 
+11. **The codegen request's deployment section is an emitter over `System`, and
+    the layout inputs live in the toolchain** (lane S, 2026-10-05,
+    driftsys/ridl#715). A backend plugin computes a deployment's shared-memory
+    and socket layouts from its `CodegenRequest` alone, so
+    `ridl build --deployment NAME` lowers the selected deployment of `System`
+    into `ridl.codegen.v1.Deployment` and attaches it to every package's
+    request: the regions with their hash; the instances with their machine, the
+    interfaces they offer and the catalogs they map; the channels with their
+    producer and their consumer links, each link with its crossing, the encoding
+    ADR-0020 decision 2 derives from the crossing, the depth of ADR-0015
+    decision 21, and the `slots` and `budget` of rsdl's sizing keys; and the
+    frame header and envelope sizes of the bindings the toolchain knows. This is
+    the emitter decision 1 anticipated, with a backend rather than a runtime as
+    its reader. `System` changes only to carry the declared sizing values,
+    `Deployment.sizing` and `Placement.sizing`, as dedicated fields the way
+    `instances` and `external` are, not as attribute-map entries. This narrows
+    decision 3 (see its note). **The boundary with the engine moves.** The
+    store, the seqlock, the ring and the scheduler stay parked as `ridl-engine`;
+    the values they are sized from are tabulated here. The system descriptor
+    file of the runtime descriptors design stays unbuilt: it would be a second
+    emitter over the same message, built when a runtime that reads one exists
+    (`docs/design/catalog-descriptor.md`, "Not built"). The design note is
+    `2026-10-05-layout-inputs-design.md`, archived when its lane closes.
+
 ## Consequences
 
 - The IR has two root messages and two artifact families. A tool that reads "the
@@ -208,10 +243,14 @@ nothing.
 
 ## Documents amended
 
-| Document                                                | Change                                                                                                                                                                                        |
-| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ADR-0014](ADR-0014-ir-encodings.md) decision 4         | a 2026-09-18 amendment names the system artifact and its three suffixes, and records that the `.system.` infix keeps it out of `.ir.json` snapshot detection (landed with the implementation) |
-| [ADR-0010](ADR-0010-cli-conventions.md) the `build` row | unchanged by decision 8 — the exit code is still 1 on any error; what is written on an RSDL-7xx error is stated here, since that row never stated what is written                             |
+| Document                                                                             | Change                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [ADR-0014](ADR-0014-ir-encodings.md) decision 4                                      | a 2026-09-18 amendment names the system artifact and its three suffixes, and records that the `.system.` infix keeps it out of `.ir.json` snapshot detection (landed with the implementation) |
+| [ADR-0015](ADR-0015-qos-absorption-and-rpc-bounds.md) decision 21                    | a 2026-10-05 amendment: the depth is tabulated into the request and declarable as an rsdl override (decision 11)                                                                              |
+| [ADR-0018](ADR-0018-runtime-core-and-generated-surface.md) decision 12               | a 2026-10-05 amendment: which depth rule the toolchain evaluates, and the `depth`, `slots` and `budget` sources (decision 11)                                                                 |
+| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decision 9 | a 2026-10-05 amendment: the request carries the deployment section (decision 11)                                                                                                              |
+| rsdl language reference §13                                                          | driftsys/ridl#719 adds the declared sizing values to the lowered facts (decision 11, the note under decision 3)                                                                               |
+| [ADR-0010](ADR-0010-cli-conventions.md) the `build` row                              | unchanged by decision 8 — the exit code is still 1 on any error; what is written on an RSDL-7xx error is stated here, since that row never stated what is written                             |
 
 ## References
 

@@ -61,6 +61,11 @@ implemented policy from typl §5.5: range and step constraints exclude NaN and
 infinities, while unconstrained floats retain them (issue #421). This amendment
 does not change the record's Proposed status.
 
+**Amended 2026-10-05 — decision 12, the depth rule and the sizing sources.** The
+toolchain tabulates ADR-0015 decision 21's bound as the depth; the rsdl keys
+`depth`, `slots` and `budget` are the override and the two sources this record
+left open (driftsys/ridl#715). The record stays Proposed.
+
 ## Context
 
 The Rust backend has shipped an interaction layer since E2 — consumer and
@@ -315,6 +320,26 @@ be generated, and in what order", which is what this record answers.
     the interaction's safety integrity level**: above a threshold, size for
     worst case and treat overflow as a fault with a defined reaction rather than
     as telemetry.
+
+    **Amendment (2026-10-05) — which rule the toolchain evaluates, and the three
+    sources.** The service period and the jitter have no source in this release,
+    so the toolchain does not evaluate this rule. It tabulates ADR-0015 decision
+    21's contract bound, `ceil(max / min)`, as every event channel's depth — the
+    worst case for any consumer this rule finds feasible, since
+    `service_period + jitter ≤ max` gives a value at most the bound — into the
+    deployment section of the codegen request (ADR-0022 decision 11). The rsdl
+    override is the `depth` key on a `deployment` declaration or a placement
+    line; it replaces the derived value for the links it covers, and a value
+    below the bound draws RSDL-805. The slot count of the call table and its
+    byte budget, which no record sourced, are the `slots` and `budget` keys on
+    the same sites, with the defaults the design fixes (16 slots, no budget).
+    "An underivable or infeasible depth is a deploy-time error" becomes: an
+    underivable depth makes the build warn (RSDL-806), the request carry the
+    depth absent with its cause, and a plugin that needs it refuse;
+    infeasibility is not evaluated either, because it needs the same service
+    period and jitter, and reopens with them (rsdl §12). This rule is evaluated
+    again when rsdl carries a service period, where RSDL-801 reopens. The design
+    note is `2026-10-05-layout-inputs-design.md` (D-5 and D-6).
 
 13. **A bridge keeps a domain-mediated reference path with generated streaming
     transcoders beside it.** Decode to the validated domain type and re-encode

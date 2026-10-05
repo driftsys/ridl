@@ -211,6 +211,15 @@ on 2026-10-04 with #703; ADR-0026 is their durable record.
   precision rule that sets each check's default level and threshold from
   labelled corpus findings, the `ridl_metrics` tool, and the format of the eval
   tasks seeded for piece 1c.
+- **2026-10-05-layout-inputs-design.md** and
+  **2026-10-05-layout-inputs-plan.md** — lane S stage S1, the layout inputs for
+  backend plugins (Epic 17, E17.0, driftsys/ridl#715): the deployment section of
+  the codegen request beside the model, the tabulation boundary, the depth rule
+  (ADR-0015 decision 21's bound derived, ADR-0018 decision 12 deferred), the
+  rsdl keys `depth`, `slots` and `budget` on the `deployment` declaration and
+  placement lines, the size states, the binding overheads, and the system
+  descriptor left unbuilt. The plan's §1 is lane S's stage driver for S2 to S4.
+  Archived when E17.5 lands.
 
 ridl-boundary-model-review.md, superseded by ADR-0012, is archived too — see
 [`../archive/README.md`](../archive/README.md). So is

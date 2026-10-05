@@ -57,6 +57,10 @@ disposition pass (story driftsys/ridl#319) found the last sentence of decision
 which the lock's decision 17 had already replaced as a binding key. Decision 9
 carries the dated paragraph, and "Documents to amend" carries the row.
 
+Amended 2026-10-05 — decision 21: the event ring depth stays derived, is
+tabulated into the codegen request, and is declarable as an rsdl deployment
+override (driftsys/ridl#715).
+
 ## Context
 
 The question that produced both notes: can ridl be the single source of truth
@@ -534,6 +538,17 @@ indistinguishable, so no claim about any of the three can be exercised.
     wire widths from ranges. It fails only on a half-open range, where one bound
     is unset — and §9.1's defaults mean both bounds are present whenever timing
     was not written explicitly.
+
+    **Amendment (2026-10-05) — derived by the toolchain, declarable in rsdl.**
+    The derivation stands and becomes a tabulated value: the deployment section
+    of the codegen request carries `ceil(max / min)` for every consumer link of
+    an event channel (ADR-0022 decision 11). "Not declarable" is narrowed to
+    `ridl`. rsdl's `depth` key, on a `deployment` declaration or a placement
+    line, replaces the derived value for the links it covers; a declared value
+    below the bound draws RSDL-805, because live occurrences can then be
+    dropped. The reconciliation with ADR-0018 decision 12 is recorded under that
+    decision. The design note is `2026-10-05-layout-inputs-design.md` (D-5 and
+    D-6), archived when its lane closes.
 
 22. **History and replay stay out of the contract.** §4 makes a signal
     latest-value only and §5.1 rules out event replay. The strongest case put

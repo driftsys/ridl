@@ -50,6 +50,10 @@ and
 [`docs/wip/2026-09-08-ridl-rt-design.md`](../wip/2026-09-08-ridl-rt-design.md),
 which is the library decisions 5 and 6 place.
 
+**Amended 2026-10-05 — decision 9, the deployment section.** The request carries
+a third thing beside the model and the options: the selected deployment's layout
+inputs (driftsys/ridl#715).
+
 ## Context
 
 Three problems came out of one session, and each has the same shape: a record
@@ -325,6 +329,14 @@ as its public contract.
    files, so `--out`, dry-run and overwrite behaviour are identical for every
    backend. A non-zero exit or a malformed response is a `ridlc` error that
    names the plugin.
+
+   **Amendment (2026-10-05) — the request carries a deployment section.** Beside
+   the model and the options, `CodegenRequest` carries, when `ridl build`
+   selects a deployment, the facts a backend sizes a layout from: the regions,
+   the instances, the channels with their crossing, encoding, depth, slots and
+   budget, and the overheads of the bindings the toolchain knows (ADR-0022
+   decision 11). The field is additive under the IR specification §6; a request
+   with no deployment is byte for byte unchanged.
 
 10. **Two hosts for that contract; the process host is this release's.** The
     in-tree Rust and TypeScript backends implement the contract in-process. The
