@@ -23,6 +23,7 @@ use super::resolve::{Scope, is_foreign};
 use super::v1;
 use crate::name::camel_case;
 use crate::projection::flatbuffers as fb;
+use crate::projection::size::{self, AbsentCause, Ctx, Encoding, PayloadShape, SizeState};
 use crate::v2;
 
 /// Lowers one package over the scope `others` (design note D-1).
@@ -34,6 +35,7 @@ pub fn lower(package: &v2::Package, others: &[&v2::Package]) -> v1::Model {
     let scope = Scope { package, others };
     let mut lowering = Lowering {
         scope,
+        sizes: Ctx::new(package, others),
         inits: Inits::new(scope),
         closures: Closures::new(scope),
         foreign: Vec::new(),
@@ -226,6 +228,7 @@ struct TupleEntry<'a> {
 
 struct Lowering<'a> {
     scope: Scope<'a>,
+    sizes: Ctx<'a>,
     inits: Inits<'a>,
     closures: Closures<'a>,
     foreign: Vec<v1::ForeignDeclaration>,
@@ -795,13 +798,13 @@ impl<'a> Lowering<'a> {
                 (
                     v1::Kind::Query,
                     query.timing.as_ref(),
-                    Some(v1::interaction::Shape::Query(v1::QueryShape {
+                    Some(v1::interaction::Shape::Query(Box::new(v1::QueryShape {
                         params,
                         request,
                         reply,
                         reply_payload,
                         clauses,
-                    })),
+                    }))),
                 )
             }
             Some(v2::decl::Kind::FixedDef(fixed)) => {
@@ -930,7 +933,41 @@ impl<'a> Lowering<'a> {
         v1::Payload {
             r#type: Some(self.type_ref(home, reference)),
             flatbuffers_max_size: max_size.map(|size| u32::try_from(size).unwrap_or(u32::MAX)),
+            sizes: Some(v1::PayloadSizes {
+                proto3: Some(self.size_state(home, reference, Encoding::Proto3)),
+                flatbuffers: Some(self.size_state(home, reference, Encoding::FlatBuffers)),
+            }),
         }
+    }
+
+    /// The state of the payload `reference` under `encoding`, from the one
+    /// sizer. An unbounded FlatBuffers state carries the same attribution a
+    /// root carries.
+    fn size_state(
+        &self,
+        home: &'a v2::Package,
+        reference: &str,
+        encoding: Encoding,
+    ) -> v1::SizeState {
+        let state = match size::size_state(&PayloadShape::Named(reference), &self.sizes, encoding) {
+            SizeState::Bounded(size) => v1::size_state::State::Bounded(size),
+            SizeState::Unbounded(cause) => {
+                let attribution = self
+                    .scope
+                    .resolve(home, reference)
+                    .map(|(decl, declaring)| super::fb_unbounded(declaring, decl))
+                    .unwrap_or_else(|| v1::FbUnbounded {
+                        cause: cause as i32,
+                        ..Default::default()
+                    });
+                v1::size_state::State::Unbounded(attribution)
+            }
+            SizeState::Absent(cause) => v1::size_state::State::Absent(v1::SizeAbsent {
+                cause: absent_cause(cause) as i32,
+                detail: None,
+            }),
+        };
+        v1::SizeState { state: Some(state) }
     }
 
     fn services(&mut self) -> Vec<v1::Service> {
@@ -1187,4 +1224,16 @@ fn strip_regex_delimiters(regex: &str) -> &str {
         .strip_prefix('/')
         .and_then(|rest| rest.strip_suffix('/'))
         .unwrap_or(regex)
+}
+
+/// The model's spelling of a sizer cause.
+fn absent_cause(cause: AbsentCause) -> v1::AbsentCause {
+    match cause {
+        AbsentCause::EncodingUndefined => v1::AbsentCause::EncodingUndefined,
+        AbsentCause::NoMessage => v1::AbsentCause::NoMessage,
+        AbsentCause::RefusedMember => v1::AbsentCause::RefusedMember,
+        AbsentCause::NoBound => v1::AbsentCause::NoBound,
+        AbsentCause::Overflow => v1::AbsentCause::Overflow,
+        AbsentCause::Unresolved => v1::AbsentCause::Unresolved,
+    }
 }

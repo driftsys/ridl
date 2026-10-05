@@ -57,6 +57,18 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "init": {
@@ -97,6 +109,18 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "init": {
@@ -158,6 +182,18 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "clauses": []
@@ -209,6 +245,18 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "init": {
@@ -683,6 +731,18 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "clauses": []

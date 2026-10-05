@@ -3521,6 +3521,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "init": {
@@ -3561,6 +3573,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "init": {
@@ -3601,6 +3625,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "init": {
@@ -3642,7 +3678,15 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 0,
                   "kind": "DECL_KIND_STRUCT"
                 },
-                "flatbuffersMaxSize": 53
+                "flatbuffersMaxSize": 53,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 8
+                  },
+                  "flatbuffers": {
+                    "bounded": 53
+                  }
+                }
               }
             }
           }
@@ -3698,6 +3742,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "clauses": [
@@ -3781,6 +3837,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "reply": {
@@ -3804,6 +3872,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "clauses": [
@@ -3881,6 +3961,21 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": false,
                   "index": 1,
                   "kind": "DECL_KIND_STRUCT"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_REFUSED_MEMBER"
+                    }
+                  },
+                  "flatbuffers": {
+                    "unbounded": {
+                      "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
+                      "unjudgeableMembers": [
+                        "category"
+                      ]
+                    }
+                  }
                 }
               },
               "reply": {
@@ -3952,6 +4047,21 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": false,
                   "index": 1,
                   "kind": "DECL_KIND_STRUCT"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_REFUSED_MEMBER"
+                    }
+                  },
+                  "flatbuffers": {
+                    "unbounded": {
+                      "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
+                      "unjudgeableMembers": [
+                        "category"
+                      ]
+                    }
+                  }
                 }
               },
               "reply": {
@@ -4012,6 +4122,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               }
             }
@@ -4099,7 +4221,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 7,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 43
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  }
+                }
               },
               "init": {
                 "derivable": true,
@@ -4151,6 +4283,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "init": {
@@ -4197,6 +4341,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "init": {
@@ -4254,7 +4410,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 5,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 44
+                "flatbuffersMaxSize": 44,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 44
+                  }
+                }
               },
               "init": {
                 "derivable": true,
@@ -4295,7 +4461,15 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 8,
                   "kind": "DECL_KIND_STRUCT"
                 },
-                "flatbuffersMaxSize": 54
+                "flatbuffersMaxSize": 54,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 8
+                  },
+                  "flatbuffers": {
+                    "bounded": 54
+                  }
+                }
               }
             }
           }
@@ -4343,7 +4517,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 5,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 44
+                "flatbuffersMaxSize": 44,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 44
+                  }
+                }
               },
               "clauses": []
             }
@@ -4400,7 +4584,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 5,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 44
+                "flatbuffersMaxSize": 44,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 44
+                  }
+                }
               },
               "clauses": []
             }
@@ -4516,7 +4710,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 7,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 43
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  }
+                }
               },
               "init": {
                 "derivable": true,
@@ -4573,7 +4777,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 7,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 43
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  }
+                }
               },
               "init": {
                 "derivable": true,
@@ -4632,7 +4846,15 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 8,
                   "kind": "DECL_KIND_STRUCT"
                 },
-                "flatbuffersMaxSize": 54
+                "flatbuffersMaxSize": 54,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 8
+                  },
+                  "flatbuffers": {
+                    "bounded": 54
+                  }
+                }
               }
             }
           }
@@ -4686,6 +4908,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "init": {
@@ -4726,6 +4960,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "init": {
@@ -4765,6 +5011,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "init": {
@@ -4805,7 +5063,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 7,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 43
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  }
+                }
               },
               "init": {
                 "derivable": true,
@@ -4845,6 +5113,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "declaredInit": "12.5",
@@ -4887,7 +5167,15 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 8,
                   "kind": "DECL_KIND_STRUCT"
                 },
-                "flatbuffersMaxSize": 54
+                "flatbuffersMaxSize": 54,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 8
+                  },
+                  "flatbuffers": {
+                    "bounded": 54
+                  }
+                }
               }
             }
           }
@@ -4942,6 +5230,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "clauses": [
@@ -5082,7 +5382,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 7,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 43
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  }
+                }
               },
               "reply": {
                 "value": {
@@ -5269,7 +5579,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 7,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 43
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  }
+                }
               },
               "reply": {
                 "fallible": {
@@ -5337,6 +5657,22 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": false,
                   "index": 9,
                   "kind": "DECL_KIND_STRUCT"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_REFUSED_MEMBER"
+                    }
+                  },
+                  "flatbuffers": {
+                    "unbounded": {
+                      "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
+                      "unjudgeableMembers": [
+                        "cabin",
+                        "setpoint"
+                      ]
+                    }
+                  }
                 }
               },
               "clauses": []
@@ -5386,6 +5722,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "clauses": []
@@ -5426,6 +5774,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               }
             }
@@ -5518,7 +5878,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 7,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 43
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  }
+                }
               },
               "clauses": [
                 {
@@ -5587,7 +5957,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 7,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 43
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  }
+                }
               },
               "clauses": [
                 {
@@ -5659,7 +6039,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 7,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 43
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  }
+                }
               },
               "clauses": [
                 {

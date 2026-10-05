@@ -497,6 +497,51 @@ message Payload {
   // `uint32` because the projection refuses any bound above `MAX_ENCODABLE`,
   // which is `u32::MAX`.
   optional uint32 flatbuffers_max_size = 2;
+  // The size state of the payload under each wire encoding. Field 2 keeps
+  // being written, equal to the FlatBuffers bounded value, for a reader
+  // older than this field.
+  PayloadSizes sizes = 3;
+}
+
+// The size state of one payload under each wire encoding.
+message PayloadSizes {
+  SizeState proto3 = 1;
+  SizeState flatbuffers = 2;
+}
+
+// One payload's state under one encoding.
+message SizeState {
+  oneof state {
+    // The maximum encoded size in bytes, envelope and framing excluded.
+    uint32 bounded = 10;
+    // No finite bound exists. FlatBuffers only.
+    FbUnbounded unbounded = 11;
+    // The toolchain states no size, with the reason it states none.
+    SizeAbsent absent = 12;
+  }
+}
+
+// Why a payload has no size state under an encoding.
+message SizeAbsent {
+  AbsentCause cause = 1;
+  // The member or the shape the cause names, for a reader.
+  optional string detail = 2;
+}
+
+enum AbsentCause {
+  ABSENT_CAUSE_UNSPECIFIED = 0;
+  // No codec defines the encoding of the shape.
+  ABSENT_CAUSE_ENCODING_UNDEFINED = 1;
+  // proto3 only: the type has no message of its own.
+  ABSENT_CAUSE_NO_MESSAGE = 2;
+  // proto3 only: a member the proto backend refuses.
+  ABSENT_CAUSE_REFUSED_MEMBER = 3;
+  // A string or bytes with no length bound, or a type def with no width.
+  ABSENT_CAUSE_NO_BOUND = 4;
+  // The bound exceeds `u32::MAX`, or the nesting passes the sizer's depth.
+  ABSENT_CAUSE_OVERFLOW = 5;
+  // A name that does not resolve, or a declaration with no root form.
+  ABSENT_CAUSE_UNRESOLVED = 6;
 }
 
 message SignalShape {

@@ -1268,3 +1268,148 @@ fn map_model_init_requires_at_most_one_generated_entry() {
         assert_eq!(field.init.as_ref().unwrap().derivable, expected);
     }
 }
+
+/// A package with a struct of two bounded scalars (`Pair`), a string type
+/// def with no length bound (`Label`), a struct holding it (`Tagged`), and
+/// one interface with a signal over each struct.
+fn sized_package() -> v2::Package {
+    let mut package = package();
+    package.decls.push(v2::Decl {
+        name: "Pair".to_string(),
+        visibility: v2::Visibility::Public as i32,
+        kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![
+                member(1, "left", named("SpeedKph")),
+                member(2, "right", named("SpeedKph")),
+            ],
+            ..Default::default()
+        })),
+        ..Default::default()
+    });
+    package.decls.push(v2::Decl {
+        name: "Label".to_string(),
+        visibility: v2::Visibility::Public as i32,
+        kind: Some(v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::String as i32,
+                )),
+            }),
+            ..Default::default()
+        })),
+        ..Default::default()
+    });
+    package.decls.push(v2::Decl {
+        name: "Tagged".to_string(),
+        visibility: v2::Visibility::Public as i32,
+        kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![member(1, "label", named("Label"))],
+            ..Default::default()
+        })),
+        ..Default::default()
+    });
+    let signal = |name: &str, payload: &str| v2::Decl {
+        name: name.to_string(),
+        visibility: v2::Visibility::Public as i32,
+        kind: Some(v2::decl::Kind::SignalDef(v2::SignalDef {
+            payload: payload.to_string(),
+            ..Default::default()
+        })),
+        ..Default::default()
+    };
+    let interface = v2::Interface {
+        name: "Gauges".to_string(),
+        visibility: v2::Visibility::Public as i32,
+        interactions: vec![signal("pair", "Pair"), signal("tagged", "Tagged")],
+        number: 1,
+        ..Default::default()
+    };
+    v2::Package {
+        interfaces: vec![interface],
+        ..package
+    }
+}
+
+/// The payload of the signal at `position` in the one interface.
+fn signal_payload(model: &v1::Model, position: usize) -> &v1::Payload {
+    let v1::Model { interfaces, .. } = model;
+    let slot = &interfaces[0].slots[position];
+    match slot.occupant.as_ref() {
+        Some(v1::interaction_slot::Occupant::Interaction(interaction)) => {
+            match interaction.shape.as_ref() {
+                Some(v1::interaction::Shape::Signal(signal)) => {
+                    signal.payload.as_ref().expect("a payload")
+                }
+                other => panic!("a signal, got {other:?}"),
+            }
+        }
+        _ => panic!("a live slot"),
+    }
+}
+
+#[test]
+fn a_payload_carries_both_size_states() {
+    let model = lower(&sized_package(), &[]);
+    let sizes = signal_payload(&model, 0)
+        .sizes
+        .as_ref()
+        .expect("a payload carries its sizes");
+    let flatbuffers = signal_payload(&model, 0)
+        .flatbuffers_max_size
+        .expect("a bounded struct");
+    assert_eq!(
+        sizes.flatbuffers.as_ref().and_then(|s| s.state.as_ref()),
+        Some(&v1::size_state::State::Bounded(flatbuffers))
+    );
+    assert!(matches!(
+        sizes.proto3.as_ref().and_then(|s| s.state.as_ref()),
+        Some(v1::size_state::State::Bounded(size)) if *size > 0
+    ));
+}
+
+#[test]
+fn field_two_still_equals_the_flatbuffers_bounded_value() {
+    let model = lower(&sized_package(), &[]);
+    let payload = signal_payload(&model, 0);
+    let state = payload
+        .sizes
+        .as_ref()
+        .and_then(|sizes| sizes.flatbuffers.as_ref())
+        .and_then(|state| state.state.as_ref());
+    assert!(payload.flatbuffers_max_size.is_some());
+    assert_eq!(
+        state,
+        payload
+            .flatbuffers_max_size
+            .map(v1::size_state::State::Bounded)
+            .as_ref()
+    );
+}
+
+#[test]
+fn an_unbounded_payload_keeps_its_cause_in_the_state() {
+    let model = lower(&sized_package(), &[]);
+    let payload = signal_payload(&model, 1);
+    assert_eq!(payload.flatbuffers_max_size, None);
+    let reference = payload.r#type.as_ref().expect("a type");
+    let root = model
+        .flatbuffers
+        .as_ref()
+        .expect("the projection is lowered")
+        .roots
+        .iter()
+        .find(|root| root.declaration == reference.index)
+        .expect("a root for the payload");
+    let Some(v1::fb_root::Bound::Unbounded(expected)) = root.bound.as_ref() else {
+        panic!("the root is unbounded");
+    };
+    let state = payload
+        .sizes
+        .as_ref()
+        .and_then(|sizes| sizes.flatbuffers.as_ref())
+        .and_then(|state| state.state.as_ref());
+    assert_eq!(
+        state,
+        Some(&v1::size_state::State::Unbounded(expected.clone()))
+    );
+}
