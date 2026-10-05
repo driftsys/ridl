@@ -1166,6 +1166,23 @@ diag_codes! {
             "a backend key whose namespace no configured backend claims",
                 lint = "unclaimed-backend-key";
 
+        /// A declared `depth` below the contract bound `ceil(max / min)` of an
+        /// event a covered link consumes (rsdl §5, §16.1). Warning: the
+        /// declared value replaces the bound, and occurrences alive at once
+        /// can then be dropped. Raised by the rsdl depth check.
+        RSDL_805 = "RSDL-805", Warning,
+            "a declared `depth` is below `ceil(max / min)` for an event a covered link consumes",
+                lint = "depth-below-bound";
+
+        /// An event whose contract bound is not derivable — an explicit
+        /// half-open range, or a ratio `ceil(max / min)` outside the `depth`
+        /// range — consumed by a link with no declared `depth` (rsdl §5,
+        /// §16.1). Warning: the ring depth of the link cannot be derived.
+        /// Raised by the rsdl depth check.
+        RSDL_806 = "RSDL-806", Warning,
+            "an event whose contract bound is not derivable is consumed by a link with no declared `depth`",
+                lint = "depth-underivable";
+
         /// A `PLATFORM` distribution holds a component whose `requires` resolves
         /// into an `APPLICATION` distribution — tier inversion; a distribution
         /// without `tier` is exempt (rsdl §3.3, §16.1). Error. Raised by the
@@ -2012,6 +2029,8 @@ mod tests {
             ("RIDL-415", "package-fan-out"),
             ("RSDL-409", "redundant-provider-set"),
             ("RSDL-804", "unclaimed-backend-key"),
+            ("RSDL-805", "depth-below-bound"),
+            ("RSDL-806", "depth-underivable"),
             ("MANI-005", "unknown-manifest-key"),
             ("MANI-010", "unknown-lint"),
         ]

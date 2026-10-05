@@ -388,6 +388,7 @@ fn member_ref(
         reference,
         backend_keys: read.attrs.backend_keys,
         sizing: read.sizing,
+        depth_site: read.depth_site,
         doc: docs::scan(docs),
         links: Vec::new(),
         see: Vec::new(),

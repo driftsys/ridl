@@ -1297,6 +1297,26 @@ expression: log
               }
             },
             {
+              "id": "RSDL-805",
+              "name": "depth-below-bound",
+              "shortDescription": {
+                "text": "a declared `depth` is below `ceil(max / min)` for an event a covered link consumes"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "RSDL-806",
+              "name": "depth-underivable",
+              "shortDescription": {
+                "text": "an event whose contract bound is not derivable is consumed by a link with no declared `depth`"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
               "id": "RSDL-901",
               "shortDescription": {
                 "text": "a `PLATFORM` distribution requires into an `APPLICATION` distribution"
@@ -1563,7 +1583,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 156,
+          "ruleIndex": 158,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

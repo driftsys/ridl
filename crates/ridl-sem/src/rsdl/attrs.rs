@@ -86,6 +86,9 @@ pub(super) struct ReadAttrs {
     pub(super) external: bool,
     pub(super) tier: Option<Tier>,
     pub(super) sizing: Sizing,
+    /// The site of the `depth` attribute when `sizing.depth` is read, for
+    /// RSDL-805 to point at the value rather than at the line.
+    pub(super) depth_site: Option<Site>,
 }
 
 /// Reads `block` at `at`, reporting every key rule of rsdl §5.
@@ -195,6 +198,9 @@ pub(super) fn read(
             "depth" | "slots" | "budget" if value.is_none() && attribute.eq_token().is_some() => {}
             "depth" | "slots" | "budget" => {
                 sizing_key(&key, value, site, reporter, &mut out.sizing);
+                if key == "depth" && out.sizing.depth.is_some() {
+                    out.depth_site = Some(site);
+                }
             }
             "labels" => out.attrs.labels = labels(value, site, reporter),
             "deprecated" => out.attrs.deprecated = deprecated(value, site, reporter),

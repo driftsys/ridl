@@ -16,6 +16,8 @@ component Hooter [ instances = (left, right) ] { offers rsdl.showcase.horn }
 component Driver {
   requires Horn
   requires Wiper
+  // The link that draws RSDL-806 in `Bench` (placement.rsdl).
+  requires Alerts
 }
 component Wipers { offers rsdl.showcase.wipers }
 

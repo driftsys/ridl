@@ -59,7 +59,7 @@ mod bindings;
 mod clauses;
 mod contract;
 mod deployment;
-mod depth;
+pub mod depth;
 mod facts;
 mod flatbuffers;
 mod lower;

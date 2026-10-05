@@ -248,7 +248,9 @@ fn channels(
 /// declaration second (`docs/design/codegen-plugins.md`, the deployment
 /// section). A key written on neither site is `None`. The two sites compose
 /// per key: a placement line that writes `slots` alone still takes the
-/// deployment's `depth` and `budget`.
+/// deployment's `depth` and `budget`. The rsdl checker reads the `depth`
+/// of each consumer link with the same precedence when it draws RSDL-805 and
+/// RSDL-806; the two are edited together.
 fn declared_sizing(deployment: &v2::Deployment, consumer: &v2::Endpoint) -> v2::Sizing {
     let placed = deployment
         .placements

@@ -155,6 +155,8 @@ MANI-010 is itself a lint, so the table can set its level.
 | `package-fan-out` | RIDL-415 | info | package depends on too many workspace packages |
 | `redundant-provider-set` | RSDL-409 | warn | a `requires` resolves to a redundant provider set |
 | `unclaimed-backend-key` | RSDL-804 | warn | a backend key whose namespace no configured backend claims |
+| `depth-below-bound` | RSDL-805 | warn | a declared `depth` is below `ceil(max / min)` for an event a covered link consumes |
+| `depth-underivable` | RSDL-806 | warn | an event whose contract bound is not derivable is consumed by a link with no declared `depth` |
 | `unknown-manifest-key` | MANI-005 | warn | unknown manifest key |
 | `unknown-lint` | MANI-010 | warn | `[lints]` entry names no lint, or its value is not a level |
 

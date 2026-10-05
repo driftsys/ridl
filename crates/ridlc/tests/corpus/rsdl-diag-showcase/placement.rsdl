@@ -5,7 +5,7 @@ package rsdl.showcase
 // RSDL-709 (rsdl reference §5): `slots` takes an integer from 1 to 65536. The
 // error blocks `Road` only, which its placement errors already do.
 deployment Road for Showcase [ slots = 0 ] {
-  machine Ecu { Lane, Chassis, Brakes, Front, Hooter.left, Fleet }
+  machine Ecu { Lane, Chassis, Brakes, Front, Hooter.left, Fleet, Siren, Dash }
   // RSDL-705 (rsdl reference §3.5): a second machine named `Ecu` in `Road`.
   // RSDL-706 (§9): `Hooter` places `Hooter.left` a second time.
   machine Ecu { Hooter }
@@ -15,6 +15,17 @@ deployment Road for Showcase [ slots = 0 ] {
   machine Spare { Draft }
   // RSDL-701 (§9): `Rear.Unit` is placed on no machine of `Road`.
 }
+
+// The consumer links of `rsdl.showcase.alerts` in `Bench` (attributes.rsdl).
+// RSDL-805, a warning (§5): `Dash [ depth = 2 ]` is below the contract bound
+// 10 of `Alerts.honked`; the declared value is the link's depth for the
+// half-open `Alerts.released` too, so `Dash` draws no RSDL-806.
+// RSDL-806, a warning (§5): `Driver` (resolution.rsdl) declares no `depth`,
+// and the depth of its link to the half-open `Alerts.released` cannot be
+// derived; its link to `Alerts.honked` takes the contract bound and draws
+// nothing. `Road` places both too, but an RSDL-7xx error blocks it (§13).
+component Siren { offers rsdl.showcase.alerts }
+component Dash { requires Alerts }
 
 // RSDL-704 (§3.4): `Nowhere` names no declared system.
 deployment Lab for Nowhere {}
