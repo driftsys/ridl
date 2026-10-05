@@ -455,7 +455,9 @@ workspace's system; a workspace has at most one system.
 
 ### Bindings, and what is not built
 
-The `bindings` list is empty today. The emitter writes none.
+The `bindings` list is empty today. The emitter writes one entry per row of the
+table of known bindings, in name order, and the table has no row because no
+binding's frame layout is specified (driftsys/ridl#265).
 
 Nothing in the workspace reads the section: the Rust backend and the two
 reference plugins ignore it, and no `--emit` value writes the request out. The
