@@ -50,6 +50,7 @@ CodegenRequest {
   Model model = 3;                    // the package's lowered model
   repeated BackendOption options = 4; // {key, value}, sorted by key, keys unique
   string artifact_base = 5;           // what ridlc names this package's files after
+  optional Deployment deployment = 6; // one deployment of the system; absent when the build selects none (§7)
 }
 CodegenResponse {
   repeated GeneratedFile files = 1;   // {path, oneof content {text | binary}}
@@ -363,8 +364,11 @@ The section states no count that is the length of a list.
 
 **The order rule.** Every repeated field is in the order stated above, so two
 builds of one workspace write the same bytes. Reordering the placements in the
-source does not change the channels' order, because the emitter sorts them by
-the key above and not by the order it read them in.
+source does not change the channels' order, because the order does not come from
+the placements. The lowering of the system writes the routes in (catalog,
+interface number, member ordinal) order, and the emitter sorts the producers of
+each route by (component, instance) and the consumer links of each channel by
+(component, instance).
 
 **One channel per producer instance.** A redundant provider set, one route whose
 producers are two instances of one component, gives two channels per member,
@@ -384,10 +388,11 @@ decision 2:
 | `different machine` | proto3      |
 | `off-board`         | proto3      |
 
-No link carries the `repr(C)` encoding: the enum value exists in the schema, and
-nothing selects it. The choice between a shared-memory store and a local socket
-on one machine stays the plugin's. Both carry FlatBuffers, so the choice does
-not change a size.
+A crossing that is unspecified or unknown gives the unspecified encoding. No
+link carries the `repr(C)` encoding: the enum value exists in the schema, and
+nothing selects it until driftsys/ridl#317. The choice between a shared-memory
+store and a local socket on one machine stays the plugin's. Both carry
+FlatBuffers, so the choice does not change a size.
 
 ### The depth rule
 
@@ -397,10 +402,11 @@ written today.
 - **Derived.** An event's depth is the contract bound, `ceil(max / min)` over
   the event's resolved timing
   ([ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) decision
-  21). The resolved timing includes the defaults of the rsdl reference, so an
-  event written with no timing has both bounds. The quotient is computed on the
-  exact-decimal microsecond strings of `Timing` as integers, never in floating
-  point.
+  21). The resolved timing includes the default timing of
+  [the ridl language reference](../specification/ridl-language-reference.md)
+  §9.1, so an event written with no timing has both bounds. The quotient is
+  computed on the exact-decimal microsecond strings of `Timing` as integers,
+  never in floating point.
 - **Underivable.** The value is absent when the timing has an explicit half-open
   range, so one bound is missing. It is also absent when the quotient is zero: a
   depth is at least 1, so a zero quotient is not a depth, and the emitter
