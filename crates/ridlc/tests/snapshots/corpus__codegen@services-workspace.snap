@@ -505,7 +505,17 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   }
                 }
               },
-              "clauses": []
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                  }
+                },
+                "flatbuffers": {
+                  "bounded": 43
+                }
+              }
             }
           }
         },
@@ -592,7 +602,29 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   }
                 }
               },
-              "clauses": []
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                  }
+                },
+                "flatbuffers": {
+                  "bounded": 43
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              }
             }
           }
         },
@@ -783,7 +815,29 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                     "result": true
                   }
                 }
-              ]
+              ],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                  }
+                },
+                "flatbuffers": {
+                  "bounded": 46
+                }
+              }
             }
           }
         }
@@ -1245,7 +1299,19 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   }
                 }
               },
-              "clauses": []
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                  }
+                }
+              }
             }
           }
         },
@@ -1369,7 +1435,31 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   "observerId": "fleet.vehicle.mirrors.readFold.ensure[0]",
                   "refused": "`result` is not a named integer or float scalar"
                 }
-              ]
+              ],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                  }
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                  }
+                }
+              }
             }
           }
         },
@@ -1508,7 +1598,31 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   }
                 }
               },
-              "clauses": []
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                  }
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              }
             }
           }
         },
@@ -1596,7 +1710,31 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   }
                 }
               },
-              "clauses": []
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                  }
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              }
             }
           }
         }

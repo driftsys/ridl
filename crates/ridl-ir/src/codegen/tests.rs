@@ -1413,3 +1413,178 @@ fn an_unbounded_payload_keeps_its_cause_in_the_state() {
         Some(&v1::size_state::State::Unbounded(expected.clone()))
     );
 }
+
+/// `sized_package` plus one interface `Calls` holding, in order: a command
+/// with two parameters, a command with the one parameter `Pair`, a query
+/// with no parameter returning `Pair`, and a query over `Pair` with the
+/// fallible reply `Pair | Pair`.
+fn call_package() -> v2::Package {
+    let param = |name: &str| v2::Param {
+        name: name.to_string(),
+        r#type: Some(named("Pair")),
+        ..Default::default()
+    };
+    let decl = |name: &str, kind: v2::decl::Kind| v2::Decl {
+        name: name.to_string(),
+        visibility: v2::Visibility::Public as i32,
+        kind: Some(kind),
+        ..Default::default()
+    };
+    let value = v2::ReturnType {
+        kind: Some(v2::return_type::Kind::Value(named("Pair"))),
+    };
+    let fallible = v2::ReturnType {
+        kind: Some(v2::return_type::Kind::Fallible(v2::FallibleType {
+            ok: "Pair".to_string(),
+            err: "Pair".to_string(),
+        })),
+    };
+    let package = sized_package();
+    let v2::Package { interfaces, .. } = package.clone();
+    let calls = v2::Interface {
+        name: "Calls".to_string(),
+        visibility: v2::Visibility::Public as i32,
+        interactions: vec![
+            decl(
+                "two",
+                v2::decl::Kind::CommandDef(v2::CommandDef {
+                    params: vec![param("a"), param("b")],
+                    ..Default::default()
+                }),
+            ),
+            decl(
+                "one",
+                v2::decl::Kind::CommandDef(v2::CommandDef {
+                    params: vec![param("a")],
+                    ..Default::default()
+                }),
+            ),
+            decl(
+                "none",
+                v2::decl::Kind::QueryDef(v2::QueryDef {
+                    return_type: Some(value),
+                    ..Default::default()
+                }),
+            ),
+            decl(
+                "risky",
+                v2::decl::Kind::QueryDef(v2::QueryDef {
+                    params: vec![param("a")],
+                    return_type: Some(fallible),
+                    ..Default::default()
+                }),
+            ),
+        ],
+        number: 2,
+        ..Default::default()
+    };
+    v2::Package {
+        interfaces: interfaces.into_iter().chain([calls]).collect(),
+        ..package
+    }
+}
+
+fn call_shape(model: &v1::Model, position: usize) -> &v1::interaction::Shape {
+    let v1::Model { interfaces, .. } = model;
+    let interface = interfaces
+        .iter()
+        .find(|interface| interface.slots.len() == 4)
+        .expect("the Calls interface");
+    match interface.slots[position].occupant.as_ref() {
+        Some(v1::interaction_slot::Occupant::Interaction(interaction)) => {
+            interaction.shape.as_ref().expect("a shape")
+        }
+        _ => panic!("a live slot"),
+    }
+}
+
+fn state(sizes: &Option<v1::PayloadSizes>, proto3: bool) -> &v1::size_state::State {
+    let sizes = sizes.as_ref().expect("sizes are written");
+    let chosen = if proto3 {
+        &sizes.proto3
+    } else {
+        &sizes.flatbuffers
+    };
+    chosen
+        .as_ref()
+        .and_then(|s| s.state.as_ref())
+        .expect("a state")
+}
+
+fn undefined() -> v1::size_state::State {
+    v1::size_state::State::Absent(v1::SizeAbsent {
+        cause: v1::AbsentCause::EncodingUndefined as i32,
+        detail: None,
+    })
+}
+
+#[test]
+fn a_two_parameter_command_has_an_undefined_request_size() {
+    let model = lower(&call_package(), &[]);
+    let v1::interaction::Shape::Command(command) = call_shape(&model, 0) else {
+        panic!("a command");
+    };
+    assert_eq!(state(&command.request_sizes, true), &undefined());
+    assert_eq!(state(&command.request_sizes, false), &undefined());
+}
+
+#[test]
+fn a_one_parameter_command_request_sizes_equal_its_payload_sizes() {
+    let model = lower(&call_package(), &[]);
+    let v1::interaction::Shape::Command(command) = call_shape(&model, 1) else {
+        panic!("a command");
+    };
+    let request = command.request.as_ref().expect("a single named parameter");
+    assert_eq!(command.request_sizes, request.sizes);
+    assert!(matches!(
+        state(&command.request_sizes, true),
+        v1::size_state::State::Bounded(size) if *size > 0
+    ));
+}
+
+#[test]
+fn a_zero_parameter_query_request_is_undefined() {
+    let model = lower(&call_package(), &[]);
+    let v1::interaction::Shape::Query(query) = call_shape(&model, 2) else {
+        panic!("a query");
+    };
+    assert_eq!(state(&query.request_sizes, true), &undefined());
+    assert_eq!(state(&query.request_sizes, false), &undefined());
+    assert_eq!(
+        query.reply_sizes,
+        query.reply_payload.as_ref().and_then(|p| p.sizes.clone()),
+        "a plain reply is sized like its payload"
+    );
+}
+
+#[test]
+fn a_fallible_query_reply_is_undefined() {
+    let model = lower(&call_package(), &[]);
+    let v1::interaction::Shape::Query(query) = call_shape(&model, 3) else {
+        panic!("a query");
+    };
+    assert_eq!(state(&query.reply_sizes, true), &undefined());
+    assert_eq!(state(&query.reply_sizes, false), &undefined());
+    assert_eq!(query.request_sizes, query.request.as_ref().unwrap().sizes);
+}
+
+#[test]
+fn absent_cause_pins_each_tag_to_its_schema_value() {
+    use crate::projection::size::AbsentCause;
+    let pairs = [
+        (
+            AbsentCause::EncodingUndefined,
+            v1::AbsentCause::EncodingUndefined,
+        ),
+        (AbsentCause::NoMessage, v1::AbsentCause::NoMessage),
+        (AbsentCause::RefusedMember, v1::AbsentCause::RefusedMember),
+        (AbsentCause::NoBound, v1::AbsentCause::NoBound),
+        (AbsentCause::Overflow, v1::AbsentCause::Overflow),
+        (AbsentCause::Unresolved, v1::AbsentCause::Unresolved),
+    ];
+    for (cause, expected) in pairs {
+        assert_eq!(super::lower::absent_cause(cause), expected);
+    }
+    assert_eq!(v1::AbsentCause::NoBound as i32, 4);
+    assert_eq!(v1::AbsentCause::Overflow as i32, 5);
+}

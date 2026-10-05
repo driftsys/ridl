@@ -772,6 +772,11 @@ impl<'a> Lowering<'a> {
                 let params = self.params(home, &command.params, interface, slot, visibility);
                 let request = single_param_type(&command.params)
                     .map(|reference| self.payload(home, reference));
+                let request_sizes = self.sizes(
+                    home,
+                    &PayloadShape::Params(&command.params),
+                    single_param_type(&command.params),
+                );
                 let clauses = self.clauses(home, &command.contracts, &command.params, None);
                 (
                     v1::Kind::Command,
@@ -780,6 +785,7 @@ impl<'a> Lowering<'a> {
                         params,
                         request,
                         clauses,
+                        request_sizes: Some(request_sizes),
                     })),
                 )
             }
@@ -793,6 +799,15 @@ impl<'a> Lowering<'a> {
                         Path::interaction(interface, slot, visibility, vec!["reply".to_string()]);
                     self.reply(home, ret, &at)
                 });
+                let request_sizes = self.sizes(
+                    home,
+                    &PayloadShape::Params(&query.params),
+                    single_param_type(&query.params),
+                );
+                let reply_sizes = query
+                    .return_type
+                    .as_ref()
+                    .map(|ret| self.sizes(home, &PayloadShape::Return(ret), reply_named));
                 let reply_payload = reply_named.map(|reference| self.payload(home, reference));
                 let clauses = self.clauses(home, &query.contracts, &query.params, reply_named);
                 (
@@ -804,6 +819,8 @@ impl<'a> Lowering<'a> {
                         reply,
                         reply_payload,
                         clauses,
+                        request_sizes: Some(request_sizes),
+                        reply_sizes,
                     }))),
                 )
             }
@@ -933,28 +950,40 @@ impl<'a> Lowering<'a> {
         v1::Payload {
             r#type: Some(self.type_ref(home, reference)),
             flatbuffers_max_size: max_size.map(|size| u32::try_from(size).unwrap_or(u32::MAX)),
-            sizes: Some(v1::PayloadSizes {
-                proto3: Some(self.size_state(home, reference, Encoding::Proto3)),
-                flatbuffers: Some(self.size_state(home, reference, Encoding::FlatBuffers)),
-            }),
+            sizes: Some(self.sizes(home, &PayloadShape::Named(reference), Some(reference))),
         }
     }
 
-    /// The state of the payload `reference` under `encoding`, from the one
-    /// sizer. An unbounded FlatBuffers state carries the same attribution a
-    /// root carries.
+    /// The states of `shape` under both wire encodings. `reference` is the
+    /// one named type the shape is, when it is one; an unbounded state
+    /// takes its attribution from it.
+    fn sizes(
+        &self,
+        home: &'a v2::Package,
+        shape: &PayloadShape<'_>,
+        reference: Option<&str>,
+    ) -> v1::PayloadSizes {
+        v1::PayloadSizes {
+            proto3: Some(self.size_state(home, shape, reference, Encoding::Proto3)),
+            flatbuffers: Some(self.size_state(home, shape, reference, Encoding::FlatBuffers)),
+        }
+    }
+
+    /// The state of `shape` under `encoding`, from the one sizer. An
+    /// unbounded FlatBuffers state carries the same attribution a root
+    /// carries.
     fn size_state(
         &self,
         home: &'a v2::Package,
-        reference: &str,
+        shape: &PayloadShape<'_>,
+        reference: Option<&str>,
         encoding: Encoding,
     ) -> v1::SizeState {
-        let state = match size::size_state(&PayloadShape::Named(reference), &self.sizes, encoding) {
+        let state = match size::size_state(shape, &self.sizes, encoding) {
             SizeState::Bounded(size) => v1::size_state::State::Bounded(size),
             SizeState::Unbounded(cause) => {
-                let attribution = self
-                    .scope
-                    .resolve(home, reference)
+                let attribution = reference
+                    .and_then(|reference| self.scope.resolve(home, reference))
                     .map(|(decl, declaring)| super::fb_unbounded(declaring, decl))
                     .unwrap_or_else(|| v1::FbUnbounded {
                         cause: cause as i32,
@@ -1227,7 +1256,7 @@ fn strip_regex_delimiters(regex: &str) -> &str {
 }
 
 /// The model's spelling of a sizer cause.
-fn absent_cause(cause: AbsentCause) -> v1::AbsentCause {
+pub(super) fn absent_cause(cause: AbsentCause) -> v1::AbsentCause {
     match cause {
         AbsentCause::EncodingUndefined => v1::AbsentCause::EncodingUndefined,
         AbsentCause::NoMessage => v1::AbsentCause::NoMessage,

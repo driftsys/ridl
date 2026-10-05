@@ -524,7 +524,8 @@ message SizeState {
 // Why a payload has no size state under an encoding.
 message SizeAbsent {
   AbsentCause cause = 1;
-  // The member or the shape the cause names, for a reader.
+  // The member or the shape the cause names, for a reader. This toolchain
+  // writes no detail today, so its absence is not a defect.
   optional string detail = 2;
 }
 
@@ -540,7 +541,7 @@ enum AbsentCause {
   ABSENT_CAUSE_NO_BOUND = 4;
   // The bound exceeds `u32::MAX`, or the nesting passes the sizer's depth.
   ABSENT_CAUSE_OVERFLOW = 5;
-  // A name that does not resolve, or a declaration with no root form.
+  // A name that does not resolve, or a declaration with no root table.
   ABSENT_CAUSE_UNRESOLVED = 6;
 }
 
@@ -562,6 +563,10 @@ message CommandShape {
   Payload request = 2;
   // require only (RIDL-302).
   repeated Clause clauses = 3;
+  // The size state of the request under each wire encoding, for every
+  // command. It is absent with a cause where the call has no parameter or
+  // several, because no codec defines the encoding of either shape.
+  PayloadSizes request_sizes = 4;
 }
 
 message QueryShape {
@@ -573,6 +578,11 @@ message QueryShape {
   // Present when the reply is one named type.
   Payload reply_payload = 4;
   repeated Clause clauses = 5;
+  // As for a command.
+  PayloadSizes request_sizes = 6;
+  // The size state of the reply under each wire encoding. It is absent with
+  // a cause where the reply is fallible or is not one named type.
+  PayloadSizes reply_sizes = 7;
 }
 
 message FixedShape {
