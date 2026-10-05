@@ -796,6 +796,45 @@ leaves room for the deployment section's own decisions, which start at DD-17).
   larger than this work; the coarser attribution is stated in the sizer's own
   documentation, and no caller branches on the cause.
 
+- **DD-34.** Task 13 of the plan, the three catalogue rows as a commit of their
+  own, is not a green commit: `crates/ridlc/tests/corpus.rs` asserts that
+  `RSDL_PROFILE_CODES` equals the `RSDL-` rows of `RSDL_CATALOG` and that the
+  diagnostic showcase provokes exactly the listed codes, so a catalogue row
+  cannot land before the check that raises it. RSDL-709's catalogue row, corpus
+  row, showcase source and reference §16.1 row land with Task 14; RSDL-805's and
+  RSDL-806's, with their two `docs/book/lints.md` rows, land with Task 17. This
+  is the fallback the plan's Task 13 names.
+- **DD-35.** How a collect-time RSDL-709 blocks only its deployment, which D-6
+  requires without saying how. `deployment_decl` records the reporter's
+  diagnostic count before reading its attribute blocks and sets a new
+  `DeploymentDecl.has_errors` when any diagnostic appended since is an error
+  whose code starts with `RSDL-7`, the same predicate `check_system` already
+  uses for a closure; `placement::place` seeds `DeploymentCheck.has_errors` from
+  it. This keeps the plan's `sizing_key` signature, which returns nothing, and
+  covers the declaration's own block and every placement line in one place.
+  Rejected: `sizing_key -> bool` with a flag threaded through `ReadAttrs`,
+  `member_ref` and `MachineDecl`.
+- **DD-36.** A placement line is a new FORM-107 site, so it takes its own
+  message: "attribute `<key>` not valid on a placement line — a placement line
+  takes backend keys and the sizing keys `depth`, `slots` and `budget` (rsdl
+  reference §5)". The message for the other lines is unchanged.
+- **DD-37.** Two shapes D-6's "not an integer" leaves open. A bare key, written
+  with no `=`, is RSDL-709 and the message reads "a bare `<key>` is not one" in
+  place of the written text. A key whose `=` carries a value the parser cannot
+  read, such as `slots = 50ms`, draws no RSDL-709: the parser has already raised
+  FORM-101, and a second diagnostic calling the key bare would misdescribe the
+  source. FORM-101 is a parse error, so `ridlc` blocks every artifact of the
+  build, which is stricter than blocking the one deployment.
+- **DD-38.** A rejected value leaves its `Sizing` field absent rather than
+  clamping it to an endpoint, and a key written twice in one block keeps the
+  first value, which is what the existing FORM-108 mechanism already does.
+- **DD-39.** The showcase provokes RSDL-709 with `slots = 0` on the `Road`
+  deployment of `placement.rsdl`, which already carries placement errors, rather
+  than on the one deployment of `attributes.rsdl`, which is the deployment that
+  lowers. No lowering snapshot changes.
+- **DD-40.** The `budget` range is written in the diagnostic message and in the
+  rustdoc as decimal digits, `18446744073709551615`, not as `2^64 − 1`.
+
 ## 9. The exit test and the cabin system
 
 E17.1 adds to `examples/cabin`:
