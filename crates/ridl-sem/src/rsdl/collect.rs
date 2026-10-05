@@ -9,7 +9,7 @@
 //! (rsdl §3).
 
 use ridl_core::db::{InputFile, profile_of_path};
-use ridl_core::diag::DiagCode;
+use ridl_core::diag::{DiagCode, Severity};
 use ridl_core::package::Workspace;
 use ridl_syntax::ast::{self, AstNode, ComponentLineKind, HasDocComments};
 use ridl_syntax::{Profile, SyntaxToken};
@@ -200,6 +200,7 @@ fn system_decl(
             member_ref(
                 line.reference(),
                 line.attr_block(),
+                AttrSite::Line,
                 &line.doc_comments(),
                 file,
                 reporter,
@@ -231,6 +232,7 @@ fn component_decl(
         let Some(member) = member_ref(
             line.reference(),
             line.attr_block(),
+            AttrSite::Line,
             &line.doc_comments(),
             file,
             reporter,
@@ -271,6 +273,7 @@ fn distribution_decl(
             member_ref(
                 line.reference(),
                 line.attr_block(),
+                AttrSite::Line,
                 &line.doc_comments(),
                 file,
                 reporter,
@@ -299,17 +302,25 @@ fn deployment_decl(
     let system = decl
         .system()
         .and_then(|reference| read_reference(&reference, file));
+    let reported = reporter.diagnostics.len();
     let read = attrs::read(decl.attr_block(), AttrSite::Deployment, file, reporter);
     let machines = decl
         .machines()
         .filter_map(|machine| machine_decl(&machine, file, reporter))
         .collect();
+    // rsdl §13: an RSDL-7xx error raised on the deployment's blocks — RSDL-709
+    // on the declaration or on a placement line — blocks this deployment only.
+    let has_errors = reporter.diagnostics[reported..].iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error && diagnostic.code.as_str().starts_with("RSDL-7")
+    });
     Some(DeploymentDecl {
         name,
         package: package.to_string(),
         system,
         machines,
         attrs: read.attrs,
+        sizing: read.sizing,
+        has_errors,
         doc: docs::scan(&decl.doc_comments()),
         links: Vec::new(),
         see: Vec::new(),
@@ -329,6 +340,7 @@ fn machine_decl(
             member_ref(
                 line.reference(),
                 line.attr_block(),
+                AttrSite::Placement,
                 &line.doc_comments(),
                 file,
                 reporter,
@@ -360,22 +372,22 @@ fn named(name: Option<ast::Name>, file: InputFile) -> Option<Named> {
     })
 }
 
-/// One body line: its reference, the backend keys of its attribute block, and
-/// its doc comment.
+/// One body line: its reference, the backend keys of its attribute block, its
+/// sizing keys when `at` is a placement line, and its doc comment.
 fn member_ref(
     reference: Option<ast::Reference>,
     block: Option<ast::AttrBlock>,
+    at: AttrSite,
     docs: &[SyntaxToken],
     file: InputFile,
     reporter: &mut Reporter,
 ) -> Option<MemberRef> {
     let reference = read_reference(&reference?, file)?;
-    let backend_keys = attrs::read(block, AttrSite::Line, file, reporter)
-        .attrs
-        .backend_keys;
+    let read = attrs::read(block, at, file, reporter);
     Some(MemberRef {
         reference,
-        backend_keys,
+        backend_keys: read.attrs.backend_keys,
+        sizing: read.sizing,
         doc: docs::scan(docs),
         links: Vec::new(),
         see: Vec::new(),

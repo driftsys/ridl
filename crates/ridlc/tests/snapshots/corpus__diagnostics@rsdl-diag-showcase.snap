@@ -95,6 +95,54 @@ error[RSDL-313]: `external` is a flag and takes no value — write `[ external ]
 47 │   external = true,
    │   ^^^^^^^^^^^^^^^
 
+error[RSDL-701]: `Rear.Unit` is placed on no machine of `Road` — every instance of the closure is on exactly one machine per deployment (rsdl reference §9)
+  ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:7:12
+  │
+7 │ deployment Road for Showcase [ slots = 0 ] {
+  │            ^^^^
+
+error[RSDL-709]: `slots` takes an integer from 1 to 65536, written `slots = <n>`; `0` is not one (rsdl reference §5)
+  ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:7:32
+  │
+7 │ deployment Road for Showcase [ slots = 0 ] {
+  │                                ^^^^^^^^^
+
+error[RSDL-705]: `Ecu` is declared twice in `Road` — a machine name is unique in its deployment (rsdl reference §3.5)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:11:11
+   │
+11 │   machine Ecu { Hooter }
+   │           ^^^
+
+error[RSDL-706]: `Hooter.left` is placed twice in `Road` — first on `Ecu` (rsdl reference §9)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:11:17
+   │
+11 │   machine Ecu { Hooter }
+   │                 ^^^^^^
+
+error[RSDL-707]: `Cloud` is an `external` machine and hosts external components only, and `Driver` is implemented in this workspace (rsdl reference §9)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:13:32
+   │
+13 │   machine Cloud [ external ] { Driver }
+   │                                ^^^^^^
+
+error[RSDL-702]: `Draft` is outside the closure of `Showcase` — a machine places closure components, their instances and the lone services the system lists (rsdl reference §9)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:15:19
+   │
+15 │   machine Spare { Draft }
+   │                   ^^^^^
+
+error[RSDL-704]: `Nowhere` names no declared `system` — a deployment is `for` the workspace's system (rsdl reference §3.4)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:20:20
+   │
+20 │ deployment Lab for Nowhere {}
+   │                    ^^^^^^^
+
+error[RSDL-708]: a deployment named `Bench` is already declared in the workspace — a deployment name is unique (rsdl reference §3.4)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:24:12
+   │
+24 │ deployment Bench for Second {}
+   │            ^^^^^
+
 error[TYPL-009]: duplicate declaration of `Flag`
   ┌─ tests/corpus/rsdl-diag-showcase/names.rsdl:6:11
   │
@@ -216,45 +264,3 @@ error[RSDL-907]: `Fleet` is external, and an external component is in no distrib
    │
 13 │ distribution App [ tier = APPLICATION ] { Hooter, Nothing, Fleet }
    │                                                            ^^^^^
-
-error[RSDL-701]: `Rear.Unit` is placed on no machine of `Road` — every instance of the closure is on exactly one machine per deployment (rsdl reference §9)
-  ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:5:12
-  │
-5 │ deployment Road for Showcase {
-  │            ^^^^
-
-error[RSDL-705]: `Ecu` is declared twice in `Road` — a machine name is unique in its deployment (rsdl reference §3.5)
-  ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:9:11
-  │
-9 │   machine Ecu { Hooter }
-  │           ^^^
-
-error[RSDL-706]: `Hooter.left` is placed twice in `Road` — first on `Ecu` (rsdl reference §9)
-  ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:9:17
-  │
-9 │   machine Ecu { Hooter }
-  │                 ^^^^^^
-
-error[RSDL-707]: `Cloud` is an `external` machine and hosts external components only, and `Driver` is implemented in this workspace (rsdl reference §9)
-   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:11:32
-   │
-11 │   machine Cloud [ external ] { Driver }
-   │                                ^^^^^^
-
-error[RSDL-702]: `Draft` is outside the closure of `Showcase` — a machine places closure components, their instances and the lone services the system lists (rsdl reference §9)
-   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:13:19
-   │
-13 │   machine Spare { Draft }
-   │                   ^^^^^
-
-error[RSDL-704]: `Nowhere` names no declared `system` — a deployment is `for` the workspace's system (rsdl reference §3.4)
-   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:18:20
-   │
-18 │ deployment Lab for Nowhere {}
-   │                    ^^^^^^^
-
-error[RSDL-708]: a deployment named `Bench` is already declared in the workspace — a deployment name is unique (rsdl reference §3.4)
-   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:22:12
-   │
-22 │ deployment Bench for Second {}
-   │            ^^^^^

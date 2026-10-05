@@ -294,12 +294,35 @@ pub struct DeploymentDecl {
     pub system: Option<Reference>,
     pub machines: Vec<MachineDecl>,
     pub attrs: DeclAttrs,
+    /// The `depth`, `slots` and `budget` keys of the declaration: the values
+    /// for every consumer link of the deployment that no placement line
+    /// overrides (rsdl §5).
+    pub sizing: Sizing,
+    /// Whether an RSDL-7xx error was raised while reading the declaration's
+    /// attribute blocks — RSDL-709 on the deployment or on one of its
+    /// placement lines. The placement pass marks the deployment blocked
+    /// (rsdl §13).
+    pub has_errors: bool,
     /// The doc comment (typl §14, ADR-0026).
     pub doc: DocInfo,
     /// The resolved doc links of the body, for the IR (ADR-0026).
     pub links: Vec<v2::DocLink>,
     /// The resolved `@see` targets, for the IR (ADR-0026).
     pub see: Vec<v2::DocLink>,
+}
+
+/// The sizing keys of a `deployment` declaration or of a placement line
+/// (rsdl §5): each is `None` when the key is not written. `depth` sizes the
+/// ring of an event channel, `slots` and `budget` the call table of a command
+/// or query channel.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Sizing {
+    /// `depth = n`, 1 to 4294967295.
+    pub depth: Option<u32>,
+    /// `slots = n`, 1 to 65536.
+    pub slots: Option<u32>,
+    /// `budget = n`, 1 to 18446744073709551615.
+    pub budget: Option<u64>,
 }
 
 /// A `machine` declaration inside a deployment (rsdl §3.5).
@@ -321,11 +344,16 @@ pub struct MachineDecl {
 
 /// One body line: a member line of a `system`, `distribution` or `machine`,
 /// or an `offers`/`requires` line of a `component` (rsdl §4). A line takes
-/// backend keys only.
+/// backend keys; a placement line, a member line of a `machine`, also takes
+/// the sizing keys (rsdl §5).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemberRef {
     pub reference: Reference,
     pub backend_keys: Vec<BackendKey>,
+    /// The `depth`, `slots` and `budget` keys of a placement line, for every
+    /// link the placed instance consumes (rsdl §5). Never written on any
+    /// other line.
+    pub sizing: Sizing,
     /// The line's doc comment (typl §14, ADR-0026).
     pub doc: DocInfo,
     /// The resolved doc links of the line, for the IR (ADR-0026).
@@ -750,7 +778,8 @@ deployment Production for Vehicle {
             ("system S [ owner = \"x\" ] {}", &["FORM-106"]),
             ("system S [ Linux.cpuset ] {}", &["FORM-106"]),
             ("system S [ linux.cpu_set ] {}", &["FORM-106"]),
-            // FORM-107: a key its row does not name, and any rsdl key on a line.
+            // FORM-107: a key its row does not name, and any rsdl key on a line
+            // (the sizing keys of a placement line aside).
             ("component C [ tier = PLATFORM ] {}", &["FORM-107"]),
             ("system S [ external ] {}", &["FORM-107"]),
             ("distribution D [ instances = (a) ] {}", &["FORM-107"]),
@@ -1516,6 +1545,316 @@ deployment Bench for Vehicle {
         let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
         assert_eq!(codes(&system), ["RSDL-603", "RSDL-701"]);
         assert!(system.closure_has_errors);
+    }
+
+    /// The closure the sizing-key tests deploy: `Panel` consumes an event
+    /// channel, `Backend` a query channel, `Lane` nothing.
+    const SIZED: &str = "package veh.topology\n\
+                         import veh.adas.LaneAssist\n\
+                         component Lane { offers veh.adas.lane }\n\
+                         component Panel { requires LaneAssist }\n\
+                         component Backend [ external ] { requires veh.diag.access }\n\
+                         system Vehicle { Lane, Panel, Backend, veh.diag.access }\n";
+
+    /// Every instance of `SIZED` on one machine.
+    const SIZED_LINES: &str = "Lane, Panel, Backend, veh.diag.access";
+
+    const UNSIZED: Sizing = Sizing {
+        depth: None,
+        slots: None,
+        budget: None,
+    };
+
+    /// rsdl §5: `depth`, `slots` and `budget` are read on a `deployment` and on
+    /// a placement line, each key at both ends of its range.
+    #[test]
+    fn the_sizing_keys_are_read_on_a_deployment_and_a_placement_line() {
+        let text = format!(
+            "{SIZED}\
+             deployment Prod for Vehicle \
+             [ depth = 1, slots = 65536, budget = 18446744073709551615 ] {{\n  \
+             machine A {{ Lane, Panel [ depth = 4294967295, slots = 1, budget = 1 ], \
+             Backend, veh.diag.access }}\n}}\n"
+        );
+        let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+        assert_eq!(codes(&system), Vec::<&str>::new());
+        let deployment = &system.deployments[0];
+        assert_eq!(
+            deployment.sizing,
+            Sizing {
+                depth: Some(1),
+                slots: Some(65536),
+                budget: Some(18446744073709551615),
+            }
+        );
+        let lines: Vec<Sizing> = deployment.machines[0]
+            .members
+            .iter()
+            .map(|member| member.sizing)
+            .collect();
+        assert_eq!(
+            lines,
+            [
+                UNSIZED,
+                Sizing {
+                    depth: Some(4294967295),
+                    slots: Some(1),
+                    budget: Some(1),
+                },
+                UNSIZED,
+                UNSIZED,
+            ]
+        );
+        assert!(!system.placements[0].has_errors);
+    }
+
+    /// rsdl §5, §13: a value that is not an integer within the key's range is
+    /// RSDL-709, which blocks its own deployment and no other, and writes
+    /// nothing.
+    #[test]
+    fn a_sizing_key_out_of_range_is_rsdl_709_and_blocks_its_deployment() {
+        let cases: &[(&str, &str)] = &[
+            (
+                "slots = 0",
+                "`slots` takes an integer from 1 to 65536, written `slots = <n>`; `0` is not one \
+                 (rsdl reference §5)",
+            ),
+            (
+                "slots = 65537",
+                "`slots` takes an integer from 1 to 65536, written `slots = <n>`; `65537` is not \
+                 one (rsdl reference §5)",
+            ),
+            (
+                "budget = 0",
+                "`budget` takes an integer from 1 to 18446744073709551615, written \
+                 `budget = <n>`; `0` is not one (rsdl reference §5)",
+            ),
+            (
+                "budget = 18446744073709551616",
+                "`budget` takes an integer from 1 to 18446744073709551615, written \
+                 `budget = <n>`; `18446744073709551616` is not one (rsdl reference §5)",
+            ),
+            (
+                "depth = 0",
+                "`depth` takes an integer from 1 to 4294967295, written `depth = <n>`; `0` is \
+                 not one (rsdl reference §5)",
+            ),
+            (
+                "depth = 4294967296",
+                "`depth` takes an integer from 1 to 4294967295, written `depth = <n>`; \
+                 `4294967296` is not one (rsdl reference §5)",
+            ),
+            (
+                "depth = -1",
+                "`depth` takes an integer from 1 to 4294967295, written `depth = <n>`; `-1` is \
+                 not one (rsdl reference §5)",
+            ),
+            (
+                "slots = (1, 2)",
+                "`slots` takes an integer from 1 to 65536, written `slots = <n>`; `(1,2)` is \
+                 not one (rsdl reference §5)",
+            ),
+            (
+                "slots = \"8\"",
+                "`slots` takes an integer from 1 to 65536, written `slots = <n>`; `\"8\"` is \
+                 not one (rsdl reference §5)",
+            ),
+            (
+                "slots",
+                "`slots` takes an integer from 1 to 65536, written `slots = <n>`; a bare \
+                 `slots` is not one (rsdl reference §5)",
+            ),
+        ];
+        for (attribute, message) in cases {
+            let sites = [
+                format!(
+                    "deployment Bad for Vehicle [ {attribute} ] {{ machine A {{ {SIZED_LINES} }} }}"
+                ),
+                format!(
+                    "deployment Bad for Vehicle {{ machine A {{ Lane, Panel [ {attribute} ], \
+                     Backend, veh.diag.access }} }}"
+                ),
+            ];
+            for bad in sites {
+                let good =
+                    format!("deployment Good for Vehicle {{ machine A {{ {SIZED_LINES} }} }}");
+                // `Bad` after `Good`, then before it: the block follows the
+                // deployment, not the order of declaration.
+                let orders = [
+                    (format!("{SIZED}{good}\n{bad}\n"), 1, [false, true]),
+                    (format!("{SIZED}{bad}\n{good}\n"), 0, [true, false]),
+                ];
+                for (text, bad_index, expected) in orders {
+                    let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+                    assert_eq!(codes(&system), ["RSDL-709"], "`{bad}`");
+                    assert_eq!(system.diagnostics[0].message, *message, "`{bad}`");
+                    assert!(!system.closure_has_errors, "`{bad}`");
+                    let blocked: Vec<bool> =
+                        system.placements.iter().map(|p| p.has_errors).collect();
+                    assert_eq!(blocked, expected, "`{bad}`");
+                    let deployment = &system.deployments[bad_index];
+                    assert_eq!(deployment.sizing, UNSIZED, "`{bad}`");
+                    let lines: Vec<Sizing> = deployment.machines[0]
+                        .members
+                        .iter()
+                        .map(|member| member.sizing)
+                        .collect();
+                    assert_eq!(lines, [UNSIZED; 4], "`{bad}`");
+                }
+            }
+        }
+
+        // `slots = 50ms`: the parser refuses a duration as an attribute value
+        // and reports FORM-101, a parse error the rsdl reporter never sees,
+        // which stops `ridl build` writing anything. The reader draws no
+        // RSDL-709 over it: a second report would call `slots` bare.
+        let text = format!(
+            "{SIZED}deployment Prod for Vehicle [ slots = 50ms ] {{ machine A {{ {SIZED_LINES} }} }}\n"
+        );
+        let parsed = ridl_syntax::parse(&text, Profile::Rsdl);
+        let parse_codes: Vec<&str> = parsed.errors().iter().map(|error| error.code).collect();
+        assert_eq!(parse_codes, ["FORM-101"]);
+        let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+        assert_eq!(codes(&system), Vec::<&str>::new());
+        assert_eq!(system.deployments[0].sizing, UNSIZED);
+    }
+
+    /// rsdl §5, §13: the sizing keys are legal on a `deployment` and on a
+    /// placement line only; anywhere else, FORM-107, which blocks every
+    /// deployment through `closure_has_errors` and marks none on its own.
+    #[test]
+    fn a_sizing_key_on_a_requires_line_or_a_machine_is_form_107() {
+        let good = format!("deployment Prod for Vehicle {{ machine A {{ {SIZED_LINES} }} }}\n");
+        let cases: [String; 8] = [
+            format!(
+                "{}{good}",
+                SIZED.replace("requires LaneAssist", "requires LaneAssist [ depth = 2 ]")
+            ),
+            format!(
+                "{SIZED}deployment Prod for Vehicle {{ machine A [ slots = 4 ] {{ {SIZED_LINES} }} }}\n"
+            ),
+            format!(
+                "{}{good}",
+                SIZED.replace(
+                    "offers veh.adas.lane",
+                    "offers veh.adas.lane [ budget = 1 ]"
+                )
+            ),
+            format!(
+                "{}{good}",
+                SIZED.replace("component Lane {", "component Lane [ depth = 2 ] {")
+            ),
+            format!(
+                "{}{good}",
+                SIZED.replace("system Vehicle {", "system Vehicle [ slots = 4 ] {")
+            ),
+            format!(
+                "{}{good}",
+                SIZED.replace(
+                    "system Vehicle { Lane,",
+                    "system Vehicle { Lane [ budget = 1 ],"
+                )
+            ),
+            format!(
+                "{SIZED}{good}distribution D [ depth = 2 ] {{ Lane, Panel, veh.diag.access }}\n"
+            ),
+            format!(
+                "{SIZED}{good}distribution D {{ Lane [ slots = 4 ], Panel, veh.diag.access }}\n"
+            ),
+        ];
+        for text in &cases {
+            let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+            assert_eq!(codes(&system), ["FORM-107"], "`{text}`");
+            assert!(system.closure_has_errors, "`{text}`");
+            assert!(!system.placements[0].has_errors, "`{text}`");
+        }
+        let system = check_topology(&[("veh/topology/x.rsdl", cases[1].as_str())]);
+        assert_eq!(
+            system.diagnostics[0].message,
+            "attribute `slots` not valid on a `machine` (rsdl reference §5)"
+        );
+        let text = format!(
+            "{SIZED}deployment Prod for Vehicle {{ machine A {{ Lane, Panel [ labels = (QM) ], \
+             Backend, veh.diag.access }} }}\n"
+        );
+        let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+        assert_eq!(codes(&system), ["FORM-107"]);
+        assert_eq!(
+            system.diagnostics[0].message,
+            "attribute `labels` not valid on a placement line — a placement line takes backend \
+             keys and the sizing keys `depth`, `slots` and `budget` (rsdl reference §5)"
+        );
+    }
+
+    /// rsdl §5: a placement line takes the sizing keys and backend keys; every
+    /// other rsdl-owned key on one is FORM-107, with no fact read from it.
+    #[test]
+    fn another_rsdl_key_on_a_placement_line_is_form_107() {
+        let cases = [
+            "instances = (a)",
+            "external",
+            "tier = PLATFORM",
+            "deprecated = \"x\"",
+        ];
+        for attribute in cases {
+            let text = format!(
+                "{SIZED}deployment Prod for Vehicle {{ machine A {{ Lane, Panel [ {attribute} ], \
+                 Backend, veh.diag.access }} }}\n"
+            );
+            let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+            assert_eq!(codes(&system), ["FORM-107"], "`{attribute}`");
+            assert!(system.closure_has_errors, "`{attribute}`");
+        }
+    }
+
+    /// rsdl §5, §13: a sizing key twice in one block is FORM-108; the first
+    /// value stands, and the error blocks through `closure_has_errors`, not
+    /// through the deployment's own flag.
+    #[test]
+    fn a_sizing_key_twice_in_one_block_is_form_108() {
+        let text = format!(
+            "{SIZED}deployment Prod for Vehicle [ depth = 2, depth = 3 ] {{ machine A {{ \
+             {SIZED_LINES} }} }}\n"
+        );
+        let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+        assert_eq!(codes(&system), ["FORM-108"]);
+        assert_eq!(system.deployments[0].sizing.depth, Some(2));
+        assert!(system.closure_has_errors);
+        assert!(!system.placements[0].has_errors);
+
+        let text = format!(
+            "{SIZED}deployment Prod for Vehicle {{ machine A {{ Lane, Panel [ slots = 4, \
+             slots = 5 ], Backend, veh.diag.access }} }}\n"
+        );
+        let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+        assert_eq!(codes(&system), ["FORM-108"]);
+        assert_eq!(
+            system.deployments[0].machines[0].members[1].sizing.slots,
+            Some(4)
+        );
+        assert!(system.closure_has_errors);
+        assert!(!system.placements[0].has_errors);
+    }
+
+    /// rsdl §5: a sizing key on an instance that consumes no channel of the
+    /// matching kind draws nothing; the value is still read.
+    #[test]
+    fn a_sizing_key_on_an_instance_that_consumes_nothing_draws_nothing() {
+        let text = format!(
+            "{SIZED}deployment Prod for Vehicle {{ machine A {{ \
+             Lane [ depth = 2, slots = 4, budget = 1024 ], Panel, Backend, veh.diag.access }} }}\n"
+        );
+        let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+        assert_eq!(codes(&system), Vec::<&str>::new());
+        assert_eq!(
+            system.deployments[0].machines[0].members[0].sizing,
+            Sizing {
+                depth: Some(2),
+                slots: Some(4),
+                budget: Some(1024),
+            }
+        );
+        assert!(!system.placements[0].has_errors);
     }
 
     /// Appendix A's distributions: every implemented closure component in one,

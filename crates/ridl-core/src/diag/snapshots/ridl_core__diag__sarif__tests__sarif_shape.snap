@@ -1278,6 +1278,15 @@ expression: log
               }
             },
             {
+              "id": "RSDL-709",
+              "shortDescription": {
+                "text": "a `depth`, `slots` or `budget` value is not an integer within its range"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
               "id": "RSDL-804",
               "name": "unclaimed-backend-key",
               "shortDescription": {
@@ -1554,7 +1563,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 155,
+          "ruleIndex": 156,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

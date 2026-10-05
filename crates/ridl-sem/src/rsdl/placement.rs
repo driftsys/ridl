@@ -11,9 +11,10 @@
 //!
 //! rsdl §13 blocks lowering for one deployment on an RSDL-7xx error and for
 //! every deployment on any other. [`DeploymentPlacement::has_errors`] records
-//! the first kind per deployment, and also a deployment whose closure was
-//! never placed even though no RSDL-7xx error was raised for it;
-//! `CheckedSystem::closure_has_errors` records the second.
+//! the first kind per deployment — raised here, or by the attribute reader
+//! (RSDL-709, carried in `DeploymentDecl::has_errors`) — and also a deployment
+//! whose closure was never placed even though no RSDL-7xx error was raised for
+//! it; `CheckedSystem::closure_has_errors` records the second.
 
 use std::collections::HashMap;
 
@@ -63,7 +64,7 @@ pub(super) fn place(
     for (index, deployment) in system.deployments.iter().enumerate() {
         let mut check = DeploymentCheck {
             reporter: &mut *reporter,
-            has_errors: false,
+            has_errors: deployment.has_errors,
         };
         if let Some(first) = system.deployments[..index]
             .iter()

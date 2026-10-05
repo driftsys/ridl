@@ -829,6 +829,7 @@ const RSDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("RSDL-706", Showcase),
     ("RSDL-707", Showcase),
     ("RSDL-708", Showcase),
+    ("RSDL-709", Showcase),
     ("RSDL-804", Showcase),
     ("RSDL-901", Showcase),
     ("RSDL-903", Showcase),
