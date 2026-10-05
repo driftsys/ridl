@@ -210,6 +210,15 @@ const ALLOWED: &[Allowed] = &[
               interfaces",
     },
     Allowed {
+        path: "crates/ridl-ir/src/codegen/deployment.rs",
+        lines: 3,
+        why: "the region map's own `Region.interfaces` field in the lowered \
+              system, which the rsdl lowering already filled from a \
+              `shapes()` walk, not a read of `Package::interfaces`; the \
+              emitter reaches a package's interface bodies through \
+              `shapes()`",
+    },
+    Allowed {
         path: "crates/ridl-ir/src/lib.rs",
         lines: 9,
         why: "the IR-side `shapes()` helper itself; `referenced_packages`, \

@@ -40,7 +40,6 @@ fn scaled(int: &str, frac: &str, places: usize) -> Option<u128> {
 /// operand has another shape, when `min_us` is zero, when a scaled operand does
 /// not fit in `u128`, when the quotient exceeds `u32::MAX`, or when the quotient
 /// is zero. A zero quotient is not derivable: a depth is at least 1.
-#[cfg_attr(not(test), expect(dead_code))]
 pub fn ceil_ratio(max_us: &str, min_us: &str) -> Option<u32> {
     let (max_int, max_frac) = split_decimal(max_us)?;
     let (min_int, min_frac) = split_decimal(min_us)?;

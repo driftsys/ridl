@@ -55,6 +55,7 @@ pub mod v1 {
 
 mod clauses;
 mod contract;
+mod deployment;
 mod depth;
 mod facts;
 mod flatbuffers;
@@ -67,6 +68,7 @@ pub use contract::{
     Backend, ModelBackend, RawIr, SCHEMA, check_path, error, has_error, request_from_json,
     request_to_json, response_from_json, response_to_json, text_file,
 };
+pub use deployment::lower_deployment;
 pub use lower::lower;
 pub use unbounded::attribute as fb_unbounded;
 
