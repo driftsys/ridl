@@ -3512,6 +3512,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "10000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "currentSpeed.payload: veh.common.Speed"
+              },
+              "flatbuffers": {
+                "unsized": "currentSpeed.payload: veh.common.Speed"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -3521,6 +3529,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "init": {
@@ -3552,6 +3572,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "100000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "engineTemp.payload: veh.common.Temperature"
+              },
+              "flatbuffers": {
+                "unsized": "engineTemp.payload: veh.common.Temperature"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -3561,6 +3589,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "init": {
@@ -3592,6 +3632,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "1000000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "warnings.payload: veh.common.WarningFlags"
+              },
+              "flatbuffers": {
+                "unsized": "warnings.payload: veh.common.WarningFlags"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -3601,6 +3649,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "init": {
@@ -3632,6 +3692,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "500000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "bytes": "8"
+              },
+              "flatbuffers": {
+                "bytes": "53"
+              }
+            },
             "event": {
               "payload": {
                 "type": {
@@ -3642,7 +3710,15 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 0,
                   "kind": "DECL_KIND_STRUCT"
                 },
-                "flatbuffersMaxSize": 53
+                "flatbuffersMaxSize": 53,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 8
+                  },
+                  "flatbuffers": {
+                    "bounded": 53
+                  }
+                }
               }
             }
           }
@@ -3666,6 +3742,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "minUs": "20000",
               "maxUs": "200000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "setGear.request: veh.common.GearPosition"
+              },
+              "flatbuffers": {
+                "unsized": "setGear.request: veh.common.GearPosition"
+              }
             },
             "command": {
               "params": [
@@ -3698,6 +3782,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "clauses": [
@@ -3714,7 +3810,19 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "observerId": "VehicleStatus.setGear.require[0]",
                   "refused": "not `<subject> <comparison> <numeric literal>`"
                 }
-              ]
+              ],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                  }
+                }
+              }
             }
           }
         },
@@ -3750,6 +3858,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "50000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "getAverageSpeed.request: ridl.std.Duration"
+              },
+              "flatbuffers": {
+                "unsized": "getAverageSpeed.request: ridl.std.Duration"
+              }
+            },
             "query": {
               "params": [
                 {
@@ -3781,6 +3897,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "reply": {
@@ -3804,6 +3932,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "clauses": [
@@ -3827,7 +3967,31 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "observerId": "VehicleStatus.getAverageSpeed.ensure[0]",
                   "refused": "`result` is not a named integer or float scalar"
                 }
-              ]
+              ],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                  }
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                  }
+                }
+              }
             }
           }
         },
@@ -3850,6 +4014,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "1000000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "streamFaults.request: DiagFilter"
+              },
+              "flatbuffers": {
+                "unsized": "streamFaults.request: DiagFilter"
+              }
+            },
             "query": {
               "params": [
                 {
@@ -3881,6 +4053,21 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": false,
                   "index": 1,
                   "kind": "DECL_KIND_STRUCT"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_REFUSED_MEMBER"
+                    }
+                  },
+                  "flatbuffers": {
+                    "unbounded": {
+                      "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
+                      "unjudgeableMembers": [
+                        "category"
+                      ]
+                    }
+                  }
                 }
               },
               "reply": {
@@ -3898,7 +4085,34 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 }
               },
-              "clauses": []
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_REFUSED_MEMBER"
+                  }
+                },
+                "flatbuffers": {
+                  "unbounded": {
+                    "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
+                    "unjudgeableMembers": [
+                      "category"
+                    ]
+                  }
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              }
             }
           }
         },
@@ -3921,6 +4135,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "100000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "getFaultPage.request: DiagFilter"
+              },
+              "flatbuffers": {
+                "unsized": "getFaultPage.request: DiagFilter"
+              }
+            },
             "query": {
               "params": [
                 {
@@ -3952,6 +4174,21 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": false,
                   "index": 1,
                   "kind": "DECL_KIND_STRUCT"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_REFUSED_MEMBER"
+                    }
+                  },
+                  "flatbuffers": {
+                    "unbounded": {
+                      "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
+                      "unjudgeableMembers": [
+                        "category"
+                      ]
+                    }
+                  }
                 }
               },
               "reply": {
@@ -3974,7 +4211,34 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 }
               },
-              "clauses": []
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_REFUSED_MEMBER"
+                  }
+                },
+                "flatbuffers": {
+                  "unbounded": {
+                    "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
+                    "unjudgeableMembers": [
+                      "category"
+                    ]
+                  }
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              }
             }
           }
         },
@@ -3992,6 +4256,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "row": 8,
             "doc": "",
             "labels": [],
+            "reservation": {
+              "proto3": {
+                "unsized": "softwareVersion.payload: ridl.std.Version"
+              },
+              "flatbuffers": {
+                "unsized": "softwareVersion.payload: ridl.std.Version"
+              }
+            },
             "fixed": {
               "payload": {
                 "optional": false,
@@ -4012,6 +4284,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               }
             }
@@ -4031,6 +4315,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "row": 9,
             "doc": "",
             "labels": [],
+            "reservation": {
+              "proto3": {
+                "unsized": "capabilities.payload: array of ridl.std.Label"
+              },
+              "flatbuffers": {
+                "unsized": "capabilities.payload: array of ridl.std.Label"
+              }
+            },
             "fixed": {
               "payload": {
                 "optional": false,
@@ -4054,6 +4346,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           }
         }
       ],
+      "tableBudget": {
+        "proto3": {
+          "unsized": "currentSpeed"
+        },
+        "flatbuffers": {
+          "unsized": "currentSpeed"
+        }
+      },
       "declared": {
         "declared": "VehicleStatus",
         "snake": "vehicle_status",
@@ -4089,6 +4389,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "1000000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "wheelTicks.payload: FanLevel"
+              },
+              "flatbuffers": {
+                "bytes": "43"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -4099,7 +4407,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 7,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 43
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  }
+                }
               },
               "init": {
                 "derivable": true,
@@ -4142,6 +4460,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "10000000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "wheelTemp.payload: veh.common.Temperature"
+              },
+              "flatbuffers": {
+                "unsized": "wheelTemp.payload: veh.common.Temperature"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -4151,6 +4477,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "init": {
@@ -4188,6 +4526,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "5000000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "wheelSlipRate.payload: veh.common.Ratio"
+              },
+              "flatbuffers": {
+                "unsized": "wheelSlipRate.payload: veh.common.Ratio"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -4197,6 +4543,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "init": {
@@ -4209,6 +4567,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           }
         }
       ],
+      "tableBudget": {
+        "proto3": {
+          "unsized": "wheelTicks"
+        },
+        "flatbuffers": {
+          "unsized": "wheelTemp"
+        }
+      },
       "declared": {
         "declared": "WheelHistory",
         "snake": "wheel_history",
@@ -4244,6 +4610,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "1000000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "wheelTicks.payload: RawTickCount"
+              },
+              "flatbuffers": {
+                "bytes": "44"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -4254,7 +4628,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 5,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 44
+                "flatbuffersMaxSize": 44,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 44
+                  }
+                }
               },
               "init": {
                 "derivable": true,
@@ -4285,6 +4669,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "500000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "bytes": "8"
+              },
+              "flatbuffers": {
+                "bytes": "54"
+              }
+            },
             "event": {
               "payload": {
                 "type": {
@@ -4295,7 +4687,15 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 8,
                   "kind": "DECL_KIND_STRUCT"
                 },
-                "flatbuffersMaxSize": 54
+                "flatbuffersMaxSize": 54,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 8
+                  },
+                  "flatbuffers": {
+                    "bounded": 54
+                  }
+                }
               }
             }
           }
@@ -4318,6 +4718,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "readTicks.request: ()"
+              },
+              "flatbuffers": {
+                "unsized": "readTicks.request: ()"
+              }
             },
             "query": {
               "params": [],
@@ -4343,9 +4751,41 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 5,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 44
+                "flatbuffersMaxSize": 44,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 44
+                  }
+                }
               },
-              "clauses": []
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                  }
+                },
+                "flatbuffers": {
+                  "bounded": 44
+                }
+              }
             }
           }
         },
@@ -4367,6 +4807,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "resetTicks.request: RawTickCount"
+              },
+              "flatbuffers": {
+                "bytes": "44"
+              }
             },
             "command": {
               "params": [
@@ -4400,9 +4848,29 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 5,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 44
+                "flatbuffersMaxSize": 44,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 44
+                  }
+                }
               },
-              "clauses": []
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                  }
+                },
+                "flatbuffers": {
+                  "bounded": 44
+                }
+              }
             }
           }
         },
@@ -4425,6 +4893,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "50000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "readSpan.request: ()"
+              },
+              "flatbuffers": {
+                "unsized": "readSpan.request: ()"
+              }
+            },
             "query": {
               "params": [],
               "reply": {
@@ -4435,7 +4911,31 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 }
               },
-              "clauses": []
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              }
             }
           }
         },
@@ -4453,6 +4953,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "row": 5,
             "doc": "",
             "labels": [],
+            "reservation": {
+              "proto3": {
+                "unsized": "tickBounds.payload: array of tuple"
+              },
+              "flatbuffers": {
+                "unsized": "tickBounds.payload: array of tuple"
+              }
+            },
             "fixed": {
               "payload": {
                 "optional": false,
@@ -4471,6 +4979,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           }
         }
       ],
+      "tableBudget": {
+        "proto3": {
+          "unsized": "wheelTicks"
+        },
+        "flatbuffers": {
+          "unsized": "readTicks"
+        }
+      },
       "declared": {
         "declared": "WheelDiagnostics",
         "snake": "wheel_diagnostics",
@@ -4506,6 +5022,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "10000000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "wheelHealth.payload: FanLevel"
+              },
+              "flatbuffers": {
+                "bytes": "43"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -4516,7 +5040,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 7,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 43
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  }
+                }
               },
               "init": {
                 "derivable": true,
@@ -4528,6 +5062,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           }
         }
       ],
+      "tableBudget": {
+        "proto3": {
+          "unsized": "wheelHealth"
+        },
+        "flatbuffers": {
+          "bytes": "43"
+        }
+      },
       "declared": {
         "declared": "WheelSummary",
         "snake": "wheel_summary",
@@ -4563,6 +5105,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "1000000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "ticks.payload: FanLevel"
+              },
+              "flatbuffers": {
+                "bytes": "43"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -4573,7 +5123,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 7,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 43
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  }
+                }
               },
               "init": {
                 "derivable": true,
@@ -4622,6 +5182,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "500000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "bytes": "8"
+              },
+              "flatbuffers": {
+                "bytes": "54"
+              }
+            },
             "event": {
               "payload": {
                 "type": {
@@ -4632,13 +5200,29 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 8,
                   "kind": "DECL_KIND_STRUCT"
                 },
-                "flatbuffersMaxSize": 54
+                "flatbuffersMaxSize": 54,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 8
+                  },
+                  "flatbuffers": {
+                    "bounded": 54
+                  }
+                }
               }
             }
           }
         }
       ],
       "inlineOfService": 0,
+      "tableBudget": {
+        "proto3": {
+          "unsized": "ticks"
+        },
+        "flatbuffers": {
+          "bytes": "97"
+        }
+      },
       "service": {
         "dotted": "veh.cluster.wheels",
         "segments": [
@@ -4677,6 +5261,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "1000000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "cabinTemp.payload: veh.common.Temperature"
+              },
+              "flatbuffers": {
+                "unsized": "cabinTemp.payload: veh.common.Temperature"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -4686,6 +5278,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "init": {
@@ -4717,6 +5321,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "5000000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "targetTemp.payload: veh.common.Temperature"
+              },
+              "flatbuffers": {
+                "unsized": "targetTemp.payload: veh.common.Temperature"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -4726,6 +5338,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "init": {
@@ -4756,6 +5380,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "minUs": "200000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "blowerDuty.payload: veh.common.Ratio"
+              },
+              "flatbuffers": {
+                "unsized": "blowerDuty.payload: veh.common.Ratio"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -4765,6 +5397,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "init": {
@@ -4795,6 +5439,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "2000000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "fanLevel.payload: FanLevel"
+              },
+              "flatbuffers": {
+                "bytes": "43"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -4805,7 +5457,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 7,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 43
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  }
+                }
               },
               "init": {
                 "derivable": true,
@@ -4836,6 +5498,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "500",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "compressorLoad.payload: veh.common.Ratio"
+              },
+              "flatbuffers": {
+                "unsized": "compressorLoad.payload: veh.common.Ratio"
+              }
+            },
             "signal": {
               "payload": {
                 "type": {
@@ -4845,6 +5515,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "declaredInit": "12.5",
@@ -4877,6 +5559,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "2000000",
               "defaultApplied": true
             },
+            "reservation": {
+              "proto3": {
+                "bytes": "8"
+              },
+              "flatbuffers": {
+                "bytes": "54"
+              }
+            },
             "event": {
               "payload": {
                 "type": {
@@ -4887,7 +5577,15 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 8,
                   "kind": "DECL_KIND_STRUCT"
                 },
-                "flatbuffersMaxSize": 54
+                "flatbuffersMaxSize": 54,
+                "sizes": {
+                  "proto3": {
+                    "bounded": 8
+                  },
+                  "flatbuffers": {
+                    "bounded": 54
+                  }
+                }
               }
             }
           }
@@ -4910,6 +5608,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "setTarget.request: veh.common.Temperature"
+              },
+              "flatbuffers": {
+                "unsized": "setTarget.request: veh.common.Temperature"
+              }
             },
             "command": {
               "params": [
@@ -4942,6 +5648,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
               "clauses": [
@@ -4967,7 +5685,19 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "observerId": "veh.hvac.cabin.setTarget.require[1]",
                   "refused": "the subject is not the interaction's declared parameter"
                 }
-              ]
+              ],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                  }
+                }
+              }
             }
           }
         },
@@ -5002,6 +5732,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "50000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "replayTrace.request: (samples)"
+              },
+              "flatbuffers": {
+                "unsized": "replayTrace.request: (samples)"
+              }
+            },
             "command": {
               "params": [
                 {
@@ -5027,7 +5765,19 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 }
               ],
-              "clauses": []
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              }
             }
           }
         },
@@ -5049,6 +5799,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "streamFilterHistory.request: FanLevel"
+              },
+              "flatbuffers": {
+                "unsized": "streamFilterHistory.reply: stream"
+              }
             },
             "query": {
               "params": [
@@ -5082,7 +5840,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 7,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 43
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  }
+                }
               },
               "reply": {
                 "value": {
@@ -5099,7 +5867,29 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 }
               },
-              "clauses": []
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                  }
+                },
+                "flatbuffers": {
+                  "bounded": 43
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              }
             }
           }
         },
@@ -5121,6 +5911,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "rebalance.request: (samples)"
+              },
+              "flatbuffers": {
+                "unsized": "rebalance.request: (samples)"
+              }
             },
             "query": {
               "params": [
@@ -5162,7 +5960,31 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 }
               },
-              "clauses": []
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              }
             }
           }
         },
@@ -5184,6 +6006,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "getBounds.request: ()"
+              },
+              "flatbuffers": {
+                "unsized": "getBounds.request: ()"
+              }
             },
             "query": {
               "params": [],
@@ -5214,7 +6044,31 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "observerId": "veh.hvac.cabin.getBounds.ensure[0]",
                   "refused": "not `<subject> <comparison> <numeric literal>`"
                 }
-              ]
+              ],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              }
             }
           }
         },
@@ -5236,6 +6090,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "calibrate.request: FanLevel"
+              },
+              "flatbuffers": {
+                "unsized": "calibrate.reply: ClimateReport | HvacError"
+              }
             },
             "query": {
               "params": [
@@ -5269,7 +6131,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 7,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 43
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  }
+                }
               },
               "reply": {
                 "fallible": {
@@ -5291,7 +6163,29 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 }
               },
-              "clauses": []
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                  }
+                },
+                "flatbuffers": {
+                  "bounded": 43
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              }
             }
           }
         },
@@ -5313,6 +6207,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "getClimate.request: ()"
+              },
+              "flatbuffers": {
+                "unsized": "getClimate.request: ()"
+              }
             },
             "query": {
               "params": [],
@@ -5337,9 +6239,53 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": false,
                   "index": 9,
                   "kind": "DECL_KIND_STRUCT"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_REFUSED_MEMBER"
+                    }
+                  },
+                  "flatbuffers": {
+                    "unbounded": {
+                      "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
+                      "unjudgeableMembers": [
+                        "cabin",
+                        "setpoint"
+                      ]
+                    }
+                  }
                 }
               },
-              "clauses": []
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_REFUSED_MEMBER"
+                  }
+                },
+                "flatbuffers": {
+                  "unbounded": {
+                    "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
+                    "unjudgeableMembers": [
+                      "cabin",
+                      "setpoint"
+                    ]
+                  }
+                }
+              }
             }
           }
         },
@@ -5362,6 +6308,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "getCabinTemp.request: ()"
+              },
+              "flatbuffers": {
+                "unsized": "getCabinTemp.request: ()"
+              }
             },
             "query": {
               "params": [],
@@ -5386,9 +6340,45 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               },
-              "clauses": []
+              "clauses": [],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                  }
+                }
+              }
             }
           }
         },
@@ -5406,6 +6396,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "row": 14,
             "doc": "Provisioned, immutable for the software-instance lifetime (ridl §8).",
             "labels": [],
+            "reservation": {
+              "proto3": {
+                "unsized": "unitSerial.payload: ridl.std.Label"
+              },
+              "flatbuffers": {
+                "unsized": "unitSerial.payload: ridl.std.Label"
+              }
+            },
             "fixed": {
               "payload": {
                 "optional": false,
@@ -5426,6 +6424,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "foreign": true,
                   "index": 0,
                   "kind": "DECL_KIND_UNSPECIFIED"
+                },
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  },
+                  "flatbuffers": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    }
+                  }
                 }
               }
             }
@@ -5445,6 +6455,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "row": 15,
             "doc": "A collection-typed fixed.",
             "labels": [],
+            "reservation": {
+              "proto3": {
+                "unsized": "supportedModes.payload: array of ridl.std.Label"
+              },
+              "flatbuffers": {
+                "unsized": "supportedModes.payload: array of ridl.std.Label"
+              }
+            },
             "fixed": {
               "payload": {
                 "optional": false,
@@ -5486,6 +6504,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "50000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "setFan.request: FanLevel"
+              },
+              "flatbuffers": {
+                "bytes": "43"
+              }
+            },
             "command": {
               "params": [
                 {
@@ -5518,7 +6544,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 7,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 43
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  }
+                }
               },
               "clauses": [
                 {
@@ -5532,7 +6568,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "observerId": "veh.hvac.cabin.setFan.require[0]",
                   "refused": "not `<subject> <comparison> <numeric literal>`"
                 }
-              ]
+              ],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                  }
+                },
+                "flatbuffers": {
+                  "bounded": 43
+                }
+              }
             }
           }
         },
@@ -5555,6 +6601,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "maxUs": "50000",
               "defaultApplied": false
             },
+            "reservation": {
+              "proto3": {
+                "unsized": "trimFan.request: FanLevel"
+              },
+              "flatbuffers": {
+                "bytes": "43"
+              }
+            },
             "command": {
               "params": [
                 {
@@ -5587,7 +6641,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 7,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 43
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  }
+                }
               },
               "clauses": [
                 {
@@ -5612,7 +6676,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "observerId": "veh.hvac.cabin.trimFan.require[1]",
                   "refused": "not `<subject> <comparison> <numeric literal>`"
                 }
-              ]
+              ],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                  }
+                },
+                "flatbuffers": {
+                  "bounded": 43
+                }
+              }
             }
           }
         },
@@ -5634,6 +6708,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
+            },
+            "reservation": {
+              "proto3": {
+                "unsized": "scaledFan.request: ()"
+              },
+              "flatbuffers": {
+                "unsized": "scaledFan.request: ()"
+              }
             },
             "query": {
               "params": [],
@@ -5659,7 +6741,17 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "index": 7,
                   "kind": "DECL_KIND_SCALAR"
                 },
-                "flatbuffersMaxSize": 43
+                "flatbuffersMaxSize": 43,
+                "sizes": {
+                  "proto3": {
+                    "absent": {
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                    }
+                  },
+                  "flatbuffers": {
+                    "bounded": 43
+                  }
+                }
               },
               "clauses": [
                 {
@@ -5671,12 +6763,42 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "observerId": "veh.hvac.cabin.scaledFan.ensure[0]",
                   "refused": "not `<subject> <comparison> <numeric literal>`"
                 }
-              ]
+              ],
+              "requestSizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                }
+              },
+              "replySizes": {
+                "proto3": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_NO_MESSAGE"
+                  }
+                },
+                "flatbuffers": {
+                  "bounded": 43
+                }
+              }
             }
           }
         }
       ],
       "inlineOfService": 3,
+      "tableBudget": {
+        "proto3": {
+          "unsized": "cabinTemp"
+        },
+        "flatbuffers": {
+          "unsized": "cabinTemp"
+        }
+      },
       "service": {
         "dotted": "veh.hvac.cabin",
         "segments": [

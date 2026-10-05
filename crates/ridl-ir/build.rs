@@ -69,6 +69,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         // it in a struct body, and clippy's `large_enum_variant` rejects the
         // unboxed oneof.
         .boxed(".ridl.ir.v2.StructMember.member.field")
+        // The interaction shapes: with a size state per payload, a query
+        // shape is far larger than the signal shape beside it.
+        .boxed(".ridl.codegen.v1.Interaction.shape.query")
         .compile_fds(file_descriptors)?;
 
     // The canonical protobuf JSON serde impls (ADR-0014 decision 14), written

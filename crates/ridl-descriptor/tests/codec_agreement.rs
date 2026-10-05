@@ -1,14 +1,15 @@
 //! The descriptor's FlatBuffers size state agrees with the generated codec:
 //! every `MAX_SIZE` the Rust backend writes for the corpus package is the
-//! `Bounded(n)` this crate advertises for the same type. Both read
+//! `Bounded(n)` this crate advertises for the same type, and the backend
+//! writes one for every declaration this crate advertises a bound for. Both
+//! read
 //! `ridl_ir::projection::flatbuffers::max_size`, the one implementation of
 //! the bound (`docs/design/flatbuffers-codec.md`); this is the test that
 //! fails if either side stops doing so.
 
 use std::path::Path;
 
-use ridl_descriptor::Encoding;
-use ridl_descriptor::size::{Ctx, SizeState, size_state};
+use ridl_ir::projection::size::{Ctx, Encoding, PayloadShape, SizeState, size_state};
 
 /// The corpus package's IR snapshot.
 fn corpus() -> ridl_ir::v2::Package {
@@ -56,17 +57,46 @@ fn every_generated_max_size_is_the_descriptors_flatbuffers_bound() {
     let package = corpus();
     let generated = ridl_backend_rust::generate(&package).expect("the corpus generates");
     let pairs = max_sizes(&generated.rust_source);
-    assert!(
-        !pairs.is_empty(),
-        "the corpus has at least one FlatBuffers root"
-    );
 
     let others: [&ridl_ir::v2::Package; 0] = [];
     let ctx = Ctx::new(&package, &others);
+
+    // The set, not just its emptiness: every declaration of the corpus
+    // package that this crate advertises a FlatBuffers bound for has a
+    // generated `MAX_SIZE`, in declaration order. A backend that emitted the
+    // constant for one declaration and not the rest fails here, where a
+    // non-empty check would pass on the first pair.
+    let advertised: Vec<&str> = package
+        .decls
+        .iter()
+        .filter(|decl| {
+            matches!(
+                size_state(
+                    &package,
+                    &PayloadShape::Named(&decl.name),
+                    &ctx,
+                    Encoding::FlatBuffers
+                ),
+                SizeState::Bounded(_)
+            )
+        })
+        .map(|decl| decl.name.as_str())
+        .collect();
+    assert!(
+        !advertised.is_empty(),
+        "the corpus has at least one FlatBuffers root"
+    );
+    let generated: Vec<&str> = pairs.iter().map(|(name, _)| name.as_str()).collect();
+    assert_eq!(generated, advertised);
     for (type_name, value) in pairs {
         assert_eq!(
-            size_state(&type_name, &ctx, Encoding::FlatBuffers),
-            Some(SizeState::Bounded(value)),
+            size_state(
+                &package,
+                &PayloadShape::Named(&type_name),
+                &ctx,
+                Encoding::FlatBuffers
+            ),
+            SizeState::Bounded(value),
             "{type_name}"
         );
     }

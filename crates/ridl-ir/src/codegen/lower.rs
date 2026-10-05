@@ -23,6 +23,7 @@ use super::resolve::{Scope, is_foreign};
 use super::v1;
 use crate::name::camel_case;
 use crate::projection::flatbuffers as fb;
+use crate::projection::size::{self, AbsentCause, Ctx, Encoding, PayloadShape, SizeState};
 use crate::v2;
 
 /// Lowers one package over the scope `others` (design note D-1).
@@ -34,6 +35,7 @@ pub fn lower(package: &v2::Package, others: &[&v2::Package]) -> v1::Model {
     let scope = Scope { package, others };
     let mut lowering = Lowering {
         scope,
+        sizes: Ctx::new(package, others),
         inits: Inits::new(scope),
         closures: Closures::new(scope),
         foreign: Vec::new(),
@@ -226,6 +228,7 @@ struct TupleEntry<'a> {
 
 struct Lowering<'a> {
     scope: Scope<'a>,
+    sizes: Ctx<'a>,
     inits: Inits<'a>,
     closures: Closures<'a>,
     foreign: Vec<v1::ForeignDeclaration>,
@@ -713,6 +716,7 @@ impl<'a> Lowering<'a> {
                 }
             })
             .collect();
+        let table_budget = budget(&slots);
         let inline_of_service = shape.service.and_then(|service| {
             home.services
                 .iter()
@@ -727,6 +731,7 @@ impl<'a> Lowering<'a> {
             labels: interface.labels.clone(),
             deprecated: interface.deprecated.clone(),
             slots,
+            table_budget: Some(table_budget),
             inline_of_service,
             identity: Some(match shape.service {
                 Some(service) => v1::interface::Identity::Service(dotted_name(&service.name)),
@@ -745,31 +750,51 @@ impl<'a> Lowering<'a> {
         row: u32,
         visibility: i32,
     ) -> v1::Interaction {
-        let (kind, timing, shape) = match decl.kind.as_ref() {
-            Some(v2::decl::Kind::SignalDef(signal)) => (
-                v1::Kind::Signal,
-                signal.timing.as_ref(),
-                Some(v1::interaction::Shape::Signal(v1::SignalShape {
-                    payload: Some(self.payload(home, &signal.payload)),
-                    declared_init: signal.declared_init.clone(),
-                    init: Some(
-                        self.inits
-                            .signal(signal.init.as_ref(), signal.declared_init.is_some()),
-                    ),
-                })),
-            ),
-            Some(v2::decl::Kind::EventDef(event)) => (
-                v1::Kind::Event,
-                event.timing.as_ref(),
-                Some(v1::interaction::Shape::Event(v1::EventShape {
-                    payload: Some(self.payload(home, &event.payload)),
-                })),
-            ),
+        let (kind, timing, shape, payloads) = match decl.kind.as_ref() {
+            Some(v2::decl::Kind::SignalDef(signal)) => {
+                let payload = self.payload(home, &signal.payload);
+                let payloads = vec![("payload", signal.payload.clone(), payload.sizes.clone())];
+                (
+                    v1::Kind::Signal,
+                    signal.timing.as_ref(),
+                    Some(v1::interaction::Shape::Signal(v1::SignalShape {
+                        payload: Some(payload),
+                        declared_init: signal.declared_init.clone(),
+                        init: Some(
+                            self.inits
+                                .signal(signal.init.as_ref(), signal.declared_init.is_some()),
+                        ),
+                    })),
+                    Some(payloads),
+                )
+            }
+            Some(v2::decl::Kind::EventDef(event)) => {
+                let payload = self.payload(home, &event.payload);
+                let payloads = vec![("payload", event.payload.clone(), payload.sizes.clone())];
+                (
+                    v1::Kind::Event,
+                    event.timing.as_ref(),
+                    Some(v1::interaction::Shape::Event(v1::EventShape {
+                        payload: Some(payload),
+                    })),
+                    Some(payloads),
+                )
+            }
             Some(v2::decl::Kind::CommandDef(command)) => {
                 let params = self.params(home, &command.params, interface, slot, visibility);
                 let request = single_param_type(&command.params)
                     .map(|reference| self.payload(home, reference));
+                let request_sizes = self.sizes(
+                    home,
+                    &PayloadShape::Params(&command.params),
+                    single_param_type(&command.params),
+                );
                 let clauses = self.clauses(home, &command.contracts, &command.params, None);
+                let payloads = vec![(
+                    "request",
+                    params_text(&command.params),
+                    Some(request_sizes.clone()),
+                )];
                 (
                     v1::Kind::Command,
                     command.timing.as_ref(),
@@ -777,7 +802,9 @@ impl<'a> Lowering<'a> {
                         params,
                         request,
                         clauses,
+                        request_sizes: Some(request_sizes),
                     })),
+                    Some(payloads),
                 )
             }
             Some(v2::decl::Kind::QueryDef(query)) => {
@@ -790,18 +817,44 @@ impl<'a> Lowering<'a> {
                         Path::interaction(interface, slot, visibility, vec!["reply".to_string()]);
                     self.reply(home, ret, &at)
                 });
+                let request_sizes = self.sizes(
+                    home,
+                    &PayloadShape::Params(&query.params),
+                    single_param_type(&query.params),
+                );
+                let reply_sizes = query.return_type.as_ref().map_or_else(absent_sizes, |ret| {
+                    self.sizes(home, &PayloadShape::Return(ret), reply_named)
+                });
+                let payloads = vec![
+                    (
+                        "request",
+                        params_text(&query.params),
+                        Some(request_sizes.clone()),
+                    ),
+                    (
+                        "reply",
+                        query
+                            .return_type
+                            .as_ref()
+                            .map_or_else(|| "()".to_string(), return_text),
+                        Some(reply_sizes.clone()),
+                    ),
+                ];
                 let reply_payload = reply_named.map(|reference| self.payload(home, reference));
                 let clauses = self.clauses(home, &query.contracts, &query.params, reply_named);
                 (
                     v1::Kind::Query,
                     query.timing.as_ref(),
-                    Some(v1::interaction::Shape::Query(v1::QueryShape {
+                    Some(v1::interaction::Shape::Query(Box::new(v1::QueryShape {
                         params,
                         request,
                         reply,
                         reply_payload,
                         clauses,
-                    })),
+                        request_sizes: Some(request_sizes),
+                        reply_sizes: Some(reply_sizes),
+                    }))),
+                    Some(payloads),
                 )
             }
             Some(v2::decl::Kind::FixedDef(fixed)) => {
@@ -813,6 +866,13 @@ impl<'a> Lowering<'a> {
                     .as_ref()
                     .and_then(named_type)
                     .map(|reference| self.payload(home, reference));
+                let sizes = fixed.payload.as_ref().map_or_else(absent_sizes, |ty| {
+                    self.sizes(home, &PayloadShape::Field(ty), named_type(ty))
+                });
+                let text = fixed
+                    .payload
+                    .as_ref()
+                    .map_or_else(|| "no payload".to_string(), field_text);
                 (
                     v1::Kind::Fixed,
                     None,
@@ -820,10 +880,13 @@ impl<'a> Lowering<'a> {
                         payload,
                         named,
                     })),
+                    Some(vec![("payload", text, Some(sizes))]),
                 )
             }
-            _ => (v1::Kind::Unspecified, None, None),
+            _ => (v1::Kind::Unspecified, None, None, None),
         };
+        let member = decl.name.as_str();
+        let reservation = reserve(member, payloads.as_deref());
         v1::Interaction {
             name: Some(spellings(&decl.name)),
             kind: kind as i32,
@@ -832,6 +895,7 @@ impl<'a> Lowering<'a> {
             labels: decl.labels.clone(),
             deprecated: decl.deprecated.clone(),
             timing: timing.map(timing_of),
+            reservation: Some(reservation),
             shape,
         }
     }
@@ -930,7 +994,55 @@ impl<'a> Lowering<'a> {
         v1::Payload {
             r#type: Some(self.type_ref(home, reference)),
             flatbuffers_max_size: max_size.map(|size| u32::try_from(size).unwrap_or(u32::MAX)),
+            sizes: Some(self.sizes(home, &PayloadShape::Named(reference), Some(reference))),
         }
+    }
+
+    /// The states of `shape` under both wire encodings. `reference` is the
+    /// one named type the shape is, when it is one; an unbounded state
+    /// takes its attribution from it.
+    fn sizes(
+        &self,
+        home: &'a v2::Package,
+        shape: &PayloadShape<'_>,
+        reference: Option<&str>,
+    ) -> v1::PayloadSizes {
+        v1::PayloadSizes {
+            proto3: Some(self.size_state(home, shape, reference, Encoding::Proto3)),
+            flatbuffers: Some(self.size_state(home, shape, reference, Encoding::FlatBuffers)),
+        }
+    }
+
+    /// The state of `shape` under `encoding`, from the one sizer. An
+    /// unbounded FlatBuffers state carries the same attribution a root
+    /// carries. `home` is the package `reference` is read from, for both
+    /// halves: the sizer resolves the payload's type name in it, and the
+    /// attribution resolves the same name in it.
+    fn size_state(
+        &self,
+        home: &'a v2::Package,
+        shape: &PayloadShape<'_>,
+        reference: Option<&str>,
+        encoding: Encoding,
+    ) -> v1::SizeState {
+        let state = match size::size_state(home, shape, &self.sizes, encoding) {
+            SizeState::Bounded(size) => v1::size_state::State::Bounded(size),
+            SizeState::Unbounded(cause) => {
+                let attribution = reference
+                    .and_then(|reference| self.scope.resolve(home, reference))
+                    .map(|(decl, declaring)| super::fb_unbounded(declaring, decl))
+                    .unwrap_or_else(|| v1::FbUnbounded {
+                        cause: cause as i32,
+                        ..Default::default()
+                    });
+                v1::size_state::State::Unbounded(attribution)
+            }
+            SizeState::Absent(cause) => v1::size_state::State::Absent(v1::SizeAbsent {
+                cause: absent_cause(cause) as i32,
+                detail: None,
+            }),
+        };
+        v1::SizeState { state: Some(state) }
     }
 
     fn services(&mut self) -> Vec<v1::Service> {
@@ -1092,6 +1204,146 @@ fn constraint(source: &v2::Constraint) -> v1::Constraint {
     }
 }
 
+/// One payload of a member: its role, the type as text, and its sizes.
+pub(super) type MemberPayload = (&'static str, String, Option<v1::PayloadSizes>);
+
+/// The type of a call's request as text: the one named type, or the
+/// parameter names in parentheses.
+fn params_text(params: &[v2::Param]) -> String {
+    single_param_type(params).map_or_else(
+        || {
+            let names: Vec<&str> = params.iter().map(|param| param.name.as_str()).collect();
+            format!("({})", names.join(", "))
+        },
+        str::to_string,
+    )
+}
+
+/// A field type as text: the reference of a named type, and the kind of any
+/// other type (an array also names its element).
+fn field_text(ty: &v2::FieldType) -> String {
+    use v2::field_type::Kind;
+    match ty.kind.as_ref() {
+        Some(Kind::Named(name)) => name.clone(),
+        Some(Kind::Primitive(_)) => "primitive".to_string(),
+        Some(Kind::InlineScalar(_)) => "inline scalar".to_string(),
+        Some(Kind::Tuple(_)) => "tuple".to_string(),
+        Some(Kind::Array(array)) => format!(
+            "array of {}",
+            array
+                .element
+                .as_ref()
+                .map_or_else(|| "no type".to_string(), |e| field_text(e))
+        ),
+        Some(Kind::Map(_)) => "map".to_string(),
+        Some(Kind::Stream(_)) => "stream".to_string(),
+        None => "no type".to_string(),
+    }
+}
+
+fn return_text(ret: &v2::ReturnType) -> String {
+    match ret.kind.as_ref() {
+        Some(v2::return_type::Kind::Value(value)) => field_text(value),
+        Some(v2::return_type::Kind::Fallible(fallible)) => {
+            format!("{} | {}", fallible.ok, fallible.err)
+        }
+        None => "()".to_string(),
+    }
+}
+
+/// A member's reservation under each encoding. `payloads` is `None` for a
+/// member of a kind this lowering does not know; its reservation is then
+/// unsized, naming the member.
+pub(super) fn reserve(member: &str, payloads: Option<&[MemberPayload]>) -> v1::Reservation {
+    let state = |pick: fn(&v1::PayloadSizes) -> &Option<v1::SizeState>| {
+        let Some(payloads) = payloads else {
+            return unsized_reservation(format!("{member}: no known payload shape"));
+        };
+        let mut total = 0u64;
+        for (role, text, sizes) in payloads {
+            let state = sizes
+                .as_ref()
+                .and_then(|sizes| pick(sizes).as_ref())
+                .and_then(|state| state.state.as_ref());
+            match state {
+                Some(v1::size_state::State::Bounded(size)) => {
+                    total = total.saturating_add(u64::from(*size));
+                }
+                Some(v1::size_state::State::Unbounded(_) | v1::size_state::State::Absent(_))
+                | None => return unsized_reservation(format!("{member}.{role}: {text}")),
+            }
+        }
+        v1::ReservationState {
+            state: Some(v1::reservation_state::State::Bytes(total)),
+        }
+    };
+    v1::Reservation {
+        proto3: Some(state(|sizes| &sizes.proto3)),
+        flatbuffers: Some(state(|sizes| &sizes.flatbuffers)),
+    }
+}
+
+fn unsized_reservation(by: String) -> v1::ReservationState {
+    v1::ReservationState {
+        state: Some(v1::reservation_state::State::Unsized(by)),
+    }
+}
+
+/// The table budget of an interface: the saturating sum of the reservations
+/// of its live members in `MEMBERS` order, unsized naming the first member
+/// whose reservation is. A tombstone adds nothing.
+fn budget(slots: &[v1::InteractionSlot]) -> v1::Reservation {
+    let state = |pick: fn(&v1::Reservation) -> &Option<v1::ReservationState>| {
+        let mut total = 0u64;
+        for slot in slots {
+            let Some(v1::interaction_slot::Occupant::Interaction(member)) = slot.occupant.as_ref()
+            else {
+                continue;
+            };
+            let state = member
+                .reservation
+                .as_ref()
+                .and_then(|reservation| pick(reservation).as_ref())
+                .and_then(|state| state.state.as_ref());
+            match state {
+                Some(v1::reservation_state::State::Bytes(size)) => {
+                    total = total.saturating_add(*size);
+                }
+                Some(v1::reservation_state::State::Unsized(_)) | None => {
+                    let name = member
+                        .name
+                        .as_ref()
+                        .map_or("", |name| name.declared.as_str());
+                    return unsized_reservation(name.to_string());
+                }
+            }
+        }
+        v1::ReservationState {
+            state: Some(v1::reservation_state::State::Bytes(total)),
+        }
+    };
+    v1::Reservation {
+        proto3: Some(state(|reservation| &reservation.proto3)),
+        flatbuffers: Some(state(|reservation| &reservation.flatbuffers)),
+    }
+}
+
+/// Both encodings absent because no codec defines the shape. A query with
+/// no return type takes this state, so that a reader can tell an undefined
+/// shape from a toolchain too old to report one.
+fn absent_sizes() -> v1::PayloadSizes {
+    let state = || v1::SizeState {
+        state: Some(v1::size_state::State::Absent(v1::SizeAbsent {
+            cause: v1::AbsentCause::EncodingUndefined as i32,
+            detail: None,
+        })),
+    };
+    v1::PayloadSizes {
+        proto3: Some(state()),
+        flatbuffers: Some(state()),
+    }
+}
+
 fn retired(reserved: &v2::Reserved) -> v1::Retired {
     v1::Retired {
         name: reserved.name.as_deref().map(spellings),
@@ -1187,4 +1439,16 @@ fn strip_regex_delimiters(regex: &str) -> &str {
         .strip_prefix('/')
         .and_then(|rest| rest.strip_suffix('/'))
         .unwrap_or(regex)
+}
+
+/// The model's spelling of a sizer cause.
+pub(super) fn absent_cause(cause: AbsentCause) -> v1::AbsentCause {
+    match cause {
+        AbsentCause::EncodingUndefined => v1::AbsentCause::EncodingUndefined,
+        AbsentCause::NoMessage => v1::AbsentCause::NoMessage,
+        AbsentCause::RefusedMember => v1::AbsentCause::RefusedMember,
+        AbsentCause::NoBound => v1::AbsentCause::NoBound,
+        AbsentCause::Overflow => v1::AbsentCause::Overflow,
+        AbsentCause::Unresolved => v1::AbsentCause::Unresolved,
+    }
 }

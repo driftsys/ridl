@@ -741,6 +741,33 @@ Decisions Sebastien took in this session (S-n) and decisions taken on his behalf
 - **DD-16.** The cabin deployment has three instances on two machines (§9), so
   that the exit test covers both encodings.
 
+Decisions taken while the size states were built (DD-30 onward; the numbering
+leaves room for the deployment section's own decisions, which start at DD-17).
+
+- **DD-30.** The new size fields made the generated `Interaction.shape` oneof
+  trip clippy's `large_enum_variant`, so the query variant is boxed and
+  `Shape::Query` holds a `Box<QueryShape>`. The protobuf and JSON encodings are
+  unchanged, so a plugin that reads the request as JSON is unaffected; only a
+  Rust crate that links `ridl-ir` and matches on `Shape::Query` is.
+- **DD-31.** `QueryShape.reply_sizes` is written for every query, including one
+  with no declared return type, where it carries an absent state with cause
+  `ENCODING_UNDEFINED`. The ridl surface makes a reply mandatory, so that case
+  is unreachable today, but these fields exist so that a plugin can tell an
+  undefined shape from a toolchain too old to report one, and an unwritten field
+  reintroduces exactly that ambiguity.
+- **DD-32.** Three cases D-8 leaves open. A `fixed` member whose payload is not
+  a named type — an array, a tuple, a stream — is unsized, because no codec
+  defines a size for it; its name states the payload's kind. A member of an
+  unknown kind is unsized rather than summed, so that a newer toolchain's member
+  kind never yields a silently smaller number. An interface with no live member
+  has a table budget of 0 bytes, which is the identity of the sum and what the
+  runtime's own `table_budget` returns for an empty member list.
+- **DD-33.** A `u64` sum or product overflow inside the proto3 walk is
+  attributed `REFUSED_MEMBER` rather than `OVERFLOW`. Attributing it precisely
+  would require the whole walk to carry a cause instead of an `Option`, which is
+  larger than this work; the coarser attribution is stated in the sizer's own
+  documentation, and no caller branches on the cause.
+
 ## 9. The exit test and the cabin system
 
 E17.1 adds to `examples/cabin`:

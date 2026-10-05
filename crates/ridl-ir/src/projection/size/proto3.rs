@@ -31,7 +31,7 @@
 //! `<Interface>Ordinal` table (`SymbolScope::claim`). A payload in a package
 //! the backend refuses on a name collision still gets a proto3 bound here: the
 //! wire size does not depend on the names. Moving the refusal rules into
-//! `ridl_ir::projection::proto3`, where the backend and this sizer share
+//! [`crate::projection::proto3`], where the backend and this sizer share
 //! them, is tracked by driftsys/ridl#690.
 //!
 //! proto3 has no unbounded state: typl bounds every collection, so a message
@@ -42,15 +42,17 @@
 
 use std::collections::HashMap;
 
-use ridl_ir::projection::proto3::{
+use crate::projection::proto3::{
     self as proto3_projection, PROTO_MAX_FIELD_NUMBER, PROTO_RESERVED, Scalar,
 };
-use ridl_ir::v2::{
+use crate::v2::{
     ArrayType, FieldType, MapType, Package, StructDef, TupleType, UnionDef, decl, field_type,
     struct_member,
 };
 
-use super::{Ctx, Leaf, SizeState, leaf_of_field_type, leaf_of_name};
+use super::{
+    AbsentCause, Ctx, Leaf, SizeState, leaf_of_field_type, leaf_of_name, leaf_of_type_def,
+};
 
 /// Nesting deeper than this is treated as unsizable; typl rejects recursion
 /// (§7.3), so this only guards against an IR the checker did not see.
@@ -100,6 +102,9 @@ struct Walk<'a, 'c> {
     /// for the path that reached it rather than a property of the type, and
     /// that answer does not generalize to another path.
     memo: HashMap<(&'a str, &'a str), u64>,
+    /// Set when the walk stopped at `MAX_DEPTH`, so that `state` reports the
+    /// depth limit as `Overflow` rather than as a refused member.
+    too_deep: bool,
     /// How many times `remembered` ran its body: the number of struct and
     /// union messages the walk derived rather than reused. A test counts
     /// these, because a memo regression on a deep diamond would otherwise
@@ -132,30 +137,68 @@ impl<'a> Walk<'a, '_> {
     }
 }
 
-/// The proto3 state of the named type `type_name`: its message's bound for
-/// a struct or a union; absent for everything else (ADR-0017 decision 1
-/// inlines a named scalar and an enum set, decision 2 rejects a wrapper
-/// message, and an enum is a declared `enum`, not a message), for a name that
-/// does not resolve, for a member the projection refuses, and for a bound
-/// above `u32::MAX`.
-pub(crate) fn state(type_name: &str, ctx: &Ctx<'_>) -> Option<SizeState> {
+/// The proto3 state of the named type `type_name`, read from `home`: its
+/// message's bound for a struct or a union, and absent for everything else,
+/// with the cause of the absence.
+///
+/// `NoMessage` for a named scalar, an enum and an enum set, which have no
+/// message of their own (ADR-0017 decision 1 inlines a named scalar and an
+/// enum set into their field, decision 2 rejects a wrapper message, and an
+/// enum is a declared `enum`). `NoBound` for a named scalar that no proto3
+/// leaf bounds: a `string` or `bytes` with no length bound, a type def with
+/// no width. `Unresolved` for a name that does not resolve and for a
+/// declaration that has no message at all, such as a constant or an
+/// interaction. `Overflow` when the nesting passes `MAX_DEPTH` or the bound
+/// is above `u32::MAX`. `RefusedMember` for every other failure inside the
+/// message: a member the proto backend refuses, a name inside the message
+/// that does not resolve, a member no proto3 leaf bounds, an enum value
+/// outside int32, and a `u64` sum or product that does not fit.
+pub(crate) fn state<'a>(home: &'a Package, type_name: &str, ctx: &Ctx<'a>) -> SizeState {
+    let Some((decl, declaring)) = ctx.resolve(home, type_name) else {
+        return SizeState::Absent(AbsentCause::Unresolved);
+    };
     let mut walk = Walk {
         ctx,
         memo: HashMap::new(),
+        too_deep: false,
         #[cfg(test)]
         bodies: 0,
     };
-    let bytes = match leaf_of_name(type_name, ctx.packages().package, ctx)? {
-        Leaf::Struct { name, def, home } => struct_size(name, def, home, &mut walk, 0)?,
-        Leaf::Union { name, def, home } => union_size(name, def, home, &mut walk, 0)?,
-        Leaf::Scalar(_)
-        | Leaf::Blob(_)
-        | Leaf::Enum { .. }
-        | Leaf::Tuple { .. }
-        | Leaf::Array { .. }
-        | Leaf::Map { .. } => return None,
+    let name = decl.name.as_str();
+    let bytes = match decl.kind.as_ref() {
+        Some(decl::Kind::StructDef(def)) => struct_size(name, def, declaring, &mut walk, 0),
+        Some(decl::Kind::UnionDef(def)) => union_size(name, def, declaring, &mut walk, 0),
+        // A named scalar with a leaf is inlined into its field; one without
+        // a leaf has no size at all.
+        Some(decl::Kind::TypeDef(def)) => {
+            return SizeState::Absent(match leaf_of_type_def(def) {
+                Some(_) => AbsentCause::NoMessage,
+                None => AbsentCause::NoBound,
+            });
+        }
+        Some(decl::Kind::EnumDef(_) | decl::Kind::EnumSetDef(_)) => {
+            return SizeState::Absent(AbsentCause::NoMessage);
+        }
+        Some(
+            decl::Kind::ConstDef(_)
+            | decl::Kind::SignalDef(_)
+            | decl::Kind::EventDef(_)
+            | decl::Kind::CommandDef(_)
+            | decl::Kind::QueryDef(_)
+            | decl::Kind::FixedDef(_)
+            | decl::Kind::ReservedSlot(_),
+        )
+        | None => return SizeState::Absent(AbsentCause::Unresolved),
     };
-    Some(SizeState::Bounded(u32::try_from(bytes).ok()?))
+    match bytes {
+        // A bound the message derived but a `u32` cannot hold is an overflow.
+        Some(bytes) => match u32::try_from(bytes) {
+            Ok(bytes) => SizeState::Bounded(bytes),
+            Err(_) => SizeState::Absent(AbsentCause::Overflow),
+        },
+        None if walk.too_deep => SizeState::Absent(AbsentCause::Overflow),
+        None => SizeState::Absent(AbsentCause::RefusedMember),
+    }
 }
 
 fn field_size<'a>(
@@ -186,7 +229,11 @@ fn enum_len(min: i64, max: i64, retired_in_int32: bool) -> Option<u64> {
 }
 
 fn leaf_field<'a>(number: u32, leaf: Leaf<'a>, walk: &mut Walk<'a, '_>, depth: u32) -> Option<u64> {
-    if depth > MAX_DEPTH || PROTO_RESERVED.contains(&number) || number > PROTO_MAX_FIELD_NUMBER {
+    if depth > MAX_DEPTH {
+        walk.too_deep = true;
+        return None;
+    }
+    if PROTO_RESERVED.contains(&number) || number > PROTO_MAX_FIELD_NUMBER {
         return None;
     }
     match leaf {
@@ -362,11 +409,10 @@ fn map_field<'a>(
 
 #[cfg(test)]
 mod tests {
+    use super::super::tests_support::*;
+    use super::super::{AbsentCause, Encoding, PayloadShape, size_state};
     use super::*;
-    use crate::Encoding;
-    use crate::size::size_state;
-    use crate::size::tests_support::*;
-    use ridl_ir::v2::{
+    use crate::v2::{
         Backing, Constraint, Decl, EnumDef, EnumSetDef, EnumValue, Field, FloatWidth, IntWidth,
         Package, PrimitiveType, Reserved, StructMember, TupleField, TypeDef, UnionArm, UnionDef,
         backing, decl, field_type, type_def,
@@ -387,18 +433,71 @@ mod tests {
         let package = fixture();
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Point", &ctx), Some(SizeState::Bounded(12)));
+        assert_eq!(state_in("Point", &ctx), SizeState::Bounded(12));
     }
 
     #[test]
     fn a_named_scalar_has_no_proto3_root_form() {
         // ADR-0017 decision 1 inlines a named scalar and decision 2 rejects a
-        // wrapper message, so a payload of one is absent (driver §4 answer 6).
+        // wrapper message, so a payload of one is absent.
         let package = fixture();
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Vin", &ctx), None);
-        assert_eq!(state("Coord", &ctx), None);
+        assert_eq!(
+            state_in("Vin", &ctx),
+            SizeState::Absent(AbsentCause::NoMessage)
+        );
+        assert_eq!(
+            state_in("Coord", &ctx),
+            SizeState::Absent(AbsentCause::NoMessage)
+        );
+    }
+
+    #[test]
+    fn a_named_scalar_no_leaf_bounds_has_no_bound() {
+        // `Loose = string` carries no length bound, so no proto3 leaf bounds
+        // the value at all. The cause is `NoBound`, not the `NoMessage` of a
+        // named scalar that does have a leaf: the two causes tell a plugin
+        // whether a bound could exist.
+        let mut package = fixture();
+        package.decls.push(Decl {
+            name: "Loose".to_owned(),
+            kind: Some(decl::Kind::TypeDef(TypeDef {
+                backing: Some(Backing {
+                    kind: Some(backing::Kind::Primitive(PrimitiveType::String as i32)),
+                }),
+                ..Default::default()
+            })),
+            ..Default::default()
+        });
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(
+            state_in("Loose", &ctx),
+            SizeState::Absent(AbsentCause::NoBound)
+        );
+    }
+
+    #[test]
+    fn an_enum_set_has_no_proto3_message() {
+        // ADR-0017 decision 1 inlines an enum set into its field, so it has
+        // no message of its own. The name resolves, so the cause is
+        // `NoMessage` and not `Unresolved`.
+        let mut package = fixture();
+        package.decls.push(Decl {
+            name: "Flags".to_owned(),
+            kind: Some(decl::Kind::EnumSetDef(EnumSetDef {
+                width: IntWidth::U8 as i32,
+                ..Default::default()
+            })),
+            ..Default::default()
+        });
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(
+            state_in("Flags", &ctx),
+            SizeState::Absent(AbsentCause::NoMessage)
+        );
     }
 
     #[test]
@@ -410,7 +509,7 @@ mod tests {
         let package = fixture();
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Bag", &ctx), Some(SizeState::Bounded(176)));
+        assert_eq!(state_in("Bag", &ctx), SizeState::Bounded(176));
     }
 
     #[test]
@@ -419,7 +518,7 @@ mod tests {
         let package = fixture();
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Shape", &ctx), Some(SizeState::Bounded(14)));
+        assert_eq!(state_in("Shape", &ctx), SizeState::Bounded(14));
     }
 
     #[test]
@@ -427,7 +526,10 @@ mod tests {
         let package = fixture();
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Missing", &ctx), None);
+        assert_eq!(
+            state_in("Missing", &ctx),
+            SizeState::Absent(AbsentCause::Unresolved)
+        );
     }
 
     fn struct_decl(name: &str, fields: Vec<(&str, u32, FieldType)>) -> Decl {
@@ -560,8 +662,12 @@ mod tests {
         ));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Mix", &ctx), Some(SizeState::Bounded(63)));
-        assert_eq!(state("Gear", &ctx), None, "an enum is not a message");
+        assert_eq!(state_in("Mix", &ctx), SizeState::Bounded(63));
+        assert_eq!(
+            state_in("Gear", &ctx),
+            SizeState::Absent(AbsentCause::NoMessage),
+            "an enum is not a message"
+        );
     }
 
     #[test]
@@ -575,7 +681,10 @@ mod tests {
         ));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Grid", &ctx), None);
+        assert_eq!(
+            state_in("Grid", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
     }
 
     #[test]
@@ -597,7 +706,10 @@ mod tests {
             .push(struct_decl("Wide", vec![("blob", 1, wide)]));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Wide", &ctx), None);
+        assert_eq!(
+            state_in("Wide", &ctx),
+            SizeState::Absent(AbsentCause::Overflow)
+        );
     }
 
     #[test]
@@ -619,7 +731,10 @@ mod tests {
         ));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Huge", &ctx), None);
+        assert_eq!(
+            state_in("Huge", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
     }
 
     #[test]
@@ -631,7 +746,10 @@ mod tests {
         ));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Vast", &ctx), None);
+        assert_eq!(
+            state_in("Vast", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
     }
 
     #[test]
@@ -660,11 +778,20 @@ mod tests {
         ));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("FloatKeyed", &ctx), None);
-        assert_eq!(state("BytesKeyed", &ctx), None);
-        assert_eq!(state("MessageKeyed", &ctx), None);
+        assert_eq!(
+            state_in("FloatKeyed", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
+        assert_eq!(
+            state_in("BytesKeyed", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
+        assert_eq!(
+            state_in("MessageKeyed", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
         // The control: `Bag` carries a string-keyed map and is bounded.
-        assert_eq!(state("Bag", &ctx), Some(SizeState::Bounded(176)));
+        assert_eq!(state_in("Bag", &ctx), SizeState::Bounded(176));
     }
 
     #[test]
@@ -681,8 +808,14 @@ mod tests {
         ));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("ArrayValued", &ctx), None);
-        assert_eq!(state("MapValued", &ctx), None);
+        assert_eq!(
+            state_in("ArrayValued", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
+        assert_eq!(
+            state_in("MapValued", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
     }
 
     #[test]
@@ -708,11 +841,17 @@ mod tests {
         ));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("OptionalArray", &ctx), None);
-        assert_eq!(state("OptionalMap", &ctx), None);
         assert_eq!(
-            state("OptionalScalar", &ctx),
-            Some(SizeState::Bounded(6)),
+            state_in("OptionalArray", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
+        assert_eq!(
+            state_in("OptionalMap", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
+        assert_eq!(
+            state_in("OptionalScalar", &ctx),
+            SizeState::Bounded(6),
             "an optional scalar is admitted and costs no more than a required one"
         );
     }
@@ -742,11 +881,17 @@ mod tests {
             .push(struct_decl("HoldsEdge", vec![("e", 1, named("Edge"))]));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("HoldsWide", &ctx), None);
-        assert_eq!(state("HoldsDeep", &ctx), None);
         assert_eq!(
-            state("HoldsEdge", &ctx),
-            Some(SizeState::Bounded(11)),
+            state_in("HoldsWide", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
+        assert_eq!(
+            state_in("HoldsDeep", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
+        assert_eq!(
+            state_in("HoldsEdge", &ctx),
+            SizeState::Bounded(11),
             "the int32 bounds themselves are admitted; a negative member is a 10-byte varint"
         );
     }
@@ -782,10 +927,13 @@ mod tests {
         ));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("HoldsRetired", &ctx), None);
         assert_eq!(
-            state("HoldsRetiredEdge", &ctx),
-            Some(SizeState::Bounded(2)),
+            state_in("HoldsRetired", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
+        assert_eq!(
+            state_in("HoldsRetiredEdge", &ctx),
+            SizeState::Bounded(2),
             "a retired value inside int32 is admitted and does not change the live values' size"
         );
     }
@@ -825,12 +973,24 @@ mod tests {
         });
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Reserved", &ctx), None);
-        assert_eq!(state("Reserved2", &ctx), None);
-        assert_eq!(state("TooHigh", &ctx), None);
-        assert_eq!(state("ArmReserved", &ctx), None);
+        assert_eq!(
+            state_in("Reserved", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
+        assert_eq!(
+            state_in("Reserved2", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
+        assert_eq!(
+            state_in("TooHigh", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
+        assert_eq!(
+            state_in("ArmReserved", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
         // The largest field number takes a 5-byte tag: 5 + 5.
-        assert_eq!(state("Highest", &ctx), Some(SizeState::Bounded(10)));
+        assert_eq!(state_in("Highest", &ctx), SizeState::Bounded(10));
     }
 
     fn union_decl(name: &str, arms: &[(&str, u32, &str)]) -> Decl {
@@ -869,12 +1029,19 @@ mod tests {
         field(field_type::Kind::Primitive(primitive as i32))
     }
 
+    /// [`state`] with the root of `ctx` as the home `type_name` is read
+    /// from. A test that needs another home calls [`state`] directly.
+    fn state_in<'a>(type_name: &str, ctx: &Ctx<'a>) -> SizeState {
+        state(ctx.packages().package, type_name, ctx)
+    }
+
     /// The bound of the struct or union `type_name`, and how many struct
     /// and union messages the walk derived rather than reused from its memo.
     fn walked(type_name: &str, ctx: &Ctx<'_>) -> (Option<u64>, u32) {
         let mut walk = Walk {
             ctx,
             memo: HashMap::new(),
+            too_deep: false,
             bodies: 0,
         };
         let bound = match leaf_of_name(type_name, ctx.packages().package, ctx) {
@@ -962,8 +1129,8 @@ mod tests {
         ));
         let others = [&imported];
         let ctx = Ctx::new(&root, &others);
-        assert_eq!(state("Both", &ctx), Some(SizeState::Bounded(410)));
-        assert_eq!(state("Swapped", &ctx), Some(SizeState::Bounded(410)));
+        assert_eq!(state_in("Both", &ctx), SizeState::Bounded(410));
+        assert_eq!(state_in("Swapped", &ctx), SizeState::Bounded(410));
     }
 
     #[test]
@@ -978,7 +1145,10 @@ mod tests {
         ));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Both", &ctx), None);
+        assert_eq!(
+            state_in("Both", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
     }
 
     #[test]
@@ -999,7 +1169,10 @@ mod tests {
         ));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Wrapped", &ctx), None);
+        assert_eq!(
+            state_in("Wrapped", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
     }
 
     #[test]
@@ -1014,7 +1187,10 @@ mod tests {
         ));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Wrapped", &ctx), None);
+        assert_eq!(
+            state_in("Wrapped", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
     }
 
     #[test]
@@ -1028,7 +1204,10 @@ mod tests {
         ));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Wrapped", &ctx), None);
+        assert_eq!(
+            state_in("Wrapped", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
     }
 
     #[test]
@@ -1044,7 +1223,10 @@ mod tests {
         ));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Wrapped", &ctx), None);
+        assert_eq!(
+            state_in("Wrapped", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
     }
 
     #[test]
@@ -1061,7 +1243,10 @@ mod tests {
             .push(struct_decl("Wrapped", vec![("index", 1, index)]));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Wrapped", &ctx), None);
+        assert_eq!(
+            state_in("Wrapped", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
     }
 
     #[test]
@@ -1074,7 +1259,7 @@ mod tests {
         ));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Flipped", &ctx), Some(SizeState::Bounded(14)));
+        assert_eq!(state_in("Flipped", &ctx), SizeState::Bounded(14));
     }
 
     #[test]
@@ -1094,8 +1279,8 @@ mod tests {
         ));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("HoldsBig", &ctx), Some(SizeState::Bounded(3)));
-        assert_eq!(state("HoldsBigs", &ctx), Some(SizeState::Bounded(8)));
+        assert_eq!(state_in("HoldsBig", &ctx), SizeState::Bounded(3));
+        assert_eq!(state_in("HoldsBigs", &ctx), SizeState::Bounded(8));
     }
 
     #[test]
@@ -1141,25 +1326,29 @@ mod tests {
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
         // A `sint32` key and value: entry (1 + 5) + (1 + 5) = 12; 2 * (1 + 1 + 12).
-        assert_eq!(state("NamedKeyed", &ctx), Some(SizeState::Bounded(28)));
-        assert_eq!(state("NamedFloatKeyed", &ctx), None, "a named float key");
-        // A bare `integer` key is `int64`: entry (1 + 10) + (1 + 5) = 17; 2 * (1 + 1 + 17).
-        assert_eq!(state("IntegerKeyed", &ctx), Some(SizeState::Bounded(38)));
+        assert_eq!(state_in("NamedKeyed", &ctx), SizeState::Bounded(28));
         assert_eq!(
-            state("FloatKeyed", &ctx),
-            None,
+            state_in("NamedFloatKeyed", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember),
+            "a named float key"
+        );
+        // A bare `integer` key is `int64`: entry (1 + 10) + (1 + 5) = 17; 2 * (1 + 1 + 17).
+        assert_eq!(state_in("IntegerKeyed", &ctx), SizeState::Bounded(38));
+        assert_eq!(
+            state_in("FloatKeyed", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember),
             "a bare float key is `double`"
         );
         // An enum set of width u8 is a `uint32` key: entry (1 + 5) + (1 + 5).
-        assert_eq!(state("EnumSetKeyed", &ctx), Some(SizeState::Bounded(28)));
+        assert_eq!(state_in("EnumSetKeyed", &ctx), SizeState::Bounded(28));
         assert_eq!(
-            state("EnumKeyed", &ctx),
-            None,
+            state_in("EnumKeyed", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember),
             "an enum key is an enum name"
         );
         assert_eq!(
-            state("UnionKeyed", &ctx),
-            None,
+            state_in("UnionKeyed", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember),
             "a union key is a message name"
         );
     }
@@ -1177,8 +1366,8 @@ mod tests {
             .push(struct_decl("Outer", vec![("inner", 1, named("Long"))]));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Long", &ctx), Some(SizeState::Bounded(203)));
-        assert_eq!(state("Outer", &ctx), Some(SizeState::Bounded(206)));
+        assert_eq!(state_in("Long", &ctx), SizeState::Bounded(203));
+        assert_eq!(state_in("Outer", &ctx), SizeState::Bounded(206));
     }
 
     #[test]
@@ -1187,8 +1376,13 @@ mod tests {
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
         assert_eq!(
-            size_state("Point", &ctx, Encoding::Proto3),
-            Some(SizeState::Bounded(12))
+            size_state(
+                &package,
+                &PayloadShape::Named("Point"),
+                &ctx,
+                Encoding::Proto3
+            ),
+            SizeState::Bounded(12)
         );
     }
 
@@ -1203,14 +1397,17 @@ mod tests {
         let (root, imported) = two_package_fixture();
         let others = [&imported];
         let ctx = Ctx::new(&root, &others);
-        assert_eq!(state("q.Thing", &ctx), Some(SizeState::Bounded(4)));
-        assert_eq!(state("q.Loose", &ctx), None);
+        assert_eq!(state_in("q.Thing", &ctx), SizeState::Bounded(4));
         assert_eq!(
-            state("Inner", &ctx),
-            Some(SizeState::Bounded(403)),
+            state_in("q.Loose", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
+        assert_eq!(
+            state_in("Inner", &ctx),
+            SizeState::Bounded(403),
             "the root's own `Inner`"
         );
-        assert_eq!(state("Hole", &ctx), Some(SizeState::Bounded(2)));
+        assert_eq!(state_in("Hole", &ctx), SizeState::Bounded(2));
     }
 
     #[test]
@@ -1230,7 +1427,7 @@ mod tests {
         package.decls.push(decl);
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("WithRetired", &ctx), Some(SizeState::Bounded(6)));
+        assert_eq!(state_in("WithRetired", &ctx), SizeState::Bounded(6));
     }
 
     #[test]
@@ -1252,7 +1449,7 @@ mod tests {
             .push(struct_decl("Sixteen", vec![("t", 1, wide)]));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        assert_eq!(state("Sixteen", &ctx), Some(SizeState::Bounded(99)));
+        assert_eq!(state_in("Sixteen", &ctx), SizeState::Bounded(99));
     }
 
     #[test]
@@ -1278,9 +1475,12 @@ mod tests {
         let within = chain(MAX_DEPTH);
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&within, &others);
-        assert!(matches!(state("C0", &ctx), Some(SizeState::Bounded(_))));
+        assert!(matches!(state_in("C0", &ctx), SizeState::Bounded(_)));
         let beyond = chain(MAX_DEPTH + 1);
         let ctx = Ctx::new(&beyond, &others);
-        assert_eq!(state("C0", &ctx), None);
+        assert_eq!(
+            state_in("C0", &ctx),
+            SizeState::Absent(AbsentCause::Overflow)
+        );
     }
 }

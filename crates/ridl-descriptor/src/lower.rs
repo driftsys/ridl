@@ -1,9 +1,12 @@
 //! IR → catalog descriptor (spec D-4, D-6, D-9). One lowering writes the
 //! whole file; the toolchain version stamped in it is this crate's. The
-//! numbers and the retired list are the IR's (driver §4 answer 3).
+//! numbers and the retired list are the IR's
+//! (`docs/design/catalog-descriptor.md`, the section "What a catalog
+//! contains").
 
 use std::fmt;
 
+use ridl_ir::projection::size::{self, Ctx, PayloadShape, SizeState, size_state};
 use ridl_ir::v2::{
     Constraint, Decl, FieldType, Package, Param, PrimitiveType, ReturnType, StreamType, decl,
     field_type, return_type, stream_type,
@@ -11,14 +14,17 @@ use ridl_ir::v2::{
 
 use crate::hash::catalog_hash;
 use crate::number::{ZeroNumber, numbered_shapes};
-use crate::size::{Ctx, PayloadShape, SizeState, named_payload, size_state};
 use crate::{
     Catalog, Encoding, Interface, Kind, MaxSize, Member, Payload, RetiredInterface, SCHEMA_VERSION,
     SizeStateTag, Timing, TimingMode, UnboundedCause,
 };
 
 /// Every encoding the size table has a column for, in `Encoding` order.
-const COLUMNS: [Encoding; 3] = [Encoding::Proto3, Encoding::FlatBuffers, Encoding::ReprC];
+const COLUMNS: [size::Encoding; 3] = [
+    size::Encoding::Proto3,
+    size::Encoding::FlatBuffers,
+    size::Encoding::ReprC,
+];
 
 /// Why a checked package could not be lowered: a defect upstream, not data.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -168,7 +174,8 @@ fn member_of(decl: &Decl, ctx: &Ctx<'_>) -> Option<Member> {
 }
 
 /// The request payload: one parameter is spelled as its type, several as
-/// `(a: T, b: U)`; only one named parameter is sized (§4 answer 6).
+/// `(a: T, b: U)`; only one named parameter is sized
+/// (`docs/design/catalog-descriptor.md`, the section "The size states").
 fn request(params: &[Param], ctx: &Ctx<'_>) -> Payload {
     let name = match params {
         [single] => single.r#type.as_ref().map(spell).unwrap_or_default(),
@@ -197,39 +204,60 @@ fn response(ret: &ReturnType, ctx: &Ctx<'_>) -> Payload {
     payload("response", name, &PayloadShape::Return(ret), ctx)
 }
 
-/// One row per encoding that has a state; none when the payload is not one
-/// named type (§4 answers 6 and 10).
+/// One row per encoding that has a state; no row for an encoding whose state
+/// is absent, which is every encoding of a payload that is not one named type
+/// (`docs/design/catalog-descriptor.md`, the section "The size states").
 fn payload(role: &str, type_name: String, shape: &PayloadShape<'_>, ctx: &Ctx<'_>) -> Payload {
-    let max_sizes = match named_payload(shape) {
-        Some(name) => COLUMNS
-            .iter()
-            .filter_map(|&encoding| {
-                size_state(name, ctx, encoding).map(|state| row(encoding, state))
-            })
-            .collect(),
-        None => Vec::new(),
-    };
     Payload {
         role: role.to_owned(),
         type_name,
-        max_sizes,
+        max_sizes: COLUMNS
+            .iter()
+            .filter_map(|&encoding| {
+                row(
+                    encoding,
+                    size_state(ctx.packages().package, shape, ctx, encoding),
+                )
+            })
+            .collect(),
     }
 }
 
-fn row(encoding: Encoding, state: SizeState) -> MaxSize {
+/// The row for one state, or none when the state is absent: the descriptor
+/// carries the two states it has a schema for, and a reader takes a missing
+/// row as "this toolchain states no size".
+fn row(encoding: size::Encoding, state: SizeState) -> Option<MaxSize> {
+    let encoding = match encoding {
+        size::Encoding::Proto3 => Encoding::Proto3,
+        size::Encoding::FlatBuffers => Encoding::FlatBuffers,
+        size::Encoding::ReprC => Encoding::ReprC,
+    };
     match state {
-        SizeState::Bounded(bytes) => MaxSize {
+        SizeState::Bounded(bytes) => Some(MaxSize {
             encoding,
             bytes,
             state: SizeStateTag::Bounded,
             cause: UnboundedCause::Unspecified,
-        },
-        SizeState::Unbounded(cause) => MaxSize {
+        }),
+        SizeState::Unbounded(cause) => Some(MaxSize {
             encoding,
             bytes: 0,
             state: SizeStateTag::Unbounded,
-            cause,
-        },
+            cause: unbounded_cause(cause),
+        }),
+        SizeState::Absent(_) => None,
+    }
+}
+
+/// The schema's enum mirrors the sizer's, member for member.
+fn unbounded_cause(cause: size::UnboundedCause) -> UnboundedCause {
+    match cause {
+        size::UnboundedCause::Member => UnboundedCause::Member,
+        size::UnboundedCause::Untyped => UnboundedCause::Untyped,
+        size::UnboundedCause::Layout => UnboundedCause::Layout,
+        size::UnboundedCause::Aggregate => UnboundedCause::Aggregate,
+        size::UnboundedCause::Exempt => UnboundedCause::Exempt,
+        size::UnboundedCause::Unspecified => UnboundedCause::Unspecified,
     }
 }
 
@@ -356,4 +384,48 @@ fn spell_primitive(primitive: i32) -> String {
         _ => "",
     }
     .to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_sizer_cause_maps_to_its_schema_member() {
+        // The schema's enum and the sizer's are written apart, so a member
+        // added to one and not to the other is caught here.
+        for (sizer, schema) in [
+            (size::UnboundedCause::Member, UnboundedCause::Member),
+            (size::UnboundedCause::Untyped, UnboundedCause::Untyped),
+            (size::UnboundedCause::Layout, UnboundedCause::Layout),
+            (size::UnboundedCause::Aggregate, UnboundedCause::Aggregate),
+            (size::UnboundedCause::Exempt, UnboundedCause::Exempt),
+            (
+                size::UnboundedCause::Unspecified,
+                UnboundedCause::Unspecified,
+            ),
+        ] {
+            assert_eq!(unbounded_cause(sizer), schema, "{sizer:?}");
+        }
+    }
+
+    #[test]
+    fn an_absent_state_writes_no_row() {
+        assert_eq!(
+            row(
+                size::Encoding::Proto3,
+                SizeState::Absent(size::AbsentCause::NoMessage)
+            ),
+            None
+        );
+        assert_eq!(
+            row(size::Encoding::Proto3, SizeState::Bounded(7)),
+            Some(MaxSize {
+                encoding: Encoding::Proto3,
+                bytes: 7,
+                state: SizeStateTag::Bounded,
+                cause: UnboundedCause::Unspecified,
+            })
+        );
+    }
 }
