@@ -253,6 +253,42 @@ M1 carries three placeholders that later stories retire — a hand-written paylo
 implementation (E11.7, E11.8 or E11.12), test-only ports (E11.9), and a zero
 catalog hash (E16.2).
 
+### Lane S — layout inputs for backend plugins (priority 1)
+
+Driver prompt: not written yet; S1 writes it. Stories: Epic 17 in the roadmap,
+E17.0 to E17.5, driftsys/ridl#715 to driftsys/ridl#720.
+
+**Added 2026-10-05, as priority 1.** A backend plugin must compute and generate
+a deployment's shared-memory layouts and socket message layouts from its
+`CodegenRequest` alone. The codegen model it receives describes one package, so
+the regions, the crossings, the routes, the placement, the envelope and frame
+header sizes and the sizing inputs are missing. The roadmap's Epic 17 lists each
+gap.
+
+| Stage | Work                                                                                                                                                                                                                                                                                                                             | Model                                                              | Starts when      |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ---------------- |
+| S1    | E17.0, the design under `docs/wip/`: the system section of the codegen model, the rsdl deployment attributes for the depth override, slot count and call budget, which derived values the toolchain tabulates, the amendments of ADR-0015 decision 21, ADR-0018 and ADR-0022; then the plan                                      | Fable for the sizing source and the model shape; Opus for the rest | now              |
+| S2    | E17.1 the system in the codegen model, with an rsdl system and one deployment added to `examples/cabin`; E17.2 the missing payload sizes (#665 as an optional narrowing after the portable-pattern implementation of #597); E17.3 the frame header and envelope sizes per transport binding (waits on E11.9, #265) — in parallel | Sonnet stage agents, Opus reviews                                  | S1 merged        |
+| S3    | E17.4 the sizing inputs, their checks and their defaults                                                                                                                                                                                                                                                                         | Fable for the checks; Sonnet for the plumbing                      | E17.1 merged     |
+| S4    | E17.5 the test plugin that computes the layouts, the system descriptor file if S1 keeps it, the records; garden S1                                                                                                                                                                                                               | Opus for the test plugin and its fixture; Sonnet for the rest      | S2 and S3 merged |
+
+**The gate inside the lane is S1.** The sizing inputs are rsdl deployment
+attributes (Sebastien, 2026-10-05), so S3 changes Lane B's rsdl grammar and
+checker files. S1 specifies the attributes. No stage after S1 starts before it
+merges.
+
+**Shared files.** S1 amends ADR-0015 decision 21, ADR-0018, ADR-0022 and
+`docs/design/catalog-descriptor.md`. S2 changes
+`crates/ridl-ir/proto/ridl/codegen/v1/model.proto` additively and follows the
+codegen model's version rule; every in-tree backend and `ridlc-gen-model` must
+still pass. S3 changes the rsdl grammar and checker, and no other lane may
+change them while S3 runs. The Kotlin plugin (driftsys/ridlc-gen-kotlin)
+receives a heads-up issue when S2 changes the model.
+
+**`repr(C)` (E11.12, #317) is not a gate.** It adds the slot layout for the
+third encoding when it lands; until then the model marks such a channel as
+having no slot layout.
+
 ## 5. Gates
 
 A gate is a fact a driver checks with a command before starting the stage that

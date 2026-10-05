@@ -167,6 +167,10 @@ beside them are issues and not stories: the ADR-0023 and ADR-0021 amendments
 driftsys/ridl#518). The Kotlin mirror is driftsys/ridlc-gen-kotlin#4 to
 driftsys/ridlc-gen-kotlin#8.
 
+**Filed 2026-10-05, with the layout inputs for backend plugins.** Epic 17 is
+new, with its own milestone; its stories are driftsys/ridl#715 to
+driftsys/ridl#720.
+
 Two conventions worth keeping, both learned from the earlier reconciliation:
 
 - **Closing a story issue never rewrites its body.** The GitHub update API
@@ -218,6 +222,9 @@ shape of ADR-0017 and ADR-0019, written when the backend is.
 
 ```text
 E15 the lock ─┬─→ E16 the catalog descriptor, landed ─→ E6.17 the catalog hash per region, landed
+              │       ─→ E17 layout inputs for plugins, priority 1: E17.0 ─→ E17.1 ─→ E17.4 ─→ E17.5
+              │                 E17.0 ─→ E17.2 ─────────────→ E17.5
+              │       E11.9 WebSocket transport (#265) ─→ E17.3 ─→ E17.5
               └─→ E14.2 ridl §17 dispositions ─┐
                                                │
 E14.1 typl §17 dispositions ───────────────────┼─→ E14.3 both references
@@ -333,8 +340,9 @@ plan's first section lists every change.
 
 **The system descriptor is not here.** The design defines two artifacts; the
 per-deployment system descriptor embeds the catalog descriptors of its closure
-and waits for the rsdl lowering, so it takes its own rows when Epic 6 has
-landed.
+and waits for the rsdl lowering, which has landed (E6.16). The system descriptor
+is in scope of [Epic 17](#epic-17--layout-inputs-for-backend-plugins), whose
+E17.0 decides whether it is built there.
 
 **Epic 15 landed first**, so the IR carries each interface's number and its
 provisional flag, and the descriptor copies them: plan Task 3, as re-baselined,
@@ -353,6 +361,92 @@ that encoding.
 | E16.4 | The proto3 and FlatBuffers size state per payload: the proto3 bound derived under ADR-0017, the FlatBuffers bound read from `ridl_ir::projection::flatbuffers::max_size` (plan Tasks 6, 7) **Landed (driftsys/ridl#686).**                                                                                       | each payload carries a size state for both encodings: bounded or unbounded for a payload that is one named type the encoding's projection roots (every named type for FlatBuffers; a struct or a union for proto3), absent for a request of zero or several parameters, an inline `T \| E` reply, a stream, and a proto3 payload with no root form | M    |
 | E16.5 | The lowering from the IR and `ridlc build --emit catalog` (plan Tasks 8, 9); the port's catalog check in the Rust face, with what the generated `new` does on a mismatch recorded as an ADR-0023 amendment **Landed (driftsys/ridl#692).**                                                                       | the corpus package writes a descriptor that verifies, and two runs write the same bytes; the generated face checks its port's catalog, the ADR-0023 amendment records the mismatch behaviour, and the runtimes built in tests and in `examples/cabin` take the generated `CATALOG` instead of a zero hash                                          | M    |
 | E16.6 | The JSON view, `ridl describe`, and the records: ADR-0010's exit-code row and the CLI reference entry (plan Tasks 10, 11, 12) **Landed (driftsys/ridl#696).**                                                                                                                                                    | `ridl describe` prints a catalog's contents as JSON, and a rejected buffer exits 2 with its cause named                                                                                                                                                                                                                                            | M    |
+
+## Epic 17 — layout inputs for backend plugins
+
+**Milestone:** a backend plugin computes and generates a deployment's
+shared-memory layouts and socket message layouts from its `CodegenRequest`
+alone. **Value:** a backend that targets shared memory needs the size of every
+region and of every slot in it, and a backend that targets a socket needs the
+maximum size of every message it frames. Under ADR-0020 decision 8 the compiler
+lowers once and a backend is mostly a printer, but the codegen model a plugin
+receives today describes one package: it carries no system, no region, no route,
+no crossing and no sizing input beyond the FlatBuffers payload bound. A plugin
+would have to re-derive those facts or receive them outside the toolchain.
+**Exit criteria:** the `CodegenRequest` for `examples/cabin`'s deployment, which
+E17.1 adds, carries every input listed below; a test plugin computes from that
+request alone each region's byte layout and each socket channel's maximum
+message size; and the computed values match a fixture checked by hand.
+
+**Priority 1 since 2026-10-05.** Sebastien set it as the critical path ahead of
+the remaining step 1 work in the [backlog](BACKLOG.md).
+
+**The plugin computes the layout; the toolchain supplies the inputs.** This
+repository does not choose a memory layout or a socket framing for a backend. It
+supplies the facts a backend computes them from, so that two plugins given the
+same request compute the same sizes. E17.0 decides whether the toolchain also
+tabulates derived values, such as a slot size per channel, under ADR-0020
+decision 8.
+
+**The engine stays outside this repository.** The store, the seqlock, the
+session and the scheduler remain parked as `ridl-engine` (Epic 11). What moves
+here is the input a backend sizes them from. This changes the boundary that Epic
+11 states, so E17.0 records the change as an amendment of
+[ADR-0022](decisions/ADR-0022-rsdl-system-in-the-ir.md), or as a new decision
+record if the amendment does not fit.
+
+**The slot count and the call budget come from rsdl deployment attributes, and
+so does an override of the queue depth.** Sebastien chose this on 2026-10-05:
+the values depend on the deployment, not on the interface, so they do not enter
+`ridl` syntax. The queue depth already has two derivation rules:
+[ADR-0015](decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) decision 21
+(`ceil(max / min)` from the event's timing) and
+[ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md) decision 12
+(`ceil((service_period + jitter) / rate_floor)`, with an rsdl override). E17.0
+reconciles them, and the codegen model carries neither. Only the slot count and
+the call budget have no source. The rsdl deployment attributes are the depth
+override that ADR-0018 decision 12 allows, the slot count and the call budget.
+The alternatives were a backend option in the request and defaults derived from
+timing and fan-out. E17.0 specifies the attributes, their ranges and their
+defaults, and amends ADR-0015 (decision 21's "not declarable"), ADR-0018 and
+ADR-0022. E17.4 starts only after E17.0 merges.
+
+**What a plugin receives on 2026-10-05**, from `ridl/codegen/v1/model.proto`,
+the lowered system IR (ADR-0022) and the
+[catalog descriptor record](design/catalog-descriptor.md):
+
+| Layout input                                                    | State on 2026-10-05                                                                                                                                         |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Regions, their interfaces and their hash                        | in the system IR (`Region`, with the catalog hash per region); the codegen model carries the hash per package in `Catalog.hash` and has no region structure |
+| Crossing per link: same machine, different machine or off-board | in the system IR (`Link.crossing`); not in the codegen model                                                                                                |
+| Producers and consumers per channel                             | derivable from `Route` and `Link` in the system IR; not in the codegen model                                                                                |
+| Placement of a region in a process                              | machines and placements only; no concept of which process maps which region                                                                                 |
+| Encoding per channel                                            | absent from both the IR and the codegen model; the encoding matrix is ADR-0020 decision 2                                                                   |
+| Maximum payload size, FlatBuffers                               | in the codegen model (`Payload.flatbuffers_max_size`) for a payload that is one named type                                                                  |
+| Maximum payload size, proto3                                    | in the catalog descriptor only; not in the codegen model                                                                                                    |
+| Size of streams, multi-parameter requests, `T \| E` replies     | absent everywhere                                                                                                                                           |
+| Envelope and frame header sizes                                 | defined per transport binding (the frame specification leaves the header layout to the binding); not in the codegen model or the descriptor                 |
+| Alignment and slot layout                                       | absent; `repr(C)` waits on E11.12 (driftsys/ridl#317)                                                                                                       |
+| Queue depth                                                     | two derivation rules (ADR-0015 decision 21, ADR-0018 decision 12) that E17.0 reconciles; the codegen model carries neither                                  |
+| Slot count, call budget                                         | no source; `ridl-rt.md` states no specification defines the call budget                                                                                     |
+
+Shared memory versus socket is the backend's or the host program's choice (rsdl
+reference §1.4), so the request does not carry it.
+
+| ID    | Story                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Done when                                                                                                                                                                                                                    | Size |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E17.0 | The design: the system section of the codegen model, the rsdl deployment attributes for the queue depth override, the slot count and the call budget, which derived values the toolchain tabulates, whether the system descriptor file is built in this epic, and the amendments of ADR-0015 decision 21, ADR-0018 and ADR-0022                                                                                                                                                                                                                                                               | the design is merged with an "Alternatives considered" section, and the three amendments and the ROADMAP rows match it                                                                                                       | M    |
+| E17.1 | The system in the codegen model: an rsdl system with one deployment added to `examples/cabin`; per deployment, the regions with their interfaces and hash, the crossing and the encoding per channel, the producer and consumer counts, and the placement; the codegen model's version rule applied                                                                                                                                                                                                                                                                                           | `examples/cabin` has an rsdl system with one deployment, its request carries every region and channel of the lowered system, two runs write the same bytes, and each channel's producer and consumer counts match its routes | M    |
+| E17.2 | The payload sizes the model lacks: the proto3 bound beside the FlatBuffers bound, requests of zero or several parameters, inline `T \| E` replies, the per-element bound of a stream, recorded once a codec defines the stream encoding, and the optional narrowing of the string capacity after the portable-pattern implementation of driftsys/ridl#597 (driftsys/ridl#665). A shape with no defined encoding (a stream, a multi-parameter request, an inline `T \| E`) gets a size state only once a codec defines its encoding, so this story depends on that definition for those shapes | every payload shape of the corpus package whose encoding is defined has a size state for proto3 and for FlatBuffers in the model, and a shape with no defined encoding stays absent and the model says so                    | M    |
+| E17.3 | The fixed overheads in the model: for each transport binding that defines them, the frame header size and the envelope size, each with the version it belongs to. Depends on E11.9 (driftsys/ridl#265), the first binding                                                                                                                                                                                                                                                                                                                                                                     | a socket message's maximum size is the frame header plus the envelope plus the payload bound, and a test checks that sum against a frame the WebSocket binding writes                                                        | S    |
+| E17.4 | The rsdl deployment attributes for the queue depth override, the slot count and the call budget: the parser, the checks, the defaults, their lowering into the request, and the lowering of the reconciled depth rule into the request                                                                                                                                                                                                                                                                                                                                                        | every channel of `examples/cabin` has a depth, a slot count and a call budget in the request, and a value outside its allowed range draws a coded diagnostic                                                                 | M    |
+| E17.5 | The proof and the records: a test plugin that computes each region's byte layout and each socket channel's maximum message size from the request alone; the system descriptor file and `ridl describe` if E17.0 keeps them in scope; the as-built record                                                                                                                                                                                                                                                                                                                                      | the test plugin's values for `examples/cabin` match the fixture, and the catalog descriptor record states where the system facts are built                                                                                   | M    |
+
+**`repr(C)` joins when E11.12 lands.** The alignment and the layout of a slot
+for the third encoding come from its projection record; until then a channel
+whose encoding is `repr(C)` has no slot layout, and the model says so.
+
+## Epic 6 — rsdl, rewritten as a language
 
 **Milestone:** a system is described in rsdl and lowered to the IR. **Value:**
 the IR then carries what a runtime derives its node descriptor from, so a
@@ -416,10 +510,13 @@ process over the WebSocket transport. The generated-package form of the same
 read is what the Rust codegen section later in this step demonstrates.
 
 **The engine is not here.** The store, the seqlock, the sans-IO session, the
-subscription table, the platform traits, the scheduler and the ring depth are
-outside this repository (§3.7), parked as `ridl-engine` and reopened by rmdl.
-This epic builds the library, the frame specification and the transport — not a
-runtime that owns them. The first runtime is the consumer's.
+subscription table, the platform traits, the scheduler and the ring are outside
+this repository (§3.7), parked as `ridl-engine` and reopened by rmdl. The values
+a backend sizes the ring from — the queue depth, the slot count and the call
+budget — are not left to the engine since 2026-10-05: Epic 17 puts them in the
+request a backend plugin receives. This epic builds the library, the frame
+specification and the transport — not a runtime that owns them. The first
+runtime is the consumer's.
 
 **Three rows are redefined under their identifiers.** E11.1, E11.7 and E11.8
 were written for the engine block — the control plane, the store and the queue —
@@ -1032,25 +1129,26 @@ reopening is an observation rather than an argument.
 
 # Milestone summary
 
-| Epic | Milestone                       | Step                                                                               |
-| ---- | ------------------------------- | ---------------------------------------------------------------------------------- |
-| E0   | walking skeleton                | landed — internal                                                                  |
-| E1   | typl schema language            | landed — **v0.1 preview**                                                          |
-| E2   | ridl contract boundary          | landed — v0.x                                                                      |
-| E9   | wire SSOT                       | **step 1** — the hash over the IR and the R5 drift removed; the projections landed |
-| E15  | interface identity and the lock | **step 1** — an interface's number is recorded in its package                      |
-| E16  | the catalog descriptor          | **step 1**, landed — an engine reads a catalog without decoding the IR             |
-| E6   | rsdl, rewritten                 | **step 1** — a system is described and lowered to the IR                           |
-| E11  | the runtime library             | **step 1** — generated code links a library                                        |
-| E14  | typl and ridl finalization      | **step 1** — the references stop being drafts                                      |
-| E10  | typl value objects              | **step 1** — types that cannot hold an invalid value                               |
-| none | Rust codegen finalized          | **step 1** — the three payload codecs, byte-conformant                             |
-| E3   | boundary model, core            | **step 1** — the attribute layer enforced                                          |
-| E8   | agent enablement                | **step 1** — threads alongside                                                     |
-| E12  | the TypeScript framework        | **step 2** — a second language, and an emulator                                    |
-| E4.5 | the plugin protocol             | **step 2** — the extension seam every domain reaches through                       |
-| E7   | the `.rxdl` profile, trimmed    | **step 2** — types, interfaces and wiring in one file                              |
-| none | Kotlin, the first plugin        | after step 2                                                                       |
+| Epic | Milestone                       | Step                                                                                  |
+| ---- | ------------------------------- | ------------------------------------------------------------------------------------- |
+| E0   | walking skeleton                | landed — internal                                                                     |
+| E1   | typl schema language            | landed — **v0.1 preview**                                                             |
+| E2   | ridl contract boundary          | landed — v0.x                                                                         |
+| E9   | wire SSOT                       | **step 1** — the hash over the IR and the R5 drift removed; the projections landed    |
+| E15  | interface identity and the lock | **step 1** — an interface's number is recorded in its package                         |
+| E16  | the catalog descriptor          | **step 1**, landed — an engine reads a catalog without decoding the IR                |
+| E17  | layout inputs for plugins       | **step 1**, priority 1 — a plugin computes memory and socket layouts from its request |
+| E6   | rsdl, rewritten                 | **step 1** — a system is described and lowered to the IR                              |
+| E11  | the runtime library             | **step 1** — generated code links a library                                           |
+| E14  | typl and ridl finalization      | **step 1** — the references stop being drafts                                         |
+| E10  | typl value objects              | **step 1** — types that cannot hold an invalid value                                  |
+| none | Rust codegen finalized          | **step 1** — the three payload codecs, byte-conformant                                |
+| E3   | boundary model, core            | **step 1** — the attribute layer enforced                                             |
+| E8   | agent enablement                | **step 1** — threads alongside                                                        |
+| E12  | the TypeScript framework        | **step 2** — a second language, and an emulator                                       |
+| E4.5 | the plugin protocol             | **step 2** — the extension seam every domain reaches through                          |
+| E7   | the `.rxdl` profile, trimmed    | **step 2** — types, interfaces and wiring in one file                                 |
+| none | Kotlin, the first plugin        | after step 2                                                                          |
 
 Rows are in step order, not numeric order — the numbering is identity, as the
 tracker section above explains. Two rows have no epic: the Rust codegen section
