@@ -741,6 +741,34 @@ Decisions Sebastien took in this session (S-n) and decisions taken on his behalf
 - **DD-16.** The cabin deployment has three instances on two machines (§9), so
   that the exit test covers both encodings.
 
+Decisions taken while the deployment section was built (DD-17 onward).
+
+- **DD-17.** A zero quotient from the depth arithmetic is not derivable. The
+  depth range starts at 1, so `ceil_ratio` answers nothing for a zero quotient
+  and the channel records an absent value with the underivable source, exactly
+  as it does for a missing bound. The alternative would write a depth of 0 into
+  the section and leave a consumer to allocate a zero-length ring.
+- **DD-18.** A workspace with no system at all, built with `--deployment NAME`,
+  is an error that exits 2. D-11 does not state this case. A name that cannot be
+  found is not found, and carrying no deployment silently would hide a typo in
+  the flag.
+- **DD-19.** When the selection fails and the build has already accumulated an
+  error, the build reports that error and exits 1, writing nothing; only an
+  otherwise clean build reaches the exit-2 unknown-name path. This is what lets
+  a deployment dropped by an RSDL-7xx error report that error rather than be
+  called unknown, as D-11 requires, while keeping exit 2 for a genuinely unknown
+  name.
+- **DD-20.** An event channel with no consumer link takes the member's contract
+  bound as its ring depth. The design does not state this case. Under D-5 every
+  link's depth is that same contract bound, so the maximum over a non-empty set
+  always equals it, and reporting an underivable depth instead would tell a
+  plugin the channel cannot be sized when the bound is known.
+- **DD-21.** A route's interface is matched on the catalog and the identity name
+  alone, not on the interface number. The name is unique within a catalog, so
+  the number adds no discrimination, and including it means a package set whose
+  numbers differ from the lowered system's matches nothing — the channel would
+  lose its kind and its sizing with no diagnostic.
+
 Decisions taken while the size states were built (DD-30 onward; the numbering
 leaves room for the deployment section's own decisions, which start at DD-17).
 
