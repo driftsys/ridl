@@ -38,8 +38,9 @@ fn scaled(int: &str, frac: &str, places: usize) -> Option<u128> {
 ///
 /// Each operand must be `digits[.digits]`. The result is `None` when an
 /// operand has another shape, when `min_us` is zero, when a scaled operand does
-/// not fit in `u128`, or when the quotient exceeds `u32::MAX`.
-#[allow(dead_code)]
+/// not fit in `u128`, when the quotient exceeds `u32::MAX`, or when the quotient
+/// is zero. A zero quotient is not derivable: a depth is at least 1.
+#[cfg_attr(not(test), expect(dead_code))]
 pub fn ceil_ratio(max_us: &str, min_us: &str) -> Option<u32> {
     let (max_int, max_frac) = split_decimal(max_us)?;
     let (min_int, min_frac) = split_decimal(min_us)?;
@@ -50,7 +51,7 @@ pub fn ceil_ratio(max_us: &str, min_us: &str) -> Option<u32> {
         return None;
     }
     let quotient = max / min + u128::from(max % min != 0);
-    u32::try_from(quotient).ok()
+    u32::try_from(quotient).ok().filter(|&depth| depth != 0)
 }
 
 #[cfg(test)]
@@ -80,7 +81,15 @@ mod tests {
         assert_eq!(ceil_ratio(".5", "1"), None);
         assert_eq!(ceil_ratio("5.", "1"), None);
         assert_eq!(ceil_ratio("1", "0.000"), None);
-        assert_eq!(ceil_ratio("0", "7"), Some(0));
+        assert_eq!(ceil_ratio("0", "7"), None);
+        assert_eq!(ceil_ratio("0.25", "0.5"), Some(1));
+        assert_eq!(
+            ceil_ratio(
+                "340282366920938463463374607431768211455",
+                "340282366920938463463374607431768211455"
+            ),
+            Some(1)
+        );
         assert_eq!(ceil_ratio("1", &format!("0.{}1", "0".repeat(60))), None);
     }
 }
