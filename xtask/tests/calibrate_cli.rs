@@ -280,6 +280,65 @@ fn executable_dump_isolates_copies_target_and_cleans_up_after_success() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn executable_dump_replaces_existing_output_without_overwriting_the_old_file() {
+    use std::io::Read;
+    use std::os::unix::fs::MetadataExt;
+
+    let fixture = Fixture::dump();
+    fixture.write("out/package-fan-out.json", "previous output\n");
+    let out = fixture.0.join("out");
+    let path = out.join("package-fan-out.json");
+    // An open handle retains the old file without adding a hard link that the
+    // destination preflight rejects. Unix permits replacing an open file.
+    let mut old_file = fs::File::open(&path).unwrap();
+    let old_metadata = old_file.metadata().unwrap();
+    let mut before = snapshot(&fixture.0);
+    before.retain(|path, _| !path.starts_with("out"));
+
+    success(&fixture.command(&["calibrate", "dump", "out"]));
+
+    let new_metadata = fs::metadata(&path).unwrap();
+    assert_ne!(
+        (new_metadata.dev(), new_metadata.ino()),
+        (old_metadata.dev(), old_metadata.ino()),
+        "publication must replace the destination file"
+    );
+    let mut retained = String::new();
+    old_file.read_to_string(&mut retained).unwrap();
+    assert_eq!(retained, "previous output\n");
+    for check in CHECKS {
+        let actual: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join(format!("{check}.json"))).unwrap()).unwrap();
+        let expected = if check == "package-fan-out" {
+            serde_json::json!([
+                {
+                    "id": "package-fan-out:alpha:p/a.typl:0-7:0",
+                    "workspace": "alpha",
+                    "location": "p/a.typl:1",
+                    "message": "package `p` depends on 4 workspace packages: a, b, c, d",
+                    "metric": {"kind": "fan-out", "count": 4}
+                },
+                {
+                    "id": "package-fan-out:beta:p/a.typl:0-7:0",
+                    "workspace": "beta",
+                    "location": "p/a.typl:1",
+                    "message": "package `p` depends on 4 workspace packages: a, b, c, d",
+                    "metric": {"kind": "fan-out", "count": 4}
+                }
+            ])
+        } else {
+            serde_json::json!([])
+        };
+        assert_eq!(actual, expected, "{check}");
+    }
+    let mut after = snapshot(&fixture.0);
+    after.retain(|path, _| !path.starts_with("out"));
+    assert_eq!(after, before, "writes must stay inside the destination");
+    no_copies(&out);
+}
+
 #[test]
 fn executable_dump_refuses_existing_lints_and_delays_publication_on_failures() {
     let fixture = Fixture::dump();

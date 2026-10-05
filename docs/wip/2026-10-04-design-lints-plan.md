@@ -1826,6 +1826,18 @@ execution.
     changed, with no production, fixture, lint-level or threshold edits. Root
     owns the fresh scoped review and full gate rerun.
 
+86. **Ruling: address both remaining Minor findings** (2026-10-05). Correct the
+    scalar vocabulary's factual abbreviation explanation and add a focused
+    successful dump regression that retains an open handle to the previous
+    regular output file. This pins destination-file replacement, exact output
+    and containment without changing production behavior or existing tests.
+    Address both findings rather than defer debt because the prose is incorrect
+    and in-place publication must fail the regression. If wrong, the added test
+    may constrain portable filesystem behavior; scope the retained-handle and
+    file-identity assertions to Unix, where replacement of an open file is
+    supported. Root owns the post-pass-2 QUICK tests and documentation review;
+    no third numbered review is requested.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:

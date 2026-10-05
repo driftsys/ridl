@@ -218,8 +218,8 @@ reference's own Appendix B writes `frame : bytes [8]`. Named types remain the
 recommendation everywhere, and they are mandatory on a boundary.
 
 Add a second file, `veh/common/scalars.ridl`. This vocabulary draws
-TYPL-223 (`inconsistent-abbreviation`) because the later examples use `temp`
-with `Temperature`. The examples retain both forms to show the diagnostic.
+TYPL-223 (`inconsistent-abbreviation`) because `count` in `DoorCount`
+abbreviates `counter` in `Counter`. The examples retain both forms to show the diagnostic.
 
 ```ridl,allow=TYPL-223
 package veh.common
