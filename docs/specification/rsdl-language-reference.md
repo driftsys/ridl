@@ -200,17 +200,19 @@ lowered system has no field for it. A doc link in an `.rsdl` file resolves in
 the view of the package that declares the line, as in a ridl file (typl §14.5),
 and draws TYPL-401 when it does not resolve.
 
-| Declaration    | Clause       | Body holds                                            | rsdl-owned keys                                 |
-| -------------- | ------------ | ----------------------------------------------------- | ----------------------------------------------- |
-| `system`       | —            | member lines: components, lone services (§4)          | `labels`, `deprecated`; one slot reserved (§12) |
-| `component`    | —            | `offers` and `requires` lines (§4)                    | `instances`, `external`, `labels`, `deprecated` |
-| `distribution` | —            | member lines: components, lone services               | `tier`, `labels`, `deprecated`                  |
-| `deployment`   | `for System` | `machine` declarations                                | `labels`, `deprecated`                          |
-| `machine`      | —            | placement lines: components, instances, lone services | `external`, `labels`, `deprecated`              |
+| Declaration    | Clause       | Body holds                                            | rsdl-owned keys                                    |
+| -------------- | ------------ | ----------------------------------------------------- | -------------------------------------------------- |
+| `system`       | —            | member lines: components, lone services (§4)          | `labels`, `deprecated`; one slot reserved (§12)    |
+| `component`    | —            | `offers` and `requires` lines (§4)                    | `instances`, `external`, `labels`, `deprecated`    |
+| `distribution` | —            | member lines: components, lone services               | `tier`, `labels`, `deprecated`                     |
+| `deployment`   | `for System` | `machine` declarations                                | `depth`, `slots`, `budget`, `labels`, `deprecated` |
+| `machine`      | —            | placement lines: components, instances, lone services | `external`, `labels`, `deprecated`                 |
 
-Every declaration and every line also takes backend keys (§5). A key not in a
-declaration's row is FORM-107; a key no row and no backend namespace defines is
-FORM-106; a key twice in one block is FORM-108.
+Every declaration and every line also takes backend keys (§5), and a placement
+line also takes the three sizing keys of the `deployment` row. A key not in a
+declaration's row, and not one of those three on a placement line, is FORM-107;
+a key no row and no backend namespace defines is FORM-106; a key twice in one
+block is FORM-108.
 
 The names of `system`, `component`, `distribution` and `deployment` declarations
 are in their package's namespace, beside the package's typl and ridl
@@ -322,6 +324,8 @@ deployment Production for Vehicle {
   production topology and a bench topology differ only here.
 - A deployment declares no transport, no fabric and no time base; those are
   configuration (§10, §12).
+- The declaration and its placement lines take the three sizing keys `depth`,
+  `slots` and `budget` (§5).
 
 ### 3.5 `machine`
 
@@ -352,8 +356,9 @@ Two line forms occur in bodies, both references and neither a declaration:
   `component`.
 
 Either form may carry the attribute block at end of line (general form §4.4); a
-line takes backend keys only (§5). A line's attribute node is the line within
-its container (§13).
+line takes backend keys only, except that a placement line also takes the three
+sizing keys (§5). A line's attribute node is the line within its container
+(§13).
 
 **The reference.** A reference is a dotted name of one or more segments, and its
 role is read from case (R7), then confirmed by lookup:
@@ -385,14 +390,17 @@ key takes the predicate form. The principle (D-6): **an rsdl-owned key is
 allow-listed per declaration kind and has a machine consumer; every other key
 belongs to a backend and is carried uninterpreted.**
 
-| Key           | Form                            | Legal on                   | Consumer                                               |
-| ------------- | ------------------------------- | -------------------------- | ------------------------------------------------------ |
-| `instances`   | `= (a, b, …)` camelCase names   | `component`                | the instance set, §7                                   |
-| `external`    | flag                            | `component`, `machine`     | placement and the surface set, §9, §13                 |
-| `tier`        | `= PLATFORM` or `= APPLICATION` | `distribution`             | RSDL-901, §3.3                                         |
-| `labels`      | `= (LABEL, …)`                  | the five declarations      | assurance profiles (typl §14.3, general form §4.7)     |
-| `deprecated`  | `= "reason"`                    | the five declarations      | the family lint (general form §4.7); rsdl adds no rule |
-| `backend.key` | flag or assignment              | every declaration and line | that backend, uninterpreted                            |
+| Key           | Form                            | Legal on                     | Consumer                                               |
+| ------------- | ------------------------------- | ---------------------------- | ------------------------------------------------------ |
+| `instances`   | `= (a, b, …)` camelCase names   | `component`                  | the instance set, §7                                   |
+| `external`    | flag                            | `component`, `machine`       | placement and the surface set, §9, §13                 |
+| `tier`        | `= PLATFORM` or `= APPLICATION` | `distribution`               | RSDL-901, §3.3                                         |
+| `depth`       | `= N`, integer occurrences      | `deployment`, placement line | the ring depth of an event channel, §13                |
+| `slots`       | `= N`, integer table entries    | `deployment`, placement line | the slot count of a command or query channel, §13      |
+| `budget`      | `= N`, integer bytes            | `deployment`, placement line | the byte budget of a command or query channel, §13     |
+| `labels`      | `= (LABEL, …)`                  | the five declarations        | assurance profiles (typl §14.3, general form §4.7)     |
+| `deprecated`  | `= "reason"`                    | the five declarations        | the family lint (general form §4.7); rsdl adds no rule |
+| `backend.key` | flag or assignment              | every declaration and line   | that backend, uninterpreted                            |
 
 - `instances` must be a parenthesised list of one or more camelCase names: `()`
   and `instances = solo` are RSDL-305. `external` is a flag and takes no value:
@@ -401,7 +409,25 @@ belongs to a backend and is carried uninterpreted.**
 - A key not in the table is FORM-106; a key on a declaration or line its row
   does not name is FORM-107 — `instances` on a line, `deprecated` on a line,
   `labels` on a line, `tier` on a component; a key twice in one block is
-  FORM-108. Lines take backend keys only.
+  FORM-108. Lines take backend keys only, except the three sizing keys a
+  placement line takes.
+- **The sizing keys** `depth`, `slots` and `budget` are integer literals. A
+  value the parser reads that is not an integer within the key's range is
+  RSDL-709, which blocks its own deployment only (§13); a value the parser
+  refuses, such as `slots = 50ms`, is FORM-101 and blocks the whole build.
+  `depth` is 1 to 4294967295 and replaces the depth the toolchain derives from
+  the event's timing; `slots` is 1 to 65536 and defaults to 16; `budget` is 1 to
+  18446744073709551615 and has no default, so only `slots` bounds the calls in
+  flight. `depth` sizes event channels and `slots` and `budget` size command and
+  query channels; a key written where no channel of that kind exists draws
+  nothing. A value on a placement line applies to every link the placed instance
+  consumes. A value on the `deployment` declaration applies to every link of the
+  deployment. The precedence per link is the placement line, then the
+  `deployment` declaration; a key declared at neither site takes the default
+  `slots`, the derived `depth`, and no `budget`. RSDL-805 warns when a declared
+  `depth` is below the contract bound `ceil(max / min)` of an event a covered
+  link consumes. RSDL-806 warns when an event whose contract bound is not
+  derivable is consumed by a link with no declared `depth`.
 - **A backend key is `backend.key`** — `someip.serviceId`, `linux.cpuset`,
   `rust.crate` — a camelCase namespace, a dot, a camelCase key (typl Appendix
   E's `camelCase_id`, which admits no underscore). The compiler carries it into
@@ -705,6 +731,10 @@ Per deployment:
   a placement line (where an instance's placement carries its keys), an `offers`
   line, or a `requires` line (the link's site). `labels` ride beside the map per
   declaration.
+- **The sizing values** — the declared `depth`, `slots` and `budget` of the
+  deployment and of each placement line, as written. Their resolution per link,
+  and the derived depth, belong to the codegen request
+  ([codegen plugins](../design/codegen-plugins.md)).
 - **Distribution installation and dependency** — per distribution, the machines
   hosting at least one instance of its components (installation, which differs
   per deployment); and the distributions it depends on: `A` depends on `B`, a
@@ -722,8 +752,9 @@ Per deployment:
 
 **Errors and warnings.** An error in the closure — RSDL-3xx, 4xx, 5xx, 6xx or
 9xx — blocks lowering for every deployment. An error in one deployment —
-RSDL-7xx — blocks lowering for that deployment only. A warning (RSDL-409,
-RSDL-804) never blocks: the facts are produced and carry the warned condition.
+RSDL-7xx, which includes the sizing-value rule RSDL-709 — blocks lowering for
+that deployment only. A warning (RSDL-409, RSDL-804, RSDL-805, RSDL-806) never
+blocks: the facts are produced and carry the warned condition.
 
 ---
 
@@ -778,8 +809,10 @@ Coded `RSDL-`, same lifecycle rules as typl §16: codes are never renumbered, a
 retired code is kept in the table and never reused. Grouped by hundreds:
 
     3xx  component and instances       6xx  system and workspace
-    4xx  resolution                     7xx  placement — deployment and machine
-    5xx  services                       8xx  transport, posture and backend keys
+    4xx  resolution                     7xx  deployment and machine — placement
+                                             and sizing values
+    5xx  services                       8xx  transport, posture, backend keys
+                                             and sizing warnings
                                         9xx  distribution
 
 An `.rsdl` file also draws the namespaces no profile owns, `FORM-` and `MANI-`,
@@ -819,7 +852,7 @@ shown in any table were never allocated.
 | RSDL-706 | an instance placed twice in one deployment — also `Cruise` together with `Cruise.primary`                                                                          | error                        | §9      |
 | RSDL-707 | an `external` machine lists an implemented component                                                                                                               | error                        | §9      |
 | RSDL-708 | two deployments with one name in the workspace                                                                                                                     | error                        | §3.4    |
-| RSDL-709 | a `depth`, `slots` or `budget` value is not an integer within its range                                                                                            | error                        | §5      |
+| RSDL-709 | a `depth`, `slots` or `budget` value that the parser reads is not an integer within its range                                                                      | error                        | §5      |
 | RSDL-804 | a backend key whose namespace no configured backend claims                                                                                                         | warning                      | §5      |
 | RSDL-805 | a declared `depth` is below `ceil(max / min)` for an event a covered link consumes                                                                                 | warning                      | §5      |
 | RSDL-806 | an event whose contract bound is not derivable is consumed by a link with no declared `depth`                                                                      | warning                      | §5      |
