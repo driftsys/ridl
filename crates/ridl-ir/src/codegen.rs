@@ -128,8 +128,9 @@ impl std::error::Error for SerializeError {
 }
 
 /// Renders a lowered model as pretty-printed canonical protobuf JSON — the
-/// `--emit codegen-model` artifact and the payload the codegen request
-/// carries, byte for byte.
+/// `--emit codegen-model` artifact. The codegen request carries the same JSON
+/// value as its `model`, nested one indentation level deeper by
+/// `request_to_json`.
 pub fn to_json_pretty(model: &v1::Model) -> Result<String, SerializeError> {
     render_json(model).map_err(SerializeError::from_v2)
 }

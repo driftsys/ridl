@@ -1001,7 +1001,7 @@ fn a_request_round_trips_and_leads_with_its_two_version_fields() {
         .join("\n");
     assert!(
         json.contains(&format!("  \"model\": {{\n{nested}")),
-        "the request's model is the artifact byte for byte, indented once more"
+        "the request's model is the artifact's text, indented one level deeper"
     );
 }
 

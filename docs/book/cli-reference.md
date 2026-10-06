@@ -667,8 +667,8 @@ classes, the pinned name transforms, the resolved type references, the typl
 init and closure rules, the tombstones in their slots, the FlatBuffers
 projection and the interaction facts computed once — as canonical protobuf
 JSON, in the schema `ridl.codegen.v1`. It is the payload a codegen request
-carries (ADR-0020 decisions 8 and 9), written byte for byte as the request
-would carry it, so a plugin's fixture is a file `ridlc` wrote. The `rust`
+carries (ADR-0020 decisions 8 and 9), the same JSON value as the request's
+`model`, so a plugin's fixture is a file `ridlc` wrote. The `rust`
 backend reads the model and nothing else. The other three backends above still
 read the IR, and a drift test in each of them asserts that what the backend
 derives and what the model states are the same fact.
@@ -693,9 +693,9 @@ The flag repeats, once per plugin. Each plugin runs once per package the code
 emits are written for — `ridl.std` included, under the same rule as above — and
 receives on its standard input one `ridl.codegen.v1.CodegenRequest` in canonical
 protobuf JSON: `schema` (`"ridl.codegen.v1"`) and `toolchain` (this `ridl`'s
-version) first, then `model`, byte for byte the package's `codegen-model`
-artifact one indentation level deeper, `options` (empty from this command
-line; no flag sets one yet), `artifactBase`, the `<base>` of the emit list
+version) first, then `model` (the same JSON value as the package's
+`codegen-model` artifact, one indentation level deeper), `options` (empty from
+this command line; no flag sets one yet), `artifactBase`, the `<base>` of the emit list
 above, and `deployment`, the deployment section — the one `--deployment`
 names, or, with no flag, the one the source declares when it declares exactly
 one — absent when no deployment is carried. It answers on its standard output with one
