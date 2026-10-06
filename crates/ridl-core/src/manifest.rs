@@ -49,14 +49,15 @@ use crate::diag::{DiagCode, Diagnostic, FileId, Severity, Span};
 use crate::lint::{LintLevel, LintTable, lint_by_name};
 
 /// A parsed `ridl.toml` manifest: its mode-specific [`ManifestKind`], its
-/// `[imports]` table (logical package name to URL), the optional
-/// `[defaults].timing` string, and its `[lints]` table, all shared by both
-/// modes.
+/// `[imports]` table (logical package name to URL), its `[defaults]` as a
+/// [`TimingDefaults`] — the three optional keys `timing`, `command_timing` and
+/// `query_timing` — and its `[lints]` table, all shared by both modes.
 ///
 /// `defaults` holds the raw `[defaults]` timing strings (e.g.
-/// `"[100ms..1000ms]"`), stored **unparsed**: `ridl-core` cannot depend on
-/// `ridl-sem`, so the checker parses and validates them (MANI-009) — the
-/// manifest layer only records the strings (ridl §9.1).
+/// `"[100ms..1000ms]"` or `"[..1s]"`), stored **unparsed**: `ridl-core`
+/// cannot depend on `ridl-sem`, so the checker parses and validates them
+/// (MANI-009) — the manifest layer only records the strings (ridl §9.1,
+/// §9.3).
 ///
 /// `lints` holds only the valid `[lints]` entries: a registered lint name
 /// mapped to a level. Every other entry is MANI-010 and is dropped
@@ -722,6 +723,69 @@ query_timing = \"[..3s]\"
                 command_timing: Some("[..1s]".to_string()),
                 query_timing: Some("[..3s]".to_string()),
             }
+        );
+    }
+
+    /// `or` resolves each key on its own, in both directions: a key `self`
+    /// sets wins over the fallback's value, and a key `self` leaves unset takes
+    /// the fallback's value.
+    #[test]
+    fn timing_defaults_or_resolves_each_key_on_its_own() {
+        let all = |prefix: &str| TimingDefaults {
+            timing: Some(format!("{prefix}-timing")),
+            command_timing: Some(format!("{prefix}-command")),
+            query_timing: Some(format!("{prefix}-query")),
+        };
+        // Every key set on both sides: `self` wins on every key.
+        assert_eq!(all("own").or(&all("fallback")), all("own"));
+        // No key set on `self`: every key comes from the fallback.
+        assert_eq!(
+            TimingDefaults::default().or(&all("fallback")),
+            all("fallback")
+        );
+        // One key set on `self`: that key is its own, the other two are the
+        // fallback's.
+        let fallback = all("fallback");
+        let own = || Some("own".to_string());
+        let cases = [
+            (
+                TimingDefaults {
+                    timing: own(),
+                    ..TimingDefaults::default()
+                },
+                TimingDefaults {
+                    timing: own(),
+                    ..fallback.clone()
+                },
+            ),
+            (
+                TimingDefaults {
+                    command_timing: own(),
+                    ..TimingDefaults::default()
+                },
+                TimingDefaults {
+                    command_timing: own(),
+                    ..fallback.clone()
+                },
+            ),
+            (
+                TimingDefaults {
+                    query_timing: own(),
+                    ..TimingDefaults::default()
+                },
+                TimingDefaults {
+                    query_timing: own(),
+                    ..fallback.clone()
+                },
+            ),
+        ];
+        for (own, expected) in cases {
+            assert_eq!(own.clone().or(&fallback), expected, "{own:?}");
+        }
+        // A key unset on both sides stays unset.
+        assert_eq!(
+            TimingDefaults::default().or(&TimingDefaults::default()),
+            TimingDefaults::default()
         );
     }
 

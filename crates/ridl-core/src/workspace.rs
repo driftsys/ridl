@@ -1571,6 +1571,83 @@ mod tests {
         assert_eq!(defaults.timing, None);
     }
 
+    /// Per-key precedence in the other direction: a member's `command_timing`
+    /// is not overridden by the workspace's, and a member that leaves
+    /// `query_timing` unset inherits the workspace's.
+    #[test]
+    fn defaults_precedence_is_per_key_in_both_directions() {
+        let dir = TempDir::new("defaults-per-key-reverse");
+        dir.write(
+            "ridl.toml",
+            "[workspace]\nmembers = [\"m\"]\n\n[defaults]\ncommand_timing = \"[..2s]\"\nquery_timing = \"[..4s]\"\n",
+        );
+        dir.write(
+            "m/ridl.toml",
+            "[package]\nname = \"veh.m\"\nversion = \"1.0.0\"\n\n[defaults]\ncommand_timing = \"[..7s]\"\n",
+        );
+        dir.write("m/m.typl", "package veh.m\ntype A: m\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert_eq!(loaded.diagnostics, Vec::new(), "a clean workspace");
+        let packages = loaded.workspace.packages(&db).clone();
+        let member = packages
+            .iter()
+            .find(|p| p.name(&db) == "veh.m")
+            .expect("the member loads");
+        let defaults = member.defaults(&db);
+        assert_eq!(
+            defaults.command_timing.as_deref(),
+            Some("[..7s]"),
+            "the member's own `command_timing` wins over the workspace's",
+        );
+        assert_eq!(
+            defaults.query_timing.as_deref(),
+            Some("[..4s]"),
+            "a member without `query_timing` inherits the workspace's",
+        );
+        assert_eq!(defaults.timing, None);
+    }
+
+    /// A standalone package's `command_timing` and `query_timing` ride on the
+    /// root package and on a nested package directory alike (ridl §9.3).
+    #[test]
+    fn standalone_rpc_defaults_ride_on_the_tree() {
+        let dir = TempDir::new("standalone-rpc-defaults");
+        dir.write(
+            "ridl.toml",
+            "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n\n[defaults]\ncommand_timing = \"[..2s]\"\nquery_timing = \"[5ms..4s]\"\n",
+        );
+        dir.write("a.typl", "package veh.common\ntype A: m\n");
+        dir.write("sub/s.typl", "package veh.common.sub\ntype S: s\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package tree loads");
+        assert_eq!(loaded.diagnostics, Vec::new());
+        let packages = loaded.workspace.packages(&db).clone();
+        let names: Vec<_> = packages.iter().map(|p| p.name(&db).clone()).collect();
+        assert!(
+            names.iter().any(|name| name == "veh.common")
+                && names.iter().any(|name| name == "veh.common.sub"),
+            "the root and the nested package both load: {names:?}",
+        );
+        for package in &packages {
+            let defaults = package.defaults(&db);
+            assert_eq!(
+                defaults.command_timing.as_deref(),
+                Some("[..2s]"),
+                "{}",
+                package.name(&db),
+            );
+            assert_eq!(
+                defaults.query_timing.as_deref(),
+                Some("[5ms..4s]"),
+                "{}",
+                package.name(&db),
+            );
+        }
+    }
+
     /// A standalone package's `[defaults].timing` rides on every package in its
     /// directory tree, and single-file mode carries none (ridl §9.1).
     #[test]
