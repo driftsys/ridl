@@ -197,5 +197,6 @@ there is no runtime, and every fact it states about the lowered system and about
   descriptor at all. A codegen request does read the lowered system: its
   deployment section is an emitter over it
   ([the codegen plugin design](../design/codegen-plugins.md), "The deployment
-  section"), and no backend reads that section yet.
+  section"). The only plugin that reads that section is the test plugin of
+  `crates/ridlc/tests/layout.rs`; no backend of this workspace reads it.
 - **Backend namespace claims.** See RSDL-804 above.

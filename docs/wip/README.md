@@ -24,7 +24,11 @@ the lane E16 driver were archived on 2026-10-04, after E16.1 to E16.6 and E6.17
 landed, and gardened into
 [`../design/catalog-descriptor.md`](../design/catalog-descriptor.md). The spec
 2a design and plan (`2026-10-04-docs-in-source-{design,plan}.md`) were archived
-on 2026-10-04 with #703; ADR-0026 is their durable record.
+on 2026-10-04 with #703; ADR-0026 is their durable record. The layout inputs
+design and plan (`2026-10-05-layout-inputs-{design,plan}.md`) were archived on
+2026-10-06, once E17.5 landed, and gardened into
+[`../design/codegen-plugins.md`](../design/codegen-plugins.md) and
+[ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md).
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
@@ -211,15 +215,6 @@ on 2026-10-04 with #703; ADR-0026 is their durable record.
   precision rule that sets each check's default level and threshold from
   labelled corpus findings, the `ridl_metrics` tool, and the format of the eval
   tasks seeded for piece 1c.
-- **2026-10-05-layout-inputs-design.md** and
-  **2026-10-05-layout-inputs-plan.md** — lane S stage S1, the layout inputs for
-  backend plugins (Epic 17, E17.0, driftsys/ridl#715): the deployment section of
-  the codegen request beside the model, the tabulation boundary, the depth rule
-  (ADR-0015 decision 21's bound derived, ADR-0018 decision 12 deferred), the
-  rsdl keys `depth`, `slots` and `budget` on the `deployment` declaration and
-  placement lines, the size states, the binding overheads, and the system
-  descriptor left unbuilt. The plan's §1 is lane S's stage driver for S2 to S4.
-  Archived when E17.5 lands.
 
 ridl-boundary-model-review.md, superseded by ADR-0012, is archived too — see
 [`../archive/README.md`](../archive/README.md). So is

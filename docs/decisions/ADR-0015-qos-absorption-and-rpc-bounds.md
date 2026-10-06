@@ -547,8 +547,8 @@ indistinguishable, so no claim about any of the three can be exercised.
     line, replaces the derived value for the links it covers; a declared value
     below the bound draws RSDL-805, because live occurrences can then be
     dropped. The reconciliation with ADR-0018 decision 12 is recorded under that
-    decision. The design note is `2026-10-05-layout-inputs-design.md` (D-5 and
-    D-6), archived when its lane closes.
+    decision. The design note is
+    `docs/archive/2026-10-05-layout-inputs-design.md` (D-5 and D-6).
 
 22. **History and replay stay out of the contract.** §4 makes a signal
     latest-value only and §5.1 rules out event replay. The strongest case put

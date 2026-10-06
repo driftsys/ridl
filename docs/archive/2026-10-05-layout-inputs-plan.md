@@ -21,7 +21,7 @@ overheads.
 `protox`, `prost` and `pbjson`, `clap`, `insta` snapshots in the corpus, `just`
 recipes as the gate.
 
-**Spec:** `docs/wip/2026-10-05-layout-inputs-design.md` (the design; its
+**Spec:** `docs/archive/2026-10-05-layout-inputs-design.md` (the design; its
 decision numbers D-1 to D-12 are cited below). Executors read both.
 
 ## 1. The stage driver
