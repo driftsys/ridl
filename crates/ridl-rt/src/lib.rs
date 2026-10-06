@@ -39,6 +39,7 @@
 //! each prelude brings the traits that interface's types implement, and
 //! rustc reports a prelude as an unused import when the other imported
 //! preludes already bring every item it would add.
+//!
 //! The ninth module, [`trace`], holds `TraceContext`, the optional trace context
 //! that a call or an event carries across a port.
 //!
