@@ -668,10 +668,10 @@ init and closure rules, the tombstones in their slots, the FlatBuffers
 projection and the interaction facts computed once — as canonical protobuf
 JSON, in the schema `ridl.codegen.v1`. It is the payload a codegen request
 carries (ADR-0020 decisions 8 and 9), written byte for byte as the request
-would carry it, so a plugin's fixture is a file `ridlc` wrote. No in-tree
-backend reads it yet: the four backends above still read the IR, and a drift
-test in each of them asserts that what the backend derives and what the model
-states are the same fact.
+would carry it, so a plugin's fixture is a file `ridlc` wrote. The `rust`
+backend reads the model and nothing else. The other three backends above still
+read the IR, and a drift test in each of them asserts that what the backend
+derives and what the model states are the same fact.
 
 **`--plugin` runs a codegen plugin beside the emits** — a backend that is an
 executable rather than part of `ridl`, over the contract
@@ -713,11 +713,13 @@ after `--plugin-timeout` seconds (60 by default; the plugin is killed) are each
 one error naming the plugin, and the build exits 1. The plugin's standard error
 is passed through.
 
-The one plugin in this repository is `ridlc-gen-model`, built for the test
-suite and not installed by any release: it is `--emit codegen-model` as a
-process, and the test that runs it through this path proves the host, not a
-language. The Rust backend and the other three still run in process only; the
-Rust backend's own plugin follows its port onto the model.
+This repository builds two plugins for its test suite, and no release
+installs either: `ridlc-gen-model` is `--emit codegen-model` as a process, and
+`ridlc-gen-rust` is `--emit rust` as a process. A parity test runs each one
+through this path and compares its output with the in-process backend's, byte
+for byte. The TypeScript, proto3 and FlatBuffers backends run in process only.
+[Writing a codegen plugin](codegen-plugins.md) is the guide for a plugin
+author.
 
 **It writes** one file per package per `--emit` target, under `--out-dir`
 (`out` by default), and — exactly like [`ridl check`](#ridl-check) —

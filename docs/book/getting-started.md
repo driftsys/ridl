@@ -67,8 +67,11 @@ Where this chapter mentions rxdl or rmdl, it is describing a plan.
 
 ## Building the toolchain
 
-There is no published release yet. Build the two binaries from a clone of this
-repository:
+Released binaries of `ridl` and `ridlc` are attached to the GitHub Releases
+tagged `editor-v<version>`, and `install.sh` at the root of the repository
+installs the newest one. This book describes the `main` branch, which can hold
+features the newest release does not. To get everything this book describes,
+build the two binaries from a clone of this repository:
 
 ```sh
 cargo build --release

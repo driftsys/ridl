@@ -505,13 +505,8 @@ each declared value reaches the request with the declared source.
 
 ## 8. What a plugin author reads
 
-In order: [the IR specification](../specification/ir-specification.md) §7 and §8
-(read `schema` first; parse leniently; a fixture is a file `ridlc` wrote),
-`crates/ridl-ir/proto/ridl/codegen/v1/plugin.proto` (the two messages),
-`crates/ridl-ir/proto/ridl/codegen/v1/model.proto` (what the model carries,
-message by message), `crates/ridlc-gen-model/src/main.rs` (a complete plugin in
-sixty lines), and the [CLI reference](../book/cli-reference.md)'s `ridl build`
-section (how the plugin is found and what `ridlc` does with the response).
+The book chapter [Writing a codegen plugin](../book/codegen-plugins.md) is the
+guide for a plugin author, and its "Reading order" section is the reading list.
 
 ## 9. Where the records and the code disagree
 
