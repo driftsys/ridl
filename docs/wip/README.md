@@ -37,7 +37,7 @@ records. The default response bound design and plan
 2026-10-06, once #741 landed; ADR-0015 is their durable record. The trace
 context design and plan
 (`2026-10-06-trace-context-propagation-{design,plan}.md`) were archived on
-2026-10-07, once #752 landed; ADR-0021 decision 21 is their durable record.
+2026-10-07, once #758 landed; ADR-0021 decision 21 is their durable record.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the

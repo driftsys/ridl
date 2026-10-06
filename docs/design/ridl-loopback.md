@@ -60,7 +60,9 @@ generated code links — and a host runtime is not among them.
 **Every handle of one runtime holds the same `Arc<Mutex<Store>>`.** The store is
 `crates/ridl-loopback/src/store.rs`: the signal map, the per interface
 generation counters, the provisioned `fixed` values, one queue per event source,
-the call table, the clock, and every stored waker.
+the call table, the clock, and every stored waker. Each queued occurrence keeps
+its interface, ordinal, payload bytes, envelope and the trace context it was
+raised with.
 
 A port method that reaches the store takes the lock, does its work and returns.
 None waits for data while holding it, which is what `ridl_rt::port` requires of
@@ -383,12 +385,12 @@ correlation is `(generation << 16) | slot`, and a reclaim advances the slot's
 generation, so the correlation a reused slot had before answers as unknown:
 `ack` and `reply` answer `None`, and an `Outcome` registration under it is woken
 at once. The table holds the outcome status and the `Outcome` waker; the
-loopback keeps each call's arguments, its envelope, its place in send order and
-its reply bytes beside it, by slot. A returned claim goes back among the waiting
-calls by send order, not by correlation, because a reused slot's correlation is
-larger than that of a call sent later into a fresh slot. A refused send draws no
-sequence number, because nothing was sent. Two identities address a call, and
-they are separate:
+loopback keeps each call's arguments, its envelope, the trace context it was
+sent with, its place in send order and its reply bytes beside it, by slot. A
+returned claim goes back among the waiting calls by send order, not by
+correlation, because a reused slot's correlation is larger than that of a call
+sent later into a fresh slot. A refused send draws no sequence number, because
+nothing was sent. Two identities address a call, and they are separate:
 
 - a **`Correlation`**, returned by `command` and `query`, is the caller's name
   for the outcome it will read back;

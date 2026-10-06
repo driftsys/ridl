@@ -490,7 +490,8 @@ provenance. Nothing here is normative — the current references live in
   on calls and events in `ridl-rt` (driftsys/ridl#752): the `TraceContext` type,
   the last argument of `Caller::command`, `Caller::query` and
   `EventSink::raise`, the `trace` field of `Claim` and `RawOccurrence`, and the
-  four delivery rules. Both are archived verbatim. The decision lives in
+  four delivery rules. Both are archived verbatim, by driftsys/ridl#758. The
+  decision lives in
   [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 21,
   whose alternatives table carries the design's rejected options. The as-built
   behaviour is in [the `ridl-rt` design record](../design/ridl-rt.md).
