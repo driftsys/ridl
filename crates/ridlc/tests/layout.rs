@@ -21,9 +21,11 @@
 //!   member's FlatBuffers reservation (the sum of its request and reply
 //!   bounds) for a command and a query.
 //! - A signal slot is its base. An event slot is its base times the channel's
-//!   ring depth. A call slot is its base times `slots`, the largest `slots`
-//!   value over the channel's consumer links — the same aggregation the
-//!   toolchain applies to an event's ring depth.
+//!   ring depth, which the toolchain states as the largest depth over the
+//!   channel's consumer links and leaves absent when any link's depth is
+//!   absent. A call slot is its base times `slots`, the largest `slots` value
+//!   over the channel's consumer links that state one; a link with no `slots`
+//!   is skipped.
 //! - A message is one consumer link whose encoding is proto3. Its
 //!   `proto3_bound` is the proto3 bounded size of the payload: the payload of
 //!   a signal or an event, the request of a command, and the larger of the
@@ -33,8 +35,17 @@
 //!   `null` when that row is absent or a term is absent.
 //!
 //! A size the rule needs and the request does not state — an unsized
-//! payload, an absent ring depth, a call with no `slots` — makes `generate`
-//! return an error diagnostic and no file.
+//! payload, an absent ring depth, a call none of whose links states `slots` —
+//! makes `generate` return an error diagnostic and no file.
+//!
+//! **Limits.** The plugin is a test of the request's inputs, not a layout for
+//! every deployment:
+//!
+//! - Every channel of a catalog goes into every region whose catalog has that
+//!   name. A deployment with two regions of one catalog would get the same
+//!   slots twice.
+//! - A slot's `member` label names no producer. Two instances that offer one
+//!   interface give two slots with the same label.
 
 use std::fs;
 use std::path::Path;
@@ -318,6 +329,123 @@ fn a_layout_plugin_computes_cabin_from_the_request_alone() {
     // `max_message_bytes` in the fixture is null.
     let deployment = request.deployment.as_ref().expect("a deployment");
     assert!(deployment.bindings.is_empty());
+}
+
+/// The file `layout.json` the plugin writes for a request, as JSON.
+fn layout_json(request: &v1::CodegenRequest) -> Value {
+    let response = LayoutBackend.generate(request);
+    assert!(
+        response.diagnostics.is_empty(),
+        "{:#?}",
+        response.diagnostics
+    );
+    let [file] = response.files.as_slice() else {
+        panic!("one file: {:#?}", response.files);
+    };
+    let Some(v1::generated_file::Content::Text(text)) = &file.content else {
+        panic!("layout.json is a text file");
+    };
+    serde_json::from_str(text).expect("layout.json is JSON")
+}
+
+/// With a `websocket` binding row, a message's `max_message_bytes` is the
+/// row's frame header bound plus its envelope plus the message's proto3
+/// bound. The row is added to cabin's request by the test, because no binding
+/// has a row yet (driftsys/ridl#265).
+#[test]
+fn a_websocket_row_adds_its_frame_header_and_envelope_to_the_proto3_bound() {
+    let (mut request, _) = request_for(&cabin(), "veh.cabin");
+    request
+        .deployment
+        .as_mut()
+        .expect("a deployment")
+        .bindings
+        .push(v1::Binding {
+            name: "websocket".to_string(),
+            version: "1".to_string(),
+            frame_header_max_bytes: Some(14),
+            envelope_bytes: Some(2),
+        });
+    let actual = layout_json(&request);
+    let max_message_bytes = |member: &str| {
+        actual["messages"]
+            .as_array()
+            .expect("a list of messages")
+            .iter()
+            .find(|message| message["member"] == member)
+            .unwrap_or_else(|| panic!("a message for {member}"))["max_message_bytes"]
+            .clone()
+    };
+    // `Warning`'s proto3 bound is 8 (the fixture derives it): 14 + 2 + 8.
+    assert_eq!(max_message_bytes("warning"), json!(24));
+    // `Temperature` has no proto3 bound, so the sum has no value.
+    assert_eq!(max_message_bytes("temperature"), Value::Null);
+}
+
+/// The proto3 size states of one payload: `proto3` bounded at `bound`, or
+/// absent when `bound` is `None`.
+fn proto3_sizes(bound: Option<u32>) -> Option<v1::PayloadSizes> {
+    Some(v1::PayloadSizes {
+        proto3: Some(v1::SizeState {
+            state: Some(match bound {
+                Some(bytes) => v1::size_state::State::Bounded(bytes),
+                None => v1::size_state::State::Absent(v1::SizeAbsent::default()),
+            }),
+        }),
+        flatbuffers: None,
+    })
+}
+
+/// The proto3 bound of a command is its request's, and the bound of a query
+/// is the larger of its request's and its reply's. A missing bound gives no
+/// bound. Cabin's calls carry named scalars, which have no proto3 bound, so
+/// these interactions are built by the test.
+#[test]
+fn a_call_s_proto3_bound_is_its_request_s_or_the_larger_of_a_query_s_two() {
+    let command = |request: Option<u32>| v1::Interaction {
+        shape: Some(v1::interaction::Shape::Command(v1::CommandShape {
+            request_sizes: proto3_sizes(request),
+            ..Default::default()
+        })),
+        ..Default::default()
+    };
+    let query = |request: Option<u32>, reply: Option<u32>| v1::Interaction {
+        shape: Some(v1::interaction::Shape::Query(Box::new(v1::QueryShape {
+            request_sizes: proto3_sizes(request),
+            reply_sizes: proto3_sizes(reply),
+            ..Default::default()
+        }))),
+        ..Default::default()
+    };
+    assert_eq!(proto3_bound(&command(Some(5))), Some(5));
+    assert_eq!(proto3_bound(&command(None)), None);
+    assert_eq!(proto3_bound(&query(Some(5), Some(9))), Some(9));
+    assert_eq!(proto3_bound(&query(Some(9), Some(5))), Some(9));
+    assert_eq!(proto3_bound(&query(Some(5), None)), None);
+    assert_eq!(proto3_bound(&query(None, Some(9))), None);
+}
+
+/// A size the layout rule needs and the request does not state gives an
+/// error diagnostic and no file. Here the test removes the ring depth of
+/// cabin's event channel `Cabin.warning`.
+#[test]
+fn a_missing_ring_depth_gives_an_error_and_no_file() {
+    let (mut request, _) = request_for(&cabin(), "veh.cabin");
+    let warning = request
+        .deployment
+        .as_mut()
+        .expect("a deployment")
+        .channels
+        .iter_mut()
+        .find(|channel| channel.member == "warning")
+        .expect("a channel for Cabin.warning");
+    warning.depth = None;
+    let response = LayoutBackend.generate(&request);
+    assert!(response.files.is_empty(), "{:#?}", response.files);
+    assert_eq!(
+        response.diagnostics,
+        [codegen::error("Cabin.warning: no ring depth".to_string())]
+    );
 }
 
 /// The FlatBuffers bounds the fixture cites are the ones
