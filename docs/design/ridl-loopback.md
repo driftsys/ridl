@@ -423,7 +423,8 @@ fails whichever handler settles next.
 bytes do not fit the buffer passed to `next_claim` is offered rather than taken:
 the claim id is minted, stored on the call's entry and recorded as the
 handler's, the call stays among the waiting calls, and the answer is
-`ReadError::ShortClaim { claim, needed }`
+`ReadError::ShortClaim { claim, needed, trace }`, where the loopback fills
+`trace` with the caller's context
 ([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 5,
 amended the same day). The id lives on the entry, so every later presentation of
 the call — by the same handler with a larger buffer, or by another handler that
