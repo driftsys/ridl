@@ -60,10 +60,12 @@ contain message text or temporary paths. `location` is the relative source path
 and one-based line number; temporary directory prefixes are removed from
 messages that cite another source site.
 
-The command uses the checks' existing search-start constants. Calibration does
-not change production thresholds or levels. Copy every record unchanged into the
-labelling and merge stages, retaining both shape kinds and both cohesion
-coordinates.
+The command runs the checks at the constants compiled into them. For cohesion
+that minimum is 7 groups, not the search start of 2, so a dump at the shipped
+constants does not reproduce the labelled findings with 2 to 6 groups
+(`docs/design/design-lints.md` describes this). Calibration does not change
+production thresholds or levels. Copy every record unchanged into the labelling
+and merge stages, retaining both shape kinds and both cohesion coordinates.
 
 ## Derive levels and thresholds
 

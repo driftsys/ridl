@@ -37,9 +37,8 @@ the diagnostics of files under the member.
 Amended 2026-10-06 by
 [ADR-0027](ADR-0027-design-lints-calibrated-on-a-corpus.md) (workspace design
 lints): a ninth tool, `ridl_metrics`, is added under decision 9, and the package
-dependency edges that decision 8 counts are now computed in `ridlc::deps` and
-shared with the compiler's design lints. `ridl_dependencies` still reports the
-complete graph.
+dependency edges that decision 8 counts are now computed in `ridlc::deps`, which
+`ridl_metrics` reads. `ridl_dependencies` still reports the complete graph.
 
 ## Context
 

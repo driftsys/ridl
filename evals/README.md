@@ -46,10 +46,11 @@ changes are visible in review.
 
 ## Results
 
-The calibration ran over 820 findings dumped at revision `200185f6` and labelled
-blind by Claude (`fable`) and Sol (`gpt-6.1-sol`); the maintainer adjudicated
-the 8 disagreements and reviewed 31 sampled agreements. Three of the five
-candidate checks ship as lints, all at Info:
+The calibration ran over 820 findings dumped at revision `8ef2f28d` (a dump at
+`200185f6` was byte-identical) and labelled blind by Claude (`fable`) and Sol
+(`gpt-6.1-sol`); the maintainer adjudicated the 8 disagreements and reviewed 31
+sampled agreements. Three of the five candidate checks ship as lints, all at
+Info:
 
 | Check                       | Precision    | Threshold                        | Level                          | Recall         |
 | --------------------------- | ------------ | -------------------------------- | ------------------------------ | -------------- |
@@ -59,13 +60,20 @@ candidate checks ship as lints, all at Info:
 | `inconsistent-abbreviation` | 0/780        | none                             | not a lint                     | not applicable |
 | `package-fan-out`           | 0/1          | fan-out > 3                      | not a lint                     | not applicable |
 
+The `duplicate-shape` recall of 3/3 counts `review-0003:1` on a broad reading of
+that rubric item; `calibration/notes.md` gives the stricter readings, 2/2 and
+1/1.
+
 `calibration/summary.md` is the unchanged output of the xtask `calibrate`
-subcommand `derive` with `--write`: the precision at every candidate threshold
-and the level each one gives. `calibration/notes.md` is written by hand and
-records the labelling method, the adjudication, the outcome applied to the
-compiler, and the recall mapping with its judgement calls. Each review task's
-`expect.lints` names the shipped lints whose accepted findings fall in that
-task's workspace and match a rubric item. `calibration/expected-counts.toml`
-pins the per-workspace counts of the shipped lints; the test
-`design_lint_counts_on_the_corpus_are_pinned` compares them with `ridl check`
-and prints the actual table on a mismatch.
+subcommand `derive` with `--write` (the xtask test
+`committed_summary_is_the_derivation_of_the_committed_labels` compares the two
+byte for byte, and compares the selected thresholds and levels with the
+constants and catalogue levels in the compiler sources): the precision at every
+candidate threshold and the level each one gives. `calibration/notes.md` is
+written by hand and records the labelling method, the adjudication, the outcome
+applied to the compiler, and the recall mapping with its judgement calls. Each
+review task's `expect.lints` names the shipped lints whose accepted findings
+fall in that task's workspace and match a rubric item.
+`calibration/expected-counts.toml` pins the per-workspace counts of the shipped
+lints; the test `design_lint_counts_on_the_corpus_are_pinned` compares them with
+`ridl check` and prints the actual table on a mismatch.

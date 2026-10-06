@@ -26,11 +26,10 @@ and its implementation in
 
 ## The pass
 
-`ridlc::check_design_lints` takes one source set: the checked packages, their
-resolutions, the lowered standard package, the lowered system when there is one,
-and the source map used to render every other diagnostic. It loads no file and
-applies no lint level. It builds a `SiteIndex` once
-([`sites.rs`](../../crates/ridlc/src/design_lints/sites.rs)), which maps a
+`ridlc::check_design_lints` takes one source set: the packages, the checked
+packages, their resolutions, and the source map used to render every other
+diagnostic. It loads no file and applies no lint level. It builds a `SiteIndex`
+once ([`sites.rs`](../../crates/ridlc/src/design_lints/sites.rs)), which maps a
 declaration, a struct field, an interaction member and a parameter to its source
 span from the current syntax trees, then runs the three checks in a fixed order
 (units, shapes, cohesion) and returns their diagnostics at the catalogue
@@ -95,13 +94,13 @@ fan-out metric they used remain, for `ridl_metrics`.
 ## The dependency graph
 
 [`deps.rs`](../../crates/ridlc/src/deps.rs) computes the package edges once.
-`package_edges` returns, for each workspace package, its `[imports]` targets,
-the package qualifiers of a walk over its IR references, and the rsdl edges of
-`component_requires` and the system's member lines; a qualifier that names no
-workspace package is kept as written. `ridl_dependencies` reports that complete
-graph. `workspace_package_edges` keeps only edges whose target is a workspace
-package; `ridl_metrics` computes fan-in, fan-out, instability and `dependsOn`
-from it.
+`package_edges` returns, for each workspace package, the package qualifiers of a
+walk over its IR references (the IR records no imports, so an import that no
+declaration uses gives no edge), and the rsdl edges of `component_requires` and
+the system's member lines; a qualifier that names no workspace package is kept
+as written. `ridl_dependencies` reports that complete graph.
+`workspace_package_edges` keeps only edges whose target is a workspace package;
+`ridl_metrics` computes fan-in, fan-out, instability and `dependsOn` from it.
 
 ## The corpus and the calibration
 

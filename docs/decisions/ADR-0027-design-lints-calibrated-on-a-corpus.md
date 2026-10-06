@@ -1,4 +1,4 @@
-# ADR-0027 — Workspace design lints: one shared pass, levels set by precision on a public corpus, `ridl_metrics`, and the eval task format
+# ADR-0027 — Workspace design lints
 
 ## Status
 
@@ -12,14 +12,13 @@ calibration records under `evals/`, and every eval task.
 Written from piece 1b of the devex and agent tracks brief, "design lints and
 metrics", implemented in four pull requests: the design and plan
 (driftsys/ridl#694), the corpus and the eval seed (#707), the checks and the
-tool (#712), and the labelling and calibration (the branch
-`feat/1b-calibration`). Sebastien agreed decisions D-1 to D-8 of the design in
-the brainstorming session of 2026-10-04 and approved the written design, D-9
-included, the same day. He approved the eval task set on 2026-10-04, decided
-every labelling disagreement and reviewed a sample of agreed labels on
-2026-10-06, and approved the derived calibration summary the same day. The
-plan's controller took the rulings recorded in decisions 2, 3, 7 and 11 while it
-implemented the design.
+tool (#712), and the labelling and calibration (#738). Sebastien agreed
+decisions D-1 to D-8 of the design in the brainstorming session of 2026-10-04
+and approved the written design, D-9 included, the same day. He approved the
+eval task set on 2026-10-04, decided every labelling disagreement and reviewed a
+sample of agreed labels on 2026-10-06, and approved the derived calibration
+summary the same day. The plan's controller took the rulings recorded in
+decisions 2, 3, 7 and 11 while it implemented the design.
 
 The design numbers its decisions D-1 to D-9. In this record decision 1 is design
 §5 with plan ruling 2, decision 2 is design §5 with plan ruling 1, decision 3 is
@@ -132,16 +131,19 @@ of the authoring skill (piece 1c), as ADR-0005 §5 requires.
    `PROVENANCE.md` with its upstream, revision, licence, subset, kind rule and
    every deviation, and its byte-exact upstream `LICENSE`.
    `THIRD-PARTY-NOTICES.txt` has one entry per set. `evals/` is outside
-   `crates/`, so no published crate and not the book ships it, and outside it
-   nothing names a domain. Private workspaces are not used.
+   `crates/`, so no published crate and not the book ships it. Private
+   workspaces are not used.
 
 6. **Labels are double-blind and adjudicated by the maintainer.** Two labellers
    each label every finding `accept` or `dismiss` with a one-line reason,
    without seeing the other's labels or the design's expectations. The question
    is "would a designer reviewing this workspace change the design because of
    this finding?" Where they agree the label stands; where they disagree the
-   maintainer decides; and the maintainer also reviews a sample of ten agreed
-   labels per check. All three columns are committed in
+   maintainer decides; and the maintainer also reviews a sample of agreed
+   labels: up to ten per check, 31 in the 1b calibration (ten each for
+   `duplicate-shape`, `inconsistent-abbreviation` and `low-cohesion-interface`,
+   the one agreed `package-fan-out` label, and none for `inconsistent-unit`,
+   which had no agreed label). All three columns are committed in
    `evals/calibration/<lint-name>.toml`. In the 1b calibration one labeller
    labelled through a rule-based script of its own; its labels were kept as
    produced, and the method is stated in the notes.
@@ -261,7 +263,10 @@ From the design's §10. The numbers are the decisions that reject them.
   justified by labelled findings on the corpus, not by judgement alone. Adding a
   candidate means adding an Info row, dumping its findings with
   `cargo xtask calibrate dump`, labelling and adjudicating them, and running
-  `cargo xtask calibrate derive --write`.
+  `cargo xtask calibrate derive --write`. A dump at the shipped constants does
+  not reproduce the labelled `low-cohesion-interface` findings with 2 to 6
+  groups, because the shipped minimum is 7 groups; the labelled dump used the
+  search-start constants.
 - The corpus is small. Every shipped design lint has fewer than ten findings at
   some candidate threshold, or a precision under 80 %, so all three ship at
   Info, and none can reach `warn` until the corpus grows. The calibration notes

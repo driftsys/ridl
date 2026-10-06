@@ -75,7 +75,7 @@ choices, see [`../decisions/`](../decisions/).
 - **design-lints.md** — the workspace design lints as built: the shared pass in
   `ridlc` that the compile and the language server both run, the site index, the
   three shipped checks and their threshold constants, the package dependency
-  graph in `ridlc::deps` that `ridl_metrics` also reads, the `evals/` corpus and
+  graph in `ridlc::deps` that `ridl_metrics` reads, the `evals/` corpus and
   calibration records, `cargo xtask calibrate`, and the tests. The decisions
   behind its choices are
   [ADR-0027](../decisions/ADR-0027-design-lints-calibrated-on-a-corpus.md).
