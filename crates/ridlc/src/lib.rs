@@ -135,6 +135,8 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
             // No manifest: the registry defaults apply (ADR-0024
             // decision 10).
             lints: LintScopes::default(),
+            // No manifest: no header file.
+            codegen_header: None,
             report_scope: None,
         },
     );
@@ -400,6 +402,7 @@ pub fn compile_workspace_with(
         sources,
         lints,
         report_scope,
+        ..
     } = load_and_check(db, entry, overlays)?;
     // System lowering resolves references into the standard package.
     let std_ir = check_package(&*db, workspace, std, std).ir;
@@ -1502,6 +1505,10 @@ struct Compiled {
     /// The lint scopes the loader resolved, carried out unapplied for the
     /// entry points that report diagnostics (ADR-0024 decision 6).
     lints: LintScopes,
+    /// The normalised `[codegen] header-file` text
+    /// ([`LoadedWorkspace::codegen_header`]).
+    #[expect(dead_code, reason = "the backends read it once they take a header")]
+    codegen_header: Option<String>,
     /// The member directory the entry lies in
     /// ([`LoadedWorkspace::report_scope`]).
     report_scope: Option<PathBuf>,
@@ -1531,6 +1538,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         mut diagnostics,
         mut sources,
         lints,
+        codegen_header,
         report_scope,
     } = loaded;
 
@@ -1630,6 +1638,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         diagnostics,
         sources,
         lints,
+        codegen_header,
         report_scope,
     }
 }

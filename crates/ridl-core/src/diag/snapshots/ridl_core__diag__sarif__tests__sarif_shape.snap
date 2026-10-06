@@ -1452,6 +1452,24 @@ expression: log
               }
             },
             {
+              "id": "MANI-011",
+              "shortDescription": {
+                "text": "`[codegen] header-file` cannot be read"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-012",
+              "shortDescription": {
+                "text": "`[codegen] header-file` is set in a workspace member"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
               "id": "MANI-101",
               "shortDescription": {
                 "text": "remote import fetch failed"
@@ -1563,7 +1581,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 156,
+          "ruleIndex": 158,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

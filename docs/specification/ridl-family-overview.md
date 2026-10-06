@@ -331,6 +331,8 @@ are `1xx`.
 | MANI-008 | workspace member directory is missing or has no `ridl.toml` | error    |
 | MANI-009 | invalid `[defaults]` timing value (ridl §9.1)               | error    |
 | MANI-010 | `[lints]` entry names no lint, or its value is not a level  | warning  |
+| MANI-011 | `[codegen] header-file` cannot be read                      | error    |
+| MANI-012 | `[codegen] header-file` is set in a workspace member        | error    |
 | MANI-101 | remote import fetch failed                                  | error    |
 | MANI-102 | fetched content hash does not match the lockfile            | error    |
 | MANI-103 | `--frozen`: no lockfile entry for a remote import           | error    |

@@ -1293,6 +1293,18 @@ diag_codes! {
         MANI_010 = "MANI-010", Warning,
             "`[lints]` entry names no lint, or its value is not a level", lint = "unknown-lint";
 
+        /// The file named by `[codegen] header-file` cannot be read: it does not
+        /// exist, an I/O error occurred, or its text is not UTF-8. The message
+        /// names the resolved path.
+        MANI_011 = "MANI-011", Error,
+            "`[codegen] header-file` cannot be read";
+
+        /// A workspace member's manifest sets `[codegen] header-file`. Only the
+        /// workspace root's manifest, or a standalone package's manifest, may
+        /// set it.
+        MANI_012 = "MANI-012", Error,
+            "`[codegen] header-file` is set in a workspace member";
+
         /// A remote import could not be fetched (network failure, a non-2xx HTTP
         /// status, or a value that is not a fetchable `http(s)` URL).
         MANI_101 = "MANI-101", Error,
