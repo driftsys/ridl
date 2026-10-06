@@ -1697,8 +1697,8 @@ fn materialize_and_lock(
 /// `--emit codegen-model` artifact, one indentation level deeper — the
 /// backend `options`, the artifact base `ridlc` names this package's files
 /// after, and the selected `deployment` section. The one request per package
-/// every in-tree backend and every plugin is handed; a test that wants the bytes a plugin sees
-/// builds it here.
+/// every in-tree backend and every plugin is handed; a test that wants the
+/// bytes a plugin sees builds it here.
 pub fn codegen_request(
     base: &str,
     package: &ridl_ir::v2::Package,
