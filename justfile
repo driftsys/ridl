@@ -343,15 +343,19 @@ compat-check: toolchain-check
 #
 # The format and lint checks are here rather than in `fmt-check` and `lint`,
 # which run `--all` over this repository's workspace and so cannot see a crate
-# outside it. They run over the consumer only — `--no-deps` for clippy, whose
-# default is to lint a path dependency built from source. `generated/` is
-# emitter output, held to the emitter's own proofs, and is not something a
-# contributor edits. Without `--no-deps` it draws three: one
-# `clippy::module_inception`, for the module a package named `veh.cabin` and an
-# interface named `Cabin` give (`veh::cabin::cabin`), and two
-# `clippy::derivable_impls`, for a `Default` the emitter writes out rather than
-# derives. All three are the emitter's own shape, not a defect here, and
-# silencing them one at a time would be a standing tax on the emitter.
+# outside it. The consumer is linted with `--no-deps`, whose absence would lint
+# a path dependency built from source.
+#
+# The generated crate is linted as well, under a closed list. Without any
+# allowance it draws one `clippy::module_inception`, for the module a package
+# named `veh.cabin` and an interface named `Cabin` give (`veh::cabin::cabin`),
+# and two `clippy::derivable_impls`, for a `Default` the emitter writes out
+# rather than derives. Both are the emitter's own shape, so the emitted
+# `lib.rs` allows exactly those two lints. This recipe turns each `allow` in
+# that list into an `expect` on a temporary edit of `lib.rs`, restored on exit.
+# A lint that is not on the list then fails the run as a new defect in the
+# emitter, and a listed lint that no longer fires fails through
+# `unfulfilled_lint_expectations`, so the list cannot go stale.
 #
 # The binary is reached through `CARGO_TARGET_DIR` where it is set, the way
 # `compat-check` reads it, rather than through a hardcoded `./target`: a
@@ -365,9 +369,10 @@ compat-check: toolchain-check
 # Fails on: the build drawing an error; the emitted crate or the consumer
 # failing to compile; the program exiting non-zero or not reporting all four
 # round trips; the lock being out of date; the consumer being unformatted or
-# drawing a clippy warning; a planus crate in the resolved graph of
-# `examples/cabin`; the planus check running no test or more than one, which
-# is what a renamed test or a changed filter does.
+# drawing a clippy warning; the generated crate drawing a clippy warning that
+# its `lib.rs` does not allow, or an allow that no longer fires; a planus crate
+# in the resolved graph of `examples/cabin`; the planus check running no test or
+# more than one, which is what a renamed test or a changed filter does.
 #
 # The planus check is `xtask/tests/oracle_boundary.rs`'s
 # `the_generated_crate_reaches_no_planus_crate`, which is ignored for a plain
@@ -402,6 +407,13 @@ demo:
         echo "demo: the generated crate's planus check did not run exactly one test" >&2
         exit 1
     fi
+    # The emitted `lib.rs` allows the emitter's own lints; `expect` makes both a
+    # missing and a stale entry fail. The trap restores the file on any exit.
+    trap 'mv examples/cabin/generated/lib.rs.bak examples/cabin/generated/lib.rs' EXIT
+    sed -i.bak 's/^#!\[allow(/#![expect(/' examples/cabin/generated/lib.rs
+    cargo clippy --manifest-path examples/cabin/Cargo.toml -p veh_cabin --locked --no-deps -- -D warnings
+    mv examples/cabin/generated/lib.rs.bak examples/cabin/generated/lib.rs
+    trap - EXIT
     cargo fmt --manifest-path examples/cabin/consumer/Cargo.toml --check
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p consumer --locked --all-targets --no-deps -- -D warnings
     # The output is checked, not just the status, and each line carries the
