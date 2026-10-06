@@ -148,8 +148,8 @@ pub struct Member {
     /// The member's name.
     pub name: &'static str,
     /// The member's timing, as the IR resolved it. `None` when the IR carries
-    /// no timing: a `command` or a `query` with no timing annotation, or a
-    /// `fixed`.
+    /// no timing: a `fixed`, or a `command` or `query` in a catalog built
+    /// before commands and queries took a default response bound.
     pub timing: Option<Timing>,
     /// One entry per payload: two for a `query` (the request, then the
     /// reply), one for every other kind.
@@ -160,10 +160,11 @@ impl Member {
     /// The call deadline: the `max` of the member's `timing`, which on a
     /// `command` or a `query` is the response bound (ridl §9.3).
     ///
-    /// `None` when `timing` is `None` — a `command` or a `query` with no
-    /// timing annotation, which is never given a default (ridl §9.1) — or
-    /// when the timing has no `max`, as under `@[20ms..]`. This function
-    /// takes no position on what a caller does with `None`.
+    /// A `command` or a `query` in a catalog built by this version always has
+    /// a `max`: an untimed member takes the package's default response bound
+    /// (ridl §9.1). `None` remains for a catalog built before that default
+    /// existed, where such a member has no timing or a timing without `max`.
+    /// This function takes no position on what a caller does with `None`.
     ///
     /// The function reads `max` whatever the member's `kind`. On a `signal`
     /// `max` is the staleness bound and on an `event` the time to live
