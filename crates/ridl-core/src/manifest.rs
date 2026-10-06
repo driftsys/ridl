@@ -62,12 +62,17 @@ use crate::lint::{LintLevel, LintTable, lint_by_name};
 /// `lints` holds only the valid `[lints]` entries: a registered lint name
 /// mapped to a level. Every other entry is MANI-010 and is dropped
 /// (ADR-0002 §4, ADR-0024 decision 11).
+///
+/// `codegen_header_file` is the raw `[codegen] header-file` value with the byte
+/// range of that value in the manifest text. The loader resolves the path
+/// against the manifest's directory and reads the file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Manifest {
     pub kind: ManifestKind,
     pub imports: BTreeMap<String, String>,
     pub defaults: TimingDefaults,
     pub lints: LintTable,
+    pub codegen_header_file: Option<(String, Range<usize>)>,
 }
 
 /// The raw `[defaults]` timing strings of one manifest, or the merge of
@@ -178,6 +183,10 @@ pub fn parse_manifest(file_id: FileId, text: &str) -> (Option<Manifest>, Vec<Dia
         })
         .unwrap_or_default();
     let lints = collect_lints(file_id, text, &mut diags);
+    let codegen_header_file = raw
+        .codegen
+        .and_then(|codegen| codegen.into_inner().header_file)
+        .map(|value| (value.get_ref().clone(), value.span()));
 
     let kind = if let Some(pkg) = raw.package {
         let section_span = pkg.span();
@@ -215,6 +224,7 @@ pub fn parse_manifest(file_id: FileId, text: &str) -> (Option<Manifest>, Vec<Dia
             imports,
             defaults,
             lints,
+            codegen_header_file,
         }),
         diags,
     )
@@ -231,6 +241,7 @@ struct RawManifest {
     #[serde(default)]
     imports: BTreeMap<String, Spanned<String>>,
     defaults: Option<Spanned<RawDefaults>>,
+    codegen: Option<Spanned<RawCodegen>>,
 }
 
 #[derive(Deserialize)]
@@ -238,6 +249,12 @@ struct RawDefaults {
     timing: Option<String>,
     command_timing: Option<String>,
     query_timing: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct RawCodegen {
+    #[serde(rename = "header-file")]
+    header_file: Option<Spanned<String>>,
 }
 
 #[derive(Deserialize)]
@@ -350,7 +367,7 @@ fn check_unknown_keys(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) 
         Err(_) => return,
     };
     // The allowed-key lists below must stay in sync with the fields of
-    // `RawPackage`, `RawWorkspace`, and `RawDefaults`: a field added there
+    // `RawPackage`, `RawWorkspace`, `RawDefaults`, and `RawCodegen`: a field added there
     // without a matching entry here would wrongly warn as an unknown key.
     // Keys under `[lints]` are lint names; `collect_lints` checks them against
     // the registry (MANI-010), so they are never "unknown" here.
@@ -365,6 +382,7 @@ fn check_unknown_keys(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) 
                 &["timing", "command_timing", "query_timing"],
                 diags,
             ),
+            "codegen" => check_section_keys(file_id, "codegen", value, &["header-file"], diags),
             "imports" => {}
             "lints" => {}
             _ => diags.push(warning(
@@ -977,5 +995,25 @@ version = \"1.0.0\"
         let (_, diags) = parse(&text);
         assert_eq!(codes(&diags), vec!["MANI-010"]);
         assert_eq!(spanned_text(&text, &diags[0]), "nope");
+    }
+
+    #[test]
+    fn codegen_header_file_is_parsed() {
+        let text = format!("{PACKAGE_HEAD}[codegen]\nheader-file = \"H.txt\"\n");
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "no diagnostic, got {diags:?}");
+        let (path, range) = manifest
+            .expect("the manifest parses")
+            .codegen_header_file
+            .expect("header-file is read");
+        assert_eq!(path, "H.txt");
+        assert_eq!(&text[range], "\"H.txt\"");
+    }
+
+    #[test]
+    fn unknown_codegen_key_is_mani_005() {
+        let text = format!("{PACKAGE_HEAD}[codegen]\nheader = \"x\"\n");
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-005"]);
     }
 }

@@ -471,6 +471,8 @@ mod tests {
             options: Vec::new(),
             artifact_base: "p".to_string(),
             deployment: None,
+            generated_marker: String::new(),
+            header: String::new(),
         }
     }
 

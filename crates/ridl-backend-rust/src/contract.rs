@@ -49,11 +49,12 @@ impl codegen::Backend for Backend {
         let Some(model) = &request.model else {
             return refusal("the request carries no model".to_string());
         };
+        let preamble = codegen::comment_preamble(&request.generated_marker, &request.header, "//");
         match generate_pipeline_over(model, wire) {
             Ok(generated) => v1::CodegenResponse {
                 files: vec![codegen::text_file(
                     format!("{}.rs", request.artifact_base),
-                    generated.rust_source,
+                    format!("{preamble}{}", generated.rust_source),
                 )],
                 diagnostics: Vec::new(),
             },

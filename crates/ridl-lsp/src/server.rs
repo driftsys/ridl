@@ -333,6 +333,7 @@ impl ServerState {
             sources,
             lints,
             report_scope: _,
+            codegen_header: _,
         } = load_workspace(&mut self.db, dir)?;
         if workspace.packages(&self.db).is_empty()
             && let Some(root) = find_root(dir)

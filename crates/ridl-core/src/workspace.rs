@@ -29,6 +29,7 @@ use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
 
+use ridl_ir::codegen::{header_control_character, normalise_header};
 use ridl_syntax::ast::{AstNode as _, SourceFile};
 use rowan::{TextRange, TextSize};
 
@@ -52,6 +53,11 @@ pub struct LoadedWorkspace {
     pub diagnostics: Vec<Diagnostic>,
     pub sources: SourceMap,
     pub lints: LintScopes,
+    /// The text of the file named by the root manifest's `[codegen]
+    /// header-file`, normalised by [`ridl_ir::codegen::normalise_header`];
+    /// `None` when no file is named, when the file holds no text, and in
+    /// single-file mode.
+    pub codegen_header: Option<String>,
     /// The member directory the entry lies in, when the entry is inside a
     /// member of the loaded workspace ([`find_root`] walked from the member to
     /// its workspace, or the entry named a path below a member); `None` for
@@ -237,6 +243,7 @@ pub fn load_workspace_with(
         diagnostics: loader.diagnostics,
         sources: loader.sources,
         lints: loader.lints,
+        codegen_header: loader.codegen_header,
         report_scope,
     })
 }
@@ -393,6 +400,8 @@ struct Loader {
     /// (ADR-0024 decision 10). Each key is the directory in the path form the
     /// loader records for the files under it.
     lints: LintScopes,
+    /// The workspace root's (or standalone package's) normalised header text.
+    codegen_header: Option<String>,
     /// Every member directory of a loaded workspace, in the path form of the
     /// files recorded under it. Empty outside workspace mode.
     member_dirs: Vec<PathBuf>,
@@ -419,10 +428,39 @@ impl Loader {
             imports,
             defaults,
             lints,
+            codegen_header_file,
         }) = manifest
         else {
             return Ok(());
         };
+        if let Some((relative, range)) = codegen_header_file {
+            let path = root.join(&relative);
+            match fs::read_to_string(&path) {
+                Ok(header) => match header_control_character(&header) {
+                    None => self.codegen_header = normalise_header(&header),
+                    Some(c) => self.diagnostics.push(error(
+                        DiagCode::MANI_011,
+                        file_id,
+                        byte_range(range.start, range.end),
+                        format!(
+                            "`[codegen] header-file` contains a control character \
+                             (U+{:04X}): `{}`",
+                            u32::from(c),
+                            path.display()
+                        ),
+                    )),
+                },
+                Err(e) => self.diagnostics.push(error(
+                    DiagCode::MANI_011,
+                    file_id,
+                    byte_range(range.start, range.end),
+                    format!(
+                        "`[codegen] header-file` cannot be read: `{}`: {e}",
+                        path.display()
+                    ),
+                )),
+            }
+        }
         // The root directory's scope: the registry defaults overlaid with the
         // root `[lints]`. In workspace mode it is also the base every member
         // overlays its own table on (ADR-0002 §4).
@@ -484,10 +522,21 @@ impl Loader {
             imports,
             defaults,
             lints,
+            codegen_header_file,
         }) = manifest
         else {
             return Ok(());
         };
+        if let Some((_, range)) = codegen_header_file {
+            self.diagnostics.push(error(
+                DiagCode::MANI_012,
+                file_id,
+                byte_range(range.start, range.end),
+                format!(
+                    "`[codegen] header-file` is set in workspace member `{member}`; set it in the workspace root's `ridl.toml`"
+                ),
+            ));
+        }
         // The member directory's scope: the root levels overlaid with the
         // member's own `[lints]` (ADR-0002 §4). The key
         // is the member directory in the same path form as the file paths
@@ -2435,5 +2484,113 @@ service:veh.common.climate 2
         let mut db = RidlDatabase::default();
         let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
         assert_eq!(loaded.report_scope, None, "the root reports on everything");
+    }
+
+    #[test]
+    fn codegen_header_is_read_and_normalised() {
+        let dir = TempDir::new("codegen-header");
+        dir.write(
+            "ridl.toml",
+            &format!("{PACKAGE_A}\n[codegen]\nheader-file = \"H.txt\"\n"),
+        );
+        dir.write("a.typl", "package a\ntype A: integer [0..1]\n");
+        dir.write("H.txt", "SPDX-License-Identifier: MIT\r\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
+        assert_eq!(
+            loaded.codegen_header.as_deref(),
+            Some("SPDX-License-Identifier: MIT")
+        );
+    }
+
+    #[test]
+    fn codegen_header_file_missing_is_mani_011() {
+        let dir = TempDir::new("codegen-header-missing");
+        let manifest = format!("{PACKAGE_A}\n[codegen]\nheader-file = \"nope.txt\"\n");
+        dir.write("ridl.toml", &manifest);
+        dir.write("a.typl", "package a\ntype A: integer [0..1]\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["MANI-011"]);
+        let diag = &loaded.diagnostics[0];
+        let start = usize::from(diag.primary.range.start());
+        let end = usize::from(diag.primary.range.end());
+        assert_eq!(&manifest[start..end], "\"nope.txt\"");
+        let resolved = dir.path().join("nope.txt");
+        assert!(
+            diag.message.contains(&resolved.display().to_string()),
+            "{}",
+            diag.message
+        );
+        assert_eq!(loaded.codegen_header, None);
+    }
+
+    #[test]
+    fn codegen_header_file_that_is_not_utf8_is_mani_011() {
+        let dir = TempDir::new("codegen-header-not-utf8");
+        dir.write(
+            "ridl.toml",
+            &format!("{PACKAGE_A}\n[codegen]\nheader-file = \"H.txt\"\n"),
+        );
+        dir.write("a.typl", "package a\ntype A: integer [0..1]\n");
+        fs::write(dir.path().join("H.txt"), [0xffu8, 0xfe]).expect("write the header");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["MANI-011"]);
+        assert!(
+            loaded.diagnostics[0].message.contains("H.txt"),
+            "{}",
+            loaded.diagnostics[0].message
+        );
+        assert_eq!(loaded.codegen_header, None);
+    }
+
+    #[test]
+    fn codegen_header_file_with_a_control_character_is_mani_011() {
+        let dir = TempDir::new("codegen-header-control");
+        dir.write(
+            "ridl.toml",
+            &format!("{PACKAGE_A}\n[codegen]\nheader-file = \"H.txt\"\n"),
+        );
+        dir.write("a.typl", "package a\ntype A: integer [0..1]\n");
+        dir.write("H.txt", "A\u{2028}B\u{0}\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["MANI-011"]);
+        let diag = &loaded.diagnostics[0];
+        let manifest = fs::read_to_string(dir.path().join("ridl.toml")).unwrap();
+        let start = usize::from(diag.primary.range.start());
+        let end = usize::from(diag.primary.range.end());
+        assert_eq!(&manifest[start..end], "\"H.txt\"");
+        let message = &diag.message;
+        assert!(message.contains("control character"), "{message}");
+        assert!(message.contains("U+2028"), "{message}");
+        assert!(
+            message.contains(&dir.path().join("H.txt").display().to_string()),
+            "{message}"
+        );
+        assert_eq!(loaded.codegen_header, None);
+    }
+
+    #[test]
+    fn codegen_header_file_in_a_member_is_mani_012() {
+        let dir = TempDir::new("codegen-header-member");
+        dir.write(
+            "ridl.toml",
+            "[workspace]\nmembers = [\"a\"]\n\n[codegen]\nheader-file = \"H.txt\"\n",
+        );
+        dir.write("H.txt", "root header\n");
+        let member = format!("{PACKAGE_A}\n[codegen]\nheader-file = \"M.txt\"\n");
+        dir.write("a/ridl.toml", &member);
+        dir.write("a/a.typl", "package a\ntype A: integer [0..1]\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["MANI-012"]);
+        let diag = &loaded.diagnostics[0];
+        let start = usize::from(diag.primary.range.start());
+        let end = usize::from(diag.primary.range.end());
+        assert_eq!(&member[start..end], "\"M.txt\"");
+        assert_eq!(loaded.codegen_header.as_deref(), Some("root header"));
     }
 }

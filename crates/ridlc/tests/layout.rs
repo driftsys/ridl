@@ -284,8 +284,14 @@ fn request_for(entry: &Path, name: &str) -> (v1::CodegenRequest, Option<v2::Syst
     let deployment = ridlc::select_deployment(system.as_ref(), &declared, None, &refs)
         .expect("no name is not an error")
         .expect("the one deployment is selected");
-    let request =
-        ridlc::codegen_request(name, &packages[0], &refs[1..], Vec::new(), Some(deployment));
+    let request = ridlc::codegen_request(
+        name,
+        &packages[0],
+        &refs[1..],
+        Vec::new(),
+        Some(deployment),
+        None,
+    );
     (request, system)
 }
 

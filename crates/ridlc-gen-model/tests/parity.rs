@@ -87,7 +87,8 @@ fn the_plugin_answers_every_corpus_request_as_the_in_process_backend_does() {
     for (entry, packages) in corpus_packages() {
         let others: Vec<&v2::Package> = packages.iter().collect();
         for package in &packages {
-            let request = ridlc::codegen_request(&package.name, package, &others, Vec::new(), None);
+            let request =
+                ridlc::codegen_request(&package.name, package, &others, Vec::new(), None, None);
             let label = format!("{entry}: package {}", package.name);
 
             let in_process = ModelBackend.generate(&request);
@@ -221,6 +222,8 @@ fn the_plugin_refuses_a_schema_it_does_not_know_with_a_diagnostic_naming_both() 
         options: Vec::new(),
         artifact_base: "p".to_string(),
         deployment: None,
+        generated_marker: String::new(),
+        header: String::new(),
     };
     let response = run(&plugin(), &request, TIMEOUT).expect("a response, not a host failure");
     assert!(codegen::has_error(&response));
@@ -242,6 +245,8 @@ fn the_plugin_refuses_an_option_it_does_not_know() {
         }],
         artifact_base: "p".to_string(),
         deployment: None,
+        generated_marker: String::new(),
+        header: String::new(),
     };
     let response = run(&plugin(), &request, TIMEOUT).expect("a response, not a host failure");
     assert!(codegen::has_error(&response));
