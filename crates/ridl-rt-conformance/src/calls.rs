@@ -212,16 +212,19 @@ pub fn an_oversized_claim_is_reported_with_its_id_and_is_not_consumed<F: Factory
     let Err(ReadError::ShortClaim {
         claim: unread,
         needed,
+        trace,
     }) = rt.next_claim(&mut short)
     else {
         panic!("a buffer shorter than the arguments reports ShortClaim");
     };
     assert_eq!(needed, 3, "the bytes the arguments need");
+    assert_eq!(trace, None, "a call sent without a context");
     assert_eq!(
         rt.next_claim(&mut short),
         Err(ReadError::ShortClaim {
             claim: unread,
-            needed: 3
+            needed: 3,
+            trace: None,
         }),
         "the call is not consumed, and is presented again under the same id"
     );
@@ -288,7 +291,8 @@ pub fn the_calls_behind_an_oversized_claim_are_presented_once_it_is_settled<F: F
         rt.next_claim(&mut buf),
         Err(ReadError::ShortClaim {
             claim: first,
-            needed: 3
+            needed: 3,
+            trace: None,
         }),
         "the oversized call stays the next one until it is settled"
     );
@@ -739,8 +743,10 @@ pub fn one_callers_calls_in_flight_each_keep_their_own_context<F: Factory>() {
     assert_eq!(seen, [1, 2], "each call is presented once");
 }
 
-/// A claim reported through `ReadError::ShortClaim` keeps its trace context:
-/// the claim presented once the buffer is large enough carries it.
+/// A claim reported through `ReadError::ShortClaim` carries its trace
+/// context on the error, so that a provider that settles it without reading
+/// it still has the context, and keeps the context: the claim presented once
+/// the buffer is large enough carries it too.
 pub fn an_oversized_claims_context_survives_its_second_presentation<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
@@ -748,10 +754,12 @@ pub fn an_oversized_claims_context_survives_its_second_presentation<F: Factory>(
         .expect("send");
 
     let mut short = [0u8; 1];
-    assert!(matches!(
-        rt.next_claim(&mut short),
-        Err(ReadError::ShortClaim { needed: 3, .. })
-    ));
+    match rt.next_claim(&mut short) {
+        Err(ReadError::ShortClaim {
+            needed: 3, trace, ..
+        }) => assert_eq!(trace, Some(TRACE_A), "the ShortClaim error"),
+        other => panic!("a buffer shorter than the arguments reports ShortClaim: {other:?}"),
+    }
 
     let mut buf = [0u8; 8];
     let claim = rt

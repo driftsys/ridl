@@ -590,9 +590,12 @@ Semantics each implementation presents:
   loss. An occurrence older than its time to live is discarded inside `next`.
 - **The trace context** (ADR-0021 decision 21). `command`, `query` and `raise`
   take a last argument, `trace: Option<TraceContext>`, and `Claim` and
-  `RawOccurrence` carry the field of the same name after `envelope`. The
-  `Envelope` stays at two fields. Four rules, stated on `Caller`, `EventSink`,
-  `Handler` and `EventSource`:
+  `RawOccurrence` carry the field of the same name after `envelope`.
+  `ReadError::ShortClaim` carries it too, after `needed`, so that a provider
+  that settles an oversized claim without reading it still has the caller's
+  context; rule 1 applies to it as it does to the `Claim`. The `Envelope` stays
+  at two fields. Four rules, stated on `Caller`, `EventSink`, `Handler` and
+  `EventSource`:
   1. A runtime that carries the trace context delivers, on the `Claim` that a
      command or a query produces, the value its sender passed, unchanged.
   2. A runtime that carries it delivers, on every `RawOccurrence` that a `raise`
@@ -630,10 +633,11 @@ Semantics each implementation presents:
   the `CallError` outcome. A provider settles
   `CallError::Transport(Transport::Corrupt)` when the argument bytes fail the
   structure check. A claim whose argument bytes do not fit the buffer passed to
-  `next_claim` is reported as `ReadError::ShortClaim { claim, needed }` and not
-  consumed; `settle` accepts that id with any outcome although the arguments
-  were never read, and the generated `serve` settles it `Transport::Corrupt`
-  (ADR-0021 decision 5, amended 2026-09-28; driftsys/ridl#569).
+  `next_claim` is reported as `ReadError::ShortClaim { claim, needed, trace }`
+  and not consumed; `settle` accepts that id with any outcome although the
+  arguments were never read, and the generated `serve` settles it
+  `Transport::Corrupt` (ADR-0021 decision 5, amended 2026-09-28;
+  driftsys/ridl#569).
 - **`ScannableSignals::scan`** writes each interface's changes into `out` all
   together or not at all: when an interface's changes do not fit in the rest of
   `out`, none of them is written, that interface's mark is not updated, and
@@ -641,10 +645,10 @@ Semantics each implementation presents:
 - **A `Short` error does not consume.** `next`, `next_claim` and `reply` return
   `Result<Option<_>, ReadError>`, so a caller that receives
   `ReadError::Short { needed }` — or, from `next_claim`,
-  `ReadError::ShortClaim { claim, needed }`, the form that also carries the
-  claim's id so that the provider can settle the claim unread — resizes and
-  reads the same item again. `next_claim` never returns `Short` (amended
-  2026-09-28, driftsys/ridl#569).
+  `ReadError::ShortClaim { claim, needed, trace }`, the form that also carries
+  the claim's id and trace context so that the provider can settle the claim
+  unread — resizes and reads the same item again. `next_claim` never returns
+  `Short` (amended 2026-09-28, driftsys/ridl#569).
 
 `ScannableSignals`, `CoherentSignals` and `Wakeable` are extensions: they
 describe mechanisms some runtimes have, not interaction semantics every runtime
@@ -850,7 +854,7 @@ pub enum CallError { Contract(Contract), Transport(Transport) }
 #[non_exhaustive] pub enum ProviderError { Serve(ServeError), Claim(ReadError) }
 
 // port::
-#[non_exhaustive] pub enum ReadError      { Short { needed: usize }, ShortClaim { claim: ClaimId, needed: usize }, TooFewSamples { needed: usize }, Contract(Contract), Detached }
+#[non_exhaustive] pub enum ReadError      { Short { needed: usize }, ShortClaim { claim: ClaimId, needed: usize, trace: Option<TraceContext> }, TooFewSamples { needed: usize }, Contract(Contract), Detached }
 #[non_exhaustive] pub enum WriteError     { TooLarge { cap: usize }, NotOwner, Contract(Contract), Detached }
 #[non_exhaustive] pub enum RaiseError     { Busy, TooLarge { cap: usize }, NotOwner, Contract(Contract), Detached }
 #[non_exhaustive] pub enum SendError      { Busy, TooLarge { cap: usize }, Contract(Contract), Detached }

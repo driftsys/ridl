@@ -293,7 +293,9 @@ pub struct Correlation(pub u64);
 /// # Trace context delivery
 ///
 /// - A runtime that carries the trace context delivers, on the [`Claim`] a
-///   command or query produces, the value its sender passed, unchanged.
+///   command or query produces, the value its sender passed, unchanged. The
+///   same holds for the `trace` field of [`ReadError::ShortClaim`], which
+///   reports that claim before its arguments are read.
 /// - A runtime or transport that does not carry the trace context delivers
 ///   `None`.
 /// - A sender's `None` is delivered as `None`.
@@ -549,6 +551,11 @@ pub enum ReadError {
         claim: ClaimId,
         /// The bytes the read needs.
         needed: usize,
+        /// The trace context the sender passed to `command` or `query`, or
+        /// `None`, under the delivery rules on [`Handler`] that apply to
+        /// [`Claim::trace`]. A provider that settles the claim without
+        /// reading it has the context here.
+        trace: Option<TraceContext>,
     },
     /// `samples` has fewer entries than `ords`. Nothing was consumed.
     TooFewSamples {

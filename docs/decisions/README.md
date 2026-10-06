@@ -266,8 +266,9 @@ other entry below is Accepted.
   which aligned it with the frame specification. A 2026-10-06 amendment adds
   decision 21: `ridl_rt::trace`, whose `TraceContext` rides as a last argument
   on `Caller::command`, `Caller::query` and `EventSink::raise` and as a field on
-  `Claim` and `RawOccurrence`, under four delivery rules, leaving `Envelope`
-  unchanged (driftsys/ridl#752); a breaking change released as 0.6.0.
+  `Claim`, `RawOccurrence` and `ReadError::ShortClaim`, under four delivery
+  rules, leaving `Envelope` unchanged (driftsys/ridl#752); a breaking change
+  released as 0.6.0.
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
   and what carries it: a `System` message in `system.proto`, its own artifact

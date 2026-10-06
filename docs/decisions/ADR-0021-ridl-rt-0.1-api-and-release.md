@@ -120,10 +120,12 @@ carries a dated note.
 crosses a process boundary carries an optional trace context, so that a trace
 follows it from the sender to the receiver (driftsys/ridl#752). The send methods
 `Caller::command`, `Caller::query` and `EventSink::raise` gain a last argument,
-and `Claim` and `RawOccurrence` gain a field. This is a breaking change under
-decision 10, because every `Caller` and `EventSink` implementer changes and
-every struct literal of `Claim` or `RawOccurrence` gains a field. It is released
-with the workspace as 0.6.0. The design note is
+and `Claim`, `RawOccurrence` and the `ReadError::ShortClaim` variant gain a
+field. This is a breaking change under decision 10, because every `Caller` and
+`EventSink` implementer changes, every struct literal of `Claim` or
+`RawOccurrence` gains a field, and every `ShortClaim` literal or pattern that
+names its fields without `..` gains one. It is released with the workspace as
+0.6.0. The design note is
 [`2026-10-06-trace-context-propagation-design.md`](../archive/2026-10-06-trace-context-propagation-design.md)
 (driftsys/ridl#752).
 
@@ -891,7 +893,11 @@ trusted with no `unsafe` and no second verification pass.
       (decision 11) pass it through unchanged; `Caller` and `EventSink` have no
       `&P` impl.
     - **The fields.** `Claim` and `RawOccurrence` each gain
-      `pub trace: Option<TraceContext>`, placed after `envelope`.
+      `pub trace: Option<TraceContext>`, placed after `envelope`. The
+      `ReadError::ShortClaim` variant gains `trace: Option<TraceContext>`,
+      placed after `needed`, so that a provider that settles an oversized claim
+      without reading it still learns the caller's context. Rule 1 below applies
+      to it as it does to the `Claim`.
     - **The delivery rules.** Each of the four traits `Caller`, `EventSink`,
       `Handler` and `EventSource` states them in its rustdoc.
       1. A runtime that carries the trace context delivers, on the `Claim` that

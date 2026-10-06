@@ -434,6 +434,7 @@ impl Handler for QueuedClaims {
             return Err(ReadError::ShortClaim {
                 claim: ClaimId(id),
                 needed: usize::MAX,
+                trace: None,
             });
         }
         let waiting = self.counts.waiting.get();
@@ -452,6 +453,7 @@ impl Handler for QueuedClaims {
             return Err(ReadError::ShortClaim {
                 claim: ClaimId(taken as u64),
                 needed: usize::MAX,
+                trace: None,
             });
         }
         Ok(Some(Claim {

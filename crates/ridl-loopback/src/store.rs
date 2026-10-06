@@ -961,6 +961,7 @@ impl Store {
             return Err(ReadError::ShortClaim {
                 claim: ClaimId(claim_id),
                 needed,
+                trace: entry.trace,
             });
         }
         out[..entry.args.len()].copy_from_slice(&entry.args);
