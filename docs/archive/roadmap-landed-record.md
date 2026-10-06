@@ -344,14 +344,15 @@ shared-memory layouts and socket message layouts from its `CodegenRequest`
 alone. **Value:** a backend that targets shared memory needs the size of every
 region and of every slot in it, and a backend that targets a socket needs the
 maximum size of every message it frames. Under ADR-0020 decision 8 the compiler
-lowers once and a backend is mostly a printer, but the codegen model a plugin
-receives today describes one package: it carries no system, no region, no route,
-no crossing and no sizing input beyond the FlatBuffers payload bound. A plugin
-would have to re-derive those facts or receive them outside the toolchain.
-**Exit criteria:** the `CodegenRequest` for `examples/cabin`'s deployment, which
-E17.1 adds, carries every input listed below; a test plugin computes from that
-request alone each region's byte layout and each socket channel's maximum
-message size; and the computed values match a fixture checked by hand.
+lowers once and a backend is mostly a printer, but on 2026-10-05 the codegen
+model a plugin received described one package: it carried no system, no region,
+no route, no crossing and no sizing input beyond the FlatBuffers payload bound.
+A plugin would have to re-derive those facts or receive them outside the
+toolchain. **Exit criteria:** the `CodegenRequest` for `examples/cabin`'s
+deployment, which E17.1 adds, carries every input listed below; a test plugin
+computes from that request alone each region's byte layout and each socket
+channel's maximum message size; and the computed values match a fixture checked
+by hand.
 
 **Priority 1 since 2026-10-05.** Sebastien set it as the critical path ahead of
 the remaining step 1 work in the [backlog](../BACKLOG.md).
@@ -416,14 +417,17 @@ reference §1.4), so the request does not carry it.
 | E17.1 | The system in the codegen request: an rsdl system with one deployment added to `examples/cabin`; per deployment, the regions with their interfaces and hash, the crossing and the encoding per consumer link, the producer and the consumer links of each channel, and the placement; the codegen model's version rule applied **Landed (driftsys/ridl#724).**                                                                                                                                                                                                                                                                | `examples/cabin` has an rsdl system with one deployment, its request carries every region and channel of the lowered system, two runs write the same bytes, and each channel's producer and consumer counts match its routes        | M    |
 | E17.2 | The payload sizes the model lacks: the proto3 bound beside the FlatBuffers bound, requests of zero or several parameters, inline `T \| E` replies, the per-element bound of a stream, recorded once a codec defines the stream encoding, and the optional narrowing of the string capacity after the portable-pattern implementation of driftsys/ridl#597 (driftsys/ridl#665). A shape with no defined encoding (a stream, a multi-parameter request, an inline `T \| E`) gets a size state only once a codec defines its encoding, so this story depends on that definition for those shapes **Landed (driftsys/ridl#723).** | every payload shape of the corpus package whose encoding is defined has a size state for proto3 and for FlatBuffers in the model, and a shape with no defined encoding stays absent and the model says so                           | M    |
 | E17.4 | The rsdl deployment attributes for the queue depth override, the slot count and the call budget: the parser, the checks, the defaults, their lowering into the request, and the lowering of the depth rule E17.0 settled (ADR-0015 decision 21's bound, replaced by a declared `depth`) into the request **Landed (driftsys/ridl#732).**                                                                                                                                                                                                                                                                                      | every event channel of `examples/cabin` has a depth and every call channel a slot count in the request, each with its source, a declared `budget` reaches its links, and a value outside its allowed range draws a coded diagnostic | M    |
-| E17.5 | The proof and the records: a test plugin that computes each region's byte layout and each socket channel's maximum message size from the request alone; the as-built record (E17.0 decided on 2026-10-05 that the system descriptor file and `ridl describe` stay out of scope, ADR-0022 decision 11) **Landed.**                                                                                                                                                                                                                                                                                                             | the test plugin's values for `examples/cabin` match the fixture, and the catalog descriptor record states where the system facts are built                                                                                          | M    |
+| E17.5 | The proof and the records: a test plugin that computes each region's byte layout and each socket channel's maximum message size from the request alone; the as-built record (E17.0 decided on 2026-10-05 that the system descriptor file and `ridl describe` stay out of scope, ADR-0022 decision 11) **Landed (driftsys/ridl#736). Each socket message carries its proto3 bound only: its `max_message_bytes` is null until the WebSocket binding row lands (driftsys/ridl#718).**                                                                                                                                           | the test plugin's values for `examples/cabin` match the fixture, and the catalog descriptor record states where the system facts are built                                                                                          | M    |
 
 **What landed.** The `CodegenRequest` of a build carries a deployment section
 (`--deployment NAME` on `build`), the size states per encoding, the reservation
 and the table budget; the rsdl keys `depth`, `slots` and `budget` declare the
 sizing values (RSDL-709, RSDL-805, RSDL-806); and a test plugin in
 `crates/ridlc/tests/layout.rs` computes `examples/cabin`'s regions and socket
-messages from the request alone, checked against a fixture derived by hand. The
+messages from the request alone, checked against a fixture derived by hand. Each
+socket message in the fixture carries its proto3 bound only; its
+`max_message_bytes` is null until the WebSocket binding row lands
+(driftsys/ridl#718), because the table of binding overheads has no row. The
 as-built record is [the codegen plugin design](../design/codegen-plugins.md),
 which holds the deployment section, and ADR-0022 decision 11. Story E17.3 stays
 open for one row, the WebSocket binding's overheads, which waits on
