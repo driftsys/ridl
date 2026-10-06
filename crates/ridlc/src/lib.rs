@@ -531,7 +531,7 @@ pub enum Emit {
     /// JSON, written to `<base>.codegen.json`.
     ///
     /// It is the payload a codegen request carries (ADR-0020 decisions 8 and
-    /// 9), written byte for byte as the request would carry it, so a plugin's
+    /// 9), the same JSON value as the request's `model`, so a plugin's
     /// fixture is a file `ridlc` wrote. It is classified with the code emits
     /// rather than the IR dumps: the model is lowered over the same scope a
     /// code emit reads, `ridl.std` included, and `ridl baseline` publishes
@@ -1693,8 +1693,8 @@ fn materialize_and_lock(
 /// The codegen request for one package (ADR-0020 decision 9; the IR
 /// specification §7): the schema name and this toolchain's version first,
 /// the model lowered over `others` — the same scope every code emit reads,
-/// so the request's `model` is the `--emit codegen-model` artifact byte for
-/// byte — the backend `options`, and the artifact base `ridlc` names this
+/// so the request's `model` is the same JSON value as the
+/// `--emit codegen-model` artifact, one indentation level deeper — the backend `options`, and the artifact base `ridlc` names this
 /// package's files after. The one request per package every in-tree backend
 /// and every plugin is handed; a test that wants the bytes a plugin sees
 /// builds it here.

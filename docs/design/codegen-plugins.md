@@ -98,15 +98,16 @@ backend that forgets to set it has failed rather than warned.
 **The encoding on the pipe** is canonical protobuf JSON, pretty-printed, through
 the same generated impls and the same reader as the IR and the model
 (`request_to_json`, `request_from_json`, `response_to_json`,
-`response_from_json` in `ridl_ir::codegen`). The request's `model` is the
-`--emit codegen-model` artifact byte for byte, one indentation level deeper; a
-plugin author's fixture is therefore a file `ridlc` wrote, wrapped. The reader
-keeps the IR's nesting ceiling of 1,000 JSON levels; the deepest request the
-front end admits nests to 265 (the model's 264 plus one for the field), and a
-plugin's parser must provision that much. The generated reader rejects an
-unknown key, so a plugin that answers with a field this schema does not have is
-reported as malformed rather than silently accepted; a plugin's own reader
-should be lenient, per the IR specification §8.
+`response_from_json` in `ridl_ir::codegen`). The request's `model` is the same
+JSON value as the `--emit codegen-model` artifact, one indentation level deeper,
+so the two are equal as JSON but not byte for byte; a plugin author's fixture is
+therefore a file `ridlc` wrote, wrapped. The reader keeps the IR's nesting
+ceiling of 1,000 JSON levels; the deepest request the front end admits nests to
+265 (the model's 264 plus one for the field), and a plugin's parser must
+provision that much. The generated reader rejects an unknown key, so a plugin
+that answers with a field this schema does not have is reported as malformed
+rather than silently accepted; a plugin's own reader should be lenient, per the
+IR specification §8.
 
 **Sizes and reservations.** The model states the maximum encoded size of every
 payload, of every command and query request, and of every query reply, once per
@@ -140,19 +141,21 @@ pub trait Backend {
 }
 ```
 
-The signature is the contract's own, over the request alone. Every in-tree
-backend is nevertheless still a reader of the raw IR until its port, so each is
-constructed with a `RawIr { package, others }` it keeps beside the request and
-reads in place of `request.model`:
+The signature is the contract's own, over the request alone. The Rust backend
+reads only `request.model`, so it is constructed with nothing. The TypeScript,
+proto3 and FlatBuffers backends are still readers of the raw IR until their
+port, so each is constructed with a `RawIr { package, others }` it keeps beside
+the request and reads in place of `request.model`:
 
 ```rust
 let raw = codegen::RawIr { package: ir, others };
 let backend: Box<dyn codegen::Backend + '_> = match emit {
-    Emit::Rust => Box::new(ridl_backend_rust::Backend::new(raw)),
+    Emit::Rust => Box::new(ridl_backend_rust::Backend),
     Emit::TypeScript => Box::new(ridl_backend_ts::Backend::new(raw)),
     Emit::Proto => Box::new(ridl_backend_proto::Backend::new(raw)),
     Emit::Flatbuffers => Box::new(ridl_backend_flatbuffers::Backend::new(raw)),
     Emit::CodegenModel => Box::new(codegen::ModelBackend),
+    Emit::Catalog => /* the catalog descriptor, written directly, no request */,
     Emit::IrJson | Emit::IrText | Emit::IrBinary => /* a direct IR dump, no request */,
 };
 let response = backend.generate(request);
@@ -160,10 +163,10 @@ write_response(out_dir, Origin::InTree { language: backend.language() }, &respon
 ```
 
 So what changes when a backend is ported is how it is built — `RawIr` leaves its
-constructor — never how it is called, and the request it is handed today is
-already the request a plugin is handed. The three IR dumps are not backends and
-take no request; the request is built only when a code emit or a plugin will
-read it.
+constructor, as it has left the Rust backend's — never how it is called, and the
+request it is handed today is already the request a plugin is handed. The three
+IR dumps and the catalog descriptor are not backends and take no request; the
+request is built only when a code emit or a plugin will read it.
 
 `write_response` records the response's diagnostics — an in-tree backend's
 message as it is, since the corpus snapshots pin those messages; a plugin's
