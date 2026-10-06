@@ -103,10 +103,10 @@ The schema of the request and the response is the protobuf package
 package of its own. Today an author copies the files from the release tag the
 plugin is tested against, as [driftsys/ridlc-gen-kotlin][kotlin] does: it keeps
 the files unchanged and runs a check that fails when they differ from the
-pinned tag. Copy every file that the tag's `plugin.proto` imports. From the
-first release that carries `deployment.proto`, that is all three files: a
-`plugin.proto` that imports `deployment.proto` does not compile without it.
-Until that release, `deployment.proto` exists only on `main`.
+pinned tag. Copy every file that the tag's `plugin.proto` imports: where the
+tag holds `deployment.proto`, that is all three files, and a `plugin.proto`
+that imports `deployment.proto` does not compile without it. An older tag holds
+only `plugin.proto` and `model.proto`.
 
 ## Compatibility
 
