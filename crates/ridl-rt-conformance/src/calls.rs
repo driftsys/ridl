@@ -708,6 +708,37 @@ pub fn two_calls_in_flight_each_keep_their_own_context<F: Factory>() {
     assert_eq!(second_claim.trace, Some(TRACE_B));
 }
 
+/// Two calls in flight from one caller each keep the trace context they were
+/// sent with: the second call does not take the context of the first, which
+/// is still in flight when the second is sent. Each claim is identified by
+/// its argument bytes, so the case does not depend on the presentation
+/// order.
+pub fn one_callers_calls_in_flight_each_keep_their_own_context<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+
+    rt.command(IFACE, ORD, &[1], Some(TRACE_A)).expect("send");
+    rt.command(IFACE, ORD, &[2], Some(TRACE_B)).expect("send");
+
+    let mut buf = [0u8; 8];
+    let mut seen = Vec::new();
+    for _ in 0..2 {
+        let claim = rt
+            .next_claim(&mut buf)
+            .expect("next_claim")
+            .expect("waiting");
+        match buf[..claim.len] {
+            [1] => assert_eq!(claim.trace, Some(TRACE_A), "the first call"),
+            [2] => assert_eq!(claim.trace, Some(TRACE_B), "the second call"),
+            ref other => panic!("a claim no call was sent with: {other:?}"),
+        }
+        seen.push(buf[0]);
+        rt.settle(claim.id, Ok(&[])).expect("settle");
+    }
+    seen.sort_unstable();
+    assert_eq!(seen, [1, 2], "each call is presented once");
+}
+
 /// A claim reported through `ReadError::ShortClaim` keeps its trace context:
 /// the claim presented once the buffer is large enough carries it.
 pub fn an_oversized_claims_context_survives_its_second_presentation<F: Factory>() {

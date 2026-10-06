@@ -251,6 +251,7 @@ macro_rules! suite {
             calls::a_querys_context_arrives_on_its_claim,
             calls::a_call_sent_without_a_context_arrives_without_one,
             calls::two_calls_in_flight_each_keep_their_own_context,
+            calls::one_callers_calls_in_flight_each_keep_their_own_context,
             calls::an_oversized_claims_context_survives_its_second_presentation,
             calls::a_reused_call_slot_does_not_keep_the_previous_context,
         );
