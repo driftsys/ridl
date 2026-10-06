@@ -121,28 +121,28 @@ other entry below is Accepted.
   expresses QoS as semantic obligation, never as a transport knob, so it
   _absorbs_ QoS rather than excluding it. `command` and `query` gain the range
   form of the §9 timing annotation — `min` is a call throttle, `max` a response
-  bound — warned but never defaulted (RIDL-112), with a diff category of its own
-  because `min`'s direction inverts on an RPC. States the coherence rule at the
-  interface grain, makes a provided interface the generation unit, and lifts the
-  one-interface restriction on `service` so that grain is real: a
-  comma-separated shape list, per-interface ordinals keyed by name, flat
-  addressing preserved, five diagnostics (RIDL-144 to RIDL-148), and five diff
-  categories. Not epic-scoped: it binds the language surface until superseded.
-  Two amendments came out of implementation review rather than design: ADR-0014
-  decision 12 retracts that record's infallible serialization return, and
-  decision 24 here requires an interface name to be unique across a service's
-  shapes, live or retired, and makes a retargeted slot breaking. Amended in
-  place on 2026-09-15 by the lock design (rsdl decision D-7): an interface's
-  number comes from its package's `interfaces.lock`, the list is a set with no
-  tombstone, the ordinal spaces are keyed on (package, interface number),
-  RIDL-146 to RIDL-148 are retired, and the five slot categories are replaced by
-  `ServiceInterfaceAdded` and `ServiceInterfaceRemoved` (decisions 12, 15, 17,
-  18, 19, 20 and 24, each dated); decisions 9 and 10 each gain a further dated
-  paragraph following this record's citations into the rsdl reference v0.2.0
-  (rewritten 2026-09-13), which renumbered the sections they name and reserved
-  two of the codes. Amended again 2026-09-16: decision 9's coherence group is
-  corrected to be the provided interface, identified by its number in the
-  package's `interfaces.lock` rather than by the interface name.
+  bound — warned and given a default response bound (RIDL-112), with a diff
+  category of its own because `min`'s direction inverts on an RPC. States the
+  coherence rule at the interface grain, makes a provided interface the
+  generation unit, and lifts the one-interface restriction on `service` so that
+  grain is real: a comma-separated shape list, per-interface ordinals keyed by
+  name, flat addressing preserved, five diagnostics (RIDL-144 to RIDL-148), and
+  five diff categories. Not epic-scoped: it binds the language surface until
+  superseded. Two amendments came out of implementation review rather than
+  design: ADR-0014 decision 12 retracts that record's infallible serialization
+  return, and decision 24 here requires an interface name to be unique across a
+  service's shapes, live or retired, and makes a retargeted slot breaking.
+  Amended in place on 2026-09-15 by the lock design (rsdl decision D-7): an
+  interface's number comes from its package's `interfaces.lock`, the list is a
+  set with no tombstone, the ordinal spaces are keyed on (package, interface
+  number), RIDL-146 to RIDL-148 are retired, and the five slot categories are
+  replaced by `ServiceInterfaceAdded` and `ServiceInterfaceRemoved` (decisions
+  12, 15, 17, 18, 19, 20 and 24, each dated); decisions 9 and 10 each gain a
+  further dated paragraph following this record's citations into the rsdl
+  reference v0.2.0 (rewritten 2026-09-13), which renumbered the sections they
+  name and reserved two of the codes. Amended again 2026-09-16: decision 9's
+  coherence group is corrected to be the provided interface, identified by its
+  number in the package's `interfaces.lock` rather than by the interface name.
 
 - **ADR-0016 — Schema projection and the pinned name transform.** The four
   properties every projection from IR identity to a target's namespace must

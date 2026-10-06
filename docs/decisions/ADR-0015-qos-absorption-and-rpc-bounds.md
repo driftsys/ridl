@@ -61,6 +61,10 @@ Amended 2026-10-05 — decision 21: the event ring depth stays derived, is
 tabulated into the codegen request, and is declarable as an rsdl deployment
 override (driftsys/ridl#715).
 
+Amended 2026-10-06 — decisions 4 and 7: a `command` or `query` takes a default
+response bound, like a signal or event, and `default_applied` can be true on an
+RPC (driftsys/ridl#741).
+
 ## Context
 
 The question that produced both notes: can ridl be the single source of truth
@@ -148,16 +152,22 @@ indistinguishable, so no claim about any of the three can be exercised.
    what varies per interaction, which is why gRPC, DDS-RPC, and AIDL all bound
    the whole call.
 
-4. **Warned, never defaulted.** An RPC with no declared response bound draws a
+4. **Warned, and defaulted.** An RPC with no declared response bound draws a
    warning, and an active profile may escalate that warning to an error — the
-   same two-step §9.1 already gives an untimed signal or event. What an RPC does
-   not get is a **default**. There is no plausible generic value, because what
-   the provider does differs by orders of magnitude between interactions; and a
-   defaulted response bound is worse than none, because it is a provider
-   obligation that callers size their own timeouts against, so inventing one
-   manufactures a promise nobody made. Absent therefore means undeclared in the
-   IR, and this change stays clear of the "changing the configured default is a
-   contract change" machinery.
+   same two-step §9.1 already gives an untimed signal or event. It also receives
+   a **default** response bound: the package's `[defaults] command_timing` or
+   `query_timing`, else the workspace's value of the same key, else the built-in
+   `[..1s]` for a `command` and `[..3s]` for a `query`. Each key resolves on its
+   own, as `timing` does for a signal or event. The first version of this
+   decision refused a default, because no generic value is plausible and an
+   invented bound is a promise nobody made. A default is not invented: the
+   package declares it in its manifest, the reference documents the built-in,
+   and both sides read the resolved bound from the catalog. An author who wants
+   every call bound explicitly sets `missing-response-bound = "deny"`, which
+   turns an untimed call into an error. A default fills `max` only: a member
+   written `@[20ms..]` keeps its `min` and takes `max` from the default, and a
+   default's `min` applies only to a member with no annotation. Changing a
+   configured default is a contract change, as it is for `timing`.
 
    The warning is about `max` specifically, not about the annotation:
    `@[20ms..]` declares a throttle and no response bound, so it warns exactly as
@@ -173,10 +183,11 @@ indistinguishable, so no claim about any of the three can be exercised.
    - **RIDL-112 is minted** — `command` or `query` with no declared response
      bound. Severity warning, escalated to error where the active profile
      requires it. It is the RPC counterpart of RIDL-100 and deliberately not
-     RIDL-100 itself, whose text turns on a default having been applied, which
-     is exactly what an RPC does not get. RIDL-111 is unavailable: ADR-0008
-     decision 21 allocated it to the interface-used-as-a-type error, so 112 is
-     the first free code in the band.
+     RIDL-100 itself, which is bound to the `timing` default and to a signal or
+     event. After the amendment of decision 4 it reports that the call took the
+     default response bound. RIDL-111 is unavailable: ADR-0008 decision 21
+     allocated it to the interface-used-as-a-type error, so 112 is the first
+     free code in the band.
    - **RIDL-106 narrows.** It currently covers a timing annotation on `command`,
      `query`, and `fixed`, plus an attribute block on `fixed`. It keeps `fixed`
      in both halves and drops the two RPC kinds.
@@ -194,9 +205,10 @@ indistinguishable, so no claim about any of the three can be exercised.
    `CommandDef.timing = 3` and `QueryDef.timing = 4`. With both bounds admitted
    all four of `Timing`'s fields carry meaning for an RPC: `mode` is always
    `Range`, `min_us` is the call throttle, `max_us` the response bound, and
-   `default_applied` always false, since RPC bounds are never defaulted. A
-   dedicated scalar `budget_us` field was rejected: reusing `Timing` keeps one
-   representation of a timing bound in the IR rather than two.
+   `default_applied` means what it means on a signal: at least one bound came
+   from a default. A dedicated scalar `budget_us` field was rejected: reusing
+   `Timing` keeps one representation of a timing bound in the IR rather than
+   two.
 
 8. **diff: a new `Category::RpcBoundChanged`, not a kind-aware branch inside
    `TimingChanged`.** The direction rule does not transfer, and that is what
