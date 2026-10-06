@@ -13568,10 +13568,15 @@ interface VehicleStatus {
             "MANI-009 must name the key, got {:?}",
             errors[0].message,
         );
+        let fallback = rpc_timing(&checked, "c").unwrap();
         assert_eq!(
-            rpc_timing(&checked, "c").unwrap().max_us.as_deref(),
+            fallback.max_us.as_deref(),
             Some("1000000"),
-            "the command falls back to the built-in",
+            "the command falls back to the built-in"
+        );
+        assert_eq!(
+            fallback.min_us, None,
+            "the command built-in has no min, unlike the signal built-in",
         );
         assert_eq!(
             rpc_timing(&checked, "q").unwrap().max_us.as_deref(),
@@ -13603,10 +13608,15 @@ interface VehicleStatus {
             Some("250000"),
             "the valid command default applies",
         );
+        let fallback = rpc_timing(&checked, "q").unwrap();
         assert_eq!(
-            rpc_timing(&checked, "q").unwrap().max_us.as_deref(),
+            fallback.max_us.as_deref(),
             Some("3000000"),
-            "the query falls back to the built-in",
+            "the query falls back to the built-in"
+        );
+        assert_eq!(
+            fallback.min_us, None,
+            "the query built-in has no min, unlike the signal built-in",
         );
         let signal = signal_def(&checked, "s").timing.clone().unwrap();
         assert_eq!(signal.min_us.as_deref(), Some("100000"));

@@ -1436,10 +1436,11 @@ fn serve_is_ready_with_the_refusal_when_the_handler_refuses_the_members() {
 }
 
 /// `Valve`'s calls declare no response bound, so each carries the built-in
-/// default for its kind (ridl §9.3) in the generated face: 1 s for the command
-/// and 3 s for the query. The deadline is read from the members, so no test
-/// waits for it. A member with no `max` has no deadline (note F-2); that path
-/// is covered at the `Member` level by `ridl-rt`'s `call_deadline` tests.
+/// default for its kind (ridl §9.3) in the generated face: 1 s for the
+/// command and 3 s for the query. The deadline is read from the members, so
+/// no test waits for it. A member with no `max` has no deadline (note F-2);
+/// that path is covered at the `Member` level by `ridl-rt`'s `call_deadline`
+/// tests.
 #[test]
 fn an_untimed_member_carries_the_built_in_default_deadline() {
     use ridl_rt::contract::Interaction;
@@ -2155,8 +2156,8 @@ fn blocking_round_trip_command_and_query_are_served_from_another_thread() {
 /// gives up at the client's timeout with `Send(Busy)`, the answer the future
 /// gives at its own deadline; nothing was sent, so nothing is forgotten. The
 /// member is `Valve::open`, whose default `max` of 1 s is longer than the
-/// client's timeout, so the client's timeout is the bound that is reached. `set_timeout` is the setter here, `with_timeout` in the
-/// other tests.
+/// client's timeout, so the client's timeout is the bound that is reached.
+/// `set_timeout` is the setter here, `with_timeout` in the other tests.
 #[test]
 fn a_blocking_call_still_unsent_at_its_timeout_returns_send_busy() {
     let rt = loopback();

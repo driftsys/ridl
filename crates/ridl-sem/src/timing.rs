@@ -1348,6 +1348,24 @@ mod tests {
         }
     }
 
+    /// A written throttle equal to the default response bound is the same
+    /// degenerate range RIDL-108 reports on a written `@[1s..1s]`, checked on
+    /// the range the default completed.
+    #[test]
+    fn half_open_min_equal_to_the_default_max_is_ridl_108() {
+        let default = builtin_command_timing();
+        let (spec, diags) = resolve(
+            Some(&annot("command setTarget(speed: Speed) @[1s..]")),
+            InteractionKind::Command,
+            &default,
+        );
+        assert_eq!(codes(&diags), vec!["RIDL-108", "RIDL-112"]);
+        let spec = spec.expect("resolved");
+        assert_eq!(spec.min_us, value_of("1s"));
+        assert_eq!(spec.max_us, value_of("1s"));
+        assert!(spec.default_applied);
+    }
+
     /// Strict periodic stays signal-only: `@Xms` on a command or query is
     /// RIDL-103, widened from event-only (ADR-0015 decisions 5 and 6).
     #[test]
