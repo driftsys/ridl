@@ -19,8 +19,8 @@ unchanged.
 
 **Tech Stack:** Rust (pinned toolchain), salsa, `toml`/`serde`, `just` gates.
 
-**Spec:** `docs/wip/2026-10-06-rpc-default-response-bound-design.md` — read it
-before any task. Section numbers below (§3, §4, …) refer to it.
+**Spec:** `docs/archive/2026-10-06-rpc-default-response-bound-design.md` — read
+it before any task. Section numbers below (§3, §4, …) refer to it.
 
 ## Global Constraints
 
