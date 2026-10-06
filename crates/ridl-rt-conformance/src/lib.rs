@@ -224,6 +224,7 @@ macro_rules! suite {
             events::a_short_buffer_leaves_the_occurrence_for_the_next_call,
             events::a_sink_sequence_number_counts_one_channel_publications,
             events::a_raised_events_context_arrives_on_every_subscribers_occurrence,
+            events::two_occurrences_each_keep_their_own_context,
             events::an_event_raised_without_a_context_arrives_without_one,
             events::a_short_buffer_keeps_the_occurrences_context,
             calls::a_command_is_delivered_and_acknowledged,

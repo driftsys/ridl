@@ -3,7 +3,7 @@
 
 use ridl_rt::port::{EventSink, EventSource, ReadError};
 
-use crate::{Factory, IFACE, ORD, OTHER, TRACE_A, runtime};
+use crate::{Factory, IFACE, ORD, OTHER, TRACE_A, TRACE_B, runtime};
 
 /// A raised occurrence reaches a subscribed source, whole.
 pub fn an_event_raise_and_receive_round_trips<F: Factory>() {
@@ -123,6 +123,23 @@ pub fn a_raised_events_context_arrives_on_every_subscribers_occurrence<F: Factor
     assert_eq!(first.trace, Some(TRACE_A));
     let other = second.next(&mut out).expect("next").expect("waiting");
     assert_eq!(other.trace, Some(TRACE_A));
+}
+
+/// Two occurrences raised with different trace contexts each arrive with
+/// their own: a source does not keep the first context for later ones. The
+/// payloads are not empty.
+pub fn two_occurrences_each_keep_their_own_context<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.subscribe(IFACE, &[ORD]).expect("subscribe");
+
+    rt.raise(IFACE, ORD, &[1], Some(TRACE_A)).expect("raise");
+    rt.raise(IFACE, ORD, &[2], Some(TRACE_B)).expect("raise");
+
+    let mut out = [0u8; 8];
+    let first = rt.next(&mut out).expect("next").expect("waiting");
+    assert_eq!(first.trace, Some(TRACE_A));
+    let second = rt.next(&mut out).expect("next").expect("waiting");
+    assert_eq!(second.trace, Some(TRACE_B));
 }
 
 /// An event raised without a trace context arrives without one.
