@@ -1657,6 +1657,17 @@ mod tests {
     }
 
     #[test]
+    fn a_leading_comment_block_is_kept() {
+        let block = "// Copyright Acme\n//\n// SPDX-License-Identifier: MIT\n";
+        for profile in [Profile::Typl, Profile::Ridl, Profile::Rsdl] {
+            for separator in ["\n", ""] {
+                let source = format!("{block}{separator}package p\n");
+                assert_profile_format(&source, &source, profile, &FormatOptions::default());
+            }
+        }
+    }
+
+    #[test]
     fn rsdl_component_header_width_counts_the_opening_brace() {
         let source = "package p\ncomponent Cruise [instances=(primary,backup,),deprecated=\"use Cruise2\",rust.crate=\"cruise\",someip.serviceId=4660,linux.realtime,] { offers veh.adas.cruise }\n";
         let block = "package p\n\ncomponent Cruise [\n  instances = (primary, backup)\n  deprecated = \"use Cruise2\"\n  rust.crate = \"cruise\"\n  someip.serviceId = 4660\n  linux.realtime\n] {\n  offers veh.adas.cruise\n}\n";
