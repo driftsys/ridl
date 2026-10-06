@@ -124,8 +124,10 @@ and `Claim`, `RawOccurrence` and the `ReadError::ShortClaim` variant gain a
 field. This is a breaking change under decision 10, because every `Caller` and
 `EventSink` implementer changes, every struct literal of `Claim` or
 `RawOccurrence` gains a field, and every `ShortClaim` literal or pattern that
-names its fields without `..` gains one. It is released with the workspace as
-0.6.0. The design note is
+names its fields without `..` gains one. It is to be released with the workspace
+as 0.6.0. `TraceContext` joins the named-field structs that decision 10 lists as
+unable to gain a public field without a breaking change, so that list now holds
+sixteen. The design note is
 [`2026-10-06-trace-context-propagation-design.md`](../archive/2026-10-06-trace-context-propagation-design.md)
 (driftsys/ridl#752).
 
@@ -510,6 +512,13 @@ trusted with no `unsafe` and no second verification pass.
     tuple structs a public field cannot be added to, and the edition/MSRV matrix
     below. The version _number_ moves with the rest of the workspace; the _rule_
     for when it must move stays this decision's.
+
+    **Amended (2026-10-06).** Decision 21 is a breaking change under this rule:
+    it adds a last argument to `Caller::command`, `Caller::query` and
+    `EventSink::raise`, and a field to `Claim`, `RawOccurrence` and
+    `ReadError::ShortClaim`. It ships with the workspace as 0.6.0. Its
+    `TraceContext` is a named-field struct a public field cannot be added to,
+    and joins the list above.
 
     `ridl-rt` supports Rust 1.83 or newer: `rust-version = "1.83"` in
     `crates/ridl-rt/Cargo.toml`. The crate's manifest compiles as edition 2021,

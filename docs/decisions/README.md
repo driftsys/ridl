@@ -264,11 +264,11 @@ other entry below is Accepted.
   reference finalization pass (story E14.2). The two reference sentences it gave
   that pass for #308 and #309 are in the reference since driftsys/ridl#544,
   which aligned it with the frame specification. A 2026-10-06 amendment adds
-  decision 21: `ridl_rt::trace`, whose `TraceContext` rides as a last argument
-  on `Caller::command`, `Caller::query` and `EventSink::raise` and as a field on
-  `Claim`, `RawOccurrence` and `ReadError::ShortClaim`, under four delivery
-  rules, leaving `Envelope` unchanged (driftsys/ridl#752); a breaking change
-  released as 0.6.0.
+  decision 21: `ridl_rt::trace`, whose `TraceContext` is passed as the last
+  argument on `Caller::command`, `Caller::query` and `EventSink::raise` and as a
+  field on `Claim`, `RawOccurrence` and `ReadError::ShortClaim`, under four
+  delivery rules, leaving `Envelope` unchanged (driftsys/ridl#752); a breaking
+  change to be released with the workspace as 0.6.0.
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
   and what carries it: a `System` message in `system.proto`, its own artifact
