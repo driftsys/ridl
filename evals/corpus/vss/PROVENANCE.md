@@ -68,7 +68,8 @@ Vehicle.Cabin:
 
 ## Frozen scope and budget
 
-Approved §3.2 row, verbatim:
+The approved row of §3.2 of the design
+(`docs/archive/2026-10-04-design-lints-design.md`), verbatim:
 
 | `vss` | `COVESA/vehicle_signal_specification` | The `Vehicle.Cabin.HVAC`
 branch, and `Vehicle.Powertrain.TractionBattery` if the budget allows | ≤ 1,000

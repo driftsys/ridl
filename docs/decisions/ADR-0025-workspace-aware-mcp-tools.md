@@ -34,6 +34,13 @@ workspace for every entry point (ADR-0002 §4). Decision 2 is edited in place to
 that rule: the note for a member path is gone, and the path mode reports only
 the diagnostics of files under the member.
 
+Amended 2026-10-06 by
+[ADR-0027](ADR-0027-design-lints-calibrated-on-a-corpus.md) (workspace design
+lints): a ninth tool, `ridl_metrics`, is added under decision 9, and the package
+dependency edges that decision 8 counts are now computed in `ridlc::deps` and
+shared with the compiler's design lints. `ridl_dependencies` still reports the
+complete graph.
+
 ## Context
 
 Before this work `ridl mcp` exposed one tool, `ridl_check(source, profile)`. It
@@ -121,6 +128,7 @@ pasted-source form.
    the whole `tools/list` response against `crates/ridl-mcp/tests/tools.json`,
    so any schema change appears as a diff in review, and the test tells the
    reader to update that file deliberately when the change is additive.
+   `ridl_metrics` is the first tool added under this rule (ADR-0027 decision 9).
 
 ## Alternatives considered
 

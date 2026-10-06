@@ -9,7 +9,7 @@ comments and blank lines. `tasks/` and `calibration/` hold the evaluation tasks
 and calibration records as those stages are completed.
 
 The
-[porting rules](../docs/wip/2026-10-04-design-lints-design.md#33-porting-rules)
+[porting rules](../docs/decisions/ADR-0027-design-lints-calibrated-on-a-corpus.md)
 require upstream names, units, grouping and comments to survive translation.
 Units and interface boundaries need upstream evidence; each set records its
 fixed interaction-kind rule and every required representation deviation. Omit
@@ -19,7 +19,8 @@ declarations field by field and justifies every deviation before a port is
 committed. Source budgets are 2,500 lines each for `ros2` and `mavlink`, 1,000
 for `vss`, and 6,000 in total; expected warnings are preserved.
 
-The [task format](../docs/wip/2026-10-04-design-lints-design.md#81-task-format)
+The
+[task format](../docs/decisions/ADR-0027-design-lints-calibrated-on-a-corpus.md)
 uses one directory per stable task ID, with `task.toml`, `prompt.md` and
 `rubric.md`. The manifest records a `review`, `evolve` or `design` task and its
 compilation, lint or compatibility expectations. The prompt states the
@@ -29,7 +30,7 @@ independent review and approval of the task set; review rubrics are written
 before candidate checks run on the corpus.
 
 The
-[calibration procedure](../docs/wip/2026-10-04-design-lints-design.md#7-calibration)
+[calibration procedure](../docs/design/design-lints.md#the-corpus-and-the-calibration)
 starts with committed ports and independently written review rubrics, then
 implements candidate checks and dumps their findings. Claude and Sol label
 findings independently; the maintainer adjudicates disagreements and reviews a

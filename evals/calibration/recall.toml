@@ -1,4 +1,4 @@
-# Recall join between the review rubrics and the design check findings (design spec section 7.4).
+# Recall join between the review rubrics and the design check findings (ADR-0027 decision 7).
 # Built after blind labelling and human adjudication were complete (2026-10-06).
 #
 # Inventory rules:
@@ -11,9 +11,9 @@
 #   A recommendation that addresses more than one issue is `excluded` with the reason given.
 #
 # Applicability rule: a check is applicable to a canonical issue only when the issue's subject is
-# the property that the check's rule computes (design spec section 4).
+# the property that the check's rule computes (ADR-0027 decision 7).
 # Matching rule: `findings` lists every finding that points at the issue, whatever its adjudicated
-# label, because labels measure precision and matching measures recall (design spec section 7.4).
+# label, because labels measure precision and matching measures recall (ADR-0027 decision 7).
 
 # 1. **must** identify that Point and Vector3 have the same x/y/z field types
 #    while their upstream comments give different transformation semantics, and

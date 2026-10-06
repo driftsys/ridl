@@ -72,3 +72,10 @@ choices, see [`../decisions/`](../decisions/).
   and outputs of each tool are in the crate README. The decisions behind its
   choices are [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md) and
   [ADR-0005](../decisions/ADR-0005-agent-enablement.md).
+- **design-lints.md** — the workspace design lints as built: the shared pass in
+  `ridlc` that the compile and the language server both run, the site index, the
+  three shipped checks and their threshold constants, the package dependency
+  graph in `ridlc::deps` that `ridl_metrics` also reads, the `evals/` corpus and
+  calibration records, `cargo xtask calibrate`, and the tests. The decisions
+  behind its choices are
+  [ADR-0027](../decisions/ADR-0027-design-lints-calibrated-on-a-corpus.md).

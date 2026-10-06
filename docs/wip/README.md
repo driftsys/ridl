@@ -24,7 +24,11 @@ the lane E16 driver were archived on 2026-10-04, after E16.1 to E16.6 and E6.17
 landed, and gardened into
 [`../design/catalog-descriptor.md`](../design/catalog-descriptor.md). The spec
 2a design and plan (`2026-10-04-docs-in-source-{design,plan}.md`) were archived
-on 2026-10-04 with #703; ADR-0026 is their durable record.
+on 2026-10-04 with #703; ADR-0026 is their durable record. The piece 1b design
+lints design and plan (`2026-10-04-design-lints-{design,plan}.md`) were archived
+on 2026-10-06, once its calibration landed; ADR-0027 and
+[`../design/design-lints.md`](../design/design-lints.md) are their durable
+records.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
@@ -205,12 +209,6 @@ on 2026-10-04 with #703; ADR-0026 is their durable record.
   documentation (doc lints, language server, rules in generated facade docs),
   split into four specs over a shared lint foundation. Scope only; each spec
   starts its own design session from it.
-- **2026-10-04-design-lints-design.md** and **2026-10-04-design-lints-plan.md**
-  — the design and the fourteen-task plan of piece 1b: five candidate design
-  checks, a corpus of public interface sets ported into RIDL under `evals/`, the
-  precision rule that sets each check's default level and threshold from
-  labelled corpus findings, the `ridl_metrics` tool, and the format of the eval
-  tasks seeded for piece 1c.
 - **2026-10-05-layout-inputs-design.md** and
   **2026-10-05-layout-inputs-plan.md** — lane S stage S1, the layout inputs for
   backend plugins (Epic 17, E17.0, driftsys/ridl#715): the deployment section of
