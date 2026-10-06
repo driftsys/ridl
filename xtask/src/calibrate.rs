@@ -1099,7 +1099,7 @@ mod tests {
         for _ in 0..2 {
             let fixture = Fixture::new();
             fixture.write("p/a.typl", "// é\npackage p;\n");
-            let diagnostic = serde_json::json!({"code":"RIDL-415", "severity":"warning", "lint":"package-fan-out", "message":format!("package `p` depends on 4 workspace packages: a, b, c, d ({}/p/a.typl:2)", fixture.0.display()), "span":{"path":fixture.0.join("p/a.typl"), "start":{"line":2,"column":1}, "end":{"line":2,"column":8}}, "labels":[], "fixes":[]});
+            let diagnostic = serde_json::json!({"severity":"warning", "lint":"package-fan-out", "message":format!("package `p` depends on 4 workspace packages: a, b, c, d ({}/p/a.typl:2)", fixture.0.display()), "span":{"path":fixture.0.join("p/a.typl"), "start":{"line":2,"column":1}, "end":{"line":2,"column":8}}, "labels":[], "fixes":[]});
             let json = serde_json::to_vec(&vec![diagnostic.clone(), diagnostic]).unwrap();
             let records = records_from_json(&fixture.0, "fixture", &json).unwrap();
             let findings = &records["package-fan-out"];

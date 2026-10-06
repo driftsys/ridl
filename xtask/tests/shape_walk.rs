@@ -300,11 +300,12 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridlc/tests/design_lints.rs",
-        lines: 7,
+        lines: 8,
         why: "cohesion fixtures read or clone their single declared interface \
-              to test the public grouping function, and mutate the standard \
-              package's declared interface to test its exclusion; the inline \
-              service exclusion fixture is checked separately through the pass",
+              to test the public grouping function and the group-count \
+              boundary below the threshold, and mutate the standard package's \
+              declared interface to test its exclusion; the inline service \
+              exclusion fixture is checked separately through the pass",
     },
     Allowed {
         path: "crates/ridlc/tests/totality.rs",

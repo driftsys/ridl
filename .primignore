@@ -21,3 +21,9 @@ crates/ridl/tests/baseline-corpus/.ridl/baseline/*.ir.json
 # https://json.schemastore.org/sarif-2.1.0.json and read by the `ridl check
 # --format sarif` test. Upstream content, kept byte-for-byte.
 crates/ridl/tests/fixtures/sarif-2.1.0.json
+
+# The calibration summary is written by `cargo xtask calibrate derive --write`
+# and must equal that output byte for byte, so a re-run produces no diff; prim
+# would rewrap its tables. The hand-written record is notes.md, which prim
+# formats.
+evals/calibration/summary.md

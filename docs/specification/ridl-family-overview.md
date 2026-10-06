@@ -278,9 +278,9 @@ and TYPL-404 to TYPL-410 (typl §16.5) are drawn in `.typl`, `.ridl` and `.rsdl`
 files alike, because doc comments are typl §14 in every language of the family
 (ADR-0026).
 
-The type vocabulary's workspace design lints are catalogued in typl §16.3;
-interface and package coupling design lints are catalogued in ridl §16.4. Their
-names and default levels are indexed on [the lints page](../book/lints.md).
+The type vocabulary's workspace design lints are catalogued in typl §16.3; the
+interface design lint is catalogued in ridl §16.4. Their names and default
+levels are indexed on [the lints page](../book/lints.md).
 
 The two namespaces below belong to no profile. `FORM-` is the **shared family
 grammar** — surface syntax, plus the attribute-block rules of general form §4.3

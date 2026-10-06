@@ -421,6 +421,31 @@ fn task_lint_validation_rejects_an_unknown_name() {
     );
 }
 
+/// A candidate check that the calibration did not ship has no catalogue row,
+/// so its name is rejected like any other unknown name.
+#[test]
+fn task_lint_validation_rejects_a_dropped_candidate_name() {
+    for dropped in ["inconsistent-abbreviation", "package-fan-out"] {
+        assert_eq!(
+            validate_lint_fixture(&format!("[{dropped:?}]")).unwrap_err(),
+            "lint name must be in the catalogue",
+            "{dropped} must not be accepted",
+        );
+    }
+}
+
+#[test]
+fn task_lint_validation_accepts_each_shipped_design_lint() {
+    for shipped in [
+        "inconsistent-unit",
+        "duplicate-shape",
+        "low-cohesion-interface",
+    ] {
+        validate_lint_fixture(&format!("[{shipped:?}]"))
+            .unwrap_or_else(|error| panic!("{shipped}: {error}"));
+    }
+}
+
 #[test]
 fn task_lint_validation_rejects_a_non_string_entry() {
     assert_eq!(
@@ -596,4 +621,86 @@ fn task_set_validation_accepts_future_additions() {
     extra["id"] = "design-0004".into();
     tasks.push(extra);
     validate_task_set(&tasks).expect("additional tasks may extend the approved seed");
+}
+
+/// The design lints whose counts on the corpus are pinned, by lint name.
+const DESIGN_LINTS: &[&str] = &[
+    "inconsistent-unit",
+    "duplicate-shape",
+    "low-cohesion-interface",
+];
+
+/// Counts the design lint findings `ridl check` reports at default levels on
+/// each corpus workspace, as `workspace -> lint name -> count`.
+fn design_lint_counts()
+-> std::collections::BTreeMap<String, std::collections::BTreeMap<String, usize>> {
+    let mut counts = std::collections::BTreeMap::new();
+    for dir in corpus_dirs() {
+        let workspace = dir.file_name().unwrap().to_str().unwrap().to_owned();
+        let output = Command::new(env!("CARGO_BIN_EXE_ridl"))
+            .args(["check", "--format", "json"])
+            .arg(&dir)
+            .output()
+            .expect("run ridl check on a corpus workspace");
+        let diagnostics: Vec<serde_json::Value> = serde_json::from_slice(&output.stdout)
+            .unwrap_or_else(|error| panic!("{workspace}: invalid diagnostic JSON: {error}"));
+        let per_lint: std::collections::BTreeMap<String, usize> = DESIGN_LINTS
+            .iter()
+            .map(|lint| {
+                let count = diagnostics
+                    .iter()
+                    .filter(|diagnostic| diagnostic["lint"] == *lint)
+                    .count();
+                ((*lint).to_owned(), count)
+            })
+            .collect();
+        counts.insert(workspace, per_lint);
+    }
+    counts
+}
+
+/// Renders the counts in the layout of `evals/calibration/expected-counts.toml`.
+fn render_counts(
+    counts: &std::collections::BTreeMap<String, std::collections::BTreeMap<String, usize>>,
+) -> String {
+    let mut text = String::new();
+    for (workspace, per_lint) in counts {
+        text.push_str(&format!("[{workspace}]\n"));
+        for (lint, count) in per_lint {
+            text.push_str(&format!("{lint} = {count}\n"));
+        }
+        text.push('\n');
+    }
+    text
+}
+
+/// Pins the number of findings each shipped design lint reports on each corpus
+/// workspace. A change to a check or to the language that changes a count
+/// fails here, and its author updates `expected-counts.toml` deliberately.
+#[test]
+fn design_lint_counts_on_the_corpus_are_pinned() {
+    let path = corpus_root()
+        .parent()
+        .expect("the evals directory")
+        .join("calibration/expected-counts.toml");
+    let actual = design_lint_counts();
+    let table = render_counts(&actual);
+    // A missing file reads as an empty table, so the first run fails with the
+    // printed table; a file that exists but does not parse is its own error.
+    let expected: std::collections::BTreeMap<String, std::collections::BTreeMap<String, usize>> =
+        match std::fs::read_to_string(&path) {
+            Ok(text) => toml::from_str(&text).unwrap_or_else(|error| {
+                panic!("{}: invalid expected-counts TOML: {error}", path.display())
+            }),
+            Err(_) => Default::default(),
+        };
+    assert_eq!(
+        actual,
+        expected,
+        "the design lint counts on the corpus changed.\n\
+         Actual counts:\n\n{table}\n\
+         If the change is intended, replace the content of {} with the table \
+         above, and state the reason in the commit message.",
+        path.display(),
+    );
 }

@@ -15,19 +15,8 @@ pub(crate) struct SiteIndex {
     members: BTreeMap<(String, String, String), Span>,
     params: BTreeMap<(String, String, String, String), Span>,
     variants: BTreeMap<(String, String, String), Span>,
-    other_children: BTreeMap<(String, String, String), Span>,
-    tuple_fields: Vec<IdSite>,
     declarations: BTreeMap<(String, String), Span>,
     packages: BTreeMap<String, Span>,
-}
-
-/// One identifier token with its qualified identity and source location.
-#[derive(Clone)]
-pub(crate) struct IdSite {
-    pub package: String,
-    pub full_name: String,
-    pub name: String,
-    pub span: Span,
 }
 
 impl SiteIndex {
@@ -84,31 +73,6 @@ impl SiteIndex {
                     {
                         continue;
                     }
-                    // Keep enum variants separate for the existing variant lookup.
-                    // The shared identifier inventory also includes bits and arms.
-                    let children: Vec<_> = match &def {
-                        ast::Definition::EnumSet(def) => {
-                            def.bits().filter_map(|bit| bit.name()).collect()
-                        }
-                        ast::Definition::Union(def) => {
-                            def.arms().filter_map(|arm| arm.name()).collect()
-                        }
-                        _ => Vec::new(),
-                    };
-                    for name in children {
-                        index
-                            .other_children
-                            .entry((
-                                pkg.clone(),
-                                name_text.clone(),
-                                name.syntax().text().to_string(),
-                            ))
-                            .or_insert(Span {
-                                file,
-                                range: name.syntax().text_range(),
-                            });
-                    }
-                    index.index_tuple_fields(pkg, &name_text, def.syntax(), file);
                     match def {
                         ast::Definition::Struct(def) => {
                             for field in def.members().filter_map(|member| match member {
@@ -172,12 +136,6 @@ impl SiteIndex {
                                 file,
                                 range: member_name.syntax().text_range(),
                             });
-                        index.index_tuple_fields(
-                            pkg,
-                            &format!("{name}.{member_text}"),
-                            member.syntax(),
-                            file,
-                        );
                         let params = match member {
                             ast::InterfaceMember::Command(def) => def.params(),
                             ast::InterfaceMember::Query(def) => def.params(),
@@ -206,87 +164,6 @@ impl SiteIndex {
             }
         }
         index
-    }
-
-    /// Walk nested type nodes, including tuples inside containers and returns.
-    /// Keep each occurrence: equal field names in different tuples are sites.
-    fn index_tuple_fields(
-        &mut self,
-        pkg: &str,
-        owner: &str,
-        root: &ridl_syntax::SyntaxNode,
-        file: ridl_core::diag::FileId,
-    ) {
-        for field in root.descendants().filter_map(ast::TupleField::cast) {
-            let Some(name) = field.name() else { continue };
-            let mut parents = field
-                .syntax()
-                .ancestors()
-                .skip(1)
-                .take_while(|node| node != root)
-                .filter_map(|node| {
-                    if let Some(field) = ast::TupleField::cast(node.clone()) {
-                        field.name()
-                    } else if let Some(field) = ast::FieldDef::cast(node.clone()) {
-                        field.name()
-                    } else if let Some(arm) = ast::UnionArm::cast(node) {
-                        arm.name()
-                    } else {
-                        None
-                    }
-                })
-                .map(|name| name.syntax().text().to_string())
-                .collect::<Vec<_>>();
-            parents.reverse();
-            parents.insert(0, owner.into());
-            let name_text = name.syntax().text().to_string();
-            self.tuple_fields.push(IdSite {
-                package: pkg.into(),
-                full_name: format!("{pkg}.{}.{}", parents.join("."), name_text),
-                name: name_text,
-                span: Span {
-                    file,
-                    range: name.syntax().text_range(),
-                },
-            });
-        }
-    }
-
-    /// Enumerates identifier tokens in qualified-name order. Qualifiers identify
-    /// a site, but are not part of the identifier's words.
-    pub fn identifiers(&self) -> Vec<IdSite> {
-        let mut sites = Vec::new();
-        let mut add = |pkg: &str, owner: &str, name: &str, span: Span| {
-            let full_name = if owner.is_empty() {
-                format!("{pkg}.{name}")
-            } else {
-                format!("{pkg}.{owner}.{name}")
-            };
-            sites.push(IdSite {
-                package: pkg.into(),
-                full_name,
-                name: name.into(),
-                span,
-            });
-        };
-        for ((pkg, name), span) in &self.declarations {
-            add(pkg, "", name, *span);
-        }
-        for ((pkg, owner, name), span) in self
-            .fields
-            .iter()
-            .chain(&self.variants)
-            .chain(&self.members)
-            .chain(&self.other_children)
-        {
-            add(pkg, owner, name, *span);
-        }
-        for ((pkg, iface, member, name), span) in &self.params {
-            add(pkg, &format!("{iface}.{member}"), name, *span);
-        }
-        sites.extend(self.tuple_fields.iter().cloned());
-        sites.sort_by(|a, b| (&a.package, &a.full_name).cmp(&(&b.package, &b.full_name)));
-        sites
     }
 
     pub fn field(&self, pkg: &str, name: &str, field: &str) -> Option<Span> {

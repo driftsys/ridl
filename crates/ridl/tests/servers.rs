@@ -550,7 +550,7 @@ async fn diff_compile_errors_preserve_structured_diagnostics() {
                     // TYPL-406 (`missing-docs`) is left out: the fixture has no docs.
                     .filter(|code| *code != "TYPL-406")
                     .collect::<Vec<_>>(),
-                ["TYPL-103", "TYPL-011", "TYPL-223", "RIDL-414"]
+                ["TYPL-103", "TYPL-011"]
             );
         }
         client.cancel().await.unwrap();
@@ -656,31 +656,7 @@ async fn every_tool_leaves_the_tree_unchanged() {
                         .iter()
                         .filter(|diagnostic| diagnostic["lint"] != "missing-docs")
                         .collect::<Vec<_>>();
-                    assert_eq!(serde_json::to_value(diagnostics).unwrap(), json!([{
-                        "code": "TYPL-223",
-                        "severity": "info",
-                        "lint": "inconsistent-abbreviation",
-                        "message": "`read` in `readSpeed` abbreviates `reading`, used in `Reading`",
-                        "span": {
-                            "path": interface_path,
-                            "start": {"line": 28, "column": 9},
-                            "end": {"line": 28, "column": 18},
-                        },
-                        "labels": [],
-                        "fixes": [],
-                    }, {
-                        "code": "RIDL-414",
-                        "severity": "info",
-                        "lint": "low-cohesion-interface",
-                        "message": "interface `Status` splits into 5 groups of members that share no type: [speed], [reading], [setLevel], [outcome], [probe]",
-                        "span": {
-                            "path": interface_path,
-                            "start": {"line": 16, "column": 11},
-                            "end": {"line": 16, "column": 17},
-                        },
-                        "labels": [],
-                        "fixes": [],
-                    }]));
+                    assert_eq!(serde_json::to_value(diagnostics).unwrap(), json!([]));
                 },
                 "ridl_explain" => {
                     assert_eq!(output["kind"], "diagnostic");

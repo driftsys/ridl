@@ -5,4 +5,4 @@ title = "Review mission transfer contracts"
 
 [expect]
 compiles = true
-lints = []
+lints = ["duplicate-shape"]

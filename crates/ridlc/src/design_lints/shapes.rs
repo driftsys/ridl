@@ -8,6 +8,8 @@ use ridl_ir::v2::{self, decl, field_type, stream_type, struct_member};
 
 use super::{Ctx, qualify};
 
+/// The least strict thresholds whose precision on the evaluation corpus meets
+/// the Info level; the derivation is recorded in `evals/calibration/summary.md`.
 pub(crate) const DUPLICATE_SHAPE_MIN_FIELDS: usize = 2;
 pub(crate) const DUPLICATE_SHAPE_MIN_VARIANTS: usize = 2;
 

@@ -503,17 +503,17 @@ diag_codes! {
             "regex pattern the Rust `regex` crate cannot compile";
 
         /// One exact site name is used with different canonical units across
-        /// the checked workspace. Emitted by the design lint pass.
+        /// the checked workspace. Emitted by the design lint pass. Info from
+        /// the corpus calibration (`evals/calibration/summary.md`).
         TYPL_222 = "TYPL-222", Info,
             "one field name used with different units", lint = "inconsistent-unit";
 
-        /// An identifier word abbreviates another word in the checked workspace.
-        /// Emitted by the design lint pass.
-        TYPL_223 = "TYPL-223", Info,
-            "inconsistent identifier abbreviation", lint = "inconsistent-abbreviation";
+        // TYPL-223 (`inconsistent-abbreviation`) was a calibration candidate
+        // that the corpus calibration did not ship; the number is not reused.
 
         /// Two differently named declarations have equal field or variant sets.
-        /// Emitted by the design lint pass.
+        /// Emitted by the design lint pass. Info from the corpus calibration
+        /// (`evals/calibration/summary.md`).
         TYPL_224 = "TYPL-224", Info,
             "duplicate declaration shape", lint = "duplicate-shape";
 
@@ -998,14 +998,14 @@ diag_codes! {
             "parameter name declared twice in one parameter list";
 
         /// A declared interface has disconnected groups of members under
-        /// direct named-type sharing. Provisional Info during calibration.
+        /// direct named-type sharing. Info from the corpus calibration
+        /// (`evals/calibration/summary.md`).
         RIDL_414 = "RIDL-414", Info,
             "interface members form disconnected type-sharing groups", lint = "low-cohesion-interface";
 
-        /// A package depends on more workspace packages than the threshold.
-        /// Provisional Info during calibration.
-        RIDL_415 = "RIDL-415", Info,
-            "package depends on too many workspace packages", lint = "package-fan-out";
+        // RIDL-415 (`package-fan-out`) was a calibration candidate that the
+        // corpus calibration did not ship; the number is not reused. The
+        // package coupling metric stays available through `ridl_metrics`.
     }
 
     /// The rsdl catalogue: every `RSDL-` code declared in this module, with the
@@ -2005,7 +2005,6 @@ mod tests {
             ("TYPL-115", "no-init-value"),
             ("TYPL-211", "duplicate-reserved"),
             ("TYPL-222", "inconsistent-unit"),
-            ("TYPL-223", "inconsistent-abbreviation"),
             ("TYPL-224", "duplicate-shape"),
             ("TYPL-401", "broken-doc-link"),
             ("TYPL-404", "detached-doc-comment"),
@@ -2027,7 +2026,6 @@ mod tests {
             ("RIDL-406", "redeclared-envelope-metadata"),
             ("RIDL-407", "ordinal-changed"),
             ("RIDL-414", "low-cohesion-interface"),
-            ("RIDL-415", "package-fan-out"),
             ("RSDL-409", "redundant-provider-set"),
             ("RSDL-804", "unclaimed-backend-key"),
             ("RSDL-805", "depth-below-bound"),

@@ -1635,19 +1635,8 @@ fn check_is_silent_for_an_enum_and_enum_set_reorder() {
     assert_eq!(code, 0, "the reorder leaves a clean check clean:\n{stderr}");
 }
 
-/// Pins the source fixture's only diagnostic, independently of baseline lookup.
-fn assert_fixture_cohesion_note(root: &Path, stderr: &str) {
-    assert_eq!(
-        stderr,
-        format!(
-            "note[RIDL-414]: interface `VehicleStatus` splits into 2 groups of members that share no type: [currentSpeed], [doorClosed, doorOpened]\n  ┌─ {}:4:11\n  │\n4 │ interface VehicleStatus {{\n  │           ^^^^^^^^^^^^^\n  │\n  = lint: `low-cohesion-interface` (set its level in `[lints]` in ridl.toml)\n\n",
-            root.join("cluster.ridl").display()
-        ),
-        "the fixture's cohesion note is the only output; no baseline report is added"
-    );
-}
-
-/// A missing baseline adds no report to the source fixture's existing lint.
+/// With no baseline anywhere, `ridl check` behaves exactly as before: no extra
+/// output, same exit code.
 #[test]
 fn check_without_a_baseline_is_unchanged() {
     let dir = TempDir::new("nobaseline");
@@ -1657,7 +1646,10 @@ fn check_without_a_baseline_is_unchanged() {
 
     assert_eq!(code, 0, "the workspace is clean:\n{stderr}");
     assert!(stdout.is_empty(), "{stdout}");
-    assert_fixture_cohesion_note(&root, &stderr);
+    assert!(
+        stderr.is_empty(),
+        "a missing baseline is silently skipped:\n{stderr}",
+    );
 }
 
 /// `--baseline` accepts a single `.ir.json` file, not only a directory.
@@ -2586,8 +2578,10 @@ fn auto_discovery_of_an_empty_baseline_directory_stays_silent() {
         code, 0,
         "a clean check with no baseline succeeds:\n{stderr}"
     );
-    assert!(stdout.is_empty(), "{stdout}");
-    assert_fixture_cohesion_note(&root, &stderr);
+    assert!(
+        stdout.is_empty() && stderr.is_empty(),
+        "no baseline means no drift report at all:\nstdout: {stdout}\nstderr: {stderr}",
+    );
 }
 
 /// A snapshot-named entry under the auto-discovered `.ridl/baseline/` whose

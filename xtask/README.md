@@ -43,8 +43,12 @@ subsequent runs.
 The five output files are `<out-dir>/<lint-name>.json`. Each is an array of
 records with `id`, `workspace`, `location`, `message`, and a typed `metric` for
 thresholded checks. Unit and abbreviation records omit `metric`. Empty arrays
-are valid. Diagnostic errors or malformed metadata fail the command before any
-finding array is written.
+are valid. Two of the five candidates, `inconsistent-abbreviation` and
+`package-fan-out`, did not ship as lints after the calibration
+(`evals/calibration/summary.md`); their `[lints]` entries draw MANI-010 and
+their output arrays are empty on a current build, while their committed label
+files keep the findings that were labelled. Diagnostic errors or malformed
+metadata fail the command before any finding array is written.
 
 IDs have the form
 `<lint>:<workspace>:<relative-source-path>:<start-byte>-<end-byte>:<occurrence>`.

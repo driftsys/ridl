@@ -5,8 +5,8 @@
 # - Each numbered rubric item has the ID `<task-id>:<item-number>`. Its committed text is copied
 #   verbatim in the comment above its `[[item]]` entry; the rubric files are unchanged.
 # - A **must** or **should** item that names a property of the workspace design is an `issue`.
-# - A **should** item that recommends the remedy for exactly one issue of the same task is an
-#   `alias` of that issue.
+# - A **must** or **should** item that recommends the remedy for exactly one issue of the same
+#   task is an `alias` of that issue.
 # - A **must not** item is `excluded`: it constrains the answer and names no design property.
 #   A recommendation that addresses more than one issue is `excluded` with the reason given.
 #

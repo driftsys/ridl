@@ -1,5 +1,5 @@
 # Labels for `duplicate-shape`: Claude (`claude -p --model fable`) and Sol (`codex exec -m gpt-6.1-sol`), labelled blind.
-# `final` is set only where the two labels agree. Disagreements have no `final` until human adjudication.
+# `final` is the agreed label where the two labels agree; where they disagree, it is the label Sebastien set at adjudication (2026-10-06). Every finding has a `final`.
 # Agreement sample seed: 20261005.
 # Sample algorithm: rank each agreed finding by SHA-256 of the UTF-8 string "20261005:duplicate-shape:<finding-id>" (lowercase hex, ascending); take the first 10.
 # Agreed findings: 15. Sampled: 10. Shortfall: 0.
