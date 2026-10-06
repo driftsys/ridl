@@ -130,6 +130,15 @@ emits it. Decision 8 states where the comparison is made and what a mismatch
 does: `Bind::new` and `serve` panic. Taken on delegated authority by stage D6 of
 lane E16 (the lane driver's §5 records it for Sebastien's review).
 
+**Amendment (2026-10-06) — the face passes no trace context.**
+[ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 21 adds a last
+argument, `trace: Option<TraceContext>`, to `Caller::command`, `Caller::query`
+and `EventSink::raise`. The emitted `Client` methods and the event raise pass
+`None` for it (`::core::option::Option::None`), and the emitted `serve` does not
+read `Claim::trace`. No generated method signature changes. Generated spans,
+which would fill the argument and read the field, are owned by
+driftsys/ridl#754.
+
 ## Context
 
 The approved M1 design (archived at

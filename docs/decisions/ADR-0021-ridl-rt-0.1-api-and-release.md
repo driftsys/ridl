@@ -116,6 +116,15 @@ the
 `pub type Wire` alias decision 7's 2026-09-21 addendum describes; that addendum
 carries a dated note.
 
+**Amendment (2026-10-06) — decision 21: `trace`.** A call or an event that
+crosses a process boundary carries an optional trace context, so that a trace
+follows it from the sender to the receiver (driftsys/ridl#752). The send methods
+`Caller::command`, `Caller::query` and `EventSink::raise` gain a last argument,
+and `Claim` and `RawOccurrence` gain a field. This is a breaking change under
+decision 10, because every `Caller` and `EventSink` implementer changes and
+every struct literal of `Claim` or `RawOccurrence` gains a field. It is released
+with the workspace as 0.6.0.
+
 ## Context
 
 `ridl-rt` 0.1 is the first crate a generated ridl package links and a runtime
@@ -854,6 +863,69 @@ trusted with no `unsafe` and no second verification pass.
     `cargo publish` of `ridl-rt` follows the tag, the order decision 19 used.
     The release follows the last of the four pull requests the design splits the
     work into.
+
+21. **Amendment (2026-10-06) — `trace`: an optional trace context on calls and
+    events, and the 0.6.0 release that carries it.** `ridl_rt::trace` is a new
+    unconditional module, `no_std` with no dependency like the rest. It holds
+    one type:
+
+    ```rust
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub struct TraceContext {
+        pub trace_id: [u8; 16],
+        pub span_id: [u8; 8],
+        pub flags: u8,
+    }
+    ```
+
+    It is the W3C Trace Context `traceparent` layout without the version byte,
+    as plain data. `ridl-rt` does not validate it: an all-zero id is carried
+    like any other value, and rejecting one is the exporter's choice. Its size
+    is 25 bytes, and `Option<TraceContext>` is 26 bytes with alignment 1.
+
+    - **The argument.** `Caller::command`, `Caller::query` and
+      `EventSink::raise` each take a last argument,
+      `trace:
+      Option<TraceContext>`. The forwarding impls for `&P` and
+      `&mut P` (decision 11) pass it through unchanged.
+    - **The fields.** `Claim` and `RawOccurrence` each gain
+      `pub trace: Option<TraceContext>`, placed after `envelope`.
+    - **The delivery rules.** Each of the four traits `Caller`, `EventSink`,
+      `Handler` and `EventSource` states them in its rustdoc.
+      1. A runtime that carries the trace context delivers, on the `Claim` that
+         a command or a query produces, the value its sender passed, unchanged.
+      2. A runtime that carries the trace context delivers, on every
+         `RawOccurrence` that a `raise` produces (one for each subscriber), the
+         value its sender passed, unchanged.
+      3. A runtime or a transport that does not carry the trace context delivers
+         `None`.
+      4. A sender's `None` is delivered as `None`.
+
+      Rule 3 lets a transport, or a future shared-memory region
+      (driftsys/ridl#317), choose not to reserve 26 bytes for each slot.
+    - **Why `Envelope` is unchanged.** Decision 5 keeps `Envelope` at two
+      fields. `Envelope` is shared by signals, events, calls and the frame, so a
+      field there would grow every stored envelope from 16 to 48 bytes and would
+      change ridl section 3.1 and the frame specification. The trace context
+      sits on the two receive structs of the interaction kinds that cross a
+      boundary instead.
+    - **Out of scope.** A trace context on signal samples (a signal is
+      latest-value state, and a trace would explain only the last writer),
+      `tracestate`, baggage, and a trace context on the frame. A frame transport
+      delivers `None` under rule 3.
+    - **Generated code.** The generated Rust face passes `None` and does not
+      read `Claim::trace` ([ADR-0023](ADR-0023-interaction-face-generation.md),
+      Status); driftsys/ridl#754 owns generated spans.
+    - **The runtimes.** `ridl-loopback` carries the context, so it is a runtime
+      under rules 1 and 2. `ridl-rt-conformance` pins the rules for every
+      runtime.
+
+    **The release.** The change is breaking under decision 10, and ships as
+    0.6.0 with the workspace. A `#[non_exhaustive]` marker and constructors on
+    `Claim` and `RawOccurrence`, which would make a later `tracestate` field
+    additive, were rejected: `tracestate` is not planned, and the change would
+    move every runtime from struct literals to constructors, which the other
+    structs under decision 10 do not do.
 
 ## Alternatives considered
 

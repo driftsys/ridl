@@ -120,12 +120,12 @@ pub trait SignalWriter: Attached {
 ///
 /// # Trace context delivery
 ///
-/// 2. A runtime that carries the trace context delivers, on every
-///    [`RawOccurrence`] a `raise` produces (one for each subscriber), the
-///    value its sender passed, unchanged.
-/// 3. A runtime or transport that does not carry the trace context delivers
-///    `None`.
-/// 4. A sender's `None` is delivered as `None`.
+/// - A runtime that carries the trace context delivers, on every
+///   [`RawOccurrence`] a `raise` produces (one for each subscriber), the
+///   value its sender passed, unchanged.
+/// - A runtime or transport that does not carry the trace context delivers
+///   `None`.
+/// - A sender's `None` is delivered as `None`.
 pub trait EventSource: Attached {
     /// Starts delivery of the listed events.
     fn subscribe(&mut self, iface: InterfaceNo, ords: &[Ordinal]) -> Result<(), SubscribeError>;
@@ -165,12 +165,12 @@ pub struct RawOccurrence {
 ///
 /// # Trace context delivery
 ///
-/// 2. A runtime that carries the trace context delivers, on every
-///    [`RawOccurrence`] a `raise` produces (one for each subscriber), the
-///    value its sender passed, unchanged.
-/// 3. A runtime or transport that does not carry the trace context delivers
-///    `None`.
-/// 4. A sender's `None` is delivered as `None`.
+/// - A runtime that carries the trace context delivers, on every
+///   [`RawOccurrence`] a `raise` produces (one for each subscriber), the
+///   value its sender passed, unchanged.
+/// - A runtime or transport that does not carry the trace context delivers
+///   `None`.
+/// - A sender's `None` is delivered as `None`.
 pub trait EventSink: Attached {
     /// Raises one occurrence.
     fn raise(
@@ -198,11 +198,11 @@ pub trait EventSink: Attached {
 ///
 /// # Trace context delivery
 ///
-/// 1. A runtime that carries the trace context delivers, on the [`Claim`] a
-///    command or query produces, the value its sender passed, unchanged.
-/// 3. A runtime or transport that does not carry the trace context delivers
-///    `None`.
-/// 4. A sender's `None` is delivered as `None`.
+/// - A runtime that carries the trace context delivers, on the [`Claim`] a
+///   command or query produces, the value its sender passed, unchanged.
+/// - A runtime or transport that does not carry the trace context delivers
+///   `None`.
+/// - A sender's `None` is delivered as `None`.
 pub trait Caller: Attached {
     /// Sends a command and returns the correlation of its outcome.
     fn command(
@@ -292,11 +292,11 @@ pub struct Correlation(pub u64);
 ///
 /// # Trace context delivery
 ///
-/// 1. A runtime that carries the trace context delivers, on the [`Claim`] a
-///    command or query produces, the value its sender passed, unchanged.
-/// 3. A runtime or transport that does not carry the trace context delivers
-///    `None`.
-/// 4. A sender's `None` is delivered as `None`.
+/// - A runtime that carries the trace context delivers, on the [`Claim`] a
+///   command or query produces, the value its sender passed, unchanged.
+/// - A runtime or transport that does not carry the trace context delivers
+///   `None`.
+/// - A sender's `None` is delivered as `None`.
 pub trait Handler: Attached {
     /// Starts presenting calls to the listed members.
     fn serve(&mut self, iface: InterfaceNo, ords: &[Ordinal]) -> Result<(), ServeError>;
