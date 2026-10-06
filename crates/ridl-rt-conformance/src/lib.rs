@@ -223,6 +223,9 @@ macro_rules! suite {
             events::two_sources_each_receive_their_own_copy_of_one_occurrence,
             events::a_short_buffer_leaves_the_occurrence_for_the_next_call,
             events::a_sink_sequence_number_counts_one_channel_publications,
+            events::a_raised_events_context_arrives_on_every_subscribers_occurrence,
+            events::an_event_raised_without_a_context_arrives_without_one,
+            events::a_short_buffer_keeps_the_occurrences_context,
             calls::a_command_is_delivered_and_acknowledged,
             calls::a_query_is_delivered_and_replied,
             calls::settle_can_be_made_to_fail_once_then_succeed,
@@ -243,6 +246,12 @@ macro_rules! suite {
             calls::an_injected_settle_failure_is_not_spent_on_an_unknown_claim,
             calls::a_handler_cannot_settle_another_handlers_claim,
             calls::two_handlers_each_receive_only_what_they_served,
+            calls::a_commands_context_arrives_on_its_claim,
+            calls::a_querys_context_arrives_on_its_claim,
+            calls::a_call_sent_without_a_context_arrives_without_one,
+            calls::two_calls_in_flight_each_keep_their_own_context,
+            calls::an_oversized_claims_context_survives_its_second_presentation,
+            calls::a_reused_call_slot_does_not_keep_the_previous_context,
         );
     };
     ($factory:ty; $($extension:ident),+ $(,)?) => {
@@ -303,6 +312,21 @@ fn catalog() -> CatalogRef {
         hash: CatalogHash([0u8; 32]),
     }
 }
+
+/// A trace context the trace cases send, and the one they tell it apart from.
+const TRACE_A: ridl_rt::trace::TraceContext = ridl_rt::trace::TraceContext {
+    trace_id: [0xA1; 16],
+    span_id: [0xA2; 8],
+    flags: 1,
+};
+
+/// The second trace context, with different identifiers and flags than
+/// [`TRACE_A`].
+const TRACE_B: ridl_rt::trace::TraceContext = ridl_rt::trace::TraceContext {
+    trace_id: [0xB1; 16],
+    span_id: [0xB2; 8],
+    flags: 0,
+};
 
 fn runtime<F: Factory>() -> F::Runtime {
     F::runtime(catalog())

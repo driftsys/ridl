@@ -10,7 +10,7 @@ use ridl_rt::contract::InterfaceNo;
 use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{Caller, ClaimId, Handler, ReadError, SendError, SettleError};
 
-use crate::{Factory, IFACE, ORD, runtime};
+use crate::{Factory, IFACE, ORD, TRACE_A, TRACE_B, runtime};
 
 /// A command reaches the handler with its arguments, and the settlement is
 /// observable through `ack`.
@@ -629,4 +629,135 @@ pub fn two_handlers_each_receive_only_what_they_served<F: Factory>() {
         "neither handler consumed the other's call"
     );
     assert!(second.next_claim(&mut buf).expect("next_claim").is_none());
+}
+
+/// The trace context a command is sent with arrives on its claim.
+pub fn a_commands_context_arrives_on_its_claim<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    rt.command(IFACE, ORD, &[1], Some(TRACE_A)).expect("send");
+
+    let mut buf = [0u8; 8];
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("a claim is waiting");
+    assert_eq!(claim.trace, Some(TRACE_A));
+}
+
+/// The trace context a query is sent with arrives on its claim.
+pub fn a_querys_context_arrives_on_its_claim<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    rt.query(IFACE, ORD, &[1], Some(TRACE_A)).expect("send");
+
+    let mut buf = [0u8; 8];
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("a claim is waiting");
+    assert_eq!(claim.trace, Some(TRACE_A));
+}
+
+/// A command and a query sent without a trace context arrive without one.
+pub fn a_call_sent_without_a_context_arrives_without_one<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    let mut buf = [0u8; 8];
+
+    rt.command(IFACE, ORD, &[1], None).expect("send");
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("the command");
+    assert_eq!(claim.trace, None, "the command");
+    rt.settle(claim.id, Ok(&[])).expect("settle");
+
+    rt.query(IFACE, ORD, &[2], None).expect("send");
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("the query");
+    assert_eq!(claim.trace, None, "the query");
+}
+
+/// Two calls in flight from two callers each keep the trace context they were
+/// sent with, and the two are not exchanged.
+pub fn two_calls_in_flight_each_keep_their_own_context<F: Factory>() {
+    let mut rt = runtime::<F>();
+    let mut second = F::caller(&rt);
+    rt.serve(IFACE, &[ORD]).expect("serve");
+
+    rt.command(IFACE, ORD, &[1], Some(TRACE_A)).expect("send");
+    second
+        .command(IFACE, ORD, &[2], Some(TRACE_B))
+        .expect("send");
+
+    let mut buf = [0u8; 8];
+    let first_claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    assert_eq!(&buf[..first_claim.len], &[1]);
+    assert_eq!(first_claim.trace, Some(TRACE_A));
+    let second_claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    assert_eq!(&buf[..second_claim.len], &[2]);
+    assert_eq!(second_claim.trace, Some(TRACE_B));
+}
+
+/// A claim reported through `ReadError::ShortClaim` keeps its trace context:
+/// the claim presented once the buffer is large enough carries it.
+pub fn an_oversized_claims_context_survives_its_second_presentation<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    rt.command(IFACE, ORD, &[1, 2, 3], Some(TRACE_A))
+        .expect("send");
+
+    let mut short = [0u8; 1];
+    assert!(matches!(
+        rt.next_claim(&mut short),
+        Err(ReadError::ShortClaim { needed: 3, .. })
+    ));
+
+    let mut buf = [0u8; 8];
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("read")
+        .expect("still waiting");
+    assert_eq!(claim.trace, Some(TRACE_A));
+}
+
+/// A call that takes a slot another call held does not keep that call's trace
+/// context. With every other slot held, the new call can only take the slot
+/// that was reclaimed.
+pub fn a_reused_call_slot_does_not_keep_the_previous_context<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    let mut buf = [0u8; 8];
+    let sent: Vec<_> = (0..F::SLOTS)
+        .map(|_| {
+            let c = rt
+                .command(IFACE, ORD, &[1], Some(TRACE_A))
+                .expect("a slot is free");
+            let claim = rt
+                .next_claim(&mut buf)
+                .expect("next_claim")
+                .expect("the call just sent");
+            assert_eq!(claim.trace, Some(TRACE_A), "the old call carries it");
+            rt.settle(claim.id, Ok(&[])).expect("settle");
+            c
+        })
+        .collect();
+    rt.forget(sent[0]);
+
+    rt.command(IFACE, ORD, &[2], None)
+        .expect("the reclaimed slot");
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("the new call");
+    assert_eq!(claim.trace, None);
 }

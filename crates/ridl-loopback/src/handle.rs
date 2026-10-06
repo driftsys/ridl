@@ -368,11 +368,11 @@ impl EventSink for SinkHandle {
         iface: InterfaceNo,
         ord: Ordinal,
         bytes: &[u8],
-        _trace: Option<TraceContext>,
+        trace: Option<TraceContext>,
     ) -> Result<(), RaiseError> {
         let seq = self.take_seq((iface, ord));
         locked(&self.shared, |store, wake| {
-            store.raise(iface, ord, bytes, seq, wake);
+            store.raise(iface, ord, bytes, seq, trace, wake);
         });
         Ok(())
     }
@@ -425,10 +425,11 @@ impl CallerHandle {
         iface: InterfaceNo,
         ord: Ordinal,
         args: &[u8],
+        trace: Option<TraceContext>,
     ) -> Result<Correlation, SendError> {
         let seq = self.next_seq + 1;
         let c = locked(&self.shared, |store, wake| {
-            store.send(self.id, kind, (iface, ord), args, seq, wake)
+            store.send(self.id, kind, (iface, ord), args, seq, trace, wake)
         })?;
         self.next_seq = seq;
         Ok(c)
@@ -485,9 +486,9 @@ impl Caller for CallerHandle {
         iface: InterfaceNo,
         ord: Ordinal,
         args: &[u8],
-        _trace: Option<TraceContext>,
+        trace: Option<TraceContext>,
     ) -> Result<Correlation, SendError> {
-        self.send(CallKind::Command, iface, ord, args)
+        self.send(CallKind::Command, iface, ord, args, trace)
     }
 
     fn query(
@@ -495,9 +496,9 @@ impl Caller for CallerHandle {
         iface: InterfaceNo,
         ord: Ordinal,
         args: &[u8],
-        _trace: Option<TraceContext>,
+        trace: Option<TraceContext>,
     ) -> Result<Correlation, SendError> {
-        self.send(CallKind::Query, iface, ord, args)
+        self.send(CallKind::Query, iface, ord, args, trace)
     }
 
     fn ack(&mut self, c: Correlation) -> Option<Result<(), CallError>> {
