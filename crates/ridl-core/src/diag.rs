@@ -704,16 +704,19 @@ diag_codes! {
 
         /// A `command` or `query` with no declared response bound — no `@`
         /// annotation at all, or the half-open `@[min..]` that declares a
-        /// throttle only (ridl §9, §16.1; ADR-0015 decisions 4 and 6). Warning;
-        /// an active profile may escalate it to an error, the same two-step
-        /// §9.1 gives an untimed signal or event. The RPC counterpart of
-        /// RIDL-100, and deliberately not RIDL-100 itself: that text turns on
-        /// a default having been applied, which is exactly what an RPC never
-        /// gets — absent means undeclared in the IR. RIDL-111 is reserved for
-        /// the interface-used-as-a-type error (ADR-0008 decision 21), so 112
-        /// is the first free code in the band. Emitted by the checker.
+        /// throttle only (ridl §9.3, §16.1; ADR-0015 decisions 4 and 6). The
+        /// checker applies the response-bound default for the member's kind —
+        /// `[defaults].command_timing` or `[defaults].query_timing`, or the
+        /// built-in `[..1s]` or `[..3s]` — and this warning names the bounds
+        /// applied. Warning; an active profile may escalate it to an error,
+        /// the same two-step §9.1 gives an untimed signal or event. The RPC
+        /// counterpart of RIDL-100, kept as its own code so that the
+        /// `missing-response-bound` lint level is set apart from the signal
+        /// and event one. RIDL-111 is reserved for the interface-used-as-a-type
+        /// error (ADR-0008 decision 21), so 112 is the first free code in the
+        /// band. Emitted by the checker.
         RIDL_112 = "RIDL-112", Warning,
-            "`command` or `query` with no declared response bound", lint = "missing-response-bound";
+            "`command` or `query` takes the default response bound", lint = "missing-response-bound";
 
         /// Duplicate `service` name across the whole workspace — the service
         /// catalog is a flat global namespace (ridl §14.5, §16.4). Emitted
@@ -1277,12 +1280,14 @@ diag_codes! {
         MANI_008 = "MANI-008", Error,
             "workspace member directory has no `ridl.toml`";
 
-        /// The manifest `[defaults].timing` value is not a valid range (ridl §9.1,
-        /// ADR-0008 decision 13). The manifest parser stores the raw string
-        /// unparsed — `ridl-core` cannot depend on `ridl-sem` — so the checker
-        /// parses it and emits this code (E2 task 9).
+        /// A manifest `[defaults].timing`, `[defaults].command_timing` or
+        /// `[defaults].query_timing` value is not a valid range (ridl §9.1,
+        /// §9.3, ADR-0008 decision 13); the message names the key. The
+        /// manifest parser stores the raw strings unparsed — `ridl-core`
+        /// cannot depend on `ridl-sem` — so the checker parses them and emits
+        /// this code.
         MANI_009 = "MANI-009", Error,
-            "invalid `[defaults].timing` value";
+            "invalid `[defaults]` timing value";
 
         /// A `[lints]` entry whose key is not a registered lint name, or whose
         /// value is not one of the level strings `allow`, `info`, `warn` and

@@ -600,6 +600,7 @@ fn attribute_value(value: &WrittenValue) -> v2::AttributeValue {
 
 #[cfg(test)]
 mod tests {
+    use ridl_core::TimingDefaults;
     use std::collections::BTreeMap;
 
     use ridl_core::db::RidlDatabase;
@@ -1621,7 +1622,7 @@ mod tests {
             inputs,
             ridl_core::package::PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             Some(ridl_core::package::PackageLock {
                 path: "veh/topology/interfaces.lock".to_string(),
                 text: lock.to_string(),

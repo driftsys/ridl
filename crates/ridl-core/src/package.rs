@@ -22,6 +22,7 @@ use rowan::TextRange;
 use crate::db::InputFile;
 use crate::diag::{DiagCode, Diagnostic, Label, Severity, SourceMap, Span};
 use crate::interface_lock::InterfaceLock;
+use crate::manifest::TimingDefaults;
 
 /// Where a package's sources come from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -66,13 +67,14 @@ pub struct Package {
     pub origin: PackageOrigin,
     #[returns(ref)]
     pub imports: BTreeMap<String, String>,
-    /// The raw `[defaults].timing` string that governs this package (ADR-0002
-    /// §5 precedence: package `[defaults]` shadows workspace `[defaults]`,
-    /// merged at load), or `None` when no manifest configures one — the
-    /// checker then applies the built-in `[100ms..1000ms]` (ridl §9.1). Stored
-    /// unparsed: `ridl-core` cannot depend on `ridl-sem` (E2 task 9).
+    /// The raw `[defaults]` timing strings that govern this package: `timing`,
+    /// `command_timing` and `query_timing` (ADR-0002 §5 precedence: package
+    /// `[defaults]` shadows workspace `[defaults]`, merged per key at load).
+    /// A key no manifest sets is `None`; the checker then applies the built-in
+    /// default (ridl §9.1). Stored unparsed: `ridl-core` cannot depend on
+    /// `ridl-sem`.
     #[returns(ref)]
-    pub default_timing: Option<String>,
+    pub defaults: TimingDefaults,
     /// The package's `interfaces.lock`, read by the loader from the package
     /// directory (lock design §2), or `None` when the directory has no such
     /// file, when the file is malformed (the loader reports RIDL-410 and
@@ -390,7 +392,7 @@ mod tests {
             vec![file(&db, "veh-common/a.typl", "package veh.common")],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             None,
         );
         let cluster = Package::new(
@@ -399,7 +401,7 @@ mod tests {
             vec![file(&db, "veh-cluster/b.typl", "package veh.cluster")],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             None,
         );
         let ws = Workspace::new(&db, vec![common, cluster], BTreeMap::new());
@@ -436,7 +438,7 @@ mod tests {
             vec![file(db, &format!("{}.ridl", name.replace('.', "/")), text)],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             None,
         )
     }

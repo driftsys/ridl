@@ -403,6 +403,7 @@ fn envelope_fields(checker: &Checker<'_>, symbol: &Symbol) -> Vec<String> {
 mod tests {
     use super::*;
     use crate::check::{CheckedPackage, check_package};
+    use ridl_core::TimingDefaults;
     use ridl_core::db::RidlDatabase;
     use ridl_core::package::{Package, PackageOrigin, Workspace};
     use ridl_core::std_lib::std_package;
@@ -429,7 +430,7 @@ mod tests {
             inputs,
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             None,
         );
         let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());

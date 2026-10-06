@@ -74,8 +74,9 @@ fn the_call_throttle_does_not_change_the_deadline() {
     assert_eq!(member.call_deadline(), Some(Duration(250_000)));
 }
 
-/// ridl §9.3: `@[20ms..]` is a throttle with no response bound: the member
-/// declares no response bound, so `call_deadline` is `None`.
+/// A `@[20ms..]` timing with no `max` is a state an older catalog can carry;
+/// the current compiler fills the `max` from the default (ridl §9.3). With no
+/// `max`, `call_deadline` is `None`.
 #[test]
 fn a_throttle_alone_gives_no_deadline() {
     let member = command(Some(Timing {
@@ -86,9 +87,9 @@ fn a_throttle_alone_gives_no_deadline() {
     assert_eq!(member.call_deadline(), None);
 }
 
-/// ridl §9.1 and §9.3: a bare `command` or `query` is never given a default
-/// response bound, and `Member::timing` is then `None`: the member declares no
-/// response bound, so `call_deadline` is `None`.
+/// ridl §9.1 and §9.3: a member whose catalog carries no timing, as a catalog
+/// built before the default response bound does for a bare `command` or
+/// `query`, has no response bound, so `call_deadline` is `None`.
 #[test]
 fn a_member_with_no_timing_has_no_deadline() {
     assert_eq!(command(None).call_deadline(), None);

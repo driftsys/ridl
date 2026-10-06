@@ -2230,11 +2230,11 @@ fn hover_on_a_bounded_query_shows_the_reply_reading() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
-/// An RPC with no declared bound renders no `@` suffix and no Timing line at
-/// all: absent means undeclared, never defaulted (ADR-0015 decision 4), so
-/// there is nothing to show.
+/// An RPC with no declared bound resolves the built-in command default
+/// `[..1s]` (ridl §9.3), so the hover renders that bound and says it is the
+/// default.
 #[test]
-fn hover_on_an_rpc_with_no_declared_bound_renders_no_timing_line() {
+fn hover_on_an_rpc_with_no_declared_bound_renders_the_default_bound() {
     let dir = TempDir::new("ridl-hover-rpc-unbounded");
     let (_vocab, contract) = write_ridl_workspace(&dir);
     let root = uri_of(dir.path());
@@ -2247,8 +2247,14 @@ fn hover_on_an_rpc_with_no_declared_bound_renders_no_timing_line() {
         find_pos(RIDL_CONTRACT, "setTarget", 0),
     );
     assert!(value.contains("command"), "kind: {value}");
-    assert!(!value.contains('@'), "no signature suffix: {value}");
-    assert!(!value.contains("**Timing:**"), "no Timing line: {value}");
+    assert!(
+        value.contains("@[..1s]"),
+        "the default signature suffix: {value}"
+    );
+    assert!(
+        value.contains("**Timing:** range `[..1s]` (default [..1s] applied)"),
+        "the default Timing line: {value}",
+    );
 
     shut_down(&client, 11);
     server.join().expect("thread joins").expect("clean exit");

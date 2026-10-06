@@ -751,15 +751,6 @@ fn rpc_bound(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
     if old_timing.mode != new_timing.mode {
         return Verdict::Breaking;
     }
-    // `default_applied` is always false on an RPC, because an RPC bound is
-    // never defaulted (ADR-0015 decision 7); anything else in a snapshot is
-    // erroneous IR, and a flip is breaking regardless — never the "default
-    // made explicit" compatibility [`timing`] grants, which would report
-    // compatible on IR the classifier does not understand (ADR-0012
-    // decision 9).
-    if old_timing.default_applied != new_timing.default_applied {
-        return Verdict::Breaking;
-    }
     // A throttle raised, a response bound raised, or either bound added or
     // removed. `raised` covers the added case (`None` → `Some`), `dropped` the
     // removed one. This is [`timing`]'s predicate with the `min` direction
@@ -771,8 +762,11 @@ fn rpc_bound(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
     {
         return Verdict::Breaking;
     }
-    // What remains is a throttle lowered or a response bound lowered — the
-    // caller is less constrained, or the provider promises more.
+    // What remains is a throttle lowered, a response bound lowered, or only
+    // `default_applied` flipped over identical bounds — a default made
+    // explicit (ADR-0015 decision 7), the rule [`timing`] gives a signal. The
+    // caller is less constrained, or the provider promises more, or neither
+    // changed.
     Verdict::Compatible
 }
 
@@ -793,8 +787,8 @@ fn interaction_timing(decl: &v2::Decl) -> Option<Option<&v2::Timing>> {
 }
 
 /// The declared timing of a command or query; `None` for other kinds, and
-/// `Some(None)` for an RPC that declares no bounds (never defaulted,
-/// ADR-0015 decision 4).
+/// `Some(None)` for an RPC with no bound at all. An RPC bound may come from a
+/// default (ADR-0015 decisions 4 and 7, as amended).
 fn rpc_timing(decl: &v2::Decl) -> Option<Option<&v2::Timing>> {
     use v2::decl::Kind;
     match &decl.kind {
@@ -1231,7 +1225,9 @@ pub fn explain(category: Category) -> &'static str {
         Category::RpcBoundChanged => concat!(
             "A command or query declared RPC bound changed (ADR-0015 d8).\n",
             "  compatible  min lowered (the caller may call more often) or max lowered\n",
-            "              (a stronger provider promise), with the mode unchanged\n",
+            "              (a stronger provider promise), with the mode unchanged;\n",
+            "              default_applied flipped over identical resolved bounds — a\n",
+            "              default made explicit\n",
             "  breaking    min raised — on an RPC, min is the call throttle and\n",
             "              constrains the caller, so raising it withdraws a call rate\n",
             "              the caller was entitled to use; max raised (a weaker provider\n",
@@ -1241,7 +1237,9 @@ pub fn explain(category: Category) -> &'static str {
             "              is why this is a category of its own rather than a branch:\n",
             "              a missed branch would inherit the signal rule and call a\n",
             "              raised RPC min compatible (ADR-0012 d9, fail closed).\n",
-            "              RPC bounds are never defaulted (ridl 9.1 does not apply)"
+            "              an RPC bound may come from a default, and diff compares\n",
+            "              resolved bounds, so editing a default surfaces here on\n",
+            "              every defaulted command or query (ridl 9.1)"
         ),
         Category::ContractChanged => concat!(
             "A command or query require/ensure clause set changed (ridl 13).\n",

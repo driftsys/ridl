@@ -1027,8 +1027,9 @@ fn a_defaults_timing_edit_classifies_by_its_resolved_bounds() {
 // a test here, the two inversions first.
 // ==========================================================================
 
-/// A command carrying the given declared RPC bounds — `None` is the
-/// undeclared state, never a default (ADR-0015 decision 4).
+/// A command carrying the given resolved RPC bounds. `None` is a state only an
+/// older catalog can carry: the current compiler resolves every command to a
+/// bound, the default one when none is written (ridl §9.3).
 fn bounded_command(timing: Option<v2::Timing>) -> v2::Package {
     pkg(vec![decl(
         "a",
@@ -1106,10 +1107,10 @@ fn an_rpc_bound_removed_is_breaking() {
 }
 
 /// The whole annotation appearing or disappearing is a bound added or removed
-/// — breaking in both directions. The absent side is the undeclared state,
-/// which the checker never defaults (ADR-0015 decision 4), so both directions
-/// arrive through ordinary compiles rather than only through a hand-edited
-/// snapshot.
+/// — breaking in both directions. The checker now resolves every command and
+/// query to a bound, so the absent side arrives from a catalog built before
+/// the response-bound default (ridl §9.3), compared with one built after it:
+/// a call that could not time out now can.
 #[test]
 fn an_rpc_annotation_present_on_one_side_only_is_breaking() {
     let declared = bounded_command(Some(range(Some("10000"), Some("100000"))));
@@ -1149,17 +1150,65 @@ fn an_rpc_timing_mode_flip_is_breaking() {
     assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Breaking);
 }
 
-/// The mirror of [`a_default_applied_flip_over_identical_bounds_is_compatible`]
-/// with the opposite verdict: `default_applied` is always false on an RPC,
-/// because an RPC bound is never defaulted (ADR-0015 decision 7), so a
-/// snapshot flipping it is erroneous IR and fails closed (ADR-0012
-/// decision 9) rather than reading as a default made explicit.
+/// A defaulted RPC bound made explicit over identical bounds is compatible,
+/// the rule [`a_default_applied_flip_over_identical_bounds_is_compatible`]
+/// gives a signal (ADR-0015 decision 7).
 #[test]
-fn an_rpc_default_applied_flip_over_identical_bounds_is_breaking() {
+fn rpc_default_made_explicit_is_compatible() {
+    let mut defaulted = range(None, Some("1000000"));
+    defaulted.default_applied = true;
+    let old = bounded_command(Some(defaulted));
+    let new = bounded_command(Some(range(None, Some("1000000"))));
+    assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Compatible);
+}
+
+/// The reverse flip, an explicit bound replaced by an equal default, is compatible.
+#[test]
+fn rpc_explicit_bound_replaced_by_equal_default_is_compatible() {
+    let mut defaulted = range(None, Some("1000000"));
+    defaulted.default_applied = true;
+    let old = bounded_command(Some(range(None, Some("1000000"))));
+    let new = bounded_command(Some(defaulted));
+    assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Compatible);
+}
+
+/// A defaulted bound appearing where there was none is breaking, as for any bound added.
+#[test]
+fn rpc_defaulted_bound_added_is_breaking() {
+    let mut defaulted = range(None, Some("1000000"));
+    defaulted.default_applied = true;
+    let old = bounded_command(None);
+    let new = bounded_command(Some(defaulted));
+    assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Breaking);
+}
+
+/// A default flip does not hide a raised max, which stays breaking.
+#[test]
+fn rpc_default_flip_with_a_raised_max_is_breaking() {
+    let mut defaulted = range(None, Some("1000000"));
+    defaulted.default_applied = true;
+    let old = bounded_command(Some(defaulted));
+    let new = bounded_command(Some(range(None, Some("2000000"))));
+    assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Breaking);
+}
+
+/// A flip over identical `min` and `max` is compatible.
+#[test]
+fn rpc_default_flip_over_identical_min_and_max_is_compatible() {
     let mut defaulted = range(Some("10000"), Some("100000"));
     defaulted.default_applied = true;
     let old = bounded_command(Some(defaulted));
     let new = bounded_command(Some(range(Some("10000"), Some("100000"))));
+    assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Compatible);
+}
+
+/// A default flip does not hide a raised throttle, which stays breaking.
+#[test]
+fn rpc_default_flip_with_a_raised_min_is_breaking() {
+    let mut defaulted = range(Some("10000"), Some("100000"));
+    defaulted.default_applied = true;
+    let old = bounded_command(Some(defaulted));
+    let new = bounded_command(Some(range(Some("20000"), Some("100000"))));
     assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Breaking);
 }
 

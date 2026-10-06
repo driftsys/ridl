@@ -31,8 +31,8 @@ interface Timing {
   /// Nor on a query.
   query timedQuery(): Level @1s
 
-  /// A query with no declared response bound — warned (RIDL-112), never
-  /// defaulted: absent means absent in the IR (ADR-0015).
+  /// A query with no declared response bound — warned (RIDL-112), and it
+  /// takes the default response bound for a query (ridl §9.3).
   query unbounded(): Level
 
   /// `@[20ms..]` declares a call throttle and no response bound, so it warns

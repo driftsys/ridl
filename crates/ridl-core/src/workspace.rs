@@ -36,7 +36,7 @@ use crate::db::{InputFile, RidlDatabase, parse_file};
 use crate::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span};
 use crate::interface_lock;
 use crate::lint::{LintLevels, LintScopes};
-use crate::manifest::{Manifest, ManifestKind, parse_manifest};
+use crate::manifest::{Manifest, ManifestKind, TimingDefaults, parse_manifest};
 use crate::package::{Package, PackageLock, PackageOrigin, Workspace, package_declarations};
 
 /// The result of [`load_workspace`]: the salsa [`Workspace`] input, the
@@ -154,7 +154,7 @@ fn overlay_key(path: &Path) -> Option<PathBuf> {
 ///   directory tree, a `[workspace]` manifest loads every member.
 ///
 /// An entry inside a workspace member loads the whole workspace, so the
-/// root's `[lints]`, `[defaults].timing` and `[imports]` apply to the member
+/// root's `[lints]`, `[defaults]` and `[imports]` apply to the member
 /// and its imports of sibling members resolve;
 /// [`LoadedWorkspace::report_scope`] records the member.
 ///
@@ -378,11 +378,11 @@ struct Loader {
     /// The workspace root's own `[imports]` (ADR-0002 §5 step 3). Stays empty
     /// in a standalone package load and in single-file mode.
     workspace_imports: BTreeMap<String, String>,
-    /// The workspace root's `[defaults].timing` (ridl §9.1). A member's own
-    /// `[defaults].timing` shadows it; when the member has none, this rides on
-    /// the member's packages. Stays `None` in a standalone package load and in
-    /// single-file mode (E2 task 9).
-    workspace_default_timing: Option<String>,
+    /// The workspace root's `[defaults]` (ridl §9.1). A member's own
+    /// `[defaults]` shadows it per key; a key the member leaves unset rides on
+    /// the member's packages. Stays empty in a standalone package load and in
+    /// single-file mode.
+    workspace_defaults: TimingDefaults,
     /// The workspace root's effective lint levels: the registry defaults
     /// overlaid with the root `[lints]` (ADR-0002 §4).
     /// Each member's own table is overlaid on a clone. Stays at the defaults
@@ -417,7 +417,7 @@ impl Loader {
         let Some(Manifest {
             kind,
             imports,
-            default_timing,
+            defaults,
             lints,
         }) = manifest
         else {
@@ -432,16 +432,16 @@ impl Loader {
         match kind {
             ManifestKind::Package { name, .. } => {
                 // A standalone package: the manifest's `[imports]` and
-                // `[defaults].timing` ride on its packages; the workspace maps
+                // `[defaults]` ride on its packages; the workspace maps
                 // stay empty.
-                self.load_package_tree(db, root, &name, &imports, &default_timing)?;
+                self.load_package_tree(db, root, &name, &imports, &defaults)?;
             }
             ManifestKind::Workspace { members } => {
                 // ADR-0002 §5 step 3: the workspace root's `[imports]` and
-                // `[defaults].timing` are the shared defaults. Member maps are
+                // `[defaults]` are the shared defaults. Member maps are
                 // never merged into them.
                 self.workspace_imports = imports;
-                self.workspace_default_timing = default_timing;
+                self.workspace_defaults = defaults;
                 self.workspace_lints = root_lints;
                 for member in &members {
                     self.member_dirs.push(root.join(member));
@@ -482,7 +482,7 @@ impl Loader {
         let Some(Manifest {
             kind,
             imports,
-            default_timing,
+            defaults,
             lints,
         }) = manifest
         else {
@@ -510,17 +510,15 @@ impl Loader {
                 // ADR-0002 §5 step 2: the member's `[imports]` ride on the
                 // member's packages only — never merged into the workspace
                 // map, never visible to a sibling member. Its
-                // `[defaults].timing` shadows the workspace default (ridl §9.1);
-                // when the member configures none, the workspace default rides
-                // on the member's packages.
-                let member_default_timing =
-                    default_timing.or_else(|| self.workspace_default_timing.clone());
+                // `[defaults]` shadow the workspace defaults per key (ridl §9.1);
+                // a key the member leaves unset takes the workspace value.
+                let member_defaults = defaults.or(&self.workspace_defaults);
                 self.load_package_tree(
                     db,
                     &workspace_root.join(member),
                     &name,
                     &imports,
-                    &member_default_timing,
+                    &member_defaults,
                 )?;
             }
         }
@@ -541,7 +539,7 @@ impl Loader {
         dir: &Path,
         name: &str,
         imports: &BTreeMap<String, String>,
-        default_timing: &Option<String>,
+        defaults: &TimingDefaults,
     ) -> io::Result<()> {
         let mut source_files = Vec::new();
         let mut subdirs = Vec::new();
@@ -592,7 +590,7 @@ impl Loader {
                 files,
                 PackageOrigin::WorkspaceMember,
                 imports.clone(),
-                default_timing.clone(),
+                defaults.clone(),
                 lock,
             ));
         }
@@ -610,7 +608,7 @@ impl Loader {
                 &subdir,
                 &format!("{name}.{dir_name}"),
                 imports,
-                default_timing,
+                defaults,
             )?;
         }
         Ok(())
@@ -648,7 +646,7 @@ impl Loader {
             vec![input],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             lock,
         ));
         Ok(())
@@ -1529,7 +1527,7 @@ mod tests {
             .find(|p| p.name(&db) == "veh.own")
             .expect("m-own loads");
         assert_eq!(
-            own.default_timing(&db).as_deref(),
+            own.defaults(&db).timing.as_deref(),
             Some("[50ms..2s]"),
             "the member's own `[defaults]` shadows the workspace default",
         );
@@ -1538,10 +1536,116 @@ mod tests {
             .find(|p| p.name(&db) == "veh.inherit")
             .expect("m-inherit loads");
         assert_eq!(
-            inherit.default_timing(&db).as_deref(),
+            inherit.defaults(&db).timing.as_deref(),
             Some("[100ms..1000ms]"),
             "a member without `[defaults]` inherits the workspace default",
         );
+    }
+
+    /// Each `[defaults]` key resolves on its own: a member's value shadows the
+    /// workspace's for that key only.
+    #[test]
+    fn defaults_precedence_is_per_key() {
+        let dir = TempDir::new("defaults-per-key");
+        dir.write(
+            "ridl.toml",
+            "[workspace]\nmembers = [\"m\"]\n\n[defaults]\ncommand_timing = \"[..2s]\"\nquery_timing = \"[..4s]\"\n",
+        );
+        dir.write(
+            "m/ridl.toml",
+            "[package]\nname = \"veh.m\"\nversion = \"1.0.0\"\n\n[defaults]\nquery_timing = \"[..5s]\"\n",
+        );
+        dir.write("m/m.typl", "package veh.m\ntype A: m\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert_eq!(loaded.diagnostics, Vec::new(), "a clean workspace");
+        let packages = loaded.workspace.packages(&db).clone();
+        let member = packages
+            .iter()
+            .find(|p| p.name(&db) == "veh.m")
+            .expect("the member loads");
+        let defaults = member.defaults(&db);
+        assert_eq!(defaults.command_timing.as_deref(), Some("[..2s]"));
+        assert_eq!(defaults.query_timing.as_deref(), Some("[..5s]"));
+        assert_eq!(defaults.timing, None);
+    }
+
+    /// Per-key precedence in the other direction: a member's `command_timing`
+    /// is not overridden by the workspace's, and a member that leaves
+    /// `query_timing` unset inherits the workspace's.
+    #[test]
+    fn defaults_precedence_is_per_key_in_both_directions() {
+        let dir = TempDir::new("defaults-per-key-reverse");
+        dir.write(
+            "ridl.toml",
+            "[workspace]\nmembers = [\"m\"]\n\n[defaults]\ncommand_timing = \"[..2s]\"\nquery_timing = \"[..4s]\"\n",
+        );
+        dir.write(
+            "m/ridl.toml",
+            "[package]\nname = \"veh.m\"\nversion = \"1.0.0\"\n\n[defaults]\ncommand_timing = \"[..7s]\"\n",
+        );
+        dir.write("m/m.typl", "package veh.m\ntype A: m\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert_eq!(loaded.diagnostics, Vec::new(), "a clean workspace");
+        let packages = loaded.workspace.packages(&db).clone();
+        let member = packages
+            .iter()
+            .find(|p| p.name(&db) == "veh.m")
+            .expect("the member loads");
+        let defaults = member.defaults(&db);
+        assert_eq!(
+            defaults.command_timing.as_deref(),
+            Some("[..7s]"),
+            "the member's own `command_timing` wins over the workspace's",
+        );
+        assert_eq!(
+            defaults.query_timing.as_deref(),
+            Some("[..4s]"),
+            "a member without `query_timing` inherits the workspace's",
+        );
+        assert_eq!(defaults.timing, None);
+    }
+
+    /// A standalone package's `command_timing` and `query_timing` ride on the
+    /// root package and on a nested package directory alike (ridl §9.3).
+    #[test]
+    fn standalone_rpc_defaults_ride_on_the_tree() {
+        let dir = TempDir::new("standalone-rpc-defaults");
+        dir.write(
+            "ridl.toml",
+            "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n\n[defaults]\ncommand_timing = \"[..2s]\"\nquery_timing = \"[5ms..4s]\"\n",
+        );
+        dir.write("a.typl", "package veh.common\ntype A: m\n");
+        dir.write("sub/s.typl", "package veh.common.sub\ntype S: s\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package tree loads");
+        assert_eq!(loaded.diagnostics, Vec::new());
+        let packages = loaded.workspace.packages(&db).clone();
+        let names: Vec<_> = packages.iter().map(|p| p.name(&db).clone()).collect();
+        assert!(
+            names.iter().any(|name| name == "veh.common")
+                && names.iter().any(|name| name == "veh.common.sub"),
+            "the root and the nested package both load: {names:?}",
+        );
+        for package in &packages {
+            let defaults = package.defaults(&db);
+            assert_eq!(
+                defaults.command_timing.as_deref(),
+                Some("[..2s]"),
+                "{}",
+                package.name(&db),
+            );
+            assert_eq!(
+                defaults.query_timing.as_deref(),
+                Some("[5ms..4s]"),
+                "{}",
+                package.name(&db),
+            );
+        }
     }
 
     /// A standalone package's `[defaults].timing` rides on every package in its
@@ -1561,7 +1665,7 @@ mod tests {
         assert_eq!(loaded.diagnostics, Vec::new());
         for package in loaded.workspace.packages(&db) {
             assert_eq!(
-                package.default_timing(&db).as_deref(),
+                package.defaults(&db).timing.as_deref(),
                 Some("[20ms..200ms]"),
                 "every package in the tree carries the manifest default",
             );
@@ -1574,8 +1678,8 @@ mod tests {
         let single_loaded =
             load_workspace(&mut single_db, &single).expect("single-file mode loads");
         assert_eq!(
-            single_loaded.workspace.packages(&single_db)[0].default_timing(&single_db),
-            &None,
+            single_loaded.workspace.packages(&single_db)[0].defaults(&single_db),
+            &TimingDefaults::default(),
             "single-file mode carries no configured default",
         );
     }

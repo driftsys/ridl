@@ -32,7 +32,9 @@ design and plan (`2026-10-05-layout-inputs-{design,plan}.md`) were archived on
 lints design and plan (`2026-10-04-design-lints-{design,plan}.md`) were archived
 on 2026-10-06, once its calibration landed; ADR-0027 and
 [`../design/design-lints.md`](../design/design-lints.md) are their durable
-records.
+records. The default response bound design and plan
+(`2026-10-06-rpc-default-response-bound-{design,plan}.md`) were archived on
+2026-10-06, once #741 landed; ADR-0015 is their durable record.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the

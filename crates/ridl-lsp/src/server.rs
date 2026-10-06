@@ -48,6 +48,7 @@ use lsp_server::{Connection, ErrorCode, Message, Notification, Request, RequestI
 use lsp_types as lt;
 use lsp_types::notification::Notification as _;
 use lsp_types::request::Request as _;
+use ridl_core::TimingDefaults;
 use ridl_core::db::{InputFile, RidlDatabase, parse_file};
 use ridl_core::diag::{
     DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, house_style_message, remap_diagnostics,
@@ -583,7 +584,7 @@ impl ServerState {
                 vec![input],
                 PackageOrigin::WorkspaceMember,
                 BTreeMap::new(),
-                None,
+                TimingDefaults::default(),
                 None,
             );
             self.overlays.insert(path, (input, package));

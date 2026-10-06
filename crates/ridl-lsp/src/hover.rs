@@ -1088,9 +1088,9 @@ fn enclosing_shape<'a>(
 }
 
 /// Renders the head of one interaction's hover: the signature, the §11
-/// ordinal, the payload with its typl detail, the resolved — on an RPC,
-/// declared — timing with its per-kind reading, and the error strata note
-/// for a fallible return. The caller appends the doc sections.
+/// ordinal, the payload with its typl detail, the resolved timing — on an
+/// RPC, the declared bound or the default one the checker filled in — with its
+/// per-kind reading, and the error strata note for a fallible return. The caller appends the doc sections.
 fn render_interaction(
     db: &dyn salsa::Database,
     ws: Workspace,
@@ -1127,9 +1127,9 @@ fn render_interaction(
             }
         }
         Some(v2::decl::Kind::CommandDef(command)) => {
-            // An RPC bound is never defaulted, so absent means undeclared and
-            // renders nothing (ADR-0015 decision 4). The query arm below is
-            // the same.
+            // The checker resolves every command and query to a bound, the
+            // default one when none is written (ridl §9.3); an absent timing
+            // renders nothing. The query arm below is the same.
             if let Some(timing) = &command.timing {
                 out.push_str(&timing_line(timing, Reading::Acceptance));
             }
@@ -1252,19 +1252,32 @@ impl Reading {
     }
 }
 
-/// The `**Timing:**` line: the resolved mode, the resolved bounds, the note
-/// that the configured default was applied when the source carried no
-/// annotation, and the derived per-kind reading.
+/// The `**Timing:**` line: the resolved mode, the resolved bounds, a note on
+/// what the configured default supplied, and the derived per-kind reading.
+///
+/// On a signal or event `default_applied` means the whole default was
+/// applied. On a command or query it means at least the maximum came from the
+/// default: an untimed member takes the whole default, and `@[min..]` keeps
+/// its written minimum. The IR does not record which of the two it was, so an
+/// RPC with a minimum names only the maximum as defaulted, which is true in
+/// both cases.
 fn timing_line(timing: &v2::Timing, reading: Reading) -> String {
     let mode = match v2::TimingMode::try_from(timing.mode) {
         Ok(v2::TimingMode::StrictPeriodic) => "strict periodic",
         _ => "range",
     };
     let bounds = bounds_text(timing);
-    let default = if timing.default_applied {
-        format!(" (default {bounds} applied)")
-    } else {
-        String::new()
+    let rpc = matches!(reading, Reading::Acceptance | Reading::Reply);
+    let default = match (timing.default_applied, timing.min_us.as_deref()) {
+        (false, _) => String::new(),
+        (true, Some(_)) if rpc => {
+            let max = timing.max_us.as_deref();
+            let max = max
+                .map(|value| duration_text(value, common_unit(&[Some(value)])))
+                .unwrap_or_default();
+            format!(" (maximum {max} taken from the default)")
+        }
+        (true, _) => format!(" (default {bounds} applied)"),
     };
     format!(
         "\n\n**Timing:** {mode} `{bounds}`{default} — {}",
@@ -1613,6 +1626,41 @@ mod tests {
         let doc = "ö [A]";
         let links = [link("A", 1, 3, "veh.A")];
         assert_eq!(render_doc(doc, &links, |_| Some(location(0))), doc);
+    }
+
+    fn defaulted_range(min: Option<&str>, max: &str) -> v2::Timing {
+        v2::Timing {
+            mode: v2::TimingMode::Range as i32,
+            min_us: min.map(str::to_string),
+            max_us: Some(max.to_string()),
+            default_applied: true,
+        }
+    }
+
+    /// On an RPC with a minimum, `default_applied` means at least the maximum
+    /// came from the default, so the line names only the maximum as defaulted
+    /// and never calls a written `@[20ms..]` the default.
+    #[test]
+    fn timing_line_names_only_the_maximum_as_defaulted_on_an_rpc_with_a_minimum() {
+        let line = timing_line(
+            &defaulted_range(Some("20000"), "1000000"),
+            Reading::Acceptance,
+        );
+        assert!(
+            line.contains("`[20ms..1000ms]` (maximum 1s taken from the default)"),
+            "{line}"
+        );
+        assert!(!line.contains("default [20ms"), "{line}");
+    }
+
+    /// With no minimum the whole range is the default, so the line says the
+    /// default was applied, on an RPC and on a signal alike.
+    #[test]
+    fn timing_line_names_the_whole_default_without_a_minimum() {
+        let line = timing_line(&defaulted_range(None, "1000000"), Reading::Acceptance);
+        assert!(line.contains("(default [..1s] applied)"), "{line}");
+        let line = timing_line(&defaulted_range(Some("100000"), "1000000"), Reading::State);
+        assert!(line.contains("(default [100ms..1000ms] applied)"), "{line}");
     }
 
     #[test]

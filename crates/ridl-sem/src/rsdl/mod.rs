@@ -718,6 +718,7 @@ fn is_screaming_snake(text: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use ridl_core::TimingDefaults;
     use std::collections::BTreeMap;
 
     use ridl_core::db::RidlDatabase;
@@ -738,7 +739,7 @@ mod tests {
             files,
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             None,
         )
     }

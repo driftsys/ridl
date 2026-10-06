@@ -98,40 +98,60 @@ pub fn check_package(
     let lock = pkg.lock(db).as_ref();
     let lock_file = lock.map(|lock| sources.file_id(&lock.path, &lock.text));
 
-    // Resolve the package timing default once (ridl §9.1): the winning raw
-    // `[defaults].timing` string (package `[defaults]` already shadows the
-    // workspace default, merged at load) is parsed here — `ridl-core` cannot
+    // Resolve the package timing defaults once: `[defaults].timing` for
+    // signals and events (ridl §9.1), and `[defaults].command_timing` and
+    // `[defaults].query_timing` for commands and queries (ridl §9.3). Each
+    // winning raw string (package `[defaults]` already shadows the workspace
+    // default per key, merged at load) is parsed here — `ridl-core` cannot
     // depend on `ridl-sem`, so a malformed string is MANI-009, spanning the
-    // package's first file, and the built-in `[100ms..1000ms]` is the fallback.
+    // package's first file, and that key falls back to its own built-in.
     let mut default_diagnostics = Vec::new();
-    let default_timing = match pkg.default_timing(db).as_ref() {
-        Some(raw) => match timing::parse_default_timing(raw) {
-            Ok(spec) => spec,
-            Err(reason) => {
-                // The span is the package's first file. A package with no
-                // interned files cannot carry one, so the diagnostic falls back
-                // to the detached id (rendered as a bare coded message) rather
-                // than vanishing — a dropped manifest error is worse than an
-                // unanchored one.
-                let file = file_ids.first().copied().unwrap_or(FileId::DETACHED);
-                default_diagnostics.push(Diagnostic {
-                    code: DiagCode::MANI_009,
-                    severity: Severity::Error,
-                    message: format!(
-                        "invalid `[defaults].timing` in the package manifest: {reason}"
-                    ),
-                    primary: Span {
-                        file,
-                        range: TextRange::empty(0.into()),
-                    },
-                    labels: Vec::new(),
-                    fixits: Vec::new(),
-                });
-                timing::builtin_default_timing()
-            }
-        },
-        None => timing::builtin_default_timing(),
+    // The span is the package's first file. A package with no interned files
+    // cannot carry one, so the diagnostic falls back to the detached id
+    // (rendered as a bare coded message) rather than vanishing — a dropped
+    // manifest error is worse than an unanchored one.
+    let manifest_file = file_ids.first().copied().unwrap_or(FileId::DETACHED);
+    let defaults = pkg.defaults(db);
+    let mut resolve_default = |key: &str,
+                               raw: Option<&String>,
+                               parse: fn(&str) -> Result<timing::TimingSpec, String>,
+                               builtin: fn() -> timing::TimingSpec| {
+        let Some(raw) = raw else {
+            return builtin();
+        };
+        parse(raw).unwrap_or_else(|reason| {
+            default_diagnostics.push(Diagnostic {
+                code: DiagCode::MANI_009,
+                severity: Severity::Error,
+                message: format!("invalid `[defaults].{key}` in the package manifest: {reason}"),
+                primary: Span {
+                    file: manifest_file,
+                    range: TextRange::empty(0.into()),
+                },
+                labels: Vec::new(),
+                fixits: Vec::new(),
+            });
+            builtin()
+        })
     };
+    let default_timing = resolve_default(
+        "timing",
+        defaults.timing.as_ref(),
+        timing::parse_default_timing,
+        timing::builtin_default_timing,
+    );
+    let default_command_timing = resolve_default(
+        "command_timing",
+        defaults.command_timing.as_ref(),
+        timing::parse_rpc_default_timing,
+        timing::builtin_command_timing,
+    );
+    let default_query_timing = resolve_default(
+        "query_timing",
+        defaults.query_timing.as_ref(),
+        timing::parse_rpc_default_timing,
+        timing::builtin_query_timing,
+    );
 
     let mut checker = Checker {
         db,
@@ -144,6 +164,8 @@ pub fn check_package(
         current_file: 0,
         diagnostics: default_diagnostics,
         default_timing,
+        default_command_timing,
+        default_query_timing,
         interface_signals: Vec::new(),
         interface_name: String::new(),
         interface_internal: false,
@@ -510,6 +532,14 @@ pub(crate) struct Checker<'db> {
     /// `[defaults].timing` or the built-in `[100ms..1000ms]`, applied to every
     /// untimed signal and event (E2 task 9).
     default_timing: timing::TimingSpec,
+    /// The resolved command default (ridl §9.3): the parsed
+    /// `[defaults].command_timing` or the built-in `[..1s]`, which supplies the
+    /// response bound of every command that writes none.
+    default_command_timing: timing::TimingSpec,
+    /// The resolved query default (ridl §9.3): the parsed
+    /// `[defaults].query_timing` or the built-in `[..3s]`, which supplies the
+    /// response bound of every query that writes none.
+    default_query_timing: timing::TimingSpec,
     /// The signals of the interface being lowered, typed for the contract
     /// environment — the names a `require` may read (ridl §13, expr-core §6).
     /// Set by [`Checker::lower_interface`] before its members are lowered and
@@ -4449,11 +4479,11 @@ impl Checker<'_> {
 
     /// Resolves one interaction's timing to its IR `Timing` (ridl §9, ADR-0008
     /// decision 12, ADR-0015 decisions 2–6): parses and validates the `@`
-    /// annotation or applies the package default, accumulating the RIDL-10x
-    /// diagnostics [`timing::resolve_timing`] returns. Always `Some` for a
-    /// signal or event; for a command or query, `Some` exactly when an
-    /// annotation was written — the §9.1 defaulting path is signal/event
-    /// only, so an undeclared RPC bound stays absent (RIDL-112).
+    /// annotation or applies the package default for `kind`, accumulating the
+    /// RIDL-10x and RIDL-112 diagnostics [`timing::resolve_timing`] returns.
+    /// Always `Some` for a signal, an event, a command and a query: an RPC
+    /// with no written response bound takes it from the command or query
+    /// default (ridl §9.3). `None` for `fixed`, which carries no timing.
     fn resolve_member_timing(
         &mut self,
         annot: Option<ast::Timing>,
@@ -4461,8 +4491,15 @@ impl Checker<'_> {
         kind: timing::InteractionKind,
     ) -> Option<v2::Timing> {
         let file = self.file_ids[self.current_file];
-        let (spec, diags) =
-            timing::resolve_timing(annot.as_ref(), kind, &self.default_timing, file, anchor);
+        // `Fixed` carries no timing, so the default it is handed is never read.
+        let default = match kind {
+            timing::InteractionKind::Command => &self.default_command_timing,
+            timing::InteractionKind::Query => &self.default_query_timing,
+            timing::InteractionKind::Signal
+            | timing::InteractionKind::Event
+            | timing::InteractionKind::Fixed => &self.default_timing,
+        };
+        let (spec, diags) = timing::resolve_timing(annot.as_ref(), kind, default, file, anchor);
         self.diagnostics.extend(diags);
         spec.map(lower_timing_spec)
     }
@@ -4885,7 +4922,7 @@ impl Checker<'_> {
         let contracts = self.lower_contracts(command.syntax(), name, false, &param_types, None);
         // The RPC bounds (ridl §9, ADR-0015 decisions 2–4): the range form
         // resolves through the same pass as a signal's, and an undeclared
-        // bound stays `None` — warned (RIDL-112), never defaulted.
+        // response bound takes the command default — warned (RIDL-112).
         let timing = self.resolve_member_timing(
             command.timing(),
             member_name_range(command.name(), command.syntax()),
@@ -6124,6 +6161,7 @@ fn int64_edge(upper: bool) -> ExactValue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ridl_core::TimingDefaults;
     use ridl_core::db::RidlDatabase;
     use ridl_core::package::{PackageLock, PackageOrigin, service_catalog};
     use ridl_core::std_lib::std_package;
@@ -6145,7 +6183,7 @@ mod tests {
             vec![file],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             None,
         )
     }
@@ -10696,18 +10734,18 @@ mod tests {
             vec![file],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             None,
         )
     }
 
-    /// A single-file `.ridl` package carrying a configured `[defaults].timing`
-    /// (the raw string the checker parses, ridl §9.1).
+    /// A single-file `.ridl` package carrying configured `[defaults]` timing
+    /// strings (the raw strings the checker parses, ridl §9.1 and §9.3).
     fn ridl_package_with_default(
         db: &RidlDatabase,
         name: &str,
         text: &str,
-        default_timing: &str,
+        defaults: TimingDefaults,
     ) -> Package {
         let file = InputFile::new(
             db,
@@ -10720,9 +10758,17 @@ mod tests {
             vec![file],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            Some(default_timing.to_string()),
+            defaults,
             None,
         )
+    }
+
+    /// `[defaults]` with only `timing` configured.
+    fn timing_default(timing: &str) -> TimingDefaults {
+        TimingDefaults {
+            timing: Some(timing.to_string()),
+            ..Default::default()
+        }
     }
 
     /// Checks a single-package workspace whose one file is a `.ridl` file.
@@ -13311,7 +13357,7 @@ interface VehicleStatus {
             &db,
             "app",
             &format!("{PRELUDE}interface I {{\n  signal s : Speed\n}}\n"),
-            "[50ms..2s]",
+            timing_default("[50ms..2s]"),
         );
         let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
         let checked = check_package(&db, ws, pkg, std);
@@ -13339,14 +13385,16 @@ interface VehicleStatus {
             &db,
             "app",
             &format!("{PRELUDE}interface I {{\n  signal s : Speed @10ms\n}}\n"),
-            "fast",
+            timing_default("fast"),
         );
         let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
         let checked = check_package(&db, ws, pkg, std);
         assert_eq!(codes(&checked), vec!["MANI-009"]);
         assert_eq!(checked.diagnostics[0].severity, Severity::Error);
         assert!(
-            checked.diagnostics[0].message.contains("[defaults].timing"),
+            checked.diagnostics[0]
+                .message
+                .contains("`[defaults].timing`"),
             "MANI-009 must name the manifest key, got {:?}",
             checked.diagnostics[0].message,
         );
@@ -13370,14 +13418,16 @@ interface VehicleStatus {
             &db,
             "app",
             &format!("{PRELUDE}interface I {{\n  event e : Speed\n}}\n"),
-            "[-100ms..2000ms]",
+            timing_default("[-100ms..2000ms]"),
         );
         let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
         let checked = check_package(&db, ws, pkg, std);
         assert_eq!(codes(&checked), vec!["MANI-009", "RIDL-100"]);
         assert_eq!(checked.diagnostics[0].severity, Severity::Error);
         assert!(
-            checked.diagnostics[0].message.contains("[defaults].timing"),
+            checked.diagnostics[0]
+                .message
+                .contains("`[defaults].timing`"),
             "MANI-009 must name the manifest key, got {:?}",
             checked.diagnostics[0].message,
         );
@@ -13399,47 +13449,178 @@ interface VehicleStatus {
         );
     }
 
+    /// The command or query of an interaction, by name.
+    fn rpc_timing(checked: &CheckedPackage, name: &str) -> Option<v2::Timing> {
+        match interaction(checked, name).kind.as_ref() {
+            Some(v2::decl::Kind::CommandDef(command)) => command.timing.clone(),
+            Some(v2::decl::Kind::QueryDef(query)) => query.timing.clone(),
+            other => panic!("expected a command or query, got {other:?}"),
+        }
+    }
+
     /// Declared RPC bounds lower into the IR on both kinds, and an undeclared
-    /// bound stays absent (ADR-0015 decisions 4 and 7): the bare command draws
-    /// RIDL-112 and its `timing` field is `None` — the §9.1 defaulting path
-    /// never touches an RPC.
+    /// bound takes the built-in default for its kind (ridl §9.3): the bare
+    /// command lowers `[..1s]` and the bare query `[..3s]`, each marked
+    /// `default_applied` and each drawing RIDL-112.
     #[test]
-    fn rpc_bounds_lower_into_the_ir_and_absent_stays_absent() {
+    fn rpc_bounds_lower_into_the_ir_and_absent_takes_the_default() {
         let checked = check_ridl(
             "app",
             &format!(
-                "{PRELUDE}interface I {{\n  command c(p: Speed) @[20ms..50ms]\n  query q(): Speed @[..100ms]\n  command bare()\n}}\n"
+                "{PRELUDE}interface I {{\n  command c(p: Speed) @[20ms..50ms]\n  query q(): Speed @[..100ms]\n  command bare()\n  query bareQ(): Speed\n}}\n"
             ),
         );
         assert_eq!(
             codes(&checked),
-            vec!["RIDL-112"],
-            "only the bare command warns"
+            vec!["RIDL-112", "RIDL-112"],
+            "only the bare command and the bare query warn"
         );
 
-        let v2::decl::Kind::CommandDef(command) = interaction(&checked, "c").kind.as_ref().unwrap()
-        else {
-            panic!("expected a command");
-        };
-        let timing = command.timing.as_ref().expect("declared bounds lower");
+        let timing = rpc_timing(&checked, "c").expect("declared bounds lower");
         assert_eq!(timing.mode, v2::TimingMode::Range as i32);
         assert_eq!(timing.min_us.as_deref(), Some("20000"));
         assert_eq!(timing.max_us.as_deref(), Some("50000"));
-        assert!(!timing.default_applied, "an RPC bound is never defaulted");
+        assert!(!timing.default_applied, "a written range is not defaulted");
 
-        let v2::decl::Kind::QueryDef(query) = interaction(&checked, "q").kind.as_ref().unwrap()
-        else {
-            panic!("expected a query");
-        };
-        let timing = query.timing.as_ref().expect("declared bounds lower");
+        let timing = rpc_timing(&checked, "q").expect("declared bounds lower");
         assert_eq!(timing.min_us, None, "the half-open throttle stays unset");
         assert_eq!(timing.max_us.as_deref(), Some("100000"));
+        assert!(!timing.default_applied, "a written `max` is not defaulted");
 
-        let v2::decl::Kind::CommandDef(bare) = interaction(&checked, "bare").kind.as_ref().unwrap()
-        else {
-            panic!("expected a command");
-        };
-        assert_eq!(bare.timing, None, "undeclared means absent in the IR");
+        let timing = rpc_timing(&checked, "bare").expect("the default lowers");
+        assert_eq!(timing.min_us, None);
+        assert_eq!(timing.max_us.as_deref(), Some("1000000"));
+        assert!(timing.default_applied);
+
+        let timing = rpc_timing(&checked, "bareQ").expect("the default lowers");
+        assert_eq!(timing.min_us, None);
+        assert_eq!(timing.max_us.as_deref(), Some("3000000"));
+        assert!(timing.default_applied);
+    }
+
+    /// A package `[defaults].command_timing` and `[defaults].query_timing`
+    /// replace the built-ins for the untimed members of their kind.
+    #[test]
+    fn package_command_and_query_defaults_apply() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = ridl_package_with_default(
+            &db,
+            "app",
+            &format!("{PRELUDE}interface I {{\n  command c()\n  query q(): Speed\n}}\n"),
+            TimingDefaults {
+                command_timing: Some("[..250ms]".to_string()),
+                query_timing: Some("[..20ms]".to_string()),
+                ..Default::default()
+            },
+        );
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+        let checked = check_package(&db, ws, pkg, std);
+        assert_eq!(codes(&checked), vec!["RIDL-112", "RIDL-112"]);
+        let command = rpc_timing(&checked, "c").expect("defaulted");
+        assert_eq!(command.max_us.as_deref(), Some("250000"));
+        assert!(command.default_applied);
+        let query = rpc_timing(&checked, "q").expect("defaulted");
+        assert_eq!(query.max_us.as_deref(), Some("20000"));
+        assert!(query.default_applied);
+    }
+
+    /// Checks one package whose untimed command, query and signal each take
+    /// a default, with the given `[defaults]`.
+    fn check_with_rpc_defaults(defaults: TimingDefaults) -> CheckedPackage {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = ridl_package_with_default(
+            &db,
+            "app",
+            &format!(
+                "{PRELUDE}interface I {{\n  command c()\n  query q(): Speed\n  signal s : Speed\n}}\n"
+            ),
+            defaults,
+        );
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+        check_package(&db, ws, pkg, std)
+    }
+
+    /// The MANI-009 diagnostics of a checked package.
+    fn mani_009s(checked: &CheckedPackage) -> Vec<&Diagnostic> {
+        checked
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code == DiagCode::MANI_009)
+            .collect()
+    }
+
+    /// A malformed `[defaults].command_timing` is one MANI-009 naming that
+    /// key; the command falls back to the built-in `[..1s]`, and the valid
+    /// `query_timing` and the signal `timing` are unaffected.
+    #[test]
+    fn mani_009_on_a_malformed_command_timing() {
+        let checked = check_with_rpc_defaults(TimingDefaults {
+            command_timing: Some("[10ms..]".to_string()),
+            query_timing: Some("[..20ms]".to_string()),
+            ..Default::default()
+        });
+        let errors = mani_009s(&checked);
+        assert_eq!(errors.len(), 1, "{:?}", checked.diagnostics);
+        assert!(
+            errors[0].message.contains("`[defaults].command_timing`"),
+            "MANI-009 must name the key, got {:?}",
+            errors[0].message,
+        );
+        let fallback = rpc_timing(&checked, "c").unwrap();
+        assert_eq!(
+            fallback.max_us.as_deref(),
+            Some("1000000"),
+            "the command falls back to the built-in"
+        );
+        assert_eq!(
+            fallback.min_us, None,
+            "the command built-in has no min, unlike the signal built-in",
+        );
+        assert_eq!(
+            rpc_timing(&checked, "q").unwrap().max_us.as_deref(),
+            Some("20000"),
+            "the valid query default applies",
+        );
+        let signal = signal_def(&checked, "s").timing.clone().unwrap();
+        assert_eq!(signal.min_us.as_deref(), Some("100000"));
+        assert_eq!(signal.max_us.as_deref(), Some("1000000"));
+    }
+
+    /// The symmetric case: a malformed `[defaults].query_timing`.
+    #[test]
+    fn mani_009_on_a_malformed_query_timing() {
+        let checked = check_with_rpc_defaults(TimingDefaults {
+            command_timing: Some("[..250ms]".to_string()),
+            query_timing: Some("[10ms..]".to_string()),
+            ..Default::default()
+        });
+        let errors = mani_009s(&checked);
+        assert_eq!(errors.len(), 1, "{:?}", checked.diagnostics);
+        assert!(
+            errors[0].message.contains("`[defaults].query_timing`"),
+            "MANI-009 must name the key, got {:?}",
+            errors[0].message,
+        );
+        assert_eq!(
+            rpc_timing(&checked, "c").unwrap().max_us.as_deref(),
+            Some("250000"),
+            "the valid command default applies",
+        );
+        let fallback = rpc_timing(&checked, "q").unwrap();
+        assert_eq!(
+            fallback.max_us.as_deref(),
+            Some("3000000"),
+            "the query falls back to the built-in"
+        );
+        assert_eq!(
+            fallback.min_us, None,
+            "the query built-in has no min, unlike the signal built-in",
+        );
+        let signal = signal_def(&checked, "s").timing.clone().unwrap();
+        assert_eq!(signal.min_us.as_deref(), Some("100000"));
+        assert_eq!(signal.max_us.as_deref(), Some("1000000"));
     }
 
     #[test]
@@ -13809,7 +13990,7 @@ interface VehicleStatus {
             vec![typl, ridl],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             None,
         );
         let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
@@ -14429,7 +14610,7 @@ interface VehicleStatus {
             inputs,
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             None,
         )
     }
@@ -14597,7 +14778,7 @@ service veh.hvac.rear { signal r : State @[100ms..1s] }
             inputs,
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             Some(PackageLock {
                 path: format!("{dir}/interfaces.lock"),
                 text: lock_text.to_string(),

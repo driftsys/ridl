@@ -61,6 +61,10 @@ Amended 2026-10-05 — decision 21: the event ring depth stays derived, is
 tabulated into the codegen request, and is declarable as an rsdl deployment
 override (driftsys/ridl#715).
 
+Amended 2026-10-06 — decisions 4, 6, 7 and 8: a `command` or `query` takes a
+default response bound, like a signal or event, and `default_applied` can be
+true on an RPC (driftsys/ridl#741).
+
 ## Context
 
 The question that produced both notes: can ridl be the single source of truth
@@ -148,16 +152,22 @@ indistinguishable, so no claim about any of the three can be exercised.
    what varies per interaction, which is why gRPC, DDS-RPC, and AIDL all bound
    the whole call.
 
-4. **Warned, never defaulted.** An RPC with no declared response bound draws a
+4. **Warned, and defaulted.** An RPC with no declared response bound draws a
    warning, and an active profile may escalate that warning to an error — the
-   same two-step §9.1 already gives an untimed signal or event. What an RPC does
-   not get is a **default**. There is no plausible generic value, because what
-   the provider does differs by orders of magnitude between interactions; and a
-   defaulted response bound is worse than none, because it is a provider
-   obligation that callers size their own timeouts against, so inventing one
-   manufactures a promise nobody made. Absent therefore means undeclared in the
-   IR, and this change stays clear of the "changing the configured default is a
-   contract change" machinery.
+   same two-step §9.1 already gives an untimed signal or event. It also receives
+   a **default** response bound: the package's `[defaults] command_timing` or
+   `query_timing`, else the workspace's value of the same key, else the built-in
+   `[..1s]` for a `command` and `[..3s]` for a `query`. Each key resolves on its
+   own, as `timing` does for a signal or event. The first version of this
+   decision refused a default, because no generic value is plausible and an
+   invented bound is a promise nobody made. A default is not invented: the
+   package declares it in its manifest, the reference documents the built-in,
+   and both sides read the resolved bound from the catalog. An author who wants
+   every call bound explicitly sets `missing-response-bound = "deny"`, which
+   turns an untimed call into an error. A default fills `max` only: a member
+   written `@[20ms..]` keeps its `min` and takes `max` from the default, and a
+   default's `min` applies only to a member with no annotation. Changing a
+   configured default is a contract change, as it is for `timing`.
 
    The warning is about `max` specifically, not about the annotation:
    `@[20ms..]` declares a throttle and no response bound, so it warns exactly as
@@ -173,10 +183,11 @@ indistinguishable, so no claim about any of the three can be exercised.
    - **RIDL-112 is minted** — `command` or `query` with no declared response
      bound. Severity warning, escalated to error where the active profile
      requires it. It is the RPC counterpart of RIDL-100 and deliberately not
-     RIDL-100 itself, whose text turns on a default having been applied, which
-     is exactly what an RPC does not get. RIDL-111 is unavailable: ADR-0008
-     decision 21 allocated it to the interface-used-as-a-type error, so 112 is
-     the first free code in the band.
+     RIDL-100 itself, which is bound to the `timing` default and to a signal or
+     event. After the amendment of decision 4 it reports that the call took the
+     default response bound. RIDL-111 is unavailable: ADR-0008 decision 21
+     allocated it to the interface-used-as-a-type error, so 112 is the first
+     free code in the band.
    - **RIDL-106 narrows.** It currently covers a timing annotation on `command`,
      `query`, and `fixed`, plus an attribute block on `fixed`. It keeps `fixed`
      in both halves and drops the two RPC kinds.
@@ -194,9 +205,10 @@ indistinguishable, so no claim about any of the three can be exercised.
    `CommandDef.timing = 3` and `QueryDef.timing = 4`. With both bounds admitted
    all four of `Timing`'s fields carry meaning for an RPC: `mode` is always
    `Range`, `min_us` is the call throttle, `max_us` the response bound, and
-   `default_applied` always false, since RPC bounds are never defaulted. A
-   dedicated scalar `budget_us` field was rejected: reusing `Timing` keeps one
-   representation of a timing bound in the IR rather than two.
+   `default_applied` means what it means on a signal: at least one bound came
+   from a default. A dedicated scalar `budget_us` field was rejected: reusing
+   `Timing` keeps one representation of a timing bound in the IR rather than
+   two.
 
 8. **diff: a new `Category::RpcBoundChanged`, not a kind-aware branch inside
    `TimingChanged`.** The direction rule does not transfer, and that is what
@@ -212,6 +224,10 @@ indistinguishable, so no claim about any of the three can be exercised.
    | `max` raised           | breaking           | breaking — a weaker provider promise                  |
    | `max` lowered          | compatible         | compatible — a stronger provider promise              |
    | bound added or removed | breaking both ways | breaking both ways                                    |
+
+   A `default_applied` flip over identical bounds is compatible: a default made
+   explicit, or an explicit bound replaced by an equal default. A bound that was
+   absent and is now defaulted is a bound added, which is breaking.
 
    ADR-0012 decision 9 settles the form. Its rule is stated for attribute keys —
    a key with no diff category is classified breaking, never compatible — and
@@ -644,22 +660,28 @@ indistinguishable, so no claim about any of the three can be exercised.
 
 ## Alternatives considered
 
-| Candidate                                                 | Verdict  | Reason                                                                                                                                                                                                                                                                                                                      |
-| --------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A QoS block on the interaction                            | rejected | imports transport vocabulary into a contract that must also bind to transports lacking it; Appendix F records that 22 orthogonal policies on one topic is too many degrees of freedom                                                                                                                                       |
-| The bound as an attribute — `[ deadline = 50ms ]`         | rejected | `@` is the family's timing sigil (general form R4), a response bound is a timing bound, and the grammar already admits `@` there; two spellings for one concept                                                                                                                                                             |
-| A budget on `query` only                                  | rejected | leaves a command's acceptance unbounded for no reason other than reluctance to touch Stratum 3, which §10.3 already crosses for pub/sub                                                                                                                                                                                     |
-| A sidecar policy file keyed by `service.member`           | rejected | correct for the per-deployment sizing of the window, permits, and retry row below and it is what rsdl replaces at E6, but wrong for the response bound specifically, which is the one value a cross-check needs against the contract                                                                                        |
-| A dedicated scalar `budget_us` IR field                   | rejected | with both bounds admitted all four `Timing` fields carry meaning, so a second representation of a timing bound adds nothing                                                                                                                                                                                                 |
-| `idempotent` as a contract term                           | rejected | reaches no generated store, dispatcher, or handler; §6.1's ack and sequence numbers already give duplicate suppression, and `@labels` carries review metadata                                                                                                                                                               |
-| `history N` on `signal`                                   | rejected | contradicts §4's latest-value definition; the lookback query of decision 22 expresses the same requirement with existing vocabulary                                                                                                                                                                                         |
-| `coherent` as an attribute                                | rejected | implicit — decision 9                                                                                                                                                                                                                                                                                                       |
-| An ordering key                                           | deferred | needs a grammar widening (`AttrValue` admits no camelCase name) and has no consumer yet; revisit with evidence                                                                                                                                                                                                              |
-| Window, permits, retry sizing in the contract             | rejected | per-deployment sizing, invisible to any peer; rsdl's territory at E6. A call throttle is a two-sided rate obligation; an in-flight window is per-consumer concurrency sizing — not the same thing                                                                                                                           |
-| Compile-time mixins for interaction-set reuse (§17.2)     | rejected | mixins flatten, so one shared block folded into three interfaces gets three unrelated ordinal sets and editing it renumbers all three; composition leaves each ordinal space intact                                                                                                                                         |
-| Renumbering interactions across a multi-interface service | rejected | an interface's wire identity would depend on what else the service carries — the coupling §14.1 rejected inheritance to avoid                                                                                                                                                                                               |
-| Serializing the contract expression tree into the IR      | rejected | E5.1 owns that restructuring, and `docs/ROADMAP.md` records that the corpus does not yet exercise five of the subset's operators, so it would restructure ahead of its regression set. `parse_contract_expr` is already public in `ridl-sem`, so a Rust-hosted generator can recover the tree from the canonical text today |
-| Growing the address to `service.Interface.member`         | rejected | composes unconditionally, but changes the shape of every existing address and abandons the flat namespace the catalog is built on                                                                                                                                                                                           |
+| Candidate                                                                                                | Verdict  | Reason                                                                                                                                                                                                                                                                                                                      |
+| -------------------------------------------------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A QoS block on the interaction                                                                           | rejected | imports transport vocabulary into a contract that must also bind to transports lacking it; Appendix F records that 22 orthogonal policies on one topic is too many degrees of freedom                                                                                                                                       |
+| The bound as an attribute — `[ deadline = 50ms ]`                                                        | rejected | `@` is the family's timing sigil (general form R4), a response bound is a timing bound, and the grammar already admits `@` there; two spellings for one concept                                                                                                                                                             |
+| A budget on `query` only                                                                                 | rejected | leaves a command's acceptance unbounded for no reason other than reluctance to touch Stratum 3, which §10.3 already crosses for pub/sub                                                                                                                                                                                     |
+| A sidecar policy file keyed by `service.member`                                                          | rejected | correct for the per-deployment sizing of the window, permits, and retry row below and it is what rsdl replaces at E6, but wrong for the response bound specifically, which is the one value a cross-check needs against the contract                                                                                        |
+| A dedicated scalar `budget_us` IR field                                                                  | rejected | with both bounds admitted all four `Timing` fields carry meaning, so a second representation of a timing bound adds nothing                                                                                                                                                                                                 |
+| `idempotent` as a contract term                                                                          | rejected | reaches no generated store, dispatcher, or handler; §6.1's ack and sequence numbers already give duplicate suppression, and `@labels` carries review metadata                                                                                                                                                               |
+| `history N` on `signal`                                                                                  | rejected | contradicts §4's latest-value definition; the lookback query of decision 22 expresses the same requirement with existing vocabulary                                                                                                                                                                                         |
+| `coherent` as an attribute                                                                               | rejected | implicit — decision 9                                                                                                                                                                                                                                                                                                       |
+| An ordering key                                                                                          | deferred | needs a grammar widening (`AttrValue` admits no camelCase name) and has no consumer yet; revisit with evidence                                                                                                                                                                                                              |
+| Window, permits, retry sizing in the contract                                                            | rejected | per-deployment sizing, invisible to any peer; rsdl's territory at E6. A call throttle is a two-sided rate obligation; an in-flight window is per-consumer concurrency sizing — not the same thing                                                                                                                           |
+| Compile-time mixins for interaction-set reuse (§17.2)                                                    | rejected | mixins flatten, so one shared block folded into three interfaces gets three unrelated ordinal sets and editing it renumbers all three; composition leaves each ordinal space intact                                                                                                                                         |
+| Renumbering interactions across a multi-interface service                                                | rejected | an interface's wire identity would depend on what else the service carries — the coupling §14.1 rejected inheritance to avoid                                                                                                                                                                                               |
+| Serializing the contract expression tree into the IR                                                     | rejected | E5.1 owns that restructuring, and `docs/ROADMAP.md` records that the corpus does not yet exercise five of the subset's operators, so it would restructure ahead of its regression set. `parse_contract_expr` is already public in `ridl-sem`, so a Rust-hosted generator can recover the tree from the canonical text today |
+| Growing the address to `service.Interface.member`                                                        | rejected | composes unconditionally, but changes the shape of every existing address and abandons the flat namespace the catalog is built on                                                                                                                                                                                           |
+| No built-in default; an untimed call with no default is a hard error (the proposal in driftsys/ridl#741) | rejected | decision 4 as amended: a call always resolves, like a signal or event, and an explicit bound on every call stays available through `missing-response-bound = "deny"`                                                                                                                                                        |
+| RIDL-112 defaults to `deny`                                                                              | rejected | ADR-0024 states that no lint defaults to `deny`, and with a built-in default no call is unbounded                                                                                                                                                                                                                           |
+| Retire RIDL-112                                                                                          | rejected | removes the only way to require an explicit bound on every call                                                                                                                                                                                                                                                             |
+| One `rpc_timing` manifest key for commands and queries                                                   | rejected | the intended values differ by kind (1 s and 3 s)                                                                                                                                                                                                                                                                            |
+| A default fills an absent `min` on `@[..max]`                                                            | rejected | on an RPC `min` is a throttle on the caller; applying it to a member whose author wrote only `max` imposes a constraint the author did not write                                                                                                                                                                            |
+| Ceiling and floor lints on a response bound                                                              | deferred | a threshold needs manifest syntax the `[lints]` table lacks and an ADR-0024 amendment; a separate design, filed as a follow-up (driftsys/ridl#748)                                                                                                                                                                          |
 
 ## Consequences
 

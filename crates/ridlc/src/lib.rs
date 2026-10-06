@@ -51,6 +51,7 @@ pub mod diff_side;
 pub use diff_side::{DiffSide, DiffSideError, load_diff_side};
 pub mod plugin;
 
+use ridl_core::TimingDefaults;
 use ridl_core::db::InputFile;
 use ridl_core::diag::{
     DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, house_style_message, remap_diagnostics,
@@ -119,7 +120,7 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
         vec![input],
         PackageOrigin::WorkspaceMember,
         BTreeMap::new(),
-        None,
+        TimingDefaults::default(),
         None,
     );
     let workspace = Workspace::new(&db, vec![pkg], BTreeMap::new());

@@ -473,3 +473,15 @@ provenance. Nothing here is normative — the current references live in
   [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) and
   [the rsdl implementation technote](../technotes/rsdl-implementation.md). One
   item stays open: the WebSocket binding row, driftsys/ridl#718.
+- **2026-10-06-rpc-default-response-bound-design.md** and
+  **2026-10-06-rpc-default-response-bound-plan.md** — the default response bound
+  for an untimed `command` or `query` (driftsys/ridl#741): the manifest keys
+  `command_timing` and `query_timing`, the built-in `[..1s]` and `[..3s]`, and
+  RIDL-112 as the "took the default" warning. The plan is archived verbatim
+  apart from its spec path. The design is archived verbatim. The decision lives
+  in [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md)
+  (decisions 4, 6, 7 and 8, amended in place), whose alternatives table carries
+  the design's rejected options. The reference, the book and
+  [the interaction face design record](../design/interaction-face.md) describe
+  the as-built behaviour. The ceiling and floor lints stay a follow-up
+  (driftsys/ridl#748).

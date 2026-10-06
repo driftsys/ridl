@@ -127,6 +127,47 @@ fn json_carries_lint_field_and_deny_exits_1() {
     );
 }
 
+/// A workspace with one member whose interface declares one `command`, with
+/// the timing annotation `timing` (empty for none), under
+/// `missing-response-bound = "deny"`. Returns the workspace root.
+fn response_bound_workspace(dir: &TempDir, timing: &str) -> PathBuf {
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"actuator\"]\n");
+    dir.write(
+        "actuator/ridl.toml",
+        "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n\n[lints]\n\
+         missing-response-bound = \"deny\"\n",
+    );
+    dir.write(
+        "actuator/actuator.ridl",
+        &format!(
+            "package demo\n\ntype Speed: integer [0..300]\n\ninterface Actuator {{\n  \
+             command setTarget(speed: Speed){timing}\n}}\n"
+        ),
+    );
+    dir.path().to_path_buf()
+}
+
+/// `missing-response-bound = "deny"` makes the default response bound an
+/// error: an unannotated command reports RIDL-112 as an error and exits 1,
+/// and the same command with a written bound exits 0.
+#[test]
+fn missing_response_bound_deny_exits_1_until_the_bound_is_written() {
+    let dir = TempDir::new("response-bound-deny");
+    let root = response_bound_workspace(&dir, "");
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 1, "an untimed command at deny exits 1:\n{stderr}");
+    assert!(
+        stderr.contains("error[RIDL-112]"),
+        "the lint is rendered as an error:\n{stderr}"
+    );
+
+    let dir = TempDir::new("response-bound-written");
+    let root = response_bound_workspace(&dir, " @[..1s]");
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "a written response bound exits 0:\n{stderr}");
+    assert!(!stderr.contains("RIDL-112"), "no RIDL-112:\n{stderr}");
+}
+
 #[test]
 fn text_deny_exits_1() {
     let dir = TempDir::new("text-deny");

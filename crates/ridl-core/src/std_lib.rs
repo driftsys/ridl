@@ -7,6 +7,7 @@
 //! lookup, version-locked to the compiler binary.
 
 use crate::db::{InputFile, RidlDatabase};
+use crate::manifest::TimingDefaults;
 use crate::package::{Package, PackageOrigin};
 
 /// The `ridl.std` source, verbatim from the typl reference Appendix A.
@@ -49,7 +50,7 @@ pub fn std_package(db: &mut RidlDatabase) -> Package {
         vec![file],
         PackageOrigin::Std,
         std::collections::BTreeMap::new(),
-        None,
+        TimingDefaults::default(),
         None,
     );
     let _ = db.std_package_cache.set(package);

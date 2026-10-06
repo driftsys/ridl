@@ -296,7 +296,8 @@ pub struct Claim {
     /// caller, not for each channel.
     pub envelope: Envelope,
     /// The time left before the response bound passes. `None` when the call
-    /// has no response bound (ridl §9.3).
+    /// has no response bound, as in a catalog built before commands and queries
+    /// took a default one (ridl §9.3).
     pub remaining: Option<Duration>,
     /// The number of argument bytes copied into `out`.
     pub len: usize,

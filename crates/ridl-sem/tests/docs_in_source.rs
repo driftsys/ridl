@@ -11,6 +11,7 @@
 
 use std::collections::BTreeMap;
 
+use ridl_core::TimingDefaults;
 use ridl_core::db::{InputFile, RidlDatabase, profile_of_path};
 use ridl_core::diag::Severity;
 use ridl_core::package::{Package, PackageOrigin, Workspace};
@@ -61,7 +62,7 @@ fn compile(files: &[(&str, &str, String)]) -> Compiled {
                 vec![InputFile::new(&db, path.to_string(), text.clone())],
                 PackageOrigin::WorkspaceMember,
                 BTreeMap::new(),
-                None,
+                TimingDefaults::default(),
                 None,
             )
         })
