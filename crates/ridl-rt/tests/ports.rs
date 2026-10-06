@@ -328,15 +328,21 @@ fn an_interest_is_copy_and_compares_by_its_key() {
 }
 
 #[test]
-fn a_raw_occurrence_is_built_from_its_four_fields() {
+fn a_raw_occurrence_is_built_from_its_five_fields() {
+    let trace = TraceContext {
+        trace_id: [1; 16],
+        span_id: [2; 8],
+        flags: 1,
+    };
     let occurrence = RawOccurrence {
         iface: IFACE,
         ord: ORD,
         envelope: ENVELOPE,
-        trace: None,
+        trace: Some(trace),
         len: 3,
     };
     assert_eq!(occurrence.len, 3);
+    assert_eq!(occurrence.trace, Some(trace));
 }
 
 #[test]
