@@ -16,6 +16,10 @@ Amended 2026-10-06 (driftsys/ridl#741): §4's root discovery names
 `[defaults].command_timing` and `[defaults].query_timing` among the defaults a
 workspace root applies to a member, beside `[defaults].timing`.
 
+Amended 2026-10-06 by the generated-file marker and header (driftsys/ridl#746):
+§4 gains the `[codegen]` table, with the `header-file` key, and the codes
+MANI-011 and MANI-012.
+
 ## Context
 
 RIDL is an interface description language whose source files declare contracts
@@ -213,6 +217,25 @@ manifest when the package is a workspace member, then the package's own
 `[lints]` table. An entry inside a member loads the member's workspace (root
 discovery above), so the root table applies to it. An entry that names no lint,
 or whose value is not a level, raises MANI-010 and is ignored.
+
+**The `[codegen]` table** (amended 2026-10-06, driftsys/ridl#746) holds one key,
+`header-file`: a path, relative to the manifest that declares it, to a text file
+whose lines `ridl build` writes after the generated-file marker in every
+generated file that can hold a comment:
+
+```toml
+[codegen]
+header-file = "LICENSE-HEADER.txt"
+```
+
+Only the workspace root's manifest, or a standalone package's manifest, may set
+it. The loader reads the file, so every command that loads the manifest reports
+a failure, `ridl check` included. It normalises the text: CRLF line ends are
+accepted, each line loses its trailing whitespace, and leading and trailing
+blank lines are dropped; a file with no text left means no header. MANI-011
+(Error) is raised when the file cannot be read, and MANI-012 (Error) when the
+manifest of a workspace member sets the key. Single-file mode has no manifest
+and no header.
 
 **Rationale — one file shape.** A second file type for workspaces would double
 the file count and the file's semantic baggage for no real gain. A section-based
