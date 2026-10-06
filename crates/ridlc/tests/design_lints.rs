@@ -1,4 +1,5 @@
 use ridl_core::RidlDatabase;
+use ridl_core::TimingDefaults;
 use ridl_core::diag::{Diagnostic, Severity, SourceMap, Span};
 
 const UNIT: &str = "TYPL-222";
@@ -487,7 +488,7 @@ fn shared_pass_reads_inline_scalar_backing_in_the_current_render_map() {
         vec![input],
         PackageOrigin::WorkspaceMember,
         BTreeMap::new(),
-        None,
+        TimingDefaults::default(),
         None,
     );
     let workspace = Workspace::new(&db, vec![package], BTreeMap::new());
@@ -621,7 +622,7 @@ fn shared_pass_excludes_standard_package_sites_from_unit_counts() {
             vec![input],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             None,
         )
     };
@@ -693,7 +694,7 @@ fn design_source_set_with(
                 vec![input],
                 PackageOrigin::WorkspaceMember,
                 BTreeMap::new(),
-                None,
+                TimingDefaults::default(),
                 None,
             )
         })

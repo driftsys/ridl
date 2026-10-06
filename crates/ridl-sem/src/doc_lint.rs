@@ -525,6 +525,7 @@ fn indentation_before(token: &SyntaxToken) -> String {
 
 #[cfg(test)]
 mod tests {
+    use ridl_core::TimingDefaults;
     use std::collections::BTreeMap;
 
     use ridl_core::db::RidlDatabase;
@@ -545,7 +546,7 @@ mod tests {
             vec![file],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             None,
         );
         let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());

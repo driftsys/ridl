@@ -1117,6 +1117,7 @@ pub(crate) fn significant_text(node: &SyntaxNode) -> String {
 #[cfg(test)]
 mod package_tests {
     use super::*;
+    use ridl_core::TimingDefaults;
     use ridl_core::db::RidlDatabase;
     use ridl_core::package::PackageOrigin;
     use ridl_core::std_lib::std_package;
@@ -1135,7 +1136,7 @@ mod package_tests {
             vec![input(db, &format!("{name}.typl"), text)],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             None,
         )
     }
@@ -1156,7 +1157,7 @@ mod package_tests {
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
-            None,
+            TimingDefaults::default(),
             None,
         )
     }
@@ -1430,7 +1431,7 @@ mod package_tests {
             vec![input(db, &format!("{name}.ridl"), text)],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             None,
         )
     }
@@ -1521,7 +1522,7 @@ mod package_tests {
                 .collect(),
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             None,
         )
     }

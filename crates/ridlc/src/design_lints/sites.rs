@@ -161,6 +161,7 @@ impl SiteIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ridl_core::TimingDefaults;
     use ridl_core::db::InputFile;
     use ridl_core::package::{PackageOrigin, Workspace};
 
@@ -179,7 +180,7 @@ mod tests {
             vec![z, a],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             None,
         );
         let workspace = Workspace::new(&db, vec![package], BTreeMap::new());

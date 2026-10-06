@@ -53,10 +53,10 @@ use crate::lint::{LintLevel, LintTable, lint_by_name};
 /// `[defaults].timing` string, and its `[lints]` table, all shared by both
 /// modes.
 ///
-/// `default_timing` is the raw `[defaults].timing` text (e.g.
+/// `defaults` holds the raw `[defaults]` timing strings (e.g.
 /// `"[100ms..1000ms]"`), stored **unparsed**: `ridl-core` cannot depend on
-/// `ridl-sem`, so the checker parses and validates it (MANI-009) — the
-/// manifest layer only records the string (ridl §9.1, E2 task 9).
+/// `ridl-sem`, so the checker parses and validates them (MANI-009) — the
+/// manifest layer only records the strings (ridl §9.1).
 ///
 /// `lints` holds only the valid `[lints]` entries: a registered lint name
 /// mapped to a level. Every other entry is MANI-010 and is dropped
@@ -65,8 +65,33 @@ use crate::lint::{LintLevel, LintTable, lint_by_name};
 pub struct Manifest {
     pub kind: ManifestKind,
     pub imports: BTreeMap<String, String>,
-    pub default_timing: Option<String>,
+    pub defaults: TimingDefaults,
     pub lints: LintTable,
+}
+
+/// The raw `[defaults]` timing strings of one manifest, or the merge of
+/// several. Each key is stored unparsed and is `None` when no manifest sets it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+pub struct TimingDefaults {
+    /// `[defaults].timing`, the default for signals and events.
+    pub timing: Option<String>,
+    /// `[defaults].command_timing`, the default for commands.
+    pub command_timing: Option<String>,
+    /// `[defaults].query_timing`, the default for queries.
+    pub query_timing: Option<String>,
+}
+
+impl TimingDefaults {
+    /// Per key: `self`'s value, else `fallback`'s.
+    pub fn or(self, fallback: &TimingDefaults) -> TimingDefaults {
+        TimingDefaults {
+            timing: self.timing.or_else(|| fallback.timing.clone()),
+            command_timing: self
+                .command_timing
+                .or_else(|| fallback.command_timing.clone()),
+            query_timing: self.query_timing.or_else(|| fallback.query_timing.clone()),
+        }
+    }
 }
 
 /// The two mutually exclusive manifest modes (ADR-0002 §4).
@@ -138,11 +163,19 @@ pub fn parse_manifest(file_id: FileId, text: &str) -> (Option<Manifest>, Vec<Dia
     check_unknown_keys(file_id, text, &mut diags);
 
     let imports = collect_imports(file_id, raw.imports, &mut diags);
-    // The raw `[defaults].timing` string, recorded verbatim; the checker
-    // parses it and reports MANI-009 (ridl §9.1, E2 task 9).
-    let default_timing = raw
+    // The raw `[defaults]` strings, recorded verbatim; the checker parses
+    // them and reports MANI-009 (ridl §9.1).
+    let defaults = raw
         .defaults
-        .and_then(|defaults| defaults.into_inner().timing);
+        .map(|defaults| {
+            let raw = defaults.into_inner();
+            TimingDefaults {
+                timing: raw.timing,
+                command_timing: raw.command_timing,
+                query_timing: raw.query_timing,
+            }
+        })
+        .unwrap_or_default();
     let lints = collect_lints(file_id, text, &mut diags);
 
     let kind = if let Some(pkg) = raw.package {
@@ -179,7 +212,7 @@ pub fn parse_manifest(file_id: FileId, text: &str) -> (Option<Manifest>, Vec<Dia
         Some(Manifest {
             kind,
             imports,
-            default_timing,
+            defaults,
             lints,
         }),
         diags,
@@ -202,6 +235,8 @@ struct RawManifest {
 #[derive(Deserialize)]
 struct RawDefaults {
     timing: Option<String>,
+    command_timing: Option<String>,
+    query_timing: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -322,7 +357,13 @@ fn check_unknown_keys(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) 
         match key.as_str() {
             "package" => check_section_keys(file_id, "package", value, &["name", "version"], diags),
             "workspace" => check_section_keys(file_id, "workspace", value, &["members"], diags),
-            "defaults" => check_section_keys(file_id, "defaults", value, &["timing"], diags),
+            "defaults" => check_section_keys(
+                file_id,
+                "defaults",
+                value,
+                &["timing", "command_timing", "query_timing"],
+                diags,
+            ),
             "imports" => {}
             "lints" => {}
             _ => diags.push(warning(
@@ -657,16 +698,40 @@ timing = \"[50ms..2s]\"
             "a `[defaults]` section is known, got {diags:?}"
         );
         let manifest = manifest.expect("the manifest parses");
-        assert_eq!(manifest.default_timing.as_deref(), Some("[50ms..2s]"));
+        assert_eq!(manifest.defaults.timing.as_deref(), Some("[50ms..2s]"));
     }
 
     #[test]
-    fn no_defaults_section_leaves_default_timing_absent() {
+    fn defaults_command_and_query_timing_parse() {
+        let text = "\
+[package]
+name = \"veh.common\"
+version = \"1.0.0\"
+
+[defaults]
+timing = \"[100ms..1s]\"
+command_timing = \"[..1s]\"
+query_timing = \"[..3s]\"
+";
+        let (manifest, diags) = parse(text);
+        assert!(diags.is_empty(), "known keys draw nothing, got {diags:?}");
+        assert_eq!(
+            manifest.expect("parses").defaults,
+            TimingDefaults {
+                timing: Some("[100ms..1s]".to_string()),
+                command_timing: Some("[..1s]".to_string()),
+                query_timing: Some("[..3s]".to_string()),
+            }
+        );
+    }
+
+    #[test]
+    fn no_defaults_section_leaves_the_defaults_absent() {
         let (manifest, diags) = parse(STANDALONE);
         assert!(diags.is_empty());
         assert_eq!(
-            manifest.expect("parses").default_timing,
-            None,
+            manifest.expect("parses").defaults,
+            TimingDefaults::default(),
             "no `[defaults]` means no configured default",
         );
     }
@@ -680,6 +745,8 @@ version = \"1.0.0\"
 
 [defaults]
 timing = \"[100ms..1000ms]\"
+command_timing = \"[..1s]\"
+query_timing = \"[..3s]\"
 bogus = 1
 ";
         let (manifest, diags) = parse(text);

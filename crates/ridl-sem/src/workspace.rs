@@ -48,6 +48,7 @@ pub fn check_workspace(db: &dyn salsa::Database, ws: Workspace, std: Package) ->
 
 #[cfg(test)]
 mod tests {
+    use ridl_core::TimingDefaults;
     use std::collections::BTreeMap;
 
     use ridl_core::db::{InputFile, RidlDatabase};
@@ -91,7 +92,7 @@ mod tests {
             files,
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             None,
         );
         let ws = Workspace::new(&db, vec![package], BTreeMap::new());

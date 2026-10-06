@@ -104,7 +104,7 @@ pub fn check_package(
     // depend on `ridl-sem`, so a malformed string is MANI-009, spanning the
     // package's first file, and the built-in `[100ms..1000ms]` is the fallback.
     let mut default_diagnostics = Vec::new();
-    let default_timing = match pkg.default_timing(db).as_ref() {
+    let default_timing = match pkg.defaults(db).timing.as_ref() {
         Some(raw) => match timing::parse_default_timing(raw) {
             Ok(spec) => spec,
             Err(reason) => {
@@ -6124,6 +6124,7 @@ fn int64_edge(upper: bool) -> ExactValue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ridl_core::TimingDefaults;
     use ridl_core::db::RidlDatabase;
     use ridl_core::package::{PackageLock, PackageOrigin, service_catalog};
     use ridl_core::std_lib::std_package;
@@ -6145,7 +6146,7 @@ mod tests {
             vec![file],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             None,
         )
     }
@@ -10696,7 +10697,7 @@ mod tests {
             vec![file],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             None,
         )
     }
@@ -10720,7 +10721,10 @@ mod tests {
             vec![file],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            Some(default_timing.to_string()),
+            TimingDefaults {
+                timing: Some(default_timing.to_string()),
+                ..Default::default()
+            },
             None,
         )
     }
@@ -13809,7 +13813,7 @@ interface VehicleStatus {
             vec![typl, ridl],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             None,
         );
         let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
@@ -14429,7 +14433,7 @@ interface VehicleStatus {
             inputs,
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             None,
         )
     }
@@ -14597,7 +14601,7 @@ service veh.hvac.rear { signal r : State @[100ms..1s] }
             inputs,
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
-            None,
+            TimingDefaults::default(),
             Some(PackageLock {
                 path: format!("{dir}/interfaces.lock"),
                 text: lock_text.to_string(),
