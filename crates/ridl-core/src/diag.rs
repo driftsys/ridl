@@ -10,9 +10,9 @@
 //! # Namespaces (ADR-0007 decision 2)
 //!
 //! Codes are grouped by hundreds and never renumbered or reused; a code
-//! retired from a catalogue is listed in [`RETIRED_RIDL_CODES`] or
-//! [`RETIRED_TYPL_CODES`], and a guard keeps it out. Five namespaces are in play across the family, one catalogue
-//! each:
+//! retired from the `RIDL-` or `TYPL-` catalogue is listed in
+//! [`RETIRED_RIDL_CODES`] or [`RETIRED_TYPL_CODES`], and a guard keeps it out.
+//! Five namespaces are in play across the family, one catalogue each:
 //!
 //! - `FORM-…` — the shared family grammar: lexical `0xx`, parse `1xx`, and the
 //!   general form §4.3 attribute rules. Named after the general form's own
@@ -169,10 +169,10 @@ macro_rules! diag_codes {
     };
 }
 
-/// The `RIDL-` codes retired by the interface lock (lock design §9). A code is
-/// never renumbered or reused (ADR-0008 decision 13): RIDL-146 to RIDL-148
-/// guarded the slot model of a service's list — a shape re-declared under a
-/// service-level `reserved` name, one interface name on two shapes, and a
+/// The `RIDL-` codes retired from the catalogue. A code is never renumbered or
+/// reused (ADR-0008 decision 13). The interface lock (lock design §9) retired
+/// RIDL-146 to RIDL-148, which guarded the slot model of a service's list — a
+/// shape re-declared under a service-level `reserved` name, one interface name on two shapes, and a
 /// nameless service-level tombstone — and left the catalogue with that model
 /// on 2026-09-15. Held as integers rather than `"RIDL-146"` literals, because
 /// a string literal of a code that is in no catalogue fails

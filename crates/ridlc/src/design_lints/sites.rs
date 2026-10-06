@@ -43,6 +43,8 @@ impl SiteIndex {
                 );
             }
             let mut files = package.files(db).clone();
+            // Fields and members keep the first site seen, so a fixed path order
+            // makes the kept site deterministic.
             files.sort_by(|a, b| a.path(db).cmp(b.path(db)));
             for input in &files {
                 let file = sources.file_id(input.path(db), input.text(db));
@@ -166,8 +168,7 @@ mod tests {
     fn index_uses_resolution_winners() {
         let mut db = RidlDatabase::default();
         let std = ridl_core::std_package(&mut db);
-        let later =
-            "package a\nstruct Entry { value: boolean }\nenum Mode { First = 0, Second = 1 }\n";
+        let later = "package a\nstruct Entry { value: boolean }\n";
         let first = "// First path\npackage a\nstruct Entry { losing: boolean }\n";
         let z = InputFile::new(&db, "z.ridl".to_string(), later.to_string());
         let a = InputFile::new(&db, "a.ridl".to_string(), first.to_string());

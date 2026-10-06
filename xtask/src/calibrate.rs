@@ -2020,5 +2020,17 @@ mod tests {
         assert_eq!(level, catalogue_level(&root, "TYPL-224"));
         let (level, _) = selected(&derived, "inconsistent-unit");
         assert_eq!(level, catalogue_level(&root, "TYPL-222"));
+
+        // A check ships exactly when the catalogue has a row for its lint name.
+        let diag = std::fs::read_to_string(root.join("crates/ridl-core/src/diag.rs")).unwrap();
+        for check in CHECKS {
+            let shipped = diag.contains(&format!("lint = \"{check}\""));
+            let (level, _) = selected(&derived, check);
+            assert_eq!(
+                level != "not a lint",
+                shipped,
+                "{check}: summary level `{level}`, catalogue row present: {shipped}"
+            );
+        }
     }
 }
