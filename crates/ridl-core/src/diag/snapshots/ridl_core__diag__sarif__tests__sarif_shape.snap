@@ -1280,7 +1280,7 @@ expression: log
             {
               "id": "RSDL-709",
               "shortDescription": {
-                "text": "a `depth`, `slots` or `budget` value is not an integer within its range"
+                "text": "a `depth`, `slots` or `budget` value is not an integer within its range, or the key is written bare"
               },
               "defaultConfiguration": {
                 "level": "error"

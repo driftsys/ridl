@@ -1157,7 +1157,8 @@ diag_codes! {
         /// within the key's range (rsdl §5, §16.1). Error, scoped to its
         /// deployment (rsdl §13). Raised by the rsdl attribute reader.
         RSDL_709 = "RSDL-709", Error,
-            "a `depth`, `slots` or `budget` value is not an integer within its range";
+            "a `depth`, `slots` or `budget` value is not an integer within its range, or the key \
+             is written bare";
 
         /// A backend key whose namespace no configured backend claims (rsdl §5,
         /// §16.1). Warning: the key is still carried. Raised by `ridlc`, which

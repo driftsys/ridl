@@ -73,8 +73,8 @@
       }
     },
     "owned-key": {
-      "comment": "rsdl §5 — the rsdl-owned keys and the family keys `labels` and `deprecated`.",
-      "match": "\\b(instances|external|tier|labels|deprecated)\\b",
+      "comment": "rsdl §5 — the rsdl-owned keys, the sizing keys `depth`, `slots` and `budget`, and the family keys `labels` and `deprecated`.",
+      "match": "\\b(instances|external|tier|depth|slots|budget|labels|deprecated)\\b",
       "name": "variable.other.property.rsdl"
     }
   }

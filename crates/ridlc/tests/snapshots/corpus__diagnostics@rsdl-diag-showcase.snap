@@ -65,7 +65,7 @@ warning[RSDL-804]: no configured backend claims the namespace `linux`, so `linux
    │
    = lint: `unclaimed-backend-key` (set its level in `[lints]` in ridl.toml)
 
-warning[RSDL-806]: `Driver` declares no `depth` for `rsdl.showcase.Alerts.released`, whose timing is an explicit half-open range — a link to an event with no derivable bound takes its ring depth from `depth = <n>` on the placement line or on the deployment (rsdl reference §5)
+warning[RSDL-806]: `Driver` in `Bench` declares no `depth` for `rsdl.showcase.Alerts.released`, whose timing is an explicit half-open range — a link to an event with no derivable bound takes its ring depth from `depth = <n>` on the placement line or on the deployment (rsdl reference §5)
    ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:31:43
    │
 31 │     Chassis, Brakes, Front, Rear, Hooter, Driver, Fleet, Siren, Dash [ depth = 2 ]
@@ -73,7 +73,7 @@ warning[RSDL-806]: `Driver` declares no `depth` for `rsdl.showcase.Alerts.releas
    │
    = lint: `depth-underivable` (set its level in `[lints]` in ridl.toml)
 
-warning[RSDL-805]: `depth = 2` on `Dash` is below the contract bound 10 of `rsdl.showcase.Alerts.honked` — the bound is `ceil(max / min)` over the event's timing, and a ring below it can drop occurrences alive at once (rsdl reference §5)
+warning[RSDL-805]: `depth = 2` on `Dash` in `Bench` is below the contract bound 10 of `rsdl.showcase.Alerts.honked` — the bound is `ceil(max / min)` over the event's timing, and a ring below it can drop occurrences alive at once (rsdl reference §5)
    ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:31:72
    │
 31 │     Chassis, Brakes, Front, Rear, Hooter, Driver, Fleet, Siren, Dash [ depth = 2 ]

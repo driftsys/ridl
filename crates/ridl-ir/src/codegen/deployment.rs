@@ -945,9 +945,15 @@ mod tests {
         }
     }
 
+    /// A signal channel carries no sizing, even when every key is declared
+    /// on the deployment and on a consumer's placement line.
     #[test]
     fn a_signal_channel_carries_no_sizing() {
-        let channel = channel_of(&section(), SIGNAL_ORDINAL, "primary");
+        let system = sized_system(
+            Some(sizing(Some(3), Some(8), Some(4096))),
+            &[(DASH, "Unit", sizing(Some(5), Some(32), Some(65536)))],
+        );
+        let channel = channel_of(&section_of(&system), SIGNAL_ORDINAL, "primary");
         assert_eq!(channel.kind, v1::Kind::Signal as i32);
         assert_eq!(channel.member, "Level");
         assert_eq!(channel.depth, None);
@@ -1184,6 +1190,40 @@ mod tests {
         );
         let event = channel_of(&section, EVENT_ORDINAL, "primary");
         assert_eq!(depth_rows(&event)[0], (DASH, Some(10), DERIVED));
+    }
+
+    /// A consumer link whose instance has no placement — a shape only a
+    /// hand-built system produces — takes the deployment's values: the
+    /// placement site is absent, and the lookup falls through to the
+    /// deployment.
+    #[test]
+    fn a_link_with_no_placement_takes_the_deployment_values() {
+        let mut system = sized_system(
+            Some(sizing(Some(3), Some(8), Some(4096))),
+            &[(LOGGER, "Unit", sizing(Some(5), Some(32), Some(65536)))],
+        );
+        system.deployments[0]
+            .placements
+            .retain(|placement| placement.component != DASH);
+        let section = section_of(&system);
+        let event = channel_of(&section, EVENT_ORDINAL, "primary");
+        assert_eq!(
+            depth_rows(&event),
+            [
+                (DASH, Some(3), DECLARED),
+                (FLEET, Some(3), DECLARED),
+                (LOGGER, Some(5), DECLARED),
+            ]
+        );
+        let query = channel_of(&section, QUERY_ORDINAL, "primary");
+        assert_eq!(
+            call_rows(&query),
+            [
+                (DASH, Some(8), DECLARED, Some(4096), DECLARED),
+                (FLEET, Some(8), DECLARED, Some(4096), DECLARED),
+                (LOGGER, Some(32), DECLARED, Some(65536), DECLARED),
+            ]
+        );
     }
 
     /// The two sites compose per key: a placement that writes `slots` still
