@@ -521,6 +521,7 @@ fn a_request_for_cabin_carries_its_one_deployment_without_a_flag() {
         &refs[1..],
         Vec::new(),
         Some(deployment),
+        None,
     );
     assert_eq!(
         request
@@ -541,7 +542,8 @@ fn assert_request_without_deployment(entry: &str, name: &str) {
         ridlc::select_deployment(system.as_ref(), &declared, None, &refs).expect("not an error");
     assert!(selected.is_none(), "{entry}: no deployment without a name");
 
-    let request = ridlc::codegen_request(name, &packages[0], &refs[1..], Vec::new(), selected);
+    let request =
+        ridlc::codegen_request(name, &packages[0], &refs[1..], Vec::new(), selected, None);
     let expected = v1::CodegenRequest {
         schema: codegen::SCHEMA.to_string(),
         toolchain: env!("CARGO_PKG_VERSION").to_string(),
@@ -549,6 +551,8 @@ fn assert_request_without_deployment(entry: &str, name: &str) {
         options: Vec::new(),
         artifact_base: name.to_string(),
         deployment: None,
+        generated_marker: codegen::generated_marker(Some(&packages[0].name)),
+        header: String::new(),
     };
     assert_eq!(request, expected, "{entry}");
     let json = codegen::request_to_json(&request).expect("the request serializes");
@@ -906,7 +910,9 @@ fn the_cabin_deployment_section_is_rendered_end_to_end() {
       }
     ],
     "bindings": []
-  }
+  },
+  "generatedMarker": "",
+  "header": ""
 }"#
     );
 }

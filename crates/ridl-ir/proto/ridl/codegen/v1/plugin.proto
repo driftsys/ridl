@@ -58,6 +58,16 @@ message CodegenRequest {
   // carries the same section. Absent when the build selects no deployment; a
   // request without it is the request that existed before the field.
   optional Deployment deployment = 6;
+  // The line that marks a generated file as generated, without a comment
+  // token: the host composes it, and a backend writes it as the first line of
+  // every file that can hold a comment. A backend that cannot hold a comment
+  // ignores it. Empty in a request that predates the field.
+  string generated_marker = 7;
+  // The project's file header, normalised by the host: lines joined by `\n`,
+  // with no trailing newline, and without a comment token. Empty when the
+  // project sets none. A backend writes it after the marker, as comment lines;
+  // a backend that cannot hold a comment ignores it.
+  string header = 8;
 }
 
 // One backend option, as the host gives it. No flag sets one yet: the
