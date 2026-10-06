@@ -642,6 +642,14 @@ fn design_lint_counts()
             .arg(&dir)
             .output()
             .expect("run ridl check on a corpus workspace");
+        // A corpus workspace has no error diagnostic, so `ridl check` exits 0.
+        // Any other status is a crash or a new error, and stderr says which.
+        assert!(
+            output.status.success(),
+            "{workspace}: `ridl check` exited with {}\nstderr:\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr),
+        );
         let diagnostics: Vec<serde_json::Value> = serde_json::from_slice(&output.stdout)
             .unwrap_or_else(|error| panic!("{workspace}: invalid diagnostic JSON: {error}"));
         let per_lint: std::collections::BTreeMap<String, usize> = DESIGN_LINTS
