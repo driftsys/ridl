@@ -103,8 +103,10 @@ The schema of the request and the response is the protobuf package
 package of its own. Today an author copies the files from the release tag the
 plugin is tested against, as [driftsys/ridlc-gen-kotlin][kotlin] does: it keeps
 the files unchanged and runs a check that fails when they differ from the
-pinned tag. Copy all three files: a `plugin.proto` that imports
-`deployment.proto` does not compile without it.
+pinned tag. Copy every file that the tag's `plugin.proto` imports. From the
+first release that carries `deployment.proto`, that is all three files: a
+`plugin.proto` that imports `deployment.proto` does not compile without it.
+Until that release, `deployment.proto` exists only on `main`.
 
 ## Compatibility
 
@@ -143,9 +145,9 @@ jq '{schema, toolchain, options, artifactBase}' request.json
 - **`model`** is the lowered model of one package: its declarations, with type
   references resolved and names in every case the name transform defines
   ([ADR-0016][adr-0016]), its interfaces and their members, its services, and
-  its catalog. It is byte for byte what `ridl build --emit codegen-model`
-  writes to `<base>.codegen.json`, so that file is a fixture for a plugin's
-  tests.
+  its catalog. It is the same JSON value that
+  `ridl build --emit codegen-model` writes to `<base>.codegen.json`, one
+  indentation level deeper, so that file is a fixture for a plugin's tests.
 - **`options`** is a list of `{key, value}` pairs sorted by key. No flag sets
   an option yet, so a plugin run from the command line receives an empty list.
 - **`artifactBase`** is the name `ridl` gives this package's files: the
