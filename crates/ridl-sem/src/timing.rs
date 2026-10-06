@@ -88,6 +88,30 @@ pub fn builtin_default_timing() -> TimingSpec {
 /// is rejected. On any malformed input the returned string is the reason the
 /// checker renders under MANI-009.
 pub fn parse_default_timing(text: &str) -> Result<TimingSpec, String> {
+    parse_default_range(text, true)
+}
+
+/// The built-in response bound `[..1s]` for an untimed command.
+pub fn builtin_command_timing() -> TimingSpec {
+    parse_rpc_default_timing("[..1s]").expect("the built-in default `[..1s]` is a valid range")
+}
+
+/// The built-in response bound `[..3s]` for an untimed query.
+pub fn builtin_query_timing() -> TimingSpec {
+    parse_rpc_default_timing("[..3s]").expect("the built-in default `[..3s]` is a valid range")
+}
+
+/// Parses a `[defaults].command_timing` or `[defaults].query_timing` string.
+/// Accepts `[..max]` and `[min..max]`; rejects `[min..]`, because a
+/// response-bound default must set a maximum. Every other rejection matches
+/// [`parse_default_timing`].
+pub fn parse_rpc_default_timing(text: &str) -> Result<TimingSpec, String> {
+    parse_default_range(text, false)
+}
+
+/// The shared parser of a configured default range. When `require_min` is
+/// true both bounds must be present; otherwise only the maximum must be.
+fn parse_default_range(text: &str, require_min: bool) -> Result<TimingSpec, String> {
     let trimmed = text.trim();
     let inner = trimmed
         .strip_prefix('[')
@@ -100,29 +124,38 @@ pub fn parse_default_timing(text: &str) -> Result<TimingSpec, String> {
         .ok_or_else(|| format!("expected `min..max`, found `{text}`"))?;
     let min_text = min_text.trim();
     let max_text = max_text.trim();
-    if min_text.is_empty() || max_text.is_empty() {
+    if require_min && (min_text.is_empty() || max_text.is_empty()) {
         return Err(format!(
             "the default timing must set both bounds, e.g. `[100ms..1000ms]`, found `{text}`"
+        ));
+    }
+    if max_text.is_empty() {
+        return Err(format!(
+            "a response-bound default must set a maximum, e.g. `[..1s]`, found `{text}`"
         ));
     }
     // A configured default must be whole-number durations too (ridl §2.1); a
     // fractional bound is rejected here rather than carried, because a manifest
     // value has no source span to report a per-bound FORM-102 against.
-    let min = whole_bound(min_text)?;
+    let min = if min_text.is_empty() {
+        None
+    } else {
+        Some(whole_bound(min_text)?)
+    };
     let max = whole_bound(max_text)?;
-    if !is_positive(&min) || !is_positive(&max) {
+    if min.as_ref().is_some_and(|min| !is_positive(min)) || !is_positive(&max) {
         return Err(format!(
             "a timing bound must be greater than zero, found `{text}`"
         ));
     }
-    if min > max {
+    if min.as_ref().is_some_and(|min| *min > max) {
         return Err(format!(
             "the lower bound exceeds the upper bound in `{text}`"
         ));
     }
     Ok(TimingSpec {
         mode: TimingMode::Range,
-        min_us: Some(min),
+        min_us: min,
         max_us: Some(max),
         default_applied: false,
     })
@@ -692,6 +725,42 @@ mod tests {
 
     fn us(text: &str) -> ExactValue {
         ExactValue::parse(text).expect("a valid decimal")
+    }
+
+    #[test]
+    fn rpc_default_accepts_max_only() {
+        let spec = parse_rpc_default_timing("[..1s]").expect("a max-only default");
+        assert_eq!(spec.mode, TimingMode::Range);
+        assert_eq!(spec.min_us, None);
+        assert_eq!(spec.max_us, value_of("1s"));
+    }
+
+    #[test]
+    fn rpc_default_accepts_both_bounds() {
+        let spec = parse_rpc_default_timing("[10ms..1s]").expect("both bounds");
+        assert_eq!(spec.min_us, value_of("10ms"));
+        assert_eq!(spec.max_us, value_of("1s"));
+    }
+
+    #[test]
+    fn rpc_default_rejects_min_only() {
+        let reason = parse_rpc_default_timing("[10ms..]").expect_err("no maximum");
+        assert!(reason.contains("maximum"), "{reason}");
+    }
+
+    #[test]
+    fn rpc_default_rejects_what_the_signal_default_rejects() {
+        for text in ["1s", "[1s]", "[..1.5s]", "[..0ms]", "[2s..1s]"] {
+            assert!(parse_rpc_default_timing(text).is_err(), "{text}");
+        }
+    }
+
+    #[test]
+    fn builtin_rpc_defaults_are_one_and_three_seconds() {
+        assert_eq!(builtin_command_timing().max_us, value_of("1s"));
+        assert_eq!(builtin_query_timing().max_us, value_of("3s"));
+        assert_eq!(builtin_command_timing().min_us, None);
+        assert_eq!(builtin_query_timing().min_us, None);
     }
 
     fn codes(diags: &[Diagnostic]) -> Vec<&str> {
