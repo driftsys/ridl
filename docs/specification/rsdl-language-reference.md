@@ -412,22 +412,23 @@ belongs to a backend and is carried uninterpreted.**
   FORM-108. Lines take backend keys only, except the three sizing keys a
   placement line takes.
 - **The sizing keys** `depth`, `slots` and `budget` are integer literals. A
-  value the parser reads that is not an integer within the key's range is
-  RSDL-709, which blocks its own deployment only (§13); a value the parser
-  refuses, such as `slots = 50ms`, is FORM-101 and blocks the whole build.
-  `depth` is 1 to 4294967295 and replaces the depth the toolchain derives from
-  the event's timing; `slots` is 1 to 65536 and defaults to 16; `budget` is 1 to
-  18446744073709551615 and has no default, so only `slots` bounds the calls in
-  flight. `depth` sizes event channels and `slots` and `budget` size command and
-  query channels; a key written where no channel of that kind exists draws
-  nothing. A value on a placement line applies to every link the placed instance
-  consumes. A value on the `deployment` declaration applies to every link of the
-  deployment. The precedence per link is the placement line, then the
-  `deployment` declaration; a key declared at neither site takes the default
-  `slots`, the derived `depth`, and no `budget`. RSDL-805 warns when a declared
-  `depth` is below the contract bound `ceil(max / min)` of an event a covered
-  link consumes. RSDL-806 warns when an event whose contract bound is not
-  derivable is consumed by a link with no declared `depth`.
+  value the parser reads that is not an integer within the key's range, or a key
+  written bare with no value, is RSDL-709, which blocks its own deployment only
+  (§13); a value the parser refuses, such as `slots = 50ms`, is FORM-101 and
+  blocks the whole build. `depth` is 1 to 4294967295 and replaces the depth the
+  toolchain derives from the event's timing; `slots` is 1 to 65536 and defaults
+  to 16; `budget` is 1 to 18446744073709551615 and has no default, so only
+  `slots` bounds the calls in flight. `depth` sizes event channels and `slots`
+  and `budget` size command and query channels; a key written where no channel
+  of that kind exists draws nothing. A value on a placement line applies to
+  every link the placed instance consumes. A value on the `deployment`
+  declaration applies to every link of the deployment. The precedence per link
+  is the placement line, then the `deployment` declaration; a key declared at
+  neither site takes the default `slots`, the derived `depth`, and no `budget`.
+  RSDL-805 warns when a declared `depth` is below the contract bound
+  `ceil(max / min)` of an event a covered link consumes. RSDL-806 warns when an
+  event whose contract bound is not derivable is consumed by a link with no
+  declared `depth`.
 - **A backend key is `backend.key`** — `someip.serviceId`, `linux.cpuset`,
   `rust.crate` — a camelCase namespace, a dot, a camelCase key (typl Appendix
   E's `camelCase_id`, which admits no underscore). The compiler carries it into
@@ -771,7 +772,10 @@ still reported.
   added, removed or made `external` — changes every link derived from the old
   placement and leaves the contract untouched. `ridl diff` lists it under its
   own heading, **placement changed**, with no verdict: neither compatible nor
-  breaking.
+  breaking. A changed `depth`, `slots` or `budget`, on the deployment or on a
+  placement line, is not listed: `ridl diff` reads neither `Deployment.sizing`
+  nor `Placement.sizing`, because a sizing value changes no link and no
+  contract.
 - A change to the closure or to a component's lines — a component added to or
   removed from the system, an `offers` or `requires` line added or removed,
   `instances` changed, a component made `external` — is listed under a second
@@ -852,7 +856,7 @@ shown in any table were never allocated.
 | RSDL-706 | an instance placed twice in one deployment — also `Cruise` together with `Cruise.primary`                                                                          | error                        | §9      |
 | RSDL-707 | an `external` machine lists an implemented component                                                                                                               | error                        | §9      |
 | RSDL-708 | two deployments with one name in the workspace                                                                                                                     | error                        | §3.4    |
-| RSDL-709 | a `depth`, `slots` or `budget` value that the parser reads is not an integer within its range                                                                      | error                        | §5      |
+| RSDL-709 | a `depth`, `slots` or `budget` value that the parser reads is not an integer within its range, or the key is written bare                                          | error                        | §5      |
 | RSDL-804 | a backend key whose namespace no configured backend claims                                                                                                         | warning                      | §5      |
 | RSDL-805 | a declared `depth` is below `ceil(max / min)` for an event a covered link consumes                                                                                 | warning                      | §5      |
 | RSDL-806 | an event whose contract bound is not derivable is consumed by a link with no declared `depth`                                                                      | warning                      | §5      |

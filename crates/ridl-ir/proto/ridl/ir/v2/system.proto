@@ -28,8 +28,10 @@ syntax = "proto3";
 //
 // A producer's machines are read from the deployment's placements, not
 // repeated on the producer. The rsdl-owned keys are consumed into the facts
-// they feed (rsdl §5): `instances` and `external` are fields, `tier` and
-// `deprecated` feed checks (RSDL-901, the family lint) and are not lowered.
+// they feed (rsdl §5): `instances` and `external` are fields, `depth`,
+// `slots` and `budget` are the `Sizing` of a deployment and of a placement,
+// and `tier` and `deprecated` feed checks (RSDL-901, the family lint) and
+// are not lowered.
 //
 // Names. A component is referred to by its qualified name — `pkg.Name` for a
 // declared component, the service's dotted name for the implicit component

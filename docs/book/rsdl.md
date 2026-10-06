@@ -189,9 +189,9 @@ deployment Bench for Cabin {
 - **`slots` is a sizing key**, written on a placement line like `Dashboard`'s. It
   sets the table entries of every command or query channel that `Dashboard`
   consumes, in `Car` only. `depth` and `budget` are the other two, and a
-  placement line and a `deployment` declaration both take all three; the reference gives their ranges and
-  the precedence ([rsdl reference](../specification/rsdl-language-reference.md)
-  §5).
+  placement line and a `deployment` declaration both take all three; the
+  reference gives their ranges and the precedence
+  ([rsdl reference](../specification/rsdl-language-reference.md) §5).
 
 Two mistakes are worth naming, because each blocks only its own deployment.
 Placing `ClimateControl.front` on `ZoneFront` and then reaching
@@ -259,8 +259,8 @@ Per deployment:
 **What an error does.** An error in the closure blocks the lowering of every
 deployment, and the build writes nothing. An RSDL-7xx error — a placement
 problem, or a sizing value out of range (RSDL-709) — blocks its own deployment
-only: the build writes the package IR and
-the system without that deployment, and still exits 1.
+only: the build writes the package IR and the system without that deployment,
+and still exits 1.
 
 ## Comparing two systems
 
