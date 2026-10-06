@@ -540,11 +540,12 @@ accepts within 100 ms. Only the range form is admitted — a strict periodic
 `@Xms` on a command or query is a `RIDL-103` error, because a caller is not
 isochronous by contract.
 
-Unlike a signal, an RPC with no declared response bound is never given a
-default: there is no plausible generic value, and a manufactured provider
-obligation is worse than none. It draws a `RIDL-112` warning instead, and the
-bound stays absent in the IR. `@[20ms..]` — a throttle with no response bound —
-warns the same way; a missing `min` draws nothing.
+Like a signal, an RPC with no declared response bound takes a default: the
+package's `command_timing` or `query_timing`, else the built-in `[..1s]` for a
+command and `[..3s]` for a query. It still draws a `RIDL-112` warning, and the
+IR carries the resolved bound. `@[20ms..]` — a throttle with no response bound —
+warns the same way and takes `max` from the default; a missing `min` draws
+nothing.
 
 ## Structs and optionality
 

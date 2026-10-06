@@ -225,6 +225,10 @@ indistinguishable, so no claim about any of the three can be exercised.
    | `max` lowered          | compatible         | compatible — a stronger provider promise              |
    | bound added or removed | breaking both ways | breaking both ways                                    |
 
+   A `default_applied` flip over identical bounds is compatible: a default made
+   explicit, or an explicit bound replaced by an equal default. A bound that was
+   absent and is now defaulted is a bound added, which is breaking.
+
    ADR-0012 decision 9 settles the form. Its rule is stated for attribute keys —
    a key with no diff category is classified breaking, never compatible — and
    the principle behind it is that reporting compatible on something the

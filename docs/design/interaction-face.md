@@ -545,10 +545,10 @@ make the two clients' signatures differ in more than the future, and an absolute
 `Instant` is computed from a duration by every caller anyway; a caller that
 wants one call bounded differently sets the timeout before it. `None` by default
 because, on a runtime that measures the bound and wakes at it, a member with a
-`max` is bounded by the future, and the reference says an untimed member waits.
-Over `ridl-loopback`, whose clock moves only under `advance`, a blocking call
-whose provider never serves returns only at a timeout the caller set, so a test
-over the loopback sets one (F-11).
+`max` is bounded by the future, and a member with no `max` waits. Over
+`ridl-loopback`, whose clock moves only under `advance`, a blocking call whose
+provider never serves returns only at a timeout the caller set, so a test over
+the loopback sets one (F-11).
 
 **The feature.** The manifest `ridl build` emits declares
 `std = ["ridl-rt/std"]`, on by default, and the `blocking` module is under the
@@ -651,9 +651,10 @@ interfaces:
   has no `blocking` module.
 - **`Siren`** — one event and nothing else, so the event-only bound set
   (`EventSource + Wakeable`, no `Clock`) is pinned.
-- **`Valve`** — one command and one query with no response bound, so a call with
-  no deadline (F-2) and the blocking client's timeout on an untimed member
-  (F-11) are testable.
+- **`Valve`** — one command and one query that declare no response bound, so
+  they carry the built-in default (1 s and 3 s) and the blocking client's
+  timeout on a defaulted member (F-11) is testable. The no-`max` path (F-2) is
+  covered at the `Member` level by `crates/ridl-rt/tests/call_deadline.rs`.
 
 The fixture declares no `fixed` interaction; the descriptor emitter's `Fixed`
 path is covered instead by a hand-built-IR unit test in `src/descriptors.rs`.
