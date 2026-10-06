@@ -316,7 +316,7 @@ fn fill<F: Factory>(rt: &mut F::Runtime) -> Vec<Correlation> {
     let mut buf = [0u8; 8];
     (0..F::SLOTS)
         .map(|_| {
-            let c = rt.command(IFACE, ORD, &[1]).expect("a slot is free");
+            let c = rt.command(IFACE, ORD, &[1], None).expect("a slot is free");
             let claim = rt
                 .next_claim(&mut buf)
                 .expect("next_claim")

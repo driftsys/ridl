@@ -859,7 +859,7 @@ fn publisher(
             ) -> ::core::result::Result<(), ::ridl_rt::port::RaiseError> {
                 let mut buf = #buffer;
                 let bytes = #encode;
-                self.port.raise(#number, #ordinal, bytes)
+                self.port.raise(#number, #ordinal, bytes, ::core::option::Option::None)
             }
         });
     }

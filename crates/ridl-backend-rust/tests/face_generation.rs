@@ -380,7 +380,7 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
         "the internal send returns the command's own correlation newtype",
     );
     assert!(
-        d.contains("__port.command(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(3u32),bytes,)"),
+        d.contains("__port.command(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(3u32),bytes,::core::option::Option::None,)"),
         "the command calls Caller::command"
     );
     // Scoped to the internal send's body: `dispatch` evaluates the same
@@ -411,7 +411,7 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
         "the internal send returns the query's own correlation newtype",
     );
     assert!(
-        d.contains("__port.query(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(4u32),bytes,)"),
+        d.contains("__port.query(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(4u32),bytes,::core::option::Option::None,)"),
         "the query calls Caller::query"
     );
     assert!(
@@ -824,7 +824,7 @@ fn the_publisher_writes_signals_and_raises_events() {
         "one raise method per event",
     );
     assert!(
-        d.contains("self.port.raise(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(2u32),bytes,)"),
+        d.contains("self.port.raise(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(2u32),bytes,::core::option::Option::None,)"),
         "raising calls EventSink::raise"
     );
     assert!(

@@ -527,6 +527,7 @@ impl Store {
             iface: event.iface,
             ord: event.ord,
             envelope: event.envelope,
+            trace: None,
             len: event.bytes.len(),
         }))
     }
@@ -958,6 +959,7 @@ impl Store {
             iface: entry.iface,
             ord: entry.ord,
             envelope: entry.envelope,
+            trace: None,
             // No response bound: a bound is a member's timing annotation, and
             // the loopback has no member table to read one from.
             remaining: None,

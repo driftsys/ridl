@@ -119,6 +119,7 @@ use ridl_rt::port::{
     SubscribeError, Wakeable, Watermark, WriteError,
 };
 use ridl_rt::sample::{Duration, Timestamp};
+use ridl_rt::trace::TraceContext;
 
 mod handle;
 mod store;
@@ -429,8 +430,14 @@ impl EventSource for Loopback {
 }
 
 impl EventSink for Loopback {
-    fn raise(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8]) -> Result<(), RaiseError> {
-        self.handles.sink.raise(iface, ord, bytes)
+    fn raise(
+        &mut self,
+        iface: InterfaceNo,
+        ord: Ordinal,
+        bytes: &[u8],
+        trace: Option<TraceContext>,
+    ) -> Result<(), RaiseError> {
+        self.handles.sink.raise(iface, ord, bytes, trace)
     }
 }
 
@@ -440,8 +447,9 @@ impl Caller for Loopback {
         iface: InterfaceNo,
         ord: Ordinal,
         args: &[u8],
+        trace: Option<TraceContext>,
     ) -> Result<Correlation, SendError> {
-        self.handles.caller.command(iface, ord, args)
+        self.handles.caller.command(iface, ord, args, trace)
     }
 
     fn query(
@@ -449,8 +457,9 @@ impl Caller for Loopback {
         iface: InterfaceNo,
         ord: Ordinal,
         args: &[u8],
+        trace: Option<TraceContext>,
     ) -> Result<Correlation, SendError> {
-        self.handles.caller.query(iface, ord, args)
+        self.handles.caller.query(iface, ord, args, trace)
     }
 
     fn ack(&mut self, c: Correlation) -> Option<Result<(), CallError>> {

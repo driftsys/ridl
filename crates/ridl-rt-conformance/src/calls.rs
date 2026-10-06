@@ -17,7 +17,9 @@ use crate::{Factory, IFACE, ORD, runtime};
 pub fn a_command_is_delivered_and_acknowledged<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
-    let correlation = rt.command(IFACE, ORD, &[1, 2, 3]).expect("command sent");
+    let correlation = rt
+        .command(IFACE, ORD, &[1, 2, 3], None)
+        .expect("command sent");
 
     assert_eq!(rt.ack(correlation), None, "not yet settled");
 
@@ -43,7 +45,7 @@ pub fn a_command_is_delivered_and_acknowledged<F: Factory>() {
 pub fn a_query_is_delivered_and_replied<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
-    let correlation = rt.query(IFACE, ORD, &[9]).expect("query sent");
+    let correlation = rt.query(IFACE, ORD, &[9], None).expect("query sent");
 
     let mut buf = [0u8; 8];
     let claim = rt
@@ -72,7 +74,7 @@ pub fn a_query_is_delivered_and_replied<F: Factory>() {
 pub fn settle_can_be_made_to_fail_once_then_succeed<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
-    let correlation = rt.command(IFACE, ORD, &[1]).expect("command sent");
+    let correlation = rt.command(IFACE, ORD, &[1], None).expect("command sent");
     let mut buf = [0u8; 8];
     let claim = rt
         .next_claim(&mut buf)
@@ -107,8 +109,8 @@ pub fn two_callers_on_one_provider_are_two_claims_under_one_seq<F: Factory>() {
     let mut second = F::caller(&rt);
     rt.serve(IFACE, &[ORD]).expect("serve");
 
-    let a = rt.command(IFACE, ORD, &[1]).expect("send");
-    let b = second.command(IFACE, ORD, &[2]).expect("send");
+    let a = rt.command(IFACE, ORD, &[1], None).expect("send");
+    let b = second.command(IFACE, ORD, &[2], None).expect("send");
     assert_ne!(a, b, "the correlations are distinct");
 
     let mut buf = [0u8; 8];
@@ -143,8 +145,8 @@ pub fn two_callers_on_one_provider_are_two_claims_under_one_seq<F: Factory>() {
 pub fn a_caller_sequence_number_counts_that_caller_calls<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
-    rt.command(IFACE, ORD, &[1]).expect("send");
-    rt.query(IFACE, ORD, &[2]).expect("send");
+    rt.command(IFACE, ORD, &[1], None).expect("send");
+    rt.query(IFACE, ORD, &[2], None).expect("send");
 
     let mut buf = [0u8; 8];
     let first = rt.next_claim(&mut buf).expect("read").expect("waiting");
@@ -160,7 +162,7 @@ pub fn a_caller_sequence_number_counts_that_caller_calls<F: Factory>() {
 pub fn a_settled_outcome_reports_the_contract_error_the_provider_settled<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
-    let correlation = rt.command(IFACE, ORD, &[1]).expect("send");
+    let correlation = rt.command(IFACE, ORD, &[1], None).expect("send");
     let mut buf = [0u8; 8];
     let claim = rt.next_claim(&mut buf).expect("read").expect("waiting");
     rt.settle(
@@ -180,7 +182,7 @@ pub fn a_settled_outcome_reports_the_contract_error_the_provider_settled<F: Fact
 pub fn a_claim_is_presented_once_and_settled_once<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
-    rt.command(IFACE, ORD, &[1]).expect("send");
+    rt.command(IFACE, ORD, &[1], None).expect("send");
     let mut buf = [0u8; 8];
     let claim = rt.next_claim(&mut buf).expect("read").expect("waiting");
     assert!(
@@ -204,7 +206,7 @@ pub fn a_claim_is_presented_once_and_settled_once<F: Factory>() {
 pub fn an_oversized_claim_is_reported_with_its_id_and_is_not_consumed<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
-    let correlation = rt.command(IFACE, ORD, &[1, 2, 3]).expect("send");
+    let correlation = rt.command(IFACE, ORD, &[1, 2, 3], None).expect("send");
 
     let mut short = [0u8; 1];
     let Err(ReadError::ShortClaim {
@@ -242,7 +244,7 @@ pub fn an_oversized_claim_is_reported_with_its_id_and_is_not_consumed<F: Factory
 pub fn an_unread_claim_is_settled_by_its_id<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
-    let correlation = rt.command(IFACE, ORD, &[1, 2, 3]).expect("send");
+    let correlation = rt.command(IFACE, ORD, &[1, 2, 3], None).expect("send");
 
     let mut short = [0u8; 1];
     let Err(ReadError::ShortClaim { claim, .. }) = rt.next_claim(&mut short) else {
@@ -275,8 +277,8 @@ pub fn an_unread_claim_is_settled_by_its_id<F: Factory>() {
 pub fn the_calls_behind_an_oversized_claim_are_presented_once_it_is_settled<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
-    let oversized = rt.command(IFACE, ORD, &[1, 2, 3]).expect("send");
-    let behind = rt.command(IFACE, ORD, &[4]).expect("send");
+    let oversized = rt.command(IFACE, ORD, &[1, 2, 3], None).expect("send");
+    let behind = rt.command(IFACE, ORD, &[4], None).expect("send");
 
     let mut buf = [0u8; 2];
     let Err(ReadError::ShortClaim { claim: first, .. }) = rt.next_claim(&mut buf) else {
@@ -312,7 +314,7 @@ pub fn the_calls_behind_an_oversized_claim_are_presented_once_it_is_settled<F: F
 pub fn forget_releases_a_settled_correlation<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
-    let correlation = rt.command(IFACE, ORD, &[1]).expect("send");
+    let correlation = rt.command(IFACE, ORD, &[1], None).expect("send");
     let mut buf = [0u8; 8];
     let claim = rt.next_claim(&mut buf).expect("read").expect("waiting");
     rt.settle(claim.id, Ok(&[])).expect("settle");
@@ -336,7 +338,7 @@ pub fn forget_releases_a_settled_correlation<F: Factory>() {
 pub fn forget_before_the_claim_is_presented_withdraws_or_leaves_the_call<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
-    let correlation = rt.command(IFACE, ORD, &[1]).expect("send");
+    let correlation = rt.command(IFACE, ORD, &[1], None).expect("send");
     rt.forget(correlation);
 
     let mut buf = [0u8; 8];
@@ -360,7 +362,7 @@ pub fn forget_before_the_claim_is_presented_withdraws_or_leaves_the_call<F: Fact
 /// `SendError::Busy`, counting at most one more than [`Factory::SLOTS`].
 fn sends_until_busy<F: Factory>(caller: &mut impl Caller) -> usize {
     for sent in 0..=F::SLOTS {
-        match caller.command(IFACE, ORD, &[2]) {
+        match caller.command(IFACE, ORD, &[2], None) {
             Ok(_) => {}
             Err(SendError::Busy) => return sent,
             Err(error) => panic!("a send failed other than busy: {error:?}"),
@@ -386,9 +388,13 @@ pub fn a_send_with_every_slot_taken_is_busy_for_every_caller<F: Factory>() {
     let mut theirs = Vec::new();
     for n in 0..F::SLOTS {
         if n % 2 == 0 {
-            mine.push(rt.command(IFACE, ORD, &[1]).expect("a slot is free"));
+            mine.push(rt.command(IFACE, ORD, &[1], None).expect("a slot is free"));
         } else {
-            theirs.push(second.command(IFACE, ORD, &[1]).expect("a slot is free"));
+            theirs.push(
+                second
+                    .command(IFACE, ORD, &[1], None)
+                    .expect("a slot is free"),
+            );
         }
         let claim = rt
             .next_claim(&mut buf)
@@ -397,10 +403,10 @@ pub fn a_send_with_every_slot_taken_is_busy_for_every_caller<F: Factory>() {
         rt.settle(claim.id, Ok(&[])).expect("settle");
     }
 
-    assert_eq!(rt.command(IFACE, ORD, &[2]), Err(SendError::Busy));
-    assert_eq!(rt.query(IFACE, ORD, &[2]), Err(SendError::Busy));
+    assert_eq!(rt.command(IFACE, ORD, &[2], None), Err(SendError::Busy));
+    assert_eq!(rt.query(IFACE, ORD, &[2], None), Err(SendError::Busy));
     assert_eq!(
-        second.command(IFACE, ORD, &[2]),
+        second.command(IFACE, ORD, &[2], None),
         Err(SendError::Busy),
         "the table is the runtime's, shared by every caller"
     );
@@ -412,17 +418,17 @@ pub fn a_send_with_every_slot_taken_is_busy_for_every_caller<F: Factory>() {
         assert_eq!(second.ack(*c), Some(Ok(())));
     }
     assert_eq!(
-        second.command(IFACE, ORD, &[2]),
+        second.command(IFACE, ORD, &[2], None),
         Err(SendError::Busy),
         "reading an outcome frees no slot"
     );
 
     rt.forget(mine[0]);
     second
-        .command(IFACE, ORD, &[3])
+        .command(IFACE, ORD, &[3], None)
         .expect("the slot the first caller's forget freed is the second caller's to take");
     assert_eq!(
-        rt.command(IFACE, ORD, &[4]),
+        rt.command(IFACE, ORD, &[4], None),
         Err(SendError::Busy),
         "and the table is full again"
     );
@@ -438,7 +444,9 @@ pub fn a_reclaimed_slots_old_correlation_answers_none<F: Factory>() {
     let old = crate::fill::<F>(&mut rt)[0];
     rt.forget(old);
 
-    let new = rt.query(IFACE, ORD, &[2]).expect("the reclaimed slot");
+    let new = rt
+        .query(IFACE, ORD, &[2], None)
+        .expect("the reclaimed slot");
     assert_ne!(new, old, "the slot is taken under a new correlation");
     let mut buf = [0u8; 8];
     let claim = rt
@@ -467,7 +475,7 @@ pub fn a_reclaimed_slots_old_correlation_answers_none<F: Factory>() {
 pub fn forget_between_the_claim_and_the_settlement_leaves_the_settlement_valid<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
-    let correlation = rt.query(IFACE, ORD, &[1]).expect("send");
+    let correlation = rt.query(IFACE, ORD, &[1], None).expect("send");
     let mut buf = [0u8; 8];
     let claim = rt.next_claim(&mut buf).expect("read").expect("waiting");
     rt.forget(correlation);
@@ -489,7 +497,7 @@ pub fn forget_between_the_claim_and_the_settlement_leaves_the_settlement_valid<F
 pub fn forget_between_the_offer_and_the_settlement_leaves_the_settlement_valid<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
-    let correlation = rt.command(IFACE, ORD, &[1, 2, 3]).expect("send");
+    let correlation = rt.command(IFACE, ORD, &[1, 2, 3], None).expect("send");
     let mut short = [0u8; 1];
     let Err(ReadError::ShortClaim { claim, .. }) = rt.next_claim(&mut short) else {
         panic!("a buffer shorter than the arguments reports ShortClaim");
@@ -516,7 +524,7 @@ pub fn forget_between_the_offer_and_the_settlement_leaves_the_settlement_valid<F
 pub fn a_claim_that_was_never_presented_cannot_be_settled<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
-    let correlation = rt.command(IFACE, ORD, &[1]).expect("send");
+    let correlation = rt.command(IFACE, ORD, &[1], None).expect("send");
     assert_eq!(
         rt.settle(ClaimId(correlation.0), Ok(&[])),
         Err(SettleError::UnknownClaim)
@@ -537,8 +545,8 @@ pub fn a_claim_that_was_never_presented_cannot_be_settled<F: Factory>() {
 pub fn an_injected_settle_failure_is_not_spent_on_an_unknown_claim<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
-    rt.command(IFACE, ORD, &[1]).expect("send");
-    rt.command(IFACE, ORD, &[2]).expect("send");
+    rt.command(IFACE, ORD, &[1], None).expect("send");
+    rt.command(IFACE, ORD, &[2], None).expect("send");
     let mut buf = [0u8; 8];
     let settled = rt.next_claim(&mut buf).expect("read").expect("waiting");
     let claim = rt.next_claim(&mut buf).expect("read").expect("waiting");
@@ -565,7 +573,7 @@ pub fn a_handler_cannot_settle_another_handlers_claim<F: Factory>() {
     rt.serve(IFACE, &[ORD]).expect("serve");
     second.serve(InterfaceNo(2), &[ORD]).expect("serve");
 
-    let correlation = rt.command(IFACE, ORD, &[1]).expect("send");
+    let correlation = rt.command(IFACE, ORD, &[1], None).expect("send");
     let mut buf = [0u8; 8];
     let claim = rt
         .next_claim(&mut buf)
@@ -598,8 +606,8 @@ pub fn two_handlers_each_receive_only_what_they_served<F: Factory>() {
     rt.serve(IFACE, &[ORD]).expect("serve");
     second.serve(InterfaceNo(2), &[ORD]).expect("serve");
 
-    rt.command(InterfaceNo(2), ORD, &[7]).expect("send");
-    rt.command(IFACE, ORD, &[8]).expect("send");
+    rt.command(InterfaceNo(2), ORD, &[7], None).expect("send");
+    rt.command(IFACE, ORD, &[8], None).expect("send");
 
     let mut buf = [0u8; 8];
     let claim = rt

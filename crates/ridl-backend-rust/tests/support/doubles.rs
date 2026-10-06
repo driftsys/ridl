@@ -37,6 +37,7 @@ use ridl_rt::port::{
     SubscribeError, Wakeable,
 };
 use ridl_rt::sample::{Envelope, Timestamp};
+use ridl_rt::trace::TraceContext;
 
 /// One `Caller` or `Wakeable` call the face made, with what the port
 /// answered where the answer is what a test asserts on.
@@ -175,10 +176,11 @@ impl Caller for RecordingPorts {
         iface: InterfaceNo,
         ord: Ordinal,
         args: &[u8],
+        trace: Option<TraceContext>,
     ) -> Result<Correlation, SendError> {
         let sent = match self.faults.send.take() {
             Some(failure) => Err(failure),
-            None => self.caller.command(iface, ord, args),
+            None => self.caller.command(iface, ord, args, trace),
         };
         self.record(Op::Command(sent));
         sent
@@ -189,10 +191,11 @@ impl Caller for RecordingPorts {
         iface: InterfaceNo,
         ord: Ordinal,
         args: &[u8],
+        trace: Option<TraceContext>,
     ) -> Result<Correlation, SendError> {
         let sent = match self.faults.send.take() {
             Some(failure) => Err(failure),
-            None => self.caller.query(iface, ord, args),
+            None => self.caller.query(iface, ord, args, trace),
         };
         self.record(Op::Query(sent));
         sent
@@ -459,6 +462,7 @@ impl Handler for QueuedClaims {
                 stamp: Timestamp(0),
                 seq: taken as u64,
             },
+            trace: None,
             remaining: None,
             len: 0,
         }))

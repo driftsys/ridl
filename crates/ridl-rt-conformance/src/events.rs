@@ -9,7 +9,7 @@ use crate::{Factory, IFACE, ORD, OTHER, runtime};
 pub fn an_event_raise_and_receive_round_trips<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.subscribe(IFACE, &[ORD]).expect("subscribe");
-    rt.raise(IFACE, ORD, &[5, 6]).expect("raise");
+    rt.raise(IFACE, ORD, &[5, 6], None).expect("raise");
 
     let mut out = [0u8; 8];
     let occurrence = rt
@@ -24,7 +24,7 @@ pub fn an_event_raise_and_receive_round_trips<F: Factory>() {
 /// A late joiner receives nothing retroactive on an event.
 pub fn an_occurrence_raised_before_the_subscription_is_not_delivered<F: Factory>() {
     let mut rt = runtime::<F>();
-    rt.raise(IFACE, ORD, &[1]).expect("raise");
+    rt.raise(IFACE, ORD, &[1], None).expect("raise");
     rt.subscribe(IFACE, &[ORD]).expect("subscribe");
 
     let mut out = [0u8; 8];
@@ -38,7 +38,7 @@ pub fn an_occurrence_raised_before_the_subscription_is_not_delivered<F: Factory>
 pub fn unsubscribe_stops_delivery_of_what_is_already_queued<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.subscribe(IFACE, &[ORD]).expect("subscribe");
-    rt.raise(IFACE, ORD, &[1]).expect("raise");
+    rt.raise(IFACE, ORD, &[1], None).expect("raise");
     rt.unsubscribe(IFACE, &[ORD]);
 
     let mut out = [0u8; 8];
@@ -53,7 +53,7 @@ pub fn two_sources_each_receive_their_own_copy_of_one_occurrence<F: Factory>() {
     rt.subscribe(IFACE, &[ORD]).expect("subscribe");
     second.subscribe(IFACE, &[ORD]).expect("subscribe");
 
-    rt.raise(IFACE, ORD, &[8]).expect("raise");
+    rt.raise(IFACE, ORD, &[8], None).expect("raise");
 
     let mut out = [0u8; 8];
     assert_eq!(
@@ -73,7 +73,7 @@ pub fn two_sources_each_receive_their_own_copy_of_one_occurrence<F: Factory>() {
 pub fn a_short_buffer_leaves_the_occurrence_for_the_next_call<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.subscribe(IFACE, &[ORD]).expect("subscribe");
-    rt.raise(IFACE, ORD, &[1, 2, 3]).expect("raise");
+    rt.raise(IFACE, ORD, &[1, 2, 3], None).expect("raise");
 
     let mut short = [0u8; 1];
     assert_eq!(rt.next(&mut short), Err(ReadError::Short { needed: 3 }));
@@ -92,9 +92,9 @@ pub fn a_sink_sequence_number_counts_one_channel_publications<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.subscribe(IFACE, &[ORD]).expect("subscribe");
 
-    rt.raise(IFACE, ORD, &[1]).expect("raise");
-    rt.raise(IFACE, OTHER, &[2]).expect("raise");
-    rt.raise(IFACE, ORD, &[3]).expect("raise");
+    rt.raise(IFACE, ORD, &[1], None).expect("raise");
+    rt.raise(IFACE, OTHER, &[2], None).expect("raise");
+    rt.raise(IFACE, ORD, &[3], None).expect("raise");
 
     let mut out = [0u8; 8];
     let mut seqs = Vec::new();

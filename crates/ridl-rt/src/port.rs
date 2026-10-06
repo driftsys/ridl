@@ -26,6 +26,7 @@ use core::task::Waker;
 use crate::contract::{CatalogRef, InterfaceNo, Ordinal};
 use crate::error::{CallError, Contract};
 use crate::sample::{Duration, Envelope, Freshness, Provenance, Timestamp};
+use crate::trace::TraceContext;
 
 /// A port attached to one catalog.
 pub trait Attached {
@@ -116,6 +117,15 @@ pub trait SignalWriter: Attached {
 /// returns the next occurrence of anything subscribed and the payload type is
 /// not known until its ordinal has been read. The generated method routes on
 /// that ordinal into an enum with one variant per event.
+///
+/// # Trace context delivery
+///
+/// 2. A runtime that carries the trace context delivers, on every
+///    [`RawOccurrence`] a `raise` produces (one for each subscriber), the
+///    value its sender passed, unchanged.
+/// 3. A runtime or transport that does not carry the trace context delivers
+///    `None`.
+/// 4. A sender's `None` is delivered as `None`.
 pub trait EventSource: Attached {
     /// Starts delivery of the listed events.
     fn subscribe(&mut self, iface: InterfaceNo, ords: &[Ordinal]) -> Result<(), SubscribeError>;
@@ -140,6 +150,9 @@ pub struct RawOccurrence {
     pub ord: Ordinal,
     /// The sender's timestamp and sequence number.
     pub envelope: Envelope,
+    /// The trace context the sender passed to `raise`, or `None` (see the
+    /// delivery rules on [`EventSource`]).
+    pub trace: Option<TraceContext>,
     /// The number of bytes copied into `out`.
     pub len: usize,
 }
@@ -149,9 +162,24 @@ pub struct RawOccurrence {
 /// A generated `Publisher` has one method per event over this port. Unlike a
 /// signal, an occurrence is not staged and there is no `commit`: there is no
 /// coherent set to assemble.
+///
+/// # Trace context delivery
+///
+/// 2. A runtime that carries the trace context delivers, on every
+///    [`RawOccurrence`] a `raise` produces (one for each subscriber), the
+///    value its sender passed, unchanged.
+/// 3. A runtime or transport that does not carry the trace context delivers
+///    `None`.
+/// 4. A sender's `None` is delivered as `None`.
 pub trait EventSink: Attached {
     /// Raises one occurrence.
-    fn raise(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8]) -> Result<(), RaiseError>;
+    fn raise(
+        &mut self,
+        iface: InterfaceNo,
+        ord: Ordinal,
+        bytes: &[u8],
+        trace: Option<TraceContext>,
+    ) -> Result<(), RaiseError>;
 }
 
 /// Calls, consumer side.
@@ -167,6 +195,14 @@ pub trait EventSink: Attached {
 /// waiting phase. A `require` clause is evaluated before sending, so a
 /// failing precondition costs no round trip and is reported as
 /// [`SendError::Contract`].
+///
+/// # Trace context delivery
+///
+/// 1. A runtime that carries the trace context delivers, on the [`Claim`] a
+///    command or query produces, the value its sender passed, unchanged.
+/// 3. A runtime or transport that does not carry the trace context delivers
+///    `None`.
+/// 4. A sender's `None` is delivered as `None`.
 pub trait Caller: Attached {
     /// Sends a command and returns the correlation of its outcome.
     fn command(
@@ -174,6 +210,7 @@ pub trait Caller: Attached {
         iface: InterfaceNo,
         ord: Ordinal,
         args: &[u8],
+        trace: Option<TraceContext>,
     ) -> Result<Correlation, SendError>;
     /// Sends a query and returns the correlation of its reply.
     fn query(
@@ -181,6 +218,7 @@ pub trait Caller: Attached {
         iface: InterfaceNo,
         ord: Ordinal,
         args: &[u8],
+        trace: Option<TraceContext>,
     ) -> Result<Correlation, SendError>;
     /// A command's delivery acknowledgment (ridl §6.1), once it is known:
     /// `Ok(())` when accepted, `Err(CallError::Contract(_))` when rejected,
@@ -251,6 +289,14 @@ pub struct Correlation(pub u64);
 /// `require`, calls the provider, evaluates a query's `ensure`, and settles.
 /// That future resolves in two cases only: at once, when this port's `serve`
 /// refused the members, and later, when this port fails.
+///
+/// # Trace context delivery
+///
+/// 1. A runtime that carries the trace context delivers, on the [`Claim`] a
+///    command or query produces, the value its sender passed, unchanged.
+/// 3. A runtime or transport that does not carry the trace context delivers
+///    `None`.
+/// 4. A sender's `None` is delivered as `None`.
 pub trait Handler: Attached {
     /// Starts presenting calls to the listed members.
     fn serve(&mut self, iface: InterfaceNo, ords: &[Ordinal]) -> Result<(), ServeError>;
@@ -295,6 +341,9 @@ pub struct Claim {
     /// The caller's timestamp and sequence number. `seq` is unique for each
     /// caller, not for each channel.
     pub envelope: Envelope,
+    /// The trace context the sender passed to `command` or `query`, or `None`
+    /// (see the delivery rules on [`Handler`]).
+    pub trace: Option<TraceContext>,
     /// The time left before the response bound passes. `None` when the call
     /// has no response bound, as in a catalog built before commands and queries
     /// took a default one (ridl §9.3).
@@ -694,8 +743,14 @@ impl<P: EventSource + ?Sized> EventSource for &mut P {
 }
 
 impl<P: EventSink + ?Sized> EventSink for &mut P {
-    fn raise(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8]) -> Result<(), RaiseError> {
-        (**self).raise(iface, ord, bytes)
+    fn raise(
+        &mut self,
+        iface: InterfaceNo,
+        ord: Ordinal,
+        bytes: &[u8],
+        trace: Option<TraceContext>,
+    ) -> Result<(), RaiseError> {
+        (**self).raise(iface, ord, bytes, trace)
     }
 }
 
@@ -705,16 +760,18 @@ impl<P: Caller + ?Sized> Caller for &mut P {
         iface: InterfaceNo,
         ord: Ordinal,
         args: &[u8],
+        trace: Option<TraceContext>,
     ) -> Result<Correlation, SendError> {
-        (**self).command(iface, ord, args)
+        (**self).command(iface, ord, args, trace)
     }
     fn query(
         &mut self,
         iface: InterfaceNo,
         ord: Ordinal,
         args: &[u8],
+        trace: Option<TraceContext>,
     ) -> Result<Correlation, SendError> {
-        (**self).query(iface, ord, args)
+        (**self).query(iface, ord, args, trace)
     }
     fn ack(&mut self, c: Correlation) -> Option<Result<(), CallError>> {
         (**self).ack(c)

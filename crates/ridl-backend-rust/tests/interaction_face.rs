@@ -106,6 +106,7 @@ fn send_level_raw(port: &mut Loopback, level: i64) -> Correlation {
         CABIN,
         <generated::CabinSetLevel as Interaction>::MEMBER.ordinal,
         bytes,
+        None,
     )
     .expect("send")
 }
@@ -527,6 +528,7 @@ fn round_trip_failing_require_settles_precondition_failed() {
             <generated::Cabin as ridl_rt::contract::Interface>::NUMBER,
             ordinal,
             bytes,
+            None,
         )
         .expect("send");
 
@@ -781,6 +783,7 @@ fn round_trip_unrecognized_ordinal_settles_unknown_interaction() {
             <generated::Cabin as ridl_rt::contract::Interface>::NUMBER,
             ridl_rt::contract::Ordinal(99),
             &[],
+            None,
         )
         .expect("send");
 
@@ -837,6 +840,7 @@ fn round_trip_foreign_interface_number_settles_unknown_interaction() {
             <generated::Horn as ridl_rt::contract::Interface>::NUMBER,
             ordinal,
             bytes,
+            None,
         )
         .expect("send");
 
@@ -874,6 +878,7 @@ fn round_trip_malformed_argument_bytes_settle_transport_corrupt() {
             <generated::Cabin as ridl_rt::contract::Interface>::NUMBER,
             ordinal,
             &[1, 2, 3],
+            None,
         )
         .expect("send");
 
@@ -911,6 +916,7 @@ fn round_trip_an_oversized_claim_is_settled_corrupt_and_the_claim_behind_it_is_s
             CABIN,
             <generated::CabinSetLevel as Interaction>::MEMBER.ordinal,
             &oversized,
+            None,
         )
         .expect("the loopback bounds no argument size");
     let second = send_level_raw(&mut rt, 3);
@@ -967,6 +973,7 @@ fn round_trip_out_of_range_argument_settles_invalid_value() {
             <generated::Cabin as ridl_rt::contract::Interface>::NUMBER,
             ordinal,
             bytes,
+            None,
         )
         .expect("send");
 
@@ -1013,7 +1020,7 @@ fn fill_the_call_table(filler: &mut ridl_loopback::CallerHandle) -> Vec<Correlat
     (0..Loopback::SLOTS)
         .map(|_| {
             filler
-                .command(CABIN, Ordinal(99), &[])
+                .command(CABIN, Ordinal(99), &[], None)
                 .expect("a free slot")
         })
         .collect()
@@ -1805,6 +1812,7 @@ fn serve_over_a_handler_failing_after_one_claim_fails_after_the_oversized_one() 
             CABIN,
             <generated::CabinSetLevel as Interaction>::MEMBER.ordinal,
             &oversized,
+            None,
         )
         .expect("send");
     let second = send_level_raw(&mut rt, 2);

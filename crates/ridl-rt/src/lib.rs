@@ -120,6 +120,7 @@ pub mod port;
 pub mod sample;
 #[cfg(feature = "std")]
 pub mod task;
+pub mod trace;
 
 /// Pins which enums stay `#[non_exhaustive]` under R-11: `Transport`,
 /// `ReadError`, `WriteError`, `RaiseError`, `SendError`, `SubscribeError`,
