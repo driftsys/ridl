@@ -299,6 +299,7 @@ macro_rules! suite {
             calls::one_callers_calls_in_flight_each_keep_their_own_context,
             calls::an_oversized_claims_context_survives_its_second_presentation,
             calls::a_reused_call_slot_does_not_keep_the_previous_context,
+            calls::an_all_zero_context_is_carried_unchanged,
         );
     };
     (@tests $factory:ty; $($module:ident :: $test:ident),+ $(,)?) => {

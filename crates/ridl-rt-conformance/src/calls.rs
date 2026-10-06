@@ -769,6 +769,28 @@ pub fn an_oversized_claims_context_survives_its_second_presentation<F: Factory>(
     assert_eq!(claim.trace, Some(TRACE_A));
 }
 
+/// A trace context whose bytes are all zero is carried like any other value:
+/// `ridl-rt` does not validate the context, so a runtime does not drop it or
+/// replace it with `None`.
+pub fn an_all_zero_context_is_carried_unchanged<F: Factory>() {
+    const TRACE_ZERO: ridl_rt::trace::TraceContext = ridl_rt::trace::TraceContext {
+        trace_id: [0; 16],
+        span_id: [0; 8],
+        flags: 0,
+    };
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    rt.command(IFACE, ORD, &[1], Some(TRACE_ZERO))
+        .expect("send");
+
+    let mut buf = [0u8; 8];
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("a claim is waiting");
+    assert_eq!(claim.trace, Some(TRACE_ZERO));
+}
+
 /// A call that takes a slot another call held does not keep that call's trace
 /// context. With every other slot held, the new call can only take the slot
 /// that was reclaimed.
