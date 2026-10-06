@@ -315,18 +315,28 @@ fn catalog() -> CatalogRef {
 }
 
 /// A trace context the trace cases send, and the one they tell it apart from.
+///
+/// Every byte differs from every other byte of this value and of
+/// [`TRACE_B`], so a runtime that reverses, truncates or masks a field, or
+/// that delivers one context's field in place of the other's, fails a case.
 const TRACE_A: ridl_rt::trace::TraceContext = ridl_rt::trace::TraceContext {
-    trace_id: [0xA1; 16],
-    span_id: [0xA2; 8],
-    flags: 1,
+    trace_id: [
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
+        0x0F,
+    ],
+    span_id: [0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17],
+    flags: 0x5A,
 };
 
 /// The second trace context, with different identifiers and flags than
 /// [`TRACE_A`].
 const TRACE_B: ridl_rt::trace::TraceContext = ridl_rt::trace::TraceContext {
-    trace_id: [0xB1; 16],
-    span_id: [0xB2; 8],
-    flags: 0,
+    trace_id: [
+        0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7, 0xF8, 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE,
+        0xFF,
+    ],
+    span_id: [0xE0, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7],
+    flags: 0xA5,
 };
 
 fn runtime<F: Factory>() -> F::Runtime {
