@@ -175,9 +175,10 @@ fn parse_default_range(text: &str, require_min: bool) -> Result<TimingSpec, Stri
 /// For a `signal` or `event` the result is always `Some`: an explicit `@`
 /// annotation is parsed and validated, and an untimed one resolves to `default`
 /// (RIDL-100). For a `command` or `query` the result is always `Some` too: an
-/// RPC with no annotation resolves to `default`, and an annotation with no
-/// response bound keeps what was written and takes `max` from `default`, with
-/// `default_applied` set (ridl §9.3). RIDL-112 covers what was not declared —
+/// RPC with no annotation resolves to `default`, and a readable range with no
+/// response bound keeps what was written and takes only `max` from `default`,
+/// with `default_applied` set (ridl §9.3). An annotation the parser could not
+/// read at all resolves to the whole `default`, its `min` included. RIDL-112 covers what was not declared —
 /// no annotation at all, or the half-open `@[min..]` — and stays quiet on an
 /// annotation the parser could not read, whose only report is the parser's
 /// FORM-101. For `fixed` the result is always `None` and no diagnostic is
@@ -256,8 +257,35 @@ pub fn resolve_timing(
                 ),
             ));
         }
+        // A maximum the default supplied was never written, so RIDL-101 and
+        // RIDL-108 below name the default as its source and ask for an
+        // explicit maximum, instead of the signal wording that quotes the
+        // annotation as if the author had typed both bounds.
+        let filled_max = default_applied && max.is_some();
         if let (Some(lo), Some(hi)) = (&min, &max) {
-            if lo > hi {
+            if filled_max {
+                let (code, severity, relation) = if lo > hi {
+                    (DiagCode::RIDL_101, Severity::Error, "is longer than")
+                } else {
+                    (DiagCode::RIDL_108, Severity::Warning, "equals")
+                };
+                if lo >= hi {
+                    diags.push(diagnostic(
+                        code,
+                        severity,
+                        file,
+                        node,
+                        format!(
+                            "the call throttle `{min_text}` {relation} the default response \
+                             bound `{max_text}` that this `{kind}` takes from \
+                             `[defaults].{kind}_timing` or the built-in default, because \
+                             `@[{min_text}..]` writes no maximum. Write an explicit maximum \
+                             longer than the throttle, `@[{min_text}..max]` (ridl §9.3)",
+                            kind = kind_noun(kind),
+                        ),
+                    ));
+                }
+            } else if lo > hi {
                 diags.push(error(
                     DiagCode::RIDL_101,
                     file,
@@ -327,7 +355,13 @@ pub fn resolve_timing(
             && max_token.is_none()
             && range_parsed_whole(annot, &range)
         {
-            diags.push(missing_response_bound(kind, &spec, file, anchor));
+            diags.push(missing_response_bound(
+                kind,
+                &spec,
+                Applied::MaxOnly,
+                file,
+                anchor,
+            ));
         }
         (Some(spec), diags)
     } else if let Some(token) = annot.duration() {
@@ -387,8 +421,11 @@ pub fn resolve_timing(
     } else {
         // A degenerate `Timing` node with neither a duration nor a range (a
         // parse error, already reported as FORM-101). Every timed kind applies
-        // the default for its kind so the IR still carries concrete bounds.
-        // An RPC draws no RIDL-112 here: the annotation was written and could
+        // the whole default for its kind, as for a member with no annotation,
+        // so the IR still carries concrete bounds. On an RPC this includes the
+        // default's `min`, unlike the range branch above, which takes only
+        // `max`; the two differ only in a package that already fails to
+        // compile on the FORM-101. An RPC draws no RIDL-112 here: the annotation was written and could
         // not be read, so the author may well have declared a response bound
         // (`@[20xs..50ms]` writes one), and the checker must not advise on
         // intent it could not read. The package fails to compile on the
@@ -436,22 +473,35 @@ fn untimed(
         }
         _ => {
             let spec = applied_default(default);
-            let diag = missing_response_bound(kind, &spec, file, anchor);
+            let diag = missing_response_bound(kind, &spec, Applied::Whole, file, anchor);
             (Some(spec), vec![diag])
         }
     }
 }
 
+/// How much of a `command` or `query`'s resolved timing came from the
+/// default, which decides how RIDL-112 words what was applied.
+#[derive(Clone, Copy)]
+enum Applied {
+    /// No annotation: the whole default range was applied.
+    Whole,
+    /// A half-open `@[min..]`: the written `min` is kept and only `max` came
+    /// from the default.
+    MaxOnly,
+}
+
 /// RIDL-112: a `command` or `query` with no declared response bound — no
 /// annotation at all, or the half-open `@[min..]` that declares a throttle
 /// only (ADR-0015 decisions 4 and 6). `spec` is the resolved timing, whose
-/// `max` came from the default, so the message names the bounds applied.
-/// Warning; a profile may escalate it, the same two-step §9.1 gives an untimed
-/// signal or event. A missing `min` draws nothing — an unbounded call rate is
-/// the default every RPC has today.
+/// `max` came from the default; `applied` says whether its `min` did too, so
+/// the message never calls a written `min` the default. Warning; a profile may
+/// escalate it, the same two-step §9.1 gives an untimed signal or event. A
+/// missing `min` draws nothing — an unbounded call rate is the default every
+/// RPC has today.
 fn missing_response_bound(
     kind: InteractionKind,
     spec: &TimingSpec,
+    applied: Applied,
     file: FileId,
     anchor: TextRange,
 ) -> Diagnostic {
@@ -459,17 +509,28 @@ fn missing_response_bound(
         InteractionKind::Command => "acceptance (the §6.1 acknowledgment, not execution)",
         _ => "the reply",
     };
+    let bounds = render_bounds(spec);
+    let what = match applied {
+        Applied::Whole => format!("the default `@{bounds}` is applied"),
+        Applied::MaxOnly => format!(
+            "the maximum `{max}` is taken from the default, giving `@{bounds}`",
+            max = spec
+                .max_us
+                .as_ref()
+                .map(render_duration)
+                .unwrap_or_default(),
+        ),
+    };
     diagnostic(
         DiagCode::RIDL_112,
         Severity::Warning,
         file,
         anchor,
         format!(
-            "{kind} without a declared response bound — the default `@{bounds}` is applied: the \
-             provider must settle {responding} within the bound. Write `@[..max]` to declare the \
-             bound this {kind} really promises (ridl §9.3)",
+            "{kind} without a declared response bound — {what}: the provider must settle \
+             {responding} within the bound. Write `@[..max]` to declare the bound this {kind} \
+             really promises (ridl §9.3)",
             kind = kind_noun(kind),
-            bounds = render_bounds(spec),
         ),
     )
 }
@@ -782,6 +843,13 @@ mod tests {
     #[test]
     fn rpc_default_rejects_what_the_signal_default_rejects() {
         for text in ["1s", "[1s]", "[..1.5s]", "[..0ms]", "[2s..1s]"] {
+            assert!(parse_rpc_default_timing(text).is_err(), "{text}");
+        }
+    }
+
+    #[test]
+    fn rpc_default_rejects_a_zero_negative_or_fractional_min() {
+        for text in ["[0ms..1s]", "[-5ms..1s]", "[1.5ms..1s]"] {
             assert!(parse_rpc_default_timing(text).is_err(), "{text}");
         }
     }
@@ -1140,6 +1208,19 @@ mod tests {
             "the message names the completed range: {}",
             diags[0].message,
         );
+        // Only the maximum came from the default; the written `20ms` did not.
+        assert!(
+            diags[0]
+                .message
+                .contains("the maximum `3s` is taken from the default"),
+            "the message names what the default supplied: {}",
+            diags[0].message,
+        );
+        assert!(
+            !diags[0].message.contains("the default `@[20ms"),
+            "the written minimum is not called the default: {}",
+            diags[0].message,
+        );
         // The written throttle still lowers honestly.
         let spec = spec.expect("resolved");
         assert_eq!(spec.min_us, Some(us("20000")));
@@ -1166,7 +1247,9 @@ mod tests {
             assert_eq!(codes(&diags), vec!["RIDL-112"]);
             assert_eq!(diags[0].severity, Severity::Warning);
             assert!(
-                diags[0].message.contains(rendered),
+                diags[0]
+                    .message
+                    .contains(&format!("the default {rendered} is applied")),
                 "{kind:?}: the message names the applied bounds: {}",
                 diags[0].message,
             );
@@ -1342,6 +1425,27 @@ mod tests {
             let codes = codes(&diags);
             assert!(codes.contains(&"RIDL-101"), "{kind:?}: {codes:?}");
             assert!(codes.contains(&"RIDL-112"), "{kind:?}: {codes:?}");
+            // The maximum was never written, so the message names the default
+            // as its source and asks for an explicit maximum.
+            let message = &diags
+                .iter()
+                .find(|diag| diag.code.as_str() == "RIDL-101")
+                .expect("RIDL-101")
+                .message;
+            let (noun, key) = match kind {
+                InteractionKind::Command => ("`command`", "`[defaults].command_timing`"),
+                _ => ("`query`", "`[defaults].query_timing`"),
+            };
+            assert!(
+                message.contains("`2s`") && message.contains("default response bound `1s`"),
+                "{kind:?}: {message}",
+            );
+            assert!(
+                message.contains(noun) && message.contains(key),
+                "{kind:?}: {message}"
+            );
+            assert!(message.contains("explicit maximum"), "{kind:?}: {message}");
+            assert!(!message.contains("staleness"), "{kind:?}: {message}");
             let spec = spec.expect("resolved");
             assert_eq!(spec.min_us, value_of("2s"), "{kind:?}");
             assert_eq!(spec.max_us, value_of("1s"), "{kind:?}");
@@ -1360,6 +1464,17 @@ mod tests {
             &default,
         );
         assert_eq!(codes(&diags), vec!["RIDL-108", "RIDL-112"]);
+        let message = &diags[0].message;
+        assert!(
+            message.contains("default response bound `1s`"),
+            "the message names the default as the source of the maximum: {message}",
+        );
+        assert!(
+            message.contains("`command`") && message.contains("`[defaults].command_timing`"),
+            "{message}"
+        );
+        assert!(message.contains("explicit maximum"), "{message}");
+        assert!(!message.contains("staleness"), "{message}");
         let spec = spec.expect("resolved");
         assert_eq!(spec.min_us, value_of("1s"));
         assert_eq!(spec.max_us, value_of("1s"));
