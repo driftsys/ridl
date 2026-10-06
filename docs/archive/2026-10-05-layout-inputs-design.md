@@ -288,11 +288,14 @@ matching kind exists draws nothing.
 catalogue (rsdl §16: 709 and 805, 806 are unused, reserved by nothing, retired
 by nothing):
 
-| Code     | Severity | Lint name           | When                                                                                     |
-| -------- | -------- | ------------------- | ---------------------------------------------------------------------------------------- |
-| RSDL-709 | error    | —                   | a `depth`, `slots` or `budget` value is not an integer within its range                  |
-| RSDL-805 | warning  | `depth-below-bound` | a declared `depth` is below `ceil(max / min)` for an event a covered link consumes       |
-| RSDL-806 | warning  | `depth-underivable` | an event with an explicit half-open range is consumed by a link with no declared `depth` |
+| Code     | Severity | Lint name           | When                                                                                                                                                                                                                         |
+| -------- | -------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RSDL-709 | error    | —                   | a `depth`, `slots` or `budget` value is not an integer within its range                                                                                                                                                      |
+| RSDL-805 | warning  | `depth-below-bound` | a declared `depth` is below `ceil(max / min)` for an event a covered link consumes                                                                                                                                           |
+| RSDL-806 | warning  | `depth-underivable` | an event with an explicit half-open range is consumed by a link with no declared `depth` **Superseded by DD-42** (§8): the code fires for every contract bound that cannot be derived, not only an explicit half-open range. |
+
+The RSDL-806 row above keeps its original wording; DD-42 in §8 widens its
+condition and is the as-built rule.
 
 The two warnings are lints under ADR-0024: a catalogue row with a name, a row in
 `docs/book/lints.md`, default level `warn`.

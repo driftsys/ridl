@@ -207,7 +207,7 @@ nothing.
     file of the runtime descriptors design stays unbuilt: it would be a second
     emitter over the same message, built when a runtime that reads one exists
     (`docs/design/catalog-descriptor.md`, "Not built"). The design note is
-    `2026-10-05-layout-inputs-design.md`, archived when its lane closes.
+    `docs/archive/2026-10-05-layout-inputs-design.md`.
 
 ## Consequences
 

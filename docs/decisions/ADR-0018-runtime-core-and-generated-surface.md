@@ -339,7 +339,7 @@ be generated, and in what order", which is what this record answers.
     infeasibility is not evaluated either, because it needs the same service
     period and jitter, and reopens with them (rsdl §12). This rule is evaluated
     again when rsdl carries a service period, where RSDL-801 reopens. The design
-    note is `2026-10-05-layout-inputs-design.md` (D-5 and D-6).
+    note is `docs/archive/2026-10-05-layout-inputs-design.md` (D-5 and D-6).
 
 13. **A bridge keeps a domain-mediated reference path with generated streaming
     transcoders beside it.** Decode to the validated domain type and re-encode
