@@ -130,7 +130,6 @@ MANI-010 is itself a lint, so the table can set its level.
 | `no-init-value` | TYPL-115 | info | type has no derivable init value and no declared `= value` |
 | `duplicate-reserved` | TYPL-211 | warn | duplicate `reserved` entry |
 | `inconsistent-unit` | TYPL-222 | info | one field name used with different units |
-| `inconsistent-abbreviation` | TYPL-223 | info | inconsistent identifier abbreviation |
 | `duplicate-shape` | TYPL-224 | info | duplicate declaration shape |
 | `broken-doc-link` | TYPL-401 | warn | doc link or `@see` target that does not resolve |
 | `detached-doc-comment` | TYPL-404 | warn | blank line between a doc comment and its carrier |
@@ -152,7 +151,6 @@ MANI-010 is itself a lint, so the table can set its level.
 | `redeclared-envelope-metadata` | RIDL-406 | info | payload struct re-declares envelope metadata |
 | `ordinal-changed` | RIDL-407 | warn | interaction, struct field, or union arm ordinal changed against the published baseline |
 | `low-cohesion-interface` | RIDL-414 | info | interface members form disconnected type-sharing groups |
-| `package-fan-out` | RIDL-415 | info | package depends on too many workspace packages |
 | `redundant-provider-set` | RSDL-409 | warn | a `requires` resolves to a redundant provider set |
 | `unclaimed-backend-key` | RSDL-804 | warn | a backend key whose namespace no configured backend claims |
 | `depth-below-bound` | RSDL-805 | warn | a declared `depth` is below `ceil(max / min)` for an event a covered link consumes |
@@ -163,3 +161,35 @@ MANI-010 is itself a lint, so the table can set its level.
 Setting `ordinal-changed` to `allow` makes `ridl check --baseline` report
 nothing for ordinal changes, so the baseline desk check no longer warns about
 them.
+
+## How the design lints' levels were set
+
+`inconsistent-unit`, `duplicate-shape` and `low-cohesion-interface` are
+workspace design lints: each reports a property of the whole checked workspace
+rather than of one declaration. Their default levels and thresholds were not
+chosen by hand. Each check was run over the evaluation corpus under `evals/`,
+three workspaces translated from public interface definitions, and every
+finding was labelled, blind, by two labellers, one of them a rule-based script,
+with the maintainer deciding every disagreement. A check's precision is the
+share of its findings that the labels accept:
+
+- at least 80 %: the lint defaults to `warn`;
+- from 50 % up to 80 %: the lint defaults to `info`;
+- below 50 %: the check does not ship as a lint.
+
+A check with fewer than ten findings on the corpus defaults to `info` at most,
+because the sample is too small for `warn`. A threshold, such as the number of
+groups `low-cohesion-interface` reports from, is the least strict value whose
+precision still meets the level; it is a constant beside the check and is not
+set in `[lints]`. Two candidate checks, one on inconsistent abbreviations and
+one on a package's number of dependencies, fell below the floor and are not
+lints; the package coupling numbers stay available through the MCP tool
+`ridl_metrics`.
+
+The derivation tables, with the precision at every candidate threshold and the
+recall against the corpus review rubrics, are in
+[`evals/calibration/summary.md`](https://github.com/driftsys/ridl/blob/main/evals/calibration/summary.md);
+the method, the outcome and the recall mapping are recorded in
+[`evals/calibration/notes.md`](https://github.com/driftsys/ridl/blob/main/evals/calibration/notes.md).
+A test pins the number of findings each design lint reports on each corpus
+workspace, so a change that moves a count is visible in review.

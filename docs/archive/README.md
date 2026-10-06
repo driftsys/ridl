@@ -417,6 +417,28 @@ provenance. Nothing here is normative — the current references live in
   their own; the decisions taken while they were executed are in the pull
   request bodies and in decisions 7 and 8 of
   [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md).
+- **2026-10-04-design-lints-design.md** — the design for piece 1b of the devex
+  and agent tracks brief (driftsys/ridl#694): five candidate workspace design
+  checks, a corpus of public interface sets ported into RIDL under `evals/`, the
+  precision rule that sets each check's default level and threshold from
+  labelled corpus findings, `ridl_metrics`, and the eval task format. Its §2
+  holds decisions D-1 to D-9, its §4 the five candidate rules, its §7 the
+  calibration procedure and its §10 the alternatives. Archived verbatim apart
+  from its link to the brief, which points at `../wip/`. The gardened records
+  are [ADR-0027](../decisions/ADR-0027-design-lints-calibrated-on-a-corpus.md),
+  whose status maps the design's decisions to its own, and
+  [the design lints design record](../design/design-lints.md). Its §4 still
+  describes the two candidates that did not ship and the search-start
+  thresholds; read it for the reasoning, not as a description of the as-built
+  checks.
+- **2026-10-04-design-lints-plan.md** — the fourteen-task plan that implemented
+  the design above in #707, #712 and the calibration branch, with the 109
+  rulings taken while it was executed. Archived verbatim. It has no gardened
+  record of its own; the rulings that changed the design (the workspace-only
+  graph, the language server call, the recall join, the summary and notes split,
+  the count guard, the removal of the two dropped checks, and Sebastien's
+  approvals of the task set, the adjudication and the summary) are in
+  [ADR-0027](../decisions/ADR-0027-design-lints-calibrated-on-a-corpus.md).
 - **2026-09-13-runtime-descriptors-design.md** — the design for the two files an
   engine reads: a catalog descriptor per package and a system descriptor per
   deployment, decisions D-1 to D-10. Archived verbatim apart from relative links

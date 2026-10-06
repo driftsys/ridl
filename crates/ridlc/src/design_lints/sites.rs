@@ -14,20 +14,7 @@ pub(crate) struct SiteIndex {
     fields: BTreeMap<(String, String, String), Span>,
     members: BTreeMap<(String, String, String), Span>,
     params: BTreeMap<(String, String, String, String), Span>,
-    variants: BTreeMap<(String, String, String), Span>,
-    other_children: BTreeMap<(String, String, String), Span>,
-    tuple_fields: Vec<IdSite>,
     declarations: BTreeMap<(String, String), Span>,
-    packages: BTreeMap<String, Span>,
-}
-
-/// One identifier token with its qualified identity and source location.
-#[derive(Clone)]
-pub(crate) struct IdSite {
-    pub package: String,
-    pub full_name: String,
-    pub name: String,
-    pub span: Span,
 }
 
 impl SiteIndex {
@@ -56,23 +43,14 @@ impl SiteIndex {
                 );
             }
             let mut files = package.files(db).clone();
+            // Fields and members keep the first site seen, so a fixed path order
+            // makes the kept site deterministic.
             files.sort_by(|a, b| a.path(db).cmp(b.path(db)));
-            for (position, input) in files.iter().enumerate() {
+            for input in &files {
                 let file = sources.file_id(input.path(db), input.text(db));
                 let Some(ast) = ast::SourceFile::cast(parse_file(db, *input).syntax()) else {
                     continue;
                 };
-                if position == 0
-                    && let Some(decl) = ast.package_decl()
-                {
-                    index.packages.insert(
-                        pkg.clone(),
-                        Span {
-                            file,
-                            range: decl.syntax().text_range(),
-                        },
-                    );
-                }
                 for def in ast.definitions() {
                     let Some(name) = def.name() else { continue };
                     let name_text = name.syntax().text().to_string();
@@ -84,70 +62,25 @@ impl SiteIndex {
                     {
                         continue;
                     }
-                    // Keep enum variants separate for the existing variant lookup.
-                    // The shared identifier inventory also includes bits and arms.
-                    let children: Vec<_> = match &def {
-                        ast::Definition::EnumSet(def) => {
-                            def.bits().filter_map(|bit| bit.name()).collect()
-                        }
-                        ast::Definition::Union(def) => {
-                            def.arms().filter_map(|arm| arm.name()).collect()
-                        }
-                        _ => Vec::new(),
-                    };
-                    for name in children {
-                        index
-                            .other_children
-                            .entry((
-                                pkg.clone(),
-                                name_text.clone(),
-                                name.syntax().text().to_string(),
-                            ))
-                            .or_insert(Span {
-                                file,
-                                range: name.syntax().text_range(),
-                            });
-                    }
-                    index.index_tuple_fields(pkg, &name_text, def.syntax(), file);
-                    match def {
-                        ast::Definition::Struct(def) => {
-                            for field in def.members().filter_map(|member| match member {
-                                ast::StructMember::Field(field) => Some(field),
-                                _ => None,
-                            }) {
-                                if let Some(name) = field.name() {
-                                    index
-                                        .fields
-                                        .entry((
-                                            pkg.clone(),
-                                            name_text.clone(),
-                                            name.syntax().text().to_string(),
-                                        ))
-                                        .or_insert(Span {
-                                            file,
-                                            range: name.syntax().text_range(),
-                                        });
-                                }
+                    if let ast::Definition::Struct(def) = def {
+                        for field in def.members().filter_map(|member| match member {
+                            ast::StructMember::Field(field) => Some(field),
+                            _ => None,
+                        }) {
+                            if let Some(name) = field.name() {
+                                index
+                                    .fields
+                                    .entry((
+                                        pkg.clone(),
+                                        name_text.clone(),
+                                        name.syntax().text().to_string(),
+                                    ))
+                                    .or_insert(Span {
+                                        file,
+                                        range: name.syntax().text_range(),
+                                    });
                             }
                         }
-                        ast::Definition::Enum(def) => {
-                            for variant in def.values() {
-                                if let Some(name) = variant.name() {
-                                    index
-                                        .variants
-                                        .entry((
-                                            pkg.clone(),
-                                            name_text.clone(),
-                                            name.syntax().text().to_string(),
-                                        ))
-                                        .or_insert(Span {
-                                            file,
-                                            range: name.syntax().text_range(),
-                                        });
-                                }
-                            }
-                        }
-                        _ => {}
                     }
                 }
                 for shape in ast.shapes() {
@@ -172,12 +105,6 @@ impl SiteIndex {
                                 file,
                                 range: member_name.syntax().text_range(),
                             });
-                        index.index_tuple_fields(
-                            pkg,
-                            &format!("{name}.{member_text}"),
-                            member.syntax(),
-                            file,
-                        );
                         let params = match member {
                             ast::InterfaceMember::Command(def) => def.params(),
                             ast::InterfaceMember::Query(def) => def.params(),
@@ -208,87 +135,6 @@ impl SiteIndex {
         index
     }
 
-    /// Walk nested type nodes, including tuples inside containers and returns.
-    /// Keep each occurrence: equal field names in different tuples are sites.
-    fn index_tuple_fields(
-        &mut self,
-        pkg: &str,
-        owner: &str,
-        root: &ridl_syntax::SyntaxNode,
-        file: ridl_core::diag::FileId,
-    ) {
-        for field in root.descendants().filter_map(ast::TupleField::cast) {
-            let Some(name) = field.name() else { continue };
-            let mut parents = field
-                .syntax()
-                .ancestors()
-                .skip(1)
-                .take_while(|node| node != root)
-                .filter_map(|node| {
-                    if let Some(field) = ast::TupleField::cast(node.clone()) {
-                        field.name()
-                    } else if let Some(field) = ast::FieldDef::cast(node.clone()) {
-                        field.name()
-                    } else if let Some(arm) = ast::UnionArm::cast(node) {
-                        arm.name()
-                    } else {
-                        None
-                    }
-                })
-                .map(|name| name.syntax().text().to_string())
-                .collect::<Vec<_>>();
-            parents.reverse();
-            parents.insert(0, owner.into());
-            let name_text = name.syntax().text().to_string();
-            self.tuple_fields.push(IdSite {
-                package: pkg.into(),
-                full_name: format!("{pkg}.{}.{}", parents.join("."), name_text),
-                name: name_text,
-                span: Span {
-                    file,
-                    range: name.syntax().text_range(),
-                },
-            });
-        }
-    }
-
-    /// Enumerates identifier tokens in qualified-name order. Qualifiers identify
-    /// a site, but are not part of the identifier's words.
-    pub fn identifiers(&self) -> Vec<IdSite> {
-        let mut sites = Vec::new();
-        let mut add = |pkg: &str, owner: &str, name: &str, span: Span| {
-            let full_name = if owner.is_empty() {
-                format!("{pkg}.{name}")
-            } else {
-                format!("{pkg}.{owner}.{name}")
-            };
-            sites.push(IdSite {
-                package: pkg.into(),
-                full_name,
-                name: name.into(),
-                span,
-            });
-        };
-        for ((pkg, name), span) in &self.declarations {
-            add(pkg, "", name, *span);
-        }
-        for ((pkg, owner, name), span) in self
-            .fields
-            .iter()
-            .chain(&self.variants)
-            .chain(&self.members)
-            .chain(&self.other_children)
-        {
-            add(pkg, owner, name, *span);
-        }
-        for ((pkg, iface, member, name), span) in &self.params {
-            add(pkg, &format!("{iface}.{member}"), name, *span);
-        }
-        sites.extend(self.tuple_fields.iter().cloned());
-        sites.sort_by(|a, b| (&a.package, &a.full_name).cmp(&(&b.package, &b.full_name)));
-        sites
-    }
-
     pub fn field(&self, pkg: &str, name: &str, field: &str) -> Option<Span> {
         self.fields
             .get(&(pkg.into(), name.into(), field.into()))
@@ -307,22 +153,8 @@ impl SiteIndex {
             .copied()
     }
 
-    // Used by the subsequent abbreviation and shape checks.
-    #[allow(dead_code)]
-    pub fn variant(&self, pkg: &str, name: &str, variant: &str) -> Option<Span> {
-        self.variants
-            .get(&(pkg.into(), name.into(), variant.into()))
-            .copied()
-    }
-
     pub fn decl(&self, pkg: &str, name: &str) -> Option<Span> {
         self.declarations.get(&(pkg.into(), name.into())).copied()
-    }
-
-    // Used by the subsequent package fan-out check.
-    #[allow(dead_code)]
-    pub fn package_line(&self, pkg: &str) -> Option<Span> {
-        self.packages.get(pkg).copied()
     }
 }
 
@@ -333,15 +165,14 @@ mod tests {
     use ridl_core::package::{PackageOrigin, Workspace};
 
     #[test]
-    fn index_uses_resolution_winners_and_first_path_package_line() {
+    fn index_uses_resolution_winners() {
         let mut db = RidlDatabase::default();
         let std = ridl_core::std_package(&mut db);
-        let later =
-            "package a\nstruct Entry { value: boolean }\nenum Mode { First = 0, Second = 1 }\n";
+        let later = "package a\nstruct Entry { value: boolean }\n";
         let first = "// First path\npackage a\nstruct Entry { losing: boolean }\n";
         let z = InputFile::new(&db, "z.ridl".to_string(), later.to_string());
         let a = InputFile::new(&db, "a.ridl".to_string(), first.to_string());
-        // Resolution follows input order; the package location follows paths.
+        // Resolution follows input order, so the later file wins `Entry`.
         let package = Package::new(
             &db,
             "a".to_string(),
@@ -360,18 +191,11 @@ mod tests {
             &sources.text(span.file).unwrap()
                 [usize::from(span.range.start())..usize::from(span.range.end())]
         };
-        let package_line = index.package_line("a").unwrap();
-        assert_eq!(sources.path(package_line.file), Some("a.ridl"));
-        assert_eq!(text(package_line), "package a");
         let declaration = index.decl("a", "Entry").unwrap();
         assert_eq!(sources.path(declaration.file), Some("z.ridl"));
         assert_eq!(text(declaration), "Entry");
         assert_eq!(text(index.field("a", "Entry", "value").unwrap()), "value");
         assert!(index.field("a", "Entry", "losing").is_none());
-        let variant = index.variant("a", "Mode", "Second").unwrap();
-        assert_eq!(sources.path(variant.file), Some("z.ridl"));
-        assert_eq!(text(variant), "Second");
-        assert!(index.variant("a", "Other", "Second").is_none());
         assert!(index.decl("a", "Duration").is_none());
     }
 }

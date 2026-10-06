@@ -1877,60 +1877,10 @@ fn cruise_package() -> v2::Package {
             diagnostic.code != ridl_core::lint::lint_by_name("missing-docs").unwrap().code
         })
         .collect::<Vec<_>>();
-    let declaration_name_range = |declaration: &str, name: &str| {
-        assert_eq!(
-            text.match_indices(declaration).count(),
-            1,
-            "the fixture declaration must be unique: {declaration}"
-        );
-        assert_eq!(
-            declaration.match_indices(name).count(),
-            1,
-            "the declaration name must be unique: {name}"
-        );
-        let start = text.find(declaration).unwrap() + declaration.find(name).unwrap();
-        let range = start..start + name.len();
-        assert_eq!(&text[range.clone()], name);
-        range
-    };
-    let expected = [
-        (
-            ridl_core::diag::DiagCode::TYPL_223,
-            "inconsistent-abbreviation",
-            "`set` in `setTarget` abbreviates `setpoint`, used in `Setpoint`",
-            declaration_name_range(
-                "command setTarget(desired: Speed) @[10ms..50ms]",
-                "setTarget",
-            ),
-            "setTarget",
-        ),
-        (
-            ridl_core::diag::DiagCode::RIDL_414,
-            "low-cohesion-interface",
-            "interface `CruiseControl` splits into 3 groups of members that share no type: [currentSpeed, setTarget], [mode], [warning]",
-            declaration_name_range("interface CruiseControl {", "CruiseControl"),
-            "CruiseControl",
-        ),
-    ];
-    assert_eq!(diagnostics.len(), expected.len(), "{:?}", diagnostics);
-    for (diagnostic, (code, lint, message, range, identifier)) in diagnostics.iter().zip(expected) {
-        assert_eq!(diagnostic.code, code);
-        assert_eq!(diagnostic.severity, ridl_core::diag::Severity::Info);
-        assert_eq!(ridl_core::lint::lint_by_name(lint).unwrap().code, code);
-        assert_eq!(diagnostic.message, message);
-        assert_eq!(usize::from(diagnostic.primary.range.start()), range.start);
-        assert_eq!(usize::from(diagnostic.primary.range.end()), range.end);
-        assert_eq!(
-            output.sources.path(diagnostic.primary.file),
-            Some(path.to_str().unwrap())
-        );
-        assert_eq!(
-            &output.sources.text(diagnostic.primary.file).unwrap()[range],
-            identifier
-        );
-        assert!(diagnostic.labels.is_empty());
-        assert!(diagnostic.fixits.is_empty());
-    }
+    assert!(
+        diagnostics.is_empty(),
+        "the fixture compiles with no design diagnostic, got: {diagnostics:?}"
+    );
     output.package
 }
 

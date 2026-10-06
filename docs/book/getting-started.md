@@ -217,11 +217,9 @@ trust the compiler here: the constraint is what the check is about, and the
 reference's own Appendix B writes `frame : bytes [8]`. Named types remain the
 recommendation everywhere, and they are mandatory on a boundary.
 
-Add a second file, `veh/common/scalars.ridl`. This vocabulary draws
-TYPL-223 (`inconsistent-abbreviation`) because `count` in `DoorCount`
-abbreviates `counter` in `Counter`. The examples retain both forms to show the diagnostic.
+Add a second file, `veh/common/scalars.ridl`.
 
-```ridl,allow=TYPL-223
+```ridl
 package veh.common
 
 // physical unit types — UCUM units
@@ -326,12 +324,7 @@ demands on a binding (see the note above — no binding exists yet):
   late-joiner delivery. An occurrence that happened before you subscribed did
   not happen to you.
 
-This example draws TYPL-223 (`inconsistent-abbreviation`) for `engineTemp`
-and `Temperature`. It also draws RIDL-414 (`low-cohesion-interface`): the speed,
-temperature and fuel members form separate groups because they share no named
-type. The example retains those groups to compare signal timing forms.
-
-```ridl,allow=TYPL-223,allow=RIDL-414
+```ridl
 package veh.cluster
 import veh.common.Speed
 import veh.common.Temperature
@@ -368,7 +361,7 @@ bound follows from the declaring keyword — specified, not implemented:
 Events take a range only. Strict periodic `@Xms` on an event is a `RIDL-103`
 error, because an isochronous rate is meaningless for occurrences:
 
-```ridl,allow=TYPL-223
+```ridl
 package veh.cluster
 import veh.common.DoorIndex
 
@@ -406,7 +399,7 @@ explicitly.
 
 An `enum` is an integer-backed set of discrete values, for choosing one:
 
-```ridl,allow=TYPL-223
+```ridl
 package veh.common
 
 enum GearPosition {
@@ -430,7 +423,7 @@ above are the same declaration. There are no semicolons in the language.
 
 An `enumset` is a named bitfield, for several flags at once:
 
-```ridl,allow=TYPL-223
+```ridl
 package veh.common
 
 enumset AccessFlags {
@@ -443,7 +436,7 @@ enumset AccessFlags {
 When you need both the single value and the set, declare the `enum` and derive
 the `enumset` from it:
 
-```ridl,allow=TYPL-223
+```ridl
 package veh.common
 
 enum Warning {
@@ -459,7 +452,7 @@ enumset WarningFlags: Warning
 Both names are then usable on a boundary — the enum where one value is meant,
 the enumset where several are:
 
-```ridl,allow=RIDL-414
+```ridl
 package veh.cluster
 import veh.common.Warning
 import veh.common.WarningFlags
@@ -475,7 +468,7 @@ interface Warnings {
 A `fixed` is a value set at build, factory, or over-the-air update, and
 immutable for the lifetime of the running software instance:
 
-```ridl,allow=TYPL-223,allow=RIDL-414
+```ridl
 package veh.cluster
 import veh.common.DoorCount
 import veh.common.Enabled
@@ -508,7 +501,7 @@ outcome, the outcome is observed as state, or the interaction is a query.
 A **query** is request/response. The reply is mandatory, and a query returning
 `()` is a `RIDL-105` error.
 
-```ridl,allow=RIDL-414
+```ridl
 package veh.cluster
 import veh.common.Speed
 import veh.common.GearPosition
@@ -583,7 +576,7 @@ ridl has no `throws`, no exceptions, and no status codes. A query that can fail
 as part of its domain semantics says so in its return type, using vocabulary
 declared in typl:
 
-```ridl,allow=TYPL-223
+```ridl
 package veh.common
 
 /// Failure vocabulary — the `error` modifier marks a shape as a failure shape.
@@ -636,7 +629,7 @@ author has no knowledge to express about them.
 
 Collections are finite and always explicitly bounded:
 
-```ridl,allow=TYPL-223
+```ridl
 package veh.common
 
 struct FaultCode {
@@ -656,7 +649,7 @@ interaction position — on a command or query parameter, or a query return. Its
 element type is a named type describing one logical element; framing and
 backpressure are transport concerns.
 
-```ridl,allow=TYPL-115,allow=TYPL-223
+```ridl,allow=TYPL-115
 package veh.common
 
 type LogLine: string [1..1024] = "-"
@@ -682,7 +675,7 @@ or a `match` pattern does. The note is harmless here — a stream element is nev
 a signal payload, so nothing ever asks it for an init — and the block's fence
 carries `allow=TYPL-115` to say so.
 
-```ridl,allow=RIDL-414
+```ridl
 package veh.cluster
 import veh.common.LogLine
 import veh.common.FwBlock
@@ -852,7 +845,7 @@ on an error. Interactions carry implicit ordinals by declaration order, so
 appending is compatible and inserting or reordering is not. Retire an
 interaction with a `reserved` tombstone rather than deleting it:
 
-```ridl,allow=TYPL-223,allow=RIDL-414
+```ridl
 package veh.cluster
 import veh.common.Speed
 
@@ -882,7 +875,7 @@ resolves such an address today, so read it as the naming scheme a deployment
 will use. Service names are unique across the system and always public, and
 that uniqueness the compiler does enforce (`RIDL-140`).
 
-```ridl,allow=TYPL-223
+```ridl
 package veh.cluster
 import veh.common.Temperature
 
@@ -962,7 +955,7 @@ air. Note that every capability flag names a type rather than writing
 `boolean`, and that `ModelYear` and `Speed` are declared types, not inline
 ranges.
 
-```ridl,allow=RIDL-414
+```ridl
 package veh.identity
 import veh.common.Speed
 import veh.common.Vin
@@ -1019,9 +1012,12 @@ Two details worth reading closely. The engine's scalar speed is published as
 its own `signal engineRpm`, because a `require` clause may read a signal but
 not reach into a struct-typed one. And the engine state field is named
 `engineState`: `state` is a reserved word family-wide, so it cannot be an
-identifier.
+identifier. This annex also draws RIDL-414 (`low-cohesion-interface`):
+`PowertrainManager` keeps every powertrain fact behind one interface, and its
+members fall into seven groups that share no named type. The annex keeps that
+grouping to show one interface per subsystem.
 
-```ridl,allow=RIDL-406,allow=TYPL-223,allow=TYPL-224,allow=RIDL-414
+```ridl,allow=RIDL-406,allow=TYPL-224,allow=RIDL-414
 package veh.powertrain
 
 type RPM: /min [0.0..8000.0 step 10.0]
@@ -1122,9 +1118,11 @@ interface PowertrainManager {
 A signal payload is a single named type, so a collection of door states is
 published through a struct that wraps the array rather than as a bare array.
 Command parameters name types too: `DoorIndex`, not `integer [0..7]`. And the
-lock parameter is named `lock`, because `state` is reserved.
+lock parameter is named `lock`, because `state` is reserved. `BodyControl`
+draws RIDL-414 (`low-cohesion-interface`): its members fall into ten groups that
+share no named type, which the annex keeps to show one interface per subsystem.
 
-```ridl,allow=RIDL-406,allow=TYPL-223,allow=RIDL-414
+```ridl,allow=RIDL-406,allow=RIDL-414
 package veh.body
 import veh.common.Temperature
 
@@ -1232,7 +1230,11 @@ interface BodyControl {
 
 ## Annex 4 — Driver monitoring
 
-```ridl,allow=RIDL-406,allow=TYPL-223,allow=RIDL-414
+`DriverMonitoring` draws RIDL-414 (`low-cohesion-interface`): its members fall
+into seven groups that share no named type, which the annex keeps to show one
+interface per subsystem.
+
+```ridl,allow=RIDL-406,allow=RIDL-414
 package veh.dms
 
 type Ratio: % [0.0..100.0 step 0.1]

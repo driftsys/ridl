@@ -897,6 +897,24 @@ now loads its workspace in every entry point. The decisions are
 [the documenting chapter of the book](book/documenting.md). How generated code
 renders the docs is spec 2b.
 
+**Piece 1b of the devex and agent tracks, design lints and metrics, landed on
+2026-10-06** (design and plan in driftsys/ridl#694; corpus and eval seed in
+#707; checks and tool in #712; labelling and calibration in #738). Three subsets
+of public interface definitions — ROS 2, MAVLink and COVESA VSS — are ported
+into RIDL under `evals/`, with ten eval tasks seeded for piece 1c. Five
+candidate checks over the whole workspace were run on that corpus, and their 820
+findings were labelled blind by two labellers and adjudicated by Sebastien.
+Three ship as lints at `info`: `inconsistent-unit` (TYPL-222), `duplicate-shape`
+(TYPL-224) and `low-cohesion-interface` (RIDL-414); `inconsistent-abbreviation`
+and `package-fan-out` fell below the precision floor and did not ship. The MCP
+tool `ridl_metrics` reports package coupling and interface cohesion with no
+threshold, and a test pins the findings per lint per corpus workspace. The
+decisions are
+[ADR-0027](decisions/ADR-0027-design-lints-calibrated-on-a-corpus.md); the
+as-built description is [the design record](design/design-lints.md), and the
+user-facing description is
+[the lints page of the book](book/lints.md#how-the-design-lints-levels-were-set).
+
 ---
 
 # Step 2 — TypeScript and the plugin system

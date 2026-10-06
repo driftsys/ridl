@@ -43,8 +43,12 @@ subsequent runs.
 The five output files are `<out-dir>/<lint-name>.json`. Each is an array of
 records with `id`, `workspace`, `location`, `message`, and a typed `metric` for
 thresholded checks. Unit and abbreviation records omit `metric`. Empty arrays
-are valid. Diagnostic errors or malformed metadata fail the command before any
-finding array is written.
+are valid. Two of the five candidates, `inconsistent-abbreviation` and
+`package-fan-out`, did not ship as lints after the calibration
+(`evals/calibration/summary.md`); their `[lints]` entries draw MANI-010 and
+their output arrays are empty on a current build, while their committed label
+files keep the findings that were labelled. Diagnostic errors or malformed
+metadata fail the command before any finding array is written.
 
 IDs have the form
 `<lint>:<workspace>:<relative-source-path>:<start-byte>-<end-byte>:<occurrence>`.
@@ -56,10 +60,12 @@ contain message text or temporary paths. `location` is the relative source path
 and one-based line number; temporary directory prefixes are removed from
 messages that cite another source site.
 
-The command uses the checks' existing search-start constants. Calibration does
-not change production thresholds or levels. Copy every record unchanged into the
-labelling and merge stages, retaining both shape kinds and both cohesion
-coordinates.
+The command runs the checks at the constants compiled into them. For cohesion
+that minimum is 7 groups, not the search start of 2, so a dump at the shipped
+constants does not reproduce the labelled findings with 2 to 6 groups
+(`docs/design/design-lints.md` describes this). Calibration does not change
+production thresholds or levels. Copy every record unchanged into the labelling
+and merge stages, retaining both shape kinds and both cohesion coordinates.
 
 ## Derive levels and thresholds
 

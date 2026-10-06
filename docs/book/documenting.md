@@ -25,7 +25,7 @@ is no `ridl doc` command that writes a documentation site.
 A doc comment is written on the lines directly above the item it documents.
 Here is a small package with every item documented:
 
-```ridl,allow=RIDL-414
+```ridl
 package docs.cruise
 
 /// A vehicle speed over ground, as the brake controller computes it from the
@@ -74,11 +74,6 @@ interface CruiseControl {
   ) @[..100ms]
 }
 ```
-
-The `low-cohesion-interface` lint reports two type-sharing groups here:
-`status` uses `CruiseState`, and `setLever` uses `LeverCmd`. This example
-keeps both members together to show documentation on an interface and its
-interactions.
 
 The rest of this chapter takes the parts of this example one at a time.
 
@@ -350,7 +345,7 @@ type FanStep: integer [0..7]
 
 A doc comment at the end of a body has no item after it:
 
-```ridl,allow=TYPL-407,allow=TYPL-223
+```ridl,allow=TYPL-407
 package docs.misplaced
 
 /// The wiper speed.
@@ -364,10 +359,6 @@ enum WiperSpeed {
   /// A fourth speed is planned.
 }
 ```
-
-The `inconsistent-abbreviation` lint also reports `OFF` here: `off` is a strict
-prefix of `offroad` in `OFFROAD` and `offset` in other book examples. These
-names are retained in this documentation example.
 
 ### `unknown-doc-tag` and `malformed-doc-tag`
 

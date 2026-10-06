@@ -1,0 +1,23 @@
+# Labels for `package-fan-out`: Claude (`claude -p --model fable`) and Sol (`codex exec -m gpt-6.1-sol`), labelled blind.
+# `final` is the agreed label where the two labels agree; where they disagree, it is the label Sebastien set at adjudication (2026-10-06). Every finding has a `final`.
+# Agreement sample seed: 20261005.
+# Sample algorithm: rank each agreed finding by SHA-256 of the UTF-8 string "20261005:package-fan-out:<finding-id>" (lowercase hex, ascending); take the first 10.
+# Agreed findings: 1. Sampled: 1. Shortfall: 9.
+# Sampled: package-fan-out:ros2:nav2_msgs/interactions.ridl:83-99:0
+# Adjudication: done by Sebastien on 2026-10-06.
+# Agreement sample: Sebastien reviewed every sampled agreement above and agreed with each; the agreed `final` labels stand.
+# Adjudicated disagreements: 0 (no disagreements).
+
+[[finding]]
+id = "package-fan-out:ros2:nav2_msgs/interactions.ridl:83-99:0"
+workspace = "ros2"
+location = "nav2_msgs/interactions.ridl:2"
+message = "package `nav2msgs` depends on 4 workspace packages: builtininterfaces, geometrymsgs, navmsgs, stdmsgs"
+claude = "dismiss"
+claude_reason = "Four dependencies on foundational message packages is normal layering for a high-level navigation package, not a design flaw"
+sol = "dismiss"
+sol_reason = "Navigation services legitimately reuse time, geometry, map and standard message types, and four dependencies do not show harmful coupling."
+final = "dismiss"
+[finding.metric]
+kind = "fan-out"
+count = 4

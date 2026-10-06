@@ -28,7 +28,11 @@ on 2026-10-04 with #703; ADR-0026 is their durable record. The layout inputs
 design and plan (`2026-10-05-layout-inputs-{design,plan}.md`) were archived on
 2026-10-06, once E17.5 landed, and gardened into
 [`../design/codegen-plugins.md`](../design/codegen-plugins.md) and
-[ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md).
+[ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md). The piece 1b design
+lints design and plan (`2026-10-04-design-lints-{design,plan}.md`) were archived
+on 2026-10-06, once its calibration landed; ADR-0027 and
+[`../design/design-lints.md`](../design/design-lints.md) are their durable
+records.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
@@ -209,12 +213,6 @@ design and plan (`2026-10-05-layout-inputs-{design,plan}.md`) were archived on
   documentation (doc lints, language server, rules in generated facade docs),
   split into four specs over a shared lint foundation. Scope only; each spec
   starts its own design session from it.
-- **2026-10-04-design-lints-design.md** and **2026-10-04-design-lints-plan.md**
-  — the design and the fourteen-task plan of piece 1b: five candidate design
-  checks, a corpus of public interface sets ported into RIDL under `evals/`, the
-  precision rule that sets each check's default level and threshold from
-  labelled corpus findings, the `ridl_metrics` tool, and the format of the eval
-  tasks seeded for piece 1c.
 
 ridl-boundary-model-review.md, superseded by ADR-0012, is archived too — see
 [`../archive/README.md`](../archive/README.md). So is

@@ -1878,6 +1878,296 @@ execution.
     fresh scoped QUICK review, full verification and CI rerun; no staging,
     commits or reviewer dispatch occurs in this repair.
 
+89. **Ruling: coordinate fresh provider labels before human adjudication**
+    (2026-10-05). Task 13 starts from the merged main revision in the current
+    calibration worktree. Run a fresh actual dump and record source hashes,
+    counts and versions in the plan scratch directory. Use a fresh Claude CLI
+    process with the requested `fable` model, an isolated working directory,
+    safe mode, disabled custom settings and an empty strict MCP configuration.
+    Use a fresh external Sol process with the exact requested model and command;
+    isolate its user configuration and disable project instruction discovery.
+    Give both processes only the findings, corpus sources, the approved question
+    and the metadata-preserving output protocol. Verify their accessed inputs
+    from their process records before accepting labels. Merge only independently
+    produced, complete, validated labels. Set final labels only on agreements;
+    prepare every disagreement and the fixed-seed agreement sample for the
+    required human stop. No recall mapping, derivation, staging, commit or
+    review dispatch is authorized here. If wrong, unintended context could bias
+    labels or invalid metadata could attach them to different findings; input
+    audit, exact metadata comparison and the human packet expose those errors.
+    Stop with an exact checkpoint if either required provider is unavailable.
+
+90. **Ruling: preserve the fresh dump and stop on required provider failures**
+    (2026-10-05). The current main dump completed with five complete arrays and
+    820 findings. A fresh isolated Claude process selected the requested model
+    and zero MCP servers, then failed because its OAuth session expired and
+    could not be refreshed. It made no input tool calls and produced no labels.
+    The exact external Sol invocation also exited before labels with workspace
+    routing discovery failed. Preserve the dump, source hashes, briefs and local
+    process provenance; report the exact blocks without printing private startup
+    or endpoint logs. Stop without retrying, substituting a model, making
+    coordinator judgements or creating merged calibration files. Root must
+    restore the required provider access. Fix the future agreement sample seed
+    at `20261005`; rank each agreed finding by SHA-256 of
+    `<seed>:<check>:<finding-id>`, show the first ten or all available, and
+    record the seed, algorithm, selected IDs and shortfall in TOML comments. No
+    sample or shortfall has been computed while labels are absent. If wrong, the
+    pause delays calibration or a small sample misses shared mistakes; complete
+    input preservation and the required human review allow a controlled
+    continuation.
+
+91. **Ruling: reuse the fresh dump for the second labelling attempt**
+    (2026-10-05). `origin/main` is still `8ef2f28d`, the revision the dump in
+    the Task 13 scratch directory was taken from. The SHA-256 hash and count of
+    each of the five findings files (820 findings) match `provenance.json`, and
+    so do the hashes of the 65 corpus files and the 8 dump and check source
+    files. A new dump would produce the same input, so the second attempt labels
+    the existing files and does not dump again. The first attempt's process
+    records and logs are kept in `task-13/attempt-1/` before the runner writes
+    new ones. If wrong, the labels would describe findings that the current
+    checks no longer produce; the hash comparison against the recorded
+    provenance rules this out for the revision named above.
+
+92. **Ruling: isolate Sol with command flags instead of a separate
+    `CODEX_HOME`** (2026-10-05). The first Sol attempt failed because the runner
+    set `CODEX_HOME` to an empty directory that has no authentication. The
+    second attempt removes every `CODEX_*` variable from the environment, so
+    Codex uses the default `CODEX_HOME` for authentication only, and adds these
+    flags to the required invocation:
+    `--ephemeral --ignore-user-config --ignore-rules -c project_doc_max_bytes=0`.
+    `--ignore-user-config` skips the user `config.toml` (plugins and
+    marketplaces), `--ignore-rules` skips execution-policy rule files,
+    `--ephemeral` stores no session, and `project_doc_max_bytes=0` disables
+    project `AGENTS.md` discovery. The one remaining global context is the
+    four-line `~/.codex/AGENTS.md` about writing in plain English, which holds
+    no task information. No credential is copied, printed or moved. If wrong,
+    unintended global context could reach Sol; the transcript audit of the files
+    Sol read detects input outside the allowed list.
+
+93. **Ruling: accept both complete single-run label sets, including Sol's
+    rule-based labelling** (2026-10-05). Each provider labelled all 820 findings
+    in one run, so no split or resume was needed. The transcript audit shows
+    that Claude read the five findings files and two corpus files, and Sol read
+    the five findings files and 40 corpus files, all on the allowed list.
+    Neither read the other's output. Claude also wrote draft decision files in
+    its own CLI scratch directory before passing them to the output helper; the
+    drafts hold only its own decisions, so they are recorded and not treated as
+    a breach. Sol labelled through a script with rules keyed on token, type and
+    interface name, and dismissed all 780 abbreviation findings with reasons
+    from five templates. That method is Sol's own judgement, so its labels are
+    kept as produced and the method is stated in the adjudication packet. Both
+    files pass exact metadata validation. If wrong, rule-based labels could hide
+    individual true findings behind agreement on dismissal; the human sample of
+    ten agreed abbreviation findings is the check on that.
+
+94. **Ruling: the labels apply at `200185f6`** (2026-10-06). The calibration
+    branch was fast-forwarded to `200185f6`, the current `main`. A new dump at
+    that revision (`task-13/redump-200185f6/findings/`) is byte-identical to the
+    dump that was labelled, for each of the five findings files. The labels and
+    their IDs therefore describe the findings that the checks produce at this
+    head, and no labelling is repeated. If wrong, the labels would describe
+    findings that the current checks no longer produce; the byte comparison of
+    the five files rules this out at `200185f6`.
+
+95. **Ruling: Sebastien's adjudication** (2026-10-06, given in chat). The one
+    `duplicate-shape` disagreement,
+    `duplicate-shape:mavlink:common/messages.typl:25115-25132:0`, has
+    `final = "accept"`. All seven `inconsistent-unit` disagreements have
+    `final = "accept"`. Sebastien agreed with each of the 31 sampled agreements
+    (ten each for `duplicate-shape`, `inconsistent-abbreviation` and
+    `low-cohesion-interface`, and the one available for `package-fan-out`), so
+    every agreed `final` stands. Ruling 93 is kept: Sol's rule-based labels stay
+    as produced. Every one of the 820 findings now has a `final`, and each file
+    header records the adjudication. This is the human decision that Step 5
+    requires; it is not a delegated decision.
+
+96. **Ruling: classify the 31 rubric items by strength and subject**
+    (2026-10-06). A **must** or **should** item that names a property of the
+    workspace design is an `issue` (19 items). A **must** or **should** item
+    that recommends the remedy for exactly one issue of the same task is an
+    `alias` of that issue (4 items: `review-0001:4`, `review-0002:4`,
+    `review-0003:4`, `review-0005:2`; the last is a **must** item). A **must
+    not** item constrains the answer and is `excluded` (7 items).
+    `review-0004:5` recommends remedies for two separate issues, and an alias
+    names exactly one canonical issue, so it is `excluded` with that reason. No
+    item in one task repeats an issue of another task in the same workspace.
+    Items that a review must identify as correct design (`review-0001:1`,
+    `review-0003:3`) are issues, because applicability, not the inventory,
+    decides which check they count for. If wrong, a recall denominator includes
+    or omits an item that a different reading would treat otherwise; each row
+    carries its reason, so a reviewer can move one item without rebuilding the
+    file.
+
+97. **Ruling: keep rubric text as comments in `recall.toml`** (2026-10-06). The
+    inventory reader in `xtask/src/calibrate.rs` rejects unknown fields, so an
+    item cannot carry its rubric text as a field. Each `[[item]]` is preceded by
+    its rubric text copied verbatim as TOML comments, and the rubric files are
+    unchanged. If wrong, the copied comments can drift from a later rubric edit;
+    derive reads the rubric files themselves for the IDs, so such drift does not
+    change any computed value.
+
+98. **Ruling: a check is applicable only to an issue whose subject is the
+    property the check computes** (2026-10-06). Applicable rows: the equal
+    shapes of `review-0001:1`, `review-0003:1` and `review-0005:1` for
+    `duplicate-shape`, and the combined responsibilities of `review-0002:1` for
+    `low-cohesion-interface`. Every other row is inapplicable with a reason. The
+    two missing-unit issues (`review-0001:3`, `review-0005:3`) are inapplicable
+    to `inconsistent-unit`, because that check skips every site whose type has
+    no unit. Protocol ordering and correlation issues (`review-0003:2`,
+    `review-0004:3`, `review-0005:5`) are inapplicable to
+    `low-cohesion-interface`, because groups that share no type do not show
+    missing sequencing. No rubric issue concerns an abbreviation, a unit
+    conflict between names, or a package dependency count, so recall for
+    `inconsistent-abbreviation`, `inconsistent-unit` and `package-fan-out` is
+    `not applicable`. If wrong, those three checks lose a recall measure that a
+    wider reading would give them, and the two checks with applicable issues
+    report recall over a small denominator (3 and 1); recall is ungated (D-9),
+    so no level or threshold depends on it.
+
+99. **Ruling: a matched finding is listed whatever its adjudicated label**
+    (2026-10-06). The design spec section 7.4 says "matching issues measure
+    recall, regardless of the finding's accept/dismiss label", and derive counts
+    every retained finding that a row lists. The coordinator's request described
+    the matched findings as accepted findings; the spec is the approved record,
+    so it is followed. One match depends on this: `review-0001:1` is matched by
+    `duplicate-shape:ros2:geometry_msgs/messages.typl:7423-7430:0` (Vector3
+    against Point), which is dismissed. The other matches are accepted:
+    `review-0003:1` by
+    `duplicate-shape:mavlink:common/messages.typl:25115-25132:0`,
+    `review-0005:1` by the seven `duplicate-shape` AirDistribution findings, and
+    `review-0002:1` by
+    `low-cohesion-interface:ros2:nav2_msgs/interactions.ridl:15158-15178:0`. If
+    wrong, the `duplicate-shape` recall at its least strict threshold is 2/3
+    instead of 3/3; removing one finding ID from one row corrects it.
+
+100. **Ruling: apply the derive output as the shipped set** (2026-10-06). At
+     `798d7811`, `cargo xtask calibrate derive` gives `inconsistent-unit` Info
+     with no threshold (7/7 accepted, fewer than ten findings),
+     `duplicate-shape` Info at `fields >= 2, variants >= 2` (8/16 = 50.00 %,
+     exactly the floor and the least strict candidate that qualifies; no
+     candidate has both 80 % precision and ten retained findings, so none
+     reaches Warning), `low-cohesion-interface` Info at
+     `groups >= 7, min group size >= 1` (1/2 retained accepted, fewer than ten
+     findings), and `inconsistent-abbreviation` (0/780) and `package-fan-out`
+     (0/1) dropped. The output agrees with D-5 and section 11, so it is applied
+     as printed: the catalogue rows of TYPL-222, TYPL-224 and RIDL-414 stay at
+     Info, `LOW_COHESION_MIN_GROUPS` becomes 7, the shape thresholds stay at 2,
+     and TYPL-223 and RIDL-415 lose their rows, `expected` pairs, book rows,
+     reference rows, SARIF rules, coverage index entries, emitters and
+     registrations. Neither number is reused; a comment in the catalogue says
+     so. If wrong, a level would not follow the committed labels; the summary
+     written by `derive --write` is the check.
+
+101. **Ruling: a dropped emitter's private inputs go with it** (2026-10-06).
+     `SiteIndex::identifiers`, `IdSite`, the enumset-bit and union-arm child map
+     and the tuple-field index served only the abbreviation emitter, and
+     `Ctx.package_edges` served only the fan-out emitter. They are removed,
+     because unused code fails `just lint`. `SiteIndex::package_line` stays: its
+     own unit test covers it and the gate does not flag it. The metric
+     computation in `crates/ridlc/src/deps.rs`, `cohesion_groups` and the
+     `ridl_metrics` tool are unchanged. If wrong, a later check would re-add the
+     inventory from the Task 7 commit; the removal is confined to `sites.rs` and
+     `mod.rs`.
+
+102. **Ruling: the fan-out tests that pinned the metric now pin it directly**
+     (2026-10-06). The two tests that observed the workspace edges through
+     RIDL-415 on the real compiler now assert `ridlc::deps::package_edges` and
+     `workspace_package_edges` (`e` depends on `a, b, c, d`; `top` on
+     `a, b, c, d, e`; external targets are excluded). The three tests of the
+     emitter's message, site and boundary, the `fan_out` filter and the LSP
+     fan-out test are removed, because the LSP exposes no metric. The
+     abbreviation tests, including the two tuple-field site tests of ruling 77,
+     are removed with the emitter. If wrong, a regression in the edge
+     computation would go unseen; the `deps.rs` unit tests, the MCP metrics
+     tests and the two rewritten tests cover it.
+
+103. **Ruling: an exact expectation that the new threshold silences returns to
+     its earlier form** (2026-10-06). The six backend helpers (rulings 29 to
+     31), the MCP code inventories and object lists (rulings 22, 34 and 85), the
+     CLI server test (ruling 40) and the two baseline desk tests (ruling 39)
+     pinned TYPL-223 findings and RIDL-414 findings with 2 to 5 groups. At
+     `groups >= 7` none of those findings is reported, so each assertion returns
+     to its pre-candidate form: an empty filtered list, or the two non-design
+     codes. No fixture source changes. The full-array parity of ruling 85 is
+     kept. Every `allow=TYPL-223` and `allow=RIDL-414` fence marker is removed,
+     and the prose that explained them (rulings 80, 84 and 86) with it; the book
+     harness then reported RIDL-414 on three annex interfaces with 7, 7 and 10
+     groups (`getting-started.md` fences at `## Annex 2`, `## Annex 3` and
+     `## Annex 4`), so those three fences keep `allow=RIDL-414` with a local
+     explanation. The `allow=TYPL-224` marker of ruling 28 stays, because the
+     shape thresholds are unchanged. If wrong, an allowance would name a code
+     its fence does not draw; the harness checks both directions.
+
+104. **Ruling: `expect.lints` names a shipped lint only where an accepted,
+     retained finding matches a rubric item** (2026-10-06). `review-0002` names
+     `low-cohesion-interface` (the accepted `Nav2MsgsInteractions` finding,
+     retained at 17 groups); `review-0003` and `review-0005` name
+     `duplicate-shape` (the accepted mavlink request finding and the seven
+     accepted vss `AirDistribution` findings); `review-0001` and `review-0004`
+     name nothing. `review-0001:1` is matched only by a dismissed finding
+     (ruling 99), so recall counts it and `expect.lints` does not. The validator
+     accepts catalogue names only; a test asserts that the two dropped names are
+     rejected and that the three shipped names are accepted. If wrong, a task
+     would expect a lint that its workspace does not draw at default levels; the
+     count guard and the task validator are the checks.
+
+105. **Ruling: the summary is the derive output verbatim, and the record is a
+     separate notes file** (2026-10-06, amended in the Task 14 fix round).
+     `evals/calibration/summary.md` is byte-identical to what `derive --write`
+     writes, including its trailing blank line; prim would rewrap its tables, so
+     the file is in `.primignore` with the reason. The hand-written record is
+     `evals/calibration/notes.md`, formatted and linted by prim: the labelling
+     method, the adjudication, the per-check outcome, the recall mapping with
+     its two judgement calls, and the pinned counts; it links the summary, and
+     the book and `evals/README.md` link both. The first version appended the
+     notes to the summary under a re-append procedure; the review called that a
+     maintenance trap, and the split removes the procedure. If wrong, the two
+     files could drift apart in what they say; the summary holds only tool
+     output, and the notes restate no number the summary does not hold.
+
+106. **Ruling: the count guard treats a missing file as an empty table and a
+     file that does not parse as an error** (2026-10-06, amended in the Task 14
+     fix round). `design_lint_counts_on_the_corpus_are_pinned` reads
+     `expected-counts.toml` as `workspace -> lint -> count`, so the first run
+     failed and printed the actual table, which was copied into the file
+     unchanged; the message names the file and asks for the reason in the commit
+     message. A file that exists but does not parse fails with a TOML parse
+     error that names the file, checked by corrupting the file in place and
+     restoring it. The counts are `duplicate-shape` 2/7/7 (mavlink, ros2, vss),
+     `inconsistent-unit` 7/0/0 and `low-cohesion-interface` 1/1/0, which sum to
+     the retained counts of the summary (16, 7 and 2). If wrong, a corrupt file
+     would read as "all counts are zero"; the parse error is the check.
+
+107. **Ruling: the two wording fixes from the Task 13 review are applied**
+     (2026-10-06). Ruling 96 and the `recall.toml` header now say that a
+     **must** or **should** item that recommends the remedy for exactly one
+     issue is an alias, which covers `review-0005:2`; no mapping changes. Line 2
+     of each `evals/calibration/<check>.toml` header now states that `final` is
+     the agreed label or the label Sebastien set at adjudication and that every
+     finding has one; no label data changes.
+
+108. **Ruling: the fix round's records cite no working-memory document by name**
+     (2026-10-06). `notes.md` states the facts the review found cited as "plan
+     ruling 93", "design spec section 7.4" and "D-9" (Sol's rule-based
+     labelling, recall counting a match whatever its label, recall never gating
+     a level or threshold), because the plan and the spec move to
+     `docs/archive/` at gardening and a name is not a path `doc-path-check`
+     sees. The book links the two calibration files with the absolute repository
+     URL the other chapters use for files outside `docs/book/`. The xtask dump
+     fixture carries no `code` key, like the other dump fixtures, instead of a
+     code that contradicts its lint name.
+
+109. **Ruling: Sebastien approved the calibration summary as derived**
+     (2026-10-06, given in chat with the controller). Three lints ship at Info:
+     `inconsistent-unit` with no threshold, `duplicate-shape` at `fields >= 2`
+     and `variants >= 2`, and `low-cohesion-interface` at `groups >= 7` and
+     `min group size >= 1`; `inconsistent-abbreviation` and `package-fan-out`
+     are dropped. He was shown the stricter alternative for `duplicate-shape`
+     (`fields >= 4`, precision 8/8, still Info because fewer than ten findings
+     remain) and chose the threshold D-5 selects, the least strict one that
+     qualifies. This is the approval Step 2 of Task 14 requires before the
+     commit; it is not a delegated decision.
+
 ## Pull requests
 
 Four PRs, each reviewed before merge:

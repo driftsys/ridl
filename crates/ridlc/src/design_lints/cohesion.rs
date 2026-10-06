@@ -8,7 +8,9 @@ use ridl_ir::v2::{FieldType, Interface, Package, decl, field_type, return_type, 
 
 use super::{Ctx, qualify};
 
-pub(crate) const LOW_COHESION_MIN_GROUPS: usize = 2;
+/// The least strict thresholds whose precision on the evaluation corpus meets
+/// the Info level; the derivation is recorded in `evals/calibration/summary.md`.
+pub(crate) const LOW_COHESION_MIN_GROUPS: usize = 7;
 pub(crate) const LOW_COHESION_MIN_GROUP_SIZE: usize = 1;
 
 /// Groups checked interface members linked by a shared named type.

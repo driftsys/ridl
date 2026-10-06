@@ -1,7 +1,7 @@
 # Design lints and the eval seed — design for piece 1b
 
 Status: design spec for piece 1b of
-[`2026-10-03-devex-and-agent-tracks-brief.md`](2026-10-03-devex-and-agent-tracks-brief.md),
+[`2026-10-03-devex-and-agent-tracks-brief.md`](../wip/2026-10-03-devex-and-agent-tracks-brief.md),
 written 2026-10-04 against `main` at c1e63351. Sebastien agreed the approach in
 the brainstorming session of 2026-10-04 (decisions D-1 to D-8, §2), and approved
 the written spec, D-9 included, the same day. It is archived with its plan when

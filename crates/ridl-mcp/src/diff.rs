@@ -144,7 +144,6 @@ mod tests {
                     .chain(std::iter::repeat_n(missing_docs_code, 15))
                     .chain(std::iter::once("TYPL-011"))
                     .chain(std::iter::repeat_n(missing_docs_code, 8))
-                    .chain(["TYPL-223", "RIDL-414"])
                     .collect::<Vec<_>>();
                 assert_eq!(
                     all_diagnostics
@@ -169,7 +168,7 @@ mod tests {
                         .iter()
                         .map(|d| d["code"].as_str().unwrap())
                         .collect::<Vec<_>>(),
-                    ["TYPL-103", "TYPL-011", "TYPL-223", "RIDL-414"]
+                    ["TYPL-103", "TYPL-011"]
                 );
                 assert_eq!(
                     serde_json::to_value(exact_diagnostics).unwrap(),
@@ -206,44 +205,6 @@ mod tests {
                                 "end": {
                                     "line": 18,
                                     "column": 32
-                                }
-                            },
-                            "labels": [],
-                            "fixes": []
-                        },
-                        {
-                            "code": "TYPL-223",
-                            "severity": "info",
-                            "lint": "inconsistent-abbreviation",
-                            "message": "`read` in `readSpeed` abbreviates `reading`, used in `Reading`",
-                            "span": {
-                                "path": format!("{}/b/b.ridl", fixture("ws-diag")),
-                                "start": {
-                                    "line": 25,
-                                    "column": 9
-                                },
-                                "end": {
-                                    "line": 25,
-                                    "column": 18
-                                }
-                            },
-                            "labels": [],
-                            "fixes": []
-                        },
-                        {
-                            "code": "RIDL-414",
-                            "severity": "info",
-                            "lint": "low-cohesion-interface",
-                            "message": "interface `Status` splits into 4 groups of members that share no type: [speed], [reading], [setLevel], [outcome]",
-                            "span": {
-                                "path": format!("{}/b/b.ridl", fixture("ws-diag")),
-                                "start": {
-                                    "line": 14,
-                                    "column": 11
-                                },
-                                "end": {
-                                    "line": 14,
-                                    "column": 17
                                 }
                             },
                             "labels": [],

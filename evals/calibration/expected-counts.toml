@@ -1,0 +1,20 @@
+# The number of findings each shipped design lint reports at default levels on
+# each corpus workspace. `design_lint_counts_on_the_corpus_are_pinned` in
+# `crates/ridl/tests/eval_corpus.rs` compares `ridl check --format json` with
+# this file and prints the actual table on a mismatch; update the file
+# deliberately, with the reason in the commit message.
+
+[mavlink]
+duplicate-shape = 2
+inconsistent-unit = 7
+low-cohesion-interface = 1
+
+[ros2]
+duplicate-shape = 7
+inconsistent-unit = 0
+low-cohesion-interface = 1
+
+[vss]
+duplicate-shape = 7
+inconsistent-unit = 0
+low-cohesion-interface = 0

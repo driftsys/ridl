@@ -1,0 +1,258 @@
+# Labels for `low-cohesion-interface`: Claude (`claude -p --model fable`) and Sol (`codex exec -m gpt-6.1-sol`), labelled blind.
+# `final` is the agreed label where the two labels agree; where they disagree, it is the label Sebastien set at adjudication (2026-10-06). Every finding has a `final`.
+# Agreement sample seed: 20261005.
+# Sample algorithm: rank each agreed finding by SHA-256 of the UTF-8 string "20261005:low-cohesion-interface:<finding-id>" (lowercase hex, ascending); take the first 10.
+# Agreed findings: 16. Sampled: 10. Shortfall: 0.
+# Sampled: low-cohesion-interface:vss:Vehicle/Cabin/HVAC/contract.ridl:8608-8612:0
+# Sampled: low-cohesion-interface:vss:Vehicle/Cabin/HVAC/Station/Row4/Driver/contract.ridl:1498-1504:0
+# Sampled: low-cohesion-interface:mavlink:common/interactions.ridl:61-76:0
+# Sampled: low-cohesion-interface:vss:Vehicle/Cabin/HVAC/Station/Row1/Passenger/contract.ridl:1504-1513:0
+# Sampled: low-cohesion-interface:mavlink:common/interactions.ridl:662-677:0
+# Sampled: low-cohesion-interface:vss:Vehicle/Cabin/HVAC/Station/Row3/Passenger/contract.ridl:1504-1513:0
+# Sampled: low-cohesion-interface:vss:Vehicle/Cabin/HVAC/Station/Row3/Driver/contract.ridl:1498-1504:0
+# Sampled: low-cohesion-interface:ros2:nav2_msgs/interactions.ridl:15158-15178:0
+# Sampled: low-cohesion-interface:vss:Vehicle/Cabin/HVAC/Station/Row4/Passenger/contract.ridl:1504-1513:0
+# Sampled: low-cohesion-interface:ros2:std_srvs/interactions.ridl:787-806:0
+# Adjudication: done by Sebastien on 2026-10-06.
+# Agreement sample: Sebastien reviewed every sampled agreement above and agreed with each; the agreed `final` labels stand.
+# Adjudicated disagreements: 0 (no disagreements).
+
+[[finding]]
+id = "low-cohesion-interface:mavlink:common/interactions.ridl:61-76:0"
+workspace = "mavlink"
+location = "common/interactions.ridl:5"
+message = "interface `MissionProtocol` splits into 8 groups of members that share no type: [missionItem], [missionItemInt, missionRequest, missionRequestInt], [missionSetCurrent], [missionCurrent], [missionCount, missionRequestList], [missionClearAll], [missionItemReached], [missionAck]"
+claude = "dismiss"
+claude_reason = "All members implement the one MAVLink mission transfer protocol; disjoint payload types are a poor proxy for its real semantic cohesion"
+sol = "dismiss"
+sol_reason = "Mission upload, retrieval, progress and acknowledgement belong to one mission protocol despite using different message types."
+final = "dismiss"
+[finding.metric]
+kind = "cohesion"
+groups = 8
+min_group_size = 1
+
+[[finding]]
+id = "low-cohesion-interface:mavlink:common/interactions.ridl:662-677:0"
+workspace = "mavlink"
+location = "common/interactions.ridl:19"
+message = "interface `CommandProtocol` splits into 4 groups of members that share no type: [commandInt], [commandLong], [commandAck], [commandCancel]"
+claude = "dismiss"
+claude_reason = "The four command messages form one cohesive command protocol; a designer would not split them"
+sol = "dismiss"
+sol_reason = "Command submission, acknowledgement and cancellation are stages of one command protocol."
+final = "dismiss"
+[finding.metric]
+kind = "cohesion"
+groups = 4
+min_group_size = 1
+
+[[finding]]
+id = "low-cohesion-interface:mavlink:common/interactions.ridl:858-875:0"
+workspace = "mavlink"
+location = "common/interactions.ridl:26"
+message = "interface `ParameterProtocol` splits into 3 groups of members that share no type: [paramRequestList, paramRequestRead, paramValue], [paramSet], [paramError]"
+claude = "dismiss"
+claude_reason = "All members implement the single parameter protocol; the interface is semantically cohesive despite disjoint types"
+sol = "dismiss"
+sol_reason = "Parameter reads, writes, values and errors form one parameter management protocol."
+final = "dismiss"
+[finding.metric]
+kind = "cohesion"
+groups = 3
+min_group_size = 1
+
+[[finding]]
+id = "low-cohesion-interface:mavlink:common/interactions.ridl:1121-1130:0"
+workspace = "mavlink"
+location = "common/interactions.ridl:34"
+message = "interface `Telemetry` splits into 6 groups of members that share no type: [sysStatus], [gpsRawInt], [attitude], [localPositionNed], [globalPositionInt], [vfrHud]"
+claude = "dismiss"
+claude_reason = "Members are all periodic telemetry streams grouped by role; splitting into single-message interfaces would not improve the design"
+sol = "dismiss"
+sol_reason = "These signals form a vehicle telemetry feed, and distinct payload types do not justify splitting it."
+final = "dismiss"
+[finding.metric]
+kind = "cohesion"
+groups = 6
+min_group_size = 1
+
+[[finding]]
+id = "low-cohesion-interface:ros2:nav2_msgs/interactions.ridl:15158-15178:0"
+workspace = "ros2"
+location = "nav2_msgs/interactions.ridl:384"
+message = "interface `Nav2MsgsInteractions` splits into 17 groups of members that share no type: [clearEntireCostmap], [getCostmap], [isPathValid, loadMap, manageLifecycleNodes, saveMap], [assistedTeleop], [assistedTeleopFeedback], [backUp], [backUpFeedback], [followPath], [followPathFeedback], [followWaypoints], [followWaypointsFeedback], [navigateToPose], [navigateToPoseFeedback], [spin], [spinFeedback], [wait], [waitFeedback]"
+claude = "accept"
+claude_reason = "A package-wide catch-all mixing lifecycle, map and costmap services with eight unrelated actions; a designer would split it into per-concern interfaces"
+sol = "accept"
+sol_reason = "Separate map and costmap services, lifecycle management and motion actions into interfaces with distinct responsibilities."
+final = "accept"
+[finding.metric]
+kind = "cohesion"
+groups = 17
+min_group_size = 1
+
+[[finding]]
+id = "low-cohesion-interface:ros2:nav_msgs/interactions.ridl:2571-2590:0"
+workspace = "ros2"
+location = "nav_msgs/interactions.ridl:77"
+message = "interface `NavMsgsInteractions` splits into 4 groups of members that share no type: [getMap], [getPlan], [loadMap], [setMap]"
+claude = "dismiss"
+claude_reason = "getMap, getPlan, loadMap and setMap are all map-and-plan services; the interface is cohesive despite disjoint types"
+sol = "dismiss"
+sol_reason = "Map retrieval, loading, setting and planning are related navigation services in the translated package."
+final = "dismiss"
+[finding.metric]
+kind = "cohesion"
+groups = 4
+min_group_size = 1
+
+[[finding]]
+id = "low-cohesion-interface:ros2:std_srvs/interactions.ridl:787-806:0"
+workspace = "ros2"
+location = "std_srvs/interactions.ridl:28"
+message = "interface `StdSrvsInteractions` splits into 3 groups of members that share no type: [empty], [setBool], [trigger]"
+claude = "dismiss"
+claude_reason = "std_srvs is deliberately a tiny set of generic utility services; splitting three members gains nothing"
+sol = "dismiss"
+sol_reason = "This small interface groups the standard generic service primitives, so separate payload types do not require a redesign."
+final = "dismiss"
+[finding.metric]
+kind = "cohesion"
+groups = 3
+min_group_size = 1
+
+[[finding]]
+id = "low-cohesion-interface:vss:Vehicle/Cabin/HVAC/Station/Row1/Driver/contract.ridl:1498-1504:0"
+workspace = "vss"
+location = "Vehicle/Cabin/HVAC/Station/Row1/Driver/contract.ridl:51"
+message = "interface `Driver` splits into 3 groups of members that share no type: [FanSpeed, setFanSpeed], [Temperature, setTemperature], [AirDistribution, setAirDistribution]"
+claude = "dismiss"
+claude_reason = "FanSpeed, Temperature and AirDistribution are one seat's HVAC controls; the interface is cohesive even though each property has its own type"
+sol = "dismiss"
+sol_reason = "Fan speed, temperature and air distribution jointly control one HVAC station, so different property types do not justify splitting it."
+final = "dismiss"
+[finding.metric]
+kind = "cohesion"
+groups = 3
+min_group_size = 2
+
+[[finding]]
+id = "low-cohesion-interface:vss:Vehicle/Cabin/HVAC/Station/Row1/Passenger/contract.ridl:1504-1513:0"
+workspace = "vss"
+location = "Vehicle/Cabin/HVAC/Station/Row1/Passenger/contract.ridl:51"
+message = "interface `Passenger` splits into 3 groups of members that share no type: [FanSpeed, setFanSpeed], [Temperature, setTemperature], [AirDistribution, setAirDistribution]"
+claude = "dismiss"
+claude_reason = "FanSpeed, Temperature and AirDistribution are one seat's HVAC controls; the interface is cohesive even though each property has its own type"
+sol = "dismiss"
+sol_reason = "Fan speed, temperature and air distribution jointly control one HVAC station, so different property types do not justify splitting it."
+final = "dismiss"
+[finding.metric]
+kind = "cohesion"
+groups = 3
+min_group_size = 2
+
+[[finding]]
+id = "low-cohesion-interface:vss:Vehicle/Cabin/HVAC/Station/Row2/Driver/contract.ridl:1498-1504:0"
+workspace = "vss"
+location = "Vehicle/Cabin/HVAC/Station/Row2/Driver/contract.ridl:51"
+message = "interface `Driver` splits into 3 groups of members that share no type: [FanSpeed, setFanSpeed], [Temperature, setTemperature], [AirDistribution, setAirDistribution]"
+claude = "dismiss"
+claude_reason = "FanSpeed, Temperature and AirDistribution are one seat's HVAC controls; the interface is cohesive even though each property has its own type"
+sol = "dismiss"
+sol_reason = "Fan speed, temperature and air distribution jointly control one HVAC station, so different property types do not justify splitting it."
+final = "dismiss"
+[finding.metric]
+kind = "cohesion"
+groups = 3
+min_group_size = 2
+
+[[finding]]
+id = "low-cohesion-interface:vss:Vehicle/Cabin/HVAC/Station/Row2/Passenger/contract.ridl:1504-1513:0"
+workspace = "vss"
+location = "Vehicle/Cabin/HVAC/Station/Row2/Passenger/contract.ridl:51"
+message = "interface `Passenger` splits into 3 groups of members that share no type: [FanSpeed, setFanSpeed], [Temperature, setTemperature], [AirDistribution, setAirDistribution]"
+claude = "dismiss"
+claude_reason = "FanSpeed, Temperature and AirDistribution are one seat's HVAC controls; the interface is cohesive even though each property has its own type"
+sol = "dismiss"
+sol_reason = "Fan speed, temperature and air distribution jointly control one HVAC station, so different property types do not justify splitting it."
+final = "dismiss"
+[finding.metric]
+kind = "cohesion"
+groups = 3
+min_group_size = 2
+
+[[finding]]
+id = "low-cohesion-interface:vss:Vehicle/Cabin/HVAC/Station/Row3/Driver/contract.ridl:1498-1504:0"
+workspace = "vss"
+location = "Vehicle/Cabin/HVAC/Station/Row3/Driver/contract.ridl:51"
+message = "interface `Driver` splits into 3 groups of members that share no type: [FanSpeed, setFanSpeed], [Temperature, setTemperature], [AirDistribution, setAirDistribution]"
+claude = "dismiss"
+claude_reason = "FanSpeed, Temperature and AirDistribution are one seat's HVAC controls; the interface is cohesive even though each property has its own type"
+sol = "dismiss"
+sol_reason = "Fan speed, temperature and air distribution jointly control one HVAC station, so different property types do not justify splitting it."
+final = "dismiss"
+[finding.metric]
+kind = "cohesion"
+groups = 3
+min_group_size = 2
+
+[[finding]]
+id = "low-cohesion-interface:vss:Vehicle/Cabin/HVAC/Station/Row3/Passenger/contract.ridl:1504-1513:0"
+workspace = "vss"
+location = "Vehicle/Cabin/HVAC/Station/Row3/Passenger/contract.ridl:51"
+message = "interface `Passenger` splits into 3 groups of members that share no type: [FanSpeed, setFanSpeed], [Temperature, setTemperature], [AirDistribution, setAirDistribution]"
+claude = "dismiss"
+claude_reason = "FanSpeed, Temperature and AirDistribution are one seat's HVAC controls; the interface is cohesive even though each property has its own type"
+sol = "dismiss"
+sol_reason = "Fan speed, temperature and air distribution jointly control one HVAC station, so different property types do not justify splitting it."
+final = "dismiss"
+[finding.metric]
+kind = "cohesion"
+groups = 3
+min_group_size = 2
+
+[[finding]]
+id = "low-cohesion-interface:vss:Vehicle/Cabin/HVAC/Station/Row4/Driver/contract.ridl:1498-1504:0"
+workspace = "vss"
+location = "Vehicle/Cabin/HVAC/Station/Row4/Driver/contract.ridl:51"
+message = "interface `Driver` splits into 3 groups of members that share no type: [FanSpeed, setFanSpeed], [Temperature, setTemperature], [AirDistribution, setAirDistribution]"
+claude = "dismiss"
+claude_reason = "FanSpeed, Temperature and AirDistribution are one seat's HVAC controls; the interface is cohesive even though each property has its own type"
+sol = "dismiss"
+sol_reason = "Fan speed, temperature and air distribution jointly control one HVAC station, so different property types do not justify splitting it."
+final = "dismiss"
+[finding.metric]
+kind = "cohesion"
+groups = 3
+min_group_size = 2
+
+[[finding]]
+id = "low-cohesion-interface:vss:Vehicle/Cabin/HVAC/Station/Row4/Passenger/contract.ridl:1504-1513:0"
+workspace = "vss"
+location = "Vehicle/Cabin/HVAC/Station/Row4/Passenger/contract.ridl:51"
+message = "interface `Passenger` splits into 3 groups of members that share no type: [FanSpeed, setFanSpeed], [Temperature, setTemperature], [AirDistribution, setAirDistribution]"
+claude = "dismiss"
+claude_reason = "FanSpeed, Temperature and AirDistribution are one seat's HVAC controls; the interface is cohesive even though each property has its own type"
+sol = "dismiss"
+sol_reason = "Fan speed, temperature and air distribution jointly control one HVAC station, so different property types do not justify splitting it."
+final = "dismiss"
+[finding.metric]
+kind = "cohesion"
+groups = 3
+min_group_size = 2
+
+[[finding]]
+id = "low-cohesion-interface:vss:Vehicle/Cabin/HVAC/contract.ridl:8608-8612:0"
+workspace = "vss"
+location = "Vehicle/Cabin/HVAC/contract.ridl:197"
+message = "interface `HVAC` splits into 3 groups of members that share no type: [IsAirConditioningActive, IsAutoPowerOptimize, IsFrontDefrosterActive, IsRearDefrosterActive, IsRecirculationActive, setIsAirConditioningActive, setIsAutoPowerOptimize, setIsFrontDefrosterActive, setIsRearDefrosterActive, setIsRecirculationActive], [AmbientAirTemperature], [PowerOptimizeLevel, setPowerOptimizeLevel]"
+claude = "dismiss"
+claude_reason = "All members are cabin HVAC controls of one unit; differing value types do not make the interface incoherent"
+sol = "dismiss"
+sol_reason = "Climate controls, ambient temperature and subsystem power policy belong to the same HVAC subsystem."
+final = "dismiss"
+[finding.metric]
+kind = "cohesion"
+groups = 3
+min_group_size = 1

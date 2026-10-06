@@ -30,6 +30,12 @@ catalogue row may declare `allow` as its default level (decisions 1, 8, 12 and
 replaces decision 9: entering at a workspace member loads its workspace, and
 reports on the member (issue #529).
 
+Amended 2026-10-06 by
+[ADR-0027](ADR-0027-design-lints-calibrated-on-a-corpus.md) (workspace design
+lints): the catalogue severity of a design lint, and so its default level, is
+derived from its precision on the evaluation corpus under `evals/`, and its
+threshold is a constant beside the check, not a `[lints]` setting (decision 1).
+
 It amends two records in place, in the same change:
 [ADR-0002](ADR-0002-module-system.md) §4 (the `[lints]` table and its resolution
 order) and [ADR-0010](ADR-0010-cli-conventions.md) decision 1 (a lint at `deny`
@@ -64,13 +70,15 @@ decision n** for n from 1 to 9, so a citation of "D-8" is a citation of decision
    its catalogue severity is its default level (Warning is `warn`, Info is
    `info`), unless the row declares `allow` as its default (`default = allow`
    after the lint name, amended by ADR-0026). Only a Warning or Info row may
-   declare it, which a catalogue guard test checks. A lint that is `allow` by
-   default is reported only when a project sets its level. An Error code is
-   never a lint and can never be configured. There is one diagnostic channel and
-   one catalogue; a lint is a catalogue row that has a name. A catalogue guard
-   test keeps the names well formed: every Warning or Info row has one, no Error
-   row has one, every name matches `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`, and no two
-   rows share one.
+   declare it, which a catalogue guard test checks. The severity of a design
+   lint's row is not chosen by hand: ADR-0027 decision 4 derives it from the
+   lint's precision on the evaluation corpus. A lint that is `allow` by default
+   is reported only when a project sets its level. An Error code is never a lint
+   and can never be configured. There is one diagnostic channel and one
+   catalogue; a lint is a catalogue row that has a name. A catalogue guard test
+   keeps the names well formed: every Warning or Info row has one, no Error row
+   has one, every name matches `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`, and no two rows
+   share one.
 
    One consequence the maintainer accepted: RIDL-407 (`ordinal-changed`), the
    warning of the `ridl check --baseline` gate, is a lint, so a project can set

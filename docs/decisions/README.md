@@ -336,7 +336,9 @@ other entry below is Accepted.
   that owns its file; a file outside the entry point's tree takes the defaults.
   `ridl check --format sarif` writes a SARIF 2.1.0 log with artifact URIs
   relative to the working directory. Amends ADR-0002 §4 and ADR-0010 decision 1
-  in place.
+  in place. Amended 2026-10-06 by the workspace design lints record (ADR-0027):
+  the default level of a design lint is derived from its precision on the
+  evaluation corpus.
 
 - **ADR-0025 — Workspace-aware MCP tools.** Nine decisions: six agreed in the
   brainstorming session of piece 1a, one from the reviewed design, one approved
@@ -352,6 +354,8 @@ other entry below is Accepted.
   lowered system; and the tool names and schemas change only by addition, pinned
   by `tools.json`. Amends ADR-0005 §3 and §7 in place. The as-built description
   is [the MCP workspace tools design record](../design/mcp-workspace-tools.md).
+  Amended 2026-10-06 by ADR-0027: a ninth tool, `ridl_metrics`, and the
+  dependency edges computed once in `ridlc`.
 
 - **ADR-0026 — Doc comments.** Ten decisions: six agreed in the brainstorming
   session of spec 2a (design D-1 to D-6), the lint table of the reviewed design,
@@ -371,6 +375,28 @@ other entry below is Accepted.
   workspace for every entry point (#529). Amends ADR-0002 §4, ADR-0024 decisions
   1, 8, 12 and 15 and ADR-0025 decision 2 in place, and replaces ADR-0024
   decision 9.
+
+- **ADR-0027 — Workspace design lints.** Twelve decisions: the design's D-1 to
+  D-9, agreed in the brainstorming session of piece 1b, its placement and code
+  rules, and the outcome of the calibration that Sebastien approved
+  (driftsys/ridl#694, #707, #712). The design lints run in one pass in `ridlc`
+  over the whole checked workspace, before lint levels apply, and the language
+  server runs the same pass on unsaved text; the package dependency edges are
+  computed once in `ridlc::deps`. A design lint's default level comes from its
+  precision on a public corpus ported into `evals/` (ROS 2, MAVLink and COVESA
+  VSS subsets): at least 80 % is `warn`, 50 % to 80 % is `info`, below 50 % does
+  not ship, and fewer than ten findings caps it at `info`; a threshold is the
+  least strict constant that meets the level and is not configurable. Labels are
+  double-blind and adjudicated by the maintainer; recall against review rubrics
+  written before the checks ran is reported, never gated; a test pins the
+  findings per lint per corpus workspace. `ridl_metrics` reports package
+  coupling and interface cohesion with no threshold, and an eval task is a
+  directory with `task.toml`, `prompt.md` and `rubric.md`. Three lints ship at
+  Info — `inconsistent-unit` (TYPL-222), `duplicate-shape` (TYPL-224) and
+  `low-cohesion-interface` (RIDL-414); two candidates fell below the floor, and
+  their numbers TYPL-223 and RIDL-415 are not reused. Amends ADR-0024 decision 1
+  and ADR-0025 decision 9 in place. The as-built description is
+  [the design lints design record](../design/design-lints.md).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

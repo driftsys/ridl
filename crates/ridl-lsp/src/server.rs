@@ -56,8 +56,7 @@ use ridl_core::lint::{LintScopes, apply_lint_levels};
 use ridl_core::package::{Package, PackageOrigin, Workspace};
 use ridl_core::{LoadedWorkspace, find_root, load_workspace, profile_of_path, std_package};
 use ridl_sem::{
-    CheckedWorkspace, check_package, check_workspace, lower_system, resolve_package,
-    unclaimed_backend_keys,
+    CheckedWorkspace, check_package, check_workspace, resolve_package, unclaimed_backend_keys,
 };
 use ridl_syntax::Profile;
 use ridl_syntax::ast::{AstNode as _, SourceFile};
@@ -763,19 +762,11 @@ impl ServerState {
             &BTreeSet::new(),
             &mut sources,
         ));
-        let std_ir = check_package(db, self.workspace, self.std, self.std).ir;
-        let ir_packages: Vec<_> = checked[..workspace_packages]
-            .iter()
-            .map(|package| &package.ir)
-            .collect();
-        let lowered_system = lower_system(&system, &ir_packages);
         all.extend(ridlc::check_design_lints(
             db,
             &packages[..workspace_packages],
             &checked[..workspace_packages],
             &resolutions[..workspace_packages],
-            &std_ir,
-            lowered_system.as_ref(),
             &mut sources,
         ));
         // Each standalone overlay is an independent one-package source set.
@@ -786,8 +777,6 @@ impl ServerState {
                 &packages[index..index + 1],
                 &checked[index..index + 1],
                 &resolutions[index..index + 1],
-                &std_ir,
-                None,
                 &mut sources,
             ));
         }

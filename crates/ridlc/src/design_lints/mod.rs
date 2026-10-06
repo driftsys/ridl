@@ -1,19 +1,14 @@
 //! Workspace design checks over current checked inputs, before lint levels apply.
 
-use std::collections::{BTreeMap, BTreeSet};
-
 use ridl_core::RidlDatabase;
 use ridl_core::diag::{Diagnostic, SourceMap};
 use ridl_core::package::Package;
-use ridl_ir::v2;
 use ridl_sem::{CheckedPackage, Resolution};
 
 mod cohesion;
-mod fan_out;
 mod shapes;
 mod sites;
 mod units;
-mod words;
 
 use sites::SiteIndex;
 
@@ -30,42 +25,22 @@ pub fn check_design_lints(
     packages: &[Package],
     checked: &[CheckedPackage],
     resolutions: &[Resolution],
-    std_ir: &v2::Package,
-    system: Option<&v2::System>,
     sources: &mut SourceMap,
 ) -> Vec<Diagnostic> {
     let sites = SiteIndex::new(db, packages, resolutions, sources);
-    let complete_edges = crate::deps::package_edges(checked, system);
-    let package_edges = crate::deps::workspace_package_edges(&complete_edges);
-    run(&Ctx {
-        db,
-        checked,
-        resolutions,
-        std_ir,
-        system,
-        sites,
-        package_edges,
-    })
+    run(&Ctx { checked, sites })
 }
 
-// The remaining design checks consume the shared context and indexed sites.
-#[allow(dead_code)]
+// The design checks consume the checked packages and the indexed sites.
 pub(crate) struct Ctx<'a> {
-    pub db: &'a RidlDatabase,
     pub checked: &'a [CheckedPackage],
-    pub resolutions: &'a [Resolution],
-    pub std_ir: &'a v2::Package,
-    pub system: Option<&'a v2::System>,
     pub sites: SiteIndex,
-    pub package_edges: BTreeMap<String, BTreeSet<String>>,
 }
 
 pub(crate) fn run(ctx: &Ctx<'_>) -> Vec<Diagnostic> {
     let mut diagnostics = units::check(ctx);
-    diagnostics.extend(words::check(ctx));
     diagnostics.extend(shapes::check(ctx));
     diagnostics.extend(cohesion::check(ctx));
-    diagnostics.extend(fan_out::check(ctx));
     diagnostics
 }
 

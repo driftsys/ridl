@@ -5,10 +5,8 @@ const UNIT: &str = "TYPL-222";
 const COHESION: &str = "RIDL-414";
 const DESIGN_LINTS: &[&str] = &[
     "inconsistent-unit",
-    "inconsistent-abbreviation",
     "duplicate-shape",
     "low-cohesion-interface",
-    "package-fan-out",
 ];
 const TYPES: &str =
     "type Speed: km/h [0.0..250.0 step 0.5]\ntype SpeedMs: m/s [0.0..100.0 step 0.5]\n";
@@ -73,13 +71,13 @@ fn cohesion(diagnostics: &[Diagnostic]) -> Vec<&Diagnostic> {
 
 #[test]
 fn low_cohesion_interface_is_reported_with_its_groups() {
-    let source = "package a\ntype X: boolean\ntype Y: boolean\ntype Z: boolean\ninterface I { command a(x: X) @[..1s] command b(x: X, y: Y) @[..1s] command c(z: Z) @[..1s] command reset() @[..1s] }\n";
-    let out = workspace(&[("a", source)]);
+    let source = format!("{SEVEN_GROUP_TYPES}interface I {{ {SEVEN_GROUP_MEMBERS} }}\n");
+    let out = workspace(&[("a", &source)]);
     let found = cohesion(&out.diagnostics);
     assert_eq!(found.len(), 1, "{:?}", out.diagnostics);
     assert_eq!(
         found[0].message,
-        "interface `I` splits into 2 groups of members that share no type: [a, b], [c]"
+        "interface `I` splits into 7 groups of members that share no type: [a, b], [c], [d], [e], [f], [g], [h]"
     );
     assert_eq!(found[0].severity, Severity::Info);
     assert_eq!(
@@ -93,6 +91,28 @@ fn low_cohesion_interface_is_reported_with_its_groups() {
     );
     assert!(found[0].labels.is_empty());
     assert!(found[0].fixits.is_empty());
+}
+
+/// Eight types and the members that split an interface into seven groups,
+/// the least strict group count the lint reports.
+const SEVEN_GROUP_TYPES: &str = "package a\ntype X: boolean\ntype Y: boolean\ntype Z: boolean\ntype W: boolean\ntype V: boolean\ntype U: boolean\ntype T: boolean\ntype S: boolean\n";
+const SEVEN_GROUP_MEMBERS: &str = "command a(x: X) @[..1s] command b(x: X, y: Y) @[..1s] command c(z: Z) @[..1s] command d(w: W) @[..1s] command e(v: V) @[..1s] command f(u: U) @[..1s] command g(t: T) @[..1s] command h(s: S) @[..1s] command reset() @[..1s]";
+
+#[test]
+fn an_interface_below_the_group_threshold_is_not_reported() {
+    // Six groups: the seventh member `h` is left out.
+    let members = SEVEN_GROUP_MEMBERS.replace("command h(s: S) @[..1s] ", "");
+    let source = format!("{SEVEN_GROUP_TYPES}interface I {{ {members} }}\n");
+    let out = workspace(&[("a", &source)]);
+    assert_eq!(
+        ridlc::cohesion_groups(&out.checked[0].ir, &out.checked[0].ir.interfaces[0]).len(),
+        6
+    );
+    assert!(
+        cohesion(&out.diagnostics).is_empty(),
+        "{:?}",
+        out.diagnostics
+    );
 }
 
 #[test]
@@ -203,10 +223,13 @@ fn cohesion_groups_exclude_standard_types_and_members_without_named_types() {
 fn low_cohesion_interface_excludes_standard_packages_and_service_inline_shapes() {
     use ridl_ir::v2::{decl, field_type};
 
-    let standard = "package ridl.std\ntype X: boolean\ntype Y: boolean\ninterface I { command a(value: X) @[..1s] command b(value: Y) @[..1s] }\n";
-    let user = "package a\ntype X: boolean\ntype Y: boolean\nservice a.example { command a(value: X) @[..1s] command b(value: Y) @[..1s] }\n";
+    // Seven singleton groups in each shape, so only the exclusions keep them silent.
+    let types = "type A: boolean\ntype B: boolean\ntype C: boolean\ntype D: boolean\ntype E: boolean\ntype F: boolean\ntype G: boolean\n";
+    let members = "command a(value: A) @[..1s] command b(value: B) @[..1s] command c(value: C) @[..1s] command d(value: D) @[..1s] command e(value: E) @[..1s] command f(value: F) @[..1s] command g(value: G) @[..1s]";
+    let standard = format!("package ridl.std\n{types}interface I {{ {members} }}\n");
+    let user = format!("package a\n{types}service a.example {{ {members} }}\n");
     let (diagnostics, _) =
-        design_source_set_with(&[("ridl.std", standard), ("a", user)], |checked| {
+        design_source_set_with(&[("ridl.std", &standard), ("a", &user)], |checked| {
             let pkg = &mut checked
                 .iter_mut()
                 .find(|package| package.ir.name == "ridl.std")
@@ -215,7 +238,7 @@ fn low_cohesion_interface_excludes_standard_packages_and_service_inline_shapes()
             for (member, name) in pkg.interfaces[0]
                 .interactions
                 .iter_mut()
-                .zip(["a.X", "a.Y"])
+                .zip(["a.A", "a.B", "a.C", "a.D", "a.E", "a.F", "a.G"])
             {
                 let Some(decl::Kind::CommandDef(command)) = &mut member.kind else {
                     panic!("command")
@@ -225,7 +248,7 @@ fn low_cohesion_interface_excludes_standard_packages_and_service_inline_shapes()
             }
             assert_eq!(
                 ridlc::cohesion_groups(pkg, &pkg.interfaces[0]),
-                vec![vec!["a"], vec!["b"]]
+                ["a", "b", "c", "d", "e", "f", "g"].map(|member| vec![member])
             );
         });
     assert!(cohesion(&diagnostics).is_empty(), "{diagnostics:?}");
@@ -489,20 +512,12 @@ fn shared_pass_reads_inline_scalar_backing_in_the_current_render_map() {
     };
     scalar.backing.as_mut().unwrap().kind = Some(backing::Kind::Unit("m/s".to_string()));
     ty.optional = true;
-    let std_ir = ridl_sem::check_package(&db, workspace, std, std).ir;
     let mut sources = SourceMap::new();
     // An unrelated file must not displace the shared pass's diagnostic span.
     sources.file_id("earlier.ridl", "package earlier\n");
     let source_id = sources.file_id("a.ridl", &source);
-    let diagnostics = ridlc::check_design_lints(
-        &db,
-        &[package],
-        &[checked],
-        &[resolution],
-        &std_ir,
-        None,
-        &mut sources,
-    );
+    let diagnostics =
+        ridlc::check_design_lints(&db, &[package], &[checked], &[resolution], &mut sources);
     let found = units(&diagnostics);
     assert_eq!(found.len(), 1, "{diagnostics:?}");
     assert_eq!(found[0].primary.file, source_id);
@@ -633,15 +648,8 @@ fn shared_pass_excludes_standard_package_sites_from_unit_counts() {
         assert_no_errors(&package.diagnostics);
     }
     let mut sources = SourceMap::new();
-    let diagnostics = ridlc::check_design_lints(
-        &db,
-        &packages,
-        &checked,
-        &resolutions,
-        &checked[1].ir,
-        None,
-        &mut sources,
-    );
+    let diagnostics =
+        ridlc::check_design_lints(&db, &packages, &checked, &resolutions, &mut sources);
     let found = units(&diagnostics);
     assert_eq!(found.len(), 1, "{diagnostics:?}");
     assert_eq!(
@@ -661,145 +669,7 @@ fn shared_pass_excludes_standard_package_sites_from_unit_counts() {
     );
 }
 
-fn abbreviations(diagnostics: &[Diagnostic]) -> Vec<&Diagnostic> {
-    diagnostics
-        .iter()
-        .filter(|d| d.code.as_str() == "TYPL-223")
-        .collect()
-}
-
-#[test]
-fn abbreviation_is_reported_where_the_short_form_is_used() {
-    let source = "package a\nstruct Reading { tempLimit: boolean, temperature: boolean }\n";
-    let out = workspace(&[("a", source)]);
-    let single = ridlc::check_source("a.ridl", source);
-    assert_no_errors(&single.diagnostics);
-    for (diagnostics, sources) in [
-        (&out.diagnostics, &out.sources),
-        (&single.diagnostics, &single.sources),
-    ] {
-        let found = abbreviations(diagnostics);
-        assert_eq!(found.len(), 1, "{diagnostics:?}");
-        assert_eq!(
-            found[0].message,
-            "`temp` in `tempLimit` abbreviates `temperature`, used in `temperature`"
-        );
-        assert_eq!(found[0].severity, Severity::Info);
-        assert_eq!(text_at(sources, found[0].primary), "tempLimit");
-        assert_eq!(
-            usize::from(found[0].primary.range.start()),
-            source.find("tempLimit").unwrap()
-        );
-    }
-}
-
-#[test]
-fn abbreviation_needs_three_letters_and_two_more() {
-    for (short, long, count) in [
-        ("id", "identity", 0),
-        ("pos", "post", 0),
-        ("pos", "position", 1),
-        ("temp", "temperature", 1),
-    ] {
-        let source = format!("package a\nstruct Reading {{ {short}: boolean, {long}: boolean }}\n");
-        let out = workspace(&[("a", &source)]);
-        assert_eq!(
-            abbreviations(&out.diagnostics).len(),
-            count,
-            "{short}/{long}: {:?}",
-            out.diagnostics
-        );
-    }
-}
-
-#[test]
-fn abbreviation_variant_uses_its_own_span() {
-    let source = "package a\nenum Mode { Temp = 0 }\nstruct Temperature { value: boolean }\n";
-    let out = workspace(&[("a", source)]);
-    let found = abbreviations(&out.diagnostics);
-    assert_eq!(found.len(), 1, "{:?}", out.diagnostics);
-    let start = source.find("Temp =").unwrap();
-    assert_eq!(
-        site(&out.sources, found[0].primary),
-        ("a/source.ridl".to_string(), start..start + 4)
-    );
-}
-
-#[test]
-fn abbreviation_covers_declarations_members_and_parameters_across_packages() {
-    let first = "package a\nstruct Temp { value: boolean }\ntype Flag: boolean\ninterface TempInput { command sendTemp(tempValue: Flag) @[..1s] }\nservice a.readings { signal tempReading: Flag @[100ms..1s] }\n";
-    let second = "package b\nstruct Temperature { value: boolean }\n";
-    let out = workspace(&[("b", second), ("a", first)]);
-    let found = abbreviations(&out.diagnostics);
-    let names: Vec<_> = found
-        .iter()
-        .map(|d| text_at(&out.sources, d.primary))
-        .collect();
-    assert_eq!(
-        names,
-        ["Temp", "TempInput", "sendTemp", "tempValue", "tempReading"]
-    );
-    assert!(
-        found
-            .iter()
-            .all(|d| d.message.ends_with("used in `Temperature`"))
-    );
-}
-
-#[test]
-fn abbreviation_reports_each_word_pair_once_per_identifier() {
-    let source = "package a\nstruct Reading { tempTempPos: boolean, temperature: boolean, position: boolean, temporary: boolean }\n";
-    let out = workspace(&[("a", source)]);
-    let messages: Vec<_> = abbreviations(&out.diagnostics)
-        .iter()
-        .map(|d| d.message.as_str())
-        .collect();
-    assert_eq!(
-        messages,
-        [
-            "`pos` in `tempTempPos` abbreviates `position`, used in `position`",
-            "`temp` in `tempTempPos` abbreviates `temperature`, used in `temperature`",
-            "`temp` in `tempTempPos` abbreviates `temporary`, used in `temporary`",
-        ]
-    );
-}
-
-#[test]
-fn abbreviation_covers_enumset_bits_and_union_arms_at_their_tokens() {
-    let source = "package a\nstruct Temperature { value: boolean }\nenumset Flags { TEMP = 0 }\nunion Choice { temp: Temperature }\n";
-    let out = workspace(&[("a", source)]);
-    let found = abbreviations(&out.diagnostics);
-    assert_eq!(found.len(), 2, "{:?}", out.diagnostics);
-    let arm = source.find("temp:").unwrap();
-    let bit = source.find("TEMP =").unwrap();
-    assert_eq!(
-        found
-            .iter()
-            .map(|d| site(&out.sources, d.primary))
-            .collect::<Vec<_>>(),
-        [
-            ("a/source.ridl".to_string(), arm..arm + 4),
-            ("a/source.ridl".to_string(), bit..bit + 4),
-        ]
-    );
-    assert_eq!(
-        found.iter().map(|d| d.message.as_str()).collect::<Vec<_>>(),
-        [
-            "`temp` in `temp` abbreviates `temperature`, used in `Temperature`",
-            "`temp` in `TEMP` abbreviates `temperature`, used in `Temperature`",
-        ]
-    );
-
-    let no_pair = "package a\nstruct Value { value: boolean }\nenumset Flags { TEMP = 0 }\nunion Choice { temp: Value }\n";
-    let out = workspace(&[("a", no_pair)]);
-    assert!(
-        abbreviations(&out.diagnostics).is_empty(),
-        "{:?}",
-        out.diagnostics
-    );
-}
-
-fn abbreviation_source_set(packages: &[(&str, &str)]) -> (Vec<Diagnostic>, SourceMap) {
+fn design_source_set(packages: &[(&str, &str)]) -> (Vec<Diagnostic>, SourceMap) {
     design_source_set_with(packages, |_| {})
 }
 
@@ -841,69 +711,10 @@ fn design_source_set_with(
         assert_no_errors(&package.diagnostics);
     }
     amend(&mut checked);
-    let std_ir = ridl_sem::check_package(&db, workspace, std, std).ir;
     let mut sources = SourceMap::new();
-    let diagnostics = ridlc::check_design_lints(
-        &db,
-        &packages,
-        &checked,
-        &resolutions,
-        &std_ir,
-        None,
-        &mut sources,
-    );
+    let diagnostics =
+        ridlc::check_design_lints(&db, &packages, &checked, &resolutions, &mut sources);
     (diagnostics, sources)
-}
-
-#[test]
-fn abbreviation_excludes_standard_short_and_long_words() {
-    for (standard, user) in [
-        (
-            "package ridl.std\nstruct Temperature { value: boolean }\n",
-            "package a\nstruct Reading { tempLimit: boolean }\n",
-        ),
-        (
-            "package ridl.std\nstruct Temp { value: boolean }\n",
-            "package a\nstruct Reading { temperature: boolean }\n",
-        ),
-    ] {
-        let (diagnostics, _) = abbreviation_source_set(&[("ridl.std", standard), ("a", user)]);
-        assert!(abbreviations(&diagnostics).is_empty(), "{diagnostics:?}");
-    }
-    let source = "package a\nstruct Reading { tempLimit: boolean, temperature: boolean }\n";
-    let (diagnostics, sources) = abbreviation_source_set(&[("a", source)]);
-    let found = abbreviations(&diagnostics);
-    assert_eq!(found.len(), 1, "{diagnostics:?}");
-    assert_eq!(text_at(&sources, found[0].primary), "tempLimit");
-    assert_eq!(
-        found[0].message,
-        "`temp` in `tempLimit` abbreviates `temperature`, used in `temperature`"
-    );
-}
-
-#[test]
-fn abbreviation_chooses_the_first_qualified_expansion_independent_of_input_order() {
-    let a = "package a\nstruct Z { temperatureEarly: boolean }\n";
-    let b = "package b\nstruct A { temperatureLate: boolean }\n";
-    let c = "package c\nstruct Reading { tempLimit: boolean }\n";
-    for packages in [
-        vec![("a", a), ("b", b), ("c", c)],
-        vec![("c", c), ("b", b), ("a", a)],
-    ] {
-        let (diagnostics, sources) = abbreviation_source_set(&packages);
-        let found = abbreviations(&diagnostics);
-        assert_eq!(found.len(), 1, "{diagnostics:?}");
-        assert_eq!(
-            found[0].message,
-            "`temp` in `tempLimit` abbreviates `temperature`, used in `temperatureEarly`"
-        );
-        let start = c.find("tempLimit").unwrap();
-        assert_eq!(
-            site(&sources, found[0].primary),
-            ("c/source.ridl".to_string(), start..start + 9)
-        );
-        assert!(found[0].labels.is_empty(), "{:?}", found[0].labels);
-    }
 }
 
 fn shapes(diagnostics: &[Diagnostic]) -> Vec<&Diagnostic> {
@@ -1001,7 +812,7 @@ fn duplicate_shape_excludes_standard_declarations() {
         "package ridl.std\nstruct First { x: float, y: float }\nenum Mode { Low = 0, High = 1 }\n";
     let user =
         "package a\nstruct Second { x: float, y: float }\nenum Choice { Low = 0, High = 1 }\n";
-    let (diagnostics, _) = abbreviation_source_set(&[("ridl.std", standard), ("a", user)]);
+    let (diagnostics, _) = design_source_set(&[("ridl.std", standard), ("a", user)]);
     assert!(shapes(&diagnostics).is_empty(), "{diagnostics:?}");
 }
 
@@ -1014,7 +825,7 @@ fn duplicate_shape_orders_packages_independently_of_source_set_order() {
         vec![("c", c), ("b", b), ("a", a)],
         vec![("a", a), ("b", b), ("c", c)],
     ] {
-        let (diagnostics, sources) = abbreviation_source_set(&packages);
+        let (diagnostics, sources) = design_source_set(&packages);
         let found = shapes(&diagnostics);
         assert_eq!(
             found.iter().map(|d| d.message.as_str()).collect::<Vec<_>>(),
@@ -1230,89 +1041,8 @@ fn duplicate_shape_qualifies_inline_scalar_pattern_constants_in_checked_ir() {
     );
 }
 
-fn fan_out(diagnostics: &[Diagnostic]) -> Vec<&Diagnostic> {
-    diagnostics
-        .iter()
-        .filter(|d| d.code.as_str() == "RIDL-415")
-        .collect()
-}
-
-const FAN_OUT_FOUR: &str = "package e\nimport d.D\nimport b.B\nimport a.A\nimport c.C\nstruct Bundle { first: A second: B third: C fourth: D again: A id: ridl.std.Uuid }\n";
-
 #[test]
-fn fan_out_above_the_maximum_is_reported() {
-    let out = workspace(&[
-        ("e", FAN_OUT_FOUR),
-        ("d", "package d\ntype D: boolean\n"),
-        ("b", "package b\ntype B: boolean\n"),
-        ("a", "package a\ntype A: boolean\n"),
-        ("c", "package c\ntype C: boolean\n"),
-    ]);
-    let found = fan_out(&out.diagnostics);
-    assert_eq!(found.len(), 1, "{:?}", out.diagnostics);
-    assert_eq!(
-        found[0].message,
-        "package `e` depends on 4 workspace packages: a, b, c, d"
-    );
-    assert_eq!(found[0].severity, Severity::Info);
-    assert_eq!(
-        ridl_core::lint::lint_of(found[0].code).unwrap().lint,
-        Some("package-fan-out")
-    );
-    assert_eq!(
-        site(&out.sources, found[0].primary),
-        ("e/source.ridl".to_string(), 0..9)
-    );
-    assert!(found[0].labels.is_empty());
-    assert!(found[0].fixits.is_empty());
-}
-
-#[test]
-fn fan_out_is_reported_once_on_the_first_file() {
-    let out = workspace_files(&[
-        (
-            "e",
-            vec![
-                ("two.ridl", FAN_OUT_FOUR),
-                (
-                    "one.ridl",
-                    "// First file\npackage e\ntype Local: boolean\n",
-                ),
-            ],
-        ),
-        ("d", vec![("source.ridl", "package d\ntype D: boolean\n")]),
-        ("c", vec![("source.ridl", "package c\ntype C: boolean\n")]),
-        ("b", vec![("source.ridl", "package b\ntype B: boolean\n")]),
-        ("a", vec![("source.ridl", "package a\ntype A: boolean\n")]),
-    ]);
-    let found = fan_out(&out.diagnostics);
-    assert_eq!(found.len(), 1, "{:?}", out.diagnostics);
-    assert_eq!(
-        site(&out.sources, found[0].primary),
-        ("e/one.ridl".to_string(), 14..23)
-    );
-}
-
-#[test]
-fn fan_out_at_the_maximum_is_not_reported() {
-    let out = workspace(&[
-        ("a", "package a\ntype A: boolean\n"),
-        ("b", "package b\ntype B: boolean\n"),
-        ("c", "package c\ntype C: boolean\n"),
-        (
-            "e",
-            "package e\nimport a.A\nimport b.B\nimport c.C\nstruct Bundle { first: A second: B third: C again: A id: ridl.std.Uuid }\n",
-        ),
-    ]);
-    assert!(
-        fan_out(&out.diagnostics).is_empty(),
-        "{:?}",
-        out.diagnostics
-    );
-}
-
-#[test]
-fn fan_out_excludes_external_targets_at_the_workspace_maximum() {
+fn workspace_package_edges_exclude_external_targets() {
     use ridl_ir::v2::{decl, field_type, struct_member};
     use std::collections::{BTreeMap, BTreeSet};
 
@@ -1381,57 +1111,7 @@ fn fan_out_excludes_external_targets_at_the_workspace_maximum() {
             );
         },
     );
-    assert!(fan_out(&diagnostics).is_empty(), "{diagnostics:?}");
-}
-
-#[test]
-fn abbreviation_indexes_named_tuple_fields_recursively_with_exact_spans() {
-    for declaration in [
-        "struct Reading { sample: (temp: boolean) }",
-        "struct Reading { sample: (nested: (temp: boolean)?) }",
-        "struct Reading { sample: [(temp: boolean); 2] }",
-        "struct Reading { sample: [integer: (temp: boolean); 2] }",
-        "struct Reading { sample: (nested: [(temp: boolean); 2]) }",
-        "interface Reading { fixed sample: [(temp: boolean); 2] }",
-        "interface Reading { query sample(): (nested: (temp: boolean)) @[..1s] }",
-    ] {
-        let source =
-            format!("package a\nstruct Vocabulary {{ temperature: boolean }}\n{declaration}\n");
-        let out = workspace(&[("a", &source)]);
-        let found = abbreviations(&out.diagnostics);
-        assert_eq!(found.len(), 1, "{declaration}: {:?}", out.diagnostics);
-        assert_eq!(
-            found[0].message,
-            "`temp` in `temp` abbreviates `temperature`, used in `temperature`"
-        );
-        let start = source.find("temp:").unwrap();
-        assert_eq!(
-            site(&out.sources, found[0].primary),
-            ("a/source.ridl".into(), start..start + 4)
-        );
-        assert!(found[0].labels.is_empty());
-        assert!(found[0].fixits.is_empty());
-    }
-}
-
-#[test]
-fn abbreviation_keeps_repeated_tuple_field_names_at_distinct_sites() {
-    let source = "package a\nstruct Vocabulary { temperature: boolean }\nstruct Reading { sample: (temp: boolean, nested: (temp: boolean)) }\n";
-    let out = workspace(&[("a", source)]);
-    let found = abbreviations(&out.diagnostics);
-    assert_eq!(found.len(), 2, "{:?}", out.diagnostics);
-    let mut spans = found
-        .iter()
-        .map(|d| site(&out.sources, d.primary).1)
-        .collect::<Vec<_>>();
-    spans.sort_by_key(|r| r.start);
-    assert_eq!(
-        spans,
-        source
-            .match_indices("temp:")
-            .map(|(n, _)| n..n + 4)
-            .collect::<Vec<_>>()
-    );
+    assert_no_errors(&diagnostics);
 }
 
 #[test]
@@ -1446,7 +1126,7 @@ fn inconsistent_unit_excludes_standard_import_aliases_without_excluding_user_nam
     let source = "package a\nimport ridl.std.Duration as StandardTime\ntype Duration: s [0.0..100.0 step 0.5]\ntype Tick: ms [0.0..100.0 step 0.5]\nstruct First { wait: Duration }\nstruct Second { wait: Duration? }\nstruct Third { wait: Tick }\nstruct Standard { wait: StandardTime? }\ninterface Timers { command schedule(wait: StandardTime) @[..1s] fixed wait: StandardTime }\n";
     // A controlled standard package makes its import available to the resolver;
     // disk workspace loading exposes standard names implicitly instead.
-    let (diagnostics, sources) = abbreviation_source_set(&[
+    let (diagnostics, sources) = design_source_set(&[
         (
             "ridl.std",
             "package ridl.std\ntype Duration: ms [0.0..100.0 step 0.5]\n",
@@ -1467,7 +1147,7 @@ fn inconsistent_unit_excludes_standard_import_aliases_without_excluding_user_nam
 }
 
 #[test]
-fn fan_out_through_real_compiler_counts_only_system_requires_and_member_edges() {
+fn package_edges_through_the_real_compiler_count_only_system_requires_and_member_edges() {
     let output = workspace_files(&[
         (
             "a",
@@ -1542,21 +1222,17 @@ fn fan_out_through_real_compiler_counts_only_system_requires_and_member_edges() 
         without_system.values().all(|targets| targets.is_empty()),
         "{without_system:?}"
     );
-    let found = fan_out(&output.diagnostics);
-    assert_eq!(found.len(), 2, "{:?}", output.diagnostics);
-    for (package, file, count, targets) in [
-        ("e", "component.rsdl", 4, "a, b, c, d"),
-        ("top", "system.rsdl", 5, "a, b, c, d, e"),
-    ] {
-        let message =
-            format!("package `{package}` depends on {count} workspace packages: {targets}");
-        let d = found.iter().find(|d| d.message == message).unwrap();
-        assert_eq!(d.severity, Severity::Info);
-        assert_eq!(
-            site(&output.sources, d.primary),
-            (format!("{package}/{file}"), 0..8 + package.len())
-        );
-        assert!(d.labels.is_empty());
-        assert!(d.fixits.is_empty());
+    let complete = ridlc::deps::package_edges(&output.checked, output.system.as_ref());
+    let edges = ridlc::deps::workspace_package_edges(&complete);
+    let targets = |package: &str| {
+        edges[package]
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(targets("e"), ["a", "b", "c", "d"], "{edges:?}");
+    assert_eq!(targets("top"), ["a", "b", "c", "d", "e"], "{edges:?}");
+    for package in ["a", "b", "c", "d"] {
+        assert!(edges[package].is_empty(), "{edges:?}");
     }
 }

@@ -10,9 +10,9 @@
 //! # Namespaces (ADR-0007 decision 2)
 //!
 //! Codes are grouped by hundreds and never renumbered or reused; a code
-//! retired from a catalogue is listed in [`RETIRED_RIDL_CODES`], and a guard
-//! keeps it out. Five namespaces are in play across the family, one catalogue
-//! each:
+//! retired from the `RIDL-` or `TYPL-` catalogue is listed in
+//! [`RETIRED_RIDL_CODES`] or [`RETIRED_TYPL_CODES`], and a guard keeps it out.
+//! Five namespaces are in play across the family, one catalogue each:
 //!
 //! - `FORM-…` — the shared family grammar: lexical `0xx`, parse `1xx`, and the
 //!   general form §4.3 attribute rules. Named after the general form's own
@@ -169,17 +169,26 @@ macro_rules! diag_codes {
     };
 }
 
-/// The `RIDL-` codes retired by the interface lock (lock design §9). A code is
-/// never renumbered or reused (ADR-0008 decision 13): RIDL-146 to RIDL-148
-/// guarded the slot model of a service's list — a shape re-declared under a
-/// service-level `reserved` name, one interface name on two shapes, and a
+/// The `RIDL-` codes retired from the catalogue. A code is never renumbered or
+/// reused (ADR-0008 decision 13). The interface lock (lock design §9) retired
+/// RIDL-146 to RIDL-148, which guarded the slot model of a service's list — a
+/// shape re-declared under a service-level `reserved` name, one interface name on two shapes, and a
 /// nameless service-level tombstone — and left the catalogue with that model
 /// on 2026-09-15. Held as integers rather than `"RIDL-146"` literals, because
 /// a string literal of a code that is in no catalogue fails
 /// `codes_written_as_string_literals_are_all_catalogued`; the guard
 /// `retired_ridl_codes_are_never_redeclared` keeps the numbers out of
 /// [`RIDL_CATALOG`].
-pub const RETIRED_RIDL_CODES: &[u16] = &[146, 147, 148];
+///
+/// RIDL-415 (`package-fan-out`) was a design-lint calibration candidate that
+/// did not ship; its number is retired too.
+pub const RETIRED_RIDL_CODES: &[u16] = &[146, 147, 148, 415];
+
+/// The `TYPL-` codes retired without shipping. TYPL-223
+/// (`inconsistent-abbreviation`) was a design-lint calibration candidate that
+/// the corpus calibration did not ship; its number is never reused.
+/// `retired_typl_codes_are_never_redeclared` keeps it out of [`TYPL_CATALOG`].
+pub const RETIRED_TYPL_CODES: &[u16] = &[223];
 
 diag_codes! {
     /// The FORM catalogue (ADR-0007 decision 2): lexical `0xx`, parse `1xx`, and
@@ -503,17 +512,17 @@ diag_codes! {
             "regex pattern the Rust `regex` crate cannot compile";
 
         /// One exact site name is used with different canonical units across
-        /// the checked workspace. Emitted by the design lint pass.
+        /// the checked workspace. Emitted by the design lint pass. Info from
+        /// the corpus calibration (`evals/calibration/summary.md`).
         TYPL_222 = "TYPL-222", Info,
             "one field name used with different units", lint = "inconsistent-unit";
 
-        /// An identifier word abbreviates another word in the checked workspace.
-        /// Emitted by the design lint pass.
-        TYPL_223 = "TYPL-223", Info,
-            "inconsistent identifier abbreviation", lint = "inconsistent-abbreviation";
+        // TYPL-223 (`inconsistent-abbreviation`) was a calibration candidate
+        // that the corpus calibration did not ship; the number is not reused.
 
         /// Two differently named declarations have equal field or variant sets.
-        /// Emitted by the design lint pass.
+        /// Emitted by the design lint pass. Info from the corpus calibration
+        /// (`evals/calibration/summary.md`).
         TYPL_224 = "TYPL-224", Info,
             "duplicate declaration shape", lint = "duplicate-shape";
 
@@ -998,14 +1007,14 @@ diag_codes! {
             "parameter name declared twice in one parameter list";
 
         /// A declared interface has disconnected groups of members under
-        /// direct named-type sharing. Provisional Info during calibration.
+        /// direct named-type sharing. Info from the corpus calibration
+        /// (`evals/calibration/summary.md`).
         RIDL_414 = "RIDL-414", Info,
             "interface members form disconnected type-sharing groups", lint = "low-cohesion-interface";
 
-        /// A package depends on more workspace packages than the threshold.
-        /// Provisional Info during calibration.
-        RIDL_415 = "RIDL-415", Info,
-            "package depends on too many workspace packages", lint = "package-fan-out";
+        // RIDL-415 (`package-fan-out`) was a calibration candidate that the
+        // corpus calibration did not ship; the number is not reused. The
+        // package coupling metric stays available through `ridl_metrics`.
     }
 
     /// The rsdl catalogue: every `RSDL-` code declared in this module, with the
@@ -1890,6 +1899,23 @@ mod tests {
         }
     }
 
+    /// A retired `TYPL-` code is never declared again: every number in
+    /// [`RETIRED_TYPL_CODES`] stays out of the `TYPL-` catalogue.
+    #[test]
+    fn retired_typl_codes_are_never_redeclared() {
+        for entry in TYPL_CATALOG {
+            let code = entry.code.as_str();
+            let number: u16 = code
+                .strip_prefix("TYPL-")
+                .and_then(|digits| digits.parse().ok())
+                .unwrap_or_else(|| panic!("`{code}` is not spelled `TYPL-NNN`"));
+            assert!(
+                !RETIRED_TYPL_CODES.contains(&number),
+                "`{code}` is retired and must not be declared again",
+            );
+        }
+    }
+
     #[test]
     fn catalog_entries_are_well_formed_ordered_and_unique() {
         let mut seen: Vec<&str> = Vec::new();
@@ -2005,7 +2031,6 @@ mod tests {
             ("TYPL-115", "no-init-value"),
             ("TYPL-211", "duplicate-reserved"),
             ("TYPL-222", "inconsistent-unit"),
-            ("TYPL-223", "inconsistent-abbreviation"),
             ("TYPL-224", "duplicate-shape"),
             ("TYPL-401", "broken-doc-link"),
             ("TYPL-404", "detached-doc-comment"),
@@ -2027,7 +2052,6 @@ mod tests {
             ("RIDL-406", "redeclared-envelope-metadata"),
             ("RIDL-407", "ordinal-changed"),
             ("RIDL-414", "low-cohesion-interface"),
-            ("RIDL-415", "package-fan-out"),
             ("RSDL-409", "redundant-provider-set"),
             ("RSDL-804", "unclaimed-backend-key"),
             ("RSDL-805", "depth-below-bound"),
