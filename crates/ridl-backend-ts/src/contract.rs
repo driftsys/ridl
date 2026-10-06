@@ -35,11 +35,12 @@ impl codegen::Backend for Backend<'_> {
                 option.key
             ));
         }
+        let preamble = codegen::comment_preamble(&request.generated_marker, &request.header, "//");
         match generate(self.raw.package) {
             Ok(generated) => v1::CodegenResponse {
                 files: vec![codegen::text_file(
                     format!("{}.ts", request.artifact_base),
-                    generated.source,
+                    format!("{preamble}/* eslint-disable */\n\n{}", generated.source),
                 )],
                 diagnostics: Vec::new(),
             },

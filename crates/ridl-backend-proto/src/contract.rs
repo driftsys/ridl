@@ -36,11 +36,12 @@ impl codegen::Backend for Backend<'_> {
                 option.key
             ));
         }
+        let preamble = codegen::comment_preamble(&request.generated_marker, &request.header, "//");
         match generate_with(self.raw.package, self.raw.others) {
             Ok(generated) => v1::CodegenResponse {
                 files: vec![codegen::text_file(
                     format!("{}.proto", request.artifact_base),
-                    generated.proto_source,
+                    format!("{preamble}{}", generated.proto_source),
                 )],
                 diagnostics: Vec::new(),
             },

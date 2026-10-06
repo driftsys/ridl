@@ -808,6 +808,7 @@ pub fn run_build_with(
         mut diagnostics,
         sources,
         lints,
+        codegen_header,
         report_scope,
         ..
     } = load_and_check(&mut db, entry, &[]).map_err(load_io_error)?;
@@ -1045,6 +1046,7 @@ pub fn run_build_with(
                 &resolved_plugins,
                 plugin_timeout,
                 selected.as_ref(),
+                codegen_header.as_deref(),
                 &mut diagnostics,
             )?;
         }
@@ -1059,6 +1061,7 @@ pub fn run_build_with(
                 &resolved_plugins,
                 plugin_timeout,
                 selected.as_ref(),
+                codegen_header.as_deref(),
                 &mut diagnostics,
             )?;
         }
@@ -1507,7 +1510,6 @@ struct Compiled {
     lints: LintScopes,
     /// The normalised `[codegen] header-file` text
     /// ([`LoadedWorkspace::codegen_header`]).
-    #[expect(dead_code, reason = "the backends read it once they take a header")]
     codegen_header: Option<String>,
     /// The member directory the entry lies in
     /// ([`LoadedWorkspace::report_scope`]).
@@ -1961,13 +1963,14 @@ fn write_emits(
     plugins: &[plugin::Plugin],
     plugin_timeout: Duration,
     deployment: Option<&v1::Deployment>,
+    header: Option<&str>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> std::io::Result<()> {
     // One request per package, built only when something reads it: an IR
     // dump alone lowers nothing.
     let needs_request = !plugins.is_empty() || emits.iter().any(|emit| !emit.is_ir_dump());
     let request = needs_request
-        .then(|| codegen_request(base, ir, others, Vec::new(), deployment.cloned(), None));
+        .then(|| codegen_request(base, ir, others, Vec::new(), deployment.cloned(), header));
     let raw = codegen::RawIr {
         package: ir,
         others,
