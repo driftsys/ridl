@@ -122,9 +122,10 @@ The Rust backend's emitted `port.command(..)`, `port.query(..)` and
 signature changes, and the generated dispatch does not read `claim.trace`.
 driftsys/ridl#754 replaces both behaviours.
 
-The checked-in generated output is regenerated:
-`examples/cabin/generated/veh.cabin.rs` and
-`crates/ridl-backend-rust/tests/generated/interaction_face.rs`.
+The checked-in fixture
+`crates/ridl-backend-rust/tests/generated/interaction_face.rs` is regenerated.
+`examples/cabin/generated/` is not in git: `ridl build` writes it when the gate
+runs.
 
 ## 6. Tests
 
