@@ -20,7 +20,7 @@ the same preamble itself for `lib.rs` and `Cargo.toml`.
 **Tech Stack:** Rust; prost and pbjson (the request schema); `toml` (the
 manifest); insta (snapshots); just (the gate).
 
-**Spec:** `docs/wip/2026-10-06-generated-file-headers-design.md` (issue
+**Spec:** `docs/archive/2026-10-06-generated-file-headers-design.md` (issue
 driftsys/ridl#746). Read it with this plan.
 
 ## Global Constraints
