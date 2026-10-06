@@ -101,6 +101,7 @@ Browse them on GitHub:
 ## Status
 
 All specifications are working drafts: typl, rxdl, rmdl and the expr-core
-specification at v0.1.0, ridl and rsdl at v0.2.0. The toolchain has no
-published release — build it from a clone, as
-[Getting started](getting-started.md) describes.
+specification at v0.1.0, ridl and rsdl at v0.2.0. The toolchain is released
+as binaries on GitHub and as crates on crates.io. This book describes the
+`main` branch, which can be ahead of the newest release;
+[Getting started](getting-started.md) says how to build it from a clone.

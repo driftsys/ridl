@@ -60,10 +60,10 @@ It binds three schema packages:
 | `ridl.codegen.v1` | the lowered codegen model and its two envelopes | the request and response of a codegen plugin             |
 
 The word **IR** below means all three unless a sentence says otherwise.
-`ridl.codegen.v1` does not exist yet: it is defined by the work that follows
-this document (the lowered model, then the plugin contract). The rules here are
-written for it in advance, because the point of stating them is that a plugin
-built outside this repository can rely on them before it is written.
+`ridl.codegen.v1` is defined in `crates/ridl-ir/proto/ridl/codegen/v1/`
+(`plugin.proto`, `model.proto` and `deployment.proto`). The rules here were
+written before that package existed, so that a plugin built outside this
+repository could rely on them before the package was written.
 
 ## 2. The Encodings
 
