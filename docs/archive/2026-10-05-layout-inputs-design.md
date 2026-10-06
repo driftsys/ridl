@@ -288,11 +288,11 @@ matching kind exists draws nothing.
 catalogue (rsdl §16: 709 and 805, 806 are unused, reserved by nothing, retired
 by nothing):
 
-| Code     | Severity | Lint name           | When                                                                                                                                                                                                                         |
-| -------- | -------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RSDL-709 | error    | —                   | a `depth`, `slots` or `budget` value is not an integer within its range                                                                                                                                                      |
-| RSDL-805 | warning  | `depth-below-bound` | a declared `depth` is below `ceil(max / min)` for an event a covered link consumes                                                                                                                                           |
-| RSDL-806 | warning  | `depth-underivable` | an event with an explicit half-open range is consumed by a link with no declared `depth` **Superseded by DD-42** (§8): the code fires for every contract bound that cannot be derived, not only an explicit half-open range. |
+| Code     | Severity | Lint name           | When                                                                                                                                                                                                                                                                                                                  |
+| -------- | -------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RSDL-709 | error    | —                   | a `depth`, `slots` or `budget` value is not an integer within its range                                                                                                                                                                                                                                               |
+| RSDL-805 | warning  | `depth-below-bound` | a declared `depth` is below `ceil(max / min)` for an event a covered link consumes                                                                                                                                                                                                                                    |
+| RSDL-806 | warning  | `depth-underivable` | an event with an explicit half-open range is consumed by a link with no declared `depth` **Superseded by DD-42** (§8): the code fires for every contract bound that cannot be derived, not only an explicit half-open range, and only for a link with no declared `depth` on its placement line or on its deployment. |
 
 The RSDL-806 row above keeps its original wording; DD-42 in §8 widens its
 condition and is the as-built rule.
@@ -949,7 +949,10 @@ plugin that lays out memory differently is as correct as this one.
   binding overheads has no row, and a number invented for the test would state
   an overhead no binding document defines. If wrong, the proof lands with the
   one sum it names unexercised, and the fixture gains non-null values when the
-  row lands. Note of 2026-10-06 (driftsys/ridl#736): the review of the pull
+  row lands. Note of 2026-10-06 (driftsys/ridl#736), which supersedes the
+  statements above that the sum is untested and that the proof lands with the
+  sum unexercised; the statements that the fixture's `max_message_bytes` is null
+  and that the binding row is missing stay current. The review of the pull
   request asked for the sum to be evaluated. A test now adds a `websocket` row
   with a frame header of 14 bytes and an envelope of 2 bytes to cabin's request
   and checks the sum for `Cabin.warning`, 14 + 2 + 8 = 24. Those two values
