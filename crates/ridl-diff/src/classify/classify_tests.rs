@@ -1027,8 +1027,9 @@ fn a_defaults_timing_edit_classifies_by_its_resolved_bounds() {
 // a test here, the two inversions first.
 // ==========================================================================
 
-/// A command carrying the given declared RPC bounds — `None` is the
-/// undeclared state, never a default (ADR-0015 decision 4).
+/// A command carrying the given resolved RPC bounds. `None` is a state only an
+/// older catalog can carry: the current compiler resolves every command to a
+/// bound, the default one when none is written (ridl §9.3).
 fn bounded_command(timing: Option<v2::Timing>) -> v2::Package {
     pkg(vec![decl(
         "a",

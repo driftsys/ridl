@@ -12,6 +12,10 @@ Amended 2026-10-04 by [ADR-0026](ADR-0026-doc-comments.md) (documentation in the
 source, spec 2a): §4 gains root discovery, so an entry inside a workspace member
 loads the member's workspace.
 
+Amended 2026-10-06 (driftsys/ridl#741): §4's root discovery names
+`[defaults].command_timing` and `[defaults].query_timing` among the defaults a
+workspace root applies to a member, beside `[defaults].timing`.
+
 ## Context
 
 RIDL is an interface description language whose source files declare contracts
@@ -187,9 +191,10 @@ upward:
   checked, and so does the filesystem root. The package is then the root.
 
 An entry inside a workspace member therefore loads the whole workspace: the
-root's `[lints]`, `[defaults].timing` and `[imports]` apply to the member, and
-its imports of sibling members resolve. A command that reports diagnostics
-reports those of the files under the member only.
+root's `[lints]`, `[defaults].timing`, `[defaults].command_timing`,
+`[defaults].query_timing` and `[imports]` apply to the member, and its imports
+of sibling members resolve. A command that reports diagnostics reports those of
+the files under the member only.
 
 **The `[lints]` table** (amended 2026-10-04, lint foundation design, ADR-0024)
 sets the level of a lint, in both modes. Each key is a lint name, the name a

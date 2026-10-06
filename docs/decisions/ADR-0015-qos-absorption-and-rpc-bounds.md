@@ -61,9 +61,9 @@ Amended 2026-10-05 — decision 21: the event ring depth stays derived, is
 tabulated into the codegen request, and is declarable as an rsdl deployment
 override (driftsys/ridl#715).
 
-Amended 2026-10-06 — decisions 4 and 7: a `command` or `query` takes a default
-response bound, like a signal or event, and `default_applied` can be true on an
-RPC (driftsys/ridl#741).
+Amended 2026-10-06 — decisions 4, 6, 7 and 8: a `command` or `query` takes a
+default response bound, like a signal or event, and `default_applied` can be
+true on an RPC (driftsys/ridl#741).
 
 ## Context
 
@@ -681,7 +681,7 @@ indistinguishable, so no claim about any of the three can be exercised.
 | Retire RIDL-112                                                                                          | rejected | removes the only way to require an explicit bound on every call                                                                                                                                                                                                                                                             |
 | One `rpc_timing` manifest key for commands and queries                                                   | rejected | the intended values differ by kind (1 s and 3 s)                                                                                                                                                                                                                                                                            |
 | A default fills an absent `min` on `@[..max]`                                                            | rejected | on an RPC `min` is a throttle on the caller; applying it to a member whose author wrote only `max` imposes a constraint the author did not write                                                                                                                                                                            |
-| Ceiling and floor lints on a response bound                                                              | deferred | a threshold needs manifest syntax the `[lints]` table lacks and an ADR-0024 amendment; a separate design, filed as a follow-up                                                                                                                                                                                              |
+| Ceiling and floor lints on a response bound                                                              | deferred | a threshold needs manifest syntax the `[lints]` table lacks and an ADR-0024 amendment; a separate design, filed as a follow-up (driftsys/ridl#748)                                                                                                                                                                          |
 
 ## Consequences
 

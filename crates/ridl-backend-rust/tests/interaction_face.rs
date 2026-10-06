@@ -2325,7 +2325,7 @@ fn a_blocking_timeout_shorter_than_the_members_max_is_accepted() {
     assert!(started.elapsed() >= SHORT);
 }
 
-/// Note F-11: the timeout is `None` until one is set, and with none an
+/// Note F-11: the timeout is `None` until one is set, and with none set a
 /// member with no written bound waits for its provider: `Valve::open` takes
 /// the default `max` of 1 s, which is longer than `LATE`, the client sets no
 /// timeout, and the call resolves when the provider serves it after `LATE`.

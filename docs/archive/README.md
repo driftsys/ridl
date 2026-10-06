@@ -483,4 +483,5 @@ provenance. Nothing here is normative — the current references live in
   (decisions 4, 6, 7 and 8, amended in place), whose alternatives table carries
   the design's rejected options. The reference, the book and
   [the interaction face design record](../design/interaction-face.md) describe
-  the as-built behaviour. The ceiling and floor lints stay a follow-up.
+  the as-built behaviour. The ceiling and floor lints stay a follow-up
+  (driftsys/ridl#748).

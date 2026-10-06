@@ -1285,7 +1285,7 @@ diag_codes! {
         /// §9.3, ADR-0008 decision 13); the message names the key. The
         /// manifest parser stores the raw strings unparsed — `ridl-core`
         /// cannot depend on `ridl-sem` — so the checker parses them and emits
-        /// this code (E2 task 9).
+        /// this code.
         MANI_009 = "MANI-009", Error,
             "invalid `[defaults]` timing value";
 
