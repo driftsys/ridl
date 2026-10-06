@@ -391,11 +391,17 @@ configurable per package or per workspace:
 ```toml
 [defaults]
 timing = "[100ms..1000ms]"
+command_timing = "[..1s]"
+query_timing = "[..3s]"
 ```
 
-Because the IR always carries resolved bounds, changing that default changes
-every untimed interaction in the package, and `ridl diff` reports it as a
-contract change. Safety-graded packages should annotate every interaction
+A `command` or `query` with no response bound is treated the same way: it
+receives `command_timing` (built-in `[..1s]`) or `query_timing` (built-in
+`[..3s]`) and draws `RIDL-112`. Each key resolves on its own.
+
+Because the IR always carries resolved bounds, changing a default changes
+every untimed interaction it covers in the package, and `ridl diff` reports it
+as a contract change. Safety-graded packages should annotate every interaction
 explicitly.
 
 ## Enums and enum sets

@@ -115,7 +115,7 @@ Options:
 `PATH` is a `.typl`/`.ridl` file, a package directory, or a workspace root, and
 defaults to the current directory. A `PATH` inside a workspace member loads the
 whole workspace whose `members` lists the member (ADR-0002 §4): the root's
-`[lints]`, `[defaults].timing` and `[imports]` apply, imports of sibling members
+`[lints]`, the `[defaults]` keys and `[imports]` apply, imports of sibling members
 resolve, and the report holds only the diagnostics of files under the member.
 `ridl build` on a member also writes the whole workspace. An error in another
 member makes it exit 1 with one error that says so; it then writes nothing, or,

@@ -75,7 +75,7 @@ or on a file inside a member, opening an editor on a member, or passing a
 member as the `path` of the MCP tool `ridl_check` loads the workspace whose
 `members` lists the member. The workspace root's `[lints]` table applies to the
 member, and the member's own table is applied over it, as in a check from the
-root. `[defaults].timing` and `[imports]` behave the same way. The command
+root. The `[defaults]` keys and `[imports]` behave the same way. The command
 reports only the diagnostics of files under the member; check from the
 workspace root to see every member's diagnostics. A package that no workspace
 lists stays standalone, and the search for a workspace stops at the first

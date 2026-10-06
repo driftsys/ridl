@@ -329,7 +329,7 @@ are `1xx`.
 | MANI-006 | invalid package name — not lowercase dot-separated segments | error    |
 | MANI-007 | invalid import URL                                          | error    |
 | MANI-008 | workspace member directory is missing or has no `ridl.toml` | error    |
-| MANI-009 | invalid `[defaults].timing` value (ridl §9.1)               | error    |
+| MANI-009 | invalid `[defaults]` timing value (ridl §9.1)               | error    |
 | MANI-010 | `[lints]` entry names no lint, or its value is not a level  | warning  |
 | MANI-101 | remote import fetch failed                                  | error    |
 | MANI-102 | fetched content hash does not match the lockfile            | error    |
@@ -337,8 +337,8 @@ are `1xx`.
 | MANI-104 | `--frozen`: a lockfile-pinned import is not cached          | error    |
 
 MANI-009 is the one manifest code the manifest layer does not raise: `ridl-core`
-cannot depend on `ridl-sem`, so the manifest parser stores `[defaults].timing`
-as an unparsed string and the checker validates it.
+cannot depend on `ridl-sem`, so the manifest parser stores the `[defaults]`
+timing keys as unparsed strings and the checker validates it.
 
 ## 8. What "Consolidated" Means Here
 
