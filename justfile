@@ -1390,7 +1390,7 @@ story-id-check root="":
     # fails the recipe instead of passing unnoticed.
     fixtures_marker="story-id-check: fixtures passed."
     id_re='(^|[^A-Za-z0-9_])E[0-9]+\.[0-9]+[a-z]?([^A-Za-z0-9_]|$)'
-    plan_re='(^|[^A-Za-z0-9_])([Ee][Pp][Ii][Cc] E?[0-9]+|[Ss][Tt][Aa][Gg][Ee] [A-Z][0-9]+[a-z]?|[Ll][Aa][Nn][Ee] [A-Z])([^A-Za-z0-9_]|$)'
+    plan_re='(^|[^A-Za-z0-9_])([Ee][Pp][Ii][Cc] E?[0-9]+|[Ss][Tt][Aa][Gg][Ee] [A-Z][0-9]+[a-z]?|[Ll][Aa][Nn][Ee] [A-Z]|E[0-9]+ task [0-9]+[a-z]?)([^A-Za-z0-9_]|$)'
     # A git call that ignores an inherited git environment. A hook exports
     # GIT_DIR, which `git -C` does not override; see doc-path-check.
     git_at() {
@@ -1454,9 +1454,9 @@ story-id-check root="":
         # Phrases that read like a plan name and are not one: no match for the
         # letter or digit class, a lowercase letter, a bare number, and a letter
         # directly before the word or after the name.
-        plan_clean="a lane a vehicle takes, lane m, stage 2, stage K, stage k3, stage K3xy, lane  M, epic poem, epic e1, upstage K3, plane M, lane Mx"
+        plan_clean="a lane a vehicle takes, lane m, stage 2, stage K, stage k3, stage K3xy, lane  M, epic poem, epic e1, upstage K3, plane M, lane Mx, task 9, E2 task, e2 task 9, E2 task x, xE2 task 9, E2 tasks 9"
         # Phrases that are a plan name, in the cases the pattern states.
-        plan_names=("epic E11" "Epic 10" "EPIC E1" "stage K3" "stage K3x" "stage K9b" "Stage P4" "STAGE M3" "lane M" "Lane P" "(lane Q's")
+        plan_names=("epic E11" "Epic 10" "EPIC E1" "stage K3" "stage K3x" "stage K9b" "Stage P4" "STAGE M3" "lane M" "Lane P" "(lane Q's" "E2 task 9" "E2 task 11b" "(E2 task 9)")
         root="$work/fixture"
         report="$work/report"
         clean_tree() {
