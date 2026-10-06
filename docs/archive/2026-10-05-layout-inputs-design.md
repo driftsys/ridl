@@ -3,8 +3,8 @@
 Status: approved in conversation on 2026-10-05; under review as a document. Lane
 S, stage S1. Stories: E17.0 to E17.5, driftsys/ridl#715 to driftsys/ridl#720.
 Satisfies: driftsys/ridl#715. Working memory under the
-[lifecycle rule](README.md); the durable records are the amended ADRs, the rsdl
-reference, `docs/design/codegen-plugins.md` and
+[lifecycle rule](../wip/README.md); the durable records are the amended ADRs,
+the rsdl reference, `docs/design/codegen-plugins.md` and
 `docs/design/catalog-descriptor.md`.
 
 ## 1. Goal
@@ -288,11 +288,14 @@ matching kind exists draws nothing.
 catalogue (rsdl §16: 709 and 805, 806 are unused, reserved by nothing, retired
 by nothing):
 
-| Code     | Severity | Lint name           | When                                                                                     |
-| -------- | -------- | ------------------- | ---------------------------------------------------------------------------------------- |
-| RSDL-709 | error    | —                   | a `depth`, `slots` or `budget` value is not an integer within its range                  |
-| RSDL-805 | warning  | `depth-below-bound` | a declared `depth` is below `ceil(max / min)` for an event a covered link consumes       |
-| RSDL-806 | warning  | `depth-underivable` | an event with an explicit half-open range is consumed by a link with no declared `depth` |
+| Code     | Severity | Lint name           | When                                                                                                                                                                                                                                                                                                                  |
+| -------- | -------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RSDL-709 | error    | —                   | a `depth`, `slots` or `budget` value is not an integer within its range                                                                                                                                                                                                                                               |
+| RSDL-805 | warning  | `depth-below-bound` | a declared `depth` is below `ceil(max / min)` for an event a covered link consumes                                                                                                                                                                                                                                    |
+| RSDL-806 | warning  | `depth-underivable` | an event with an explicit half-open range is consumed by a link with no declared `depth` **Superseded by DD-42** (§8): the code fires for every contract bound that cannot be derived, not only an explicit half-open range, and only for a link with no declared `depth` on its placement line or on its deployment. |
+
+The RSDL-806 row above keeps its original wording; DD-42 in §8 widens its
+condition and is the as-built rule.
 
 The two warnings are lints under ADR-0024: a catalogue row with a name, a row in
 `docs/book/lints.md`, default level `warn`.
@@ -892,6 +895,72 @@ leaves room for the deployment section's own decisions, which start at DD-17).
   size it. D-5 and DD-20 cover the no-consumer case only for a derivable bound.
   Referred to a follow-up issue rather than widened here, because what a warning
   is for is a design question.
+
+Decisions taken while the test plugin and the records were built (DD-52 onward,
+stage S4). DD-52 to DD-56 are rules of the test plugin in
+`crates/ridlc/tests/layout.rs`, not rules of the toolchain or of the request: a
+plugin that lays out memory differently is as correct as this one.
+
+- **DD-52.** Each message entry of the fixture carries a `proto3_bound` field
+  beside `interface`, `member`, `consumer` and `max_message_bytes`. Section 9
+  says the fixture states the payload bound until a binding row exists, and
+  without the field every message entry is all null and proves nothing numeric.
+  If wrong, the fixture's shape differs from the plan's by one field; removing
+  the field leaves the message half of the proof without a number.
+- **DD-53.** A call slot's count is the largest `slots` over the consumer links
+  of the channel that state one; a link with no `slots` is skipped, and the
+  plugin reports an error only when no link states one. The toolchain's ring
+  depth of an event channel is also the largest value over the links, but it is
+  absent when any link's depth is absent, so the two rules differ for a link
+  that states no value. A sum over the links is the other reading. The fixture
+  pins the choice: `setLevel` has 16 slots under the maximum and would have 32
+  under the sum. If wrong, a call region is half the size another plugin
+  computes.
+- **DD-54.** A call slot's base is the FlatBuffers reservation of the member
+  rounded up to a multiple of 8 bytes as one number. For a query whose request
+  and reply are each bounded at 41 bytes, the base is round8(41 + 41) =
+  round8(82) = 88; rounding each payload first would give round8(41) +
+  round8(41) = 48 + 48 = 96. The cabin fixture cannot pin this choice: its one
+  query, `average`, gives round8(46 + 44) = 96 and round8(46) + round8(44) =
+  48 + 48 = 96, and its command `setLevel` has one payload. If wrong, the
+  regions that hold a call member differ by the padding of one payload.
+- **DD-55.** A slot's label is `Interface.member`, because one region holds two
+  interfaces, and a message's consumer is `component.instance`. The labels
+  affect only how the fixture reads. If wrong, a label is renamed in the fixture
+  and the plugin, and no number moves.
+- **DD-56.** A query's message bound is the larger of the request's and the
+  reply's proto3 bound, and null when either is not bounded, because the message
+  that crosses is the larger of the two. If wrong, a query's message size is
+  understated or null where another plugin states a number.
+- **DD-57.** The end-to-end test of declared sizing values runs over a workspace
+  written to a temporary directory, not over a corpus entry and not over
+  `examples/cabin`. Six test files enumerate every entry of
+  `crates/ridlc/tests/corpus` (`corpus.rs`, `ir_canonical.rs`,
+  `codegen_model.rs` and `totality.rs` in `crates/ridlc/tests`, and `parity.rs`
+  in `crates/ridlc-gen-rust/tests` and in `crates/ridlc-gen-model/tests`), and a
+  new entry would run in each of them for a test that needs none;
+  `examples/cabin` is the hand-checked fixture and the `just demo` subject, and
+  `rsdl-appendix-a` is held verbatim against the reference. If wrong, the
+  declared path has no snapshot in the corpus, and a later change to the corpus
+  does not exercise it.
+- **DD-58.** `max_message_bytes` is null in the fixture, and the sum of frame
+  header, envelope and payload bound is untested, until the WebSocket binding
+  row lands (driftsys/ridl#718, which waits on driftsys/ridl#265). The table of
+  binding overheads has no row, and a number invented for the test would state
+  an overhead no binding document defines. If wrong, the proof lands with the
+  one sum it names unexercised, and the fixture gains non-null values when the
+  row lands. Note of 2026-10-06 (driftsys/ridl#736), which supersedes the
+  statements above that the sum is untested and that the proof lands with the
+  sum unexercised; the statements that the fixture's `max_message_bytes` is null
+  and that the binding row is missing stay current. The review of the pull
+  request asked for the sum to be evaluated. A test now adds a `websocket` row
+  with a frame header of 14 bytes and an envelope of 2 bytes to cabin's request
+  and checks the sum for `Cabin.warning`, 14 + 2 + 8 = 24. Those two values
+  belong to the test, not to a binding document; the fixture's values stay null.
+- **DD-59.** The ROADMAP keeps the WebSocket binding row open while the rest of
+  Epic 17 moves to the landed record, and the BACKLOG marks P1 done except that
+  item. Shipped records describe the system as built, and the row has not
+  landed. If wrong, the ROADMAP keeps one row the plan meant to retire.
 
 ## 9. The exit test and the cabin system
 

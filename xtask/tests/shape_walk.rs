@@ -308,6 +308,12 @@ const ALLOWED: &[Allowed] = &[
               exclusion fixture is checked separately through the pass",
     },
     Allowed {
+        path: "crates/ridlc/tests/layout.rs",
+        lines: 1,
+        why: "the read is of the codegen model's interface list \
+              (`Model::interfaces`), not of `Package::interfaces`",
+    },
+    Allowed {
         path: "crates/ridlc/tests/totality.rs",
         lines: 1,
         why: "an emptiness assertion over both stores in a malformed-input \

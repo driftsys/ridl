@@ -424,13 +424,12 @@ the status in the code and the rejected alternatives in short form.
   error that stops a deployment's descriptor, and `ridl describe` comparing a
   system descriptor's catalog hashes with its embedded catalogs). Its file
   identifier and extension are not chosen. Decided on 2026-10-05
-  (driftsys/ridl#715): it stays unbuilt while the layout inputs for backend
-  plugins land. The per-deployment facts a backend needs are to reach it through
-  the codegen request's deployment section, which driftsys/ridl#716,
-  driftsys/ridl#718 and driftsys/ridl#719 build
-  ([ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 11,
-  [`codegen-plugins.md`](codegen-plugins.md)); a descriptor file would be a
-  second emitter over the same system IR, built when a runtime that reads one
+  (driftsys/ridl#715): it stays unbuilt. The per-deployment facts a backend
+  needs reach it through the codegen request's deployment section, which is
+  built ([ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 11,
+  [`codegen-plugins.md`](codegen-plugins.md)); only the transport bindings'
+  overheads are missing from it (driftsys/ridl#718). A descriptor file would be
+  a second emitter over the same system IR, built when a runtime that reads one
   exists.
 - **Payload layouts** as a `.bfbs` reflection schema (D-7).
 - **The `stream` flag** and the per-element bound of a stream payload

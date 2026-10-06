@@ -38,6 +38,11 @@ codegen request's deployment section as an emitter over `System`, the declared
 sizing values as dedicated fields, and the moved boundary with the engine. It
 amends ADR-0015 decision 21, ADR-0018 decision 12 and ADR-0020 decision 9.
 
+Amended 2026-10-06 by the records of story E17.5 (driftsys/ridl#736): the note
+under decision 3 is rewritten, because rsdl §13 now lists the declared sizing
+values (driftsys/ridl#719). The note no longer states the two `sizing` fields as
+a fact that §13 does not list.
+
 ## Context
 
 rsdl §13 states the lowering as facts and leaves their carrier open: "a
@@ -93,9 +98,8 @@ nothing.
 
    **Note (2026-10-05, decision 11).** `Deployment.sizing` and
    `Placement.sizing` carry the declared `depth`, `slots` and `budget` as
-   dedicated fields. rsdl §13 lists them once the rsdl sizing keys land
-   (driftsys/ridl#719), so the rule reads over the amended §13; until then the
-   two fields are the one fact this message states that §13 does not.
+   dedicated fields. rsdl §13 lists them as "the sizing values", so the rule
+   reads over §13 as written (driftsys/ridl#719).
 
 4. **Identity in the message is by qualified name, with `inline` beside it.** A
    component is `pkg.Name`, or the owning service's dotted name for the implicit
@@ -208,7 +212,7 @@ nothing.
     file of the runtime descriptors design stays unbuilt: it would be a second
     emitter over the same message, built when a runtime that reads one exists
     (`docs/design/catalog-descriptor.md`, "Not built"). The design note is
-    `2026-10-05-layout-inputs-design.md`, archived when its lane closes.
+    `docs/archive/2026-10-05-layout-inputs-design.md`.
 
 ## Consequences
 
@@ -249,7 +253,7 @@ nothing.
 | [ADR-0015](ADR-0015-qos-absorption-and-rpc-bounds.md) decision 21                    | a 2026-10-05 amendment: the depth is tabulated into the request and declarable as an rsdl override (decision 11)                                                                              |
 | [ADR-0018](ADR-0018-runtime-core-and-generated-surface.md) decision 12               | a 2026-10-05 amendment: which depth rule the toolchain evaluates, and the `depth`, `slots` and `budget` sources (decision 11)                                                                 |
 | [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decision 9 | a 2026-10-05 amendment: the request carries the deployment section (decision 11)                                                                                                              |
-| rsdl language reference §13                                                          | driftsys/ridl#719 adds the declared sizing values to the lowered facts (decision 11, the note under decision 3)                                                                               |
+| rsdl language reference §13                                                          | lists the declared sizing values among the lowered facts (decision 11, the note under decision 3); landed with driftsys/ridl#719                                                              |
 | [ADR-0010](ADR-0010-cli-conventions.md) the `build` row                              | unchanged by decision 8 — the exit code is still 1 on any error; what is written on an RSDL-7xx error is stated here, since that row never stated what is written                             |
 
 ## References

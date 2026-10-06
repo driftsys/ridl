@@ -456,3 +456,20 @@ provenance. Nothing here is normative — the current references live in
   [the catalog descriptor design record](../design/catalog-descriptor.md); the
   decisions the stages took are in the driver's
   [§5 "Decisions taken under delegation"](2026-10-03-lane-e16-catalog-descriptor-driver.md#5-decisions-taken-under-delegation).
+- **2026-10-05-layout-inputs-design.md** and
+  **2026-10-05-layout-inputs-plan.md** — lane S, the layout inputs for backend
+  plugins (Epic 17, driftsys/ridl#715 to #720): the deployment section of the
+  codegen request, the depth rule, the rsdl keys `depth`, `slots` and `budget`,
+  the size states and the binding overheads. The design's §8 holds the delegated
+  decisions DD-1 to DD-59, which Sebastien reviews; its D-6 table row for
+  RSDL-806 is superseded by DD-42. The plan's §1 was the stage driver for S2 to
+  S4. The plan is archived verbatim apart from its spec path. The design is
+  archived with these edits: the D-6 table re-flowed, with the note "Superseded
+  by DD-42" added to the RSDL-806 row and a paragraph below the table; its
+  lifecycle-rule link pointed at `docs/wip/README.md`; DD-53, DD-54 and DD-57
+  corrected and a dated note added to DD-58 during the review of
+  driftsys/ridl#736. The gardened records are
+  [the codegen plugins design record](../design/codegen-plugins.md),
+  [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) and
+  [the rsdl implementation technote](../technotes/rsdl-implementation.md). One
+  item stays open: the WebSocket binding row, driftsys/ridl#718.

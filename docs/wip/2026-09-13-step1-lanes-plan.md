@@ -255,9 +255,14 @@ catalog hash (E16.2).
 
 ### Lane S — layout inputs for backend plugins (priority 1)
 
-Driver prompt: `2026-10-05-layout-inputs-plan.md`, whose §1 is the stage driver,
-with the design `2026-10-05-layout-inputs-design.md`. Stories: Epic 17 in the
-roadmap, E17.0 to E17.5, driftsys/ridl#715 to driftsys/ridl#720.
+Driver prompt: `docs/archive/2026-10-05-layout-inputs-plan.md`, whose §1 is the
+stage driver, with the design `docs/archive/2026-10-05-layout-inputs-design.md`.
+Stories: Epic 17 in the roadmap, E17.0 to E17.5, driftsys/ridl#715 to
+driftsys/ridl#720.
+
+**Closed 2026-10-06**, stages S1 to S4 landed, with one item still open: the
+WebSocket binding row of the binding-overhead table, driftsys/ridl#718, which
+waits on driftsys/ridl#265. The design and plan are archived.
 
 **Added 2026-10-05, as priority 1.** A backend plugin must compute and generate
 a deployment's shared-memory layouts and socket message layouts from its
