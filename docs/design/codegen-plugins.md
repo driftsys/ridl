@@ -130,9 +130,9 @@ plugin and the path.
 
 `ridlc::codegen_request(base, package, others, options, deployment)` builds the
 one request per package — the model lowered once, over the same `others` every
-code emit reads, so the request's model is the artifact, and the `deployment`
-section the build selected once, the same section in every request — and
-`write_emits` hands it to each selected backend through the trait:
+code emit reads, so the request's model is the same JSON value as the artifact,
+and the `deployment` section the build selected once, the same section in every
+request — and `write_emits` hands it to each selected backend through the trait:
 
 ```rust
 pub trait Backend {
@@ -142,10 +142,11 @@ pub trait Backend {
 ```
 
 The signature is the contract's own, over the request alone. The Rust backend
-reads only `request.model`, so it is constructed with nothing. The TypeScript,
-proto3 and FlatBuffers backends are still readers of the raw IR until their
-port, so each is constructed with a `RawIr { package, others }` it keeps beside
-the request and reads in place of `request.model`:
+reads the request's model, options and artifact base and never the raw IR, so it
+is constructed with nothing. The TypeScript, proto3 and FlatBuffers backends are
+still readers of the raw IR until their port, so each is constructed with a
+`RawIr { package, others }` it keeps beside the request and reads in place of
+`request.model`:
 
 ```rust
 let raw = codegen::RawIr { package: ir, others };
@@ -165,8 +166,10 @@ write_response(out_dir, Origin::InTree { language: backend.language() }, &respon
 So what changes when a backend is ported is how it is built — `RawIr` leaves its
 constructor, as it has left the Rust backend's — never how it is called, and the
 request it is handed today is already the request a plugin is handed. The three
-IR dumps and the catalog descriptor are not backends and take no request; the
-request is built only when a code emit or a plugin will read it.
+IR dumps and the catalog descriptor are not backends and take no request. The
+request is built when a plugin runs or when an emit other than an IR dump is
+selected, so a build whose only emit is `catalog` builds a request that nothing
+reads.
 
 `write_response` records the response's diagnostics — an in-tree backend's
 message as it is, since the corpus snapshots pin those messages; a plugin's

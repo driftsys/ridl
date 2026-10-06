@@ -1694,8 +1694,9 @@ fn materialize_and_lock(
 /// specification §7): the schema name and this toolchain's version first,
 /// the model lowered over `others` — the same scope every code emit reads,
 /// so the request's `model` is the same JSON value as the
-/// `--emit codegen-model` artifact, one indentation level deeper — the backend `options`, and the artifact base `ridlc` names this
-/// package's files after. The one request per package every in-tree backend
+/// `--emit codegen-model` artifact, one indentation level deeper — the
+/// backend `options`, the artifact base `ridlc` names this package's files
+/// after, and the selected `deployment` section. The one request per package every in-tree backend
 /// and every plugin is handed; a test that wants the bytes a plugin sees
 /// builds it here.
 pub fn codegen_request(

@@ -693,9 +693,9 @@ The flag repeats, once per plugin. Each plugin runs once per package the code
 emits are written for — `ridl.std` included, under the same rule as above — and
 receives on its standard input one `ridl.codegen.v1.CodegenRequest` in canonical
 protobuf JSON: `schema` (`"ridl.codegen.v1"`) and `toolchain` (this `ridl`'s
-version) first, then `model`, the same JSON value as the package's
-`codegen-model` artifact, one indentation level deeper, `options` (empty from this command
-line; no flag sets one yet), `artifactBase`, the `<base>` of the emit list
+version) first, then `model` (the same JSON value as the package's
+`codegen-model` artifact, one indentation level deeper), `options` (empty from
+this command line; no flag sets one yet), `artifactBase`, the `<base>` of the emit list
 above, and `deployment`, the deployment section — the one `--deployment`
 names, or, with no flag, the one the source declares when it declares exactly
 one — absent when no deployment is carried. It answers on its standard output with one
