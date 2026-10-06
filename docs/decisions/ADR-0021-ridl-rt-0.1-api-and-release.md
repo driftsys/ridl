@@ -116,6 +116,21 @@ the
 `pub type Wire` alias decision 7's 2026-09-21 addendum describes; that addendum
 carries a dated note.
 
+**Amendment (2026-10-06) — decision 21: `trace`.** A call or an event that
+crosses a process boundary carries an optional trace context, so that a trace
+follows it from the sender to the receiver (driftsys/ridl#752). The send methods
+`Caller::command`, `Caller::query` and `EventSink::raise` gain a last argument,
+and `Claim`, `RawOccurrence` and the `ReadError::ShortClaim` variant gain a
+field. This is a breaking change under decision 10, because every `Caller` and
+`EventSink` implementer changes, every struct literal of `Claim` or
+`RawOccurrence` gains a field, and every `ShortClaim` literal or pattern that
+names its fields without `..` gains one. It is to be released with the workspace
+as 0.6.0. `TraceContext` joins the named-field structs that decision 10 lists as
+unable to gain a public field without a breaking change, so that list now holds
+sixteen. The design note is
+[`2026-10-06-trace-context-propagation-design.md`](../archive/2026-10-06-trace-context-propagation-design.md)
+(driftsys/ridl#752).
+
 ## Context
 
 `ridl-rt` 0.1 is the first crate a generated ridl package links and a runtime
@@ -498,6 +513,13 @@ trusted with no `unsafe` and no second verification pass.
     below. The version _number_ moves with the rest of the workspace; the _rule_
     for when it must move stays this decision's.
 
+    **Amended (2026-10-06).** Decision 21 is a breaking change under this rule:
+    it adds a last argument to `Caller::command`, `Caller::query` and
+    `EventSink::raise`, and a field to `Claim`, `RawOccurrence` and
+    `ReadError::ShortClaim`. It ships with the workspace as 0.6.0. Its
+    `TraceContext` is a named-field struct a public field cannot be added to,
+    and joins the list above.
+
     `ridl-rt` supports Rust 1.83 or newer: `rust-version = "1.83"` in
     `crates/ridl-rt/Cargo.toml`. The crate's manifest compiles as edition 2021,
     because its 1.83 minimum predates edition 2024 — Rust cannot build that
@@ -855,33 +877,107 @@ trusted with no `unsafe` and no second verification pass.
     The release follows the last of the four pull requests the design splits the
     work into.
 
+21. **Amendment (2026-10-06) — `trace`: an optional trace context on calls and
+    events, and the 0.6.0 release that carries it.** `ridl_rt::trace` is a new
+    unconditional module, `no_std` with no dependency like the rest. It holds
+    one type:
+
+    ```rust
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub struct TraceContext {
+        pub trace_id: [u8; 16],
+        pub span_id: [u8; 8],
+        pub flags: u8,
+    }
+    ```
+
+    It is the W3C Trace Context `traceparent` layout without the version byte,
+    as plain data. `ridl-rt` does not validate it: an all-zero id is carried
+    like any other value, and rejecting one is the exporter's choice. Its size
+    is 25 bytes, and `Option<TraceContext>` is 26 bytes with alignment 1.
+
+    - **The argument.** `Caller::command`, `Caller::query` and
+      `EventSink::raise` each take a last argument,
+      `trace: Option<TraceContext>`. The forwarding impls for `&mut P`
+      (decision 11) pass it through unchanged; `Caller` and `EventSink` have no
+      `&P` impl.
+    - **The fields.** `Claim` and `RawOccurrence` each gain
+      `pub trace: Option<TraceContext>`, placed after `envelope`. The
+      `ReadError::ShortClaim` variant gains `trace: Option<TraceContext>`,
+      placed after `needed`, so that a provider that settles an oversized claim
+      without reading it still learns the caller's context. Rule 1 below applies
+      to it as it does to the `Claim`.
+    - **The delivery rules.** Each of the four traits `Caller`, `EventSink`,
+      `Handler` and `EventSource` states them in its rustdoc.
+      1. A runtime that carries the trace context delivers, on the `Claim` that
+         a command or a query produces, the value its sender passed, unchanged.
+      2. A runtime that carries the trace context delivers, on every
+         `RawOccurrence` that a `raise` produces (one for each subscriber), the
+         value its sender passed, unchanged.
+      3. A runtime or a transport that does not carry the trace context delivers
+         `None`.
+      4. A sender's `None` is delivered as `None`.
+
+      Rule 3 lets a transport, or a future shared-memory region
+      (driftsys/ridl#317), choose not to reserve 26 bytes for each slot.
+    - **Why `Envelope` is unchanged.** Decision 5 keeps `Envelope` at two
+      fields. `Envelope` is shared by signals, events, calls and the frame, so a
+      field there would grow every stored envelope from 16 to 48 bytes and would
+      change ridl section 3.1 and the frame specification. The trace context
+      sits on the two receive structs of the interaction kinds that cross a
+      boundary instead.
+    - **Out of scope.** A trace context on signal samples (a signal is
+      latest-value state, and a trace would explain only the last writer),
+      `tracestate`, baggage, and a trace context on the frame. A frame transport
+      delivers `None` under rule 3.
+    - **Generated code.** The generated Rust face passes `None` and does not
+      read `Claim::trace` ([ADR-0023](ADR-0023-interaction-face-generation.md),
+      Status); driftsys/ridl#754 owns generated spans.
+    - **The runtimes.** `ridl-loopback` carries the context, so it is a runtime
+      under rules 1 and 2. In `ridl-rt-conformance`, the base arm of `suite!`
+      pins rule 4 for every runtime, and the `trace` arm pins rules 1 and 2 for
+      a runtime that carries the context. A runtime that does not carry it omits
+      the `trace` arm, because rule 3 lets it deliver `None`.
+
+    **The release.** The change is breaking under decision 10, and ships as
+    0.6.0 with the workspace. A `#[non_exhaustive]` marker and constructors on
+    `Claim` and `RawOccurrence`, which would make a later `tracestate` field
+    additive, were rejected: `tracestate` is not planned, and the change would
+    move every runtime from struct literals to constructors, which the other
+    structs under decision 10 do not do.
+
 ## Alternatives considered
 
-| Question                   | Alternative                                                           | Why it was not chosen                                                                                                                                                                                                                      |
-| -------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Identity (decision 1)      | keep `ServiceId`                                                      | the identity studies give a service no number; nothing would produce the type                                                                                                                                                              |
-| Identity (decision 1)      | a provisional bit inside `InterfaceNo`                                | a provisional number routes identically to a frozen one, and the bit would take width decision 2 fixes                                                                                                                                     |
-| Widths (decision 2)        | keep the note's `u16`                                                 | the IR already carries an ordinal as `uint32`, and the catalog descriptor plan writes `uint32` for both                                                                                                                                    |
-| Port binding (decision 3)  | the full `(catalog, interface, ordinal)` key on every call            | a lookup and a pointer on every call, and a catalog field on every result struct                                                                                                                                                           |
-| Port binding (decision 3)  | an address handle resolved once                                       | a table per binding in the runtime; a handle is not `const`, so generated dispatch cannot `match` on it, and a handle from one port means nothing to another                                                                               |
-| Clause result (decision 4) | `require`/`ensure` return `Result<(), Violation>`                     | typl v0.1 has no invariant constraint, so the `Violation` would name one that does not exist, and `Handler::settle` reads neither variant's payload                                                                                        |
-| Clause result (decision 4) | the index of the failing clause as the error                          | neither `Contract` variant carries a payload, so reading the index needs one on both plus a wire form for it                                                                                                                               |
-| #308 (decision 5)          | a caller field added to `Envelope`                                    | ridl §3.1 defines exactly two fields; the field would expose transport identity above the port and decide E14.2's question in advance                                                                                                      |
-| #569 (decision 5)          | a `ReadError` variant that consumes the claim and drops its arguments | `next_claim` would be the one read where a short buffer consumes, which breaks the rule that a `Short` error does not consume and the resize-and-read-again pattern a hand-written provider relies on                                      |
-| #569 (decision 5)          | the runtime settles an oversized claim itself and presents the next   | removes resize-and-read-again from `next_claim`, a behaviour change for every `Handler` user, and treats the provider's buffer size as the type's maximum                                                                                  |
-| #569 (decision 5)          | defer until a network runtime exists                                  | the defect is reachable today through a raw `Caller` over `ridl-loopback`, and every claim behind the oversized one stays unserved                                                                                                         |
-| #309 (decision 6)          | a ninth port that records withheld occurrences                        | a port every runtime must implement, for a reading the reference has not chosen, and it decides E14.2's question in advance                                                                                                                |
-| Proof type (decision 7)    | a `#[doc(hidden)]` public `Ref` constructor                           | a convention, not visibility — any crate could still forge a proof                                                                                                                                                                         |
-| Proof type (decision 7)    | `Ref` over bytes only, with a required separate `check`               | decoding a flatc-style buffer then needs an unchecked root (`unsafe`) or a second verification pass                                                                                                                                        |
-| Features (decision 8)      | let `flatbuffers` pull the dependency in 0.1                          | pins a version before story E11.7 chooses one, and obliges every binary that enables the feature to provide an allocator for a codec that does not exist yet                                                                               |
-| Error enums (decision 9)   | `#[non_exhaustive]` on `Contract` and `CallError` too                 | their variants are ridl §10's fixed categories and strata; a new one there is a language change, not a runtime's to add                                                                                                                    |
-| Rust version (decision 10) | `rust-version` equal to the `rust-toolchain.toml` pin                 | it would rise with every toolchain bump, and repeats the pin that ADR-0009 decision 2 keeps in one file                                                                                                                                    |
-| Rust version (decision 10) | no `rust-version` at all                                              | cargo's MSRV-aware resolver and crates.io get no minimum to build against                                                                                                                                                                  |
-| Rust edition (decision 10) | keep `ridl-rt` on the workspace's edition 2024 only                   | the 1.83 minimum cannot build edition 2024, so the crate would break its own `rust-version`; and source ridl emits, copied or generated into an edition-2021 consumer — which compiles as that consumer's own edition — would have no test |
-| Forwarding (decision 11)   | no forwarding impls; runtimes hand out short-lived ports              | moves the cost into every runtime rather than removing it, and still admits no face over a reference to a port                                                                                                                             |
-| Forwarding (decision 11)   | `impl<P: T + ?Sized> T for Box<P>` in 0.1                             | needs `alloc`, which only the `std` feature brings in since 2026-09-25 (decision 8), and nothing needs a boxed port; deferred rather than rejected                                                                                         |
-| Threading (decision 12)    | one runtime struct implementing every port, behind a mutex            | serialises every signal read behind every publication commit, removing the property a signal read is specified to have                                                                                                                     |
-| Threading (decision 12)    | `Send + Sync` as supertraits on the port traits                       | excludes a single-threaded `no_std` runtime whose handles use `Cell` or `RefCell` internally, a supported target on the platform ladder                                                                                                    |
+| Question                    | Alternative                                                           | Why it was not chosen                                                                                                                                                                                                                      |
+| --------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Identity (decision 1)       | keep `ServiceId`                                                      | the identity studies give a service no number; nothing would produce the type                                                                                                                                                              |
+| Identity (decision 1)       | a provisional bit inside `InterfaceNo`                                | a provisional number routes identically to a frozen one, and the bit would take width decision 2 fixes                                                                                                                                     |
+| Widths (decision 2)         | keep the note's `u16`                                                 | the IR already carries an ordinal as `uint32`, and the catalog descriptor plan writes `uint32` for both                                                                                                                                    |
+| Port binding (decision 3)   | the full `(catalog, interface, ordinal)` key on every call            | a lookup and a pointer on every call, and a catalog field on every result struct                                                                                                                                                           |
+| Port binding (decision 3)   | an address handle resolved once                                       | a table per binding in the runtime; a handle is not `const`, so generated dispatch cannot `match` on it, and a handle from one port means nothing to another                                                                               |
+| Clause result (decision 4)  | `require`/`ensure` return `Result<(), Violation>`                     | typl v0.1 has no invariant constraint, so the `Violation` would name one that does not exist, and `Handler::settle` reads neither variant's payload                                                                                        |
+| Clause result (decision 4)  | the index of the failing clause as the error                          | neither `Contract` variant carries a payload, so reading the index needs one on both plus a wire form for it                                                                                                                               |
+| #308 (decision 5)           | a caller field added to `Envelope`                                    | ridl §3.1 defines exactly two fields; the field would expose transport identity above the port and decide E14.2's question in advance                                                                                                      |
+| #569 (decision 5)           | a `ReadError` variant that consumes the claim and drops its arguments | `next_claim` would be the one read where a short buffer consumes, which breaks the rule that a `Short` error does not consume and the resize-and-read-again pattern a hand-written provider relies on                                      |
+| #569 (decision 5)           | the runtime settles an oversized claim itself and presents the next   | removes resize-and-read-again from `next_claim`, a behaviour change for every `Handler` user, and treats the provider's buffer size as the type's maximum                                                                                  |
+| #569 (decision 5)           | defer until a network runtime exists                                  | the defect is reachable today through a raw `Caller` over `ridl-loopback`, and every claim behind the oversized one stays unserved                                                                                                         |
+| #309 (decision 6)           | a ninth port that records withheld occurrences                        | a port every runtime must implement, for a reading the reference has not chosen, and it decides E14.2's question in advance                                                                                                                |
+| Proof type (decision 7)     | a `#[doc(hidden)]` public `Ref` constructor                           | a convention, not visibility — any crate could still forge a proof                                                                                                                                                                         |
+| Proof type (decision 7)     | `Ref` over bytes only, with a required separate `check`               | decoding a flatc-style buffer then needs an unchecked root (`unsafe`) or a second verification pass                                                                                                                                        |
+| Features (decision 8)       | let `flatbuffers` pull the dependency in 0.1                          | pins a version before story E11.7 chooses one, and obliges every binary that enables the feature to provide an allocator for a codec that does not exist yet                                                                               |
+| Error enums (decision 9)    | `#[non_exhaustive]` on `Contract` and `CallError` too                 | their variants are ridl §10's fixed categories and strata; a new one there is a language change, not a runtime's to add                                                                                                                    |
+| Rust version (decision 10)  | `rust-version` equal to the `rust-toolchain.toml` pin                 | it would rise with every toolchain bump, and repeats the pin that ADR-0009 decision 2 keeps in one file                                                                                                                                    |
+| Rust version (decision 10)  | no `rust-version` at all                                              | cargo's MSRV-aware resolver and crates.io get no minimum to build against                                                                                                                                                                  |
+| Rust edition (decision 10)  | keep `ridl-rt` on the workspace's edition 2024 only                   | the 1.83 minimum cannot build edition 2024, so the crate would break its own `rust-version`; and source ridl emits, copied or generated into an edition-2021 consumer — which compiles as that consumer's own edition — would have no test |
+| Forwarding (decision 11)    | no forwarding impls; runtimes hand out short-lived ports              | moves the cost into every runtime rather than removing it, and still admits no face over a reference to a port                                                                                                                             |
+| Forwarding (decision 11)    | `impl<P: T + ?Sized> T for Box<P>` in 0.1                             | needs `alloc`, which only the `std` feature brings in since 2026-09-25 (decision 8), and nothing needs a boxed port; deferred rather than rejected                                                                                         |
+| Threading (decision 12)     | one runtime struct implementing every port, behind a mutex            | serialises every signal read behind every publication commit, removing the property a signal read is specified to have                                                                                                                     |
+| Threading (decision 12)     | `Send + Sync` as supertraits on the port traits                       | excludes a single-threaded `no_std` runtime whose handles use `Cell` or `RefCell` internally, a supported target on the platform ladder                                                                                                    |
+| Trace context (decision 21) | the context as a field of `Envelope`                                  | decision 5 keeps `Envelope` at two fields, and a third would grow every stored envelope from 16 to 48 bytes and change ridl section 3.1 and the frame specification                                                                        |
+| Trace context (decision 21) | additive `*_traced` send methods with default implementations         | a runtime breaks anyway, because it builds `Claim` and `RawOccurrence` as struct literals; the methods would save only the generated call sites, at the cost of two methods per operation                                                  |
+| Trace context (decision 21) | a context held on the port and applied to the next send               | it is stateful, and a context that is not cleared attaches to an unrelated call                                                                                                                                                            |
+| Trace context (decision 21) | `#[non_exhaustive]` and constructors on `Claim` and `RawOccurrence`   | `tracestate` is not planned, and the change would move every runtime to constructors, which the other structs under decision 10 do not do                                                                                                  |
+| Trace context (decision 21) | defer events to a later study (#752 as filed)                         | the shared-memory region layout the study would measure does not exist (driftsys/ridl#317); rule 3 lets a future region decline the cost, and deferring would make the events field a second breaking release                              |
 
 ## Consequences
 
@@ -978,6 +1074,13 @@ trusted with no `unsafe` and no second verification pass.
 | [the interaction-face design record](../design/interaction-face.md)                              | the consumer face, the provider face and the blocking module state which methods are trait methods, and the collision paragraph states the rule a consumer follows (ADR-0023 decision 7)                                                                                                                                         |
 | [the `ridl-rt` by example technote](../technotes/ridl-rt-by-example.md)                          | its examples carry the `use ...::prelude::*;` line and name the traits (ADR-0023 decision 7)                                                                                                                                                                                                                                     |
 | `crates/ridl-rt/src/lib.rs`, `crates/ridl-rt/README.md`                                          | the crate documentation and the README name the `face` module (decision 19)                                                                                                                                                                                                                                                      |
+| [ADR-0023](ADR-0023-interaction-face-generation.md)                                              | its 2026-10-06 amendment records that the generated face passes `None` as the trace context (decision 21)                                                                                                                                                                                                                        |
+| [the `ridl-rt` design record](../design/ridl-rt.md)                                              | the module table gains `trace`, and the ports section gains the three signatures, the two fields and the four delivery rules (decision 21)                                                                                                                                                                                       |
+| [the `ridl-rt` by example technote](../technotes/ridl-rt-by-example.md)                          | the `Claim` description names its `trace` field (decision 21)                                                                                                                                                                                                                                                                    |
+| [the frame specification](../specification/frame-specification.md) §2                            | `TraceContext` joins the `ridl-rt` names that are not on the frame (decision 21)                                                                                                                                                                                                                                                 |
+| `crates/ridl-rt/src/port.rs`                                                                     | the `Caller`, `EventSink`, `Handler` and `EventSource` docs state the four delivery rules (decision 21)                                                                                                                                                                                                                          |
+| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decision 5             | a 2026-10-06 amendment records `trace` as the ninth unconditional module (decision 21)                                                                                                                                                                                                                                           |
+| `crates/ridl-rt/src/lib.rs`, `crates/ridl-rt/README.md`                                          | the crate documentation and the README name the `trace` module (decision 21)                                                                                                                                                                                                                                                     |
 
 ## References
 

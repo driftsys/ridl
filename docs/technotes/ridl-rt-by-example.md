@@ -646,9 +646,11 @@ pub trait Handler: Attached {
 ```
 
 A `Claim` is one call presented to the provider: an id, the interface number and
-ordinal, the caller's envelope, the argument length, and `remaining` — the time
-left before the response bound passes, or `None` when the call has no response
-bound (ridl §9.3).
+ordinal, the caller's envelope, the caller's `trace: Option<TraceContext>` (what
+the sender passed to `command` or `query`, or `None`), the argument length, and
+`remaining` — the time left before the response bound passes, or `None` when the
+call has no response bound (ridl §9.3). The generated face passes `None` as the
+trace and does not read the field.
 
 The contract that shapes everything below is one sentence from the trait's own
 documentation: **every claim is settled.**

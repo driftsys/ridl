@@ -22,6 +22,7 @@ use ridl_rt::port::{
     SubscribeError, Watermark, WriteError,
 };
 use ridl_rt::sample::{Envelope, Freshness, Provenance, Timestamp};
+use ridl_rt::trace::TraceContext;
 
 const CATALOG: CatalogRef = CatalogRef {
     name: "vehicle",
@@ -43,8 +44,20 @@ const RAW: RawSample = RawSample {
 const IFACE: InterfaceNo = InterfaceNo(1);
 const ORD: Ordinal = Ordinal(1);
 
-/// A port set that answers every call with a fixed value.
-struct Stub;
+const TRACE: TraceContext = TraceContext {
+    trace_id: [1; 16],
+    span_id: [2; 8],
+    flags: 1,
+};
+
+/// A port set that answers every call with a fixed value, and records the
+/// trace context its send methods receive.
+#[derive(Default)]
+struct Stub {
+    raised: Option<TraceContext>,
+    commanded: Option<TraceContext>,
+    queried: Option<TraceContext>,
+}
 
 impl Attached for Stub {
     fn catalog(&self) -> &CatalogRef {
@@ -88,16 +101,37 @@ impl EventSource for Stub {
 }
 
 impl EventSink for Stub {
-    fn raise(&mut self, _: InterfaceNo, _: Ordinal, _: &[u8]) -> Result<(), RaiseError> {
+    fn raise(
+        &mut self,
+        _: InterfaceNo,
+        _: Ordinal,
+        _: &[u8],
+        trace: Option<TraceContext>,
+    ) -> Result<(), RaiseError> {
+        self.raised = trace;
         Err(RaiseError::Busy)
     }
 }
 
 impl Caller for Stub {
-    fn command(&mut self, _: InterfaceNo, _: Ordinal, _: &[u8]) -> Result<Correlation, SendError> {
+    fn command(
+        &mut self,
+        _: InterfaceNo,
+        _: Ordinal,
+        _: &[u8],
+        trace: Option<TraceContext>,
+    ) -> Result<Correlation, SendError> {
+        self.commanded = trace;
         Ok(Correlation(1))
     }
-    fn query(&mut self, _: InterfaceNo, _: Ordinal, _: &[u8]) -> Result<Correlation, SendError> {
+    fn query(
+        &mut self,
+        _: InterfaceNo,
+        _: Ordinal,
+        _: &[u8],
+        trace: Option<TraceContext>,
+    ) -> Result<Correlation, SendError> {
+        self.queried = trace;
         Err(SendError::Busy)
     }
     fn ack(&mut self, _: Correlation) -> Option<Result<(), CallError>> {
@@ -123,6 +157,7 @@ impl Handler for Stub {
             iface: IFACE,
             ord: ORD,
             envelope: ENVELOPE,
+            trace: None,
             remaining: None,
             len: 0,
         }))
@@ -164,7 +199,7 @@ fn attached_is_reached_through_a_borrow() {
     fn over<P: Attached>(port: P) {
         assert_eq!(port.catalog(), &CATALOG);
     }
-    let mut stub = Stub;
+    let mut stub = Stub::default();
     over(&stub);
     over(&mut stub);
 }
@@ -174,7 +209,7 @@ fn clock_is_reached_through_a_borrow() {
     fn over<P: Clock>(port: P) -> Timestamp {
         port.now()
     }
-    let mut stub = Stub;
+    let mut stub = Stub::default();
     assert_eq!(over(&stub), Timestamp(42));
     assert_eq!(over(&mut stub), Timestamp(42));
 }
@@ -185,7 +220,7 @@ fn signal_reader_is_reached_through_a_borrow() {
         assert_eq!(port.catalog(), &CATALOG);
         port.read(IFACE, ORD, &mut [0u8; 8])
     }
-    let mut stub = Stub;
+    let mut stub = Stub::default();
     assert_eq!(over(&stub), Ok(RAW));
     assert_eq!(over(&mut stub), Ok(RAW));
 }
@@ -205,7 +240,7 @@ fn signal_writer_is_reached_through_a_borrow() {
         );
         port.commit();
     }
-    let mut stub = Stub;
+    let mut stub = Stub::default();
     over(&mut stub);
 }
 
@@ -220,7 +255,7 @@ fn event_source_is_reached_through_a_borrow() {
         port.unsubscribe(IFACE, &[ORD]);
         assert_eq!(port.next(&mut [0u8; 8]), Ok(None));
     }
-    let mut stub = Stub;
+    let mut stub = Stub::default();
     over(&mut stub);
 }
 
@@ -228,18 +263,28 @@ fn event_source_is_reached_through_a_borrow() {
 fn event_sink_is_reached_through_a_borrow() {
     fn over<P: EventSink>(mut port: P) {
         assert_eq!(port.catalog(), &CATALOG);
-        assert_eq!(port.raise(IFACE, ORD, &[1]), Err(RaiseError::Busy));
+        assert_eq!(
+            port.raise(IFACE, ORD, &[1], Some(TRACE)),
+            Err(RaiseError::Busy)
+        );
     }
-    let mut stub = Stub;
+    let mut stub = Stub::default();
     over(&mut stub);
+    assert_eq!(stub.raised, Some(TRACE));
 }
 
 #[test]
 fn caller_is_reached_through_a_borrow() {
     fn over<P: Caller>(mut port: P) {
         assert_eq!(port.catalog(), &CATALOG);
-        assert_eq!(port.command(IFACE, ORD, &[]), Ok(Correlation(1)));
-        assert_eq!(port.query(IFACE, ORD, &[]), Err(SendError::Busy));
+        assert_eq!(
+            port.command(IFACE, ORD, &[], Some(TRACE)),
+            Ok(Correlation(1))
+        );
+        assert_eq!(
+            port.query(IFACE, ORD, &[], Some(TRACE)),
+            Err(SendError::Busy)
+        );
         assert_eq!(port.ack(Correlation(1)), Some(Ok(())));
         assert_eq!(
             port.reply(Correlation(1), &mut [0u8; 8]),
@@ -247,8 +292,10 @@ fn caller_is_reached_through_a_borrow() {
         );
         port.forget(Correlation(1));
     }
-    let mut stub = Stub;
+    let mut stub = Stub::default();
     over(&mut stub);
+    assert_eq!(stub.commanded, Some(TRACE));
+    assert_eq!(stub.queried, Some(TRACE));
 }
 
 #[test]
@@ -265,7 +312,7 @@ fn handler_is_reached_through_a_borrow() {
             Err(SettleError::UnknownClaim)
         );
     }
-    let mut stub = Stub;
+    let mut stub = Stub::default();
     over(&mut stub);
 }
 
@@ -275,7 +322,7 @@ fn fixed_reader_is_reached_through_a_borrow() {
         assert_eq!(port.catalog(), &CATALOG);
         port.read_fixed(IFACE, ORD, &mut [0u8; 8])
     }
-    let mut stub = Stub;
+    let mut stub = Stub::default();
     assert_eq!(over(&stub), Err(ReadError::Detached));
     assert_eq!(over(&mut stub), Err(ReadError::Detached));
 }
@@ -297,7 +344,7 @@ fn scannable_signals_is_reached_through_a_borrow() {
         assert_eq!(port.scan(&mut marks, &mut out), 0);
         port.generation(IFACE)
     }
-    let mut stub = Stub;
+    let mut stub = Stub::default();
     assert_eq!(over(&stub), 7);
     assert_eq!(over(&mut stub), 7);
 }
@@ -308,7 +355,7 @@ fn coherent_signals_is_reached_through_a_borrow() {
         assert_eq!(port.read(IFACE, ORD, &mut [0u8; 8]), Ok(RAW));
         port.read_coherent(IFACE, &[ORD], &mut [0u8; 8], &mut [RAW])
     }
-    let mut stub = Stub;
+    let mut stub = Stub::default();
     assert_eq!(over(&stub), Ok(0));
     assert_eq!(over(&mut stub), Ok(0));
 }

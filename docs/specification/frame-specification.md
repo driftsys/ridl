@@ -125,6 +125,9 @@ the provider runtime's local name for a call it has presented to application
 code, and `Correlation` is the caller runtime's local name for a call it has
 sent; neither crosses (§5.3, §5.4). `Family` — which of the five boundaries of
 ridl §3.2 an interaction sits on — is not on the frame in this version (§13).
+`TraceContext`, the optional trace context that a call or an event carries
+across a port (`ridl_rt::trace`), is not on the frame either, so a frame
+transport delivers `None`.
 
 ## 3. The Session
 

@@ -46,6 +46,7 @@ use ridl_rt::port::{
     SettleError, Watermark,
 };
 use ridl_rt::sample::{Cause, Envelope, Freshness, Provenance, Timestamp};
+use ridl_rt::trace::TraceContext;
 
 /// One interaction, addressed the way every port method addresses one.
 pub(crate) type Key = (InterfaceNo, Ordinal);
@@ -77,6 +78,8 @@ struct QueuedEvent {
     ord: Ordinal,
     bytes: Vec<u8>,
     envelope: Envelope,
+    /// The trace context the event was raised with.
+    trace: Option<TraceContext>,
 }
 
 /// One source handle's subscription set, its own queue, and its waiter. `raise`
@@ -148,6 +151,8 @@ struct CallEntry {
     ord: Ordinal,
     args: Vec<u8>,
     envelope: Envelope,
+    /// The trace context the call was sent with.
+    trace: Option<TraceContext>,
     /// The call's place in send order, which a returned claim goes back in
     /// by. A correlation does not give that order once a slot is reused.
     sent: u64,
@@ -467,6 +472,7 @@ impl Store {
         ord: Ordinal,
         bytes: &[u8],
         seq: u64,
+        trace: Option<TraceContext>,
         wake: &mut Vec<Waker>,
     ) {
         let envelope = Envelope {
@@ -480,6 +486,7 @@ impl Store {
                     ord,
                     bytes: bytes.to_vec(),
                     envelope,
+                    trace,
                 });
                 wake.extend(state.waiters.take(Interest::Event(iface)));
             }
@@ -527,6 +534,7 @@ impl Store {
             iface: event.iface,
             ord: event.ord,
             envelope: event.envelope,
+            trace: event.trace,
             len: event.bytes.len(),
         }))
     }
@@ -537,6 +545,7 @@ impl Store {
     /// or answers `SendError::Busy` when every slot is taken. Every handler
     /// that serves the member has its `Claim` waiter woken, whatever
     /// interface that waiter was registered under.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn send(
         &mut self,
         caller: usize,
@@ -544,6 +553,7 @@ impl Store {
         (iface, ord): Key,
         args: &[u8],
         seq: u64,
+        trace: Option<TraceContext>,
         wake: &mut Vec<Waker>,
     ) -> Result<Correlation, SendError> {
         // No budget, so the reservation is not read.
@@ -564,6 +574,7 @@ impl Store {
                 ord,
                 args: args.to_vec(),
                 envelope,
+                trace,
                 sent,
                 reply: Vec::new(),
                 forgotten: false,
@@ -950,6 +961,7 @@ impl Store {
             return Err(ReadError::ShortClaim {
                 claim: ClaimId(claim_id),
                 needed,
+                trace: entry.trace,
             });
         }
         out[..entry.args.len()].copy_from_slice(&entry.args);
@@ -958,6 +970,7 @@ impl Store {
             iface: entry.iface,
             ord: entry.ord,
             envelope: entry.envelope,
+            trace: entry.trace,
             // No response bound: a bound is a member's timing annotation, and
             // the loopback has no member table to read one from.
             remaining: None,

@@ -22,10 +22,11 @@ every section below cites for the contract it implements.
 
 ## Module layout
 
-Eight modules, each public item living in exactly one (ADR-0020 decision 5;
+Nine modules, each public item living in exactly one (ADR-0020 decision 5;
 `error` renamed from that decision's original `strata`, amended in place
 2026-09-13; `correlate` added by ADR-0021 decision 15; `face` by ADR-0021
-decision 19), plus two that a cargo feature adds:
+decision 19; `trace` by ADR-0021 decision 21), plus two that a cargo feature
+adds:
 
 | Module        | Contents                                                                                                                                                                                                                                                             |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -37,6 +38,7 @@ decision 19), plus two that a cargo feature adds:
 | `correlate`   | since the call-table move: `Table`, `Settled`, `Forgotten`, `Waiters`                                                                                                                                                                                                |
 | `error`       | `Contract`, `Transport`, `CallError`, `ClientError`, `ProviderError`                                                                                                                                                                                                 |
 | `face`        | since 2026-09-28 (driftsys/ridl#580): `Bind`, `Events`, `Publish`; `Timeout` under the `std` feature — the traits a generated face implements, the section "The face traits" below                                                                                   |
+| `trace`       | `TraceContext`, the optional trace context a call or an event carries across a port (ADR-0021 decision 21)                                                                                                                                                           |
 | `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with the Rust codec emitter             |
 | `task`        | under the `std` feature, since 2026-09-25: `block_on`, `noop_waker`; `flag_waker` and `WakeFlag` since 2026-09-28 (driftsys/ridl#568)                                                                                                                                |
 
@@ -509,15 +511,21 @@ pub trait EventSource: Attached {
     fn unsubscribe(&mut self, iface: InterfaceNo, ords: &[Ordinal]);
     fn next(&mut self, out: &mut [u8]) -> Result<Option<RawOccurrence>, ReadError>;
 }
-pub struct RawOccurrence { pub iface: InterfaceNo, pub ord: Ordinal, pub envelope: Envelope, pub len: usize }
+pub struct RawOccurrence {
+    pub iface: InterfaceNo, pub ord: Ordinal, pub envelope: Envelope,
+    pub trace: Option<TraceContext>, pub len: usize,
+}
 
 pub trait EventSink: Attached {
-    fn raise(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8]) -> Result<(), RaiseError>;
+    fn raise(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8],
+             trace: Option<TraceContext>) -> Result<(), RaiseError>;
 }
 
 pub trait Caller: Attached {
-    fn command(&mut self, iface: InterfaceNo, ord: Ordinal, args: &[u8]) -> Result<Correlation, SendError>;
-    fn query(&mut self, iface: InterfaceNo, ord: Ordinal, args: &[u8]) -> Result<Correlation, SendError>;
+    fn command(&mut self, iface: InterfaceNo, ord: Ordinal, args: &[u8],
+               trace: Option<TraceContext>) -> Result<Correlation, SendError>;
+    fn query(&mut self, iface: InterfaceNo, ord: Ordinal, args: &[u8],
+             trace: Option<TraceContext>) -> Result<Correlation, SendError>;
     fn ack(&mut self, c: Correlation) -> Option<Result<(), CallError>>;
     fn reply(&mut self, c: Correlation, out: &mut [u8]) -> Result<Option<Result<usize, CallError>>, ReadError>;
     fn forget(&mut self, c: Correlation);
@@ -531,7 +539,8 @@ pub trait Handler: Attached {
 }
 pub struct Claim {
     pub id: ClaimId, pub iface: InterfaceNo, pub ord: Ordinal,
-    pub envelope: Envelope, pub remaining: Option<Duration>, pub len: usize,
+    pub envelope: Envelope, pub trace: Option<TraceContext>,
+    pub remaining: Option<Duration>, pub len: usize,
 }
 pub struct ClaimId(pub u64);
 
@@ -579,6 +588,24 @@ Semantics each implementation presents:
   provider does not own.
 - **`EventSource::next`** returns occurrences in order; a gap in `seq` is a
   loss. An occurrence older than its time to live is discarded inside `next`.
+- **The trace context** (ADR-0021 decision 21). `command`, `query` and `raise`
+  take a last argument, `trace: Option<TraceContext>`, and `Claim` and
+  `RawOccurrence` carry the field of the same name after `envelope`.
+  `ReadError::ShortClaim` carries it too, after `needed`, so that a provider
+  that settles an oversized claim without reading it still has the caller's
+  context; rule 1 applies to it as it does to the `Claim`. The `Envelope` stays
+  at two fields. Four rules, stated on `Caller`, `EventSink`, `Handler` and
+  `EventSource`:
+  1. A runtime that carries the trace context delivers, on the `Claim` that a
+     command or a query produces, the value its sender passed, unchanged.
+  2. A runtime that carries it delivers, on every `RawOccurrence` that a `raise`
+     produces (one for each subscriber), the value its sender passed, unchanged.
+  3. A runtime or a transport that does not carry it delivers `None`.
+  4. A sender's `None` is delivered as `None`.
+
+  `ridl-loopback` carries the context. The generated Rust face passes `None` and
+  does not read `Claim::trace`. `TraceContext` has no place on the frame, so a
+  frame transport delivers `None`.
 - **`Caller::ack`** reports a command's delivery acknowledgment: `Ok(())`
   accepted, `Err(CallError::Contract(_))` a negative acknowledgment,
   `Err(CallError::Transport(Transport::Corrupt))` when the provider could not
@@ -606,10 +633,11 @@ Semantics each implementation presents:
   the `CallError` outcome. A provider settles
   `CallError::Transport(Transport::Corrupt)` when the argument bytes fail the
   structure check. A claim whose argument bytes do not fit the buffer passed to
-  `next_claim` is reported as `ReadError::ShortClaim { claim, needed }` and not
-  consumed; `settle` accepts that id with any outcome although the arguments
-  were never read, and the generated `serve` settles it `Transport::Corrupt`
-  (ADR-0021 decision 5, amended 2026-09-28; driftsys/ridl#569).
+  `next_claim` is reported as `ReadError::ShortClaim { claim, needed, trace }`
+  and not consumed; `settle` accepts that id with any outcome although the
+  arguments were never read, and the generated `serve` settles it
+  `Transport::Corrupt` (ADR-0021 decision 5, amended 2026-09-28;
+  driftsys/ridl#569).
 - **`ScannableSignals::scan`** writes each interface's changes into `out` all
   together or not at all: when an interface's changes do not fit in the rest of
   `out`, none of them is written, that interface's mark is not updated, and
@@ -617,10 +645,10 @@ Semantics each implementation presents:
 - **A `Short` error does not consume.** `next`, `next_claim` and `reply` return
   `Result<Option<_>, ReadError>`, so a caller that receives
   `ReadError::Short { needed }` — or, from `next_claim`,
-  `ReadError::ShortClaim { claim, needed }`, the form that also carries the
-  claim's id so that the provider can settle the claim unread — resizes and
-  reads the same item again. `next_claim` never returns `Short` (amended
-  2026-09-28, driftsys/ridl#569).
+  `ReadError::ShortClaim { claim, needed, trace }`, the form that also carries
+  the claim's id and trace context so that the provider can settle the claim
+  unread — resizes and reads the same item again. `next_claim` never returns
+  `Short` (amended 2026-09-28, driftsys/ridl#569).
 
 `ScannableSignals`, `CoherentSignals` and `Wakeable` are extensions: they
 describe mechanisms some runtimes have, not interaction semantics every runtime
@@ -826,7 +854,7 @@ pub enum CallError { Contract(Contract), Transport(Transport) }
 #[non_exhaustive] pub enum ProviderError { Serve(ServeError), Claim(ReadError) }
 
 // port::
-#[non_exhaustive] pub enum ReadError      { Short { needed: usize }, ShortClaim { claim: ClaimId, needed: usize }, TooFewSamples { needed: usize }, Contract(Contract), Detached }
+#[non_exhaustive] pub enum ReadError      { Short { needed: usize }, ShortClaim { claim: ClaimId, needed: usize, trace: Option<TraceContext> }, TooFewSamples { needed: usize }, Contract(Contract), Detached }
 #[non_exhaustive] pub enum WriteError     { TooLarge { cap: usize }, NotOwner, Contract(Contract), Detached }
 #[non_exhaustive] pub enum RaiseError     { Busy, TooLarge { cap: usize }, NotOwner, Contract(Contract), Detached }
 #[non_exhaustive] pub enum SendError      { Busy, TooLarge { cap: usize }, Contract(Contract), Detached }

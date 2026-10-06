@@ -20,6 +20,7 @@ use ridl_rt::port::{
     SubscribeError, Wakeable, Watermark, WriteError,
 };
 use ridl_rt::sample::{Envelope, Freshness, Provenance, Timestamp};
+use ridl_rt::trace::TraceContext;
 
 const CATALOG: CatalogRef = CatalogRef {
     name: "vehicle",
@@ -83,7 +84,13 @@ impl EventSource for Stub {
 }
 
 impl EventSink for Stub {
-    fn raise(&mut self, _: InterfaceNo, ord: Ordinal, _: &[u8]) -> Result<(), RaiseError> {
+    fn raise(
+        &mut self,
+        _: InterfaceNo,
+        ord: Ordinal,
+        _: &[u8],
+        _: Option<TraceContext>,
+    ) -> Result<(), RaiseError> {
         if ord == ORD {
             Err(RaiseError::Busy)
         } else {
@@ -93,10 +100,22 @@ impl EventSink for Stub {
 }
 
 impl Caller for Stub {
-    fn command(&mut self, _: InterfaceNo, _: Ordinal, _: &[u8]) -> Result<Correlation, SendError> {
+    fn command(
+        &mut self,
+        _: InterfaceNo,
+        _: Ordinal,
+        _: &[u8],
+        _: Option<TraceContext>,
+    ) -> Result<Correlation, SendError> {
         Ok(Correlation(1))
     }
-    fn query(&mut self, _: InterfaceNo, _: Ordinal, _: &[u8]) -> Result<Correlation, SendError> {
+    fn query(
+        &mut self,
+        _: InterfaceNo,
+        _: Ordinal,
+        _: &[u8],
+        _: Option<TraceContext>,
+    ) -> Result<Correlation, SendError> {
         Err(SendError::Busy)
     }
     fn ack(&mut self, _: Correlation) -> Option<Result<(), CallError>> {
@@ -122,6 +141,7 @@ impl Handler for Stub {
             iface: InterfaceNo(1),
             ord: Ordinal(3),
             envelope: ENVELOPE,
+            trace: None,
             remaining: None,
             len: 0,
         }))
@@ -228,16 +248,16 @@ fn every_core_port_is_usable_as_a_trait_object() {
     assert_eq!(source.catalog(), &CATALOG);
 
     let sink: &mut dyn EventSink = &mut stub;
-    assert_eq!(sink.raise(IFACE, ORD, &[1]), Err(RaiseError::Busy));
+    assert_eq!(sink.raise(IFACE, ORD, &[1], None), Err(RaiseError::Busy));
     assert_eq!(
-        sink.raise(IFACE, Ordinal(2), &[1]),
+        sink.raise(IFACE, Ordinal(2), &[1], None),
         Err(RaiseError::Contract(Contract::UnknownInteraction))
     );
     assert_eq!(sink.catalog(), &CATALOG);
 
     let caller: &mut dyn Caller = &mut stub;
-    assert_eq!(caller.command(IFACE, ORD, &[]), Ok(Correlation(1)));
-    assert_eq!(caller.query(IFACE, ORD, &[]), Err(SendError::Busy));
+    assert_eq!(caller.command(IFACE, ORD, &[], None), Ok(Correlation(1)));
+    assert_eq!(caller.query(IFACE, ORD, &[], None), Err(SendError::Busy));
     assert_eq!(caller.ack(Correlation(1)), Some(Ok(())));
     assert_eq!(
         caller.reply(Correlation(1), &mut out),
@@ -308,14 +328,21 @@ fn an_interest_is_copy_and_compares_by_its_key() {
 }
 
 #[test]
-fn a_raw_occurrence_is_built_from_its_four_fields() {
+fn a_raw_occurrence_is_built_from_its_five_fields() {
+    let trace = TraceContext {
+        trace_id: [1; 16],
+        span_id: [2; 8],
+        flags: 1,
+    };
     let occurrence = RawOccurrence {
         iface: IFACE,
         ord: ORD,
         envelope: ENVELOPE,
+        trace: Some(trace),
         len: 3,
     };
     assert_eq!(occurrence.len, 3);
+    assert_eq!(occurrence.trace, Some(trace));
 }
 
 #[test]

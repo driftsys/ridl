@@ -263,7 +263,12 @@ other entry below is Accepted.
   every consumer of `ridl-rt`: the Rust codegen, the two runtimes, and the ridl
   reference finalization pass (story E14.2). The two reference sentences it gave
   that pass for #308 and #309 are in the reference since driftsys/ridl#544,
-  which aligned it with the frame specification.
+  which aligned it with the frame specification. A 2026-10-06 amendment adds
+  decision 21: `ridl_rt::trace`, whose `TraceContext` is passed as the last
+  argument on `Caller::command`, `Caller::query` and `EventSink::raise` and as a
+  field on `Claim`, `RawOccurrence` and `ReadError::ShortClaim`, under four
+  delivery rules, leaving `Envelope` unchanged (driftsys/ridl#752); a breaking
+  change to be released with the workspace as 0.6.0.
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
   and what carries it: a `System` message in `system.proto`, its own artifact
@@ -309,10 +314,12 @@ other entry below is Accepted.
   line, and on a real collision the consumer writes the trait's path
   (`<Client<_> as Bind>::new(port)`). The 2026-10-04 amendment adds decision 8:
   `Bind::new` and `serve` compare the port's catalog with the interface's
-  `CATALOG` once, at the binding, and panic on a mismatch. Binds every later
-  story that extends the Rust backend's interaction face, until superseded:
-  E5.1, Epic 10, and any later language backend that follows this precedent. The
-  as-built face this record's decisions produced is
+  `CATALOG` once, at the binding, and panic on a mismatch. A 2026-10-06
+  amendment records that the emitted client methods and event raise pass `None`
+  as the trace context (driftsys/ridl#752, #754). Binds every later story that
+  extends the Rust backend's interaction face, until superseded: E5.1, Epic 10,
+  and any later language backend that follows this precedent. The as-built face
+  this record's decisions produced is
   [the interaction-face design record](../design/interaction-face.md).
 
 - **ADR-0024 — The lint registry and levels.** Sixteen decisions: seven agreed

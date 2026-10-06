@@ -15,7 +15,8 @@ registry every runtime would otherwise write alone (`correlate`), and the traits
 a generated face implements for its fixed methods — `Bind::new`,
 `Events::next_event`, `Publish::commit`, and under `std` `Timeout` — which a
 consumer brings into scope with the generated `prelude` of each interface whose
-face it uses (`face`).
+face it uses (`face`). One more module holds the optional trace context that a
+call or an event carries across a port (`trace`).
 
 With its default features the crate is `no_std` and allocates nothing; it
 contains no `unsafe` code and has no dependency in any feature combination. It
@@ -33,12 +34,12 @@ carries no `#[non_exhaustive]` cannot gain a field without a breaking change,
 because code outside the crate can build it as a struct literal: `CatalogRef`,
 `Member`, `Timing`, `PayloadInfo`, `EncodedSizes`, `Encoded`, `Violation`,
 `RawSample`, `RawOccurrence`, `Claim`, `Watermark`, `Changed`, `Envelope`,
-`Sample`, `Occurrence`. The public tuple structs — `Ordinal`, `InterfaceNo`,
-`CatalogHash`, `Correlation`, `ClaimId`, `Timestamp`, `Duration` — follow the
-same rule. So do the unit structs `FlatBuffers`, `Proto3` and `ReprC`
-(`src/encoding.rs`) and `TrackerFull` (`src/sample.rs`): each is a unit struct
-with no field that code outside the crate uses as a value or a pattern, so a
-field added to any of them breaks that code.
+`Sample`, `Occurrence`, `TraceContext`. The public tuple structs — `Ordinal`,
+`InterfaceNo`, `CatalogHash`, `Correlation`, `ClaimId`, `Timestamp`, `Duration`
+— follow the same rule. So do the unit structs `FlatBuffers`, `Proto3` and
+`ReprC` (`src/encoding.rs`) and `TrackerFull` (`src/sample.rs`): each is a unit
+struct with no field that code outside the crate uses as a value or a pattern,
+so a field added to any of them breaks that code.
 
 The open API questions are tracked at
 <https://github.com/driftsys/ridl/issues/350>.

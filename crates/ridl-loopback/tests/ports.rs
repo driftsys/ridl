@@ -241,9 +241,9 @@ fn a_sink_counts_its_own_channel_and_not_another_sinks() {
     let mut second = rt.sink();
     source.subscribe(IFACE, &[ORD]).expect("subscribe");
 
-    first.raise(IFACE, ORD, &[1]).expect("raise");
-    second.raise(IFACE, ORD, &[2]).expect("raise");
-    first.raise(IFACE, ORD, &[3]).expect("raise");
+    first.raise(IFACE, ORD, &[1], None).expect("raise");
+    second.raise(IFACE, ORD, &[2], None).expect("raise");
+    first.raise(IFACE, ORD, &[3], None).expect("raise");
 
     let mut out = [0u8; 8];
     let mut seqs = Vec::new();
@@ -273,7 +273,9 @@ fn a_handler_that_served_nothing_is_presented_every_call() {
     let rt = runtime();
     let mut caller = rt.caller();
     let mut handler = rt.handler();
-    caller.command(InterfaceNo(2), OTHER, &[1]).expect("send");
+    caller
+        .command(InterfaceNo(2), OTHER, &[1], None)
+        .expect("send");
 
     let mut buf = [0u8; 8];
     let claim = handler
@@ -286,7 +288,7 @@ fn a_handler_that_served_nothing_is_presented_every_call() {
 #[test]
 fn the_injected_settle_failure_is_too_large_with_no_capacity() {
     let mut rt = runtime();
-    rt.command(IFACE, ORD, &[1]).expect("send");
+    rt.command(IFACE, ORD, &[1], None).expect("send");
     let mut buf = [0u8; 8];
     let claim = rt.next_claim(&mut buf).expect("read").expect("waiting");
 
@@ -393,8 +395,8 @@ fn an_attached_aggregate_starts_with_none_of_the_originals_handle_state() {
     rt.serve(IFACE, &[ORD]).expect("serve");
     rt.set(IFACE, ORD, &[1]).expect("staged");
     rt.commit();
-    rt.raise(IFACE, ORD, &[1]).expect("raise");
-    rt.command(IFACE, ORD, &[1]).expect("send");
+    rt.raise(IFACE, ORD, &[1], None).expect("raise");
+    rt.command(IFACE, ORD, &[1], None).expect("send");
     let mut attached = rt.attach();
 
     let mut out = [0u8; 8];
@@ -406,7 +408,7 @@ fn an_attached_aggregate_starts_with_none_of_the_originals_handle_state() {
         "the attached writer's first publication"
     );
 
-    attached.raise(IFACE, ORD, &[2]).expect("raise");
+    attached.raise(IFACE, ORD, &[2], None).expect("raise");
     assert!(
         attached.next(&mut out).expect("next").is_none(),
         "the attached source is subscribed to nothing"
@@ -421,7 +423,7 @@ fn an_attached_aggregate_starts_with_none_of_the_originals_handle_state() {
         "each sink's first raise is its own seq 1"
     );
 
-    attached.command(IFACE, ORD, &[2]).expect("send");
+    attached.command(IFACE, ORD, &[2], None).expect("send");
     let mut sent = Vec::new();
     while let Some(claim) = rt.next_claim(&mut out).expect("next_claim") {
         sent.push(claim.envelope.seq);
@@ -441,7 +443,7 @@ fn an_attached_aggregate_has_its_own_subscriptions_and_queue() {
     let mut attached = rt.attach();
     rt.subscribe(IFACE, &[ORD]).expect("subscribe");
 
-    attached.raise(IFACE, ORD, &[1]).expect("raise");
+    attached.raise(IFACE, ORD, &[1], None).expect("raise");
     let mut out = [0u8; 8];
     assert!(
         attached.next(&mut out).expect("next").is_none(),
@@ -449,7 +451,7 @@ fn an_attached_aggregate_has_its_own_subscriptions_and_queue() {
     );
 
     attached.subscribe(IFACE, &[ORD]).expect("subscribe");
-    attached.raise(IFACE, ORD, &[2]).expect("raise");
+    attached.raise(IFACE, ORD, &[2], None).expect("raise");
     let mut drain = |port: &mut Loopback| {
         let mut payloads = Vec::new();
         while let Some(occurrence) = port.next(&mut out).expect("next") {
@@ -465,7 +467,7 @@ fn an_attached_aggregate_has_its_own_subscriptions_and_queue() {
 fn a_call_sent_through_one_aggregate_is_served_through_an_attached_one() {
     let mut rt = runtime();
     let mut attached = rt.attach();
-    let sent = rt.command(IFACE, ORD, &[1]).expect("send");
+    let sent = rt.command(IFACE, ORD, &[1], None).expect("send");
 
     let mut buf = [0u8; 8];
     let claim = attached
@@ -484,10 +486,10 @@ fn dropping_an_attached_aggregate_leaves_the_originals_calls_and_subscriptions()
     // unclaimed call is withdrawn with it.
     let mut rt = runtime();
     rt.subscribe(IFACE, &[ORD]).expect("subscribe");
-    let sent = rt.command(IFACE, ORD, &[1]).expect("send");
+    let sent = rt.command(IFACE, ORD, &[1], None).expect("send");
     let mut attached = rt.attach();
     attached.subscribe(IFACE, &[ORD]).expect("subscribe");
-    attached.command(IFACE, ORD, &[2]).expect("send");
+    attached.command(IFACE, ORD, &[2], None).expect("send");
     let mut out = [0u8; 8];
     let claim = rt
         .next_claim(&mut out)
@@ -496,7 +498,7 @@ fn dropping_an_attached_aggregate_leaves_the_originals_calls_and_subscriptions()
     assert_eq!(out[0], 1);
     drop(attached);
 
-    rt.raise(IFACE, ORD, &[3]).expect("raise");
+    rt.raise(IFACE, ORD, &[3], None).expect("raise");
     let occurrence = rt.next(&mut out).expect("next").expect("subscribed");
     assert_eq!(&out[..occurrence.len], &[3]);
 
@@ -516,7 +518,7 @@ fn an_attached_aggregate_keeps_the_store_after_the_original_is_dropped() {
     let mut rt = runtime();
     let mut attached = rt.attach();
     attached.subscribe(IFACE, &[ORD]).expect("subscribe");
-    let sent = attached.command(IFACE, ORD, &[5]).expect("send");
+    let sent = attached.command(IFACE, ORD, &[5], None).expect("send");
     rt.set(IFACE, ORD, &[4]).expect("staged");
     rt.commit();
     drop(rt);
@@ -525,7 +527,7 @@ fn an_attached_aggregate_keeps_the_store_after_the_original_is_dropped() {
     let sample = attached.read(IFACE, ORD, &mut out).expect("read");
     assert_eq!(&out[..sample.len], &[4]);
 
-    attached.raise(IFACE, ORD, &[6]).expect("raise");
+    attached.raise(IFACE, ORD, &[6], None).expect("raise");
     let occurrence = attached.next(&mut out).expect("next").expect("subscribed");
     assert_eq!(&out[..occurrence.len], &[6]);
 
@@ -644,8 +646,8 @@ fn each_settlement_wakes_only_its_own_calls_waiter() {
     } = runtime().split();
     let mut buf = [0u8; 8];
 
-    let first_call = caller.command(IFACE, ORD, &[1]).expect("send");
-    let second_call = caller.command(IFACE, ORD, &[2]).expect("send");
+    let first_call = caller.command(IFACE, ORD, &[1], None).expect("send");
+    let second_call = caller.command(IFACE, ORD, &[2], None).expect("send");
     let (first, first_waker) = counting();
     let (second, second_waker) = counting();
     caller.wake_on(Interest::Outcome(first_call), &first_waker);
@@ -681,7 +683,7 @@ fn a_waiter_registered_after_the_settlement_is_woken_at_once() {
         mut handler,
         ..
     } = runtime().split();
-    let c = caller.query(IFACE, ORD, &[1]).expect("send");
+    let c = caller.query(IFACE, ORD, &[1], None).expect("send");
     let mut buf = [0u8; 8];
     let claim = handler
         .next_claim(&mut buf)
@@ -714,7 +716,7 @@ fn a_raise_wakes_a_subscribed_source_and_not_an_unsubscribed_one() {
     elsewhere.wake_on(Interest::Event(IFACE), &other_waker);
     unsubscribed.wake_on(Interest::Event(IFACE), &none_waker);
 
-    sink.raise(IFACE, ORD, &[1]).expect("raise");
+    sink.raise(IFACE, ORD, &[1], None).expect("raise");
     assert_eq!(wakes(&woken), 1, "the subscribed source is woken");
     assert_eq!(
         wakes(&other),
@@ -733,7 +735,7 @@ fn a_waiting_occurrence_of_another_interface_wakes_an_event_registration_at_once
     let mut sink = rt.sink();
     let mut source = rt.source();
     source.subscribe(InterfaceNo(2), &[ORD]).expect("subscribe");
-    sink.raise(InterfaceNo(2), ORD, &[1]).expect("raise");
+    sink.raise(InterfaceNo(2), ORD, &[1], None).expect("raise");
 
     let (count, waker) = counting();
     source.wake_on(Interest::Event(IFACE), &waker);
@@ -750,7 +752,9 @@ fn a_waiting_call_on_another_interface_wakes_a_claim_registration_at_once() {
     let mut caller = rt.caller();
     let mut handler = rt.handler();
     handler.serve(InterfaceNo(2), &[ORD]).expect("serve");
-    caller.command(InterfaceNo(2), ORD, &[1]).expect("send");
+    caller
+        .command(InterfaceNo(2), ORD, &[1], None)
+        .expect("send");
 
     let (count, waker) = counting();
     handler.wake_on(Interest::Claim(IFACE), &waker);
@@ -771,12 +775,12 @@ fn a_drop_returns_only_the_dropped_handlers_claims_and_wakes_every_serving_handl
     elsewhere.serve(IFACE, &[OTHER]).expect("serve");
     let mut buf = [0u8; 8];
 
-    let kept = caller.command(IFACE, ORD, &[1]).expect("send");
+    let kept = caller.command(IFACE, ORD, &[1], None).expect("send");
     let kept_claim = keeper
         .next_claim(&mut buf)
         .expect("next_claim")
         .expect("waiting");
-    caller.command(IFACE, ORD, &[2]).expect("send");
+    caller.command(IFACE, ORD, &[2], None).expect("send");
     dropped
         .next_claim(&mut buf)
         .expect("next_claim")
@@ -836,12 +840,12 @@ fn a_waiter_woken_at_once_is_not_stored() {
     let mut sink = rt.sink();
     let mut source = rt.source();
     source.subscribe(IFACE, &[ORD]).expect("subscribe");
-    sink.raise(IFACE, ORD, &[1]).expect("raise");
+    sink.raise(IFACE, ORD, &[1], None).expect("raise");
     let (count, waker) = counting();
     source.wake_on(Interest::Event(IFACE), &waker);
     assert_eq!(wakes(&count), 1, "an occurrence is waiting");
 
-    sink.raise(IFACE, ORD, &[2]).expect("raise");
+    sink.raise(IFACE, ORD, &[2], None).expect("raise");
     assert_eq!(wakes(&count), 1, "a waker woken at once was not stored");
 }
 
@@ -854,7 +858,7 @@ fn a_registration_on_a_forgotten_call_is_woken_at_once() {
         mut handler,
         ..
     } = runtime().split();
-    let c = caller.command(IFACE, ORD, &[1]).expect("send");
+    let c = caller.command(IFACE, ORD, &[1], None).expect("send");
     handler
         .next_claim(&mut [0u8; 8])
         .expect("next_claim")
@@ -885,11 +889,11 @@ fn every_subscribed_source_and_every_serving_handler_is_woken() {
     first_handler.wake_on(Interest::Claim(IFACE), &wakers[2].1);
     second_handler.wake_on(Interest::Claim(IFACE), &wakers[3].1);
 
-    sink.raise(IFACE, ORD, &[1]).expect("raise");
+    sink.raise(IFACE, ORD, &[1], None).expect("raise");
     assert_eq!(wakes(&wakers[0].0), 1, "the first source");
     assert_eq!(wakes(&wakers[1].0), 1, "the second source");
 
-    caller.command(IFACE, ORD, &[1]).expect("send");
+    caller.command(IFACE, ORD, &[1], None).expect("send");
     assert_eq!(wakes(&wakers[2].0), 1, "the first handler");
     assert_eq!(wakes(&wakers[3].0), 1, "the second handler");
 }
@@ -900,7 +904,7 @@ fn a_claim_registration_is_not_woken_by_a_call_the_handler_does_not_serve() {
     let mut caller = rt.caller();
     let mut handler = rt.handler();
     handler.serve(IFACE, &[OTHER]).expect("serve");
-    caller.command(IFACE, ORD, &[1]).expect("send");
+    caller.command(IFACE, ORD, &[1], None).expect("send");
     let (count, waker) = counting();
     handler.wake_on(Interest::Claim(IFACE), &waker);
     assert_eq!(wakes(&count), 0, "the waiting call is not this handler's");
@@ -927,12 +931,12 @@ fn a_dropped_handler_returns_its_claims_to_the_waiting_calls() {
     second.serve(IFACE, &[ORD]).expect("serve");
     let mut buf = [0u8; 8];
 
-    let c = caller.command(IFACE, ORD, &[1]).expect("send");
+    let c = caller.command(IFACE, ORD, &[1], None).expect("send");
     first
         .next_claim(&mut buf)
         .expect("next_claim")
         .expect("waiting");
-    let later = caller.command(IFACE, ORD, &[2]).expect("send");
+    let later = caller.command(IFACE, ORD, &[2], None).expect("send");
     first
         .next_claim(&mut buf)
         .expect("next_claim")
@@ -985,7 +989,7 @@ fn a_dropped_handler_returns_its_claims_to_the_waiting_calls() {
 /// `SendError::Busy`, counting at most one more than `Loopback::SLOTS`.
 fn sends_until_busy(caller: &mut impl Caller) -> usize {
     for sent in 0..=Loopback::SLOTS {
-        match caller.command(IFACE, ORD, &[9]) {
+        match caller.command(IFACE, ORD, &[9], None) {
             Ok(_) => {}
             Err(SendError::Busy) => return sent,
             Err(error) => panic!("a send failed other than busy: {error:?}"),
@@ -1015,7 +1019,7 @@ fn a_forgotten_offered_call_is_presented_again_under_the_same_id_and_its_settlem
     let mut caller = rt.caller();
     let mut handler = rt.handler();
     handler.serve(IFACE, &[ORD]).expect("serve");
-    let c = caller.command(IFACE, ORD, &[1, 2, 3]).expect("send");
+    let c = caller.command(IFACE, ORD, &[1, 2, 3], None).expect("send");
     let claim = offer(&mut handler);
     caller.forget(c);
 
@@ -1046,7 +1050,7 @@ fn a_dropped_handlers_offered_claim_is_taken_once_by_another_handler_under_the_s
     let mut second = rt.handler();
     first.serve(IFACE, &[ORD]).expect("serve");
     second.serve(IFACE, &[ORD]).expect("serve");
-    let c = caller.command(IFACE, ORD, &[1, 2, 3]).expect("send");
+    let c = caller.command(IFACE, ORD, &[1, 2, 3], None).expect("send");
     let claim = offer(&mut first);
     // Registered while the offered call is already waiting, so the registration
     // is woken at once; the count is read before the drop and compared after.
@@ -1090,7 +1094,7 @@ fn a_forgotten_offered_call_is_withdrawn_when_its_handler_drops() {
     let mut second = rt.handler();
     first.serve(IFACE, &[ORD]).expect("serve");
     second.serve(IFACE, &[ORD]).expect("serve");
-    let c = caller.command(IFACE, ORD, &[1, 2, 3]).expect("send");
+    let c = caller.command(IFACE, ORD, &[1, 2, 3], None).expect("send");
     offer(&mut first);
     caller.forget(c);
 
@@ -1119,7 +1123,7 @@ fn an_offered_call_taken_by_another_handler_moves_the_claim_to_it() {
     let mut second = rt.handler();
     first.serve(IFACE, &[ORD]).expect("serve");
     second.serve(IFACE, &[ORD]).expect("serve");
-    let c = caller.command(IFACE, ORD, &[1, 2, 3]).expect("send");
+    let c = caller.command(IFACE, ORD, &[1, 2, 3], None).expect("send");
     let claim = offer(&mut first);
 
     let mut buf = [0u8; 8];
@@ -1155,7 +1159,7 @@ fn a_send_wakes_the_handler_that_serves_the_member() {
     serving.wake_on(Interest::Claim(IFACE), &woken_waker);
     elsewhere.wake_on(Interest::Claim(IFACE), &other_waker);
 
-    caller.command(IFACE, ORD, &[1]).expect("send");
+    caller.command(IFACE, ORD, &[1], None).expect("send");
     assert_eq!(wakes(&woken), 1, "the serving handler is woken");
     assert_eq!(wakes(&other), 0, "a handler serving another member is not");
 
@@ -1171,7 +1175,7 @@ fn a_serve_that_admits_a_waiting_call_wakes_the_handler() {
     handler.serve(IFACE, &[OTHER]).expect("serve");
     let (count, waker) = counting();
     handler.wake_on(Interest::Claim(IFACE), &waker);
-    caller.command(IFACE, ORD, &[1]).expect("send");
+    caller.command(IFACE, ORD, &[1], None).expect("send");
     assert_eq!(wakes(&count), 0, "the handler does not serve the member");
 
     handler.serve(IFACE, &[ORD]).expect("serve");
@@ -1201,12 +1205,12 @@ fn a_registration_whose_key_already_holds_is_woken_at_once() {
     caller.wake_on(Interest::Slot, &slot_waker);
     assert_eq!(wakes(&slot), 1, "a slot is free");
 
-    sink.raise(IFACE, ORD, &[1]).expect("raise");
+    sink.raise(IFACE, ORD, &[1], None).expect("raise");
     let (event, event_waker) = counting();
     source.wake_on(Interest::Event(IFACE), &event_waker);
     assert_eq!(wakes(&event), 1, "an occurrence is waiting");
 
-    caller.command(IFACE, ORD, &[1]).expect("send");
+    caller.command(IFACE, ORD, &[1], None).expect("send");
     let (claim, claim_waker) = counting();
     handler.wake_on(Interest::Claim(IFACE), &claim_waker);
     assert_eq!(wakes(&claim), 1, "a call is waiting");
@@ -1226,7 +1230,7 @@ fn a_forgotten_call_wakes_its_waiter() {
     // After `forget`, a settlement records nothing, so the stored waker would
     // never be woken.
     let Handles { mut caller, .. } = runtime().split();
-    let c = caller.command(IFACE, ORD, &[1]).expect("send");
+    let c = caller.command(IFACE, ORD, &[1], None).expect("send");
     let (count, waker) = counting();
     caller.wake_on(Interest::Outcome(c), &waker);
     caller.forget(c);
@@ -1273,7 +1277,7 @@ fn a_dropped_handler_leaves_no_waiter_behind() {
     // The handler holds a claim, so its drop returns one; the handler's own
     // state must be gone before the return wakes the handlers that serve the
     // member, or the dropped handler's waker would be woken with them.
-    caller.command(IFACE, ORD, &[1]).expect("send");
+    caller.command(IFACE, ORD, &[1], None).expect("send");
     handler
         .next_claim(&mut buf)
         .expect("next_claim")
@@ -1284,7 +1288,7 @@ fn a_dropped_handler_leaves_no_waiter_behind() {
     drop(handler);
     assert_eq!(Arc::strong_count(&count), 2, "the drop released it");
     assert_eq!(wakes(&count), 0, "the returned claim does not wake it");
-    caller.command(IFACE, ORD, &[2]).expect("send");
+    caller.command(IFACE, ORD, &[2], None).expect("send");
     assert_eq!(wakes(&count), 0, "nothing wakes a dropped handler's waker");
 }
 
@@ -1299,7 +1303,7 @@ fn a_dropped_source_leaves_no_waiter_behind() {
     assert_eq!(Arc::strong_count(&count), 3, "the store holds a clone");
     drop(source);
     assert_eq!(Arc::strong_count(&count), 2, "the drop released it");
-    sink.raise(IFACE, ORD, &[1]).expect("raise");
+    sink.raise(IFACE, ORD, &[1], None).expect("raise");
     assert_eq!(wakes(&count), 0, "nothing wakes a dropped source's waker");
 }
 
@@ -1314,8 +1318,8 @@ fn a_providers_busy_settlement_reaches_the_caller() {
     let mut buf = [0u8; 8];
     let busy = CallError::Transport(Transport::Busy);
 
-    let command = caller.command(IFACE, ORD, &[1]).expect("send");
-    let query = caller.query(IFACE, ORD, &[2]).expect("send");
+    let command = caller.command(IFACE, ORD, &[1], None).expect("send");
+    let query = caller.query(IFACE, ORD, &[2], None).expect("send");
     while let Some(claim) = handler.next_claim(&mut buf).expect("next_claim") {
         handler.settle(claim.id, Err(busy)).expect("settle");
     }
@@ -1331,12 +1335,12 @@ fn a_returned_claim_keeps_its_place_by_send_order() {
     let mut second = rt.handler();
     let mut buf = [0u8; 8];
 
-    caller.command(IFACE, ORD, &[1]).expect("send");
+    caller.command(IFACE, ORD, &[1], None).expect("send");
     first
         .next_claim(&mut buf)
         .expect("next_claim")
         .expect("waiting");
-    caller.command(IFACE, ORD, &[2]).expect("send");
+    caller.command(IFACE, ORD, &[2], None).expect("send");
     drop(first);
 
     let claim = second
@@ -1362,7 +1366,7 @@ fn a_returned_claim_keeps_its_send_order_across_a_reused_slot() {
     let mut second = rt.handler();
     let mut buf = [0u8; 8];
 
-    let old = caller.command(IFACE, ORD, &[0]).expect("send");
+    let old = caller.command(IFACE, ORD, &[0], None).expect("send");
     let claim = first
         .next_claim(&mut buf)
         .expect("next_claim")
@@ -1370,8 +1374,12 @@ fn a_returned_claim_keeps_its_send_order_across_a_reused_slot() {
     first.settle(claim.id, Ok(&[])).expect("settle");
     caller.forget(old);
 
-    let reused = caller.command(IFACE, ORD, &[1]).expect("send into slot 0");
-    let fresh = caller.command(IFACE, ORD, &[2]).expect("send into slot 1");
+    let reused = caller
+        .command(IFACE, ORD, &[1], None)
+        .expect("send into slot 0");
+    let fresh = caller
+        .command(IFACE, ORD, &[2], None)
+        .expect("send into slot 1");
     assert!(
         reused.0 > fresh.0,
         "the reused slot's correlation is the larger one"
@@ -1403,7 +1411,7 @@ fn fill(caller: &mut impl Caller) -> Vec<ridl_rt::port::Correlation> {
     (0..Loopback::SLOTS)
         .map(|n| {
             caller
-                .command(IFACE, ORD, &[u8::try_from(n).expect("small")])
+                .command(IFACE, ORD, &[u8::try_from(n).expect("small")], None)
                 .expect("a slot is free")
         })
         .collect()
@@ -1419,10 +1427,13 @@ fn the_seventeenth_in_flight_call_is_busy() {
     let mut buf = [0u8; 8];
     let calls = fill(&mut caller);
 
-    assert_eq!(caller.command(IFACE, ORD, &[99]), Err(SendError::Busy));
-    assert_eq!(caller.query(IFACE, ORD, &[99]), Err(SendError::Busy));
     assert_eq!(
-        other.command(IFACE, ORD, &[99]),
+        caller.command(IFACE, ORD, &[99], None),
+        Err(SendError::Busy)
+    );
+    assert_eq!(caller.query(IFACE, ORD, &[99], None), Err(SendError::Busy));
+    assert_eq!(
+        other.command(IFACE, ORD, &[99], None),
         Err(SendError::Busy),
         "the table is the runtime's, shared by every caller"
     );
@@ -1434,16 +1445,19 @@ fn the_seventeenth_in_flight_call_is_busy() {
     handler.settle(claim.id, Ok(&[])).expect("settle");
     assert_eq!(caller.ack(calls[0]), Some(Ok(())));
     assert_eq!(
-        caller.command(IFACE, ORD, &[99]),
+        caller.command(IFACE, ORD, &[99], None),
         Err(SendError::Busy),
         "a settled call keeps its slot until it is forgotten"
     );
 
     caller.forget(calls[0]);
     other
-        .command(IFACE, ORD, &[99])
+        .command(IFACE, ORD, &[99], None)
         .expect("the forget freed a slot");
-    assert_eq!(caller.command(IFACE, ORD, &[100]), Err(SendError::Busy));
+    assert_eq!(
+        caller.command(IFACE, ORD, &[100], None),
+        Err(SendError::Busy)
+    );
 }
 
 #[test]
@@ -1453,7 +1467,10 @@ fn a_refused_send_draws_no_sequence_number() {
     let mut handler = rt.handler();
     let mut buf = [0u8; 8];
     let calls = fill(&mut caller);
-    assert_eq!(caller.command(IFACE, ORD, &[99]), Err(SendError::Busy));
+    assert_eq!(
+        caller.command(IFACE, ORD, &[99], None),
+        Err(SendError::Busy)
+    );
 
     let mut last = 0;
     for _ in &calls {
@@ -1465,7 +1482,9 @@ fn a_refused_send_draws_no_sequence_number() {
         handler.settle(claim.id, Ok(&[])).expect("settle");
     }
     caller.forget(calls[0]);
-    caller.command(IFACE, ORD, &[99]).expect("a slot is free");
+    caller
+        .command(IFACE, ORD, &[99], None)
+        .expect("a slot is free");
     let claim = handler
         .next_claim(&mut buf)
         .expect("next_claim")
@@ -1494,13 +1513,18 @@ fn a_claimed_then_forgotten_call_holds_its_slot_until_its_settlement() {
     assert_eq!(&buf[..claim.len], &[0], "the claim is calls[0]");
     caller.forget(calls[0]);
     assert_eq!(wakes(&count), 0, "the claimed call still holds its slot");
-    assert_eq!(caller.command(IFACE, ORD, &[99]), Err(SendError::Busy));
+    assert_eq!(
+        caller.command(IFACE, ORD, &[99], None),
+        Err(SendError::Busy)
+    );
 
     handler
         .settle(claim.id, Ok(&[]))
         .expect("the provider's settlement is still accepted");
     assert_eq!(wakes(&count), 1, "its settlement reclaims the slot");
-    caller.command(IFACE, ORD, &[99]).expect("the slot is free");
+    caller
+        .command(IFACE, ORD, &[99], None)
+        .expect("the slot is free");
 }
 
 #[test]
@@ -1515,11 +1539,14 @@ fn forgotten_calls_to_an_unserved_member_leave_room_for_another_send() {
     let calls: Vec<_> = (0..Loopback::SLOTS)
         .map(|n| {
             caller
-                .command(IFACE, OTHER, &[u8::try_from(n).expect("small")])
+                .command(IFACE, OTHER, &[u8::try_from(n).expect("small")], None)
                 .expect("a slot is free")
         })
         .collect();
-    assert_eq!(caller.command(IFACE, OTHER, &[99]), Err(SendError::Busy));
+    assert_eq!(
+        caller.command(IFACE, OTHER, &[99], None),
+        Err(SendError::Busy)
+    );
     let (count, waker) = counting();
     caller.wake_on(Interest::Slot, &waker);
 
@@ -1529,10 +1556,13 @@ fn forgotten_calls_to_an_unserved_member_leave_room_for_another_send() {
     assert_eq!(wakes(&count), 1, "the withdrawal reclaimed a slot");
     for n in 0..Loopback::SLOTS {
         caller
-            .command(IFACE, OTHER, &[u8::try_from(n).expect("small")])
+            .command(IFACE, OTHER, &[u8::try_from(n).expect("small")], None)
             .expect("every withdrawn call's slot is free");
     }
-    assert_eq!(caller.command(IFACE, OTHER, &[99]), Err(SendError::Busy));
+    assert_eq!(
+        caller.command(IFACE, OTHER, &[99], None),
+        Err(SendError::Busy)
+    );
 }
 
 #[test]
@@ -1545,8 +1575,8 @@ fn a_withdrawn_call_is_never_presented_to_a_handler_that_serves_the_member_later
     let (count, waker) = counting();
     handler.wake_on(Interest::Claim(IFACE), &waker);
 
-    let withdrawn = caller.command(IFACE, ORD, &[1]).expect("send");
-    let kept = caller.command(IFACE, ORD, &[2]).expect("send");
+    let withdrawn = caller.command(IFACE, ORD, &[1], None).expect("send");
+    let kept = caller.command(IFACE, ORD, &[2], None).expect("send");
     caller.forget(withdrawn);
 
     handler.serve(IFACE, &[ORD]).expect("serve");
@@ -1571,9 +1601,9 @@ fn a_withdrawal_from_the_middle_of_the_queue_leaves_the_calls_around_it_in_order
     let mut caller = rt.caller();
     let mut handler = rt.handler();
     let mut buf = [0u8; 8];
-    caller.command(IFACE, ORD, &[1]).expect("send");
-    let middle = caller.command(IFACE, ORD, &[2]).expect("send");
-    caller.command(IFACE, ORD, &[3]).expect("send");
+    caller.command(IFACE, ORD, &[1], None).expect("send");
+    let middle = caller.command(IFACE, ORD, &[2], None).expect("send");
+    caller.command(IFACE, ORD, &[3], None).expect("send");
     caller.forget(middle);
 
     handler.serve(IFACE, &[ORD]).expect("serve");
@@ -1596,7 +1626,7 @@ fn forgetting_a_claimed_call_wakes_its_outcome_waiter() {
     let rt = runtime();
     let mut caller = rt.caller();
     let mut handler = rt.handler();
-    let c = caller.command(IFACE, ORD, &[1]).expect("send");
+    let c = caller.command(IFACE, ORD, &[1], None).expect("send");
     handler
         .next_claim(&mut [0u8; 8])
         .expect("next_claim")
@@ -1619,7 +1649,7 @@ fn a_stale_correlation_does_not_withdraw_the_call_now_in_its_slot() {
     let mut caller = rt.caller();
     let mut handler = rt.handler();
     let mut buf = [0u8; 8];
-    let old = caller.command(IFACE, ORD, &[1]).expect("send");
+    let old = caller.command(IFACE, ORD, &[1], None).expect("send");
     let claim = handler
         .next_claim(&mut buf)
         .expect("next_claim")
@@ -1628,7 +1658,7 @@ fn a_stale_correlation_does_not_withdraw_the_call_now_in_its_slot() {
     caller.forget(old);
 
     let new = caller
-        .command(IFACE, ORD, &[2])
+        .command(IFACE, ORD, &[2], None)
         .expect("send into the same slot");
     assert_ne!(new, old, "the slot is reused under a new generation");
     caller.forget(old);
@@ -1653,7 +1683,7 @@ fn a_call_forgotten_while_claimed_is_withdrawn_when_its_handler_is_dropped() {
     let mut handlers = Vec::new();
     for n in 0..Loopback::SLOTS {
         let c = caller
-            .command(IFACE, ORD, &[u8::try_from(n).expect("small")])
+            .command(IFACE, ORD, &[u8::try_from(n).expect("small")], None)
             .expect("a slot is free");
         let mut handler = rt.handler();
         handler.serve(IFACE, &[ORD]).expect("serve");
@@ -1665,7 +1695,7 @@ fn a_call_forgotten_while_claimed_is_withdrawn_when_its_handler_is_dropped() {
         handlers.push(handler);
     }
     assert_eq!(
-        caller.command(IFACE, ORD, &[99]),
+        caller.command(IFACE, ORD, &[99], None),
         Err(SendError::Busy),
         "a claimed call keeps its slot after its forget"
     );
@@ -1677,10 +1707,13 @@ fn a_call_forgotten_while_claimed_is_withdrawn_when_its_handler_is_dropped() {
     assert_eq!(wakes(&count), 1, "the drops reclaimed the slots");
     for n in 0..Loopback::SLOTS {
         caller
-            .command(IFACE, ORD, &[100 + u8::try_from(n).expect("small")])
+            .command(IFACE, ORD, &[100 + u8::try_from(n).expect("small")], None)
             .expect("every withdrawn call's slot is free");
     }
-    assert_eq!(caller.command(IFACE, ORD, &[99]), Err(SendError::Busy));
+    assert_eq!(
+        caller.command(IFACE, ORD, &[99], None),
+        Err(SendError::Busy)
+    );
     let mut later = rt.handler();
     later.serve(IFACE, &[ORD]).expect("serve");
     for n in 0..Loopback::SLOTS {
@@ -1703,7 +1736,7 @@ fn a_forget_withdrawal_wakes_no_claim_waiter_of_a_handler_serving_another_member
     let mut caller = rt.caller();
     let mut handler = rt.handler();
     handler.serve(IFACE, &[OTHER]).expect("serve");
-    let c = caller.command(IFACE, ORD, &[1]).expect("send");
+    let c = caller.command(IFACE, ORD, &[1], None).expect("send");
     let (count, waker) = counting();
     handler.wake_on(Interest::Claim(IFACE), &waker);
     assert_eq!(wakes(&count), 0, "no call it serves waits: stored");
@@ -1715,7 +1748,7 @@ fn a_forget_withdrawal_wakes_no_claim_waiter_of_a_handler_serving_another_member
         "a withdrawal adds no call to claim, so it wakes no claim waiter"
     );
     caller
-        .command(IFACE, OTHER, &[2])
+        .command(IFACE, OTHER, &[2], None)
         .expect("send a call it serves");
     assert_eq!(wakes(&count), 1, "the waker was still stored");
 }
@@ -1728,7 +1761,7 @@ fn a_dropped_handler_withdraws_only_its_forgotten_claim_and_returns_the_others()
     let mut buf = [0u8; 8];
     first.serve(IFACE, &[ORD]).expect("serve");
     let sent: Vec<_> = (1u8..=3)
-        .map(|n| caller.command(IFACE, ORD, &[n]).expect("send"))
+        .map(|n| caller.command(IFACE, ORD, &[n], None).expect("send"))
         .collect();
     for _ in &sent {
         first
@@ -1738,22 +1771,22 @@ fn a_dropped_handler_withdraws_only_its_forgotten_claim_and_returns_the_others()
     }
     for n in 3..Loopback::SLOTS {
         caller
-            .command(IFACE, OTHER, &[u8::try_from(n).expect("small")])
+            .command(IFACE, OTHER, &[u8::try_from(n).expect("small")], None)
             .expect("a slot is free");
     }
     caller.forget(sent[1]);
     assert_eq!(
-        caller.command(IFACE, OTHER, &[99]),
+        caller.command(IFACE, OTHER, &[99], None),
         Err(SendError::Busy),
         "the claimed call keeps its slot after its forget"
     );
 
     drop(first);
     caller
-        .command(IFACE, OTHER, &[99])
+        .command(IFACE, OTHER, &[99], None)
         .expect("the withdrawn claim's slot came back");
     assert_eq!(
-        caller.command(IFACE, OTHER, &[100]),
+        caller.command(IFACE, OTHER, &[100], None),
         Err(SendError::Busy),
         "exactly one slot came back"
     );
@@ -1777,7 +1810,7 @@ fn a_dropped_callers_claimed_call_is_withdrawn_when_its_handler_is_dropped() {
     let mut first = rt.handler();
     let mut buf = [0u8; 8];
     first.serve(IFACE, &[ORD]).expect("serve");
-    caller.command(IFACE, ORD, &[1]).expect("send");
+    caller.command(IFACE, ORD, &[1], None).expect("send");
     first
         .next_claim(&mut buf)
         .expect("next_claim")
@@ -1787,7 +1820,7 @@ fn a_dropped_callers_claimed_call_is_withdrawn_when_its_handler_is_dropped() {
     drop(first);
     for n in 0..Loopback::SLOTS {
         other
-            .command(IFACE, ORD, &[100 + u8::try_from(n).expect("small")])
+            .command(IFACE, ORD, &[100 + u8::try_from(n).expect("small")], None)
             .expect("the withdrawn call's slot is free");
     }
     let mut later = rt.handler();
@@ -1818,7 +1851,7 @@ fn a_withdrawal_at_a_handlers_drop_wakes_no_claim_waiter() {
     let mut second = rt.handler();
     first.serve(IFACE, &[ORD]).expect("serve");
     second.serve(IFACE, &[ORD]).expect("serve");
-    let c = caller.command(IFACE, ORD, &[1]).expect("send");
+    let c = caller.command(IFACE, ORD, &[1], None).expect("send");
     first
         .next_claim(&mut [0u8; 8])
         .expect("next_claim")
@@ -1854,7 +1887,7 @@ fn a_slot_registration_while_a_slot_is_free_is_woken_at_once() {
     let (count, waker) = counting();
     caller.wake_on(Interest::Slot, &waker);
     assert_eq!(wakes(&count), 1, "one slot is free");
-    caller.command(IFACE, ORD, &[99]).expect("send");
+    caller.command(IFACE, ORD, &[99], None).expect("send");
     caller.wake_on(Interest::Slot, &waker);
     assert_eq!(wakes(&count), 1, "the table is full again: stored");
 }
@@ -1906,7 +1939,7 @@ fn a_dropped_caller_forgets_its_calls_and_their_slots_come_back() {
                 .expect("waiting")
         })
         .collect();
-    assert_eq!(other.command(IFACE, ORD, &[99]), Err(SendError::Busy));
+    assert_eq!(other.command(IFACE, ORD, &[99], None), Err(SendError::Busy));
     let (count, waker) = counting();
     other.wake_on(Interest::Slot, &waker);
 
@@ -1918,11 +1951,11 @@ fn a_dropped_caller_forgets_its_calls_and_their_slots_come_back() {
     );
     for n in 0..8 {
         other
-            .command(IFACE, ORD, &[n])
+            .command(IFACE, ORD, &[n], None)
             .expect("a slot of a settled call of the dropped caller");
     }
     assert_eq!(
-        other.command(IFACE, ORD, &[99]),
+        other.command(IFACE, ORD, &[99], None),
         Err(SendError::Busy),
         "the dropped caller's claimed calls keep their slots until settled"
     );
@@ -1934,10 +1967,10 @@ fn a_dropped_caller_forgets_its_calls_and_their_slots_come_back() {
     }
     for n in 0..8 {
         other
-            .command(IFACE, ORD, &[n])
+            .command(IFACE, ORD, &[n], None)
             .expect("a slot of a claimed call of the dropped caller");
     }
-    assert_eq!(other.command(IFACE, ORD, &[99]), Err(SendError::Busy));
+    assert_eq!(other.command(IFACE, ORD, &[99], None), Err(SendError::Busy));
 }
 
 #[test]
@@ -1955,10 +1988,10 @@ fn a_dropped_callers_unclaimed_calls_are_withdrawn() {
     assert_eq!(wakes(&count), 1, "the drop reclaimed the unclaimed calls");
     for n in 0..Loopback::SLOTS {
         other
-            .command(IFACE, ORD, &[100 + u8::try_from(n).expect("small")])
+            .command(IFACE, ORD, &[100 + u8::try_from(n).expect("small")], None)
             .expect("every unclaimed call of the dropped caller was withdrawn");
     }
-    assert_eq!(other.command(IFACE, ORD, &[99]), Err(SendError::Busy));
+    assert_eq!(other.command(IFACE, ORD, &[99], None), Err(SendError::Busy));
 
     for n in 0..Loopback::SLOTS {
         let claim = handler
@@ -1981,8 +2014,8 @@ fn a_dropped_caller_forgets_only_its_own_calls() {
     let mut second = rt.caller();
     let mut handler = rt.handler();
     let mut buf = [0u8; 8];
-    first.command(IFACE, ORD, &[1]).expect("send");
-    let theirs = second.command(IFACE, ORD, &[2]).expect("send");
+    first.command(IFACE, ORD, &[1], None).expect("send");
+    let theirs = second.command(IFACE, ORD, &[2], None).expect("send");
     while let Some(claim) = handler.next_claim(&mut buf).expect("next_claim") {
         handler.settle(claim.id, Ok(&[])).expect("settle");
     }
@@ -1999,7 +2032,7 @@ fn a_dropped_caller_forgets_only_its_own_calls() {
 fn a_dropped_callers_call_in_flight_wakes_its_outcome_waiter() {
     let rt = runtime();
     let mut caller = rt.caller();
-    let c = caller.command(IFACE, ORD, &[1]).expect("send");
+    let c = caller.command(IFACE, ORD, &[1], None).expect("send");
     let (count, waker) = counting();
     caller.wake_on(Interest::Outcome(c), &waker);
     assert_eq!(wakes(&count), 0, "the call is in flight");
@@ -2047,7 +2080,7 @@ fn a_serve_with_no_call_waiting_keeps_the_handlers_claim_waker() {
     handler.serve(IFACE, &[ORD]).expect("serve");
     assert_eq!(wakes(&count), 0, "nothing is waiting");
 
-    caller.command(IFACE, ORD, &[1]).expect("send");
+    caller.command(IFACE, ORD, &[1], None).expect("send");
     assert_eq!(
         wakes(&count),
         1,
@@ -2142,7 +2175,7 @@ fn the_aggregate_routes_each_key_to_the_handle_that_observes_it() {
     let mut rt = runtime();
     let mut buf = [0u8; 8];
 
-    let c = rt.command(IFACE, ORD, &[1]).expect("send");
+    let c = rt.command(IFACE, ORD, &[1], None).expect("send");
     let (outcome, outcome_waker) = counting();
     rt.wake_on(Interest::Outcome(c), &outcome_waker);
     assert_eq!(wakes(&outcome), 0, "stored, not woken at once");
@@ -2157,13 +2190,13 @@ fn the_aggregate_routes_each_key_to_the_handle_that_observes_it() {
     let (event, event_waker) = counting();
     rt.wake_on(Interest::Event(IFACE), &event_waker);
     assert_eq!(wakes(&event), 0, "stored, not woken at once");
-    rt.raise(IFACE, ORD, &[1]).expect("raise");
+    rt.raise(IFACE, ORD, &[1], None).expect("raise");
     assert_eq!(wakes(&event), 1, "woken by the raise");
 
     let (claim, claim_waker) = counting();
     rt.wake_on(Interest::Claim(IFACE), &claim_waker);
     assert_eq!(wakes(&claim), 0, "stored, not woken at once");
-    rt.caller().command(IFACE, ORD, &[1]).expect("send");
+    rt.caller().command(IFACE, ORD, &[1], None).expect("send");
     assert_eq!(wakes(&claim), 1, "woken by the send");
 
     let (slot, slot_waker) = counting();
@@ -2233,7 +2266,7 @@ fn every_wake_is_run_with_the_lock_released() {
 
     let (waker, rx) = lock_probe(&rt);
     source.wake_on(Interest::Event(IFACE), &waker);
-    sink.raise(IFACE, ORD, &[1]).expect("raise");
+    sink.raise(IFACE, ORD, &[1], None).expect("raise");
     assert_released(&rx, "a raise");
 
     let (waker, rx) = lock_probe(&rt);
@@ -2242,7 +2275,7 @@ fn every_wake_is_run_with_the_lock_released() {
 
     let (waker, rx) = lock_probe(&rt);
     first.wake_on(Interest::Claim(IFACE), &waker);
-    caller.command(IFACE, ORD, &[1]).expect("send");
+    caller.command(IFACE, ORD, &[1], None).expect("send");
     assert_released(&rx, "a command");
 
     first
@@ -2251,7 +2284,7 @@ fn every_wake_is_run_with_the_lock_released() {
         .expect("waiting");
     let (waker, rx) = lock_probe(&rt);
     first.wake_on(Interest::Claim(IFACE), &waker);
-    let c = caller.query(IFACE, ORD, &[1]).expect("send");
+    let c = caller.query(IFACE, ORD, &[1], None).expect("send");
     assert_released(&rx, "a query");
 
     let (waker, rx) = lock_probe(&rt);
@@ -2261,7 +2294,7 @@ fn every_wake_is_run_with_the_lock_released() {
 
     // No handler had claimed the query, so the forget withdrew it. Another
     // query waits for the second handler's serve.
-    caller.query(IFACE, ORD, &[1]).expect("send");
+    caller.query(IFACE, ORD, &[1], None).expect("send");
     let (waker, rx) = lock_probe(&rt);
     second.wake_on(Interest::Claim(IFACE), &waker);
     second.serve(IFACE, &[ORD]).expect("serve");
@@ -2288,7 +2321,7 @@ fn every_wake_is_run_with_the_lock_released() {
         .expect("the returned query");
     first.settle(claim.id, Ok(&[])).expect("settle");
     let mut sent = Vec::new();
-    while let Ok(c) = caller.command(IFACE, ORD, &[2]) {
+    while let Ok(c) = caller.command(IFACE, ORD, &[2], None) {
         sent.push(c);
     }
     let claim = first
@@ -2303,7 +2336,7 @@ fn every_wake_is_run_with_the_lock_released() {
     assert_released(&rx, "a forget that reclaims a slot");
 
     caller
-        .command(IFACE, ORD, &[3])
+        .command(IFACE, ORD, &[3], None)
         .expect("the reclaimed slot");
     let claim = first
         .next_claim(&mut buf)
@@ -2316,7 +2349,7 @@ fn every_wake_is_run_with_the_lock_released() {
     assert_released(&rx, "a settlement that reclaims a slot");
 
     caller
-        .command(IFACE, ORD, &[4])
+        .command(IFACE, ORD, &[4], None)
         .expect("the reclaimed slot");
     let (waker, rx) = lock_probe(&rt);
     caller.wake_on(Interest::Slot, &waker);

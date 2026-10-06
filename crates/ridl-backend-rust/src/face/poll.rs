@@ -100,7 +100,9 @@ fn send(
             })?;
             let mut buf = #buffer;
             let bytes = #encode;
-            __port.#port_method(#number, #ordinal, bytes).map(#correlation)
+            __port
+                .#port_method(#number, #ordinal, bytes, ::core::option::Option::None)
+                .map(#correlation)
         }
     }
 }

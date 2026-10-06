@@ -2232,6 +2232,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
                 <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER,
                 ::ridl_rt::contract::Ordinal(3u32),
                 bytes,
+                ::core::option::Option::None,
             )
             .map(SetLevelCorrelation)
     }
@@ -2277,6 +2278,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
                 <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER,
                 ::ridl_rt::contract::Ordinal(4u32),
                 bytes,
+                ::core::option::Option::None,
             )
             .map(AverageCorrelation)
     }
@@ -2439,6 +2441,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
                     <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER,
                     ::ridl_rt::contract::Ordinal(2u32),
                     bytes,
+                    ::core::option::Option::None,
                 )
         }
     }
@@ -3375,6 +3378,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
                     <super::Siren as ::ridl_rt::contract::Interface>::NUMBER,
                     ::ridl_rt::contract::Ordinal(1u32),
                     bytes,
+                    ::core::option::Option::None,
                 )
         }
     }
@@ -3866,6 +3870,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                 <super::Valve as ::ridl_rt::contract::Interface>::NUMBER,
                 ::ridl_rt::contract::Ordinal(1u32),
                 bytes,
+                ::core::option::Option::None,
             )
             .map(OpenCorrelation)
     }
@@ -3911,6 +3916,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                 <super::Valve as ::ridl_rt::contract::Interface>::NUMBER,
                 ::ridl_rt::contract::Ordinal(2u32),
                 bytes,
+                ::core::option::Option::None,
             )
             .map(PressureCorrelation)
     }

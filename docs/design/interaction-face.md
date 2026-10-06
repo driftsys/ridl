@@ -400,7 +400,7 @@ vs §10.3).
 
 **An oversized claim is settled, not fatal (2026-09-28, driftsys/ridl#569).**
 `Handler::next_claim` reports a claim whose argument bytes do not fit `buf` as
-`ReadError::ShortClaim { claim, needed }` and does not consume it
+`ReadError::ShortClaim { claim, needed, trace }` and does not consume it
 ([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 5,
 amended the same day). The step settles `claim` `Transport::Corrupt` without
 reading it — an argument that does not fit `MAX_BUFFER_SIZE`, the interface's

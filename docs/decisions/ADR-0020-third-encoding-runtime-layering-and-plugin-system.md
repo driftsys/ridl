@@ -242,6 +242,13 @@ as its public contract.
    unconditional module list is therefore `contract`, `sample`, `payload`,
    `port`, `error`, `encoding`, `correlate` and `face`.
 
+   **Amendment (2026-10-06) — a ninth unconditional module, `trace`.**
+   [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 21 adds `trace`,
+   which holds `TraceContext`, behind no feature. A runtime carries it on the
+   port methods, so decision 6 is unchanged. The unconditional module list is
+   therefore `contract`, `sample`, `payload`, `port`, `error`, `encoding`,
+   `correlate`, `face` and `trace`.
+
    **Amendment (2026-10-03) — planus is excluded from the permission.** The
    FlatBuffers runtime this decision permits `ridl-rt` under the `flatbuffers`
    feature cannot be planus. Sebastien's decision of 2026-10-03 (the

@@ -79,8 +79,8 @@ where
 {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
-    let first = rt.command(IFACE, ORD, &[1]).expect("send");
-    let second = rt.query(IFACE, ORD, &[2]).expect("send");
+    let first = rt.command(IFACE, ORD, &[1], None).expect("send");
+    let second = rt.query(IFACE, ORD, &[2], None).expect("send");
     // Both calls are claimed before the wakers are registered, so nothing
     // changes between a registration and the settlement that wakes it.
     let mut buf = [0u8; 8];
@@ -128,7 +128,7 @@ where
     // A third call, registered on before it is claimed. The claim is a
     // change a runtime may wake on spuriously, so nothing is checked between
     // the claim and the settlement.
-    let third = rt.command(IFACE, ORD, &[3]).expect("send");
+    let third = rt.command(IFACE, ORD, &[3], None).expect("send");
     let (c, c_waker) = task();
     rt.wake_on(Interest::Outcome(third), &c_waker);
     assert_eq!(wakes(&c), 0, "nothing has changed since the registration");
@@ -188,7 +188,7 @@ where
         "the reclaim wakes every caller's slot waker"
     );
     let taken = second
-        .command(IFACE, ORD, &[1])
+        .command(IFACE, ORD, &[1], None)
         .expect("the send that follows takes the reclaimed slot");
 
     // The settlement of a claimed call that was forgotten.
@@ -214,7 +214,7 @@ where
         "the reclaim wakes every caller's slot waker"
     );
     let unclaimed = rt
-        .command(IFACE, ORD, &[2])
+        .command(IFACE, ORD, &[2], None)
         .expect("the send that follows takes the reclaimed slot");
 
     // A forget of a call no handler has claimed: withdrawn, or presented
@@ -240,7 +240,7 @@ where
         "the reclaim wakes every caller's slot waker"
     );
     second
-        .command(IFACE, ORD, &[3])
+        .command(IFACE, ORD, &[3], None)
         .expect("the send that follows takes the reclaimed slot");
 }
 
@@ -265,7 +265,7 @@ where
     second.wake_on(Interest::Event(IFACE), &b_waker);
     assert_eq!((wakes(&a), wakes(&b)), (0, 0), "nothing has been raised");
 
-    rt.raise(IFACE, ORD, &[1]).expect("raise");
+    rt.raise(IFACE, ORD, &[1], None).expect("raise");
     assert_eq!(
         (wakes(&a), wakes(&b)),
         (1, 1),
@@ -275,7 +275,7 @@ where
     assert!(rt.next(&mut out).expect("next").is_some(), "and it reads");
     assert!(second.next(&mut out).expect("next").is_some());
 
-    rt.raise(IFACE, ORD, &[2]).expect("raise");
+    rt.raise(IFACE, ORD, &[2], None).expect("raise");
     assert_eq!(
         (wakes(&a), wakes(&b)),
         (1, 1),
@@ -301,13 +301,13 @@ where
         handler.wake_on(Interest::Claim(IFACE), &waker);
         assert_eq!(wakes(&count), 0, "no call is waiting");
         let sent = if query {
-            rt.query(IFACE, ORD, &[1])
+            rt.query(IFACE, ORD, &[1], None)
         } else {
-            rt.command(IFACE, ORD, &[1])
+            rt.command(IFACE, ORD, &[1], None)
         };
         sent.expect("send");
         assert_eq!(wakes(&count), 1, "the call wakes the serving handler");
-        rt.command(IFACE, ORD, &[2]).expect("send");
+        rt.command(IFACE, ORD, &[2], None).expect("send");
         assert_eq!(
             wakes(&count),
             1,
@@ -347,7 +347,7 @@ where
     let mut buf = [0u8; 8];
 
     // An outcome.
-    let c = caller.command(IFACE, ORD, &[1]).expect("send");
+    let c = caller.command(IFACE, ORD, &[1], None).expect("send");
     let claim = handler
         .next_claim(&mut buf)
         .expect("next_claim")
@@ -382,7 +382,7 @@ where
         (1, 0),
         "`Event`: C displaces B under another interface of the kind"
     );
-    rt.raise(IFACE, ORD, &[1]).expect("raise");
+    rt.raise(IFACE, ORD, &[1], None).expect("raise");
     assert_eq!(
         (wakes(&a), wakes(&b), wakes(&c)),
         (1, 1, 1),
@@ -406,7 +406,7 @@ where
         (1, 0),
         "`Claim`: C displaces B under another interface of the kind"
     );
-    caller.command(IFACE, ORD, &[2]).expect("send");
+    caller.command(IFACE, ORD, &[2], None).expect("send");
     assert_eq!(
         (wakes(&a), wakes(&b), wakes(&c)),
         (1, 1, 1),
@@ -431,7 +431,7 @@ where
         "`Slot`: the reclaim wakes B"
     );
     caller
-        .command(IFACE, ORD, &[1])
+        .command(IFACE, ORD, &[1], None)
         .expect("the reclaimed slot");
 }
 
@@ -458,7 +458,7 @@ where
     let mut buf = [0u8; 8];
 
     // An outcome.
-    let c = caller.command(IFACE, ORD, &[1]).expect("send");
+    let c = caller.command(IFACE, ORD, &[1], None).expect("send");
     let claim = handler
         .next_claim(&mut buf)
         .expect("next_claim")
@@ -476,7 +476,7 @@ where
     source.wake_on(Interest::Event(IFACE2), &waker);
     source.wake_on(Interest::Event(IFACE), &waker.clone());
     assert_eq!(wakes(&count), 0, "`Event`: a refresh wakes nothing");
-    rt.raise(IFACE, ORD, &[1]).expect("raise");
+    rt.raise(IFACE, ORD, &[1], None).expect("raise");
     assert_eq!(wakes(&count), 1, "`Event`: the raise wakes the task");
 
     // A claim, refreshed under another interface of the kind.
@@ -484,7 +484,7 @@ where
     handler.wake_on(Interest::Claim(IFACE2), &waker);
     handler.wake_on(Interest::Claim(IFACE), &waker.clone());
     assert_eq!(wakes(&count), 0, "`Claim`: a refresh wakes nothing");
-    caller.command(IFACE, ORD, &[2]).expect("send");
+    caller.command(IFACE, ORD, &[2], None).expect("send");
     assert_eq!(wakes(&count), 1, "`Claim`: the call wakes the task");
 
     // A slot, on a new runtime whose table is full.
@@ -499,7 +499,7 @@ where
     rt.forget(calls[0]);
     assert_eq!(wakes(&count), 1, "`Slot`: the reclaim wakes the task");
     caller
-        .command(IFACE, ORD, &[1])
+        .command(IFACE, ORD, &[1], None)
         .expect("the reclaimed slot");
 }
 
@@ -522,13 +522,13 @@ where
     let (event, event_waker) = task();
     source.wake_on(Interest::Event(IFACE), &event_waker);
     assert_eq!(wakes(&event), 0, "nothing has been raised");
-    rt.raise(IFACE2, ORD, &[1]).expect("raise");
+    rt.raise(IFACE2, ORD, &[1], None).expect("raise");
     assert_eq!(wakes(&event), 1, "an occurrence on interface 2 wakes it");
 
     let (claim, claim_waker) = task();
     handler.wake_on(Interest::Claim(IFACE), &claim_waker);
     assert_eq!(wakes(&claim), 0, "no call is waiting");
-    rt.command(IFACE2, ORD, &[1]).expect("send");
+    rt.command(IFACE2, ORD, &[1], None).expect("send");
     assert_eq!(wakes(&claim), 1, "a call on interface 2 wakes it");
 }
 
@@ -661,7 +661,7 @@ where
     install_probe::<F>(&rt);
     let mut buf = [0u8; 8];
 
-    let c = caller.command(IFACE, ORD, &[1]).expect("send");
+    let c = caller.command(IFACE, ORD, &[1], None).expect("send");
     let claim = handler
         .next_claim(&mut buf)
         .expect("next_claim")
@@ -674,7 +674,7 @@ where
 
     let (count, waker) = calling_back();
     source.wake_on(Interest::Event(IFACE), &waker);
-    rt.raise(IFACE, ORD, &[1]).expect("raise");
+    rt.raise(IFACE, ORD, &[1], None).expect("raise");
     assert_called_back(&count, "a raise");
 
     // Each call is claimed and settled before the next registration, so no
@@ -683,9 +683,9 @@ where
         let (count, waker) = calling_back();
         handler.wake_on(Interest::Claim(IFACE), &waker);
         let c = if query {
-            caller.query(IFACE, ORD, &[1])
+            caller.query(IFACE, ORD, &[1], None)
         } else {
-            caller.command(IFACE, ORD, &[1])
+            caller.command(IFACE, ORD, &[1], None)
         }
         .expect("send");
         assert_called_back(&count, if query { "a query" } else { "a command" });
@@ -716,7 +716,7 @@ where
     assert_called_back(&count, "a forget that reclaims a slot");
 
     let taken = caller
-        .command(IFACE, ORD, &[1])
+        .command(IFACE, ORD, &[1], None)
         .expect("the reclaimed slot");
     let claim = rt
         .next_claim(&mut buf)
