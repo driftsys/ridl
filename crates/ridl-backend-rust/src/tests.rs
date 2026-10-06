@@ -3586,7 +3586,7 @@ fn generate_reports_an_empty_named_decl_instead_of_panicking() {
 }
 
 // ---------------------------------------------------------------------------
-// Interactions and services (E2 task 15) — fixture builders.
+// Interactions and services — fixture builders.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------

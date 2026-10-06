@@ -128,9 +128,10 @@ member; rsdl is the apex.
                          docs/wip/, where such a path records what was true
                          when it was written
     just story-id-check  no story id (`E16.5`, `E2.8b`) and no plan name
-                         (`epic E11`, `stage K3`, `lane M`) in a tracked file
-                         under crates/, xtask/, examples/, editors/vscode/src/,
-                         docs/book/, docs/design/ or docs/technotes/, nor in a
+                         (`epic E11`, `stage K3`, `lane M`, `E2 task 9`) in a
+                         tracked file under crates/, xtask/, examples/,
+                         editors/vscode/src/, docs/book/, docs/design/ or
+                         docs/technotes/, nor in a
                          docs/specification/ file that the book includes —
                          names file:line for each match. The ROADMAP, the
                          backlog, the ADRs, the rest of the specifications,
@@ -257,8 +258,8 @@ them.
   now; when a gap is real, link its tracking issue (`driftsys/ridl#N`). State a
   fact once, in the record that owns it, and link to that record from elsewhere
   instead of restating it. `just story-id-check` enforces the first rule for
-  dotted story ids and for the plan names `epic E<n>`, `stage <Letter><n>[a-z]`
-  and `lane <Letter>`.
+  dotted story ids and for the plan names `epic E<n>`, `stage <Letter><n>[a-z]`,
+  `lane <Letter>` and `E<n> task <n>`.
 - Documents are prose, in Markdown, under `docs/`. The specs read as one system:
   doctrines are indexed once in the overview, cited from each reference — keep
   that discipline when editing.

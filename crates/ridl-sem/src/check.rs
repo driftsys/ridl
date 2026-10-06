@@ -530,7 +530,7 @@ pub(crate) struct Checker<'db> {
     pub(crate) diagnostics: Vec<Diagnostic>,
     /// The resolved package timing default (ridl §9.1): the parsed
     /// `[defaults].timing` or the built-in `[100ms..1000ms]`, applied to every
-    /// untimed signal and event (E2 task 9).
+    /// untimed signal and event.
     default_timing: timing::TimingSpec,
     /// The resolved command default (ridl §9.3): the parsed
     /// `[defaults].command_timing` or the built-in `[..1s]`, which supplies the
@@ -1991,10 +1991,10 @@ impl Checker<'_> {
     /// string/bytes init against the length bound and, where the type carries a
     /// `match` pattern, against that pattern (see [`Checker::check_string_init`]).
     /// Returns `(declared_init, init)`; both stay absent when no init is
-    /// declared — derivation is the task 15 pass.
+    /// declared — derivation happens in a separate pass.
     /// `violation` is the code an out-of-constraint init draws: TYPL-109 at
     /// the vocabulary layer (types and fields), RIDL-110 for a signal's
-    /// `= value` override (ridl §4.4, E2 task 5) — one validation, two codes.
+    /// `= value` override (ridl §4.4) — one validation, two codes.
     fn lower_declared_init(
         &mut self,
         init: Option<ast::InitValue>,
@@ -4504,7 +4504,7 @@ impl Checker<'_> {
         spec.map(lower_timing_spec)
     }
 
-    // --- the contract environment (E2 task 11) ----------------------------
+    // --- the contract environment -----------------------------------------
 
     /// The contract-expression type of a declared type reference, resolved in
     /// `resolution`'s view. A declaration outside the five expr-core domains
@@ -11724,7 +11724,7 @@ mod tests {
             &format!("{PRELUDE}interface I {{\n  signal s : <Speed>\n  event e : <Speed>\n}}\n"),
         );
         // Both are untimed, so each draws RIDL-100 (default applied) when it
-        // lowers, before the stream payloads draw RIDL-201 (E2 task 9).
+        // lowers, before the stream payloads draw RIDL-201.
         assert_eq!(
             codes(&checked),
             vec!["RIDL-100", "RIDL-100", "RIDL-201", "RIDL-201"],
@@ -11762,7 +11762,7 @@ mod tests {
             "app",
             &format!("{PRELUDE}interface I {{\n  event e : Speed [ ensure x > 0.0 ]\n}}\n"),
         );
-        // The untimed event also draws RIDL-100 (default applied, E2 task 9).
+        // The untimed event also draws RIDL-100 (default applied).
         assert_eq!(codes(&on_event), vec!["RIDL-301", "RIDL-100"]);
 
         // On a `fixed` the block itself is already RIDL-106; the predicate
@@ -12449,7 +12449,7 @@ interface I {\n\
             &format!("{PRELUDE}interface I {{\n  event e : Speed = 3.0\n}}\n"),
         );
         // FORM-102 for the init; the untimed event then draws RIDL-100
-        // (default applied, E2 task 9).
+        // (default applied).
         assert_eq!(codes(&on_event), vec!["FORM-102", "RIDL-100"]);
         assert_eq!(
             on_event.diagnostics[0].message,
@@ -12486,7 +12486,7 @@ interface I {\n\
             &format!("{PRELUDE}interface I {{\n  event e : integer [0..5]\n}}\n"),
         );
         // FORM-102 for the payload; the untimed event then draws RIDL-100
-        // (default applied, E2 task 9).
+        // (default applied).
         assert_eq!(codes(&primitive_event), vec!["FORM-102", "RIDL-100"]);
         assert_eq!(
             primitive_event.diagnostics[0].message,

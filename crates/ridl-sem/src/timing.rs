@@ -1,7 +1,7 @@
 //! Timing resolution: parse and validate `@` annotations, apply the configured
 //! default to untimed signals and events, and produce the resolved bounds the
 //! IR carries (ridl language reference §9, general form §6.2, ADR-0008
-//! decision 12; E2 task 9).
+//! decision 12).
 //!
 //! Durations convert to exact microseconds — the five duration suffixes ridl
 //! §2.1 tabulates: `us`/`ms`/`s` scale by 1 / 1_000 / 1_000_000, and `min`/`h`

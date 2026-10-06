@@ -35,26 +35,23 @@
 //! definition kind. The checker narrows these later (TYPL-2xx); the parser
 //! must not reject them.
 //!
-//! The interaction grammar (E2 task 3) follows the same discipline: a
-//! `: return_type` after a command's params parses; timing parses on
-//! command, query, and fixed; an attr block parses on signal, event, and
-//! fixed; an init value parses on event and fixed; a stream `<T>` parses in
-//! every type position, including signal/event payloads and struct fields;
-//! a typl definition inside an interface body whose `}` still lies ahead
-//! recovers into one body-local `ErrorNode` and draws **RIDL-107** here,
-//! where the keyword is recognised, while a body with no `}` ahead reports
-//! an unclosed `{` and keeps the declarations that follow it.
-//! The other rejections are checker scope (RIDL-104/-106/-201/-301, E2
-//! task 5).
+//! The interaction grammar follows the same discipline: a `: return_type`
+//! after a command's params parses; timing parses on command, query, and
+//! fixed; an attr block parses on signal, event, and fixed; an init value
+//! parses on event and fixed; a stream `<T>` parses in every type position,
+//! including signal/event payloads and struct fields; a typl definition inside
+//! an interface body whose `}` still lies ahead recovers into one body-local
+//! `ErrorNode` and draws **RIDL-107** here, where the keyword is recognised,
+//! while a body with no `}` ahead reports an unclosed `{` and keeps the
+//! declarations that follow it. The other rejections are checker scope (RIDL-104/-106/-201/-301).
 //!
 //! # Profile boundary
 //!
-//! The parser runs under a [`Profile`] (E2 task 2, ADR-0007 decision 10). In
-//! a `.typl` parse — byte-identical to the E1 parser — a `Duration` token or
-//! a stray `@` anywhere emits **TYPL-302** (typl reference §2.8) and parsing
-//! continues, an interaction keyword at declaration-start position emits
-//! **TYPL-304**, and a `require`/`ensure` attribute emits **TYPL-303** with
-//! the same recovery. In a `.ridl` parse durations and `@` are ordinary tokens,
+//! The parser runs under a [`Profile`] (ADR-0007 decision 10). In a `.typl`
+//! parse, a `Duration` token or a stray `@` anywhere emits **TYPL-302** (typl
+//! reference §2.8) and parsing continues, an interaction keyword at
+//! declaration-start position emits **TYPL-304**, and a `require`/`ensure`
+//! attribute emits **TYPL-303** with the same recovery. In a `.ridl` parse durations and `@` are ordinary tokens,
 //! and a `ReservedWord` at declaration-start position — a word of the
 //! uxdl/rmdl/rsdl profiles — emits **RIDL-403** (ridl reference §16.4). In a
 //! `.rsdl` parse a declaration of another profile at declaration-start position
@@ -62,13 +59,12 @@
 //! emits **RSDL-604** (rsdl reference §2), and an `internal` or `error`
 //! modifier before an rsdl declaration emits FORM-102. The typl and ridl
 //! declaration-start boundaries recover exactly as FORM-105 does; the rsdl one
-//! consumes a `{ … }` body whole. The stream
-//! grammar parses under both profiles (E2 task 3): a `<T>` in type position
-//! builds a `StreamType` node everywhere, and in a `.typl` parse it
-//! additionally emits **TYPL-301** (`stream type in typl context`) and
-//! parsing continues. Leading
-//! zeros in an integer literal emit **FORM-005**. Every [`SyntaxError`]
-//! carries its diagnostic code; the coded `Diagnostic` model consumes it.
+//! consumes a `{ … }` body whole. The stream grammar parses under both
+//! profiles: a `<T>` in type position builds a `StreamType` node everywhere,
+//! and in a `.typl` parse it additionally emits **TYPL-301** (`stream type in
+//! typl context`) and parsing continues. Leading zeros in an integer literal
+//! emit **FORM-005**. Every [`SyntaxError`] carries its diagnostic code; the
+//! coded `Diagnostic` model consumes it.
 //!
 //! # Error recovery
 //!
@@ -1180,13 +1176,12 @@ impl<'a> Parser<'a> {
     /// `ServiceDef = 'service' DottedName (':' shapes (',' shapes)* ','? |
     /// '{' (inline_members ','?)* '}')` — the global published declaration of
     /// one or more interfaces (ridl reference §14.5, ADR-0015 decision 12).
-    /// The `service_def` production is absent from Appendix C; E2 task 8
-    /// authors it. The named form carries a comma-separated shape list after
-    /// `:`; the inline form carries an interaction body reusing
-    /// [`Parser::interface_body`], so the checker runs the same structural
-    /// pass over it (RIDL-401/-402). Never both forms (ADR-0015 decision 14).
-    /// A service takes no `internal`/`error` modifiers — it is a global,
-    /// published contract.
+    /// The named form carries a comma-separated shape list after `:`; the
+    /// inline form carries an interaction body reusing
+    /// [`Parser::interface_body`], so the checker runs the same structural pass
+    /// over it (RIDL-401/-402). Never both forms (ADR-0015 decision 14). A
+    /// service takes no `internal`/`error` modifiers — it is a global, published
+    /// contract.
     fn service_def(&mut self) {
         self.start(SyntaxKind::ServiceDef);
         self.bump(); // 'service'
@@ -1338,7 +1333,7 @@ impl<'a> Parser<'a> {
     /// The bare `= value` init comes before the timing (ADR-0008 decision
     /// 2). The reference allows the init on signals only and timing on
     /// signals and events; here all three kinds accept an init, a timing,
-    /// and an attr block, and the checker narrows (RIDL-106/-301, task 5).
+    /// and an attr block, and the checker narrows (RIDL-106/-301).
     fn value_interaction(&mut self, kind: SyntaxKind) {
         self.start(kind);
         self.bump(); // 'signal' | 'event' | 'fixed'
@@ -1509,8 +1504,8 @@ impl<'a> Parser<'a> {
     /// The lenient trailing annotations of an interaction: at most one
     /// [`Timing`](SyntaxKind::Timing) and at most one
     /// [`AttrBlock`](SyntaxKind::AttrBlock), in either order. Which kinds
-    /// may carry which annotation is checker scope (RIDL-104/-106/-301,
-    /// task 5); the parser accepts both on every interaction.
+    /// may carry which annotation is checker scope (RIDL-104/-106/-301); the
+    /// parser accepts both on every interaction.
     fn interaction_annotations(&mut self) {
         let mut seen_timing = false;
         let mut seen_attrs = false;
@@ -1634,8 +1629,8 @@ impl<'a> Parser<'a> {
     /// `Attribute = key | key '=' const_value | ('require'|'ensure') expr`
     /// — the three forms of gf §4.2. One grammar production for all of
     /// them; which keys are legal where is checker scope (gf §4.3,
-    /// FORM-106/107/108, E2 task 5). Callers have confirmed the leading
-    /// token is an `Ident` or a predicate keyword.
+    /// FORM-106/107/108). Callers have confirmed the leading token is an
+    /// `Ident` or a predicate keyword.
     fn attribute(&mut self) {
         self.start(SyntaxKind::Attribute);
         match self.current() {
@@ -2713,8 +2708,8 @@ mod tests {
         assert_eq!(codes, vec!["TYPL-302"]);
     }
 
-    // E2 task 2 step (b), parser half: under `Profile::Ridl` durations and `@`
-    // are ordinary tokens — no TYPL-302 fires anywhere.
+    // Under `Profile::Ridl` durations and `@` are ordinary tokens — no TYPL-302
+    // fires anywhere.
     #[test]
     fn duration_and_at_draw_no_typl_302_under_ridl() {
         let parsed = parse("package p\nconst BAD = 10ms\n", Profile::Ridl);
@@ -2731,9 +2726,9 @@ mod tests {
         );
     }
 
-    // E2 task 2 step (e): an interaction keyword at declaration-start in a
-    // `.typl` parse is the profile boundary — TYPL-304, recovering like
-    // FORM-105 does (ErrorNode, resync at the next top-level keyword).
+    // An interaction keyword at declaration-start in a `.typl` parse is the
+    // profile boundary — TYPL-304, recovering like FORM-105 does (ErrorNode,
+    // resync at the next top-level keyword).
     #[test]
     fn interaction_keyword_in_typl_flags_typl_304_and_recovers() {
         let input = "package p\ninterface X {}\ntype Fine: m\n";
@@ -2758,9 +2753,9 @@ mod tests {
         assert_eq!(codes, vec!["TYPL-304"]);
     }
 
-    // E2 task 3: the stream grammar parses under both profiles; in a `.typl`
-    // parse a `<T>` in type position is the profile boundary — TYPL-301 —
-    // and the StreamType node is still built, losslessly.
+    // The stream grammar parses under both profiles; in a `.typl` parse a `<T>`
+    // in type position is the profile boundary — TYPL-301 — and the StreamType
+    // node is still built, losslessly.
     #[test]
     fn stream_type_in_typl_flags_typl_301_and_keeps_parsing() {
         let input = "package p\nstruct S {\n  f : <Frame>\n  g : integer [0..1]\n}\n";
@@ -2790,8 +2785,8 @@ mod tests {
         );
     }
 
-    // E2 task 2 step (f): a reserved word of another profile at
-    // declaration-start in a `.ridl` parse is RIDL-403, with the same recovery.
+    // A reserved word of another profile at declaration-start in a `.ridl` parse
+    // is RIDL-403, with the same recovery.
     #[test]
     fn reserved_word_in_ridl_flags_ridl_403_and_recovers() {
         let input = "package p\nmodel X {}\ntype Fine: m\n";
