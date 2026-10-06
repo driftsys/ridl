@@ -5,6 +5,7 @@
 - [Getting started](getting-started.md)
 - [Describing a system](rsdl.md)
 - [Documenting your API](documenting.md)
+- [Writing a codegen plugin](codegen-plugins.md)
 - [CLI reference](cli-reference.md)
 - [Lints](lints.md)
 

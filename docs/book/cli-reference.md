@@ -718,6 +718,8 @@ installs either: `ridlc-gen-model` is `--emit codegen-model` as a process, and
 `ridlc-gen-rust` is `--emit rust` as a process. A parity test runs each one
 through this path and compares its output with the in-process backend's, byte
 for byte. The TypeScript, proto3 and FlatBuffers backends run in process only.
+[Writing a codegen plugin](codegen-plugins.md) is the guide for a plugin
+author.
 
 **It writes** one file per package per `--emit` target, under `--out-dir`
 (`out` by default), and — exactly like [`ridl check`](#ridl-check) —
