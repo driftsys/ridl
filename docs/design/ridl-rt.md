@@ -596,7 +596,7 @@ Semantics each implementation presents:
   1. A runtime that carries the trace context delivers, on the `Claim` that a
      command or a query produces, the value its sender passed, unchanged.
   2. A runtime that carries it delivers, on every `RawOccurrence` that a `raise`
-     produces, the value its sender passed, unchanged.
+     produces (one for each subscriber), the value its sender passed, unchanged.
   3. A runtime or a transport that does not carry it delivers `None`.
   4. A sender's `None` is delivered as `None`.
 

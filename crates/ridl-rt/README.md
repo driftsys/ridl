@@ -15,7 +15,8 @@ registry every runtime would otherwise write alone (`correlate`), and the traits
 a generated face implements for its fixed methods — `Bind::new`,
 `Events::next_event`, `Publish::commit`, and under `std` `Timeout` — which a
 consumer brings into scope with the generated `prelude` of each interface whose
-face it uses (`face`).
+face it uses (`face`). One more module holds the optional trace context that a
+call or an event carries across a port (`trace`).
 
 With its default features the crate is `no_std` and allocates nothing; it
 contains no `unsafe` code and has no dependency in any feature combination. It

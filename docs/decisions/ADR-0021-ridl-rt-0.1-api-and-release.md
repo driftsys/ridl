@@ -885,9 +885,9 @@ trusted with no `unsafe` and no second verification pass.
 
     - **The argument.** `Caller::command`, `Caller::query` and
       `EventSink::raise` each take a last argument,
-      `trace:
-      Option<TraceContext>`. The forwarding impls for `&P` and
-      `&mut P` (decision 11) pass it through unchanged.
+      `trace: Option<TraceContext>`. The forwarding impls for `&mut P`
+      (decision 11) pass it through unchanged; `Caller` and `EventSink` have no
+      `&P` impl.
     - **The fields.** `Claim` and `RawOccurrence` each gain
       `pub trace: Option<TraceContext>`, placed after `envelope`.
     - **The delivery rules.** Each of the four traits `Caller`, `EventSink`,
@@ -1050,6 +1050,13 @@ trusted with no `unsafe` and no second verification pass.
 | [the interaction-face design record](../design/interaction-face.md)                              | the consumer face, the provider face and the blocking module state which methods are trait methods, and the collision paragraph states the rule a consumer follows (ADR-0023 decision 7)                                                                                                                                         |
 | [the `ridl-rt` by example technote](../technotes/ridl-rt-by-example.md)                          | its examples carry the `use ...::prelude::*;` line and name the traits (ADR-0023 decision 7)                                                                                                                                                                                                                                     |
 | `crates/ridl-rt/src/lib.rs`, `crates/ridl-rt/README.md`                                          | the crate documentation and the README name the `face` module (decision 19)                                                                                                                                                                                                                                                      |
+| [ADR-0023](ADR-0023-interaction-face-generation.md)                                              | its 2026-10-06 amendment records that the generated face passes `None` as the trace context (decision 21)                                                                                                                                                                                                                        |
+| [the `ridl-rt` design record](../design/ridl-rt.md)                                              | the module table gains `trace`, and the ports section gains the three signatures, the two fields and the four delivery rules (decision 21)                                                                                                                                                                                       |
+| [the `ridl-rt` by example technote](../technotes/ridl-rt-by-example.md)                          | the `Claim` description names its `trace` field (decision 21)                                                                                                                                                                                                                                                                    |
+| [the frame specification](../specification/frame-specification.md) §2                            | `TraceContext` joins the `ridl-rt` names that are not on the frame (decision 21)                                                                                                                                                                                                                                                 |
+| `crates/ridl-rt/src/port.rs`                                                                     | the `Caller`, `EventSink`, `Handler` and `EventSource` docs state the four delivery rules (decision 21)                                                                                                                                                                                                                          |
+| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decision 5             | a 2026-10-06 amendment records `trace` as the ninth unconditional module (decision 21)                                                                                                                                                                                                                                           |
+| `crates/ridl-rt/src/lib.rs`, `crates/ridl-rt/README.md`                                          | the crate documentation and the README name the `trace` module (decision 21)                                                                                                                                                                                                                                                     |
 
 ## References
 

@@ -73,8 +73,8 @@ fn raise(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8],
          trace: Option<TraceContext>) -> Result<(), RaiseError>;
 ```
 
-The `impl<P: T + ?Sized> T for &P` forwarding impls pass the argument through
-unchanged.
+The `impl<P: T + ?Sized> T for &mut P` forwarding impls pass the argument
+through unchanged.
 
 ### 3.3 The receive side
 
@@ -138,8 +138,8 @@ Written before the implementation they pin.
     subscribers;
   - a `None` sent on each of the three methods arrives as `None`;
   - two calls in flight with different contexts each arrive with their own.
-- `ridl-rt`: the `&P` forwarding test passes a context through each of the three
-  methods.
+- `ridl-rt`: the `&mut P` forwarding test passes a context through each of the
+  three methods.
 - `ridl-backend-rust`: the generated-face golden file pins the `None` argument.
 - Task review mutates the loopback implementation: dropping the context (always
   `None`) and swapping the contexts of two in-flight calls must each fail a

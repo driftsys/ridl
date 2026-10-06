@@ -25,7 +25,7 @@
 //! allocates — one `Arc` per call of any of the three functions. Every other
 //! module stays `no_std` with the feature on.
 //!
-//! Every public item lives in one of eight modules, or in one of the two that
+//! Every public item lives in one of nine modules, or in one of the two that
 //! the `flatbuffers` and `std` features add. Generated code names each
 //! item by its full path, for example `ridl_rt::sample::Sample`, and imports
 //! none, because several names here — `Duration`, `Handler`, `Kind` — are also
@@ -39,6 +39,8 @@
 //! each prelude brings the traits that interface's types implement, and
 //! rustc reports a prelude as an unused import when the other imported
 //! preludes already bring every item it would add.
+//! The ninth module, [`trace`], holds `TraceContext`, the optional trace context
+//! that a call or an event carries across a port.
 //!
 //! # Where to start
 //!
