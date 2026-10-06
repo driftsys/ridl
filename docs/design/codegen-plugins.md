@@ -493,13 +493,15 @@ shows that the request carries every input those two layouts need. The layout
 rule belongs to the test plugin: it is stated in the plugin's module comment,
 and neither the toolchain nor the request prescribes it.
 
-Two things are not proved. The fixture states `null` for every socket message's
-maximum size, because the table of binding overheads has no row, so the sum of
-header, envelope and payload bound is not exercised. Declared sizing values are
-not in the `examples/cabin` source; a second test in the same file builds a
-workspace in a temporary directory that declares `depth`, `slots` and `budget`
-and checks that each declared value reaches the request with the declared
-source.
+Two things the cabin fixture does not show are tested apart from it. The fixture
+states `null` for every socket message's maximum size, because the table of
+binding overheads has no row. A second test adds a `websocket` row to cabin's
+request with a frame header of 14 bytes and an envelope of 2 bytes, values that
+belong to the test and to no binding document, and checks that `Cabin.warning`'s
+maximum size is 14 + 2 + 8 = 24. Declared sizing values are not in the
+`examples/cabin` source; another test in the same file builds a workspace in a
+temporary directory that declares `depth`, `slots` and `budget` and checks that
+each declared value reaches the request with the declared source.
 
 ## 8. What a plugin author reads
 

@@ -441,8 +441,12 @@ provenance. Nothing here is normative — the current references live in
   the size states and the binding overheads. The design's §8 holds the delegated
   decisions DD-1 to DD-59, which Sebastien reviews; its D-6 table row for
   RSDL-806 is superseded by DD-42. The plan's §1 was the stage driver for S2 to
-  S4. Archived verbatim apart from the D-6 note and the spec path in the plan.
-  The gardened records are
+  S4. The plan is archived verbatim apart from its spec path. The design is
+  archived with these edits: DD-52 to DD-59 appended to its §8; the D-6 table
+  re-flowed, with the note "Superseded by DD-42" added to the RSDL-806 row and a
+  paragraph below the table; its lifecycle-rule link pointed at
+  `docs/wip/README.md`; DD-53, DD-54 and DD-57 corrected and a dated note added
+  to DD-58 during the review of driftsys/ridl#736. The gardened records are
   [the codegen plugins design record](../design/codegen-plugins.md),
   [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) and
   [the rsdl implementation technote](../technotes/rsdl-implementation.md). One
