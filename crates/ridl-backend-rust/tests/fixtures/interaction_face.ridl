@@ -75,12 +75,12 @@ interface Siren {
   event tripped : Warning @[100ms..1s]
 }
 
-// ---------- A calls-only interface with no timing, for two tests ----------
+// ------ A calls-only interface with no written timing, for two tests ------
 //
 // Its `Client` is bound on `Caller`, `Clock` and `Wakeable` and on nothing
-// else, and neither call has a `max`, so a call's future has no deadline and
-// waits without a bound (the async face design, note F-2). Named to sort
-// after `Siren`, for the reason `Siren` gives.
+// else. Neither call writes a timing annotation, so each takes the built-in
+// default response bound for its kind (ridl §9.3): 1 s for `open` and 3 s for
+// `pressure`. Named to sort after `Siren`, for the reason `Siren` gives.
 
 interface Valve {
   command open(level: Level)

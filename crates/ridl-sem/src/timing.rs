@@ -25,10 +25,12 @@
 //! carries concrete bounds and a `default_applied` flag (ADR-0008 decision 12).
 //!
 //! `command` and `query` admit the range form only (ADR-0015 decisions 2, 3,
-//! and 5): `min` is the call throttle and `max` the response bound. An RPC is
-//! **warned, never defaulted** (RIDL-112, ADR-0015 decision 4) — the §9.1
-//! defaulting path above is signal/event only, and an undeclared RPC bound
-//! stays absent in the IR.
+//! and 5): `min` is the call throttle and `max` the response bound. An RPC
+//! with no written response bound is **warned, and defaulted** (RIDL-112,
+//! ridl §9.3): it takes `max` from `[defaults].command_timing` or
+//! `[defaults].query_timing`, or from the built-in `[..1s]` or `[..3s]`, and
+//! the IR marks the bound `default_applied`. A default's `min` applies only to
+//! an RPC with no annotation at all.
 
 use num_bigint::BigInt;
 use num_rational::BigRational;
@@ -49,8 +51,9 @@ pub enum TimingMode {
 ///
 /// `min_us` is the rate floor and `max_us` the staleness bound. A strict period
 /// stores the same value in both; an explicit half-open range leaves the absent
-/// side `None`. `default_applied` marks the configured default that an untimed
-/// signal or event resolves to (ADR-0008 decision 12).
+/// side `None`. `default_applied` marks a timing with at least one bound taken
+/// from the configured default: an untimed signal or event (ADR-0008 decision
+/// 12), or a command or query with no written response bound (ridl §9.3).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TimingSpec {
     pub mode: TimingMode,
@@ -62,7 +65,8 @@ pub struct TimingSpec {
 /// The five ridl interaction kinds (ridl §4–§8). [`InteractionKind::Signal`]
 /// and [`InteractionKind::Event`] carry timing and are defaulted when untimed;
 /// [`InteractionKind::Command`] and [`InteractionKind::Query`] admit the range
-/// form only and are never defaulted (ADR-0015 decisions 2 and 4);
+/// form only (ADR-0015 decision 2) and take their response bound from the
+/// default for their kind when none is written (ridl §9.3);
 /// [`InteractionKind::Fixed`] carries none.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InteractionKind {
@@ -164,18 +168,21 @@ fn parse_default_range(text: &str, require_min: bool) -> Result<TimingSpec, Stri
 /// Resolves one interaction's timing to concrete bounds (ridl §9, ADR-0008
 /// decision 12, ADR-0015 decisions 2–6).
 ///
+/// `default` is the configured default for `kind`: `[defaults].timing` for a
+/// signal or event, `[defaults].command_timing` for a command, and
+/// `[defaults].query_timing` for a query, each with its built-in fallback.
+///
 /// For a `signal` or `event` the result is always `Some`: an explicit `@`
 /// annotation is parsed and validated, and an untimed one resolves to `default`
-/// (RIDL-100). For a `command` or `query` the result is `Some` exactly when a
-/// readable annotation was written: an RPC is warned, never defaulted
-/// (RIDL-112, ADR-0015 decision 4), so an undeclared bound stays `None` and
-/// the `default` argument is never read on this path. RIDL-112 covers what
-/// was not declared — no annotation at all, or the half-open `@[min..]` — and
-/// stays quiet on an annotation the parser could not read, whose only report
-/// is the parser's FORM-101. For `fixed` the result is
-/// always `None` and no diagnostic is produced — the kind carries no timing,
-/// and the structural checker already reports any annotation written on it
-/// (RIDL-106).
+/// (RIDL-100). For a `command` or `query` the result is always `Some` too: an
+/// RPC with no annotation resolves to `default`, and an annotation with no
+/// response bound keeps what was written and takes `max` from `default`, with
+/// `default_applied` set (ridl §9.3). RIDL-112 covers what was not declared —
+/// no annotation at all, or the half-open `@[min..]` — and stays quiet on an
+/// annotation the parser could not read, whose only report is the parser's
+/// FORM-101. For `fixed` the result is always `None` and no diagnostic is
+/// produced — the kind carries no timing, and the structural checker already
+/// reports any annotation written on it (RIDL-106).
 ///
 /// Validity diagnostics carry `file` as their span source: RIDL-100 (default
 /// applied, warning, anchored on `anchor` — the interaction that received the
@@ -210,13 +217,27 @@ pub fn resolve_timing(
         let min_token = range.min();
         let max_token = range.max();
         let min = bound_us(min_token.as_ref(), file, &mut diags);
-        let max = bound_us(max_token.as_ref(), file, &mut diags);
+        let mut max = bound_us(max_token.as_ref(), file, &mut diags);
         let node = range.syntax().text_range();
         // The written text of each bound, so every message below quotes the
         // annotation the author typed rather than the microseconds the IR
         // carries.
         let min_text = written(min_token.as_ref());
-        let max_text = written(max_token.as_ref());
+        let mut max_text = written(max_token.as_ref());
+        // An RPC with no resolved response bound takes `max` from the default
+        // for its kind (ridl §9.3). Only `max` is filled: a written `min` is
+        // kept, and an absent `min` stays absent, because on an RPC `min` is a
+        // call throttle that applies only when the author writes it. The
+        // checks below then run on the completed range, so `@[2s..]` under a
+        // `1s` default is the inverted range RIDL-101 reports.
+        let mut default_applied = false;
+        if matches!(kind, InteractionKind::Command | InteractionKind::Query) && max.is_none() {
+            max = default.max_us.clone();
+            if let Some(value) = &max {
+                max_text = render_duration(value);
+            }
+            default_applied = true;
+        }
         let zero = [
             (&min, &min_text, "rate floor"),
             (&max, &max_text, "staleness bound"),
@@ -272,9 +293,10 @@ pub fn resolve_timing(
         }
         // A half-open `@[min..]` on an RPC declares a throttle and no response
         // bound, so it warns exactly as a bare undecorated RPC does (ADR-0015
-        // decision 4). The test is on the written token, not the resolved
-        // value: an unreadable `max` already drew FORM-102 above and is a
-        // written bound, not an undeclared one.
+        // decision 4), and the message names the range the default completed.
+        // The test is on the written token, not the resolved value: an
+        // unreadable `max` already drew FORM-102 above and is a written bound,
+        // not an undeclared one.
         //
         // The warning requires the literal spelling `@[min..]`: a written
         // `min`, an absent `max`, the `..` consumed into the range node, and
@@ -294,19 +316,19 @@ pub fn resolve_timing(
         // checker could not read. The package fails to compile on the
         // FORM-101 regardless, so no artifact or baseline can carry the
         // state.
+        let spec = TimingSpec {
+            mode: TimingMode::Range,
+            min_us: min,
+            max_us: max,
+            default_applied,
+        };
         if matches!(kind, InteractionKind::Command | InteractionKind::Query)
             && min_token.is_some()
             && max_token.is_none()
             && range_parsed_whole(annot, &range)
         {
-            diags.push(missing_response_bound(kind, file, anchor));
+            diags.push(missing_response_bound(kind, &spec, file, anchor));
         }
-        let spec = TimingSpec {
-            mode: TimingMode::Range,
-            min_us: min,
-            max_us: max,
-            default_applied: false,
-        };
         (Some(spec), diags)
     } else if let Some(token) = annot.duration() {
         // Strict periodic `@Xms` — signal only (ridl §9). The period resolves
@@ -364,21 +386,16 @@ pub fn resolve_timing(
         (Some(spec), diags)
     } else {
         // A degenerate `Timing` node with neither a duration nor a range (a
-        // parse error, already reported as FORM-101). A signal or event
-        // applies the default so the IR still carries concrete bounds. An RPC
-        // stays absent and draws no RIDL-112: the annotation was written and
-        // could not be read, so the author may well have declared a response
-        // bound (`@[20xs..50ms]` writes one), and the checker must not advise
-        // on intent it could not read. The package fails to compile on the
+        // parse error, already reported as FORM-101). Every timed kind applies
+        // the default for its kind so the IR still carries concrete bounds.
+        // An RPC draws no RIDL-112 here: the annotation was written and could
+        // not be read, so the author may well have declared a response bound
+        // (`@[20xs..50ms]` writes one), and the checker must not advise on
+        // intent it could not read. The package fails to compile on the
         // FORM-101 regardless, so no artifact or baseline can carry this
         // state. (ADR-0015 decision 4 warns on a readable annotation with no
         // `max` — a malformed annotation has no readable `max` either way.)
-        match kind {
-            InteractionKind::Signal | InteractionKind::Event => {
-                (Some(applied_default(default)), diags)
-            }
-            _ => (None, diags),
-        }
+        (Some(applied_default(default)), diags)
     }
 }
 
@@ -387,9 +404,10 @@ pub fn resolve_timing(
 /// A signal or event resolves the configured default (ridl §9.1); RIDL-100
 /// warns and names the applied bounds, anchored on the interaction that
 /// received the default so a package with many untimed interactions yields one
-/// navigable warning each. A command or query is warned, never defaulted
-/// (RIDL-112, ADR-0015 decision 4): there is no plausible generic response
-/// bound, so the IR carries nothing rather than a manufactured promise.
+/// navigable warning each. A command or query resolves the default response
+/// bound for its kind (ridl §9.3) — `[defaults].command_timing` or
+/// `[defaults].query_timing`, or the built-in `[..1s]` or `[..3s]` — and
+/// RIDL-112 warns and names the applied bounds.
 fn untimed(
     kind: InteractionKind,
     default: &TimingSpec,
@@ -416,18 +434,29 @@ fn untimed(
             );
             (Some(spec), vec![diag])
         }
-        _ => (None, vec![missing_response_bound(kind, file, anchor)]),
+        _ => {
+            let spec = applied_default(default);
+            let diag = missing_response_bound(kind, &spec, file, anchor);
+            (Some(spec), vec![diag])
+        }
     }
 }
 
 /// RIDL-112: a `command` or `query` with no declared response bound — no
 /// annotation at all, or the half-open `@[min..]` that declares a throttle
-/// only (ADR-0015 decisions 4 and 6). Warning; a profile may escalate it, the
-/// same two-step §9.1 gives an untimed signal or event. A missing `min` draws
-/// nothing — an unbounded call rate is the default every RPC has today.
-fn missing_response_bound(kind: InteractionKind, file: FileId, anchor: TextRange) -> Diagnostic {
+/// only (ADR-0015 decisions 4 and 6). `spec` is the resolved timing, whose
+/// `max` came from the default, so the message names the bounds applied.
+/// Warning; a profile may escalate it, the same two-step §9.1 gives an untimed
+/// signal or event. A missing `min` draws nothing — an unbounded call rate is
+/// the default every RPC has today.
+fn missing_response_bound(
+    kind: InteractionKind,
+    spec: &TimingSpec,
+    file: FileId,
+    anchor: TextRange,
+) -> Diagnostic {
     let responding = match kind {
-        InteractionKind::Command => "acceptance — the §6.1 acknowledgment, not execution",
+        InteractionKind::Command => "acceptance (the §6.1 acknowledgment, not execution)",
         _ => "the reply",
     };
     diagnostic(
@@ -436,11 +465,11 @@ fn missing_response_bound(kind: InteractionKind, file: FileId, anchor: TextRange
         file,
         anchor,
         format!(
-            "{} without a declared response bound — no default is applied, because a response \
-             bound is a provider obligation callers size their timeouts against, and inventing \
-             one would manufacture a promise nobody made. Write `@[..max]` to bound {} (ridl §9)",
-            kind_noun(kind),
-            responding,
+            "{kind} without a declared response bound — the default `@{bounds}` is applied: the \
+             provider must settle {responding} within the bound. Write `@[..max]` to declare the \
+             bound this {kind} really promises (ridl §9.3)",
+            kind = kind_noun(kind),
+            bounds = render_bounds(spec),
         ),
     )
 }
@@ -639,8 +668,10 @@ fn render_bounds(spec: &TimingSpec) -> String {
 /// `100ms` and `1000000` renders `1s`.
 ///
 /// This is used only where nothing was written to echo — the default applied to
-/// an untimed signal or event (RIDL-100), which comes from `[defaults].timing`
-/// or from the built-in fallback. The units are the ones a `.ridl` file and a
+/// an untimed signal or event (RIDL-100) or to a command or query with no
+/// written response bound (RIDL-112, and RIDL-101 on the range that default
+/// completed), which comes from the package's `[defaults]` or from the
+/// built-in fallback. The units are the ones a `.ridl` file and a
 /// manifest are written in, so the message never answers in the canonical
 /// microseconds only the IR carries. A value no larger unit divides exactly
 /// renders in `us`: a whole count such as `1500` (`1500us`, since `1.5ms` is
@@ -1052,8 +1083,9 @@ mod tests {
     // --- RPC bounds (ADR-0015 decisions 2–6) ------------------------
 
     /// The range form resolves on a command and a query exactly as it does on
-    /// a signal: `min` is the call throttle, `max` the response bound, and
-    /// nothing is defaulted (ADR-0015 decisions 2 and 3).
+    /// a signal: `min` is the call throttle, `max` the response bound, and a
+    /// range with both bounds written takes nothing from the default
+    /// (ADR-0015 decisions 2 and 3).
     #[test]
     fn rpc_range_resolves_both_bounds_clean() {
         for (decl, kind) in [
@@ -1072,7 +1104,7 @@ mod tests {
             assert_eq!(spec.mode, TimingMode::Range);
             assert_eq!(spec.min_us, Some(us("20000")));
             assert_eq!(spec.max_us, Some(us("50000")));
-            assert!(!spec.default_applied, "an RPC bound is never defaulted");
+            assert!(!spec.default_applied, "a written range is not defaulted");
         }
     }
 
@@ -1092,42 +1124,62 @@ mod tests {
     }
 
     /// `@[20ms..]` declares a throttle and no response bound, so it warns
-    /// exactly as a bare undecorated RPC does (ADR-0015 decision 4).
+    /// exactly as a bare undecorated RPC does (ADR-0015 decision 4), and the
+    /// message names the range the default completed.
     #[test]
     fn rpc_half_open_throttle_only_draws_ridl_112() {
         let (spec, diags) = resolve(
             Some(&annot("query getSpeed(): Speed @[20ms..]")),
             InteractionKind::Query,
-            &builtin_default_timing(),
+            &builtin_query_timing(),
         );
         assert_eq!(codes(&diags), vec!["RIDL-112"]);
         assert_eq!(diags[0].severity, Severity::Warning);
+        assert!(
+            diags[0].message.contains("`@[20ms..3s]`"),
+            "the message names the completed range: {}",
+            diags[0].message,
+        );
         // The written throttle still lowers honestly.
         let spec = spec.expect("resolved");
         assert_eq!(spec.min_us, Some(us("20000")));
-        assert_eq!(spec.max_us, None, "absent means absent — never defaulted");
+        assert_eq!(spec.max_us, value_of("3s"), "max comes from the default");
+        assert!(spec.default_applied);
     }
 
-    /// A bare command or query draws RIDL-112 and resolves no timing at all:
-    /// the §9.1 defaulting path is signal/event only, so the IR carries
-    /// nothing rather than a manufactured bound (ADR-0015 decision 4).
+    /// A bare command or query draws RIDL-112 and resolves the built-in
+    /// default for its kind; the message names the bounds applied.
     #[test]
-    fn rpc_without_annotation_draws_ridl_112_and_stays_absent() {
-        for kind in [InteractionKind::Command, InteractionKind::Query] {
-            let (spec, diags) = resolve(None, kind, &builtin_default_timing());
-            assert_eq!(spec, None, "{kind:?} is never defaulted");
+    fn rpc_without_annotation_draws_ridl_112_naming_the_default() {
+        for (kind, default, rendered) in [
+            (
+                InteractionKind::Command,
+                builtin_command_timing(),
+                "`@[..1s]`",
+            ),
+            (InteractionKind::Query, builtin_query_timing(), "`@[..3s]`"),
+        ] {
+            let (spec, diags) = resolve(None, kind, &default);
+            let spec = spec.expect("an untimed RPC resolves the default");
+            assert_eq!(spec.max_us, default.max_us, "{kind:?}");
+            assert!(spec.default_applied, "{kind:?}");
             assert_eq!(codes(&diags), vec!["RIDL-112"]);
             assert_eq!(diags[0].severity, Severity::Warning);
+            assert!(
+                diags[0].message.contains(rendered),
+                "{kind:?}: the message names the applied bounds: {}",
+                diags[0].message,
+            );
         }
         // The command message derives responding as acceptance, not execution
         // (ridl §6.1, ADR-0015 decision 3).
-        let (_, on_command) = resolve(None, InteractionKind::Command, &builtin_default_timing());
+        let (_, on_command) = resolve(None, InteractionKind::Command, &builtin_command_timing());
         assert!(
             on_command[0].message.contains("acceptance") && on_command[0].message.contains("§6.1"),
             "a command's bound is acceptance: {}",
             on_command[0].message,
         );
-        let (_, on_query) = resolve(None, InteractionKind::Query, &builtin_default_timing());
+        let (_, on_query) = resolve(None, InteractionKind::Query, &builtin_query_timing());
         assert!(
             on_query[0].message.contains("the reply"),
             "a query's bound is the reply: {}",
@@ -1149,16 +1201,16 @@ mod tests {
     /// way.
     #[test]
     fn ridl_112_warns_on_undeclared_bounds_and_not_on_unreadable_ones() {
-        // No annotation at all — warned, never defaulted.
-        let (spec, bare) = resolve(None, InteractionKind::Query, &builtin_default_timing());
-        assert_eq!(spec, None);
+        // No annotation at all — warned, and defaulted.
+        let (spec, bare) = resolve(None, InteractionKind::Query, &builtin_query_timing());
+        assert!(spec.expect("defaulted").default_applied);
         assert_eq!(codes(&bare), vec!["RIDL-112"]);
 
         // A readable range that declares a throttle and no response bound.
         let (_, half_open) = resolve(
             Some(&annot("query getSpeed(): Speed @[20ms..]")),
             InteractionKind::Query,
-            &builtin_default_timing(),
+            &builtin_query_timing(),
         );
         assert_eq!(codes(&half_open), vec!["RIDL-112"]);
 
@@ -1187,18 +1239,112 @@ mod tests {
                 parse_codes.contains(&"FORM-101"),
                 "{decl} still draws its FORM-101, got {parse_codes:?}",
             );
-            let (spec, diags) = resolve(Some(&timing), kind, &builtin_default_timing());
+            let default = builtin_query_timing();
+            let (spec, diags) = resolve(Some(&timing), kind, &default);
             assert_eq!(
                 codes(&diags),
                 Vec::<&str>::new(),
                 "{decl}: an unreadable annotation is FORM-101's alone",
             );
-            // Suppressing the warning did not start defaulting: whatever
-            // lowers carries no response bound and no applied default.
-            if let Some(spec) = spec {
-                assert_eq!(spec.max_us, None, "{decl}: no bound is manufactured");
-                assert!(!spec.default_applied, "{decl}: never defaulted");
-            }
+            // Suppressing the warning did not stop the default: the
+            // unreadable response bound lowers the default's `max`, marked
+            // as applied, the same fallback a malformed signal timing takes.
+            let spec = spec.expect("a malformed annotation still resolves");
+            assert_eq!(spec.max_us, default.max_us, "{decl}: max from the default");
+            assert!(spec.default_applied, "{decl}: the default is applied");
+        }
+    }
+
+    // --- RPC default response bound (ridl §9.3) ---------------------
+
+    /// Both RPC kinds, each with a sample declaration whose annotation the
+    /// caller appends.
+    const RPC_KINDS: [(&str, InteractionKind); 2] = [
+        ("command setTarget(speed: Speed)", InteractionKind::Command),
+        ("query getSpeed(): Speed", InteractionKind::Query),
+    ];
+
+    #[test]
+    fn untimed_rpc_takes_the_default() {
+        let default = parse_rpc_default_timing("[..1s]").expect("valid default");
+        for (_, kind) in RPC_KINDS {
+            let (spec, diags) = resolve(None, kind, &default);
+            let spec = spec.expect("an untimed RPC resolves the default");
+            assert_eq!(spec.max_us, value_of("1s"), "{kind:?}");
+            assert_eq!(spec.min_us, None, "{kind:?}");
+            assert!(spec.default_applied, "{kind:?}");
+            assert_eq!(codes(&diags), vec!["RIDL-112"], "{kind:?}");
+        }
+    }
+
+    #[test]
+    fn untimed_rpc_takes_the_default_min_too() {
+        let default = parse_rpc_default_timing("[10ms..1s]").expect("valid default");
+        for (_, kind) in RPC_KINDS {
+            let (spec, _) = resolve(None, kind, &default);
+            let spec = spec.expect("resolved");
+            assert_eq!(spec.min_us, value_of("10ms"), "{kind:?}");
+            assert_eq!(spec.max_us, value_of("1s"), "{kind:?}");
+        }
+    }
+
+    #[test]
+    fn half_open_min_on_rpc_takes_max_from_the_default() {
+        let default = parse_rpc_default_timing("[..1s]").expect("valid default");
+        for (decl, kind) in RPC_KINDS {
+            let decl = format!("{decl} @[20ms..]");
+            let (spec, diags) = resolve(Some(&annot(&decl)), kind, &default);
+            let spec = spec.expect("resolved");
+            assert_eq!(spec.min_us, value_of("20ms"), "{kind:?}");
+            assert_eq!(spec.max_us, value_of("1s"), "{kind:?}");
+            assert!(spec.default_applied, "{kind:?}");
+            assert_eq!(codes(&diags), vec!["RIDL-112"], "{kind:?}");
+        }
+    }
+
+    #[test]
+    fn max_only_on_rpc_ignores_the_default() {
+        let default = parse_rpc_default_timing("[10ms..1s]").expect("valid default");
+        for (decl, kind) in RPC_KINDS {
+            let decl = format!("{decl} @[..5s]");
+            let (spec, diags) = resolve(Some(&annot(&decl)), kind, &default);
+            let spec = spec.expect("resolved");
+            assert_eq!(spec.min_us, None, "{kind:?}: the default min is not used");
+            assert_eq!(spec.max_us, value_of("5s"), "{kind:?}");
+            assert!(!spec.default_applied, "{kind:?}");
+            assert!(diags.is_empty(), "{kind:?}: {diags:?}");
+        }
+    }
+
+    #[test]
+    fn full_range_on_rpc_ignores_the_default() {
+        let default = parse_rpc_default_timing("[10ms..1s]").expect("valid default");
+        for (decl, kind) in RPC_KINDS {
+            let decl = format!("{decl} @[1ms..20ms]");
+            let (spec, diags) = resolve(Some(&annot(&decl)), kind, &default);
+            let spec = spec.expect("resolved");
+            assert_eq!(spec.min_us, value_of("1ms"), "{kind:?}");
+            assert_eq!(spec.max_us, value_of("20ms"), "{kind:?}");
+            assert!(!spec.default_applied, "{kind:?}");
+            assert!(diags.is_empty(), "{kind:?}: {diags:?}");
+        }
+    }
+
+    /// A written throttle above the default response bound is the same
+    /// inverted range RIDL-101 reports on a written `@[2s..1s]`, checked on
+    /// the range the default completed.
+    #[test]
+    fn half_open_min_above_the_default_max_is_ridl_101() {
+        let default = parse_rpc_default_timing("[..1s]").expect("valid default");
+        for (decl, kind) in RPC_KINDS {
+            let decl = format!("{decl} @[2s..]");
+            let (spec, diags) = resolve(Some(&annot(&decl)), kind, &default);
+            let codes = codes(&diags);
+            assert!(codes.contains(&"RIDL-101"), "{kind:?}: {codes:?}");
+            assert!(codes.contains(&"RIDL-112"), "{kind:?}: {codes:?}");
+            let spec = spec.expect("resolved");
+            assert_eq!(spec.min_us, value_of("2s"), "{kind:?}");
+            assert_eq!(spec.max_us, value_of("1s"), "{kind:?}");
         }
     }
 

@@ -1106,10 +1106,10 @@ fn an_rpc_bound_removed_is_breaking() {
 }
 
 /// The whole annotation appearing or disappearing is a bound added or removed
-/// — breaking in both directions. The absent side is the undeclared state,
-/// which the checker never defaults (ADR-0015 decision 4), so both directions
-/// arrive through ordinary compiles rather than only through a hand-edited
-/// snapshot.
+/// — breaking in both directions. The checker now resolves every command and
+/// query to a bound, so the absent side arrives from a catalog built before
+/// the response-bound default (ridl §9.3), compared with one built after it:
+/// a call that could not time out now can.
 #[test]
 fn an_rpc_annotation_present_on_one_side_only_is_breaking() {
     let declared = bounded_command(Some(range(Some("10000"), Some("100000"))));

@@ -482,7 +482,7 @@ error[RIDL-103]: the strict period `@1s` is not valid on a query — a strict pe
 32 │   query timedQuery(): Level @1s
    │                             ^^^
 
-warning[RIDL-112]: query without a declared response bound — no default is applied, because a response bound is a provider obligation callers size their timeouts against, and inventing one would manufacture a promise nobody made. Write `@[..max]` to bound the reply (ridl §9)
+warning[RIDL-112]: query without a declared response bound — the default `@[..3s]` is applied: the provider must settle the reply within the bound. Write `@[..max]` to declare the bound this query really promises (ridl §9.3)
    ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:36:9
    │
 36 │   query unbounded(): Level
@@ -490,7 +490,7 @@ warning[RIDL-112]: query without a declared response bound — no default is app
    │
    = lint: `missing-response-bound` (set its level in `[lints]` in ridl.toml)
 
-warning[RIDL-112]: command without a declared response bound — no default is applied, because a response bound is a provider obligation callers size their timeouts against, and inventing one would manufacture a promise nobody made. Write `@[..max]` to bound acceptance — the §6.1 acknowledgment, not execution (ridl §9)
+warning[RIDL-112]: command without a declared response bound — the default `@[20ms..1s]` is applied: the provider must settle acceptance (the §6.1 acknowledgment, not execution) within the bound. Write `@[..max]` to declare the bound this command really promises (ridl §9.3)
    ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:40:11
    │
 40 │   command throttledOnly(level: Level) @[20ms..]

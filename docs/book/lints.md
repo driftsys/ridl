@@ -141,7 +141,7 @@ MANI-010 is itself a lint, so the table can set its level.
 | `doc-comment-style` | TYPL-410 | allow | doc comment written as `/** */` |
 | `missing-timing` | RIDL-100 | warn | `signal` or `event` without a timing annotation |
 | `degenerate-timing-range` | RIDL-108 | warn | degenerate timing range `@[X..X]` |
-| `missing-response-bound` | RIDL-112 | warn | `command` or `query` with no declared response bound |
+| `missing-response-bound` | RIDL-112 | warn | `command` or `query` takes the default response bound |
 | `error-typed-parameter` | RIDL-304 | warn | `error`-typed or result-union parameter on a `command` or `query` |
 | `ensure-without-result` | RIDL-305 | warn | `ensure` clause that never references `result` |
 | `contract-error-name-in-enum` | RIDL-307 | warn | contract-error category name declared in an `error` enum |

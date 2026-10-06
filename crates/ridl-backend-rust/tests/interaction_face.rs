@@ -178,7 +178,7 @@ impl generated::cabin::Provider for TestProvider {
 }
 
 /// The same provider serves `Valve`, the fixture's calls-only interface with
-/// no response bound, whose reply is the same test-controlled value.
+/// no written response bound, whose reply is the same test-controlled value.
 impl generated::valve::Provider for TestProvider {
     fn open(&mut self, level: &generated::Level) {
         self.set_level_calls.push(level.get());
@@ -1435,31 +1435,25 @@ fn serve_is_ready_with_the_refusal_when_the_handler_refuses_the_members() {
     );
 }
 
-/// Note F-2: a member with no `max` has no deadline. `Valve`'s calls declare
-/// no response bound, so a call waits past any time and still delivers.
+/// `Valve`'s calls declare no response bound, so each carries the built-in
+/// default for its kind (ridl §9.3) in the generated face: 1 s for the command
+/// and 3 s for the query. The deadline is read from the members, so no test
+/// waits for it. A member with no `max` has no deadline (note F-2); that path
+/// is covered at the `Member` level by `ridl-rt`'s `call_deadline` tests.
 #[test]
-fn a_call_on_a_member_with_no_max_waits_without_a_bound() {
-    let mut rt = loopback();
-    let mut provider = TestProvider::new(3);
-    let mut serve = generated::valve::serve(rt.handler(), &mut provider);
-    let ports = RecordingPorts::new(&rt);
-    let log = ports.log();
-    let mut client = generated::valve::Client::new(ports);
+fn an_untimed_member_carries_the_built_in_default_deadline() {
+    use ridl_rt::contract::Interaction;
 
-    let mut call = client.pressure(generated::Window::new_unchecked(10));
-    let c = the_one_send(&log);
-    assert!(poll_once(&mut call).is_pending());
-    rt.advance(Duration(i64::MAX / 2));
-    assert!(
-        poll_once(&mut call).is_pending(),
-        "no bound passes for a member with no max"
-    );
-    assert!(poll_once(&mut serve).is_pending());
     assert_eq!(
-        poll_once(&mut call),
-        Poll::Ready(Ok(generated::Average::new_unchecked(3)))
+        <generated::ValveOpen as Interaction>::MEMBER.call_deadline(),
+        Some(Duration(1_000_000)),
+        "an untimed command takes the built-in 1 s",
     );
-    assert_eq!(doubles::forgets(&log), vec![c]);
+    assert_eq!(
+        <generated::ValvePressure as Interaction>::MEMBER.call_deadline(),
+        Some(Duration(3_000_000)),
+        "an untimed query takes the built-in 3 s",
+    );
 }
 
 /// Note F-2: the outcome wins over the deadline. A command settled within its
@@ -2056,7 +2050,8 @@ const SHORT: std::time::Duration = std::time::Duration::from_millis(20);
 /// waited.
 const LONG: std::time::Duration = std::time::Duration::from_millis(300);
 /// How long the serving thread sleeps after the client registers its outcome
-/// interest, in the tests that show an unbounded call waits for its provider.
+/// interest, in the tests that show a call with no client timeout waits for
+/// its provider.
 const LATE: std::time::Duration = std::time::Duration::from_millis(100);
 
 /// Serves `Valve` once on a second thread, `LATE` after the client registers
@@ -2159,8 +2154,8 @@ fn blocking_round_trip_command_and_query_are_served_from_another_thread() {
 /// Note F-11, the unsent phase: with every slot taken, the blocking call
 /// gives up at the client's timeout with `Send(Busy)`, the answer the future
 /// gives at its own deadline; nothing was sent, so nothing is forgotten. The
-/// member is `Valve::open`, which has no `max`, so the client's timeout is
-/// the only bound. `set_timeout` is the setter here, `with_timeout` in the
+/// member is `Valve::open`, whose default `max` of 1 s is longer than the
+/// client's timeout, so the client's timeout is the bound that is reached. `set_timeout` is the setter here, `with_timeout` in the
 /// other tests.
 #[test]
 fn a_blocking_call_still_unsent_at_its_timeout_returns_send_busy() {
@@ -2330,9 +2325,9 @@ fn a_blocking_timeout_shorter_than_the_members_max_is_accepted() {
 }
 
 /// Note F-11: the timeout is `None` until one is set, and with none an
-/// untimed member waits for its provider: `Valve::open` has no `max`, the
-/// client sets no timeout, and the call resolves when the provider serves it
-/// after `LATE`, rather than at a default bound shorter than that.
+/// member with no written bound waits for its provider: `Valve::open` takes
+/// the default `max` of 1 s, which is longer than `LATE`, the client sets no
+/// timeout, and the call resolves when the provider serves it after `LATE`.
 #[test]
 fn a_blocking_client_with_no_timeout_set_waits_for_the_provider() {
     let rt = loopback();

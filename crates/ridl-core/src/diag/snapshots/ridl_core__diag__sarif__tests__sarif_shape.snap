@@ -746,7 +746,7 @@ expression: log
               "id": "RIDL-112",
               "name": "missing-response-bound",
               "shortDescription": {
-                "text": "`command` or `query` with no declared response bound"
+                "text": "`command` or `query` takes the default response bound"
               },
               "defaultConfiguration": {
                 "level": "warning"
@@ -1435,7 +1435,7 @@ expression: log
             {
               "id": "MANI-009",
               "shortDescription": {
-                "text": "invalid `[defaults].timing` value"
+                "text": "invalid `[defaults]` timing value"
               },
               "defaultConfiguration": {
                 "level": "error"

@@ -1268,8 +1268,8 @@ impl ::ridl_rt::contract::Interface for Cabin {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            52, 54, 127, 153, 61, 26, 253, 79, 142, 206, 193, 33, 168, 182, 100, 48, 242,
-            149, 191, 32, 140, 85, 6, 7, 157, 119, 132, 34, 34, 104, 127, 157,
+            78, 33, 65, 116, 71, 120, 145, 211, 47, 76, 125, 95, 217, 117, 227, 100, 17,
+            184, 94, 72, 55, 15, 72, 145, 231, 68, 122, 125, 166, 37, 212, 205,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(1);
@@ -1479,8 +1479,8 @@ impl ::ridl_rt::contract::Interface for Horn {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            52, 54, 127, 153, 61, 26, 253, 79, 142, 206, 193, 33, 168, 182, 100, 48, 242,
-            149, 191, 32, 140, 85, 6, 7, 157, 119, 132, 34, 34, 104, 127, 157,
+            78, 33, 65, 116, 71, 120, 145, 211, 47, 76, 125, 95, 217, 117, 227, 100, 17,
+            184, 94, 72, 55, 15, 72, 145, 231, 68, 122, 125, 166, 37, 212, 205,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(2);
@@ -1534,8 +1534,8 @@ impl ::ridl_rt::contract::Interface for Siren {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            52, 54, 127, 153, 61, 26, 253, 79, 142, 206, 193, 33, 168, 182, 100, 48, 242,
-            149, 191, 32, 140, 85, 6, 7, 157, 119, 132, 34, 34, 104, 127, 157,
+            78, 33, 65, 116, 71, 120, 145, 211, 47, 76, 125, 95, 217, 117, 227, 100, 17,
+            184, 94, 72, 55, 15, 72, 145, 231, 68, 122, 125, 166, 37, 212, 205,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(3);
@@ -1601,8 +1601,8 @@ impl ::ridl_rt::contract::Interface for Valve {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            52, 54, 127, 153, 61, 26, 253, 79, 142, 206, 193, 33, 168, 182, 100, 48, 242,
-            149, 191, 32, 140, 85, 6, 7, 157, 119, 132, 34, 34, 104, 127, 157,
+            78, 33, 65, 116, 71, 120, 145, 211, 47, 76, 125, 95, 217, 117, 227, 100, 17,
+            184, 94, 72, 55, 15, 72, 145, 231, 68, 122, 125, 166, 37, 212, 205,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(4);
@@ -1613,7 +1613,11 @@ impl ::ridl_rt::contract::Interface for Valve {
             ordinal: ::ridl_rt::contract::Ordinal(1),
             kind: ::ridl_rt::contract::Kind::Command,
             name: "open",
-            timing: ::core::option::Option::None,
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
+                mode: ::ridl_rt::contract::TimingMode::Range,
+                min: ::core::option::Option::None,
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(1000000)),
+            }),
             payloads: &[
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Level",
@@ -1629,7 +1633,11 @@ impl ::ridl_rt::contract::Interface for Valve {
             ordinal: ::ridl_rt::contract::Ordinal(2),
             kind: ::ridl_rt::contract::Kind::Query,
             name: "pressure",
-            timing: ::core::option::Option::None,
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
+                mode: ::ridl_rt::contract::TimingMode::Range,
+                min: ::core::option::Option::None,
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(3000000)),
+            }),
             payloads: &[
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Window",

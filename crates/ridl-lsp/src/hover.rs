@@ -1127,9 +1127,9 @@ fn render_interaction(
             }
         }
         Some(v2::decl::Kind::CommandDef(command)) => {
-            // An RPC bound is never defaulted, so absent means undeclared and
-            // renders nothing (ADR-0015 decision 4). The query arm below is
-            // the same.
+            // The checker resolves every command and query to a bound, the
+            // default one when none is written (ridl §9.3); an absent timing
+            // renders nothing. The query arm below is the same.
             if let Some(timing) = &command.timing {
                 out.push_str(&timing_line(timing, Reading::Acceptance));
             }
