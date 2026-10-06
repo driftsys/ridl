@@ -71,10 +71,10 @@ of the authoring skill (piece 1c), as ADR-0005 §5 requires.
 
 1. **The design lints run in one shared pass in `ridlc`, after the per-package
    checks and before `apply_lint_levels`.** `ridlc::check_design_lints` takes
-   the checked packages, their resolutions, the standard IR, the lowered system
-   and the source map, loads no file and applies no level. It emits each code at
-   its catalogue severity, so ADR-0024's level handling applies with no change.
-   It runs wherever the shared compile runs, including `check_source`, where the
+   the packages, the checked packages, their resolutions and the source map,
+   loads no file and applies no level. It emits each code at its catalogue
+   severity, so ADR-0024's level handling applies with no change. It runs
+   wherever the shared compile runs, including `check_source`, where the
    workspace is one package. The language server calls the same pass from its
    analysis path with its current inputs, unsaved buffers included: the loaded
    workspace as one set, and each standalone overlay as its own one-package set.
@@ -222,9 +222,11 @@ of the authoring skill (piece 1c), as ADR-0005 §5 requires.
     about interfaces or coupling takes a RIDL-4xx code.** Every candidate was an
     Info catalogue row during calibration, so that it ran and reported. A check
     that does not ship loses its row before release, so its name was never
-    released and nothing is reserved; its code number is not reused, and a
-    comment in the catalogue says so. TYPL-223 and RIDL-415 are those two
-    numbers. ADR-0024 decision 7 applies to each shipped lint.
+    released and nothing is reserved; its code number is not reused. A comment
+    in the catalogue says so, the number is listed in `RETIRED_TYPL_CODES` or
+    `RETIRED_RIDL_CODES` in `ridl-core`, and a guard test fails if the number is
+    declared again. TYPL-223 and RIDL-415 are those two numbers. ADR-0024
+    decision 7 applies to each shipped lint.
 
 ## Alternatives considered
 
@@ -279,7 +281,9 @@ From the design's §10. The numbers are the decisions that reject them.
 - A language or checker change that moves a design-lint count on the corpus
   fails the count guard; its author updates `expected-counts.toml` and states
   the reason in the commit message.
-- The two dropped checks' numbers, TYPL-223 and RIDL-415, are not reused.
+- The two dropped checks' numbers, TYPL-223 and RIDL-415, are not reused: they
+  are in the retired-code lists of `ridl-core`, and a guard test per list fails
+  if either is declared again.
 - The language server reports the design lints for unsaved text, through the
   same pass as the command line.
 

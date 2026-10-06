@@ -14,15 +14,15 @@ and its implementation in
 
 ## Components
 
-| Component                                                                    | Role                                                                                          |
-| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| [`crates/ridlc/src/design_lints/`](../../crates/ridlc/src/design_lints/)     | The shared pass, `check_design_lints`, and one module per shipped check                       |
-| [`crates/ridlc/src/deps.rs`](../../crates/ridlc/src/deps.rs)                 | The package dependency graph, complete and workspace-only, and the rsdl component uses        |
-| [`crates/ridl-mcp/src/metrics.rs`](../../crates/ridl-mcp/src/metrics.rs)     | `ridl_metrics`, over the graph and `cohesion_groups`                                          |
-| [`crates/ridl-core/src/diag.rs`](../../crates/ridl-core/src/diag.rs)         | The catalogue rows TYPL-222, TYPL-224 and RIDL-414, and the comments retiring the two numbers |
-| [`xtask/src/calibrate.rs`](../../xtask/src/calibrate.rs)                     | `cargo xtask calibrate dump` and `cargo xtask calibrate derive`                               |
-| [`evals/`](../../evals/)                                                     | The corpus, the calibration records and the eval tasks                                        |
-| [`crates/ridl/tests/eval_corpus.rs`](../../crates/ridl/tests/eval_corpus.rs) | The corpus guard, the count guard and the task validator                                      |
+| Component                                                                    | Role                                                                                               |
+| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| [`crates/ridlc/src/design_lints/`](../../crates/ridlc/src/design_lints/)     | The shared pass, `check_design_lints`, and one module per shipped check                            |
+| [`crates/ridlc/src/deps.rs`](../../crates/ridlc/src/deps.rs)                 | The package dependency graph, complete and workspace-only, and the rsdl component uses             |
+| [`crates/ridl-mcp/src/metrics.rs`](../../crates/ridl-mcp/src/metrics.rs)     | `ridl_metrics`, over the graph and `cohesion_groups`                                               |
+| [`crates/ridl-core/src/diag.rs`](../../crates/ridl-core/src/diag.rs)         | The catalogue rows TYPL-222, TYPL-224 and RIDL-414, and the retired-code lists for the two numbers |
+| [`xtask/src/calibrate.rs`](../../xtask/src/calibrate.rs)                     | `cargo xtask calibrate dump` and `cargo xtask calibrate derive`                                    |
+| [`evals/`](../../evals/)                                                     | The corpus, the calibration records and the eval tasks                                             |
+| [`crates/ridl/tests/eval_corpus.rs`](../../crates/ridl/tests/eval_corpus.rs) | The corpus guard, the count guard and the task validator                                           |
 
 ## The pass
 
@@ -154,6 +154,14 @@ constants by hand, in the same change.
   well formed and names catalogue lints only; and
   `design_lint_counts_on_the_corpus_are_pinned` compares the findings per lint
   per workspace with `evals/calibration/expected-counts.toml`.
+- [`crates/ridl-core/src/diag.rs`](../../crates/ridl-core/src/diag.rs) —
+  `retired_typl_codes_are_never_redeclared` and
+  `retired_ridl_codes_are_never_redeclared` keep TYPL-223 and RIDL-415 out of
+  the catalogues.
+- [`xtask/src/calibrate.rs`](../../xtask/src/calibrate.rs) —
+  `committed_summary_is_the_derivation_of_the_committed_labels` compares
+  `evals/calibration/summary.md` with the derivation of the committed labels,
+  and its selected thresholds and levels with the compiler sources.
 - [`crates/ridl-lsp/tests/server.rs`](../../crates/ridl-lsp/tests/server.rs) —
   the language server reports the design lints for unsaved text.
 - [`xtask/tests/calibrate_cli.rs`](../../xtask/tests/calibrate_cli.rs) — the
