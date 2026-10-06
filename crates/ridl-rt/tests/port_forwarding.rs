@@ -23,7 +23,6 @@ use ridl_rt::port::{
 };
 use ridl_rt::sample::{Envelope, Freshness, Provenance, Timestamp};
 use ridl_rt::trace::TraceContext;
-use std::cell::Cell;
 
 const CATALOG: CatalogRef = CatalogRef {
     name: "vehicle",
@@ -55,9 +54,9 @@ const TRACE: TraceContext = TraceContext {
 /// trace context its send methods receive.
 #[derive(Default)]
 struct Stub {
-    raised: Cell<Option<TraceContext>>,
-    commanded: Cell<Option<TraceContext>>,
-    queried: Cell<Option<TraceContext>>,
+    raised: Option<TraceContext>,
+    commanded: Option<TraceContext>,
+    queried: Option<TraceContext>,
 }
 
 impl Attached for Stub {
@@ -109,7 +108,7 @@ impl EventSink for Stub {
         _: &[u8],
         trace: Option<TraceContext>,
     ) -> Result<(), RaiseError> {
-        self.raised.set(trace);
+        self.raised = trace;
         Err(RaiseError::Busy)
     }
 }
@@ -122,7 +121,7 @@ impl Caller for Stub {
         _: &[u8],
         trace: Option<TraceContext>,
     ) -> Result<Correlation, SendError> {
-        self.commanded.set(trace);
+        self.commanded = trace;
         Ok(Correlation(1))
     }
     fn query(
@@ -132,7 +131,7 @@ impl Caller for Stub {
         _: &[u8],
         trace: Option<TraceContext>,
     ) -> Result<Correlation, SendError> {
-        self.queried.set(trace);
+        self.queried = trace;
         Err(SendError::Busy)
     }
     fn ack(&mut self, _: Correlation) -> Option<Result<(), CallError>> {
@@ -271,7 +270,7 @@ fn event_sink_is_reached_through_a_borrow() {
     }
     let mut stub = Stub::default();
     over(&mut stub);
-    assert_eq!(stub.raised.get(), Some(TRACE));
+    assert_eq!(stub.raised, Some(TRACE));
 }
 
 #[test]
@@ -295,8 +294,8 @@ fn caller_is_reached_through_a_borrow() {
     }
     let mut stub = Stub::default();
     over(&mut stub);
-    assert_eq!(stub.commanded.get(), Some(TRACE));
-    assert_eq!(stub.queried.get(), Some(TRACE));
+    assert_eq!(stub.commanded, Some(TRACE));
+    assert_eq!(stub.queried, Some(TRACE));
 }
 
 #[test]
