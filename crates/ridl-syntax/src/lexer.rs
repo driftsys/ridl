@@ -420,8 +420,8 @@ mod tests {
             .collect()
     }
 
-    // The nine ridl words lex to their keyword variants
-    // under `Profile::Ridl` and stay `ReservedWord` under `Profile::Typl`.
+    // The nine ridl words lex to their keyword variants under `Profile::Ridl`
+    // and stay `ReservedWord` under `Profile::Typl`.
     #[test]
     fn ridl_words_lex_by_profile() {
         for (word, kind) in [
@@ -551,8 +551,8 @@ mod tests {
         );
     }
 
-    // Durations and `@` are ordinary tokens
-    // under Ridl (the parser draws no TYPL-302 there — see the parser tests).
+    // Durations and `@` are ordinary tokens under Ridl (the parser draws no
+    // TYPL-302 there — see the parser tests).
     #[test]
     fn durations_and_at_lex_clean_under_ridl() {
         assert_eq!(kinds_in(Profile::Ridl, "10ms"), vec![SyntaxKind::Duration]);

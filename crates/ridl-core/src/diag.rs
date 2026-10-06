@@ -193,9 +193,9 @@ pub const RETIRED_TYPL_CODES: &[u16] = &[223];
 diag_codes! {
     /// The FORM catalogue (ADR-0007 decision 2): lexical `0xx`, parse `1xx`, and
     /// the attribute-semantics codes 106-108 the checker emits for the general
-    /// form §4.3 allow-list. Every FORM code is listed even when no
-    /// pass emits it yet, so the error index has one authoritative source. FORM
-    /// diagnostics are all errors.
+    /// form §4.3 allow-list. Every FORM code is listed even when no pass emits
+    /// it yet, so the error index has one authoritative source. FORM diagnostics
+    /// are all errors.
     FORM_CATALOG {
         /// Invalid character.
         FORM_001 = "FORM-001", Error,
@@ -527,8 +527,8 @@ diag_codes! {
             "duplicate declaration shape", lint = "duplicate-shape";
 
         /// Stream type `<T>` outside interaction position (typl §16.4, ridl
-        /// §12.3). Emitted by the parser in a `.typl` parse and by
-        /// the checker for struct fields and collections in a `.ridl` file.
+        /// §12.3). Emitted by the parser in a `.typl` parse and by the checker
+        /// for struct fields and collections in a `.ridl` file.
         TYPL_301 = "TYPL-301", Error,
             "stream type `<T>` outside interaction position";
 
@@ -726,8 +726,8 @@ diag_codes! {
             "duplicate `service` name across the workspace";
 
         /// A `service` names a type that is not an `interface`, and has no inline
-        /// shape (ridl §14.5, §16.4). Emitted per-package by the checker (E2 task
-        /// 8). Kept in the 1xx band per ADR-0008 decision 6 (see RIDL-140).
+        /// shape (ridl §14.5, §16.4). Emitted per-package by the checker. Kept in
+        /// the 1xx band per ADR-0008 decision 6 (see RIDL-140).
         /// Applies per shape in the service's shape list since ADR-0015
         /// decision 18: the rule is unchanged, the span reports against
         /// the offending list element.
@@ -882,8 +882,8 @@ diag_codes! {
 
         /// One `error` type used as the failure arm of queries in three or more
         /// distinct interfaces — the "shared across unrelated failure domains"
-        /// heuristic (ridl §10.1, §16.4). Info. Emitted by the lint pass (E2 task
-        /// 19); the threshold is three, so two interfaces stay silent.
+        /// heuristic (ridl §10.1, §16.4). Info. Emitted by the lint pass; the
+        /// threshold is three, so two interfaces stay silent.
         RIDL_405 = "RIDL-405", Info,
             "one `error` type shared across unrelated failure domains", lint = "shared-error-type";
 

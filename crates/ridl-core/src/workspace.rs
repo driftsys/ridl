@@ -7,9 +7,9 @@
 //!
 //! [`load_workspace`] walks from an entry path — a source file, a package
 //! directory, or a workspace root — reads the `ridl.toml` manifests, loads
-//! every source file (`.typl` and `.ridl` alike — a package may mix both, E2
-//! task 2) into [`InputFile`] inputs, and enforces the package↔directory law
-//! (typl reference §3.1): every file in a package directory must declare that
+//! every source file (`.typl` and `.ridl` alike — a package may mix both)
+//! into [`InputFile`] inputs, and enforces the package↔directory law (typl
+//! reference §3.1): every file in a package directory must declare that
 //! directory's package name (TYPL-002), and more than one `package`
 //! declaration in a file is TYPL-001. A bare `.typl` or `.ridl` file with no
 //! manifest anywhere up the tree loads in **single-file mode**: one synthetic

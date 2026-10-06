@@ -24,9 +24,9 @@ pub struct InputFile {
     pub text: String,
 }
 
-/// The [`Profile`] a source path selects: a `.ridl` file parses
-/// under [`Profile::Ridl`], a `.rsdl` file under [`Profile::Rsdl`]; everything
-/// else — `.typl` first of all — parses under [`Profile::Typl`].
+/// The [`Profile`] a source path selects: a `.ridl` file parses under
+/// [`Profile::Ridl`], a `.rsdl` file under [`Profile::Rsdl`]; everything else —
+/// `.typl` first of all — parses under [`Profile::Typl`].
 pub fn profile_of_path(path: &str) -> Profile {
     if path.ends_with(".ridl") {
         Profile::Ridl

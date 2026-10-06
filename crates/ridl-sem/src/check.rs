@@ -1991,7 +1991,7 @@ impl Checker<'_> {
     /// string/bytes init against the length bound and, where the type carries a
     /// `match` pattern, against that pattern (see [`Checker::check_string_init`]).
     /// Returns `(declared_init, init)`; both stay absent when no init is
-    /// declared — derivation is the task 15 pass.
+    /// declared — derivation happens in a separate pass.
     /// `violation` is the code an out-of-constraint init draws: TYPL-109 at
     /// the vocabulary layer (types and fields), RIDL-110 for a signal's
     /// `= value` override (ridl §4.4) — one validation, two codes.
@@ -4504,7 +4504,7 @@ impl Checker<'_> {
         spec.map(lower_timing_spec)
     }
 
-    // --- the contract environment ----------------------------
+    // --- the contract environment -----------------------------------------
 
     /// The contract-expression type of a declared type reference, resolved in
     /// `resolution`'s view. A declaration outside the five expr-core domains

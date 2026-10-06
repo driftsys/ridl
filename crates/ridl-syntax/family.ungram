@@ -265,13 +265,11 @@ TimingRange =
 
 // ---------- ridl services (ridl reference §14.5) ----------
 //
-// `service_def` is absent from the ridl reference Appendix C and is
-// defined here. A `service` is the
-// global, published declaration of one or more interfaces (ADR-0015
-// decision 12) — either naming shapes in a comma-separated list after `:`,
-// or carrying one inline body of interactions for a one-off global contract
-// (§14.5); never both (ADR-0015 decision 14). The dotted global name is
-// reverse-domain, like a package (ADR-0002 §1). The inline body reuses the
+// A `service` is the global, published declaration of one or more interfaces
+// (ADR-0015 decision 12) — either naming shapes in a comma-separated list
+// after `:`, or carrying one inline body of interactions for a one-off global
+// contract (§14.5); never both (ADR-0015 decision 14). The dotted global name
+// is reverse-domain, like a package (ADR-0002 §1). The inline body reuses the
 // `InterfaceMember` alternation, so an inline shape runs the same structural
 // pass as an interface. `ServiceDef::shapes()` yields the named shape list;
 // `ServiceDef::inline_members()` yields the inline body's members;
