@@ -38,6 +38,7 @@ use std::collections::{BTreeSet, HashMap};
 use ridl_core::db::{InputFile, profile_of_path};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span};
 use ridl_core::package::{Package, Workspace, service_catalog};
+use ridl_ir::codegen::depth::ceil_ratio;
 use ridl_ir::v2;
 use ridl_syntax::Profile;
 use rowan::TextRange;
@@ -74,6 +75,7 @@ pub fn check_system(db: &dyn salsa::Database, ws: Workspace, std: Package) -> Ch
             closure
         });
     system.placements = placement::place(&lookup, &system, system.closure.as_ref(), &mut reporter);
+    check_depths(db, ws, std, &system, &mut reporter);
     system.component_lines = lines;
     // rsdl §13: an RSDL-7xx error blocks its own deployment, recorded on its
     // placement; every other error blocks every deployment.
@@ -82,6 +84,193 @@ pub fn check_system(db: &dyn salsa::Database, ws: Workspace, std: Package) -> Ch
     });
     system.diagnostics = reporter.diagnostics;
     system
+}
+
+/// RSDL-805 and RSDL-806 (rsdl §5): the `depth` of every consumer link of
+/// an event, against the event's contract bound, `ceil(max / min)` over its
+/// resolved timing (`docs/decisions/ADR-0015-qos-absorption-and-rpc-bounds.md`
+/// decision 21).
+///
+/// The link's declared `depth` is the placement line's value, else the
+/// deployment's: the precedence `ridl_ir::codegen::lower_deployment` applies
+/// when it writes the deployment section (its `declared_sizing`). The two
+/// read the same two sites in the same order and are edited together. A
+/// declared value below the bound is RSDL-805, pointed at the value that
+/// declares it: the line's `depth` attribute, or the deployment's name. An
+/// event with no derivable bound — an explicit half-open range, or a ratio
+/// `ceil_ratio` refuses — consumed by a link with no declared value is
+/// RSDL-806, pointed at the placement line.
+///
+/// Each code is drawn once per consumer instance and event: the value and
+/// the bound belong to the consumer and the event, so a redundant provider
+/// set (RSDL-409), which lowers one link per producer instance, does not
+/// repeat them. Each message names its deployment, so that a reader of the
+/// rendered diagnostic, of SARIF or of JSON does not have to infer which
+/// deployment a warning belongs to from its span. A deployment an RSDL-7xx error blocks is skipped, because its
+/// placement set is not one to read links from: an instance placed twice or
+/// not at all, a machine declared twice, or a sizing value out of range
+/// leaves the lines of that deployment without a defined link set
+/// (rsdl §13). A `requires` whose two ends are external is skipped too: it
+/// lowers no link (rsdl §10).
+fn check_depths(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    system: &CheckedSystem,
+    reporter: &mut Reporter,
+) {
+    let Some(closure) = &system.closure else {
+        return;
+    };
+    // No deployment, or every deployment blocked: nothing reads a link, so
+    // the package IR of each required interface is not read either. This
+    // guard only saves work: with it removed, the loop below skips every
+    // blocked deployment and reports the same diagnostics, so it changes when
+    // `check_package` is reached and not what is reported. No test pins it for
+    // that reason, and a change to it is a change to incrementality.
+    if system
+        .placements
+        .iter()
+        .all(|placement| placement.has_errors)
+    {
+        return;
+    }
+    // The events of each required interface, read once per `requires` line.
+    let events: Vec<Vec<EventBound>> = closure
+        .requires
+        .iter()
+        .map(|require| {
+            let consumer = &closure.components[require.consumer];
+            let producer = &closure.components[require.producer];
+            if consumer.external && producer.external {
+                return Vec::new();
+            }
+            event_bounds(db, ws, std, closure, require)
+        })
+        .collect();
+    for (decl, placement) in system.deployments.iter().zip(&system.placements) {
+        if placement.has_errors {
+            continue;
+        }
+        let deployment = decl.name.name.as_str();
+        for (require, events) in closure.requires.iter().zip(&events) {
+            let consumer = &closure.components[require.consumer];
+            for instance in &consumer.instances {
+                let Some(placed) = placement.placements.iter().find(|placed| {
+                    placed.component == require.consumer && placed.instance == *instance
+                }) else {
+                    continue;
+                };
+                let line = &decl.machines[placed.machine].members[placed.line];
+                let declared = line
+                    .sizing
+                    .depth
+                    .map(|value| (value, line.depth_site.unwrap_or(line.reference.site)))
+                    .or_else(|| decl.sizing.depth.map(|value| (value, decl.name.site)));
+                let name = if *instance == UNIT_INSTANCE {
+                    consumer.id.text().to_string()
+                } else {
+                    format!("{}.{instance}", consumer.id.text())
+                };
+                for event in events {
+                    match (declared, event.bound) {
+                        (Some((value, site)), Ok(bound)) if value < bound => reporter.warning(
+                            DiagCode::RSDL_805,
+                            site,
+                            format!(
+                                "`depth = {value}` on `{name}` in `{deployment}` is below the \
+                                 contract bound {bound} of `{}` — the bound is `ceil(max / min)` \
+                                 over the event's timing, and a ring below it can drop occurrences \
+                                 alive at once (rsdl reference §5)",
+                                event.name
+                            ),
+                        ),
+                        (None, Err(reason)) => reporter.warning(
+                            DiagCode::RSDL_806,
+                            line.reference.site,
+                            format!(
+                                "`{name}` in `{deployment}` declares no `depth` for `{}`, {reason} \
+                                 — a link to an event with no derivable bound takes its ring depth \
+                                 from `depth = <n>` on the placement line or on the deployment \
+                                 (rsdl reference §5)",
+                                event.name
+                            ),
+                        ),
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// One event of a required interface, with its contract bound or the reason
+/// it has none, as the RSDL-806 message states it.
+struct EventBound {
+    /// `pkg.Interface.event`, or `service.event` for an inline shape.
+    name: String,
+    bound: Result<u32, &'static str>,
+}
+
+/// The events of the interface `require` names, read from the package IR of
+/// the package that declares it, in declaration order. Empty when the
+/// package or the shape is not found, or when the interface declares no
+/// event.
+fn event_bounds(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    closure: &Closure,
+    require: &ResolvedRequire,
+) -> Vec<EventBound> {
+    let (package, shape_name) = match &require.interface {
+        InterfaceId::Declared { package, name } => (package.as_str(), name.as_str()),
+        InterfaceId::Inline { service } => {
+            (closure.services[service].package.as_str(), service.as_str())
+        }
+    };
+    let Some(pkg) = ws
+        .packages(db)
+        .iter()
+        .chain(std::iter::once(&std))
+        .copied()
+        .find(|pkg| pkg.name(db) == package)
+    else {
+        return Vec::new();
+    };
+    let ir = crate::check_package(db, ws, pkg, std).ir;
+    let interface = require.interface.text();
+    let Some(shape) = ir.shapes().find(|found| found.name == shape_name) else {
+        return Vec::new();
+    };
+    shape
+        .interface
+        .interactions
+        .iter()
+        .filter_map(|decl| match decl.kind.as_ref()? {
+            v2::decl::Kind::EventDef(event) => Some(EventBound {
+                name: format!("{interface}.{}", decl.name),
+                bound: contract_bound(event.timing.as_ref()),
+            }),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The contract bound of an event, `ceil(max / min)` over its resolved
+/// timing, or the reason it has none. The resolved timing of an untimed
+/// event carries the ridl §9.1 defaults, so only an explicit half-open range
+/// lacks a bound. A ratio `ceil_ratio` refuses — above the `depth` range, or
+/// any other refusal it may add — is reported without naming a cause, because
+/// `ceil_ratio` does not say which one it found.
+fn contract_bound(timing: Option<&v2::Timing>) -> Result<u32, &'static str> {
+    let Some((max, min)) =
+        timing.and_then(|timing| Some((timing.max_us.as_deref()?, timing.min_us.as_deref()?)))
+    else {
+        return Err("whose timing is an explicit half-open range");
+    };
+    ceil_ratio(max, min)
+        .ok_or("whose contract bound `ceil(max / min)` is not derivable from its timing")
 }
 
 /// Runs the doc lints (ADR-0026) over every `.rsdl` file of `ws`, in
@@ -294,12 +483,35 @@ pub struct DeploymentDecl {
     pub system: Option<Reference>,
     pub machines: Vec<MachineDecl>,
     pub attrs: DeclAttrs,
+    /// The `depth`, `slots` and `budget` keys of the declaration: the values
+    /// for every consumer link of the deployment that no placement line
+    /// overrides (rsdl §5).
+    pub sizing: Sizing,
+    /// Whether an RSDL-7xx error was raised while reading the declaration's
+    /// attribute blocks — RSDL-709 on the deployment or on one of its
+    /// placement lines. The placement pass marks the deployment blocked
+    /// (rsdl §13).
+    pub has_errors: bool,
     /// The doc comment (typl §14, ADR-0026).
     pub doc: DocInfo,
     /// The resolved doc links of the body, for the IR (ADR-0026).
     pub links: Vec<v2::DocLink>,
     /// The resolved `@see` targets, for the IR (ADR-0026).
     pub see: Vec<v2::DocLink>,
+}
+
+/// The sizing keys of a `deployment` declaration or of a placement line
+/// (rsdl §5): each is `None` when the key is not written. `depth` sizes the
+/// ring of an event channel, `slots` and `budget` the call table of a command
+/// or query channel.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Sizing {
+    /// `depth = n`, 1 to 4294967295.
+    pub depth: Option<u32>,
+    /// `slots = n`, 1 to 65536.
+    pub slots: Option<u32>,
+    /// `budget = n`, 1 to 18446744073709551615.
+    pub budget: Option<u64>,
 }
 
 /// A `machine` declaration inside a deployment (rsdl §3.5).
@@ -321,11 +533,19 @@ pub struct MachineDecl {
 
 /// One body line: a member line of a `system`, `distribution` or `machine`,
 /// or an `offers`/`requires` line of a `component` (rsdl §4). A line takes
-/// backend keys only.
+/// backend keys; a placement line, a member line of a `machine`, also takes
+/// the sizing keys (rsdl §5).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemberRef {
     pub reference: Reference,
     pub backend_keys: Vec<BackendKey>,
+    /// The `depth`, `slots` and `budget` keys of a placement line, for every
+    /// link the placed instance consumes (rsdl §5). Never written on any
+    /// other line.
+    pub sizing: Sizing,
+    /// The site of the line's `depth` attribute, `Some` exactly when
+    /// `sizing.depth` is; RSDL-805 points at it.
+    pub depth_site: Option<Site>,
     /// The line's doc comment (typl §14, ADR-0026).
     pub doc: DocInfo,
     /// The resolved doc links of the line, for the IR (ADR-0026).
@@ -750,7 +970,8 @@ deployment Production for Vehicle {
             ("system S [ owner = \"x\" ] {}", &["FORM-106"]),
             ("system S [ Linux.cpuset ] {}", &["FORM-106"]),
             ("system S [ linux.cpu_set ] {}", &["FORM-106"]),
-            // FORM-107: a key its row does not name, and any rsdl key on a line.
+            // FORM-107: a key its row does not name, and any rsdl key on a line
+            // (the sizing keys of a placement line aside).
             ("component C [ tier = PLATFORM ] {}", &["FORM-107"]),
             ("system S [ external ] {}", &["FORM-107"]),
             ("distribution D [ instances = (a) ] {}", &["FORM-107"]),
@@ -1516,6 +1737,929 @@ deployment Bench for Vehicle {
         let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
         assert_eq!(codes(&system), ["RSDL-603", "RSDL-701"]);
         assert!(system.closure_has_errors);
+    }
+
+    /// The closure the sizing-key tests deploy: `Panel` consumes an event
+    /// channel, `Backend` a query channel, `Lane` nothing.
+    const SIZED: &str = "package veh.topology\n\
+                         import veh.adas.LaneAssist\n\
+                         component Lane { offers veh.adas.lane }\n\
+                         component Panel { requires LaneAssist }\n\
+                         component Backend [ external ] { requires veh.diag.access }\n\
+                         system Vehicle { Lane, Panel, Backend, veh.diag.access }\n";
+
+    /// Every instance of `SIZED` on one machine.
+    const SIZED_LINES: &str = "Lane, Panel, Backend, veh.diag.access";
+
+    const UNSIZED: Sizing = Sizing {
+        depth: None,
+        slots: None,
+        budget: None,
+    };
+
+    /// The sizing read from every `offers` and `requires` line, every system
+    /// member and every distribution member. Only a placement line holds one,
+    /// so every value here is `UNSIZED` unless a rejected site was read.
+    fn declared_member_sizing(system: &CheckedSystem) -> Vec<Sizing> {
+        let components = system
+            .components
+            .iter()
+            .flat_map(|component| component.offers.iter().chain(&component.requires));
+        let systems = system.systems.iter().flat_map(|decl| decl.members.iter());
+        let distributions = system
+            .distributions
+            .iter()
+            .flat_map(|decl| decl.members.iter());
+        components
+            .chain(systems)
+            .chain(distributions)
+            .map(|member| member.sizing)
+            .collect()
+    }
+
+    /// rsdl §5: `depth`, `slots` and `budget` are read on a `deployment` and on
+    /// a placement line, each key at both ends of its range.
+    #[test]
+    fn the_sizing_keys_are_read_on_a_deployment_and_a_placement_line() {
+        let text = format!(
+            "{SIZED}\
+             deployment Prod for Vehicle \
+             [ depth = 1, slots = 65536, budget = 18446744073709551615 ] {{\n  \
+             machine A {{ Lane, Panel [ depth = 4294967295, slots = 1, budget = 1 ], \
+             Backend, veh.diag.access }}\n}}\n"
+        );
+        let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+        assert_eq!(codes(&system), Vec::<&str>::new());
+        let deployment = &system.deployments[0];
+        assert_eq!(
+            deployment.sizing,
+            Sizing {
+                depth: Some(1),
+                slots: Some(65536),
+                budget: Some(18446744073709551615),
+            }
+        );
+        let lines: Vec<Sizing> = deployment.machines[0]
+            .members
+            .iter()
+            .map(|member| member.sizing)
+            .collect();
+        assert_eq!(
+            lines,
+            [
+                UNSIZED,
+                Sizing {
+                    depth: Some(4294967295),
+                    slots: Some(1),
+                    budget: Some(1),
+                },
+                UNSIZED,
+                UNSIZED,
+            ]
+        );
+        assert!(!system.placements[0].has_errors);
+    }
+
+    /// rsdl §5, §13: a value that is not an integer within the key's range is
+    /// RSDL-709, which blocks its own deployment and no other, and writes
+    /// nothing.
+    #[test]
+    fn a_sizing_key_out_of_range_is_rsdl_709_and_blocks_its_deployment() {
+        let cases: &[(&str, &str)] = &[
+            (
+                "slots = 0",
+                "`slots` takes an integer from 1 to 65536, written `slots = <n>`; `0` is not one \
+                 (rsdl reference §5)",
+            ),
+            (
+                "slots = 65537",
+                "`slots` takes an integer from 1 to 65536, written `slots = <n>`; `65537` is not \
+                 one (rsdl reference §5)",
+            ),
+            (
+                "budget = 0",
+                "`budget` takes an integer from 1 to 18446744073709551615, written \
+                 `budget = <n>`; `0` is not one (rsdl reference §5)",
+            ),
+            (
+                "budget = 18446744073709551616",
+                "`budget` takes an integer from 1 to 18446744073709551615, written \
+                 `budget = <n>`; `18446744073709551616` is not one (rsdl reference §5)",
+            ),
+            (
+                "depth = 0",
+                "`depth` takes an integer from 1 to 4294967295, written `depth = <n>`; `0` is \
+                 not one (rsdl reference §5)",
+            ),
+            (
+                "depth = 4294967296",
+                "`depth` takes an integer from 1 to 4294967295, written `depth = <n>`; \
+                 `4294967296` is not one (rsdl reference §5)",
+            ),
+            (
+                "depth = -1",
+                "`depth` takes an integer from 1 to 4294967295, written `depth = <n>`; `-1` is \
+                 not one (rsdl reference §5)",
+            ),
+            (
+                "slots = (1, 2)",
+                "`slots` takes an integer from 1 to 65536, written `slots = <n>`; `(1,2)` is \
+                 not one (rsdl reference §5)",
+            ),
+            (
+                "slots = \"8\"",
+                "`slots` takes an integer from 1 to 65536, written `slots = <n>`; `\"8\"` is \
+                 not one (rsdl reference §5)",
+            ),
+            (
+                "slots",
+                "`slots` takes an integer from 1 to 65536, written `slots = <n>`; a bare \
+                 `slots` is not one (rsdl reference §5)",
+            ),
+        ];
+        for (attribute, message) in cases {
+            let sites = [
+                format!(
+                    "deployment Bad for Vehicle [ {attribute} ] {{ machine A {{ {SIZED_LINES} }} }}"
+                ),
+                format!(
+                    "deployment Bad for Vehicle {{ machine A {{ Lane, Panel [ {attribute} ], \
+                     Backend, veh.diag.access }} }}"
+                ),
+            ];
+            for bad in sites {
+                let good =
+                    format!("deployment Good for Vehicle {{ machine A {{ {SIZED_LINES} }} }}");
+                // `Bad` after `Good`, then before it: the block follows the
+                // deployment, not the order of declaration.
+                let orders = [
+                    (format!("{SIZED}{good}\n{bad}\n"), 1, [false, true]),
+                    (format!("{SIZED}{bad}\n{good}\n"), 0, [true, false]),
+                ];
+                for (text, bad_index, expected) in orders {
+                    let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+                    assert_eq!(codes(&system), ["RSDL-709"], "`{bad}`");
+                    assert_eq!(system.diagnostics[0].message, *message, "`{bad}`");
+                    assert!(!system.closure_has_errors, "`{bad}`");
+                    let blocked: Vec<bool> =
+                        system.placements.iter().map(|p| p.has_errors).collect();
+                    assert_eq!(blocked, expected, "`{bad}`");
+                    let deployment = &system.deployments[bad_index];
+                    assert_eq!(deployment.sizing, UNSIZED, "`{bad}`");
+                    let lines: Vec<Sizing> = deployment.machines[0]
+                        .members
+                        .iter()
+                        .map(|member| member.sizing)
+                        .collect();
+                    assert_eq!(lines, [UNSIZED; 4], "`{bad}`");
+                }
+            }
+        }
+
+        // `slots = 50ms`: the parser refuses a duration as an attribute value
+        // and reports FORM-101, a parse error the rsdl reporter never sees,
+        // which stops `ridl build` writing anything. The reader draws no
+        // RSDL-709 over it: a second report would call `slots` bare.
+        let text = format!(
+            "{SIZED}deployment Prod for Vehicle [ slots = 50ms ] {{ machine A {{ {SIZED_LINES} }} }}\n"
+        );
+        let parsed = ridl_syntax::parse(&text, Profile::Rsdl);
+        let parse_codes: Vec<&str> = parsed.errors().iter().map(|error| error.code).collect();
+        assert_eq!(parse_codes, ["FORM-101"]);
+        let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+        assert_eq!(codes(&system), Vec::<&str>::new());
+        assert_eq!(system.deployments[0].sizing, UNSIZED);
+    }
+
+    /// rsdl §5, §13: the sizing keys are legal on a `deployment` and on a
+    /// placement line only; anywhere else, FORM-107, which blocks every
+    /// deployment through `closure_has_errors` and marks none on its own.
+    #[test]
+    fn a_sizing_key_on_a_requires_line_or_a_machine_is_form_107() {
+        let good = format!("deployment Prod for Vehicle {{ machine A {{ {SIZED_LINES} }} }}\n");
+        let cases: [String; 8] = [
+            format!(
+                "{}{good}",
+                SIZED.replace("requires LaneAssist", "requires LaneAssist [ depth = 2 ]")
+            ),
+            format!(
+                "{SIZED}deployment Prod for Vehicle {{ machine A [ slots = 4 ] {{ {SIZED_LINES} }} }}\n"
+            ),
+            format!(
+                "{}{good}",
+                SIZED.replace(
+                    "offers veh.adas.lane",
+                    "offers veh.adas.lane [ budget = 1 ]"
+                )
+            ),
+            format!(
+                "{}{good}",
+                SIZED.replace("component Lane {", "component Lane [ depth = 2 ] {")
+            ),
+            format!(
+                "{}{good}",
+                SIZED.replace("system Vehicle {", "system Vehicle [ slots = 4 ] {")
+            ),
+            format!(
+                "{}{good}",
+                SIZED.replace(
+                    "system Vehicle { Lane,",
+                    "system Vehicle { Lane [ budget = 1 ],"
+                )
+            ),
+            format!(
+                "{SIZED}{good}distribution D [ depth = 2 ] {{ Lane, Panel, veh.diag.access }}\n"
+            ),
+            format!(
+                "{SIZED}{good}distribution D {{ Lane [ slots = 4 ], Panel, veh.diag.access }}\n"
+            ),
+        ];
+        for text in &cases {
+            let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+            assert_eq!(codes(&system), ["FORM-107"], "`{text}`");
+            assert!(system.closure_has_errors, "`{text}`");
+            assert!(!system.placements[0].has_errors, "`{text}`");
+            let read = declared_member_sizing(&system);
+            assert!(
+                read.iter().all(|sizing| *sizing == UNSIZED),
+                "a rejected site's in-range value is not read: {read:?} in `{text}`"
+            );
+        }
+        let system = check_topology(&[("veh/topology/x.rsdl", cases[1].as_str())]);
+        assert_eq!(
+            system.diagnostics[0].message,
+            "attribute `slots` not valid on a `machine` (rsdl reference §5)"
+        );
+        let text = format!(
+            "{SIZED}deployment Prod for Vehicle {{ machine A {{ Lane, Panel [ labels = (QM) ], \
+             Backend, veh.diag.access }} }}\n"
+        );
+        let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+        assert_eq!(codes(&system), ["FORM-107"]);
+        assert_eq!(
+            system.diagnostics[0].message,
+            "attribute `labels` not valid on a placement line — a placement line takes backend \
+             keys and the sizing keys `depth`, `slots` and `budget` (rsdl reference §5)"
+        );
+    }
+
+    /// rsdl §5: a sizing key at a site that does not take it is FORM-107 and
+    /// nothing else — the value is not read, so one out of its range draws no
+    /// RSDL-709 and blocks no deployment on its own.
+    #[test]
+    fn a_sizing_key_out_of_range_at_a_rejected_site_is_form_107_alone() {
+        let good = format!("deployment Prod for Vehicle {{ machine A {{ {SIZED_LINES} }} }}\n");
+        let cases: [String; 3] = [
+            format!(
+                "{SIZED}deployment Prod for Vehicle {{ machine A [ slots = 0 ] {{ {SIZED_LINES} }} }}\n"
+            ),
+            format!(
+                "{}{good}",
+                SIZED.replace("requires LaneAssist", "requires LaneAssist [ depth = 0 ]")
+            ),
+            format!(
+                "{}{good}",
+                SIZED.replace("component Lane {", "component Lane [ budget = 0 ] {")
+            ),
+        ];
+        for text in &cases {
+            let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+            assert_eq!(codes(&system), ["FORM-107"], "`{text}`");
+            assert!(system.closure_has_errors, "`{text}`");
+            assert!(!system.placements[0].has_errors, "`{text}`");
+            let read = declared_member_sizing(&system);
+            assert!(
+                read.iter().all(|sizing| *sizing == UNSIZED),
+                "a rejected site's value is not read: {read:?} in `{text}`"
+            );
+        }
+    }
+
+    /// rsdl §5: a placement line takes the sizing keys and backend keys; every
+    /// other rsdl-owned key on one is FORM-107, with no fact read from it.
+    #[test]
+    fn another_rsdl_key_on_a_placement_line_is_form_107() {
+        let cases = [
+            "instances = (a)",
+            "external",
+            "tier = PLATFORM",
+            "deprecated = \"x\"",
+        ];
+        for attribute in cases {
+            let text = format!(
+                "{SIZED}deployment Prod for Vehicle {{ machine A {{ Lane, Panel [ {attribute} ], \
+                 Backend, veh.diag.access }} }}\n"
+            );
+            let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+            assert_eq!(codes(&system), ["FORM-107"], "`{attribute}`");
+            assert!(system.closure_has_errors, "`{attribute}`");
+        }
+    }
+
+    /// rsdl §5, §13: a sizing key twice in one block is FORM-108; the first
+    /// value stands, and the error blocks through `closure_has_errors`, not
+    /// through the deployment's own flag.
+    #[test]
+    fn a_sizing_key_twice_in_one_block_is_form_108() {
+        let text = format!(
+            "{SIZED}deployment Prod for Vehicle [ depth = 2, depth = 3 ] {{ machine A {{ \
+             {SIZED_LINES} }} }}\n"
+        );
+        let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+        assert_eq!(codes(&system), ["FORM-108"]);
+        assert_eq!(system.deployments[0].sizing.depth, Some(2));
+        assert!(system.closure_has_errors);
+        assert!(!system.placements[0].has_errors);
+
+        let text = format!(
+            "{SIZED}deployment Prod for Vehicle {{ machine A {{ Lane, Panel [ slots = 4, \
+             slots = 5 ], Backend, veh.diag.access }} }}\n"
+        );
+        let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+        assert_eq!(codes(&system), ["FORM-108"]);
+        assert_eq!(
+            system.deployments[0].machines[0].members[1].sizing.slots,
+            Some(4)
+        );
+        assert!(system.closure_has_errors);
+        assert!(!system.placements[0].has_errors);
+
+        // The repeat is never range-checked: `depth = 0` after `depth = 2`
+        // draws FORM-108 alone, and no RSDL-709.
+        let text = format!(
+            "{SIZED}deployment Prod for Vehicle [ depth = 2, depth = 0 ] {{ machine A {{ \
+             {SIZED_LINES} }} }}\n"
+        );
+        let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+        assert_eq!(codes(&system), ["FORM-108"]);
+        assert_eq!(system.deployments[0].sizing.depth, Some(2));
+        assert!(system.closure_has_errors);
+        assert!(!system.placements[0].has_errors);
+    }
+
+    /// rsdl §5: a sizing key on an instance that consumes no channel of the
+    /// matching kind draws nothing; the value is still read.
+    #[test]
+    fn a_sizing_key_on_an_instance_that_consumes_nothing_draws_nothing() {
+        let text = format!(
+            "{SIZED}deployment Prod for Vehicle {{ machine A {{ \
+             Lane [ depth = 2, slots = 4, budget = 1024 ], Panel, Backend, veh.diag.access }} }}\n"
+        );
+        let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+        assert_eq!(codes(&system), Vec::<&str>::new());
+        assert_eq!(
+            system.deployments[0].machines[0].members[0].sizing,
+            Sizing {
+                depth: Some(2),
+                slots: Some(4),
+                budget: Some(1024),
+            }
+        );
+        assert!(!system.placements[0].has_errors);
+    }
+
+    /// The contract package of the depth tests. The contract bound of each
+    /// event, `ceil(max / min)`: `Doors.opened` 10, `Trunk.opened` 10,
+    /// `Trunk.closed` 5, `Hood.raised` 4 (3.33 rounded up); `Latch.jammed`
+    /// and `Spare.idle` are half-open and have none; `Clock.tick` is untimed,
+    /// so the §9.1 defaults give it both bounds. `veh.ev.horn` is an
+    /// inline-shape service: `honked` has the bound 10 and `stuck` is
+    /// half-open.
+    const EVENTS: &str = "package veh.ev\n\
+                          interface Doors {\n  event opened: boolean @[100ms..1s]\n}\n\
+                          interface Trunk {\n  event opened: boolean @[100ms..1s]\n  \
+                          event closed: boolean @[100ms..500ms]\n}\n\
+                          interface Hood {\n  event raised: boolean @[300ms..1s]\n}\n\
+                          interface Latch {\n  event jammed: boolean @[100ms..]\n}\n\
+                          interface Spare {\n  event idle: boolean @[100ms..]\n}\n\
+                          interface Clock {\n  event tick: boolean\n}\n\
+                          service veh.ev.doors : Doors\n\
+                          service veh.ev.trunk : Trunk\n\
+                          service veh.ev.hood : Hood\n\
+                          service veh.ev.latch : Latch\n\
+                          service veh.ev.spare : Spare\n\
+                          service veh.ev.clock : Clock\n\
+                          service veh.ev.horn {\n  event honked: boolean @[100ms..1s]\n  \
+                          event stuck: boolean @[100ms..]\n}\n";
+
+    /// The components of the depth tests: `Body` offers every service of
+    /// `EVENTS`, each consumer requires one interface (`Klaxon` the inline
+    /// shape of `veh.ev.horn`), and `Cloud` and
+    /// `Remote` are the external ends of a `Latch` link. A test lists in its
+    /// `system` the components it needs, so `Body` and `Cloud` never offer
+    /// `veh.ev.latch` in one closure.
+    const EV_TOPOLOGY: &str = "package veh.topology\n\
+                               import veh.ev.Doors\n\
+                               import veh.ev.Trunk\n\
+                               import veh.ev.Hood\n\
+                               import veh.ev.Latch\n\
+                               import veh.ev.Clock\n\
+                               component Body {\n  offers veh.ev.doors\n  offers veh.ev.trunk\n  \
+                               offers veh.ev.hood\n  offers veh.ev.latch\n  offers veh.ev.spare\n  \
+                               offers veh.ev.clock\n  offers veh.ev.horn\n}\n\
+                               component Panel { requires Doors }\n\
+                               component Klaxon { requires veh.ev.horn }\n\
+                               component Mirror { requires Doors }\n\
+                               component Pair [ instances = (a, b) ] { requires Doors }\n\
+                               component Hatch { requires Trunk }\n\
+                               component Bonnet { requires Hood }\n\
+                               component Lock { requires Latch }\n\
+                               component Dash { requires Clock }\n\
+                               component Remote [ external ] { requires Latch }\n\
+                               component Cloud [ external ] { offers veh.ev.latch }\n";
+
+    /// Checks `EVENTS` beside `EV_TOPOLOGY` followed by `topology`, the
+    /// system and deployment of one test.
+    fn check_events(topology: &str) -> CheckedSystem {
+        let ev: &[(&str, &str)] = &[("veh/ev/ev.ridl", EVENTS)];
+        let text = format!("{EV_TOPOLOGY}{topology}");
+        let topology: &[(&str, &str)] = &[("veh/topology/x.rsdl", text.as_str())];
+        check(&[("veh.ev", ev), ("veh.topology", topology)])
+    }
+
+    fn messages(system: &CheckedSystem) -> Vec<&str> {
+        system
+            .diagnostics
+            .iter()
+            .map(|d| d.message.as_str())
+            .collect()
+    }
+
+    /// The source text under each diagnostic's primary span, for the file
+    /// `check_events` builds from `topology`.
+    fn spans<'a>(system: &CheckedSystem, text: &'a str) -> Vec<&'a str> {
+        system
+            .diagnostics
+            .iter()
+            .map(|d| {
+                &text[usize::from(d.primary.range.start())..usize::from(d.primary.range.end())]
+            })
+            .collect()
+    }
+
+    /// rsdl §5: a declared `depth` below the contract bound of an event a
+    /// covered link consumes is RSDL-805, once per link and event, naming
+    /// the event, the declared value and the bound.
+    #[test]
+    fn a_declared_depth_below_the_bound_is_rsdl_805_once_per_link_and_event() {
+        let system = check_events(
+            "system Vehicle { Body, Panel, Mirror, Hatch }\n\
+             deployment Prod for Vehicle { machine A { \
+             Body, Panel [ depth = 2 ], Mirror [ depth = 3 ], Hatch [ depth = 4 ] } }\n",
+        );
+        assert_eq!(
+            codes(&system),
+            ["RSDL-805", "RSDL-805", "RSDL-805", "RSDL-805"]
+        );
+        assert_eq!(
+            messages(&system),
+            [
+                "`depth = 2` on `Panel` in `Prod` is below the contract bound 10 of \
+                 `veh.ev.Doors.opened` — the bound is `ceil(max / min)` over the event's timing, \
+                 and a ring below it can drop occurrences alive at once (rsdl reference §5)",
+                "`depth = 3` on `Mirror` in `Prod` is below the contract bound 10 of \
+                 `veh.ev.Doors.opened` — the bound is `ceil(max / min)` over the event's timing, \
+                 and a ring below it can drop occurrences alive at once (rsdl reference §5)",
+                "`depth = 4` on `Hatch` in `Prod` is below the contract bound 10 of \
+                 `veh.ev.Trunk.opened` — the bound is `ceil(max / min)` over the event's timing, \
+                 and a ring below it can drop occurrences alive at once (rsdl reference §5)",
+                "`depth = 4` on `Hatch` in `Prod` is below the contract bound 5 of \
+                 `veh.ev.Trunk.closed` — the bound is `ceil(max / min)` over the event's timing, \
+                 and a ring below it can drop occurrences alive at once (rsdl reference §5)",
+            ]
+        );
+        assert!(
+            system
+                .diagnostics
+                .iter()
+                .all(|d| d.severity == Severity::Warning),
+            "{:?}",
+            system.diagnostics
+        );
+    }
+
+    /// rsdl §5: a `depth` exactly at the bound draws nothing, and one exactly
+    /// one below it draws RSDL-805.
+    #[test]
+    fn a_depth_one_below_the_bound_is_rsdl_805_and_one_at_the_bound_is_not() {
+        let below = check_events(
+            "system Vehicle { Body, Panel }\n\
+             deployment Prod for Vehicle { machine A { Body, Panel [ depth = 9 ] } }\n",
+        );
+        assert_eq!(codes(&below), ["RSDL-805"]);
+        assert_eq!(
+            messages(&below),
+            [
+                "`depth = 9` on `Panel` in `Prod` is below the contract bound 10 of \
+                 `veh.ev.Doors.opened` — the bound is `ceil(max / min)` over the event's timing, \
+                 and a ring below it can drop occurrences alive at once (rsdl reference §5)"
+            ]
+        );
+        let at = check_events(
+            "system Vehicle { Body, Panel }\n\
+             deployment Prod for Vehicle { machine A { Body, Panel [ depth = 10 ] } }\n",
+        );
+        assert_eq!(codes(&at), Vec::<&str>::new());
+    }
+
+    /// ADR-0015 decision 21: the bound is rounded up. `Hood.raised` is
+    /// `@[300ms..1s]`, 3.33, so its bound is 4 and `depth = 3` is below it.
+    #[test]
+    fn a_rounded_up_bound_is_reported_rounded_up() {
+        let system = check_events(
+            "system Vehicle { Body, Bonnet }\n\
+             deployment Prod for Vehicle { machine A { Body, Bonnet [ depth = 3 ] } }\n",
+        );
+        assert_eq!(
+            messages(&system),
+            [
+                "`depth = 3` on `Bonnet` in `Prod` is below the contract bound 4 of \
+                 `veh.ev.Hood.raised` — the bound is `ceil(max / min)` over the event's timing, \
+                 and a ring below it can drop occurrences alive at once (rsdl reference §5)"
+            ]
+        );
+        let at = check_events(
+            "system Vehicle { Body, Bonnet }\n\
+             deployment Prod for Vehicle { machine A { Body, Bonnet [ depth = 4 ] } }\n",
+        );
+        assert_eq!(codes(&at), Vec::<&str>::new());
+    }
+
+    /// rsdl §5: a declared `depth` at or above the bound is accepted silently.
+    #[test]
+    fn a_depth_at_or_above_the_bound_draws_nothing() {
+        for depth in ["10", "11", "4294967295"] {
+            let system = check_events(&format!(
+                "system Vehicle {{ Body, Panel, Hatch }}\n\
+                 deployment Prod for Vehicle {{ machine A {{ \
+                 Body, Panel [ depth = {depth} ], Hatch [ depth = {depth} ] }} }}\n"
+            ));
+            assert_eq!(codes(&system), Vec::<&str>::new(), "depth = {depth}");
+        }
+    }
+
+    /// rsdl §5: a `depth` declared on the `deployment` reaches every covered
+    /// link, and RSDL-805 is drawn once per link, not once for the
+    /// deployment. `Lock`'s half-open event has no bound, and the declared
+    /// value silences RSDL-806 for it.
+    #[test]
+    fn a_deployment_depth_below_the_bound_is_rsdl_805_once_per_covered_link() {
+        let topology = "system Vehicle { Body, Panel, Mirror, Lock }\n\
+                        deployment Prod for Vehicle [ depth = 2 ] { machine A { \
+                        Body, Panel, Mirror, Lock } }\n";
+        let system = check_events(topology);
+        assert_eq!(codes(&system), ["RSDL-805", "RSDL-805"]);
+        assert_eq!(
+            messages(&system),
+            [
+                "`depth = 2` on `Panel` in `Prod` is below the contract bound 10 of \
+                 `veh.ev.Doors.opened` — the bound is `ceil(max / min)` over the event's timing, \
+                 and a ring below it can drop occurrences alive at once (rsdl reference §5)",
+                "`depth = 2` on `Mirror` in `Prod` is below the contract bound 10 of \
+                 `veh.ev.Doors.opened` — the bound is `ceil(max / min)` over the event's timing, \
+                 and a ring below it can drop occurrences alive at once (rsdl reference §5)",
+            ]
+        );
+        // The deployment declares the value, so the diagnostic points at the
+        // deployment's name rather than at a placement line.
+        let text = format!("{EV_TOPOLOGY}{topology}");
+        assert_eq!(spans(&system, &text), ["Prod", "Prod"]);
+    }
+
+    /// rsdl §5: the placement line's value takes precedence over the
+    /// deployment's, and the comparison reads the value that wins: a line
+    /// value above the bound silences a deployment value below it, and a line
+    /// value below the bound is reported under a deployment value above it.
+    /// A line's RSDL-805 points at the `depth` attribute, as RSDL-709 does.
+    #[test]
+    fn a_placement_depth_takes_precedence_over_a_deployment_depth() {
+        let line_above = check_events(
+            "system Vehicle { Body, Panel, Mirror }\n\
+             deployment Prod for Vehicle [ depth = 2 ] { machine A { \
+             Body, Panel [ depth = 10 ], Mirror } }\n",
+        );
+        assert_eq!(
+            messages(&line_above),
+            [
+                "`depth = 2` on `Mirror` in `Prod` is below the contract bound 10 of \
+                 `veh.ev.Doors.opened` — the bound is `ceil(max / min)` over the event's timing, \
+                 and a ring below it can drop occurrences alive at once (rsdl reference §5)"
+            ]
+        );
+        let topology = "system Vehicle { Body, Panel, Mirror }\n\
+                        deployment Prod for Vehicle [ depth = 10 ] { machine A { \
+                        Body, Panel [ depth = 2 ], Mirror } }\n";
+        let line_below = check_events(topology);
+        assert_eq!(
+            messages(&line_below),
+            [
+                "`depth = 2` on `Panel` in `Prod` is below the contract bound 10 of \
+                 `veh.ev.Doors.opened` — the bound is `ceil(max / min)` over the event's timing, \
+                 and a ring below it can drop occurrences alive at once (rsdl reference §5)"
+            ]
+        );
+        let text = format!("{EV_TOPOLOGY}{topology}");
+        assert_eq!(spans(&line_below, &text), ["depth = 2"]);
+    }
+
+    /// rsdl §5, §7: a consumer with two instances has two links, each read
+    /// from its own placement line and named by its instance.
+    #[test]
+    fn a_multi_instance_consumer_is_read_line_by_line_and_named_per_instance() {
+        let one_below = check_events(
+            "system Vehicle { Body, Pair }\n\
+             deployment Prod for Vehicle { machine A { \
+             Body, Pair.a [ depth = 2 ], Pair.b [ depth = 20 ] } }\n",
+        );
+        assert_eq!(
+            messages(&one_below),
+            [
+                "`depth = 2` on `Pair.a` in `Prod` is below the contract bound 10 of \
+                 `veh.ev.Doors.opened` — the bound is `ceil(max / min)` over the event's timing, \
+                 and a ring below it can drop occurrences alive at once (rsdl reference §5)"
+            ]
+        );
+        let both_below = check_events(
+            "system Vehicle { Body, Pair }\n\
+             deployment Prod for Vehicle { machine A { \
+             Body, Pair.a [ depth = 2 ], Pair.b [ depth = 3 ] } }\n",
+        );
+        assert_eq!(
+            messages(&both_below),
+            [
+                "`depth = 2` on `Pair.a` in `Prod` is below the contract bound 10 of \
+                 `veh.ev.Doors.opened` — the bound is `ceil(max / min)` over the event's timing, \
+                 and a ring below it can drop occurrences alive at once (rsdl reference §5)",
+                "`depth = 3` on `Pair.b` in `Prod` is below the contract bound 10 of \
+                 `veh.ev.Doors.opened` — the bound is `ceil(max / min)` over the event's timing, \
+                 and a ring below it can drop occurrences alive at once (rsdl reference §5)",
+            ]
+        );
+    }
+
+    /// rsdl §5: an event with an explicit half-open range consumed by a link
+    /// with no declared `depth` is RSDL-806.
+    #[test]
+    fn a_half_open_event_with_no_declared_depth_is_rsdl_806() {
+        let system = check_events(
+            "system Vehicle { Body, Lock }\n\
+             deployment Prod for Vehicle { machine A { Body, Lock } }\n",
+        );
+        assert_eq!(codes(&system), ["RSDL-806"]);
+        assert_eq!(
+            messages(&system),
+            [
+                "`Lock` in `Prod` declares no `depth` for `veh.ev.Latch.jammed`, whose timing is \
+                 an explicit half-open range — a link to an event with no derivable bound takes \
+                 its ring depth from `depth = <n>` on the placement line or on the deployment \
+                 (rsdl reference §5)"
+            ]
+        );
+        assert_eq!(system.diagnostics[0].severity, Severity::Warning);
+    }
+
+    /// rsdl §5: an event whose bounds are both written but whose ratio is
+    /// above 4294967295 has no derivable bound either; RSDL-806 is drawn, and
+    /// the message does not claim a half-open range.
+    #[test]
+    fn an_event_whose_ratio_exceeds_the_depth_range_is_rsdl_806() {
+        let text = EVENTS.replace(
+            "event jammed: boolean @[100ms..]",
+            "event jammed: boolean @[1us..2h]",
+        );
+        let ev: &[(&str, &str)] = &[("veh/ev/ev.ridl", text.as_str())];
+        let topology = format!(
+            "{EV_TOPOLOGY}system Vehicle {{ Body, Lock }}\n\
+             deployment Prod for Vehicle {{ machine A {{ Body, Lock }} }}\n"
+        );
+        let topology: &[(&str, &str)] = &[("veh/topology/x.rsdl", topology.as_str())];
+        let system = check(&[("veh.ev", ev), ("veh.topology", topology)]);
+        assert_eq!(codes(&system), ["RSDL-806"]);
+        assert_eq!(
+            messages(&system),
+            [
+                "`Lock` in `Prod` declares no `depth` for `veh.ev.Latch.jammed`, whose contract \
+                 bound `ceil(max / min)` is not derivable from its timing — a link to an event \
+                 with no derivable bound takes its ring depth from `depth = <n>` on the placement \
+                 line or on the deployment (rsdl reference §5)"
+            ]
+        );
+    }
+
+    /// rsdl §5: a declared `depth`, on the placement line or on the
+    /// deployment, is the link's depth, so RSDL-806 is not drawn.
+    #[test]
+    fn a_declared_depth_silences_rsdl_806() {
+        let on_line = check_events(
+            "system Vehicle { Body, Lock }\n\
+             deployment Prod for Vehicle { machine A { Body, Lock [ depth = 1 ] } }\n",
+        );
+        assert_eq!(codes(&on_line), Vec::<&str>::new());
+        let on_deployment = check_events(
+            "system Vehicle { Body, Lock }\n\
+             deployment Prod for Vehicle [ depth = 1 ] { machine A { Body, Lock } }\n",
+        );
+        assert_eq!(codes(&on_deployment), Vec::<&str>::new());
+    }
+
+    /// rsdl §10: a `requires` whose two ends are external lowers no link, so
+    /// the half-open event between them draws nothing.
+    #[test]
+    fn two_external_ends_lower_no_link_and_draw_neither_code() {
+        let system = check_events(
+            "system Vehicle { Cloud, Remote }\n\
+             deployment Prod for Vehicle { machine X [ external ] { Cloud, Remote } }\n",
+        );
+        assert_eq!(codes(&system), Vec::<&str>::new());
+    }
+
+    /// rsdl §10: a link with one external end is lowered, read from the
+    /// consumer's side — an external consumer of an internal producer draws
+    /// RSDL-806 once.
+    #[test]
+    fn an_external_consumer_of_an_internal_producer_draws_rsdl_806() {
+        let system = check_events(
+            "system Vehicle { Body, Remote }\n\
+             deployment Prod for Vehicle { \
+             machine A { Body } machine X [ external ] { Remote } }\n",
+        );
+        assert_eq!(
+            messages(&system),
+            [
+                "`Remote` in `Prod` declares no `depth` for `veh.ev.Latch.jammed`, whose timing is \
+                 an explicit half-open range — a link to an event with no derivable bound takes \
+                 its ring depth from `depth = <n>` on the placement line or on the deployment \
+                 (rsdl reference §5)"
+            ]
+        );
+    }
+
+    /// rsdl §10: an internal consumer of an external producer draws RSDL-806
+    /// once.
+    #[test]
+    fn an_internal_consumer_of_an_external_producer_draws_rsdl_806() {
+        let system = check_events(
+            "system Vehicle { Cloud, Lock }\n\
+             deployment Prod for Vehicle { \
+             machine A { Lock } machine X [ external ] { Cloud } }\n",
+        );
+        assert_eq!(
+            messages(&system),
+            [
+                "`Lock` in `Prod` declares no `depth` for `veh.ev.Latch.jammed`, whose timing is \
+                 an explicit half-open range — a link to an event with no derivable bound takes \
+                 its ring depth from `depth = <n>` on the placement line or on the deployment \
+                 (rsdl reference §5)"
+            ]
+        );
+    }
+
+    /// rsdl §5, ridl §9.1: an event written with no timing resolves the
+    /// package default, so it has both bounds and draws neither code.
+    #[test]
+    fn an_event_with_no_timing_draws_neither_code() {
+        let undeclared = check_events(
+            "system Vehicle { Body, Dash }\n\
+             deployment Prod for Vehicle { machine A { Body, Dash } }\n",
+        );
+        assert_eq!(codes(&undeclared), Vec::<&str>::new());
+        let declared = check_events(
+            "system Vehicle { Body, Dash }\n\
+             deployment Prod for Vehicle { machine A { Body, Dash [ depth = 4294967295 ] } }\n",
+        );
+        assert_eq!(codes(&declared), Vec::<&str>::new());
+    }
+
+    /// rsdl §5: `depth` applies to event channels only; a placement that
+    /// consumes a query channel and no event draws neither code.
+    #[test]
+    fn a_depth_on_a_placement_that_consumes_only_calls_draws_neither_code() {
+        let text = format!(
+            "{SIZED}deployment Prod for Vehicle {{ machine A {{ \
+             Lane, Panel, Backend [ depth = 1 ], veh.diag.access }} }}\n"
+        );
+        let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+        assert_eq!(codes(&system), Vec::<&str>::new());
+    }
+
+    /// rsdl §5: the rule is per consumer link, so a half-open event no link
+    /// consumes draws nothing — `Spare.idle` is offered by `Body` and
+    /// required by nobody.
+    #[test]
+    fn a_half_open_event_that_no_link_consumes_draws_neither_code() {
+        let system = check_events(
+            "system Vehicle { Body, Panel }\n\
+             deployment Prod for Vehicle { machine A { Body, Panel } }\n",
+        );
+        assert_eq!(codes(&system), Vec::<&str>::new());
+    }
+
+    /// rsdl §13: an RSDL-7xx error blocks its deployment, and its placement
+    /// set is not one to read links from. The only deployment here is blocked,
+    /// so the check returns before it reads any link; the per-deployment skip
+    /// is pinned by `a_blocked_deployment_does_not_silence_a_sibling_deployment`.
+    #[test]
+    fn a_blocked_deployment_draws_neither_code() {
+        let system = check_events(
+            "system Vehicle { Body, Panel, Lock }\n\
+             deployment Prod for Vehicle [ slots = 0 ] { machine A { \
+             Body, Panel [ depth = 2 ], Lock } }\n",
+        );
+        assert_eq!(codes(&system), ["RSDL-709"]);
+    }
+
+    /// rsdl §13: a deployment an RSDL-7xx error blocks is skipped on its own;
+    /// a sibling deployment is still read, and each warning names the
+    /// deployment it is drawn in.
+    #[test]
+    fn a_blocked_deployment_does_not_silence_a_sibling_deployment() {
+        let system = check_events(
+            "system Vehicle { Body, Panel, Lock }\n\
+             deployment Prod for Vehicle [ slots = 0 ] { machine A { \
+             Body, Panel [ depth = 2 ], Lock } }\n\
+             deployment Bench for Vehicle { machine B { \
+             Body, Panel [ depth = 2 ], Lock } }\n",
+        );
+        assert_eq!(codes(&system), ["RSDL-709", "RSDL-805", "RSDL-806"]);
+        assert!(system.placements[0].has_errors);
+        assert!(!system.placements[1].has_errors);
+        assert_eq!(
+            messages(&system)[1..],
+            [
+                "`depth = 2` on `Panel` in `Bench` is below the contract bound 10 of \
+                 `veh.ev.Doors.opened` — the bound is `ceil(max / min)` over the event's timing, \
+                 and a ring below it can drop occurrences alive at once (rsdl reference §5)",
+                "`Lock` in `Bench` declares no `depth` for `veh.ev.Latch.jammed`, whose timing is \
+                 an explicit half-open range — a link to an event with no derivable bound takes \
+                 its ring depth from `depth = <n>` on the placement line or on the deployment \
+                 (rsdl reference §5)",
+            ]
+        );
+    }
+
+    /// rsdl §5: two unblocked deployments that each draw RSDL-805 report one
+    /// warning each, and each message names its own deployment.
+    #[test]
+    fn two_unblocked_deployments_each_draw_a_warning_naming_themselves() {
+        let system = check_events(
+            "system Vehicle { Body, Panel, Lock }\n\
+             deployment Prod for Vehicle { machine A { \
+             Body, Panel [ depth = 2 ], Lock [ depth = 10 ] } }\n\
+             deployment Bench for Vehicle { machine B { \
+             Body, Panel [ depth = 2 ], Lock [ depth = 10 ] } }\n",
+        );
+        assert_eq!(codes(&system), ["RSDL-805", "RSDL-805"]);
+        let messages = messages(&system);
+        assert!(messages[0].starts_with("`depth = 2` on `Panel` in `Prod` "));
+        assert!(messages[1].starts_with("`depth = 2` on `Panel` in `Bench` "));
+        assert_ne!(messages[0], messages[1]);
+    }
+
+    /// rsdl §5: an event of an inline-shape service (ridl §4) is read like one
+    /// of a declared interface; the event is named `service.event`.
+    #[test]
+    fn an_event_of_an_inline_shape_service_draws_both_codes() {
+        let system = check_events(
+            "system Vehicle { Body, Klaxon }\n\
+             deployment Prod for Vehicle { machine A { Body, Klaxon [ depth = 2 ] } }\n",
+        );
+        assert_eq!(codes(&system), ["RSDL-805"]);
+        assert_eq!(
+            messages(&system),
+            [
+                "`depth = 2` on `Klaxon` in `Prod` is below the contract bound 10 of \
+                 `veh.ev.horn.honked` — the bound is `ceil(max / min)` over the event's timing, \
+                 and a ring below it can drop occurrences alive at once (rsdl reference §5)"
+            ]
+        );
+
+        let system = check_events(
+            "system Vehicle { Body, Klaxon }\n\
+             deployment Prod for Vehicle { machine A { Body, Klaxon } }\n",
+        );
+        assert_eq!(codes(&system), ["RSDL-806"]);
+        assert_eq!(
+            messages(&system),
+            [
+                "`Klaxon` in `Prod` declares no `depth` for `veh.ev.horn.stuck`, whose timing is \
+                 an explicit half-open range — a link to an event with no derivable bound takes \
+                 its ring depth from `depth = <n>` on the placement line or on the deployment \
+                 (rsdl reference §5)"
+            ]
+        );
+    }
+
+    /// rsdl §7: a redundant provider set lowers one link per producer
+    /// instance, but the declared value and the bound belong to the consumer
+    /// and the event, so RSDL-805 is drawn once per consumer instance.
+    #[test]
+    fn a_redundant_provider_set_draws_rsdl_805_once_per_consumer_instance() {
+        let system = check_events(
+            "component Twin [ instances = (a, b) ] { offers veh.ev.doors }\n\
+             system Vehicle { Twin, Panel }\n\
+             deployment Prod for Vehicle { machine A { Twin.a, Twin.b, Panel [ depth = 2 ] } }\n",
+        );
+        assert_eq!(codes(&system), ["RSDL-409", "RSDL-805"]);
     }
 
     /// Appendix A's distributions: every implemented closure component in one,

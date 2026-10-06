@@ -5,7 +5,8 @@
 //! row of the §5 table and no backend namespace defines is FORM-106, an
 //! rsdl-owned key where its row does not allow it is FORM-107, and a key twice
 //! in one block is FORM-108. The value rules of the rsdl-owned keys are
-//! RSDL-305 (`instances`), RSDL-313 (`external`) and RSDL-908 (`tier`).
+//! RSDL-305 (`instances`), RSDL-313 (`external`), RSDL-908 (`tier`) and
+//! RSDL-709 (`depth`, `slots`, `budget`).
 //!
 //! The ridl member check (`check::Checker::check_member_attrs`) raises the same
 //! three FORM codes, but it is a method of the package checker, bound to the
@@ -19,13 +20,13 @@ use ridl_core::diag::DiagCode;
 use ridl_syntax::ast::{self, AstNode};
 
 use super::{
-    BackendKey, DeclAttrs, Named, Reporter, Site, Tier, UNIT_INSTANCE, WrittenValue,
+    BackendKey, DeclAttrs, Named, Reporter, Site, Sizing, Tier, UNIT_INSTANCE, WrittenValue,
     is_lower_camel, is_screaming_snake,
 };
 use crate::resolve::significant_text;
 
 /// Where an attribute block sits (rsdl §3 table): one of the five declaration
-/// kinds, or a line.
+/// kinds, a placement line (a member line of a `machine`), or any other line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum AttrSite {
     System,
@@ -33,6 +34,7 @@ pub(super) enum AttrSite {
     Distribution,
     Deployment,
     Machine,
+    Placement,
     Line,
 }
 
@@ -44,6 +46,7 @@ impl AttrSite {
             Self::Distribution => "a `distribution`",
             Self::Deployment => "a `deployment`",
             Self::Machine => "a `machine`",
+            Self::Placement => "a placement line",
             Self::Line => "a line",
         }
     }
@@ -54,23 +57,38 @@ impl AttrSite {
             "instances" => self == Self::Component,
             "external" => matches!(self, Self::Component | Self::Machine),
             "tier" => self == Self::Distribution,
-            "labels" | "deprecated" => self != Self::Line,
+            "labels" | "deprecated" => !matches!(self, Self::Placement | Self::Line),
+            "depth" | "slots" | "budget" => matches!(self, Self::Deployment | Self::Placement),
             _ => false,
         }
     }
 }
 
 /// The rsdl-owned keys (rsdl §5 table).
-const RSDL_KEYS: [&str; 5] = ["instances", "external", "tier", "labels", "deprecated"];
+const RSDL_KEYS: [&str; 8] = [
+    "instances",
+    "external",
+    "tier",
+    "labels",
+    "deprecated",
+    "depth",
+    "slots",
+    "budget",
+];
 
-/// What one attribute block yields. A line uses `attrs.backend_keys` only: its
-/// other fields stay empty, because every rsdl-owned key on a line is FORM-107.
+/// What one attribute block yields. A line uses `attrs.backend_keys` only, and
+/// a placement line `sizing` beside it: the other fields stay empty, because
+/// every other rsdl-owned key on a line is FORM-107.
 #[derive(Debug, Default)]
 pub(super) struct ReadAttrs {
     pub(super) attrs: DeclAttrs,
     pub(super) instances: Option<Vec<Named>>,
     pub(super) external: bool,
     pub(super) tier: Option<Tier>,
+    pub(super) sizing: Sizing,
+    /// The site of the `depth` attribute when `sizing.depth` is read, for
+    /// RSDL-805 to point at the value rather than at the line.
+    pub(super) depth_site: Option<Site>,
 }
 
 /// Reads `block` at `at`, reporting every key rule of rsdl §5.
@@ -143,6 +161,12 @@ pub(super) fn read(
                     "attribute `{key}` not valid on a line — a line takes backend keys only \
                      (rsdl reference §5)"
                 )
+            } else if at == AttrSite::Placement {
+                format!(
+                    "attribute `{key}` not valid on {} — a placement line takes backend keys and \
+                     the sizing keys `depth`, `slots` and `budget` (rsdl reference §5)",
+                    at.noun()
+                )
             } else {
                 format!(
                     "attribute `{key}` not valid on {} (rsdl reference §5)",
@@ -168,6 +192,16 @@ pub(super) fn read(
                 out.external = true;
             }
             "tier" => out.tier = tier(value, site, reporter),
+            // `slots = 50ms`: the parser refused the value and reported
+            // FORM-101, which stops the build; a second report would describe
+            // the key as bare.
+            "depth" | "slots" | "budget" if value.is_none() && attribute.eq_token().is_some() => {}
+            "depth" | "slots" | "budget" => {
+                sizing_key(&key, value, site, reporter, &mut out.sizing);
+                if key == "depth" && out.sizing.depth.is_some() {
+                    out.depth_site = Some(site);
+                }
+            }
             "labels" => out.attrs.labels = labels(value, site, reporter),
             "deprecated" => out.attrs.deprecated = deprecated(value, site, reporter),
             _ => {}
@@ -235,6 +269,52 @@ fn tier(value: Option<ast::AttrValue>, site: Site, reporter: &mut Reporter) -> O
             );
             None
         }
+    }
+}
+
+/// `depth = n`, `slots = n` or `budget = n` (rsdl §5): an integer literal
+/// within the key's range, written into `into`. Any other value — none, a
+/// negated number, a list, a string, a name, or an integer outside the range —
+/// is RSDL-709, and `into` keeps what it held.
+fn sizing_key(
+    key: &str,
+    value: Option<ast::AttrValue>,
+    site: Site,
+    reporter: &mut Reporter,
+    into: &mut Sizing,
+) {
+    let (lo, hi): (u64, u64) = match key {
+        "depth" => (1, u64::from(u32::MAX)),
+        "slots" => (1, 65536),
+        _ => (1, u64::MAX),
+    };
+    let integer = value
+        .as_ref()
+        .and_then(ast::AttrValue::literal)
+        .filter(|literal| literal.minus_token().is_none())
+        .and_then(|literal| literal.int_number_token())
+        .and_then(|token| token.text().parse::<u64>().ok())
+        .filter(|integer| (lo..=hi).contains(integer));
+    let Some(integer) = integer else {
+        let written = match &value {
+            Some(value) => format!("`{}`", significant_text(value.syntax())),
+            None => format!("a bare `{key}`"),
+        };
+        reporter.error(
+            DiagCode::RSDL_709,
+            site,
+            format!(
+                "`{key}` takes an integer from {lo} to {hi}, written `{key} = <n>`; {written} \
+                 is not one (rsdl reference §5)"
+            ),
+        );
+        return;
+    };
+    // `depth` and `slots` are bounded by `hi` to fit a `u32`.
+    match key {
+        "depth" => into.depth = u32::try_from(integer).ok(),
+        "slots" => into.slots = u32::try_from(integer).ok(),
+        _ => into.budget = Some(integer),
     }
 }
 

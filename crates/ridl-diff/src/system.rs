@@ -56,7 +56,10 @@ pub fn heading_text(heading: SystemHeading) -> &'static str {
 /// changes, deployment by deployment in the new system's order and then the
 /// removed deployments. The doc fields (`doc`, the doc links, `see`,
 /// `since`) are never read: a doc edit is neither a placement nor a
-/// composition change, and a system change has no verdict (ADR-0026).
+/// composition change, and a system change has no verdict (ADR-0026). The
+/// sizing fields (`Deployment.sizing`, `Placement.sizing`) are never read
+/// either: a changed `depth`, `slots` or `budget` changes no link and no
+/// contract (rsdl §14).
 pub fn diff_systems(old: &System, new: &System) -> Vec<SystemChange> {
     let mut changes = Vec::new();
     for component in &new.components {
@@ -346,6 +349,7 @@ mod tests {
             instance: instance.to_string(),
             machine: machine.to_string(),
             attributes: Vec::new(),
+            sizing: None,
         }
     }
 
@@ -460,6 +464,30 @@ mod tests {
         document!(new.deployments[0].machines[0]);
         assert_ne!(old, new);
         assert!(diff_systems(&old, &new).is_empty());
+    }
+
+    /// A changed sizing value, on the deployment or on a placement, is
+    /// neither a placement nor a composition change (rsdl §14).
+    #[test]
+    fn system_sizing_changes_are_not_reported() {
+        let sized = |depth: u32, slots: u32, budget: u64| v2::Sizing {
+            depth: Some(depth),
+            slots: Some(slots),
+            budget: Some(budget),
+        };
+        let mut old = base();
+        old.deployments[0].sizing = Some(sized(3, 16, 4096));
+        old.deployments[0].placements[0].sizing = Some(sized(3, 16, 4096));
+        let mut new = old.clone();
+        new.deployments[0].sizing = Some(sized(300, 64, 65536));
+        new.deployments[0].placements[0].sizing = Some(sized(300, 64, 65536));
+        assert_ne!(old, new);
+        assert!(diff_systems(&old, &new).is_empty());
+
+        // Declaring a value where none was, and removing one, are not
+        // reported either.
+        assert!(diff_systems(&base(), &new).is_empty());
+        assert!(diff_systems(&new, &base()).is_empty());
     }
 
     /// A system change is rendered under its heading, after the contract

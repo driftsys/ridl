@@ -61,8 +61,11 @@ test("the rsdl grammar scopes the keys of an attribute block", () => {
   assert.ok(includes(attributes.patterns).includes("#owned-key"), "a block holds rsdl-owned keys");
   assert.ok(new RegExp(grammar.repository["backend-key"].match).test("linux.cpuset"), "`linux.cpuset`");
   const owned = new RegExp(`^(?:${grammar.repository["owned-key"].match})$`);
-  for (const key of ["instances", "external", "tier", "labels", "deprecated"]) {
+  for (const key of ["instances", "external", "tier", "depth", "slots", "budget", "labels", "deprecated"]) {
     assert.ok(owned.test(key), `\`${key}\` is an rsdl-owned key`);
+  }
+  for (const word of ["cpuset", "rustCrate", "instance", "depths", "name"]) {
+    assert.ok(!owned.test(word), `\`${word}\` is not an rsdl-owned key`);
   }
 });
 

@@ -796,6 +796,103 @@ leaves room for the deployment section's own decisions, which start at DD-17).
   larger than this work; the coarser attribution is stated in the sizer's own
   documentation, and no caller branches on the cause.
 
+- **DD-34.** Task 13 of the plan, the three catalogue rows as a commit of their
+  own, is not a green commit: `crates/ridlc/tests/corpus.rs` asserts that
+  `RSDL_PROFILE_CODES` equals the `RSDL-` rows of `RSDL_CATALOG` and that the
+  diagnostic showcase provokes exactly the listed codes, so a catalogue row
+  cannot land before the check that raises it. RSDL-709's catalogue row, corpus
+  row, showcase source and reference §16.1 row land with Task 14; RSDL-805's and
+  RSDL-806's, with their two `docs/book/lints.md` rows, land with Task 17. This
+  is the fallback the plan's Task 13 names.
+- **DD-35.** How a collect-time RSDL-709 blocks only its deployment, which D-6
+  requires without saying how. `deployment_decl` records the reporter's
+  diagnostic count before reading its attribute blocks and sets a new
+  `DeploymentDecl.has_errors` when any diagnostic appended since is an error
+  whose code starts with `RSDL-7`, the same predicate `check_system` already
+  uses for a closure; `placement::place` seeds `DeploymentCheck.has_errors` from
+  it. This keeps the plan's `sizing_key` signature, which returns nothing, and
+  covers the declaration's own block and every placement line in one place.
+  Rejected: `sizing_key -> bool` with a flag threaded through `ReadAttrs`,
+  `member_ref` and `MachineDecl`.
+- **DD-36.** A placement line is a new FORM-107 site, so it takes its own
+  message: "attribute `<key>` not valid on a placement line — a placement line
+  takes backend keys and the sizing keys `depth`, `slots` and `budget` (rsdl
+  reference §5)". The message for the other lines is unchanged.
+- **DD-37.** Two shapes D-6's "not an integer" leaves open. A bare key, written
+  with no `=`, is RSDL-709 and the message reads "a bare `<key>` is not one" in
+  place of the written text. A key whose `=` carries a value the parser cannot
+  read, such as `slots = 50ms`, draws no RSDL-709: the parser has already raised
+  FORM-101, and a second diagnostic calling the key bare would misdescribe the
+  source. FORM-101 is a parse error, so `ridlc` blocks every artifact of the
+  build, which is stricter than blocking the one deployment.
+- **DD-38.** A rejected value leaves its `Sizing` field absent rather than
+  clamping it to an endpoint, and a key written twice in one block keeps the
+  first value, which is what the existing FORM-108 mechanism already does.
+- **DD-39.** The showcase provokes RSDL-709 with `slots = 0` on the `Road`
+  deployment of `placement.rsdl`, which already carries placement errors, rather
+  than on the one deployment of `attributes.rsdl`, which is the deployment that
+  lowers. No lowering snapshot changes.
+- **DD-40.** The `budget` range is written in the diagnostic message and in the
+  rustdoc as decimal digits, `18446744073709551615`, not as `2^64 − 1`.
+
+- **DD-41.** The ring depth's tie-break. D-5 fixes the ring depth as the maximum
+  over the consumer links and `docs/design/codegen-plugins.md` gives it "the
+  source of the link that supplies it", which left the source order-dependent
+  when a declared link and a derived link carry the same value: the first link
+  in emitted order supplied it. The maximum is taken over the rank
+  `(value, source is
+  declared)`, so on an equal value the declared link
+  supplies the source whatever its position. The record's sentence needs "and,
+  on an equal value, the declared source".
+- **DD-42.** RSDL-806 covers every underivable contract bound, not only the
+  explicit half-open range of D-6's table. An event whose `ceil(max / min)`
+  exceeds 4294967295 is `UNDERIVABLE` in the emitter, so a link to it with no
+  declared `depth` has the same unsized ring and draws the same warning. The
+  catalogue summary, `docs/book/lints.md` and the rsdl reference §16.1 state the
+  wider condition; D-6's table row is narrower than what is built and this entry
+  supersedes it. The message states which of the two cases applies.
+- **DD-43.** The grain of both warnings is once per consumer instance and event.
+  The IR lowers one link per (consumer instance, producer instance), so a
+  redundant provider set would otherwise print identical text twice at one site;
+  the declared value and the bound belong to the consumer side and the event.
+- **DD-44.** A deployment blocked by its own RSDL-7xx error is skipped by the
+  two warnings, because its placement set is not one to read links from: an
+  instance placed twice or not at all, a machine declared twice, or a sizing
+  value out of range leaves that deployment's lines without a defined link set.
+  The pass does run when the closure carries errors that are not RSDL-7xx,
+  because suppressing a warning over an unrelated error elsewhere would be worse
+  for `ridl check`.
+- **DD-45.** A `requires` whose two ends are both external is skipped, mirroring
+  the lowering, which emits no link for it. A pair with one external end is
+  lowered and is warned about.
+- **DD-46.** The sites. RSDL-805 points at the `depth` attribute of the
+  placement line that declares the value, matching RSDL-709 for the same key,
+  and at the deployment's name when the value is the deployment's. RSDL-806
+  points at the consumer's placement line.
+- **DD-47.** The declared-depth precedence is restated in the checker rather
+  than shared with the emitter. `declared_sizing` is private to `ridl-ir` and
+  reads the lowered `v2::Deployment`, while the checker runs before lowering on
+  the model's `Sizing`, and `ridl-ir` cannot depend on `ridl-sem`. The rule is
+  one expression, so a shared helper would have cost a model-to-IR conversion or
+  a generic over two option sites. Both sides carry a cross-reference in their
+  rustdoc naming the other and saying the two are edited together.
+- **DD-48.** `ridl_ir::codegen::depth` becomes public so that `ridl-sem` can use
+  `ceil_ratio`, which is the path the plan already named.
+- **DD-49.** A consumer named in a message is the component's declared name,
+  with `.instance` appended for a declared instance and nothing for the unit
+  instance.
+- **DD-50.** A consumer link with no matching placement, which only a hand-built
+  system produces, takes the deployment-level values: the placement site is
+  absent and the lookup falls through. The emitter applies no range check of its
+  own and copies whatever the IR carries, because RSDL-709 is the range gate.
+- **DD-51.** An open question deliberately not settled in this stage. A
+  half-open event that no consumer link consumes draws neither warning, which
+  follows D-5 literally, yet the request carries that channel's depth as absent
+  with source `UNDERIVABLE` and nothing tells the author why a plugin cannot
+  size it. D-5 and DD-20 cover the no-consumer case only for a derivable bound.
+  Referred to a follow-up issue rather than widened here, because what a warning
+  is for is a design question.
+
 ## 9. The exit test and the cabin system
 
 E17.1 adds to `examples/cabin`:

@@ -31,13 +31,18 @@ a check in another:
   components are listed in `Showcase` and placed on `DevBox`, so the placement
   checks have nothing to report about them.
 - `placement.rsdl` — the deployment and placement rules of rsdl §3.4, §3.5 and
-  §9: RSDL-701, RSDL-702 and RSDL-704 to RSDL-708. `Bench`, in
-  `attributes.rsdl`, places every closure instance once, so it draws none of
-  them.
+  §9: RSDL-701, RSDL-702 and RSDL-704 to RSDL-708, and RSDL-709 for a `slots`
+  value out of range on `Road`, the one §5 value rule that is scoped to its
+  deployment. `Bench`, in `attributes.rsdl`, places every closure instance
+  once, so it draws none of them. The depth rules of §5 are read over the links
+  of `Bench`: `Siren` offers `rsdl.showcase.alerts`, whose two events
+  (`contracts.ridl`) `Dash` consumes with `depth = 2`, the RSDL-805 warning,
+  and `Driver` (`resolution.rsdl`) consumes with no `depth`, the RSDL-806
+  warning for the half-open event.
 - `distribution.rsdl` — the distribution rules of rsdl §3.3: RSDL-901 over the
   derived dependency of `Base` on `App`, and RSDL-903 to RSDL-907.
-- `contracts.ridl` — the ridl interfaces and services the rsdl files name. It
-  draws no diagnostic.
+- `contracts.ridl` — the ridl interfaces and services the rsdl files name,
+  among them the `Alerts` events the depth rules read. It draws no diagnostic.
 
 A code the showcase cannot provoke in one compile is listed in
 `RSDL_PROFILE_CODES` as `Elsewhere`, with the fixture that provokes it.

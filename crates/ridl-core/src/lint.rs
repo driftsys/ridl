@@ -436,6 +436,29 @@ mod tests {
         );
     }
 
+    /// The two depth lints of the rsdl checker, RSDL-805 and RSDL-806, take
+    /// their level from the `[lints]` table like every other warning row.
+    #[test]
+    fn the_depth_lints_take_their_level_from_the_table() {
+        let mut sources = SourceMap::new();
+        let file = sources.file_id("/ws/x.rsdl", "deployment P for S {}");
+        let mut levels = LintLevels::default();
+        levels.overlay(&LintTable::from([
+            ("depth-below-bound", LintLevel::Allow),
+            ("depth-underivable", LintLevel::Deny),
+        ]));
+        let mut scopes = LintScopes::default();
+        scopes.insert(PathBuf::from("/ws"), levels);
+        let mut diagnostics = vec![
+            diagnostic(DiagCode::RSDL_805, Severity::Warning, file),
+            diagnostic(DiagCode::RSDL_806, Severity::Warning, file),
+        ];
+        apply_lint_levels(&mut diagnostics, &sources, &scopes);
+        let kept: Vec<(DiagCode, Severity)> =
+            diagnostics.iter().map(|d| (d.code, d.severity)).collect();
+        assert_eq!(kept, vec![(DiagCode::RSDL_806, Severity::Error)]);
+    }
+
     #[test]
     fn apply_uses_defaults_outside_scopes() {
         let mut sources = SourceMap::new();

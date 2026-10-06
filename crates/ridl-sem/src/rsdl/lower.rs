@@ -21,7 +21,7 @@ use ridl_ir::v2;
 
 use super::closure::{Closure, ComponentId, InterfaceId};
 use super::placement::{DeploymentPlacement, Placement};
-use super::{BackendKey, CheckedSystem, DeploymentDecl, DistributionDecl, WrittenValue};
+use super::{BackendKey, CheckedSystem, DeploymentDecl, DistributionDecl, Sizing, WrittenValue};
 
 /// Lowers `system` to the IR's `System` message, or returns `None` when the
 /// workspace declares no `system` or an error in the closure blocks lowering
@@ -257,6 +257,7 @@ impl<'a> Lowering<'a> {
                     instance: instance.clone(),
                     machine: decl.machines[placed.machine].name.name.clone(),
                     attributes: attributes(&line.backend_keys),
+                    sizing: sizing(line.sizing),
                 });
             }
         }
@@ -321,6 +322,7 @@ impl<'a> Lowering<'a> {
             doc_links: decl.links.clone(),
             see: decl.see.clone(),
             since: decl.doc.since.clone(),
+            sizing: sizing(decl.sizing),
         }
     }
 
@@ -560,6 +562,19 @@ fn placed(placement: &DeploymentPlacement) -> HashMap<(usize, &str), &Placement>
         .iter()
         .map(|placed| ((placed.component, placed.instance.as_str()), placed))
         .collect()
+}
+
+/// The declared sizing keys of one site (rsdl §5, §13), absent when the site
+/// writes none of them.
+fn sizing(declared: Sizing) -> Option<v2::Sizing> {
+    if declared == Sizing::default() {
+        return None;
+    }
+    Some(v2::Sizing {
+        depth: declared.depth,
+        slots: declared.slots,
+        budget: declared.budget,
+    })
 }
 
 /// Backend keys as declared (rsdl §5): carried, never interpreted.
@@ -1847,5 +1862,150 @@ mod tests {
             .collect();
         assert_eq!(warnings, ["RSDL-409", "RSDL-409"]);
         assert!(lowered.is_some());
+    }
+
+    /// A closure on one machine: `Panel` consumes an event channel, `Backend`
+    /// a query channel, `Lane` nothing, and `Pair` has two instances.
+    const SIZED_CLOSURE: &str = "package veh.topology\n\
+                                 import veh.adas.LaneAssist\n\
+                                 component Lane { offers veh.adas.lane }\n\
+                                 component Panel { requires LaneAssist }\n\
+                                 component Backend [ external ] { requires veh.diag.access }\n\
+                                 component Pair [ instances = (primary, backup) ] {}\n\
+                                 system Vehicle { Lane, Panel, Backend, Pair, veh.diag.access }\n";
+
+    /// Lowers `SIZED_CLOSURE` with the given deployment block and returns the
+    /// lowered deployment.
+    fn sized_deployment(deployment: &str) -> v2::Deployment {
+        let text = format!("{SIZED_CLOSURE}{deployment}");
+        let (checked, lowered) = lower_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+        assert!(!checked.closure_has_errors, "{:?}", checked.diagnostics);
+        let mut system = lowered.expect("the closure lowers");
+        assert_eq!(system.deployments.len(), 1);
+        system.deployments.remove(0)
+    }
+
+    /// The `sizing` of the placement of `instance` of `component`.
+    fn placement_sizing(
+        deployment: &v2::Deployment,
+        component: &str,
+        instance: &str,
+    ) -> Option<v2::Sizing> {
+        let placement = deployment
+            .placements
+            .iter()
+            .find(|placement| placement.component == component && placement.instance == instance)
+            .unwrap_or_else(|| panic!("no placement of `{component}` `{instance}`"));
+        placement.sizing
+    }
+
+    /// rsdl §5, §13: the declared `depth`, `slots` and `budget` enter the
+    /// system IR as the `sizing` of the deployment and of the placement of the
+    /// line that wrote them.
+    #[test]
+    fn declared_sizing_values_reach_the_deployment_and_its_placements() {
+        let deployment = sized_deployment(
+            "deployment Prod for Vehicle [ depth = 3, slots = 8, budget = 4096 ] {\n  \
+             machine A { Lane, Panel [ depth = 5, slots = 2, budget = 512 ], \
+             Backend, Pair [ depth = 7 ], veh.diag.access }\n}\n",
+        );
+        assert_eq!(
+            deployment.sizing,
+            Some(v2::Sizing {
+                depth: Some(3),
+                slots: Some(8),
+                budget: Some(4096),
+            })
+        );
+        assert_eq!(
+            placement_sizing(&deployment, "veh.topology.Panel", "Unit"),
+            Some(v2::Sizing {
+                depth: Some(5),
+                slots: Some(2),
+                budget: Some(512),
+            })
+        );
+        for instance in ["primary", "backup"] {
+            assert_eq!(
+                placement_sizing(&deployment, "veh.topology.Pair", instance),
+                Some(v2::Sizing {
+                    depth: Some(7),
+                    slots: None,
+                    budget: None,
+                }),
+                "{instance}"
+            );
+        }
+    }
+
+    /// A deployment and a placement that declare no key lower to an absent
+    /// `sizing`, not to an empty one: a plugin tells "nothing declared" from
+    /// "declared nothing".
+    #[test]
+    fn a_deployment_and_a_placement_with_no_sizing_key_lower_to_an_absent_sizing() {
+        let deployment = sized_deployment(
+            "deployment Prod for Vehicle {\n  \
+             machine A { Lane, Panel, Backend, Pair, veh.diag.access }\n}\n",
+        );
+        assert_eq!(deployment.sizing, None);
+        assert_eq!(deployment.placements.len(), 6);
+        for placement in &deployment.placements {
+            assert_eq!(placement.sizing, None, "{}", placement.component);
+        }
+    }
+
+    /// A key written on one placement line, or on the deployment only, does not
+    /// reach any other placement, and a partly declared site writes only the
+    /// keys it declares.
+    #[test]
+    fn a_sizing_value_stays_on_the_site_that_declared_it() {
+        let deployment = sized_deployment(
+            "deployment Prod for Vehicle [ slots = 8 ] {\n  \
+             machine A { Panel [ depth = 5 ], Lane, Backend [ budget = 512 ], \
+             veh.diag.access, Pair [ slots = 2 ] }\n}\n",
+        );
+        assert_eq!(
+            deployment.sizing,
+            Some(v2::Sizing {
+                depth: None,
+                slots: Some(8),
+                budget: None,
+            })
+        );
+        assert_eq!(
+            placement_sizing(&deployment, "veh.topology.Lane", "Unit"),
+            None
+        );
+        assert_eq!(
+            placement_sizing(&deployment, "veh.topology.Panel", "Unit"),
+            Some(v2::Sizing {
+                depth: Some(5),
+                slots: None,
+                budget: None,
+            })
+        );
+        assert_eq!(
+            placement_sizing(&deployment, "veh.topology.Backend", "Unit"),
+            Some(v2::Sizing {
+                depth: None,
+                slots: None,
+                budget: Some(512),
+            })
+        );
+        assert_eq!(
+            placement_sizing(&deployment, "veh.diag.access", "Unit"),
+            None
+        );
+        for instance in ["primary", "backup"] {
+            assert_eq!(
+                placement_sizing(&deployment, "veh.topology.Pair", instance),
+                Some(v2::Sizing {
+                    depth: None,
+                    slots: Some(2),
+                    budget: None,
+                }),
+                "{instance}"
+            );
+        }
     }
 }

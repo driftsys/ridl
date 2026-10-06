@@ -22,9 +22,17 @@ query together, so a workspace-wide diagnostic reaches every face.
 It is workspace-level because the closure is (rsdl §3.1): a component declared
 in one package offers a service declared in another and is placed by a
 `deployment` declared in a third, so no per-package pass can see a closure. The
-package checks (`check_package`) are unchanged by rsdl, and the two queries do
-not depend on each other; the rsdl query reads the package resolver only to bind
-a reference in a member line.
+package checks (`check_package`) are unchanged by rsdl. The dependency between
+the two queries runs one way: the rsdl query reads the package resolver to bind
+a reference in a member line, and reads the package IR of each interface a
+`requires` line names, or of the package of the service an inline-shape line
+names (`check_package(..).ir`), for the resolved timing of its events, which is
+what the depth warnings RSDL-805 and RSDL-806 compare a declared `depth`
+against. `check_package` never reads the rsdl query. The IR read is skipped when
+no deployment can be checked — none is declared, or every one is blocked by an
+RSDL-7xx error — and salsa memoises it otherwise, so a `.rsdl` edit does not
+re-run the package checks of any other package. A `.rsdl` file is a package
+file, so an edit re-runs the checks of its own package.
 
 The query returns `CheckedSystem`, the collected model with its diagnostics.
 Every entry in the model carries the source site it is written at, which is what

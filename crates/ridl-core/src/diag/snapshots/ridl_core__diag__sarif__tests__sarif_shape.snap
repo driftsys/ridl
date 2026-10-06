@@ -1278,10 +1278,39 @@ expression: log
               }
             },
             {
+              "id": "RSDL-709",
+              "shortDescription": {
+                "text": "a `depth`, `slots` or `budget` value is not an integer within its range, or the key is written bare"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
               "id": "RSDL-804",
               "name": "unclaimed-backend-key",
               "shortDescription": {
                 "text": "a backend key whose namespace no configured backend claims"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "RSDL-805",
+              "name": "depth-below-bound",
+              "shortDescription": {
+                "text": "a declared `depth` is below `ceil(max / min)` for an event a covered link consumes"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "RSDL-806",
+              "name": "depth-underivable",
+              "shortDescription": {
+                "text": "an event whose contract bound is not derivable is consumed by a link with no declared `depth`"
               },
               "defaultConfiguration": {
                 "level": "warning"
@@ -1554,7 +1583,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 155,
+          "ruleIndex": 158,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

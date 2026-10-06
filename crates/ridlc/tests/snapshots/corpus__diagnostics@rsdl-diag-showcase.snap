@@ -58,42 +58,106 @@ error[RSDL-908]: `tier` is `PLATFORM` or `APPLICATION` (rsdl reference §3.3)
    │                     ^^^^^^^^^^^^^
 
 warning[RSDL-804]: no configured backend claims the namespace `linux`, so `linux.cpuset` is carried uninterpreted (rsdl reference §5)
-   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:29:12
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:30:12
    │
-29 │     Lane [ linux.cpuset = (2, 3) ]
+30 │     Lane [ linux.cpuset = (2, 3) ]
    │            ^^^^^^^^^^^^^^^^^^^^^
    │
    = lint: `unclaimed-backend-key` (set its level in `[lints]` in ridl.toml)
 
-error[FORM-107]: attribute `tier` not valid on a `component` (rsdl reference §5)
-   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:42:3
+warning[RSDL-806]: `Driver` in `Bench` declares no `depth` for `rsdl.showcase.Alerts.released`, whose timing is an explicit half-open range — a link to an event with no derivable bound takes its ring depth from `depth = <n>` on the placement line or on the deployment (rsdl reference §5)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:31:43
    │
-42 │   tier = PLATFORM,
+31 │     Chassis, Brakes, Front, Rear, Hooter, Driver, Fleet, Siren, Dash [ depth = 2 ]
+   │                                           ^^^^^^
+   │
+   = lint: `depth-underivable` (set its level in `[lints]` in ridl.toml)
+
+warning[RSDL-805]: `depth = 2` on `Dash` in `Bench` is below the contract bound 10 of `rsdl.showcase.Alerts.honked` — the bound is `ceil(max / min)` over the event's timing, and a ring below it can drop occurrences alive at once (rsdl reference §5)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:31:72
+   │
+31 │     Chassis, Brakes, Front, Rear, Hooter, Driver, Fleet, Siren, Dash [ depth = 2 ]
+   │                                                                        ^^^^^^^^^
+   │
+   = lint: `depth-below-bound` (set its level in `[lints]` in ridl.toml)
+
+error[FORM-107]: attribute `tier` not valid on a `component` (rsdl reference §5)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:43:3
+   │
+43 │   tier = PLATFORM,
    │   ^^^^^^^^^^^^^^^
 
 error[FORM-108]: duplicate attribute key `labels`
-   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:44:3
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:45:3
    │
-44 │   labels = (QM),
+45 │   labels = (QM),
    │   ^^^^^^^^^^^^^
 
 error[FORM-101]: expected `deprecated = "reason"`, a string literal (rsdl reference §5)
-   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:45:3
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:46:3
    │
-45 │   deprecated = draft,
+46 │   deprecated = draft,
    │   ^^^^^^^^^^^^^^^^^^
 
 error[RSDL-305]: `instances` takes a parenthesised list of one or more camelCase names, such as `instances = (primary, backup)` (rsdl reference §7)
-   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:46:3
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:47:3
    │
-46 │   instances = solo,
+47 │   instances = solo,
    │   ^^^^^^^^^^^^^^^^
 
 error[RSDL-313]: `external` is a flag and takes no value — write `[ external ]` (rsdl reference §5)
-   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:47:3
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:48:3
    │
-47 │   external = true,
+48 │   external = true,
    │   ^^^^^^^^^^^^^^^
+
+error[RSDL-701]: `Rear.Unit` is placed on no machine of `Road` — every instance of the closure is on exactly one machine per deployment (rsdl reference §9)
+  ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:7:12
+  │
+7 │ deployment Road for Showcase [ slots = 0 ] {
+  │            ^^^^
+
+error[RSDL-709]: `slots` takes an integer from 1 to 65536, written `slots = <n>`; `0` is not one (rsdl reference §5)
+  ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:7:32
+  │
+7 │ deployment Road for Showcase [ slots = 0 ] {
+  │                                ^^^^^^^^^
+
+error[RSDL-705]: `Ecu` is declared twice in `Road` — a machine name is unique in its deployment (rsdl reference §3.5)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:11:11
+   │
+11 │   machine Ecu { Hooter }
+   │           ^^^
+
+error[RSDL-706]: `Hooter.left` is placed twice in `Road` — first on `Ecu` (rsdl reference §9)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:11:17
+   │
+11 │   machine Ecu { Hooter }
+   │                 ^^^^^^
+
+error[RSDL-707]: `Cloud` is an `external` machine and hosts external components only, and `Driver` is implemented in this workspace (rsdl reference §9)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:13:32
+   │
+13 │   machine Cloud [ external ] { Driver }
+   │                                ^^^^^^
+
+error[RSDL-702]: `Draft` is outside the closure of `Showcase` — a machine places closure components, their instances and the lone services the system lists (rsdl reference §9)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:15:19
+   │
+15 │   machine Spare { Draft }
+   │                   ^^^^^
+
+error[RSDL-704]: `Nowhere` names no declared `system` — a deployment is `for` the workspace's system (rsdl reference §3.4)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:31:20
+   │
+31 │ deployment Lab for Nowhere {}
+   │                    ^^^^^^^
+
+error[RSDL-708]: a deployment named `Bench` is already declared in the workspace — a deployment name is unique (rsdl reference §3.4)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:35:12
+   │
+35 │ deployment Bench for Second {}
+   │            ^^^^^
 
 error[TYPL-009]: duplicate declaration of `Flag`
   ┌─ tests/corpus/rsdl-diag-showcase/names.rsdl:6:11
@@ -182,27 +246,27 @@ error[RSDL-403]: no closure service lists `rsdl.showcase.Wiper`, which `Driver` 
    │            ^^^^^
 
 error[RSDL-308]: `Echo` requires `rsdl.showcase.echo`, which `rsdl.showcase.echo` lists, and `Echo` offers `rsdl.showcase.echo` — a component cannot be in its own provider set (rsdl reference §3.2)
-   ┌─ tests/corpus/rsdl-diag-showcase/resolution.rsdl:25:12
+   ┌─ tests/corpus/rsdl-diag-showcase/resolution.rsdl:27:12
    │
-25 │   requires rsdl.showcase.echo
+27 │   requires rsdl.showcase.echo
    │            ^^^^^^^^^^^^^^^^^^
 
 error[RSDL-901]: `Base` has tier `PLATFORM` and depends on `App`, which has tier `APPLICATION`: `Driver` requires `rsdl.showcase.Horn`, which `Hooter` offers — tier inversion (rsdl reference §3.3)
   ┌─ tests/corpus/rsdl-diag-showcase/distribution.rsdl:8:14
   │
-8 │ distribution Base [ tier = PLATFORM ] { Driver, Chassis, Driver }
+8 │ distribution Base [ tier = PLATFORM ] { Driver, Chassis, Driver, Siren, Dash }
   │              ^^^^
 
 error[RSDL-905]: `Chassis` is already in the distribution `Adas` — an implemented closure component is in exactly one (rsdl reference §3.3)
   ┌─ tests/corpus/rsdl-diag-showcase/distribution.rsdl:8:49
   │
-8 │ distribution Base [ tier = PLATFORM ] { Driver, Chassis, Driver }
+8 │ distribution Base [ tier = PLATFORM ] { Driver, Chassis, Driver, Siren, Dash }
   │                                                 ^^^^^^^
 
 error[RSDL-906]: `Driver` is listed twice in `Base` (rsdl reference §3.3)
   ┌─ tests/corpus/rsdl-diag-showcase/distribution.rsdl:8:58
   │
-8 │ distribution Base [ tier = PLATFORM ] { Driver, Chassis, Driver }
+8 │ distribution Base [ tier = PLATFORM ] { Driver, Chassis, Driver, Siren, Dash }
   │                                                          ^^^^^^
 
 error[RSDL-903]: `Nothing` is not a component of the closure of `Showcase` — a distribution lists closure components and the lone services the system lists (rsdl reference §3.3)
@@ -216,45 +280,3 @@ error[RSDL-907]: `Fleet` is external, and an external component is in no distrib
    │
 13 │ distribution App [ tier = APPLICATION ] { Hooter, Nothing, Fleet }
    │                                                            ^^^^^
-
-error[RSDL-701]: `Rear.Unit` is placed on no machine of `Road` — every instance of the closure is on exactly one machine per deployment (rsdl reference §9)
-  ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:5:12
-  │
-5 │ deployment Road for Showcase {
-  │            ^^^^
-
-error[RSDL-705]: `Ecu` is declared twice in `Road` — a machine name is unique in its deployment (rsdl reference §3.5)
-  ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:9:11
-  │
-9 │   machine Ecu { Hooter }
-  │           ^^^
-
-error[RSDL-706]: `Hooter.left` is placed twice in `Road` — first on `Ecu` (rsdl reference §9)
-  ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:9:17
-  │
-9 │   machine Ecu { Hooter }
-  │                 ^^^^^^
-
-error[RSDL-707]: `Cloud` is an `external` machine and hosts external components only, and `Driver` is implemented in this workspace (rsdl reference §9)
-   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:11:32
-   │
-11 │   machine Cloud [ external ] { Driver }
-   │                                ^^^^^^
-
-error[RSDL-702]: `Draft` is outside the closure of `Showcase` — a machine places closure components, their instances and the lone services the system lists (rsdl reference §9)
-   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:13:19
-   │
-13 │   machine Spare { Draft }
-   │                   ^^^^^
-
-error[RSDL-704]: `Nowhere` names no declared `system` — a deployment is `for` the workspace's system (rsdl reference §3.4)
-   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:18:20
-   │
-18 │ deployment Lab for Nowhere {}
-   │                    ^^^^^^^
-
-error[RSDL-708]: a deployment named `Bench` is already declared in the workspace — a deployment name is unique (rsdl reference §3.4)
-   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:22:12
-   │
-22 │ deployment Bench for Second {}
-   │            ^^^^^

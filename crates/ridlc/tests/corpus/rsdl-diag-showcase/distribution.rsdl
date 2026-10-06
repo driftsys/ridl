@@ -5,7 +5,7 @@ package rsdl.showcase
 // `APPLICATION`.
 // RSDL-905 (§3.3): `Chassis` is already in `Adas` (attributes.rsdl).
 // RSDL-906 (§3.3): `Driver` is listed twice in `Base`.
-distribution Base [ tier = PLATFORM ] { Driver, Chassis, Driver }
+distribution Base [ tier = PLATFORM ] { Driver, Chassis, Driver, Siren, Dash }
 
 // RSDL-903 (§3.3): `Nothing` is not a closure component.
 // RSDL-907 (§3.3): `Fleet` is external, and an external component is in no

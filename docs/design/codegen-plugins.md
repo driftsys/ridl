@@ -396,8 +396,8 @@ FlatBuffers, so the choice does not change a size.
 
 ### The depth rule
 
-A `Depth` is an optional value and the source of that value. Two sources are
-written today.
+A `Depth` is an optional value and the source of that value. Three sources are
+written.
 
 - **Derived.** An event's depth is the contract bound, `ceil(max / min)` over
   the event's resolved timing
@@ -414,19 +414,28 @@ written today.
   is zero, because a depth is at least 1; and when the quotient does not fit in
   32 bits. The emitter records every one of these the way it records a missing
   bound.
+- **Declared.** The value is the `depth` that an rsdl key states, resolved for
+  the link by the precedence of
+  [the rsdl language reference](../specification/rsdl-language-reference.md) §5:
+  the placement line of the consuming instance, then the deployment. A declared
+  value replaces the derived one, whether it is above or below the contract
+  bound.
 
-Every consumer link of an event channel carries the member's depth. The
-channel's ring depth is the maximum over its consumer links, with the source of
-the link that supplies it, and it is absent when any link's depth is absent. An
-event channel with no consumer link takes the member's contract bound as its
-ring depth.
+Every consumer link of an event channel carries the declared depth when one
+resolves for it, and the member's derived depth otherwise. The channel's ring
+depth is the maximum over its consumer links, with the source of the link that
+supplies it: on an equal value, the declared link supplies the source. It is
+absent when any link's depth is absent. An event channel with no consumer link
+takes the member's contract bound as its ring depth.
 
-The schema also names a declared source, for a value that an rsdl key states. No
-rsdl key states a depth today, so no value is written with it.
+The resolution is per key, so a placement line that writes `slots` alone still
+takes the deployment's `depth` and `budget`.
 
-A **command or query channel** carries sixteen slots on each consumer link, with
-the default source, and no budget: the budget is absent and its source is
-unspecified. A **signal or fixed channel** carries no sizing fields.
+A **command or query channel** carries on each consumer link the declared
+`slots` with the declared source, or sixteen slots with the default source when
+none is declared. It carries the declared `budget` with the declared source, or
+no budget when none is declared, in which case the budget is absent and its
+source is unspecified. A **signal or fixed channel** carries no sizing fields.
 
 ### The selection
 

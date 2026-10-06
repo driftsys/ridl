@@ -39,3 +39,12 @@ service rsdl.showcase.lights {
 service rsdl.showcase.echo {
   signal ping: Flag @[100ms..1s]
 }
+
+// The events the depth rules of rsdl §5 read: `honked` has the contract bound
+// `ceil(1s / 100ms)` = 10; `released` is half-open and has none.
+interface Alerts {
+  event honked: Flag @[100ms..1s]
+  event released: Flag @[100ms..]
+}
+
+service rsdl.showcase.alerts : Alerts
