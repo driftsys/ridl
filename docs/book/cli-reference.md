@@ -636,9 +636,9 @@ Those of a workspace build belong to no one package, so their line reads
 The marker is the first line because `rustfmt` looks for `@generated` only in
 the first 5 lines of a file. It carries no version and no timestamp, so a
 regeneration with the same inputs gives the same bytes. The TypeScript file has
-`/* eslint-disable */` after the comment block. The IR dumps (JSON and
-prototext), the `<base>.codegen.json` file and the `<base>.catalog.binfb` file
-carry no marker.
+`/* eslint-disable */` after the comment block. The IR dumps (JSON,
+prototext and binary), the `<base>.codegen.json` file and the
+`<base>.catalog.binfb` file carry no marker.
 
 **A licence header goes after the marker.** `[codegen] header-file` in the
 workspace root's `ridl.toml` (or in the `ridl.toml` of a standalone package)
@@ -657,7 +657,8 @@ whitespace from each line and drops leading and trailing blank lines, so a file
 with no text left means no header. A blank line inside the text becomes a bare
 comment token. Single-file mode has no manifest and writes no header. MANI-011
 is an error when the file cannot be read, when it is not UTF-8, and when it
-contains a control character other than a tab and a line break; `ridl check`
+contains a control character, which means a C0, DEL or C1 character (U+0085
+included), U+2028 or U+2029, other than a tab and a line break; `ridl check`
 reports it too. MANI-012 is an error when the manifest of a workspace member
 sets the key: only the root sets it.
 

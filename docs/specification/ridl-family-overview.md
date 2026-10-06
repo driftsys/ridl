@@ -319,24 +319,24 @@ Lexical errors are `0xx`, parse errors `1xx`, and the attribute-block rules
 The manifest codes are `0xx`; the distribution codes — lockfile, cache, fetch —
 are `1xx`.
 
-| Code     | Rule                                                        | Severity |
-| -------- | ----------------------------------------------------------- | -------- |
-| MANI-001 | invalid manifest TOML                                       | error    |
-| MANI-002 | manifest declares both `[package]` and `[workspace]`        | error    |
-| MANI-003 | manifest declares neither `[package]` nor `[workspace]`     | error    |
-| MANI-004 | nested workspace — a member manifest declares `[workspace]` | error    |
-| MANI-005 | unknown manifest key                                        | warning  |
-| MANI-006 | invalid package name — not lowercase dot-separated segments | error    |
-| MANI-007 | invalid import URL                                          | error    |
-| MANI-008 | workspace member directory is missing or has no `ridl.toml` | error    |
-| MANI-009 | invalid `[defaults]` timing value (ridl §9.1)               | error    |
-| MANI-010 | `[lints]` entry names no lint, or its value is not a level  | warning  |
-| MANI-011 | `[codegen] header-file` cannot be read                      | error    |
-| MANI-012 | `[codegen] header-file` is set in a workspace member        | error    |
-| MANI-101 | remote import fetch failed                                  | error    |
-| MANI-102 | fetched content hash does not match the lockfile            | error    |
-| MANI-103 | `--frozen`: no lockfile entry for a remote import           | error    |
-| MANI-104 | `--frozen`: a lockfile-pinned import is not cached          | error    |
+| Code     | Rule                                                                | Severity |
+| -------- | ------------------------------------------------------------------- | -------- |
+| MANI-001 | invalid manifest TOML                                               | error    |
+| MANI-002 | manifest declares both `[package]` and `[workspace]`                | error    |
+| MANI-003 | manifest declares neither `[package]` nor `[workspace]`             | error    |
+| MANI-004 | nested workspace — a member manifest declares `[workspace]`         | error    |
+| MANI-005 | unknown manifest key                                                | warning  |
+| MANI-006 | invalid package name — not lowercase dot-separated segments         | error    |
+| MANI-007 | invalid import URL                                                  | error    |
+| MANI-008 | workspace member directory is missing or has no `ridl.toml`         | error    |
+| MANI-009 | invalid `[defaults]` timing value (ridl §9.1)                       | error    |
+| MANI-010 | `[lints]` entry names no lint, or its value is not a level          | warning  |
+| MANI-011 | `[codegen] header-file` cannot be read or holds a control character | error    |
+| MANI-012 | `[codegen] header-file` is set in a workspace member                | error    |
+| MANI-101 | remote import fetch failed                                          | error    |
+| MANI-102 | fetched content hash does not match the lockfile                    | error    |
+| MANI-103 | `--frozen`: no lockfile entry for a remote import                   | error    |
+| MANI-104 | `--frozen`: a lockfile-pinned import is not cached                  | error    |
 
 MANI-009 is the one manifest code the manifest layer does not raise: `ridl-core`
 cannot depend on `ridl-sem`, so the manifest parser stores the `[defaults]`

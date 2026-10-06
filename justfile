@@ -370,7 +370,8 @@ compat-check: toolchain-check
 # failing to compile; the program exiting non-zero or not reporting all four
 # round trips; the lock being out of date; the consumer being unformatted or
 # drawing a clippy warning; the generated crate drawing a clippy warning that
-# its `lib.rs` does not allow, or an allow that no longer fires; a planus crate
+# its `lib.rs` does not allow, or an allow that no longer fires; a `lib.rs`
+# with no `#![allow(` line to rewrite; a planus crate
 # in the resolved graph of `examples/cabin`; the planus check running no test or
 # more than one, which is what a renamed test or a changed filter does.
 #

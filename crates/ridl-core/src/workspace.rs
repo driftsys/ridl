@@ -2554,12 +2554,18 @@ service:veh.common.climate 2
             &format!("{PACKAGE_A}\n[codegen]\nheader-file = \"H.txt\"\n"),
         );
         dir.write("a.typl", "package a\ntype A: integer [0..1]\n");
-        dir.write("H.txt", "A\u{0}B\n");
+        dir.write("H.txt", "A\u{2028}B\u{0}\n");
         let mut db = RidlDatabase::default();
         let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
         assert_eq!(codes(&loaded.diagnostics), vec!["MANI-011"]);
-        let message = &loaded.diagnostics[0].message;
+        let diag = &loaded.diagnostics[0];
+        let manifest = fs::read_to_string(dir.path().join("ridl.toml")).unwrap();
+        let start = usize::from(diag.primary.range.start());
+        let end = usize::from(diag.primary.range.end());
+        assert_eq!(&manifest[start..end], "\"H.txt\"");
+        let message = &diag.message;
         assert!(message.contains("control character"), "{message}");
+        assert!(message.contains("U+2028"), "{message}");
         assert!(
             message.contains(&dir.path().join("H.txt").display().to_string()),
             "{message}"

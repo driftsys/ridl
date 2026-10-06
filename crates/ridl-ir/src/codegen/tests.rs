@@ -2680,6 +2680,21 @@ fn header_control_character_finds_a_control_character_other_than_tab_and_line_br
         Some('\u{1b}')
     );
     assert_eq!(super::header_control_character("A\u{7f}"), Some('\u{7f}'));
+    for c in ['\u{2028}', '\u{2029}', '\u{85}', '\x0b', '\x0c'] {
+        assert_eq!(
+            super::header_control_character(&format!("A{c}B")),
+            Some(c),
+            "{c:?}"
+        );
+    }
+    assert_eq!(
+        super::header_control_character("A\u{2028}B\u{0}"),
+        Some('\u{2028}')
+    );
+    assert_eq!(
+        super::header_control_character("A\u{0}B\u{2028}"),
+        Some('\u{0}')
+    );
 }
 
 #[test]

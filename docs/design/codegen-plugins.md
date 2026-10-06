@@ -79,8 +79,8 @@ name, also in single-file mode, composed by
 `[codegen] header-file`, normalised by `ridl_ir::codegen::normalise_header`: a
 `\r\n`, a `\n` and a lone `\r` are each one line break, so the text holds no
 `\r`; no line keeps trailing whitespace; there is no leading or trailing blank
-line. The loader first refuses (MANI-011) a file with a control character other
-than a tab and a line break, found by
+line. The loader first refuses (MANI-011) a file with a control character (C0,
+DEL, C1, U+2028 or U+2029, other than a tab and a line break), found by
 `ridl_ir::codegen::header_control_character`. Both fields are additive under the
 IR specification §6, with no change to `SCHEMA`. The JSON writer emits both keys
 in every request (pbjson `emit_fields` is on), so a project with no header sends

@@ -129,13 +129,16 @@ pub fn generated_marker(package: Option<&str>) -> String {
 }
 
 /// The first character of a header text that a generated file cannot carry:
-/// a C0 control character or DEL, other than a tab and the line-break
-/// characters `\n` and `\r`. `None` when the text holds none. The workspace
-/// loader reports such a header as MANI-011, so [`normalise_header`] only sees
-/// text without one.
+/// every character for which [`char::is_control`] is true (C0, DEL and C1,
+/// U+0085 included) other than a tab, a `\n` and a `\r`, and the line and
+/// paragraph separators U+2028 and U+2029, which end a `//` comment in
+/// TypeScript. `None` when the text holds none. The workspace loader reports
+/// such a header as MANI-011, so [`normalise_header`] only sees text without
+/// one.
 pub fn header_control_character(text: &str) -> Option<char> {
-    text.chars()
-        .find(|c| c.is_ascii_control() && !matches!(c, '\t' | '\n' | '\r'))
+    text.chars().find(|c| {
+        (c.is_control() && !matches!(c, '\t' | '\n' | '\r')) || matches!(c, '\u{2028}' | '\u{2029}')
+    })
 }
 
 /// Normalises a header text: each of `\r\n`, `\n` and a lone `\r` is one line

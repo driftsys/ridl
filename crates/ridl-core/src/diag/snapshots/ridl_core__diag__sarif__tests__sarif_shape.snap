@@ -1454,7 +1454,7 @@ expression: log
             {
               "id": "MANI-011",
               "shortDescription": {
-                "text": "`[codegen] header-file` cannot be read"
+                "text": "`[codegen] header-file` cannot be read or holds a control character"
               },
               "defaultConfiguration": {
                 "level": "error"
