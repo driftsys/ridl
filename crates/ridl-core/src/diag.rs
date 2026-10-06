@@ -10,8 +10,8 @@
 //! # Namespaces (ADR-0007 decision 2)
 //!
 //! Codes are grouped by hundreds and never renumbered or reused; a code
-//! retired from a catalogue is listed in [`RETIRED_RIDL_CODES`], and a guard
-//! keeps it out. Five namespaces are in play across the family, one catalogue
+//! retired from a catalogue is listed in [`RETIRED_RIDL_CODES`] or
+//! [`RETIRED_TYPL_CODES`], and a guard keeps it out. Five namespaces are in play across the family, one catalogue
 //! each:
 //!
 //! - `FORM-…` — the shared family grammar: lexical `0xx`, parse `1xx`, and the
@@ -179,7 +179,16 @@ macro_rules! diag_codes {
 /// `codes_written_as_string_literals_are_all_catalogued`; the guard
 /// `retired_ridl_codes_are_never_redeclared` keeps the numbers out of
 /// [`RIDL_CATALOG`].
-pub const RETIRED_RIDL_CODES: &[u16] = &[146, 147, 148];
+///
+/// RIDL-415 (`package-fan-out`) was a design-lint calibration candidate that
+/// did not ship; its number is retired too.
+pub const RETIRED_RIDL_CODES: &[u16] = &[146, 147, 148, 415];
+
+/// The `TYPL-` codes retired without shipping. TYPL-223
+/// (`inconsistent-abbreviation`) was a design-lint calibration candidate that
+/// the corpus calibration did not ship; its number is never reused.
+/// `retired_typl_codes_are_never_redeclared` keeps it out of [`TYPL_CATALOG`].
+pub const RETIRED_TYPL_CODES: &[u16] = &[223];
 
 diag_codes! {
     /// The FORM catalogue (ADR-0007 decision 2): lexical `0xx`, parse `1xx`, and
@@ -1885,6 +1894,23 @@ mod tests {
                 .unwrap_or_else(|| panic!("`{code}` is not spelled `RIDL-NNN`"));
             assert!(
                 !RETIRED_RIDL_CODES.contains(&number),
+                "`{code}` is retired and must not be declared again",
+            );
+        }
+    }
+
+    /// A retired `TYPL-` code is never declared again: every number in
+    /// [`RETIRED_TYPL_CODES`] stays out of the `TYPL-` catalogue.
+    #[test]
+    fn retired_typl_codes_are_never_redeclared() {
+        for entry in TYPL_CATALOG {
+            let code = entry.code.as_str();
+            let number: u16 = code
+                .strip_prefix("TYPL-")
+                .and_then(|digits| digits.parse().ok())
+                .unwrap_or_else(|| panic!("`{code}` is not spelled `TYPL-NNN`"));
+            assert!(
+                !RETIRED_TYPL_CODES.contains(&number),
                 "`{code}` is retired and must not be declared again",
             );
         }

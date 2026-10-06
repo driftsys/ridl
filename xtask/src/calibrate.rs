@@ -1935,4 +1935,90 @@ mod tests {
         run_at(&fixture.0, &["--derive".into(), "--write".into()]).unwrap();
         assert_eq!(std::fs::read_to_string(summary_path).unwrap(), canonical);
     }
+
+    fn repository_root() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask lives one level below the repository root")
+            .to_path_buf()
+    }
+
+    /// The value of `const <name>: usize = <n>;` in a source file.
+    fn usize_constant(root: &Path, file: &str, name: &str) -> usize {
+        let text = std::fs::read_to_string(root.join(file)).unwrap();
+        let marker = format!("const {name}: usize = ");
+        let rest = text
+            .split_once(&marker)
+            .unwrap_or_else(|| panic!("{file} has no `{marker}`"))
+            .1;
+        rest.split_once(';').unwrap().0.trim().parse().unwrap()
+    }
+
+    /// The default level written for a code in the diagnostic catalogue.
+    fn catalogue_level(root: &Path, code: &str) -> String {
+        let text = std::fs::read_to_string(root.join("crates/ridl-core/src/diag.rs")).unwrap();
+        let marker = format!("= \"{code}\", ");
+        let rest = text
+            .split_once(&marker)
+            .unwrap_or_else(|| panic!("diag.rs declares no `{code}`"))
+            .1;
+        rest.split_once(',').unwrap().0.to_string()
+    }
+
+    /// The selected level and threshold of one check in the summary text.
+    fn selected(summary: &str, check: &str) -> (String, String) {
+        let section = summary
+            .split_once(&format!("## {check}\n"))
+            .unwrap_or_else(|| panic!("summary has no section for {check}"))
+            .1;
+        let line = section
+            .lines()
+            .find(|line| line.starts_with("Selected level: "))
+            .unwrap();
+        let level = line["Selected level: ".len()..].split('.').next().unwrap();
+        let threshold = line
+            .split_once("Threshold: ")
+            .map(|(_, rest)| rest.split_once(". Retained").unwrap().0.to_string())
+            .unwrap_or_default();
+        (level.to_string(), threshold)
+    }
+
+    /// `evals/README.md` states that `evals/calibration/summary.md` is the
+    /// unchanged output of `derive`. The committed labels also have to agree
+    /// with the thresholds and levels compiled into the checks.
+    #[test]
+    fn committed_summary_is_the_derivation_of_the_committed_labels() {
+        let root = repository_root();
+        let derived = read_calibration(&root).unwrap();
+        let committed = std::fs::read_to_string(root.join("evals/calibration/summary.md")).unwrap();
+        assert!(
+            derived == committed,
+            "evals/calibration/summary.md is not the output of `cargo xtask calibrate derive`"
+        );
+
+        let cohesion = "crates/ridlc/src/design_lints/cohesion.rs";
+        let shapes = "crates/ridlc/src/design_lints/shapes.rs";
+        let (level, threshold) = selected(&derived, "low-cohesion-interface");
+        assert_eq!(
+            threshold,
+            format!(
+                "groups >= {}, min group size >= {}",
+                usize_constant(&root, cohesion, "LOW_COHESION_MIN_GROUPS"),
+                usize_constant(&root, cohesion, "LOW_COHESION_MIN_GROUP_SIZE"),
+            )
+        );
+        assert_eq!(level, catalogue_level(&root, "RIDL-414"));
+        let (level, threshold) = selected(&derived, "duplicate-shape");
+        assert_eq!(
+            threshold,
+            format!(
+                "fields >= {}, variants >= {}",
+                usize_constant(&root, shapes, "DUPLICATE_SHAPE_MIN_FIELDS"),
+                usize_constant(&root, shapes, "DUPLICATE_SHAPE_MIN_VARIANTS"),
+            )
+        );
+        assert_eq!(level, catalogue_level(&root, "TYPL-224"));
+        let (level, _) = selected(&derived, "inconsistent-unit");
+        assert_eq!(level, catalogue_level(&root, "TYPL-222"));
+    }
 }
