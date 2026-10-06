@@ -787,8 +787,8 @@ fn interaction_timing(decl: &v2::Decl) -> Option<Option<&v2::Timing>> {
 }
 
 /// The declared timing of a command or query; `None` for other kinds, and
-/// `Some(None)` for an RPC that declares no bounds (never defaulted,
-/// ADR-0015 decision 4).
+/// `Some(None)` for an RPC with no bound at all. An RPC bound may come from a
+/// default (ADR-0015 decisions 4 and 7, as amended).
 fn rpc_timing(decl: &v2::Decl) -> Option<Option<&v2::Timing>> {
     use v2::decl::Kind;
     match &decl.kind {
@@ -1225,7 +1225,9 @@ pub fn explain(category: Category) -> &'static str {
         Category::RpcBoundChanged => concat!(
             "A command or query declared RPC bound changed (ADR-0015 d8).\n",
             "  compatible  min lowered (the caller may call more often) or max lowered\n",
-            "              (a stronger provider promise), with the mode unchanged\n",
+            "              (a stronger provider promise), with the mode unchanged;\n",
+            "              default_applied flipped over identical resolved bounds — a\n",
+            "              default made explicit\n",
             "  breaking    min raised — on an RPC, min is the call throttle and\n",
             "              constrains the caller, so raising it withdraws a call rate\n",
             "              the caller was entitled to use; max raised (a weaker provider\n",
@@ -1235,7 +1237,9 @@ pub fn explain(category: Category) -> &'static str {
             "              is why this is a category of its own rather than a branch:\n",
             "              a missed branch would inherit the signal rule and call a\n",
             "              raised RPC min compatible (ADR-0012 d9, fail closed).\n",
-            "              RPC bounds are never defaulted (ridl 9.1 does not apply)"
+            "              an RPC bound may come from a default, and diff compares\n",
+            "              resolved bounds, so editing a default surfaces here on\n",
+            "              every defaulted command or query (ridl 9.1)"
         ),
         Category::ContractChanged => concat!(
             "A command or query require/ensure clause set changed (ridl 13).\n",
