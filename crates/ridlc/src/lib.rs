@@ -1611,16 +1611,11 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         &mut sources,
     ));
 
-    let std_ir = check_package(db, workspace, std, std).ir;
-    let ir_packages: Vec<_> = checked.iter().map(|package| &package.ir).collect();
-    let lowered_system = lower_system(&system, &ir_packages);
     diagnostics.extend(check_design_lints(
         db,
         &packages,
         &checked,
         &resolutions,
-        &std_ir,
-        lowered_system.as_ref(),
         &mut sources,
     ));
 

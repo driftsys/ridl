@@ -512,20 +512,12 @@ fn shared_pass_reads_inline_scalar_backing_in_the_current_render_map() {
     };
     scalar.backing.as_mut().unwrap().kind = Some(backing::Kind::Unit("m/s".to_string()));
     ty.optional = true;
-    let std_ir = ridl_sem::check_package(&db, workspace, std, std).ir;
     let mut sources = SourceMap::new();
     // An unrelated file must not displace the shared pass's diagnostic span.
     sources.file_id("earlier.ridl", "package earlier\n");
     let source_id = sources.file_id("a.ridl", &source);
-    let diagnostics = ridlc::check_design_lints(
-        &db,
-        &[package],
-        &[checked],
-        &[resolution],
-        &std_ir,
-        None,
-        &mut sources,
-    );
+    let diagnostics =
+        ridlc::check_design_lints(&db, &[package], &[checked], &[resolution], &mut sources);
     let found = units(&diagnostics);
     assert_eq!(found.len(), 1, "{diagnostics:?}");
     assert_eq!(found[0].primary.file, source_id);
@@ -656,15 +648,8 @@ fn shared_pass_excludes_standard_package_sites_from_unit_counts() {
         assert_no_errors(&package.diagnostics);
     }
     let mut sources = SourceMap::new();
-    let diagnostics = ridlc::check_design_lints(
-        &db,
-        &packages,
-        &checked,
-        &resolutions,
-        &checked[1].ir,
-        None,
-        &mut sources,
-    );
+    let diagnostics =
+        ridlc::check_design_lints(&db, &packages, &checked, &resolutions, &mut sources);
     let found = units(&diagnostics);
     assert_eq!(found.len(), 1, "{diagnostics:?}");
     assert_eq!(
@@ -726,17 +711,9 @@ fn design_source_set_with(
         assert_no_errors(&package.diagnostics);
     }
     amend(&mut checked);
-    let std_ir = ridl_sem::check_package(&db, workspace, std, std).ir;
     let mut sources = SourceMap::new();
-    let diagnostics = ridlc::check_design_lints(
-        &db,
-        &packages,
-        &checked,
-        &resolutions,
-        &std_ir,
-        None,
-        &mut sources,
-    );
+    let diagnostics =
+        ridlc::check_design_lints(&db, &packages, &checked, &resolutions, &mut sources);
     (diagnostics, sources)
 }
 

@@ -3,7 +3,6 @@
 use ridl_core::RidlDatabase;
 use ridl_core::diag::{Diagnostic, SourceMap};
 use ridl_core::package::Package;
-use ridl_ir::v2;
 use ridl_sem::{CheckedPackage, Resolution};
 
 mod cohesion;
@@ -26,29 +25,15 @@ pub fn check_design_lints(
     packages: &[Package],
     checked: &[CheckedPackage],
     resolutions: &[Resolution],
-    std_ir: &v2::Package,
-    system: Option<&v2::System>,
     sources: &mut SourceMap,
 ) -> Vec<Diagnostic> {
     let sites = SiteIndex::new(db, packages, resolutions, sources);
-    run(&Ctx {
-        db,
-        checked,
-        resolutions,
-        std_ir,
-        system,
-        sites,
-    })
+    run(&Ctx { checked, sites })
 }
 
-// The remaining design checks consume the shared context and indexed sites.
-#[allow(dead_code)]
+// The design checks consume the checked packages and the indexed sites.
 pub(crate) struct Ctx<'a> {
-    pub db: &'a RidlDatabase,
     pub checked: &'a [CheckedPackage],
-    pub resolutions: &'a [Resolution],
-    pub std_ir: &'a v2::Package,
-    pub system: Option<&'a v2::System>,
     pub sites: SiteIndex,
 }
 
