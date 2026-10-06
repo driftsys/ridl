@@ -1293,9 +1293,10 @@ diag_codes! {
         MANI_010 = "MANI-010", Warning,
             "`[lints]` entry names no lint, or its value is not a level", lint = "unknown-lint";
 
-        /// The file named by `[codegen] header-file` cannot be read: it does not
-        /// exist, an I/O error occurred, or its text is not UTF-8. The message
-        /// names the resolved path.
+        /// The file named by `[codegen] header-file` cannot be used: it cannot
+        /// be read (it does not exist, or an I/O error occurred), its text is
+        /// not UTF-8, or it contains a control character other than a tab and a
+        /// line break. The message names the resolved path.
         MANI_011 = "MANI-011", Error,
             "`[codegen] header-file` cannot be read";
 

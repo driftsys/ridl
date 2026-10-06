@@ -411,6 +411,10 @@ demo:
     # missing and a stale entry fail. The trap restores the file on any exit.
     trap 'mv examples/cabin/generated/lib.rs.bak examples/cabin/generated/lib.rs' EXIT
     sed -i.bak 's/^#!\[allow(/#![expect(/' examples/cabin/generated/lib.rs
+    if ! grep -q '^#!\[expect(' examples/cabin/generated/lib.rs; then
+        echo "demo: examples/cabin/generated/lib.rs has no #![allow( line to rewrite to #![expect(" >&2
+        exit 1
+    fi
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p veh_cabin --locked --no-deps -- -D warnings
     mv examples/cabin/generated/lib.rs.bak examples/cabin/generated/lib.rs
     trap - EXIT

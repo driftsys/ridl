@@ -128,9 +128,23 @@ pub fn generated_marker(package: Option<&str>) -> String {
     }
 }
 
-/// Normalises a header text: no `\r`, no trailing whitespace on a line, no
-/// leading or trailing blank line. `None` when no text is left.
+/// The first character of a header text that a generated file cannot carry:
+/// a C0 control character or DEL, other than a tab and the line-break
+/// characters `\n` and `\r`. `None` when the text holds none. The workspace
+/// loader reports such a header as MANI-011, so [`normalise_header`] only sees
+/// text without one.
+pub fn header_control_character(text: &str) -> Option<char> {
+    text.chars()
+        .find(|c| c.is_ascii_control() && !matches!(c, '\t' | '\n' | '\r'))
+}
+
+/// Normalises a header text: each of `\r\n`, `\n` and a lone `\r` is one line
+/// break, no line keeps trailing whitespace, and the text has no leading or
+/// trailing blank line. A whitespace-only line inside the text becomes an
+/// empty line. `None` when no text is left. A caller rejects a text with
+/// [`header_control_character`] first.
 pub fn normalise_header(text: &str) -> Option<String> {
+    let text = text.replace("\r\n", "\n").replace('\r', "\n");
     let lines: Vec<&str> = text.lines().map(str::trim_end).collect();
     let first = lines.iter().position(|line| !line.is_empty())?;
     let last = lines.iter().rposition(|line| !line.is_empty())?;
@@ -138,8 +152,11 @@ pub fn normalise_header(text: &str) -> Option<String> {
 }
 
 /// The comment block that starts a generated file: the marker, then each
-/// header line, each behind `comment`, then one blank line. An empty header
-/// line is the bare `comment`. Empty when `marker` and `header` are both empty.
+/// header line, each behind `comment`, then one blank line. An empty line is
+/// the bare `comment`, so an empty `marker` with a non-empty `header` gives a
+/// bare `comment` as line 1. Empty when `marker` and `header` are both empty.
+/// `header` is expected to be normalised ([`normalise_header`]): a line break
+/// other than `\n` is not handled here.
 pub fn comment_preamble(marker: &str, header: &str, comment: &str) -> String {
     if marker.is_empty() && header.is_empty() {
         return String::new();

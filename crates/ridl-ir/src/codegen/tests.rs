@@ -2655,6 +2655,39 @@ fn normalise_header_removes_carriage_returns_and_trailing_space() {
 }
 
 #[test]
+fn normalise_header_treats_a_lone_carriage_return_as_a_line_break() {
+    assert_eq!(super::normalise_header("A\rB").as_deref(), Some("A\nB"));
+    assert_eq!(
+        super::normalise_header("A\r\rB\r\nC").as_deref(),
+        Some("A\n\nB\nC")
+    );
+}
+
+#[test]
+fn normalise_header_keeps_an_interior_whitespace_only_line_as_empty() {
+    assert_eq!(
+        super::normalise_header("A\n   \nB").as_deref(),
+        Some("A\n\nB")
+    );
+}
+
+#[test]
+fn header_control_character_finds_a_control_character_other_than_tab_and_line_breaks() {
+    assert_eq!(super::header_control_character("A\tB\r\nC\rD\n"), None);
+    assert_eq!(super::header_control_character("A\u{0}B"), Some('\u{0}'));
+    assert_eq!(
+        super::header_control_character("A\u{1b}[0m"),
+        Some('\u{1b}')
+    );
+    assert_eq!(super::header_control_character("A\u{7f}"), Some('\u{7f}'));
+}
+
+#[test]
+fn comment_preamble_with_an_empty_marker_starts_with_a_bare_comment_token() {
+    assert_eq!(super::comment_preamble("", "H", "//"), "//\n// H\n\n");
+}
+
+#[test]
 fn normalise_header_removes_leading_blank_lines() {
     assert_eq!(super::normalise_header("\n \nA\n").as_deref(), Some("A"));
 }

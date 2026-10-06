@@ -29,7 +29,7 @@ use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
 
-use ridl_ir::codegen::normalise_header;
+use ridl_ir::codegen::{header_control_character, normalise_header};
 use ridl_syntax::ast::{AstNode as _, SourceFile};
 use rowan::{TextRange, TextSize};
 
@@ -436,7 +436,20 @@ impl Loader {
         if let Some((relative, range)) = codegen_header_file {
             let path = root.join(&relative);
             match fs::read_to_string(&path) {
-                Ok(header) => self.codegen_header = normalise_header(&header),
+                Ok(header) => match header_control_character(&header) {
+                    None => self.codegen_header = normalise_header(&header),
+                    Some(c) => self.diagnostics.push(error(
+                        DiagCode::MANI_011,
+                        file_id,
+                        byte_range(range.start, range.end),
+                        format!(
+                            "`[codegen] header-file` contains a control character \
+                             (U+{:04X}): `{}`",
+                            u32::from(c),
+                            path.display()
+                        ),
+                    )),
+                },
                 Err(e) => self.diagnostics.push(error(
                     DiagCode::MANI_011,
                     file_id,
@@ -2504,7 +2517,53 @@ service:veh.common.climate 2
         let start = usize::from(diag.primary.range.start());
         let end = usize::from(diag.primary.range.end());
         assert_eq!(&manifest[start..end], "\"nope.txt\"");
-        assert!(diag.message.contains("nope.txt"), "{}", diag.message);
+        let resolved = dir.path().join("nope.txt");
+        assert!(
+            diag.message.contains(&resolved.display().to_string()),
+            "{}",
+            diag.message
+        );
+        assert_eq!(loaded.codegen_header, None);
+    }
+
+    #[test]
+    fn codegen_header_file_that_is_not_utf8_is_mani_011() {
+        let dir = TempDir::new("codegen-header-not-utf8");
+        dir.write(
+            "ridl.toml",
+            &format!("{PACKAGE_A}\n[codegen]\nheader-file = \"H.txt\"\n"),
+        );
+        dir.write("a.typl", "package a\ntype A: integer [0..1]\n");
+        fs::write(dir.path().join("H.txt"), [0xffu8, 0xfe]).expect("write the header");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["MANI-011"]);
+        assert!(
+            loaded.diagnostics[0].message.contains("H.txt"),
+            "{}",
+            loaded.diagnostics[0].message
+        );
+        assert_eq!(loaded.codegen_header, None);
+    }
+
+    #[test]
+    fn codegen_header_file_with_a_control_character_is_mani_011() {
+        let dir = TempDir::new("codegen-header-control");
+        dir.write(
+            "ridl.toml",
+            &format!("{PACKAGE_A}\n[codegen]\nheader-file = \"H.txt\"\n"),
+        );
+        dir.write("a.typl", "package a\ntype A: integer [0..1]\n");
+        dir.write("H.txt", "A\u{0}B\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["MANI-011"]);
+        let message = &loaded.diagnostics[0].message;
+        assert!(message.contains("control character"), "{message}");
+        assert!(
+            message.contains(&dir.path().join("H.txt").display().to_string()),
+            "{message}"
+        );
         assert_eq!(loaded.codegen_header, None);
     }
 

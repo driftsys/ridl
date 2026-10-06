@@ -231,11 +231,12 @@ header-file = "LICENSE-HEADER.txt"
 Only the workspace root's manifest, or a standalone package's manifest, may set
 it. The loader reads the file, so every command that loads the manifest reports
 a failure, `ridl check` included. It normalises the text: CRLF line ends are
-accepted, each line loses its trailing whitespace, and leading and trailing
-blank lines are dropped; a file with no text left means no header. MANI-011
-(Error) is raised when the file cannot be read, and MANI-012 (Error) when the
-manifest of a workspace member sets the key. Single-file mode has no manifest
-and no header.
+accepted and a lone CR is a line break, each line loses its trailing whitespace,
+and leading and trailing blank lines are dropped; a file with no text left means
+no header. MANI-011 (Error) is raised when the file cannot be read, when it is
+not UTF-8, and when it contains a control character other than a tab and a line
+break; MANI-012 (Error) is raised when the manifest of a workspace member sets
+the key. Single-file mode has no manifest and no header.
 
 **Rationale — one file shape.** A second file type for workspaces would double
 the file count and the file's semantic baggage for no real gain. A section-based
