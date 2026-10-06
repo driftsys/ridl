@@ -420,7 +420,7 @@ mod tests {
             .collect()
     }
 
-    // E2 task 2 step (a): the nine ridl words lex to their keyword variants
+    // The nine ridl words lex to their keyword variants
     // under `Profile::Ridl` and stay `ReservedWord` under `Profile::Typl`.
     #[test]
     fn ridl_words_lex_by_profile() {
@@ -551,7 +551,7 @@ mod tests {
         );
     }
 
-    // E2 task 2 step (b), lexer half: durations and `@` are ordinary tokens
+    // Durations and `@` are ordinary tokens
     // under Ridl (the parser draws no TYPL-302 there — see the parser tests).
     #[test]
     fn durations_and_at_lex_clean_under_ridl() {
@@ -559,7 +559,7 @@ mod tests {
         assert_eq!(kinds_in(Profile::Ridl, "@"), vec![SyntaxKind::At]);
     }
 
-    // E2 task 2 step (c): the expr operator tokens.
+    // The expr operator tokens.
     #[test]
     fn expr_operators_lex_under_both_profiles() {
         for profile in [Profile::Typl, Profile::Ridl] {
@@ -597,7 +597,7 @@ mod tests {
         );
     }
 
-    // E2 task 2 step (d): `T | E` still lexes with the single `Pipe`.
+    // `T | E` still lexes with the single `Pipe`.
     #[test]
     fn union_pipe_lexes_unchanged() {
         for profile in [Profile::Typl, Profile::Ridl] {

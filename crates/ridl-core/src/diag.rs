@@ -193,7 +193,7 @@ pub const RETIRED_TYPL_CODES: &[u16] = &[223];
 diag_codes! {
     /// The FORM catalogue (ADR-0007 decision 2): lexical `0xx`, parse `1xx`, and
     /// the attribute-semantics codes 106-108 the checker emits for the general
-    /// form §4.3 allow-list (E2 task 5). Every FORM code is listed even when no
+    /// form §4.3 allow-list. Every FORM code is listed even when no
     /// pass emits it yet, so the error index has one authoritative source. FORM
     /// diagnostics are all errors.
     FORM_CATALOG {
@@ -527,9 +527,8 @@ diag_codes! {
             "duplicate declaration shape", lint = "duplicate-shape";
 
         /// Stream type `<T>` outside interaction position (typl §16.4, ridl
-        /// §12.3). Emitted by the parser in a `.typl` parse (E2 task 2) and by
-        /// the checker for struct fields and collections in a `.ridl` file
-        /// (E2 task 5).
+        /// §12.3). Emitted by the parser in a `.typl` parse and by
+        /// the checker for struct fields and collections in a `.ridl` file.
         TYPL_301 = "TYPL-301", Error,
             "stream type `<T>` outside interaction position";
 
@@ -539,7 +538,7 @@ diag_codes! {
 
         /// `require`/`ensure` attribute in a typl context (typl §16.4): the two
         /// contract attributes at declaration-start position in a `.typl` parse.
-        /// Emitted by the parser (E2 task 2) as a bare string literal rather than
+        /// Emitted by the parser as a bare string literal rather than
         /// through this constant — see `codes_written_as_string_literals_are_all
         /// _catalogued`.
         TYPL_303 = "TYPL-303", Error,
@@ -547,7 +546,7 @@ diag_codes! {
 
         /// Interaction declaration in a typl context (typl §16.4, ADR-0007
         /// decision 10): one of the nine ridl words at declaration-start position
-        /// in a `.typl` parse. Emitted by the parser (E2 task 2).
+        /// in a `.typl` parse. Emitted by the parser.
         TYPL_304 = "TYPL-304", Error,
             "interaction declaration in a typl context";
 
@@ -622,17 +621,17 @@ diag_codes! {
     RIDL_CATALOG {
         /// `signal` or `event` without a timing annotation — the default
         /// `[100ms..1000ms]` (or the configured `[defaults].timing`) is applied
-        /// (ridl §9.1, §16.1). Warning. Emitted by the checker (E2 task 9).
+        /// (ridl §9.1, §16.1). Warning. Emitted by the checker.
         RIDL_100 = "RIDL-100", Warning,
             "`signal` or `event` without a timing annotation", lint = "missing-timing";
 
         /// A range annotation `@[X..Y]` whose lower bound exceeds its upper bound
-        /// (ridl §9.2, §16.1). Emitted by the checker (E2 task 9).
+        /// (ridl §9.2, §16.1). Emitted by the checker.
         RIDL_101 = "RIDL-101", Error,
             "timing range `@[X..Y]` with `X > Y`";
 
         /// A zero or negative timing duration (ridl §9.2, §16.1). Emitted by the
-        /// checker (E2 task 9).
+        /// checker.
         RIDL_102 = "RIDL-102", Error,
             "zero or negative timing duration";
 
@@ -641,23 +640,23 @@ diag_codes! {
         /// Widened from "on an `event`" by ADR-0015 decision 6 when `command`
         /// and `query` gained the range form: the same rule, stated
         /// over the three kinds it excludes instead of one. Emitted by the
-        /// checker (E2 task 9).
+        /// checker.
         RIDL_103 = "RIDL-103", Error,
             "strict-periodic `@Xms` on a kind other than `signal`";
 
         /// Explicit return type on a `command` — a command always returns `()`
-        /// (ridl §6.1, §16.1). Emitted by the checker (E2 task 5).
+        /// (ridl §6.1, §16.1). Emitted by the checker.
         RIDL_104 = "RIDL-104", Error,
             "explicit return type on a `command`";
 
         /// `query` returning `()` — use `command` (ridl §7.1, §16.1). Emitted by
-        /// the checker (E2 task 5).
+        /// the checker.
         RIDL_105 = "RIDL-105", Error,
             "`query` returning `()`";
 
         /// A timing annotation on `fixed` — the one kind that carries none —
         /// or an attribute block on `fixed` (ridl §8, §9, §16.1). Emitted by
-        /// the checker (E2 task 5).
+        /// the checker.
         ///
         /// Narrowed by ADR-0015 decision 6: `command` and `query` admit
         /// the range form now, so the two RPC kinds left this rule and only
@@ -688,17 +687,17 @@ diag_codes! {
         /// range, the rate floor equal to its staleness bound, on a `signal` and an
         /// `event` alike (ridl §9.2, §16.1; ADR-0008 decision 17). Not a spelling
         /// of the strict-periodic `@Xms`, which is a separate `TimingMode`.
-        /// Warning. Emitted by the checker (E2 task 9).
+        /// Warning. Emitted by the checker.
         RIDL_108 = "RIDL-108", Warning,
             "degenerate timing range `@[X..X]`", lint = "degenerate-timing-range";
 
         /// Signal payload type has no derivable init value and no `= value`
-        /// override (ridl §4.4, §16.1). Emitted by the checker (E2 task 5).
+        /// override (ridl §4.4, §16.1). Emitted by the checker.
         RIDL_109 = "RIDL-109", Error,
             "signal payload has no derivable init and no `= value` override";
 
         /// Signal `= value` init override violates the payload type's constraints
-        /// (ridl §4.4, §16.1). Emitted by the checker (E2 task 5).
+        /// (ridl §4.4, §16.1). Emitted by the checker.
         RIDL_110 = "RIDL-110", Error,
             "signal `= value` init override violates the payload constraints";
 
@@ -720,7 +719,7 @@ diag_codes! {
 
         /// Duplicate `service` name across the whole workspace — the service
         /// catalog is a flat global namespace (ridl §14.5, §16.4). Emitted
-        /// workspace-wide by `service_catalog` (E2 task 8). The reference numbers
+        /// workspace-wide by `service_catalog`. The reference numbers
         /// it in the 1xx band while listing it under the §16.4 evolution/profile
         /// table — a documented anomaly kept as written (ADR-0008 decision 6).
         RIDL_140 = "RIDL-140", Error,
@@ -797,56 +796,55 @@ diag_codes! {
             "two names in one scope collide after a pinned name transform";
 
         /// Stream `<T>` on a `signal` or `event` payload (ridl §12.3, §16.2).
-        /// Emitted by the checker (E2 task 5).
+        /// Emitted by the checker.
         RIDL_201 = "RIDL-201", Error,
             "stream `<T>` on a `signal` or `event` payload";
 
         /// Stream element type not a named type, `string`, or `bytes` (ridl
-        /// §12.2, §16.2). Emitted by the checker (E2 task 5).
+        /// §12.2, §16.2). Emitted by the checker.
         RIDL_202 = "RIDL-202", Error,
             "stream element type not a named type, `string`, or `bytes`";
 
         /// `require` or `ensure` on `signal`, `event`, or `fixed` (ridl §13,
-        /// §16.3). Emitted by the checker (E2 task 5).
+        /// §16.3). Emitted by the checker.
         RIDL_301 = "RIDL-301", Error,
             "`require` or `ensure` on `signal`, `event`, or `fixed`";
 
         /// `ensure` on `command` — a command has no result to observe (ridl §6.1,
-        /// §16.3). Emitted by the checker (E2 task 5).
+        /// §16.3). Emitted by the checker.
         RIDL_302 = "RIDL-302", Error,
             "`ensure` on `command`";
 
         /// A fallible query return with no success path (ridl §10.1, §16.3; general
         /// form §6.1): a bare `error` type in return position, an `error`-typed
         /// success (left) arm of an inline `T | E`, or a non-error error (right)
-        /// arm. Error. Emitted by the checker (E2 task 10).
+        /// arm. Error. Emitted by the checker.
         RIDL_303 = "RIDL-303", Error,
             "fallible query return with no success path";
 
         /// An `error`-typed or result-union parameter on a `command` or `query` —
         /// failure flowing toward a provider (ridl §10.1, §16.3). Warning. Emitted
-        /// by the checker (E2 task 10).
+        /// by the checker.
         RIDL_304 = "RIDL-304", Warning,
             "`error`-typed or result-union parameter on a `command` or `query`",
                 lint = "error-typed-parameter";
 
         /// An `ensure` clause that never references `result` — well-typed but
         /// suspicious (ridl §13, §16.3; expr-core specification §8). Warning.
-        /// Emitted by the checker (E2 task 11).
+        /// Emitted by the checker.
         RIDL_305 = "RIDL-305", Warning,
             "`ensure` clause that never references `result`", lint = "ensure-without-result";
 
         /// A `require`/`ensure` expression outside the guaranteed subset (ridl §13,
         /// §16.3; expr-core specification §8 — one code for the whole boundary,
-        /// with a message naming the offending form). Error. Emitted by the checker
-        /// (E2 task 11).
+        /// with a message naming the offending form). Error. Emitted by the checker.
         RIDL_306 = "RIDL-306", Error,
             "`require`/`ensure` expression outside the guaranteed subset";
 
         /// An `error` enum declares a Stratum-2 contract-error category name
         /// (`INVALID_VALUE`, `PRECONDITION_FAILED`, `CONTRACT_BROKEN`,
         /// `UNKNOWN_INTERACTION`) — reserved vocabulary (ridl §10.2, §16.3).
-        /// Warning. Emitted by the checker (E2 task 10).
+        /// Warning. Emitted by the checker.
         RIDL_307 = "RIDL-307", Warning,
             "contract-error category name declared in an `error` enum",
                 lint = "contract-error-name-in-enum";
@@ -854,32 +852,31 @@ diag_codes! {
         /// A named result union in query return position — the inline `T | E`
         /// spelling is canonical there (general form §6.1, ADR-0008 decision 13).
         /// Warning; the named spelling stays legal typl data, so this is a lint,
-        /// not an error. Emitted by the lint pass (E2 task 19).
+        /// not an error. Emitted by the lint pass.
         RIDL_308 = "RIDL-308", Warning,
             "named result union in query return position", lint = "named-result-union-in-query";
 
         /// Interaction re-declared under a `reserved` name (ridl §11, §16.4).
-        /// Emitted by the checker (E2 task 5).
+        /// Emitted by the checker.
         RIDL_401 = "RIDL-401", Error,
             "interaction re-declared under a `reserved` name";
 
         /// Duplicate interaction name in one interaction body — an `interface`
         /// or a service's inline shape (ridl §14.1, §16.4). Emitted by the
-        /// checker (E2 task 5); lowering keeps the first declaration only, and
+        /// checker; lowering keeps the first declaration only, and
         /// the diagnostic's secondary label points at it.
         RIDL_402 = "RIDL-402", Error,
             "duplicate interaction name in one interaction body";
 
         /// Behaviour, user-interaction, or architecture declaration in a ridl
         /// context (ridl §16.4): a reserved word of the uxdl/rmdl/rsdl profiles at
-        /// declaration-start position in a `.ridl` parse. Emitted by the parser
-        /// (E2 task 2).
+        /// declaration-start position in a `.ridl` parse. Emitted by the parser.
         RIDL_403 = "RIDL-403", Error,
             "behaviour, user-interaction, or architecture declaration in a ridl context";
 
         /// A query named like a mutation — `set…`, `reset…`, and the rest of the
         /// mutating verb set (ridl §7.2, §16.4): a state-mutating request belongs
-        /// to `command`. Warning. Emitted by the lint pass (E2 task 19).
+        /// to `command`. Warning. Emitted by the lint pass.
         RIDL_404 = "RIDL-404", Warning,
             "query named like a mutation", lint = "query-named-like-mutation";
 
@@ -893,14 +890,14 @@ diag_codes! {
         /// A `signal` or `event` payload whose struct re-declares envelope
         /// metadata — publication time or a frame counter (ridl §3.1, §16.4). Info;
         /// domain time distinct from transport time is legitimate, so the message
-        /// says so. Emitted by the lint pass (E2 task 19).
+        /// says so. Emitted by the lint pass.
         RIDL_406 = "RIDL-406", Info,
             "payload struct re-declares envelope metadata", lint = "redeclared-envelope-metadata";
 
         /// An interaction's, struct field's or union arm's ordinal (typl §7.4)
         /// changed against a published baseline snapshot
         /// (ridl §11, general form §6.3). Warning. Emitted by the `ridl check`
-        /// desk check (E2 task 18), never by the compiler: the comparison
+        /// desk check, never by the compiler: the comparison
         /// reads a workspace-local baseline, which is outside `ridlc`'s
         /// source→IR function (ADR-0008 decisions 9 and 13). For a struct
         /// field or union arm the desk reads the verdict `ridl diff` gates

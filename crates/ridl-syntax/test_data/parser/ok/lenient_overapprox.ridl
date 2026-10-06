@@ -1,7 +1,7 @@
 package veh.lenient
 
 // Grammar over-approximations (the parser accepts, the checker narrows —
-// the E1 discipline, E2 task 5 emits the rejections). Every shape below
+// the E1 discipline, the checker emits the rejections). Every shape below
 // parses losslessly with zero parser errors.
 
 interface LenientShapes {

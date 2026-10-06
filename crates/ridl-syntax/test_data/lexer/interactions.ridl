@@ -1,6 +1,6 @@
 package veh.engine
 
-// A lexer-only corpus file (the interaction grammar lands with E2 task 3):
+// A lexer-only corpus file (the interaction grammar is not exercised here):
 // the nine ridl words, durations, the `@` sigil, and the expr operator
 // tokens the ridl profile activates (ridl reference §2).
 

@@ -189,7 +189,7 @@ UnionArm =
 // and a signal's bare `= value` init comes before its timing annotation.
 //
 // The parser is deliberately more lenient than the reference — the checker
-// narrows (RIDL-1xx/2xx/3xx, E2 task 5): a `: return_type` after a
+// narrows (RIDL-1xx/2xx/3xx): a `: return_type` after a
 // command's params parses; timing parses on command, query, and fixed;
 // an attr block parses on signal, event, and fixed; an init value parses
 // on event and fixed. The rules below name a child only where the typed
@@ -265,8 +265,8 @@ TimingRange =
 
 // ---------- ridl services (ridl reference §14.5) ----------
 //
-// `service_def` is absent from the ridl reference Appendix C; E2 task 8
-// authors it (recorded for the close-out doc sync). A `service` is the
+// `service_def` is absent from the ridl reference Appendix C and is
+// defined here. A `service` is the
 // global, published declaration of one or more interfaces (ADR-0015
 // decision 12) — either naming shapes in a comma-separated list after `:`,
 // or carrying one inline body of interactions for a one-off global contract
@@ -300,14 +300,14 @@ ServiceDef =
 DottedName =
   'ident' ('.' 'ident')*
 
-// ---------- Attributes (general form §4.2–§4.3, E2 task 4) ----------
+// ---------- Attributes (general form §4.2–§4.3) ----------
 //
 // The single attr_block production: three forms — a flag key, an
 // assignment `key = const_value`, and a predicate `require|ensure expr`.
 // gf §4.2 requires at least one attribute per block; the parser accepts
 // an empty `[]` losslessly and reports FORM-101 at the closing bracket.
 // Which keys are legal on which declaration kind is a semantic allow-list
-// (gf §4.3, FORM-106/107/108) — checker scope, E2 task 5.
+// (gf §4.3, FORM-106/107/108) — checker scope.
 
 AttrBlock =
   '[' (attributes:Attribute ','?)* ']'

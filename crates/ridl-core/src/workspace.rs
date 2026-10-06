@@ -1496,7 +1496,7 @@ mod tests {
 
     /// `[defaults].timing` follows the ADR-0002 §5 precedence merged at load:
     /// a member's own `[defaults]` shadows the workspace `[defaults]`; a member
-    /// without one inherits the workspace default (ridl §9.1, E2 task 9).
+    /// without one inherits the workspace default (ridl §9.1).
     #[test]
     fn defaults_timing_precedence_package_shadows_workspace() {
         let dir = TempDir::new("defaults-timing");
@@ -1929,7 +1929,7 @@ mod tests {
         );
     }
 
-    /// E2 task 2 step (g): a package directory may mix `.typl` and `.ridl`
+    /// A package directory may mix `.typl` and `.ridl`
     /// files — `.ridl` is accepted everywhere `.typl` is, under the same
     /// package↔directory law.
     #[test]

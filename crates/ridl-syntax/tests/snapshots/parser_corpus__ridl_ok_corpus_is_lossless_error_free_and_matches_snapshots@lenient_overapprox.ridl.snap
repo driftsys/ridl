@@ -3,7 +3,7 @@ source: crates/ridl-syntax/tests/parser_corpus.rs
 expression: dump(&parsed)
 input_file: crates/ridl-syntax/test_data/parser/ok/lenient_overapprox.ridl
 ---
-SourceFile@0..1081
+SourceFile@0..1083
   PackageDecl@0..19
     PackageKw@0..7 "package"
     Whitespace@7..8 " "
@@ -14,282 +14,282 @@ SourceFile@0..1081
   Whitespace@19..21 "\n\n"
   LineComment@21..96 "// Grammar over-appro ..."
   Whitespace@96..97 "\n"
-  LineComment@97..169 "// the E1 discipline, ..."
-  Whitespace@169..170 "\n"
-  LineComment@170..215 "// parses losslessly  ..."
-  Whitespace@215..217 "\n\n"
-  InterfaceDef@217..1080
-    InterfaceKw@217..226 "interface"
-    Whitespace@226..227 " "
-    Name@227..240
-      Ident@227..240 "LenientShapes"
-    Whitespace@240..241 " "
-    LBrace@241..242 "{"
-    Whitespace@242..246 "\n\n  "
-    LineComment@246..305 "// RIDL-201 territory ..."
-    Whitespace@305..308 "\n  "
-    SignalDef@308..338
-      SignalKw@308..314 "signal"
-      Whitespace@314..315 " "
-      Name@315..322
-        Ident@315..322 "rawFeed"
-      Whitespace@322..323 " "
-      Colon@323..324 ":"
+  LineComment@97..171 "// the E1 discipline, ..."
+  Whitespace@171..172 "\n"
+  LineComment@172..217 "// parses losslessly  ..."
+  Whitespace@217..219 "\n\n"
+  InterfaceDef@219..1082
+    InterfaceKw@219..228 "interface"
+    Whitespace@228..229 " "
+    Name@229..242
+      Ident@229..242 "LenientShapes"
+    Whitespace@242..243 " "
+    LBrace@243..244 "{"
+    Whitespace@244..248 "\n\n  "
+    LineComment@248..307 "// RIDL-201 territory ..."
+    Whitespace@307..310 "\n  "
+    SignalDef@310..340
+      SignalKw@310..316 "signal"
+      Whitespace@316..317 " "
+      Name@317..324
+        Ident@317..324 "rawFeed"
       Whitespace@324..325 " "
-      StreamType@325..338
-        Lt@325..326 "<"
-        PathType@326..337
-          QualifiedName@326..337
-            Ident@326..337 "SensorFrame"
-        Gt@337..338 ">"
-    Whitespace@338..342 "\n\n  "
-    LineComment@342..399 "// RIDL-104 territory ..."
-    Whitespace@399..402 "\n  "
-    CommandDef@402..444
-      CommandKw@402..409 "command"
-      Whitespace@409..410 " "
-      Name@410..417
-        Ident@410..417 "setMode"
-      ParamList@417..434
-        LParen@417..418 "("
-        Param@418..433
-          Name@418..422
-            Ident@418..422 "mode"
-          Colon@422..423 ":"
-          Whitespace@423..424 " "
-          PathType@424..433
-            QualifiedName@424..433
-              Ident@424..433 "DriveMode"
-        RParen@433..434 ")"
-      Colon@434..435 ":"
-      Whitespace@435..436 " "
-      ReturnType@436..444
-        PathType@436..444
-          QualifiedName@436..444
-            Ident@436..444 "AckState"
-    Whitespace@444..448 "\n\n  "
-    LineComment@448..522 "// RIDL-106 territory ..."
-    Whitespace@522..525 "\n  "
-    CommandDef@525..546
-      CommandKw@525..532 "command"
-      Whitespace@532..533 " "
-      Name@533..538
-        Ident@533..538 "reset"
-      ParamList@538..540
-        LParen@538..539 "("
-        RParen@539..540 ")"
-      Whitespace@540..541 " "
-      Timing@541..546
-        At@541..542 "@"
-        Duration@542..546 "50ms"
-    Whitespace@546..549 "\n  "
-    QueryDef@549..592
-      QueryKw@549..554 "query"
-      Whitespace@554..555 " "
-      Name@555..563
-        Ident@555..563 "getState"
-      ParamList@563..565
-        LParen@563..564 "("
-        RParen@564..565 ")"
-      Colon@565..566 ":"
-      Whitespace@566..567 " "
-      ReturnType@567..577
-        PathType@567..577
-          QualifiedName@567..577
-            Ident@567..577 "DriveState"
-      Whitespace@577..578 " "
-      Timing@578..592
-        At@578..579 "@"
-        LBracket@579..580 "["
-        TimingRange@580..591
-          Duration@580..584 "10ms"
-          DotDot@584..586 ".."
-          Duration@586..591 "100ms"
-        RBracket@591..592 "]"
-    Whitespace@592..595 "\n  "
-    FixedDef@595..622
-      FixedKw@595..600 "fixed"
-      Whitespace@600..601 " "
-      Name@601..608
-        Ident@601..608 "buildId"
-      Whitespace@608..609 " "
-      Colon@609..610 ":"
+      Colon@325..326 ":"
+      Whitespace@326..327 " "
+      StreamType@327..340
+        Lt@327..328 "<"
+        PathType@328..339
+          QualifiedName@328..339
+            Ident@328..339 "SensorFrame"
+        Gt@339..340 ">"
+    Whitespace@340..344 "\n\n  "
+    LineComment@344..401 "// RIDL-104 territory ..."
+    Whitespace@401..404 "\n  "
+    CommandDef@404..446
+      CommandKw@404..411 "command"
+      Whitespace@411..412 " "
+      Name@412..419
+        Ident@412..419 "setMode"
+      ParamList@419..436
+        LParen@419..420 "("
+        Param@420..435
+          Name@420..424
+            Ident@420..424 "mode"
+          Colon@424..425 ":"
+          Whitespace@425..426 " "
+          PathType@426..435
+            QualifiedName@426..435
+              Ident@426..435 "DriveMode"
+        RParen@435..436 ")"
+      Colon@436..437 ":"
+      Whitespace@437..438 " "
+      ReturnType@438..446
+        PathType@438..446
+          QualifiedName@438..446
+            Ident@438..446 "AckState"
+    Whitespace@446..450 "\n\n  "
+    LineComment@450..524 "// RIDL-106 territory ..."
+    Whitespace@524..527 "\n  "
+    CommandDef@527..548
+      CommandKw@527..534 "command"
+      Whitespace@534..535 " "
+      Name@535..540
+        Ident@535..540 "reset"
+      ParamList@540..542
+        LParen@540..541 "("
+        RParen@541..542 ")"
+      Whitespace@542..543 " "
+      Timing@543..548
+        At@543..544 "@"
+        Duration@544..548 "50ms"
+    Whitespace@548..551 "\n  "
+    QueryDef@551..594
+      QueryKw@551..556 "query"
+      Whitespace@556..557 " "
+      Name@557..565
+        Ident@557..565 "getState"
+      ParamList@565..567
+        LParen@565..566 "("
+        RParen@566..567 ")"
+      Colon@567..568 ":"
+      Whitespace@568..569 " "
+      ReturnType@569..579
+        PathType@569..579
+          QualifiedName@569..579
+            Ident@569..579 "DriveState"
+      Whitespace@579..580 " "
+      Timing@580..594
+        At@580..581 "@"
+        LBracket@581..582 "["
+        TimingRange@582..593
+          Duration@582..586 "10ms"
+          DotDot@586..588 ".."
+          Duration@588..593 "100ms"
+        RBracket@593..594 "]"
+    Whitespace@594..597 "\n  "
+    FixedDef@597..624
+      FixedKw@597..602 "fixed"
+      Whitespace@602..603 " "
+      Name@603..610
+        Ident@603..610 "buildId"
       Whitespace@610..611 " "
-      PathType@611..618
-        QualifiedName@611..618
-          Ident@611..618 "BuildId"
-      Whitespace@618..619 " "
-      Timing@619..622
-        At@619..620 "@"
-        Duration@620..622 "1s"
-    Whitespace@622..626 "\n\n  "
-    LineComment@626..696 "// RIDL-301/-106 terr ..."
-    Whitespace@696..699 "\n  "
-    SignalDef@699..731
-      SignalKw@699..705 "signal"
-      Whitespace@705..706 " "
-      Name@706..711
-        Ident@706..711 "speed"
-      Whitespace@711..712 " "
-      Colon@712..713 ":"
+      Colon@611..612 ":"
+      Whitespace@612..613 " "
+      PathType@613..620
+        QualifiedName@613..620
+          Ident@613..620 "BuildId"
+      Whitespace@620..621 " "
+      Timing@621..624
+        At@621..622 "@"
+        Duration@622..624 "1s"
+    Whitespace@624..628 "\n\n  "
+    LineComment@628..698 "// RIDL-301/-106 terr ..."
+    Whitespace@698..701 "\n  "
+    SignalDef@701..733
+      SignalKw@701..707 "signal"
+      Whitespace@707..708 " "
+      Name@708..713
+        Ident@708..713 "speed"
       Whitespace@713..714 " "
-      PathType@714..719
-        QualifiedName@714..719
-          Ident@714..719 "Speed"
-      Whitespace@719..720 " "
-      AttrBlock@720..731
-        LBracket@720..721 "["
-        Whitespace@721..722 " "
-        Attribute@722..729
-          Name@722..729
-            Ident@722..729 "persist"
-        Whitespace@729..730 " "
-        RBracket@730..731 "]"
-    Whitespace@731..734 "\n  "
-    EventDef@734..780
-      EventKw@734..739 "event"
-      Whitespace@739..740 " "
-      Name@740..750
-        Ident@740..750 "doorOpened"
-      Whitespace@750..751 " "
-      Colon@751..752 ":"
+      Colon@714..715 ":"
+      Whitespace@715..716 " "
+      PathType@716..721
+        QualifiedName@716..721
+          Ident@716..721 "Speed"
+      Whitespace@721..722 " "
+      AttrBlock@722..733
+        LBracket@722..723 "["
+        Whitespace@723..724 " "
+        Attribute@724..731
+          Name@724..731
+            Ident@724..731 "persist"
+        Whitespace@731..732 " "
+        RBracket@732..733 "]"
+    Whitespace@733..736 "\n  "
+    EventDef@736..782
+      EventKw@736..741 "event"
+      Whitespace@741..742 " "
+      Name@742..752
+        Ident@742..752 "doorOpened"
       Whitespace@752..753 " "
-      PathType@753..764
-        QualifiedName@753..764
-          Ident@753..764 "DoorPayload"
-      Whitespace@764..765 " "
-      AttrBlock@765..780
-        LBracket@765..766 "["
-        Whitespace@766..767 " "
-        Attribute@767..778
-          Name@767..774
-            Ident@767..774 "someKey"
-          Whitespace@774..775 " "
-          Eq@775..776 "="
+      Colon@753..754 ":"
+      Whitespace@754..755 " "
+      PathType@755..766
+        QualifiedName@755..766
+          Ident@755..766 "DoorPayload"
+      Whitespace@766..767 " "
+      AttrBlock@767..782
+        LBracket@767..768 "["
+        Whitespace@768..769 " "
+        Attribute@769..780
+          Name@769..776
+            Ident@769..776 "someKey"
           Whitespace@776..777 " "
-          AttrValue@777..778
-            Literal@777..778
-              IntNumber@777..778 "3"
-        Whitespace@778..779 " "
-        RBracket@779..780 "]"
-    Whitespace@780..783 "\n  "
-    FixedDef@783..809
-      FixedKw@783..788 "fixed"
-      Whitespace@788..789 " "
-      Name@789..792
-        Ident@789..792 "vin"
-      Whitespace@792..793 " "
-      Colon@793..794 ":"
+          Eq@777..778 "="
+          Whitespace@778..779 " "
+          AttrValue@779..780
+            Literal@779..780
+              IntNumber@779..780 "3"
+        Whitespace@780..781 " "
+        RBracket@781..782 "]"
+    Whitespace@782..785 "\n  "
+    FixedDef@785..811
+      FixedKw@785..790 "fixed"
+      Whitespace@790..791 " "
+      Name@791..794
+        Ident@791..794 "vin"
       Whitespace@794..795 " "
-      PathType@795..798
-        QualifiedName@795..798
-          Ident@795..798 "Vin"
-      Whitespace@798..799 " "
-      AttrBlock@799..809
-        LBracket@799..800 "["
-        Whitespace@800..801 " "
-        Attribute@801..807
-          Name@801..807
-            Ident@801..807 "cached"
-        Whitespace@807..808 " "
-        RBracket@808..809 "]"
-    Whitespace@809..813 "\n\n  "
-    LineComment@813..853 "// Init values parse  ..."
-    Whitespace@853..856 "\n  "
-    EventDef@856..899
-      EventKw@856..861 "event"
-      Whitespace@861..862 " "
-      Name@862..872
-        Ident@862..872 "calibrated"
-      Whitespace@872..873 " "
-      Colon@873..874 ":"
+      Colon@795..796 ":"
+      Whitespace@796..797 " "
+      PathType@797..800
+        QualifiedName@797..800
+          Ident@797..800 "Vin"
+      Whitespace@800..801 " "
+      AttrBlock@801..811
+        LBracket@801..802 "["
+        Whitespace@802..803 " "
+        Attribute@803..809
+          Name@803..809
+            Ident@803..809 "cached"
+        Whitespace@809..810 " "
+        RBracket@810..811 "]"
+    Whitespace@811..815 "\n\n  "
+    LineComment@815..855 "// Init values parse  ..."
+    Whitespace@855..858 "\n  "
+    EventDef@858..901
+      EventKw@858..863 "event"
+      Whitespace@863..864 " "
+      Name@864..874
+        Ident@864..874 "calibrated"
       Whitespace@874..875 " "
-      PathType@875..885
-        QualifiedName@875..885
-          Ident@875..885 "CalPayload"
-      Whitespace@885..886 " "
-      InitValue@886..899
-        Eq@886..887 "="
-        Whitespace@887..888 " "
-        Literal@888..899
-          Ident@888..899 "DEFAULT_CAL"
-    Whitespace@899..902 "\n  "
-    FixedDef@902..935
-      FixedKw@902..907 "fixed"
-      Whitespace@907..908 " "
-      Name@908..914
-        Ident@908..914 "region"
-      Whitespace@914..915 " "
-      Colon@915..916 ":"
+      Colon@875..876 ":"
+      Whitespace@876..877 " "
+      PathType@877..887
+        QualifiedName@877..887
+          Ident@877..887 "CalPayload"
+      Whitespace@887..888 " "
+      InitValue@888..901
+        Eq@888..889 "="
+        Whitespace@889..890 " "
+        Literal@890..901
+          Ident@890..901 "DEFAULT_CAL"
+    Whitespace@901..904 "\n  "
+    FixedDef@904..937
+      FixedKw@904..909 "fixed"
+      Whitespace@909..910 " "
+      Name@910..916
+        Ident@910..916 "region"
       Whitespace@916..917 " "
-      PathType@917..923
-        QualifiedName@917..923
-          Ident@917..923 "Region"
-      Whitespace@923..924 " "
-      InitValue@924..935
-        Eq@924..925 "="
-        Whitespace@925..926 " "
-        Literal@926..935
-          Ident@926..935 "REGION_EU"
-    Whitespace@935..939 "\n\n  "
-    LineComment@939..980 "// Timing and attr bl ..."
-    Whitespace@980..983 "\n  "
-    QueryDef@983..1028
-      QueryKw@983..988 "query"
-      Whitespace@988..989 " "
-      Name@989..996
-        Ident@989..996 "ordered"
-      ParamList@996..998
-        LParen@996..997 "("
-        RParen@997..998 ")"
-      Colon@998..999 ":"
-      Whitespace@999..1000 " "
-      ReturnType@1000..1010
-        PathType@1000..1010
-          QualifiedName@1000..1010
-            Ident@1000..1010 "DriveState"
-      Whitespace@1010..1011 " "
-      AttrBlock@1011..1022
-        LBracket@1011..1012 "["
-        Whitespace@1012..1013 " "
-        Attribute@1013..1020
-          Name@1013..1020
-            Ident@1013..1020 "flagged"
-        Whitespace@1020..1021 " "
-        RBracket@1021..1022 "]"
-      Whitespace@1022..1023 " "
-      Timing@1023..1028
-        At@1023..1024 "@"
-        Duration@1024..1028 "10ms"
-    Whitespace@1028..1031 "\n  "
-    QueryDef@1031..1078
-      QueryKw@1031..1036 "query"
-      Whitespace@1036..1037 " "
-      Name@1037..1046
-        Ident@1037..1046 "reordered"
-      ParamList@1046..1048
-        LParen@1046..1047 "("
-        RParen@1047..1048 ")"
-      Colon@1048..1049 ":"
-      Whitespace@1049..1050 " "
-      ReturnType@1050..1060
-        PathType@1050..1060
-          QualifiedName@1050..1060
-            Ident@1050..1060 "DriveState"
-      Whitespace@1060..1061 " "
-      Timing@1061..1066
-        At@1061..1062 "@"
-        Duration@1062..1066 "10ms"
-      Whitespace@1066..1067 " "
-      AttrBlock@1067..1078
-        LBracket@1067..1068 "["
-        Whitespace@1068..1069 " "
-        Attribute@1069..1076
-          Name@1069..1076
-            Ident@1069..1076 "flagged"
-        Whitespace@1076..1077 " "
-        RBracket@1077..1078 "]"
-    Whitespace@1078..1079 "\n"
-    RBrace@1079..1080 "}"
-  Whitespace@1080..1081 "\n"
+      Colon@917..918 ":"
+      Whitespace@918..919 " "
+      PathType@919..925
+        QualifiedName@919..925
+          Ident@919..925 "Region"
+      Whitespace@925..926 " "
+      InitValue@926..937
+        Eq@926..927 "="
+        Whitespace@927..928 " "
+        Literal@928..937
+          Ident@928..937 "REGION_EU"
+    Whitespace@937..941 "\n\n  "
+    LineComment@941..982 "// Timing and attr bl ..."
+    Whitespace@982..985 "\n  "
+    QueryDef@985..1030
+      QueryKw@985..990 "query"
+      Whitespace@990..991 " "
+      Name@991..998
+        Ident@991..998 "ordered"
+      ParamList@998..1000
+        LParen@998..999 "("
+        RParen@999..1000 ")"
+      Colon@1000..1001 ":"
+      Whitespace@1001..1002 " "
+      ReturnType@1002..1012
+        PathType@1002..1012
+          QualifiedName@1002..1012
+            Ident@1002..1012 "DriveState"
+      Whitespace@1012..1013 " "
+      AttrBlock@1013..1024
+        LBracket@1013..1014 "["
+        Whitespace@1014..1015 " "
+        Attribute@1015..1022
+          Name@1015..1022
+            Ident@1015..1022 "flagged"
+        Whitespace@1022..1023 " "
+        RBracket@1023..1024 "]"
+      Whitespace@1024..1025 " "
+      Timing@1025..1030
+        At@1025..1026 "@"
+        Duration@1026..1030 "10ms"
+    Whitespace@1030..1033 "\n  "
+    QueryDef@1033..1080
+      QueryKw@1033..1038 "query"
+      Whitespace@1038..1039 " "
+      Name@1039..1048
+        Ident@1039..1048 "reordered"
+      ParamList@1048..1050
+        LParen@1048..1049 "("
+        RParen@1049..1050 ")"
+      Colon@1050..1051 ":"
+      Whitespace@1051..1052 " "
+      ReturnType@1052..1062
+        PathType@1052..1062
+          QualifiedName@1052..1062
+            Ident@1052..1062 "DriveState"
+      Whitespace@1062..1063 " "
+      Timing@1063..1068
+        At@1063..1064 "@"
+        Duration@1064..1068 "10ms"
+      Whitespace@1068..1069 " "
+      AttrBlock@1069..1080
+        LBracket@1069..1070 "["
+        Whitespace@1070..1071 " "
+        Attribute@1071..1078
+          Name@1071..1078
+            Ident@1071..1078 "flagged"
+        Whitespace@1078..1079 " "
+        RBracket@1079..1080 "]"
+    Whitespace@1080..1081 "\n"
+    RBrace@1081..1082 "}"
+  Whitespace@1082..1083 "\n"
 errors: none

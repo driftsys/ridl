@@ -2286,7 +2286,7 @@ fn ridl_407_block<'a>(stderr: &'a str, name: &str) -> &'a str {
     }
 }
 
-/// The committed baseline corpus member (E2 task 22). Every other test in this
+/// The committed baseline corpus member. Every other test in this
 /// file builds its baseline in a temp directory from a source string, so none
 /// of them exercises a baseline that was written by an earlier run and read
 /// back later — which is the only way a real baseline is ever used.

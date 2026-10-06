@@ -24,7 +24,7 @@ pub struct InputFile {
     pub text: String,
 }
 
-/// The [`Profile`] a source path selects (E2 task 2): a `.ridl` file parses
+/// The [`Profile`] a source path selects: a `.ridl` file parses
 /// under [`Profile::Ridl`], a `.rsdl` file under [`Profile::Rsdl`]; everything
 /// else — `.typl` first of all — parses under [`Profile::Typl`].
 pub fn profile_of_path(path: &str) -> Profile {

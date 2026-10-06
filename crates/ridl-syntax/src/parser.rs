@@ -35,7 +35,7 @@
 //! definition kind. The checker narrows these later (TYPL-2xx); the parser
 //! must not reject them.
 //!
-//! The interaction grammar (E2 task 3) follows the same discipline: a
+//! The interaction grammar follows the same discipline: a
 //! `: return_type` after a command's params parses; timing parses on
 //! command, query, and fixed; an attr block parses on signal, event, and
 //! fixed; an init value parses on event and fixed; a stream `<T>` parses in
@@ -49,7 +49,7 @@
 //!
 //! # Profile boundary
 //!
-//! The parser runs under a [`Profile`] (E2 task 2, ADR-0007 decision 10). In
+//! The parser runs under a [`Profile`] (ADR-0007 decision 10). In
 //! a `.typl` parse — byte-identical to the E1 parser — a `Duration` token or
 //! a stray `@` anywhere emits **TYPL-302** (typl reference §2.8) and parsing
 //! continues, an interaction keyword at declaration-start position emits
@@ -63,7 +63,7 @@
 //! modifier before an rsdl declaration emits FORM-102. The typl and ridl
 //! declaration-start boundaries recover exactly as FORM-105 does; the rsdl one
 //! consumes a `{ … }` body whole. The stream
-//! grammar parses under both profiles (E2 task 3): a `<T>` in type position
+//! grammar parses under both profiles: a `<T>` in type position
 //! builds a `StreamType` node everywhere, and in a `.typl` parse it
 //! additionally emits **TYPL-301** (`stream type in typl context`) and
 //! parsing continues. Leading
@@ -1180,8 +1180,8 @@ impl<'a> Parser<'a> {
     /// `ServiceDef = 'service' DottedName (':' shapes (',' shapes)* ','? |
     /// '{' (inline_members ','?)* '}')` — the global published declaration of
     /// one or more interfaces (ridl reference §14.5, ADR-0015 decision 12).
-    /// The `service_def` production is absent from Appendix C; E2 task 8
-    /// authors it. The named form carries a comma-separated shape list after
+    /// The `service_def` production is absent from Appendix C and is defined
+    /// here. The named form carries a comma-separated shape list after
     /// `:`; the inline form carries an interaction body reusing
     /// [`Parser::interface_body`], so the checker runs the same structural
     /// pass over it (RIDL-401/-402). Never both forms (ADR-0015 decision 14).
@@ -1634,7 +1634,7 @@ impl<'a> Parser<'a> {
     /// `Attribute = key | key '=' const_value | ('require'|'ensure') expr`
     /// — the three forms of gf §4.2. One grammar production for all of
     /// them; which keys are legal where is checker scope (gf §4.3,
-    /// FORM-106/107/108, E2 task 5). Callers have confirmed the leading
+    /// FORM-106/107/108). Callers have confirmed the leading
     /// token is an `Ident` or a predicate keyword.
     fn attribute(&mut self) {
         self.start(SyntaxKind::Attribute);
@@ -2713,7 +2713,7 @@ mod tests {
         assert_eq!(codes, vec!["TYPL-302"]);
     }
 
-    // E2 task 2 step (b), parser half: under `Profile::Ridl` durations and `@`
+    // Under `Profile::Ridl` durations and `@`
     // are ordinary tokens — no TYPL-302 fires anywhere.
     #[test]
     fn duration_and_at_draw_no_typl_302_under_ridl() {
@@ -2731,7 +2731,7 @@ mod tests {
         );
     }
 
-    // E2 task 2 step (e): an interaction keyword at declaration-start in a
+    // An interaction keyword at declaration-start in a
     // `.typl` parse is the profile boundary — TYPL-304, recovering like
     // FORM-105 does (ErrorNode, resync at the next top-level keyword).
     #[test]
@@ -2758,7 +2758,7 @@ mod tests {
         assert_eq!(codes, vec!["TYPL-304"]);
     }
 
-    // E2 task 3: the stream grammar parses under both profiles; in a `.typl`
+    // The stream grammar parses under both profiles; in a `.typl`
     // parse a `<T>` in type position is the profile boundary — TYPL-301 —
     // and the StreamType node is still built, losslessly.
     #[test]
@@ -2790,7 +2790,7 @@ mod tests {
         );
     }
 
-    // E2 task 2 step (f): a reserved word of another profile at
+    // A reserved word of another profile at
     // declaration-start in a `.ridl` parse is RIDL-403, with the same recovery.
     #[test]
     fn reserved_word_in_ridl_flags_ridl_403_and_recovers() {

@@ -44,7 +44,7 @@ fn lexer_corpus_round_trips_and_matches_snapshots() {
     });
 }
 
-// E2 task 2 step (h): round-trip totality on the `.ridl` corpus.
+// Round-trip totality on the `.ridl` corpus.
 #[test]
 fn ridl_lexer_corpus_round_trips_and_matches_snapshots() {
     insta::glob!("../test_data/lexer", "*.ridl", |path| {

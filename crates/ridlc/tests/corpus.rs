@@ -176,7 +176,7 @@ fn compile_entry(entry: &Path) -> Compiled {
         checked_irs.push((name, checked.ir));
     }
 
-    // The workspace-wide passes — the service catalog (E2 task 8) and the rsdl
+    // The workspace-wide passes — the service catalog and the rsdl
     // system query — driven through `ridl_sem::check_workspace`, as
     // `ridlc::compile_workspace` drives them: their diagnostics span the whole
     // workspace, so their FileIds index every source file in package-then-file

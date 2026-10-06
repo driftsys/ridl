@@ -2,7 +2,7 @@ package veh.attrs
 
 // The non-predicate attribute forms (general form §4.2) parse everywhere an
 // attr block parses; which key is legal on which declaration kind is checker
-// scope (gf §4.3, E2 task 5 — FORM-106/107/108).
+// scope (gf §4.3, FORM-106/107/108).
 interface FlagShapes {
 
   // A bare flag key.
