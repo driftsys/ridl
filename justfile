@@ -1355,13 +1355,19 @@ doc-path-check root="":
 #   optional lowercase letter (`E2.8b`).
 # - A plan name: the word `epic` followed by an epic (`epic E11`, `Epic 10`),
 #   the word `stage` followed by a letter, digits and an optional lowercase
-#   letter (`stage K3`, `stage K9b`), or the word `lane` followed by one capital
-#   letter (`lane M`). The word and the letter are separated by one space. The word matches in any
-#   case; the letter does not, so prose such as "a lane a vehicle takes" is not
-#   a plan name.
+#   letter (`stage K3`, `stage K9b`), the word `lane` followed by one capital
+#   letter (`lane M`), or an epic id, the word `task` and a task number with an
+#   optional lowercase letter (`E2 task 9`, `E2 task 11b`). The word and the
+#   letter or number are separated by one space. The word matches in any case;
+#   the letter does not, nor does the `E` of an epic id in the last form, so
+#   prose such as "a lane a vehicle takes" is not a plan name. A plural such as
+#   "E2 tasks 9" is not matched.
 #
 # The check is a plain text match: it does not read the context, so a match
-# that is not a story id or a plan name is reworded rather than exempted.
+# that is not a story id or a plan name is reworded rather than exempted. It
+# reads one line at a time, so a name wrapped across two lines is not caught;
+# keep a name on one line when it is written, and reword one found in a wrapped
+# comment.
 #
 # Scanned, as tracked files: crates/, xtask/, examples/, editors/vscode/src/,
 # the docs/book/, docs/design/ and docs/technotes/ trees, and each file of
@@ -1390,7 +1396,7 @@ story-id-check root="":
     # fails the recipe instead of passing unnoticed.
     fixtures_marker="story-id-check: fixtures passed."
     id_re='(^|[^A-Za-z0-9_])E[0-9]+\.[0-9]+[a-z]?([^A-Za-z0-9_]|$)'
-    plan_re='(^|[^A-Za-z0-9_])([Ee][Pp][Ii][Cc] E?[0-9]+|[Ss][Tt][Aa][Gg][Ee] [A-Z][0-9]+[a-z]?|[Ll][Aa][Nn][Ee] [A-Z]|E[0-9]+ task [0-9]+[a-z]?)([^A-Za-z0-9_]|$)'
+    plan_re='(^|[^A-Za-z0-9_])([Ee][Pp][Ii][Cc] E?[0-9]+|[Ss][Tt][Aa][Gg][Ee] [A-Z][0-9]+[a-z]?|[Ll][Aa][Nn][Ee] [A-Z]|E[0-9]+ [Tt][Aa][Ss][Kk] [0-9]+[a-z]?)([^A-Za-z0-9_]|$)'
     # A git call that ignores an inherited git environment. A hook exports
     # GIT_DIR, which `git -C` does not override; see doc-path-check.
     git_at() {
@@ -1452,11 +1458,14 @@ story-id-check root="":
         # literal docs/… path that resolves nowhere would be reported here.
         d=docs
         # Phrases that read like a plan name and are not one: no match for the
-        # letter or digit class, a lowercase letter, a bare number, and a letter
-        # directly before the word or after the name.
-        plan_clean="a lane a vehicle takes, lane m, stage 2, stage K, stage k3, stage K3xy, lane  M, epic poem, epic e1, upstage K3, plane M, lane Mx, task 9, E2 task, e2 task 9, E2 task x, xE2 task 9, E2 tasks 9"
+        # letter or digit class, a lowercase letter (including the `e` of an
+        # epic id), a bare number, a letter directly before the word or after
+        # the name, and the `E<n> task` form with no space, a missing or
+        # non-digit number, a missing epic number, a plural word, or a letter
+        # glued to the epic id or to the task number.
+        plan_clean="a lane a vehicle takes, lane m, stage 2, stage K, stage k3, stage K3xy, lane  M, epic poem, epic e1, upstage K3, plane M, lane Mx, task 9, E2 task, e2 task 9, E2 task x, xE2 task 9, E2 tasks 9, E2 task9, E task 9, 2 task 9, E2 task 9bc"
         # Phrases that are a plan name, in the cases the pattern states.
-        plan_names=("epic E11" "Epic 10" "EPIC E1" "stage K3" "stage K3x" "stage K9b" "Stage P4" "STAGE M3" "lane M" "Lane P" "(lane Q's" "E2 task 9" "E2 task 11b" "(E2 task 9)")
+        plan_names=("epic E11" "Epic 10" "EPIC E1" "stage K3" "stage K3x" "stage K9b" "Stage P4" "STAGE M3" "lane M" "Lane P" "(lane Q's" "E2 task 9" "E2 task 11b" "(E2 task 9)" "E16 task 3" "E2 Task 9")
         root="$work/fixture"
         report="$work/report"
         clean_tree() {
