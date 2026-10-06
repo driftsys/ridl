@@ -400,7 +400,7 @@ pub fn compile_workspace_with(
         lints,
         report_scope,
     } = load_and_check(db, entry, overlays)?;
-    // Reuse the standard IR query already evaluated by the design lint pass.
+    // System lowering resolves references into the standard package.
     let std_ir = check_package(&*db, workspace, std, std).ir;
     let packages: Vec<&ridl_ir::v2::Package> = checked.iter().map(|package| &package.ir).collect();
     let declared_deployments = declared_deployments(&system);

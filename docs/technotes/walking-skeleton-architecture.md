@@ -207,12 +207,12 @@ here. This list is not a standing count of every crate the workspace holds — s
   `tests/layout.rs` holds a test plugin that computes `examples/cabin`'s memory
   and socket layouts from that request alone.
 
-  `check_design_lints` (`src/design_lints/`) is the last pass of the workspace
-  check. It reads every checked package at once and reports the design lints,
-  such as shapes, units and interface cohesion. `ridl check` and `ridlc check`
-  run it, and the language server runs it through the same path. The
-  [design lints record](../design/design-lints.md) owns the checks, their levels
-  and thresholds.
+  `check_design_lints` (`src/design_lints/`) is the last diagnostic pass of the
+  workspace check. It reads every checked package at once and reports the design
+  lints, such as shapes, units and interface cohesion. `ridl check` and
+  `ridlc check` run it, and the language server calls the same function from its
+  own analysis path. The [design lints record](../design/design-lints.md) owns
+  the checks, their levels and thresholds.
 
 - **`crates/ridl`** — the porcelain facade: `ridl check`, `ridl baseline`,
   `ridl build`, `ridl test`, `ridl fmt`, `ridl diff`, `ridl lock`, `ridl lsp`,
