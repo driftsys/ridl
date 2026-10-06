@@ -919,8 +919,10 @@ trusted with no `unsafe` and no second verification pass.
       read `Claim::trace` ([ADR-0023](ADR-0023-interaction-face-generation.md),
       Status); driftsys/ridl#754 owns generated spans.
     - **The runtimes.** `ridl-loopback` carries the context, so it is a runtime
-      under rules 1 and 2. `ridl-rt-conformance` pins the rules for every
-      runtime.
+      under rules 1 and 2. In `ridl-rt-conformance`, the base arm of `suite!`
+      pins rule 4 for every runtime, and the `trace` arm pins rules 1 and 2 for
+      a runtime that carries the context. A runtime that does not carry it omits
+      the `trace` arm, because rule 3 lets it deliver `None`.
 
     **The release.** The change is breaking under decision 10, and ships as
     0.6.0 with the workspace. A `#[non_exhaustive]` marker and constructors on

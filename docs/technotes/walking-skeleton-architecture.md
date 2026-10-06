@@ -275,8 +275,8 @@ here. This list is not a standing count of every crate the workspace holds — s
   states the size of its call table, and supplies a hand-driven clock and a
   settlement fault injected once. A runtime runs the whole suite from its own
   tests with the crate's `suite!` macro, naming the extensions it implements —
-  the two signal extensions and `Wakeable`; `ridl-loopback` is the one runtime
-  that does.
+  the two signal extensions and `Wakeable` — and `trace` when it carries the
+  trace context; `ridl-loopback` is the one runtime that does.
 
 - **`crates/ridlc-gen-model`** — the reference codegen plugin, test-only and
   unpublished: `--emit codegen-model` as a process, over the backend contract

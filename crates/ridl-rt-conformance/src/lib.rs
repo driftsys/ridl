@@ -16,9 +16,10 @@
 //!     // ...
 //! }
 //!
-//! // Every test of the ports every runtime presents, and those of the three
-//! // extensions this runtime implements.
-//! ridl_rt_conformance::suite!(MyFactory; scannable, coherent, wakeable);
+//! // Every test of the ports every runtime presents, those of the three
+//! // extensions this runtime implements, and those of a runtime that
+//! // carries the trace context.
+//! ridl_rt_conformance::suite!(MyFactory; scannable, coherent, wakeable, trace);
 //! ```
 //!
 //! `ridl-loopback` is the first runtime to run it
@@ -191,14 +192,24 @@ pub trait Factory {
 ///
 /// `suite!(F)` writes the tests of the ports every runtime presents. Naming
 /// an extension after a semicolon adds its tests: `scannable` and
-/// `coherent`, the two signal extensions, and `wakeable`, in any
-/// combination, as in `suite!(F; scannable, coherent, wakeable)`. Each
-/// requires what that extension's tests ask for: `scannable` and `coherent`
-/// that `F::Runtime` implements the extension named, and `wakeable` that
-/// `F::Runtime` and the three role handles `F` makes implement `Wakeable`,
-/// and that `F` and those handles are `'static`, because one test runs on a
-/// thread of its own. Each test is named after the function it calls, so a
-/// failure names the contract it breaks.
+/// `coherent`, the two signal extensions, `wakeable`, and `trace`, in any
+/// combination, as in `suite!(F; scannable, coherent, wakeable, trace)`.
+/// Each requires what that extension's tests ask for: `scannable` and
+/// `coherent` that `F::Runtime` implements the extension named, and
+/// `wakeable` that `F::Runtime` and the three role handles `F` makes
+/// implement `Wakeable`, and that `F` and those handles are `'static`,
+/// because one test runs on a thread of its own. Each test is named after
+/// the function it calls, so a failure names the contract it breaks.
+///
+/// `trace` is not a trait. It is for a runtime that carries the trace
+/// context, and asks for nothing beyond the base arm. The port traits state
+/// four delivery rules for the context (ADR-0021 decision 21). The base arm
+/// pins rule 4, that a sender's `None` is delivered as `None`, for every
+/// runtime, because a runtime that does not carry the context passes it too.
+/// The `trace` arm pins rules 1 and 2, that the context a command, a query or
+/// a `raise` is sent with arrives unchanged, for a runtime that carries the
+/// context. Rule 3 lets a runtime that does not carry it deliver `None`, so
+/// such a runtime omits `trace`.
 #[macro_export]
 macro_rules! suite {
     ($factory:ty) => {
@@ -223,10 +234,7 @@ macro_rules! suite {
             events::two_sources_each_receive_their_own_copy_of_one_occurrence,
             events::a_short_buffer_leaves_the_occurrence_for_the_next_call,
             events::a_sink_sequence_number_counts_one_channel_publications,
-            events::a_raised_events_context_arrives_on_every_subscribers_occurrence,
-            events::two_occurrences_each_keep_their_own_context,
             events::an_event_raised_without_a_context_arrives_without_one,
-            events::a_short_buffer_keeps_the_occurrences_context,
             calls::a_command_is_delivered_and_acknowledged,
             calls::a_query_is_delivered_and_replied,
             calls::settle_can_be_made_to_fail_once_then_succeed,
@@ -247,13 +255,7 @@ macro_rules! suite {
             calls::an_injected_settle_failure_is_not_spent_on_an_unknown_claim,
             calls::a_handler_cannot_settle_another_handlers_claim,
             calls::two_handlers_each_receive_only_what_they_served,
-            calls::a_commands_context_arrives_on_its_claim,
-            calls::a_querys_context_arrives_on_its_claim,
             calls::a_call_sent_without_a_context_arrives_without_one,
-            calls::two_calls_in_flight_each_keep_their_own_context,
-            calls::one_callers_calls_in_flight_each_keep_their_own_context,
-            calls::an_oversized_claims_context_survives_its_second_presentation,
-            calls::a_reused_call_slot_does_not_keep_the_previous_context,
         );
     };
     ($factory:ty; $($extension:ident),+ $(,)?) => {
@@ -284,6 +286,19 @@ macro_rules! suite {
             wakeable::the_same_tasks_registration_is_a_refresh_that_wakes_nothing,
             wakeable::one_waker_per_kind_is_woken_by_a_change_on_any_interface_of_that_kind,
             wakeable::every_wake_runs_with_the_runtime_lock_released,
+        );
+    };
+    (@trace $factory:ty) => {
+        $crate::suite!(@tests $factory;
+            events::a_raised_events_context_arrives_on_every_subscribers_occurrence,
+            events::two_occurrences_each_keep_their_own_context,
+            events::a_short_buffer_keeps_the_occurrences_context,
+            calls::a_commands_context_arrives_on_its_claim,
+            calls::a_querys_context_arrives_on_its_claim,
+            calls::two_calls_in_flight_each_keep_their_own_context,
+            calls::one_callers_calls_in_flight_each_keep_their_own_context,
+            calls::an_oversized_claims_context_survives_its_second_presentation,
+            calls::a_reused_call_slot_does_not_keep_the_previous_context,
         );
     };
     (@tests $factory:ty; $($module:ident :: $test:ident),+ $(,)?) => {
@@ -393,14 +408,16 @@ fn blank_change() -> Changed {
 
 #[cfg(test)]
 mod tests {
-    /// The arm of `suite!` a test belongs in: the base arm, or the arm of the
-    /// one signal extension its signature asks `F::Runtime` for.
+    /// The arm of `suite!` a test belongs in: the base arm, the arm of the
+    /// one extension its signature asks `F::Runtime` for, or the `trace` arm
+    /// when it sends a trace context and asserts that the context arrives.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     enum Arm {
         Base,
         Scannable,
         Coherent,
         Wakeable,
+        Trace,
     }
 
     /// Every public function of a test module: its path under the crate, and
@@ -424,7 +441,12 @@ mod tests {
                 // The signature runs to the body's opening brace, and holds
                 // the where clause that asks for an extension.
                 let signature = rest.split('{').next().expect("a function body");
-                let asked: Vec<Arm> = [
+                // The text up to the next public function holds this one's
+                // body. A test that sends a context, one of the `TRACE_`
+                // constants, asserts that it arrives, which only a runtime
+                // that carries the context does.
+                let text = rest.split("\npub fn ").next().expect("a function");
+                let mut asked: Vec<Arm> = [
                     ("ScannableSignals", Arm::Scannable),
                     ("CoherentSignals", Arm::Coherent),
                     ("Wakeable", Arm::Wakeable),
@@ -433,10 +455,13 @@ mod tests {
                 .filter(|(extension, _)| signature.contains(extension))
                 .map(|(_, arm)| arm)
                 .collect();
+                if text.contains("Some(TRACE_") {
+                    asked.push(Arm::Trace);
+                }
                 let arm = match asked[..] {
                     [] => Arm::Base,
                     [arm] => arm,
-                    _ => panic!("`{module}::{name}` asks for more than one extension"),
+                    _ => panic!("`{module}::{name}` belongs in more than one extension arm"),
                 };
                 found.push((format!("{module}::{name}"), arm));
             }
@@ -445,7 +470,7 @@ mod tests {
     }
 
     /// The text of each arm of `suite!` that lists tests.
-    fn macro_arms() -> [(Arm, &'static str); 4] {
+    fn macro_arms() -> [(Arm, &'static str); 5] {
         let lib = include_str!("lib.rs");
         let between = |from: &str, to: &str| {
             let start = lib.find(from).expect("the arm's opening") + from.len();
@@ -464,7 +489,11 @@ mod tests {
             ),
             (
                 Arm::Wakeable,
-                between("(@wakeable $factory:ty) => {", "(@tests $factory:ty"),
+                between("(@wakeable $factory:ty) => {", "(@trace"),
+            ),
+            (
+                Arm::Trace,
+                between("(@trace $factory:ty) => {", "(@tests $factory:ty"),
             ),
         ]
     }
