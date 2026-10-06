@@ -38,6 +38,11 @@ codegen request's deployment section as an emitter over `System`, the declared
 sizing values as dedicated fields, and the moved boundary with the engine. It
 amends ADR-0015 decision 21, ADR-0018 decision 12 and ADR-0020 decision 9.
 
+Amended 2026-10-06 by the records of story E17.5 (driftsys/ridl#736): the note
+under decision 3 is rewritten, because rsdl §13 now lists the declared sizing
+values (driftsys/ridl#719). The note no longer states the two `sizing` fields as
+a fact that §13 does not list.
+
 ## Context
 
 rsdl §13 states the lowering as facts and leaves their carrier open: "a
