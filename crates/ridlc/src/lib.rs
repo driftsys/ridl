@@ -1696,8 +1696,8 @@ fn materialize_and_lock(
 /// so the request's `model` is the same JSON value as the
 /// `--emit codegen-model` artifact, one indentation level deeper — the
 /// backend `options`, the artifact base `ridlc` names this package's files
-/// after, and the selected `deployment` section. The one request per package every in-tree backend
-/// and every plugin is handed; a test that wants the bytes a plugin sees
+/// after, and the selected `deployment` section. The one request per package
+/// every in-tree backend and every plugin is handed; a test that wants the bytes a plugin sees
 /// builds it here.
 pub fn codegen_request(
     base: &str,
@@ -1911,8 +1911,8 @@ fn write_response(
 /// the interaction face and the descriptors beside the domain types and the
 /// codec; TypeScript, proto3 and FlatBuffers are their own crates'
 /// `Backend`; `codegen-model` is [`codegen::ModelBackend`], the model
-/// written back. The Rust backend reads the request's model and nothing else,
-/// as `codegen-model` does and as a plugin must; the other three still read the
+/// written back. The Rust backend reads the request and never the raw IR, as
+/// `codegen-model` does and as a plugin must; the other three still read the
 /// raw IR, so each is constructed with a [`codegen::RawIr`] — the package and
 /// `others`, the caller's full package list ([`run_build`]), which proto3 and
 /// FlatBuffers read to resolve a cross-package reference themselves — and reads
