@@ -36,6 +36,7 @@ plugins; each waits to be ported. §6 says what each parity test proves.
 | The in-process host: one request per package, every emit through the trait, the response written     | `crates/ridlc/src/lib.rs` — `codegen_request`, `write_emits`, `write_response`, `run_build_with`                                                                                                                                                                                                                                                                                                      |
 | The process host: `ridlc-gen-<language>`, `PATH` lookup, the pipe, the timeout, the error            | `crates/ridlc/src/plugin.rs` — `PluginSpec`, `resolve`, `run`, `PluginError`                                                                                                                                                                                                                                                                                                                          |
 | The flags                                                                                            | `crates/ridlc/src/main.rs` and `crates/ridl/src/main.rs`, `--plugin`, `--plugin-timeout` and `--deployment` on `build`; documented in [`docs/book/cli-reference.md`](../book/cli-reference.md)                                                                                                                                                                                                        |
+| The layout test plugin and its fixture                                                               | `crates/ridlc/tests/layout.rs` and `crates/ridlc/tests/fixtures/cabin-layout.json`                                                                                                                                                                                                                                                                                                                    |
 | The reference plugins                                                                                | `crates/ridlc-gen-model/`, a binary over `ModelBackend`, and `crates/ridlc-gen-rust/`, a binary over the Rust backend; both `publish = false`                                                                                                                                                                                                                                                         |
 | The parity tests                                                                                     | `crates/ridlc-gen-model/tests/parity.rs` and `crates/ridlc-gen-rust/tests/parity.rs`, each over every corpus package at the contract's level and every corpus entry at the command's level; the host's failure modes in `crates/ridlc/src/plugin.rs`'s tests; the flag's behaviour in `crates/ridlc/tests/cli.rs`; the messages' encodings and the path rule in `crates/ridl-ir/src/codegen/tests.rs` |
 
@@ -468,11 +469,37 @@ The `bindings` list is empty today. The emitter writes one entry per row of the
 table of known bindings, in name order, and the table has no row because no
 binding's frame layout is specified (driftsys/ridl#265).
 
-Nothing in the workspace reads the section: the Rust backend and the two
+The overhead of a binding is not part of any payload size. A plugin that sizes a
+socket message adds the frame header and the envelope of the binding the message
+crosses to the payload bound, so a socket message size is unavailable for a
+binding the table does not list.
+
+Nothing in the shipped toolchain reads the section: the Rust backend and the two
 reference plugins ignore it, and no `--emit` value writes the request out. The
 request is built in memory, and what a build hands a plugin is checked by
 running a plugin that saves each request it is given
 (`crates/ridlc/tests/cli.rs`).
+
+### The layout test plugin
+
+`crates/ridlc/tests/layout.rs` holds `LayoutBackend`, a test plugin that
+implements `ridl_ir::codegen::Backend` and reads the request alone: no raw IR
+and no file. It computes, for the deployment of `examples/cabin`, the byte
+layout of each region and the maximum size of each message that crosses a
+socket, and its output is compared with
+`crates/ridlc/tests/fixtures/cabin-layout.json`, a fixture in which a comment
+beside each number states how the number follows from the request. The test
+shows that the request carries every input those two layouts need. The layout
+rule belongs to the test plugin: it is stated in the plugin's module comment,
+and neither the toolchain nor the request prescribes it.
+
+Two things are not proved. The fixture states `null` for every socket message's
+maximum size, because the table of binding overheads has no row, so the sum of
+header, envelope and payload bound is not exercised. Declared sizing values are
+not in the `examples/cabin` source; a second test in the same file builds a
+workspace in a temporary directory that declares `depth`, `slots` and `budget`
+and checks that each declared value reaches the request with the declared
+source.
 
 ## 8. What a plugin author reads
 

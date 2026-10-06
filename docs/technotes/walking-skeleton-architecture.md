@@ -147,7 +147,12 @@ here. This list is not a standing count of every crate the workspace holds — s
   descriptor, whose crate `ridl-descriptor` depends on `ridl-ir`, re-exports the
   hash as `ridl_descriptor::hash`, and copies the interface numbers from the IR
   in `ridl_descriptor::number`; and each `Region` of the lowered rsdl system,
-  where `ridlc` embeds it (`embed_catalog_hashes`).
+  where `ridlc` embeds it (`embed_catalog_hashes`). `ridl_ir::codegen` holds the
+  codegen request's deployment section: `lower_deployment` in
+  `codegen/deployment.rs` is an emitter over the lowered system IR, and
+  `codegen/bindings.rs` holds the table of transport binding overheads, which
+  has no row yet ([the codegen plugin design](../design/codegen-plugins.md),
+  "The deployment section").
 
 - **`crates/ridl-backend-rust`** — one IR v2 package to
   `Generated { rust_source }`. Rust is built as a `quote` token stream and
@@ -196,7 +201,10 @@ here. This list is not a standing count of every crate the workspace holds — s
   reachable from the command line and not only from the corpus runner's
   snapshots. The two language emits are independent — each backend generates
   from the same IR on its own, and one that cannot render a package skips only
-  its own artifact.
+  its own artifact. `select_deployment` chooses the deployment that every
+  codegen request of a build carries (`--deployment NAME` on `build`), and
+  `tests/layout.rs` holds a test plugin that computes `examples/cabin`'s memory
+  and socket layouts from that request alone.
 
 - **`crates/ridl`** — the porcelain facade: `ridl check`, `ridl baseline`,
   `ridl build`, `ridl test`, `ridl fmt`, `ridl diff`, `ridl lock`, `ridl lsp`,
