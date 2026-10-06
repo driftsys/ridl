@@ -26,8 +26,9 @@ One Cargo workspace for the toolchain (`Cargo.toml`,
 is a second, separate workspace, because one of its members is written by
 `ridl build` and is not in git): every crate under `crates/` with its directory
 named after it, and the `xtask` automation member at the root (issue #180),
-which runs two generators, `codegen` and `descriptor-codegen`. The VS Code
-extension (`editors/vscode`) is TypeScript and is not a workspace member.
+which runs two generators, `codegen` and `descriptor-codegen`, and the
+`calibrate` command. The VS Code extension (`editors/vscode`) is TypeScript and
+is not a workspace member.
 
 The crates below arrived in three waves: seven from the E1 spine, grown in place
 through E2; two more from E2 — `ridl-backend-ts` and `ridl-diff`; and
@@ -206,6 +207,13 @@ here. This list is not a standing count of every crate the workspace holds — s
   `tests/layout.rs` holds a test plugin that computes `examples/cabin`'s memory
   and socket layouts from that request alone.
 
+  `check_design_lints` (`src/design_lints/`) is the last diagnostic pass of the
+  workspace check. It reads every checked package at once and reports the design
+  lints, such as shapes, units and interface cohesion. `ridl check` and
+  `ridlc check` run it, and the language server calls the same function from its
+  own analysis path. The [design lints record](../design/design-lints.md) owns
+  the checks, their levels and thresholds.
+
 - **`crates/ridl`** — the porcelain facade: `ridl check`, `ridl baseline`,
   `ridl build`, `ridl test`, `ridl fmt`, `ridl diff`, `ridl lock`, `ridl lsp`,
   `ridl mcp`, and `ridl describe`, driving the `ridlc` command drivers, the
@@ -293,6 +301,11 @@ here. This list is not a standing count of every crate the workspace holds — s
   [the design record](../design/mcp-workspace-tools.md) and the decisions in
   [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md).
 
+- **`evals/`** — the public corpus of translated upstream definitions, the
+  calibration records and the eval tasks that set the design lints' levels. It
+  is not a workspace member and holds no crate; see
+  [`evals/README.md`](../../evals/README.md).
+
 - **`editors/vscode`** — the VS Code extension: an LSP client plus TextMate
   grammars for `.typl`, `.ridl` and `.rsdl`, built with npm/tsc.
 
@@ -300,6 +313,9 @@ here. This list is not a standing count of every crate the workspace holds — s
   `family.ungram`, and `cargo xtask descriptor-codegen`, which generates
   `ridl-descriptor`'s accessors (`crates/ridl-descriptor/src/generated.rs`) from
   `crates/ridl-descriptor/schema/catalog.fbs` with planus.
+
+  `cargo xtask calibrate` dumps the design lints' findings over `evals/` and
+  derives the calibration summary ([`xtask/README.md`](../../xtask/README.md)).
 
   Run `cargo xtask descriptor-codegen` after every schema edit. The xtask test
   `committed_generated_accessors_match_the_schema` fails while the committed

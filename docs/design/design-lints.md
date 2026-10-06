@@ -37,8 +37,8 @@ severity.
 
 Two callers run it:
 
-- the shared compile in `ridlc`, after the per-package checks, the system checks
-  and system lowering, and before `apply_lint_levels`, so `ridl check`,
+- the shared compile in `ridlc`, after the per-package checks and the system
+  checks, and before system lowering and `apply_lint_levels`, so `ridl check`,
   `ridl build`, `ridlc check`, `ridlc build`, `check_source` and the MCP tool
   `ridl_check` all report the same findings and apply the same levels;
 - the language server's analysis path

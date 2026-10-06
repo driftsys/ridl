@@ -15,13 +15,14 @@ under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`,
 `ridl-rt`, `ridl-loopback`, `ridl-rt-conformance` (the port contract tests any
 runtime runs, test-only), and `ridlc-gen-model` and `ridlc-gen-rust` (the
 reference codegen plugins, test-only) — plus `xtask` at the root, the
-`editors/vscode` extension, and `examples/`, whose worked examples are compiled
-and run by the test suite rather than being prose. The typl v0.1 toolchain (epic
-E1), the ridl interface layer over it (epic E2) and rsdl's checks, lowering and
-`ridl diff` at the system (epic E6) are built; the boundary model (epic E3) is
-sequenced in the roadmap, and `rmdl` stays a Proposed draft with no
-implementation. See `docs/technotes/walking-skeleton-architecture.md` for the
-as-built map.
+`editors/vscode` extension, `evals/` (the public corpus, the calibration records
+and the eval tasks for design evaluation, outside the published crates and the
+book), and `examples/`, whose worked examples are compiled and run by the test
+suite rather than being prose. The typl v0.1 toolchain (epic E1), the ridl
+interface layer over it (epic E2) and rsdl's checks, lowering and `ridl diff` at
+the system (epic E6) are built; the boundary model (epic E3) is sequenced in the
+roadmap, and `rmdl` stays a Proposed draft with no implementation. See
+`docs/technotes/walking-skeleton-architecture.md` for the as-built map.
 
 **Start from the map for your task, then read what the task touches.**
 
@@ -76,6 +77,9 @@ as-built map.
   - ADR-0026 and `docs/book/documenting.md` — before changing doc comments:
     their carriers, links, tags, the doc lints, the IR's doc fields,
     `ridl_ir::rules`, or how a workspace member finds its root.
+  - ADR-0027 and `docs/design/design-lints.md` — before adding a design lint,
+    changing the level or the threshold of one, or changing the corpus, the
+    calibration records or an eval task under `evals/`.
 - `docs/ROADMAP.md` — the forward plan: the two steps it structures from the
   2026-09-12 re-scope's release scope (step 1, rsdl finalized plus the Rust
   runtime and codegen; step 2, TypeScript and the codegen plugin system), the

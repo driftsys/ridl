@@ -98,18 +98,16 @@ delivery sequence above; the rest of the sequence keeps its order.
 agents — the language server, the MCP server, doc comments and the authoring
 skill — leads P2, ahead of the advisory score, in this order:
 
-1. Design lints and metrics, PR #712: merge it, then move its specification and
-   plan out of `docs/wip/` into the records.
-2. The authoring skill and its rules: one specification that covers #73, #74,
+1. The authoring skill and its rules: one specification that covers #73, #74,
    #75 and #87 and decides which agent hosts it supports, how it is registered,
    and how the evals score an answer. It needs only the MCP tools that have
-   landed, so it can start before step 1 finishes.
-3. Doc comments in generated code: the rules and the source docs rendered as
+   landed, so it can start now.
+2. Doc comments in generated code: the rules and the source docs rendered as
    rustdoc and TSDoc on the public facade. It needs a specification; its
    dependencies (doc comments in the source, and the catalog descriptor) have
    landed.
-4. rsdl-aware references, rename and completion in the language server, #385.
-5. The review debt of the track: #711 and #682.
+3. rsdl-aware references, rename and completion in the language server, #385.
+4. The review debt of the track: #711 and #682.
 
 The developer-experience track runs beside P1. It does not change Epic 17's
 place in the sequence.
