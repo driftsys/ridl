@@ -104,9 +104,9 @@ pub fn check_system(db: &dyn salsa::Database, ws: Workspace, std: Package) -> Ch
 /// Each code is drawn once per consumer instance and event: the value and
 /// the bound belong to the consumer and the event, so a redundant provider
 /// set (RSDL-409), which lowers one link per producer instance, does not
-/// repeat them. Each message names its deployment, so two deployments that
-/// draw one code over one link are told apart by text and not by span
-/// alone. A deployment an RSDL-7xx error blocks is skipped, because its
+/// repeat them. Each message names its deployment, so that a reader of the
+/// rendered diagnostic, of SARIF or of JSON does not have to infer which
+/// deployment a warning belongs to from its span. A deployment an RSDL-7xx error blocks is skipped, because its
 /// placement set is not one to read links from: an instance placed twice or
 /// not at all, a machine declared twice, or a sizing value out of range
 /// leaves the lines of that deployment without a defined link set
@@ -123,7 +123,11 @@ fn check_depths(
         return;
     };
     // No deployment, or every deployment blocked: nothing reads a link, so
-    // the package IR of each required interface is not read either.
+    // the package IR of each required interface is not read either. This
+    // guard only saves work: with it removed, the loop below skips every
+    // blocked deployment and reports the same diagnostics, so it changes when
+    // `check_package` is reached and not what is reported. No test pins it for
+    // that reason, and a change to it is a change to incrementality.
     if system
         .placements
         .iter()
@@ -1753,6 +1757,26 @@ deployment Bench for Vehicle {
         budget: None,
     };
 
+    /// The sizing read from every `offers` and `requires` line, every system
+    /// member and every distribution member. Only a placement line holds one,
+    /// so every value here is `UNSIZED` unless a rejected site was read.
+    fn declared_member_sizing(system: &CheckedSystem) -> Vec<Sizing> {
+        let components = system
+            .components
+            .iter()
+            .flat_map(|component| component.offers.iter().chain(&component.requires));
+        let systems = system.systems.iter().flat_map(|decl| decl.members.iter());
+        let distributions = system
+            .distributions
+            .iter()
+            .flat_map(|decl| decl.members.iter());
+        components
+            .chain(systems)
+            .chain(distributions)
+            .map(|member| member.sizing)
+            .collect()
+    }
+
     /// rsdl §5: `depth`, `slots` and `budget` are read on a `deployment` and on
     /// a placement line, each key at both ends of its range.
     #[test]
@@ -1955,6 +1979,11 @@ deployment Bench for Vehicle {
             assert_eq!(codes(&system), ["FORM-107"], "`{text}`");
             assert!(system.closure_has_errors, "`{text}`");
             assert!(!system.placements[0].has_errors, "`{text}`");
+            let read = declared_member_sizing(&system);
+            assert!(
+                read.iter().all(|sizing| *sizing == UNSIZED),
+                "a rejected site's in-range value is not read: {read:?} in `{text}`"
+            );
         }
         let system = check_topology(&[("veh/topology/x.rsdl", cases[1].as_str())]);
         assert_eq!(
@@ -1998,7 +2027,11 @@ deployment Bench for Vehicle {
             assert_eq!(codes(&system), ["FORM-107"], "`{text}`");
             assert!(system.closure_has_errors, "`{text}`");
             assert!(!system.placements[0].has_errors, "`{text}`");
-            assert_eq!(system.deployments[0].sizing, UNSIZED, "`{text}`");
+            let read = declared_member_sizing(&system);
+            assert!(
+                read.iter().all(|sizing| *sizing == UNSIZED),
+                "a rejected site's value is not read: {read:?} in `{text}`"
+            );
         }
     }
 
@@ -2522,7 +2555,9 @@ deployment Bench for Vehicle {
     }
 
     /// rsdl §13: an RSDL-7xx error blocks its deployment, and its placement
-    /// set is not one to read links from.
+    /// set is not one to read links from. The only deployment here is blocked,
+    /// so the check returns before it reads any link; the per-deployment skip
+    /// is pinned by `a_blocked_deployment_does_not_silence_a_sibling_deployment`.
     #[test]
     fn a_blocked_deployment_draws_neither_code() {
         let system = check_events(
@@ -2560,6 +2595,24 @@ deployment Bench for Vehicle {
                  (rsdl reference §5)",
             ]
         );
+    }
+
+    /// rsdl §5: two unblocked deployments that each draw RSDL-805 report one
+    /// warning each, and each message names its own deployment.
+    #[test]
+    fn two_unblocked_deployments_each_draw_a_warning_naming_themselves() {
+        let system = check_events(
+            "system Vehicle { Body, Panel, Lock }\n\
+             deployment Prod for Vehicle { machine A { \
+             Body, Panel [ depth = 2 ], Lock [ depth = 10 ] } }\n\
+             deployment Bench for Vehicle { machine B { \
+             Body, Panel [ depth = 2 ], Lock [ depth = 10 ] } }\n",
+        );
+        assert_eq!(codes(&system), ["RSDL-805", "RSDL-805"]);
+        let messages = messages(&system);
+        assert!(messages[0].starts_with("`depth = 2` on `Panel` in `Prod` "));
+        assert!(messages[1].starts_with("`depth = 2` on `Panel` in `Bench` "));
+        assert_ne!(messages[0], messages[1]);
     }
 
     /// rsdl §5: an event of an inline-shape service (ridl §4) is read like one

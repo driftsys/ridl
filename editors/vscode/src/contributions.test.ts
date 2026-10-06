@@ -64,6 +64,9 @@ test("the rsdl grammar scopes the keys of an attribute block", () => {
   for (const key of ["instances", "external", "tier", "depth", "slots", "budget", "labels", "deprecated"]) {
     assert.ok(owned.test(key), `\`${key}\` is an rsdl-owned key`);
   }
+  for (const word of ["cpuset", "rustCrate", "instance", "depths", "name"]) {
+    assert.ok(!owned.test(word), `\`${word}\` is not an rsdl-owned key`);
+  }
 });
 
 test("the rsdl grammar highlights the rsdl keywords and no retired word", () => {
