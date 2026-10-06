@@ -751,15 +751,6 @@ fn rpc_bound(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
     if old_timing.mode != new_timing.mode {
         return Verdict::Breaking;
     }
-    // `default_applied` is always false on an RPC, because an RPC bound is
-    // never defaulted (ADR-0015 decision 7); anything else in a snapshot is
-    // erroneous IR, and a flip is breaking regardless — never the "default
-    // made explicit" compatibility [`timing`] grants, which would report
-    // compatible on IR the classifier does not understand (ADR-0012
-    // decision 9).
-    if old_timing.default_applied != new_timing.default_applied {
-        return Verdict::Breaking;
-    }
     // A throttle raised, a response bound raised, or either bound added or
     // removed. `raised` covers the added case (`None` → `Some`), `dropped` the
     // removed one. This is [`timing`]'s predicate with the `min` direction
@@ -771,8 +762,11 @@ fn rpc_bound(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
     {
         return Verdict::Breaking;
     }
-    // What remains is a throttle lowered or a response bound lowered — the
-    // caller is less constrained, or the provider promises more.
+    // What remains is a throttle lowered, a response bound lowered, or only
+    // `default_applied` flipped over identical bounds — a default made
+    // explicit (ADR-0015 decision 7), the rule [`timing`] gives a signal. The
+    // caller is less constrained, or the provider promises more, or neither
+    // changed.
     Verdict::Compatible
 }
 

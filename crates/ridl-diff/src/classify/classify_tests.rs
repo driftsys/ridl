@@ -1149,17 +1149,42 @@ fn an_rpc_timing_mode_flip_is_breaking() {
     assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Breaking);
 }
 
-/// The mirror of [`a_default_applied_flip_over_identical_bounds_is_compatible`]
-/// with the opposite verdict: `default_applied` is always false on an RPC,
-/// because an RPC bound is never defaulted (ADR-0015 decision 7), so a
-/// snapshot flipping it is erroneous IR and fails closed (ADR-0012
-/// decision 9) rather than reading as a default made explicit.
+/// A defaulted RPC bound made explicit over identical bounds is compatible,
+/// the rule [`a_default_applied_flip_over_identical_bounds_is_compatible`]
+/// gives a signal (ADR-0015 decision 7).
 #[test]
-fn an_rpc_default_applied_flip_over_identical_bounds_is_breaking() {
-    let mut defaulted = range(Some("10000"), Some("100000"));
+fn rpc_default_made_explicit_is_compatible() {
+    let mut defaulted = range(None, Some("1000000"));
     defaulted.default_applied = true;
     let old = bounded_command(Some(defaulted));
-    let new = bounded_command(Some(range(Some("10000"), Some("100000"))));
+    let new = bounded_command(Some(range(None, Some("1000000"))));
+    assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Compatible);
+}
+
+#[test]
+fn rpc_explicit_bound_replaced_by_equal_default_is_compatible() {
+    let mut defaulted = range(None, Some("1000000"));
+    defaulted.default_applied = true;
+    let old = bounded_command(Some(range(None, Some("1000000"))));
+    let new = bounded_command(Some(defaulted));
+    assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Compatible);
+}
+
+#[test]
+fn rpc_defaulted_bound_added_is_breaking() {
+    let mut defaulted = range(None, Some("1000000"));
+    defaulted.default_applied = true;
+    let old = bounded_command(None);
+    let new = bounded_command(Some(defaulted));
+    assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Breaking);
+}
+
+#[test]
+fn rpc_default_flip_with_a_raised_max_is_breaking() {
+    let mut defaulted = range(None, Some("1000000"));
+    defaulted.default_applied = true;
+    let old = bounded_command(Some(defaulted));
+    let new = bounded_command(Some(range(None, Some("2000000"))));
     assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Breaking);
 }
 
