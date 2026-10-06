@@ -48,7 +48,7 @@ crates/                         The compiler workspace (typl + ridl)
 ├── ridlc/                      Compiler driver (check / build / emit)
 ├── ridl/                       Porcelain facade (check / baseline / build / test / fmt / diff / lock / lsp / mcp / describe)
 ├── ridl-lsp/                   Language server library (`ridl lsp`)
-├── ridl-mcp/                   MCP server (ADR-0005 Layer B): `ridl mcp`, the `ridl_check` tool
+├── ridl-mcp/                   MCP server (ADR-0005 Layer B): `ridl mcp`, nine workspace tools (docs/design/mcp-workspace-tools.md)
 ├── ridl-backend-rust/          Rust + extern-C code generation over the IR
 ├── ridl-backend-ts/            TypeScript code generation over the IR
 ├── ridl-backend-proto/         proto3 schema generation over the IR (a wire backend, ADR-0013 decision 2)
@@ -59,7 +59,8 @@ crates/                         The compiler workspace (typl + ridl)
 └── ridl-loopback/              The in-process reference runtime over those ports (ADR-0020 decision 6)
 editors/vscode/                 VS Code extension (TextMate grammars + LSP client)
 examples/                       Worked examples — a schema and a program against the crate built from it
-xtask/                          Workspace automation (ungrammar codegen, descriptor-codegen, drift checks)
+evals/                          Public evaluation corpus, calibration records and eval tasks (evals/README.md)
+xtask/                          Workspace automation (codegen, descriptor-codegen, calibrate; xtask/README.md)
 Cargo.toml                      Cargo workspace root
 rust-toolchain.toml             The pinned Rust toolchain (ADR-0009)
 docs/
@@ -126,6 +127,11 @@ docs/
   [`docs/wip/ridl-family-concept.md`](docs/wip/ridl-family-concept.md).
 - Building the toolchain? [`docs/ROADMAP.md`](docs/ROADMAP.md) and the ADRs
   under [`docs/decisions/`](docs/decisions/).
+- Using the tools for agents? `ridl mcp` serves nine workspace tools, listed in
+  [`docs/design/mcp-workspace-tools.md`](docs/design/mcp-workspace-tools.md).
+- Checking how the design lints were set? [`evals/`](evals/README.md) holds the
+  evaluation corpus and tasks, and `cargo xtask calibrate` dumps and derives the
+  calibration; see [`xtask/README.md`](xtask/README.md).
 - Selecting work? [`docs/BACKLOG.md`](docs/BACKLOG.md) records the latest
   priority review of open issues, bugs and technical debt.
 
