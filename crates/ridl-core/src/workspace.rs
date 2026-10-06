@@ -154,7 +154,7 @@ fn overlay_key(path: &Path) -> Option<PathBuf> {
 ///   directory tree, a `[workspace]` manifest loads every member.
 ///
 /// An entry inside a workspace member loads the whole workspace, so the
-/// root's `[lints]`, `[defaults].timing` and `[imports]` apply to the member
+/// root's `[lints]`, `[defaults]` and `[imports]` apply to the member
 /// and its imports of sibling members resolve;
 /// [`LoadedWorkspace::report_scope`] records the member.
 ///
@@ -438,7 +438,7 @@ impl Loader {
             }
             ManifestKind::Workspace { members } => {
                 // ADR-0002 §5 step 3: the workspace root's `[imports]` and
-                // `[defaults].timing` are the shared defaults. Member maps are
+                // `[defaults]` are the shared defaults. Member maps are
                 // never merged into them.
                 self.workspace_imports = imports;
                 self.workspace_defaults = defaults;
