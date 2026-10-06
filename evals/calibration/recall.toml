@@ -1,0 +1,897 @@
+# Recall join between the review rubrics and the design check findings (design spec section 7.4).
+# Built after blind labelling and human adjudication were complete (2026-10-06).
+#
+# Inventory rules:
+# - Each numbered rubric item has the ID `<task-id>:<item-number>`. Its committed text is copied
+#   verbatim in the comment above its `[[item]]` entry; the rubric files are unchanged.
+# - A **must** or **should** item that names a property of the workspace design is an `issue`.
+# - A **should** item that recommends the remedy for exactly one issue of the same task is an
+#   `alias` of that issue.
+# - A **must not** item is `excluded`: it constrains the answer and names no design property.
+#   A recommendation that addresses more than one issue is `excluded` with the reason given.
+#
+# Applicability rule: a check is applicable to a canonical issue only when the issue's subject is
+# the property that the check's rule computes (design spec section 4).
+# Matching rule: `findings` lists every finding that points at the issue, whatever its adjudicated
+# label, because labels measure precision and matching measures recall (design spec section 7.4).
+
+# 1. **must** identify that Point and Vector3 have the same x/y/z field types
+#    while their upstream comments give different transformation semantics, and
+#    explain why merging them would erase useful nominal meaning.
+[[item]]
+id = "review-0001:1"
+workspace = "ros2"
+kind = "issue"
+reason = "Design issue: two structs with the same field shape and different documented meaning."
+
+# 2. **must** identify that Point32 and Point have distinct upstream precision
+#    intentions which the RosFloat32 and RosFloat64 helpers both lower to float64,
+#    and classify that loss as a documented translation limitation.
+[[item]]
+id = "review-0001:2"
+workspace = "ros2"
+kind = "issue"
+reason = "Design issue: a translation limitation that loses a declared precision distinction."
+
+# 3. **must** identify that Inertia.com documents metres but uses the general
+#    Vector3 type without a machine-readable length unit, and explain the risk of
+#    accepting a vector with another physical meaning.
+[[item]]
+id = "review-0001:3"
+workspace = "ros2"
+kind = "issue"
+reason = "Design issue: a field documented in metres whose type carries no machine-readable unit."
+
+# 4. **should** propose a separately typed centre-of-mass vector for a redesigned
+#    API while explaining that introducing it would change the frozen
+#    upstream-shaped schema.
+[[item]]
+id = "review-0001:4"
+workspace = "ros2"
+kind = "alias"
+canonical = "review-0001:3"
+reason = "Recommendation for the remedy of review-0001:3 (the untyped centre-of-mass vector); it names the same issue, so it is an alias."
+
+# 5. **must not** assign one physical unit globally to Vector3, which is also used
+#    for acceleration and angular quantities.
+[[item]]
+id = "review-0001:5"
+workspace = "ros2"
+kind = "excluded"
+reason = "Answer constraint (a **must not** item): it limits what a review may claim or change and does not describe a design property of the workspace."
+
+# 6. **must not** treat the identical field shapes of Point and Vector3 alone as
+#    proof that either declaration should be removed.
+[[item]]
+id = "review-0001:6"
+workspace = "ros2"
+kind = "excluded"
+reason = "Answer constraint (a **must not** item): it limits what a review may claim or change and does not describe a design property of the workspace."
+
+# 1. **must** identify that Nav2MsgsInteractions combines map operations,
+#    lifecycle management and navigation actions, and discuss separate interfaces
+#    aligned with those different responsibilities.
+[[item]]
+id = "review-0002:1"
+workspace = "ros2"
+kind = "issue"
+reason = "Design issue: one interface combines several unrelated responsibilities."
+
+# 2. **must** identify that isPathValid exposes seven independent parameters
+#    although IsPathValidRequest groups them and retains explicit upstream
+#    defaults, and explain that the call parameters do not retain those defaults.
+[[item]]
+id = "review-0002:2"
+workspace = "ros2"
+kind = "issue"
+reason = "Design issue: call parameters that do not retain the defaults of the grouped request."
+
+# 3. **must** identify that action goal commands and feedback events are present
+#    but action result structs such as NavigateToPoseResult have no result
+#    interaction under the frozen kind rule, leaving completion and failure
+#    delivery unspecified by this port.
+[[item]]
+id = "review-0002:3"
+workspace = "ros2"
+kind = "issue"
+reason = "Design issue: actions without a result or completion interaction."
+
+# 4. **should** propose an explicit completion channel and goal/result correlation
+#    for a redesigned action API without claiming that the current compiler
+#    implements ROS action execution.
+[[item]]
+id = "review-0002:4"
+workspace = "ros2"
+kind = "alias"
+canonical = "review-0002:3"
+reason = "Recommendation for the remedy of review-0002:3 (no action result or completion interaction); it names the same issue, so it is an alias."
+
+# 5. **must** identify that loadMap and saveMap are mapped to queries by the
+#    service rule even though they affect state, and distinguish that mechanical
+#    mapping from a recommendation for a newly designed RIDL API.
+[[item]]
+id = "review-0002:5"
+workspace = "ros2"
+kind = "issue"
+reason = "Design issue: state-changing services mapped to queries."
+
+# 6. **must not** present the missing action result interaction as an accidental
+#    omission by the porter or silently add it to the frozen workspace.
+[[item]]
+id = "review-0002:6"
+workspace = "ros2"
+kind = "excluded"
+reason = "Answer constraint (a **must not** item): it limits what a review may claim or change and does not describe a design property of the workspace."
+
+# 1. **must** identify that missionRequest and missionRequestInt both return
+#    MissionItemInt even though the deprecated non-integer request historically
+#    pairs with MissionItem, and explain the deliberate documented adaptation.
+[[item]]
+id = "review-0003:1"
+workspace = "mavlink"
+kind = "issue"
+reason = "Design issue: two request calls with equal requests that both return the integer item."
+
+# 2. **must** identify that query-shaped mission requests do not by themselves
+#    express transfer sequencing, re-request after timeout or missionAck
+#    completion, and explain why a client cannot infer a reliable transfer from
+#    the signatures alone.
+[[item]]
+id = "review-0003:2"
+workspace = "mavlink"
+kind = "issue"
+reason = "Design issue: transfer sequencing, retry and completion are not expressed by the signatures."
+
+# 3. **must** identify missionType and sequence fields as necessary distinctions
+#    for independently stored plan types and ordered item transfer, using named
+#    declarations from the port.
+[[item]]
+id = "review-0003:3"
+workspace = "mavlink"
+kind = "issue"
+reason = "Design property that a review must identify: fields that keep plan types and item order distinct."
+
+# 4. **should** recommend documenting protocol state transitions and correlation
+#    between requests, items and acknowledgements alongside the RIDL boundary.
+[[item]]
+id = "review-0003:4"
+workspace = "mavlink"
+kind = "alias"
+canonical = "review-0003:2"
+reason = "Recommendation for the remedy of review-0003:2 (transfer sequencing and correlation not expressed by the signatures); it names the same issue, so it is an alias."
+
+# 5. **must not** remove targetSystem, targetComponent, sequence or missionType
+#    fields as redundant solely because calls are presented through a single
+#    interface.
+[[item]]
+id = "review-0003:5"
+workspace = "mavlink"
+kind = "excluded"
+reason = "Answer constraint (a **must not** item): it limits what a review may claim or change and does not describe a design property of the workspace."
+
+# 6. **must not** claim that RIDL timing defaults implement the upstream retry
+#    procedure.
+[[item]]
+id = "review-0003:6"
+workspace = "mavlink"
+kind = "excluded"
+reason = "Answer constraint (a **must not** item): it limits what a review may claim or change and does not describe a design property of the workspace."
+
+# 1. **must** identify that ParamSet.paramValue and ParamValue.paramValue use a
+#    float-backed field accompanied by paramType, while the public protocol
+#    permits byte-wise and numeric-cast encoding, so a float value alone does not
+#    determine the original parameter value.
+[[item]]
+id = "review-0004:1"
+workspace = "mavlink"
+kind = "issue"
+reason = "Design issue: a float-backed value whose meaning depends on a separate type field and encoding."
+
+# 2. **must** identify that parameter identifiers are fixed 16-byte arrays whose
+#    full-length names need no trailing null, and explain why replacing them with
+#    a null-terminated string changes accepted identifiers.
+[[item]]
+id = "review-0004:2"
+workspace = "mavlink"
+kind = "issue"
+reason = "Design issue: fixed-length identifiers that are not null-terminated strings."
+
+# 3. **must** identify that paramSet has no query return and that paramValue is
+#    also an event, so confirmation of the current stored value and correlation
+#    with a write require the documented protocol procedure.
+[[item]]
+id = "review-0004:3"
+workspace = "mavlink"
+kind = "issue"
+reason = "Design issue: a write with no query return, so confirmation needs the protocol procedure."
+
+# 4. **must** identify paramCount and paramIndex in ParamValue as
+#    list-completeness information and explain why the list query stream alone
+#    does not establish that every parameter arrived.
+[[item]]
+id = "review-0004:4"
+workspace = "mavlink"
+kind = "issue"
+reason = "Design issue: list completeness carried by count and index fields, not by the stream."
+
+# 5. **should** recommend keeping adapter encoding policy and retry/completeness
+#    rules explicit instead of inferring them from the scalar type.
+[[item]]
+id = "review-0004:5"
+workspace = "mavlink"
+kind = "excluded"
+reason = "Recommendation that addresses two separate canonical issues (review-0004:1, the encoding policy, and review-0004:3 and review-0004:4, the confirmation and completeness rules); an alias names exactly one canonical issue, so the item is excluded rather than made an alias."
+
+# 6. **must not** assume that every stored parameter is intrinsically a
+#    floating-point value or that receiving any paramValue confirms a particular
+#    write.
+[[item]]
+id = "review-0004:6"
+workspace = "mavlink"
+kind = "excluded"
+reason = "Answer constraint (a **must not** item): it limits what a review may claim or change and does not describe a design property of the workspace."
+
+# 7. **must** identify that the port's Float32 helper lowers to float64 without
+#    guaranteeing preservation of binary32 payload bits, and explain that
+#    byte-wise parameter decoding requires the original wire bits or a conversion
+#    explicitly justified to preserve them rather than assuming the RIDL scalar
+#    preserves them.
+[[item]]
+id = "review-0004:7"
+workspace = "mavlink"
+kind = "issue"
+reason = "Design issue: a translation limitation that does not preserve binary32 payload bits."
+
+# 1. **must** identify the eight row/occupant station packages that repeat
+#    FanSpeed, Temperature and AirDistribution declarations, and explain the
+#    maintenance cost of changing those definitions consistently.
+[[item]]
+id = "review-0005:1"
+workspace = "vss"
+kind = "issue"
+reason = "Design issue: eight station packages repeat the same declarations."
+
+# 2. **must** discuss a shared station vocabulary as a possible redesign while
+#    preserving separate addressed station instances and recognizing that the
+#    frozen one-package-per-branch rule explains the repetition.
+[[item]]
+id = "review-0005:2"
+workspace = "vss"
+kind = "alias"
+canonical = "review-0005:1"
+reason = "Recommendation for the remedy of review-0005:1 (the repeated station declarations); it names the same issue, so it is an alias."
+
+# 3. **must** identify that FanSpeed enforces the integer range 0..100 while its
+#    percent unit remains comment metadata because integer-backed unit types are
+#    unavailable, so adding a unit directly would change its representation.
+[[item]]
+id = "review-0005:3"
+workspace = "vss"
+kind = "issue"
+reason = "Design issue: a percent unit kept only in a comment on an integer range type."
+
+# 4. **must** identify that AirDistribution preserves the three upstream allowed
+#    names but encodes them as integer enum values rather than upstream strings,
+#    requiring an explicit adapter correspondence.
+[[item]]
+id = "review-0005:4"
+workspace = "vss"
+kind = "issue"
+reason = "Design issue: enum values encoded as integers instead of upstream strings."
+
+# 5. **must** identify that a setter command has no reported applied value or
+#    failure outcome and that the matching signal alone does not specify
+#    correlation with a particular request.
+[[item]]
+id = "review-0005:5"
+workspace = "vss"
+kind = "issue"
+reason = "Design issue: a setter with no reported outcome and no correlation with the matching signal."
+
+# 6. **must not** invent upstream timing, temperature bounds, setter
+#    acknowledgement guarantees or default values absent from the selected
+#    definitions.
+[[item]]
+id = "review-0005:6"
+workspace = "vss"
+kind = "excluded"
+reason = "Answer constraint (a **must not** item): it limits what a review may claim or change and does not describe a design property of the workspace."
+
+[[check]]
+name = "duplicate-shape"
+
+[[check.issue]]
+id = "review-0001:1"
+applicable = true
+reason = "The issue is the equal field shape of Point and Vector3, which is the property this check reports."
+findings = [
+  "duplicate-shape:ros2:geometry_msgs/messages.typl:7423-7430:0",
+]
+
+[[check.issue]]
+id = "review-0001:2"
+applicable = false
+reason = "The issue is precision loss in the scalar helpers, not equal field shapes; no Point32 finding exists, and an equal shape would not show the precision loss."
+findings = []
+
+[[check.issue]]
+id = "review-0001:3"
+applicable = false
+reason = "The issue does not concern two struct or enum declarations with equal fields or variants, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0002:1"
+applicable = false
+reason = "The issue does not concern two struct or enum declarations with equal fields or variants, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0002:2"
+applicable = false
+reason = "The issue does not concern two struct or enum declarations with equal fields or variants, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0002:3"
+applicable = false
+reason = "The issue is a missing result interaction; the equal shapes of the result structs are a separate matter and do not show the missing interaction."
+findings = []
+
+[[check.issue]]
+id = "review-0002:5"
+applicable = false
+reason = "The issue does not concern two struct or enum declarations with equal fields or variants, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0003:1"
+applicable = true
+reason = "The issue is the equivalence of the two request calls; their request structs MissionRequestInt and MissionRequest have equal field shapes, which this check reports."
+findings = [
+  "duplicate-shape:mavlink:common/messages.typl:25115-25132:0",
+]
+
+[[check.issue]]
+id = "review-0003:2"
+applicable = false
+reason = "The issue does not concern two struct or enum declarations with equal fields or variants, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0003:3"
+applicable = false
+reason = "The issue does not concern two struct or enum declarations with equal fields or variants, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:1"
+applicable = false
+reason = "The issue does not concern two struct or enum declarations with equal fields or variants, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:2"
+applicable = false
+reason = "The issue does not concern two struct or enum declarations with equal fields or variants, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:3"
+applicable = false
+reason = "The issue does not concern two struct or enum declarations with equal fields or variants, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:4"
+applicable = false
+reason = "The issue does not concern two struct or enum declarations with equal fields or variants, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:7"
+applicable = false
+reason = "The issue does not concern two struct or enum declarations with equal fields or variants, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0005:1"
+applicable = true
+reason = "The issue is the repetition of declarations across the station packages; this check reports repeated enum declarations (AirDistribution). FanSpeed and Temperature are not structs or enums, so this check cannot report them."
+findings = [
+  "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row1/Passenger/contract.ridl:1440-1455:0",
+  "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row2/Driver/contract.ridl:1434-1449:0",
+  "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row2/Passenger/contract.ridl:1440-1455:0",
+  "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row3/Driver/contract.ridl:1434-1449:0",
+  "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row3/Passenger/contract.ridl:1440-1455:0",
+  "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row4/Driver/contract.ridl:1434-1449:0",
+  "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row4/Passenger/contract.ridl:1440-1455:0",
+]
+
+[[check.issue]]
+id = "review-0005:3"
+applicable = false
+reason = "The issue does not concern two struct or enum declarations with equal fields or variants, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0005:4"
+applicable = false
+reason = "The issue is the integer encoding of the enum values, not the repetition of the enum; this check reports only equal variant sets."
+findings = []
+
+[[check.issue]]
+id = "review-0005:5"
+applicable = false
+reason = "The issue does not concern two struct or enum declarations with equal fields or variants, which is the only property this check reports."
+findings = []
+
+[[check]]
+name = "inconsistent-abbreviation"
+
+[[check.issue]]
+id = "review-0001:1"
+applicable = false
+reason = "The issue does not concern a name word used in both an abbreviated and a full form, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0001:2"
+applicable = false
+reason = "The issue does not concern a name word used in both an abbreviated and a full form, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0001:3"
+applicable = false
+reason = "The issue does not concern a name word used in both an abbreviated and a full form, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0002:1"
+applicable = false
+reason = "The issue does not concern a name word used in both an abbreviated and a full form, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0002:2"
+applicable = false
+reason = "The issue does not concern a name word used in both an abbreviated and a full form, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0002:3"
+applicable = false
+reason = "The issue does not concern a name word used in both an abbreviated and a full form, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0002:5"
+applicable = false
+reason = "The issue does not concern a name word used in both an abbreviated and a full form, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0003:1"
+applicable = false
+reason = "The issue does not concern a name word used in both an abbreviated and a full form, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0003:2"
+applicable = false
+reason = "The issue does not concern a name word used in both an abbreviated and a full form, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0003:3"
+applicable = false
+reason = "The issue does not concern a name word used in both an abbreviated and a full form, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:1"
+applicable = false
+reason = "The issue does not concern a name word used in both an abbreviated and a full form, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:2"
+applicable = false
+reason = "The issue does not concern a name word used in both an abbreviated and a full form, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:3"
+applicable = false
+reason = "The issue does not concern a name word used in both an abbreviated and a full form, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:4"
+applicable = false
+reason = "The issue does not concern a name word used in both an abbreviated and a full form, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:7"
+applicable = false
+reason = "The issue does not concern a name word used in both an abbreviated and a full form, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0005:1"
+applicable = false
+reason = "The issue does not concern a name word used in both an abbreviated and a full form, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0005:3"
+applicable = false
+reason = "The issue does not concern a name word used in both an abbreviated and a full form, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0005:4"
+applicable = false
+reason = "The issue does not concern a name word used in both an abbreviated and a full form, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0005:5"
+applicable = false
+reason = "The issue does not concern a name word used in both an abbreviated and a full form, which is the only property this check reports."
+findings = []
+
+[[check]]
+name = "inconsistent-unit"
+
+[[check.issue]]
+id = "review-0001:1"
+applicable = false
+reason = "The issue does not concern one field or parameter name declared with two different units, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0001:2"
+applicable = false
+reason = "The issue does not concern one field or parameter name declared with two different units, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0001:3"
+applicable = false
+reason = "The issue is a missing unit; this check skips every site whose type has no unit, so it cannot report a missing unit."
+findings = []
+
+[[check.issue]]
+id = "review-0002:1"
+applicable = false
+reason = "The issue does not concern one field or parameter name declared with two different units, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0002:2"
+applicable = false
+reason = "The issue does not concern one field or parameter name declared with two different units, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0002:3"
+applicable = false
+reason = "The issue does not concern one field or parameter name declared with two different units, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0002:5"
+applicable = false
+reason = "The issue does not concern one field or parameter name declared with two different units, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0003:1"
+applicable = false
+reason = "The issue does not concern one field or parameter name declared with two different units, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0003:2"
+applicable = false
+reason = "The issue does not concern one field or parameter name declared with two different units, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0003:3"
+applicable = false
+reason = "The issue does not concern one field or parameter name declared with two different units, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:1"
+applicable = false
+reason = "The issue does not concern one field or parameter name declared with two different units, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:2"
+applicable = false
+reason = "The issue does not concern one field or parameter name declared with two different units, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:3"
+applicable = false
+reason = "The issue does not concern one field or parameter name declared with two different units, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:4"
+applicable = false
+reason = "The issue does not concern one field or parameter name declared with two different units, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:7"
+applicable = false
+reason = "The issue does not concern one field or parameter name declared with two different units, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0005:1"
+applicable = false
+reason = "The issue does not concern one field or parameter name declared with two different units, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0005:3"
+applicable = false
+reason = "The issue is a unit kept only in a comment; this check skips every site whose type has no unit, so it cannot report it."
+findings = []
+
+[[check.issue]]
+id = "review-0005:4"
+applicable = false
+reason = "The issue does not concern one field or parameter name declared with two different units, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0005:5"
+applicable = false
+reason = "The issue does not concern one field or parameter name declared with two different units, which is the only property this check reports."
+findings = []
+
+[[check]]
+name = "low-cohesion-interface"
+
+[[check.issue]]
+id = "review-0001:1"
+applicable = false
+reason = "The issue does not concern an interface whose members fall into groups that share no type, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0001:2"
+applicable = false
+reason = "The issue does not concern an interface whose members fall into groups that share no type, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0001:3"
+applicable = false
+reason = "The issue does not concern an interface whose members fall into groups that share no type, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0002:1"
+applicable = true
+reason = "The issue is an interface that combines unrelated responsibilities, which is the property this check measures."
+findings = [
+  "low-cohesion-interface:ros2:nav2_msgs/interactions.ridl:15158-15178:0",
+]
+
+[[check.issue]]
+id = "review-0002:2"
+applicable = false
+reason = "The issue does not concern an interface whose members fall into groups that share no type, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0002:3"
+applicable = false
+reason = "The issue does not concern an interface whose members fall into groups that share no type, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0002:5"
+applicable = false
+reason = "The issue does not concern an interface whose members fall into groups that share no type, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0003:1"
+applicable = false
+reason = "The issue does not concern an interface whose members fall into groups that share no type, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0003:2"
+applicable = false
+reason = "The issue is protocol ordering and correlation between members, not a split of unrelated responsibilities; groups that share no type do not show missing sequencing."
+findings = []
+
+[[check.issue]]
+id = "review-0003:3"
+applicable = false
+reason = "The issue does not concern an interface whose members fall into groups that share no type, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:1"
+applicable = false
+reason = "The issue does not concern an interface whose members fall into groups that share no type, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:2"
+applicable = false
+reason = "The issue does not concern an interface whose members fall into groups that share no type, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:3"
+applicable = false
+reason = "The issue is confirmation and correlation of a write, not a split of unrelated responsibilities; groups that share no type do not show missing correlation."
+findings = []
+
+[[check.issue]]
+id = "review-0004:4"
+applicable = false
+reason = "The issue does not concern an interface whose members fall into groups that share no type, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:7"
+applicable = false
+reason = "The issue does not concern an interface whose members fall into groups that share no type, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0005:1"
+applicable = false
+reason = "The issue does not concern an interface whose members fall into groups that share no type, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0005:3"
+applicable = false
+reason = "The issue does not concern an interface whose members fall into groups that share no type, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0005:4"
+applicable = false
+reason = "The issue does not concern an interface whose members fall into groups that share no type, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0005:5"
+applicable = false
+reason = "The issue is a missing outcome and correlation for a setter, not a split of unrelated responsibilities."
+findings = []
+
+[[check]]
+name = "package-fan-out"
+
+[[check.issue]]
+id = "review-0001:1"
+applicable = false
+reason = "The issue does not concern the number of workspace packages a package depends on, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0001:2"
+applicable = false
+reason = "The issue does not concern the number of workspace packages a package depends on, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0001:3"
+applicable = false
+reason = "The issue does not concern the number of workspace packages a package depends on, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0002:1"
+applicable = false
+reason = "The issue is the responsibilities of one interface, not the package dependency count."
+findings = []
+
+[[check.issue]]
+id = "review-0002:2"
+applicable = false
+reason = "The issue does not concern the number of workspace packages a package depends on, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0002:3"
+applicable = false
+reason = "The issue does not concern the number of workspace packages a package depends on, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0002:5"
+applicable = false
+reason = "The issue does not concern the number of workspace packages a package depends on, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0003:1"
+applicable = false
+reason = "The issue does not concern the number of workspace packages a package depends on, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0003:2"
+applicable = false
+reason = "The issue does not concern the number of workspace packages a package depends on, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0003:3"
+applicable = false
+reason = "The issue does not concern the number of workspace packages a package depends on, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:1"
+applicable = false
+reason = "The issue does not concern the number of workspace packages a package depends on, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:2"
+applicable = false
+reason = "The issue does not concern the number of workspace packages a package depends on, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:3"
+applicable = false
+reason = "The issue does not concern the number of workspace packages a package depends on, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:4"
+applicable = false
+reason = "The issue does not concern the number of workspace packages a package depends on, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0004:7"
+applicable = false
+reason = "The issue does not concern the number of workspace packages a package depends on, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0005:1"
+applicable = false
+reason = "The issue does not concern the number of workspace packages a package depends on, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0005:3"
+applicable = false
+reason = "The issue does not concern the number of workspace packages a package depends on, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0005:4"
+applicable = false
+reason = "The issue does not concern the number of workspace packages a package depends on, which is the only property this check reports."
+findings = []
+
+[[check.issue]]
+id = "review-0005:5"
+applicable = false
+reason = "The issue does not concern the number of workspace packages a package depends on, which is the only property this check reports."
+findings = []

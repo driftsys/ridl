@@ -1,0 +1,85 @@
+# Labels for `inconsistent-unit`: Claude (`claude -p --model fable`) and Sol (`codex exec -m gpt-6.1-sol`), labelled blind.
+# `final` is set only where the two labels agree. Disagreements have no `final` until human adjudication.
+# Agreement sample seed: 20261005.
+# Sample algorithm: rank each agreed finding by SHA-256 of the UTF-8 string "20261005:inconsistent-unit:<finding-id>" (lowercase hex, ascending); take the first 10.
+# Agreed findings: 0. Sampled: 0. Shortfall: 10.
+# Adjudication: done by Sebastien on 2026-10-06.
+# Agreement sample: none (no agreed findings).
+# Adjudicated disagreements: 7. Sebastien set final = "accept" for all 7 findings in this file.
+
+[[finding]]
+id = "inconsistent-unit:mavlink:common/messages.typl:13656-13658:0"
+workspace = "mavlink"
+location = "common/messages.typl:251"
+message = "`vx` uses `m/s` here; elsewhere `vx` uses `cm/s`"
+claude = "accept"
+claude_reason = "The same field name vx carries m/s here and cm/s elsewhere in the workspace, a genuine unit hazard a designer would standardize or disambiguate"
+sol = "dismiss"
+sol_reason = "The documented vx units preserve float local velocity and scaled integer global velocity representations, so uniform units would change the contracts."
+final = "accept"
+
+[[finding]]
+id = "inconsistent-unit:mavlink:common/messages.typl:13750-13752:0"
+workspace = "mavlink"
+location = "common/messages.typl:254"
+message = "`vy` uses `m/s` here; elsewhere `vy` uses `cm/s`"
+claude = "accept"
+claude_reason = "The same field name vy carries m/s here and cm/s elsewhere in the workspace, a genuine unit hazard a designer would standardize or disambiguate"
+sol = "dismiss"
+sol_reason = "The documented vy units preserve float local velocity and scaled integer global velocity representations, so uniform units would change the contracts."
+final = "accept"
+
+[[finding]]
+id = "inconsistent-unit:mavlink:common/messages.typl:13844-13846:0"
+workspace = "mavlink"
+location = "common/messages.typl:257"
+message = "`vz` uses `m/s` here; elsewhere `vz` uses `cm/s`"
+claude = "accept"
+claude_reason = "The same field name vz carries m/s here and cm/s elsewhere in the workspace, a genuine unit hazard a designer would standardize or disambiguate"
+sol = "dismiss"
+sol_reason = "The documented vz units preserve float local velocity and scaled integer global velocity representations, so uniform units would change the contracts."
+final = "accept"
+
+[[finding]]
+id = "inconsistent-unit:mavlink:common/messages.typl:28955-28958:0"
+workspace = "mavlink"
+location = "common/messages.typl:569"
+message = "`alt` uses `m` here; elsewhere `alt` uses `mm`"
+claude = "accept"
+claude_reason = "The same field name alt carries meters here and millimeters elsewhere, a genuine unit hazard a designer would standardize or disambiguate"
+sol = "dismiss"
+sol_reason = "The documented float altitude in meters and scaled integer altitudes in millimeters preserve different upstream message representations."
+final = "accept"
+
+[[finding]]
+id = "inconsistent-unit:mavlink:standard/messages.typl:1312-1314:0"
+workspace = "mavlink"
+location = "standard/messages.typl:30"
+message = "`vx` uses `cm/s` here; elsewhere `vx` uses `m/s`"
+claude = "accept"
+claude_reason = "The same field name vx carries cm/s here and m/s elsewhere in the workspace, a genuine unit hazard a designer would standardize or disambiguate"
+sol = "dismiss"
+sol_reason = "The documented vx units preserve float local velocity and scaled integer global velocity representations, so uniform units would change the contracts."
+final = "accept"
+
+[[finding]]
+id = "inconsistent-unit:mavlink:standard/messages.typl:1446-1448:0"
+workspace = "mavlink"
+location = "standard/messages.typl:33"
+message = "`vy` uses `cm/s` here; elsewhere `vy` uses `m/s`"
+claude = "accept"
+claude_reason = "The same field name vy carries cm/s here and m/s elsewhere in the workspace, a genuine unit hazard a designer would standardize or disambiguate"
+sol = "dismiss"
+sol_reason = "The documented vy units preserve float local velocity and scaled integer global velocity representations, so uniform units would change the contracts."
+final = "accept"
+
+[[finding]]
+id = "inconsistent-unit:mavlink:standard/messages.typl:1579-1581:0"
+workspace = "mavlink"
+location = "standard/messages.typl:36"
+message = "`vz` uses `cm/s` here; elsewhere `vz` uses `m/s`"
+claude = "accept"
+claude_reason = "The same field name vz carries cm/s here and m/s elsewhere in the workspace, a genuine unit hazard a designer would standardize or disambiguate"
+sol = "dismiss"
+sol_reason = "The documented vz units preserve float local velocity and scaled integer global velocity representations, so uniform units would change the contracts."
+final = "accept"
