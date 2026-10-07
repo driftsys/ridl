@@ -375,12 +375,15 @@ as its public contract.
    `ridl_ir::codegen::request_from_json` ignores a key it does not know, at the
    top level of the request and inside `model` and `deployment`, so a plugin
    built on `ridl-ir` keeps reading the requests of a later `ridl` that adds a
-   request field. Before this amendment the reader rejected such a key, and the
-   two fields of the previous amendment, which the writer always emits, made
-   every plugin built on an earlier `ridl-ir` fail on every request. A plugin
-   built against an earlier `ridl-ir` must be rebuilt once. The response reader
-   (`response_from_json`) and the IR readers stay strict: ADR-0014 decision 11's
-   conformance test relies on that strictness.
+   request field. An unknown key is additive data a plugin can skip; an unknown
+   enum name is not, because it changes the meaning of a known field, so it
+   stays an error and a later `ridl` that adds an enum value is a change an
+   older plugin reports as an error. Before this amendment the reader rejected
+   such a key, and the two fields of the previous amendment, which the writer
+   always emits, made every plugin built on an earlier `ridl-ir` fail on every
+   request. A plugin built against an earlier `ridl-ir` must be rebuilt once.
+   The response reader (`response_from_json`) and the IR readers stay strict:
+   ADR-0014 decision 11's conformance test relies on that strictness.
 
 10. **Two hosts for that contract; the process host is this release's.** The
     in-tree Rust and TypeScript backends implement the contract in-process. The
