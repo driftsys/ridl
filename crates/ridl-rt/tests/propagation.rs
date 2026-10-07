@@ -32,5 +32,10 @@ fn set_once_then_refuse() {
     assert_eq!(set_propagation(&A), Ok(()));
     assert_eq!(marker_of(propagation()), Some(1));
     assert_eq!(set_propagation(&B), Err(AlreadySet));
+    let error: &dyn std::error::Error = &AlreadySet;
+    assert_eq!(
+        error.to_string(),
+        "a trace propagation hook is already registered"
+    );
     assert_eq!(marker_of(propagation()), Some(1));
 }

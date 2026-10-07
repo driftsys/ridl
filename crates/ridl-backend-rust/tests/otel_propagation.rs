@@ -1,17 +1,16 @@
 //! The order in which a generated `dispatch` calls the propagation hook and
 //! opens the claim span, proven against `tracing-opentelemetry`.
 //!
-//! The design of generated observation gives `ridl_rt::trace::Propagation`
-//! to the application: `current` reads the context to send, `enter` makes a
-//! received context the parent of what follows, and `leave` undoes `enter`.
-//! This test implements that trait with `tracing-opentelemetry` over an
-//! in-memory exporter, simulates one call and one claim in one thread, and
-//! reads the exported OpenTelemetry spans back. The hook object is passed
-//! directly and is not registered, so the test does not depend on the
-//! process-wide hook.
+//! `ridl_rt::trace::Propagation` is the hook the application implements:
+//! `current` reads the context to send, `enter` makes a received context the
+//! parent of what follows, and `leave` undoes `enter`. This test implements it
+//! with `tracing-opentelemetry` over an in-memory exporter, simulates one call
+//! and one claim in one thread, and reads the exported OpenTelemetry spans
+//! back. The hook object is passed directly and is not registered, so the test
+//! does not depend on the process-wide hook.
 //!
 //! The order that passes, and that the generated `dispatch` must follow, as
-//! recorded in the design note:
+//! recorded in ADR-0021 decision 22:
 //!
 //! 1. `enter(received)`, before the claim span exists. The hook attaches an
 //!    OpenTelemetry context that carries the received span context.
@@ -20,15 +19,19 @@
 //!    parent at creation, and `on_enter` starts the OpenTelemetry span.
 //! 3. Run the handler. A call made inside takes the claim span as its parent.
 //! 4. Exit and drop the claim span.
-//! 5. `leave()`. The hook detaches what `enter` attached.
+//! 5. `leave()`. The hook detaches what `enter` attached. The hook asserts
+//!    that the claim span is no longer the current span, which pins step 4
+//!    before step 5.
 //!
 //! Setting the parent after the span is entered (`set_parent` on
 //! `Span::current()`) returns `AlreadyStarted`, because entering the span
 //! starts it. Creating the claim span as an explicit root (`parent: None`)
-//! ignores the attached context and makes a new trace. The design note's
-//! "Call order" paragraph records both.
+//! ignores the attached context and makes a new trace. These two facts come
+//! from the source of `tracing-opentelemetry` 0.34.0 and are recorded in
+//! ADR-0021 decision 22; no test here pins them.
 
 use std::cell::RefCell;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use opentelemetry::trace::{
     SpanContext, SpanId, TraceContextExt, TraceFlags, TraceId, TraceState, TracerProvider,
@@ -36,7 +39,7 @@ use opentelemetry::trace::{
 use opentelemetry::{Context, ContextGuard};
 use opentelemetry_sdk::trace::{InMemorySpanExporter, SdkTracerProvider, SpanData};
 use ridl_rt::trace::{Propagation, TraceContext};
-use tracing::Span;
+use tracing::{Span, span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::Registry;
 use tracing_subscriber::layer::SubscriberExt;
@@ -45,10 +48,19 @@ thread_local! {
     /// What `enter` attached, popped by `leave`. An entry is `None` when
     /// nothing was received, so that `leave` always pops what `enter` pushed.
     static ATTACHED: RefCell<Vec<Option<ContextGuard>>> = const { RefCell::new(Vec::new()) };
+
+    /// The ids of the claim spans that are open, innermost last. The harness
+    /// pushes one when it creates a claim span and pops it after `leave`, so
+    /// that `leave` can check that its claim span is closed.
+    static OPEN_CLAIMS: RefCell<Vec<Option<span::Id>>> = const { RefCell::new(Vec::new()) };
 }
 
-/// The hook implemented with OpenTelemetry.
-struct Otel;
+/// The hook implemented with OpenTelemetry. It counts its calls.
+#[derive(Default)]
+struct Otel {
+    enters: AtomicUsize,
+    leaves: AtomicUsize,
+}
 
 impl Propagation for Otel {
     fn current(&self) -> Option<TraceContext> {
@@ -63,6 +75,7 @@ impl Propagation for Otel {
     }
 
     fn enter(&self, received: Option<TraceContext>) {
+        self.enters.fetch_add(1, Ordering::SeqCst);
         let guard = received.map(|received| {
             Context::current()
                 .with_remote_span_context(SpanContext::new(
@@ -78,10 +91,31 @@ impl Propagation for Otel {
     }
 
     fn leave(&self) {
+        self.leaves.fetch_add(1, Ordering::SeqCst);
+        let claim = OPEN_CLAIMS.with(|claims| claims.borrow().last().cloned().flatten());
+        assert!(
+            claim.is_some() && Span::current().id() != claim,
+            "leave() ran while the claim span was still the current span"
+        );
         ATTACHED.with(|stack| {
             stack.borrow_mut().pop();
         });
     }
+}
+
+/// Simulates `dispatch` for one claim in the order the module comment states:
+/// `enter`, the claim span around `handler`, then `leave`.
+fn serve_claim<R>(hook: &Otel, received: Option<TraceContext>, handler: impl FnOnce() -> R) -> R {
+    hook.enter(received);
+    let result = {
+        let claim = tracing::trace_span!("Cabin/setLevel");
+        OPEN_CLAIMS.with(|claims| claims.borrow_mut().push(claim.id()));
+        let _entered = claim.enter();
+        handler()
+    };
+    hook.leave();
+    OPEN_CLAIMS.with(|claims| claims.borrow_mut().pop());
+    result
 }
 
 /// What one call and one claim leave behind.
@@ -92,10 +126,11 @@ struct Observed {
     serve_loop: TraceContext,
     /// What a nested call inside the handler would send.
     inside_handler: Option<TraceContext>,
-    /// What the hook reads once `dispatch` has returned.
-    after_handler: Option<TraceContext>,
     /// The OpenTelemetry context attached once `dispatch` has returned.
     otel_after_handler: SpanContext,
+    /// How many times the hook's `enter` and `leave` ran.
+    enters: usize,
+    leaves: usize,
     exported: Vec<SpanData>,
 }
 
@@ -109,7 +144,7 @@ fn run(received: bool) -> Observed {
         .build();
     let layer = tracing_opentelemetry::layer().with_tracer(provider.tracer("test"));
     let subscriber = Registry::default().with(layer);
-    let hook = Otel;
+    let hook = Otel::default();
 
     let observed = tracing::subscriber::with_default(subscriber, || {
         // The client side: the call span is entered while the context is read.
@@ -124,20 +159,15 @@ fn run(received: bool) -> Observed {
         let _serve_entered = serve.enter();
         let serve_loop = hook.current().expect("the serve loop span has a context");
 
-        hook.enter(received.then_some(sent));
-        let inside_handler = {
-            let claim = tracing::trace_span!("Cabin/setLevel");
-            let _entered = claim.enter();
-            hook.current()
-        };
-        hook.leave();
+        let inside_handler = serve_claim(&hook, received.then_some(sent), || hook.current());
 
         Observed {
             sent,
             serve_loop,
             inside_handler,
-            after_handler: hook.current(),
             otel_after_handler: Context::current().span().span_context().clone(),
+            enters: hook.enters.load(Ordering::SeqCst),
+            leaves: hook.leaves.load(Ordering::SeqCst),
             exported: Vec::new(),
         }
     });
@@ -183,7 +213,7 @@ fn claim_span_has_the_remote_parent() {
 }
 
 #[test]
-fn nested_call_is_a_child_of_the_claim() {
+fn current_inside_the_claim_is_the_claim_span_context() {
     let observed = run(true);
     let claim = claim_span(&observed);
     let inside = observed
@@ -196,7 +226,6 @@ fn nested_call_is_a_child_of_the_claim() {
 #[test]
 fn leave_restores_the_application_span() {
     let observed = run(true);
-    assert_eq!(observed.after_handler, Some(observed.serve_loop));
     assert_eq!(
         observed.otel_after_handler.span_id().to_bytes(),
         observed.serve_loop.span_id
@@ -217,9 +246,52 @@ fn claim_without_context_is_a_child_of_the_application_span() {
         observed.serve_loop.trace_id
     );
     assert!(!claim.parent_span_is_remote);
-    assert_eq!(observed.after_handler, Some(observed.serve_loop));
     assert_eq!(
         observed.otel_after_handler.span_id().to_bytes(),
         observed.serve_loop.span_id
     );
+}
+
+#[test]
+fn enter_without_context_is_still_paired_with_leave() {
+    let observed = run(false);
+    assert_eq!(observed.enters, 1);
+    assert_eq!(observed.leaves, 1);
+}
+
+#[test]
+fn inner_pair_restores_the_outer_context() {
+    let exporter = InMemorySpanExporter::default();
+    let provider = SdkTracerProvider::builder()
+        .with_simple_exporter(exporter)
+        .build();
+    let layer = tracing_opentelemetry::layer().with_tracer(provider.tracer("test"));
+    let subscriber = Registry::default().with(layer);
+    let hook = Otel::default();
+    let outer_received = TraceContext {
+        trace_id: [1; 16],
+        span_id: [1; 8],
+        flags: 1,
+    };
+    let inner_received = TraceContext {
+        trace_id: [2; 16],
+        span_id: [2; 8],
+        flags: 1,
+    };
+
+    tracing::subscriber::with_default(subscriber, || {
+        serve_claim(&hook, Some(outer_received), || {
+            let outer = hook.current().expect("the outer claim span has a context");
+            assert_eq!(outer.trace_id, outer_received.trace_id);
+            let inner = serve_claim(&hook, Some(inner_received), || {
+                hook.current().expect("the inner claim span has a context")
+            });
+            assert_eq!(inner.trace_id, inner_received.trace_id);
+            let restored = Context::current().span().span_context().clone();
+            assert_eq!(restored.span_id().to_bytes(), outer.span_id);
+            assert_eq!(restored.trace_id().to_bytes(), outer.trace_id);
+        });
+    });
+    assert_eq!(hook.enters.load(Ordering::SeqCst), 2);
+    assert_eq!(hook.leaves.load(Ordering::SeqCst), 2);
 }
