@@ -26,7 +26,7 @@ declares one cargo feature per payload encoding — `flatbuffers`, which enables
 the FlatBuffers reading and writing helpers, and `proto3` and `repr-c`, which
 enable nothing in this version — and a `std` feature, off by default, that links
 the standard library and enables `task::block_on`, `task::noop_waker` and
-`task::flag_waker`.
+`task::flag_waker`, and the propagation hook of the `trace` module.
 
 ## Versioning
 
@@ -39,9 +39,10 @@ because code outside the crate can build it as a struct literal: `CatalogRef`,
 `Sample`, `Occurrence`, `TraceContext`. The public tuple structs — `Ordinal`,
 `InterfaceNo`, `CatalogHash`, `Correlation`, `ClaimId`, `Timestamp`, `Duration`
 — follow the same rule. So do the unit structs `FlatBuffers`, `Proto3` and
-`ReprC` (`src/encoding.rs`) and `TrackerFull` (`src/sample.rs`): each is a unit
-struct with no field that code outside the crate uses as a value or a pattern,
-so a field added to any of them breaks that code.
+`ReprC` (`src/encoding.rs`), `TrackerFull` (`src/sample.rs`) and `AlreadySet`
+(`src/trace.rs`): each is a unit struct with no field that code outside the
+crate uses as a value or a pattern, so a field added to any of them breaks that
+code.
 
 The open API questions are tracked at
 <https://github.com/driftsys/ridl/issues/350>.

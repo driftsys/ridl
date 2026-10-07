@@ -22,7 +22,8 @@ rust-version = "1.83"
 # `flatbuffers` enables the module of the same name, `proto3` and `repr-c`
 # enable nothing, and the crate has no dependency in any combination.
 # `std` is not an encoding: it links the standard library and enables the
-# `task` module (ADR-0021 decision 8, amended 2026-09-26).
+# `task` module (ADR-0021 decision 8, amended 2026-09-26) and the propagation
+# hook of the `trace` module (ADR-0021 decision 22).
 [features]
 flatbuffers = []
 proto3 = []

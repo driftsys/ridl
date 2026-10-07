@@ -442,12 +442,14 @@ cloned. The module is for a blocking client written as `block_on` over an async
 one, and for a frame loop that polls a future once per frame. It exists because
 `Waker::noop()` needs Rust 1.85, above the crate's minimum of 1.83, and a raw
 waker needs `unsafe`, which the crate forbids. It takes no dependency and
-contains no `unsafe`; every other module stays `no_std` with the feature on; and
-the feature compiles for `wasm32-unknown-unknown`, which `just wasm-check`'s
-`--all-features` line requires, but `block_on` is not usable on that target:
-`Instant::now()` panics there and a park does not block the thread, so a frame
-loop on wasm polls with `noop_waker` and never calls `block_on`. ADR-0021
-decision 8 carries the dated note.
+contains no `unsafe`; the `trace` module also links the standard library under
+the feature, for the propagation hook of ADR-0021 decision 22; every other
+module stays `no_std` with the feature on; and the feature compiles for
+`wasm32-unknown-unknown`, which `just wasm-check`'s `--all-features` line
+requires, but `block_on` is not usable on that target: `Instant::now()` panics
+there and a park does not block the thread, so a frame loop on wasm polls with
+`noop_waker` and never calls `block_on`. ADR-0021 decision 8 carries the dated
+note.
 
 **Since 2026-09-28 (driftsys/ridl#568) the `task` module has a third function,**
 `flag_waker() -> (Waker, WakeFlag)`. The waker is `Waker::from(Arc<Flag>)` over

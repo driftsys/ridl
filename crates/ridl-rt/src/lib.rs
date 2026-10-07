@@ -21,9 +21,10 @@
 //! `noop_waker`, and `flag_waker`, whose wake sets a flag the caller reads —
 //! for a blocking client built over an async one and for a frame loop that
 //! polls a future once per frame, or again in the same frame when the future
-//! woke itself. `task` is the one module that links the standard library and
-//! allocates — one `Arc` per call of any of the three functions. Every other
-//! module stays `no_std` with the feature on.
+//! woke itself. `task` links the standard library and allocates — one `Arc` per
+//! call of any of the three functions. [`trace`] also links the standard
+//! library, for its hook: a `OnceLock` and an `Error` impl, with no allocation.
+//! Every other module stays `no_std` with the feature on.
 //!
 //! Every public item lives in one of nine modules, or in one of the two that
 //! the `flatbuffers` and `std` features add. Generated code names each
@@ -113,6 +114,12 @@
 
 #![no_std]
 #![forbid(unsafe_code)]
+
+// The `task` and `trace` modules name the standard library under the `std`
+// feature.
+#[cfg(feature = "std")]
+extern crate std;
+
 pub mod contract;
 pub mod correlate;
 pub mod encoding;

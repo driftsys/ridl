@@ -77,7 +77,9 @@ registration is a refresh.
 the generated `Serve` to 32 claims, after which the future wakes itself. A frame
 loop that polls with `noop_waker` loses that wake, so decision 8 gains a third
 `task` function, `flag_waker`, whose wake the loop can read. Sebastien took the
-decision during the review of driftsys/ridl#584.
+decision during the review of driftsys/ridl#584. A 2026-10-07 note: decision 22
+adds a second user of the `std` feature, the `trace` module's propagation hook,
+so `task` is no longer the only module that links the standard library.
 
 **Amendment (2026-09-28) — decision 5 amended: `ReadError::ShortClaim`.** A
 claim whose argument bytes exceed the buffer a provider passes to
@@ -130,6 +132,16 @@ unable to gain a public field without a breaking change, so that list now holds
 sixteen. The design note is
 [`2026-10-06-trace-context-propagation-design.md`](../archive/2026-10-06-trace-context-propagation-design.md)
 (driftsys/ridl#752).
+
+**Amendment (2026-10-07) — decision 22: `trace::Propagation`.** The application
+needs a place to connect its telemetry library to the trace context, so that a
+generated crate can send the context of the current span and make a received
+context the parent of a claim span (driftsys/ridl#754). `ridl_rt::trace` gains,
+under the `std` feature, the `Propagation` trait, the `AlreadySet` error and the
+functions `set_propagation` and `propagation`. This is an addition under
+decision 10, with no dependency and no `unsafe` code. Nothing calls the hook in
+this version: the generated face still passes `None`. The `trace` module is now
+the second module that links the standard library under `std`.
 
 ## Context
 
@@ -1134,6 +1146,7 @@ trusted with no `unsafe` and no second verification pass.
 | [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decision 5             | a 2026-10-06 amendment records `trace` as the ninth unconditional module (decision 21)                                                                                                                                                                                                                                           |
 | `crates/ridl-rt/src/lib.rs`, `crates/ridl-rt/README.md`                                          | the crate documentation and the README name the `trace` module (decision 21)                                                                                                                                                                                                                                                     |
 | [the `ridl-rt` design record](../design/ridl-rt.md)                                              | the `trace` row of the module table lists `Propagation`, `AlreadySet`, `set_propagation` and `propagation` (decision 22)                                                                                                                                                                                                         |
+| `crates/ridl-rt/src/lib.rs`, `crates/ridl-rt/README.md`, `crates/ridl-rt/Cargo.toml`             | the crate documentation, the README and the feature comment name the `trace` hook and no longer call `task` the one module that links the standard library (decision 22)                                                                                                                                                         |
 
 ## References
 
