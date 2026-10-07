@@ -298,8 +298,16 @@ macro_rules! suite {
             calls::two_calls_in_flight_each_keep_their_own_context,
             calls::one_callers_calls_in_flight_each_keep_their_own_context,
             calls::an_oversized_claims_context_survives_its_second_presentation,
+            calls::an_oversized_querys_context_is_reported_on_the_error,
+            calls::an_oversized_claims_context_is_reported_on_every_presentation,
+            calls::an_oversized_querys_context_is_reported_on_every_presentation,
+            calls::an_oversized_all_zero_commands_context_is_reported_on_the_error,
+            calls::an_oversized_all_zero_querys_context_is_reported_on_the_error,
+            calls::an_oversized_claims_context_is_the_offered_calls_not_the_latest,
             calls::a_reused_call_slot_does_not_keep_the_previous_context,
-            calls::an_all_zero_context_is_carried_unchanged,
+            calls::an_all_zero_commands_context_is_carried_unchanged,
+            calls::an_all_zero_querys_context_is_carried_unchanged,
+            events::an_all_zero_occurrence_context_is_carried_unchanged,
         );
     };
     (@tests $factory:ty; $($module:ident :: $test:ident),+ $(,)?) => {
@@ -354,6 +362,15 @@ const TRACE_B: ridl_rt::trace::TraceContext = ridl_rt::trace::TraceContext {
     ],
     span_id: [0xE0, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7],
     flags: 0xA5,
+};
+
+/// A trace context whose bytes are all zero. `ridl-rt` does not validate the
+/// context, so a runtime does not drop it or replace it with `None`: the
+/// trace cases send it to see that a runtime carries it like any other value.
+const TRACE_ZERO: ridl_rt::trace::TraceContext = ridl_rt::trace::TraceContext {
+    trace_id: [0; 16],
+    span_id: [0; 8],
+    flags: 0,
 };
 
 fn runtime<F: Factory>() -> F::Runtime {
@@ -421,6 +438,28 @@ mod tests {
         Trace,
     }
 
+    /// Whether a function's text names a trace constant (`TRACE_A`,
+    /// `TRACE_B` or `TRACE_ZERO`) as a whole identifier on a line that is
+    /// not a comment line. A line whose first non-blank text is `//` is
+    /// ignored, so a doc comment that names a constant does not count, and
+    /// neither does the doc comment of the next function. A string literal
+    /// or a trailing comment that names a constant still counts.
+    fn carries_trace(text: &str) -> bool {
+        let is_identifier_byte = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+        text.lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .any(|line| {
+                ["TRACE_A", "TRACE_B", "TRACE_ZERO"].iter().any(|name| {
+                    line.match_indices(name).any(|(at, _)| {
+                        let before = line[..at].bytes().next_back();
+                        let after = line[at + name.len()..].bytes().next();
+                        !before.is_some_and(is_identifier_byte)
+                            && !after.is_some_and(is_identifier_byte)
+                    })
+                })
+            })
+    }
+
     /// Every public function of a test module: its path under the crate, and
     /// the arm its signature places it in.
     fn test_functions() -> Vec<(String, Arm)> {
@@ -443,9 +482,8 @@ mod tests {
                 // the where clause that asks for an extension.
                 let signature = rest.split('{').next().expect("a function body");
                 // The text up to the next public function holds this one's
-                // body. A test that sends a context, one of the `TRACE_`
-                // constants, asserts that it arrives, which only a runtime
-                // that carries the context does.
+                // body. A test whose body names a trace constant sends that
+                // context, and asserts that it arrives.
                 let text = rest.split("\npub fn ").next().expect("a function");
                 let mut asked: Vec<Arm> = [
                     ("ScannableSignals", Arm::Scannable),
@@ -456,7 +494,7 @@ mod tests {
                 .filter(|(extension, _)| signature.contains(extension))
                 .map(|(_, arm)| arm)
                 .collect();
-                if text.contains("Some(TRACE_") {
+                if carries_trace(text) {
                     asked.push(Arm::Trace);
                 }
                 let arm = match asked[..] {
@@ -519,5 +557,28 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn a_body_that_names_a_trace_constant_carries_a_trace() {
+        assert!(carries_trace("rt.command(I, O, &[1], Some(TRACE_A))"));
+        assert!(carries_trace("rt.command(I, O, &[1], TRACE_A.into())"));
+        assert!(carries_trace("raise(I, O, &[1], Option::from(TRACE_ZERO))"));
+        assert!(carries_trace("assert_eq!(c.trace, Some(TRACE_B));"));
+    }
+
+    #[test]
+    fn a_string_literal_or_a_trailing_comment_that_names_a_constant_counts() {
+        assert!(carries_trace("let s = \"TRACE_A\";"));
+        assert!(carries_trace("f(); // TRACE_A"));
+    }
+
+    #[test]
+    fn a_body_that_names_no_trace_constant_carries_no_trace() {
+        assert!(!carries_trace("rt.command(I, O, &[1], None)"));
+        assert!(!carries_trace("let n = MAX_TRACE_LEN;"));
+        assert!(!carries_trace("let n = TRACE_AB + XTRACE_A;"));
+        assert!(!carries_trace("/// see TRACE_A\n// and TRACE_B\nNone"));
+        assert!(!carries_trace("    // TRACE_A\n    None"));
     }
 }

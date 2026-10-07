@@ -3,7 +3,7 @@
 
 use ridl_rt::port::{EventSink, EventSource, ReadError};
 
-use crate::{Factory, IFACE, ORD, OTHER, TRACE_A, TRACE_B, runtime};
+use crate::{Factory, IFACE, ORD, OTHER, TRACE_A, TRACE_B, TRACE_ZERO, runtime};
 
 /// A raised occurrence reaches a subscribed source, whole.
 pub fn an_event_raise_and_receive_round_trips<F: Factory>() {
@@ -169,4 +169,15 @@ pub fn a_short_buffer_keeps_the_occurrences_context<F: Factory>() {
     let mut out = [0u8; 8];
     let occurrence = rt.next(&mut out).expect("next").expect("still waiting");
     assert_eq!(occurrence.trace, Some(TRACE_A));
+}
+
+/// An occurrence raised with `TRACE_ZERO` arrives with it unchanged.
+pub fn an_all_zero_occurrence_context_is_carried_unchanged<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.subscribe(IFACE, &[ORD]).expect("subscribe");
+    rt.raise(IFACE, ORD, &[8], Some(TRACE_ZERO)).expect("raise");
+
+    let mut out = [0u8; 8];
+    let occurrence = rt.next(&mut out).expect("next").expect("waiting");
+    assert_eq!(occurrence.trace, Some(TRACE_ZERO));
 }
