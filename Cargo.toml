@@ -100,10 +100,9 @@ prost = "0.14.4"
 prost-build = "0.14.4"
 # The reflection side of the IR encodings (ADR-0014 decision 7, amended by
 # decision 14): prototext via `text-format`. JSON moved to `pbjson`-generated
-# impls. The `serde` feature returns for one reader only: the codegen request
-# reader, which ignores unknown keys through `DynamicMessage` (ADR-0020
-# decision 9). Depends on prost ^0.14, matching the pin above.
-prost-reflect = { version = "0.16.5", features = ["text-format", "serde"] }
+# impls, so the `serde` feature is no longer needed. Depends on prost ^0.14,
+# matching the pin above.
+prost-reflect = { version = "0.16.5", features = ["text-format"] }
 protox = "0.9.1"
 # The book-example harness parses `docs/book/` with the same CommonMark parser
 # mdBook uses, and with mdBook's option set, so what the harness compiles and
