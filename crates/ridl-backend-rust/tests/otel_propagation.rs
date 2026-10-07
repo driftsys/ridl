@@ -21,7 +21,7 @@
 //! 4. Exit and drop the claim span.
 //! 5. `leave()`. The hook detaches what `enter` attached. The hook asserts
 //!    that the claim span is not the current span when `leave` runs. This
-//!    catches a `leave` that runs while the claim span is still entered. It
+//!    catches a `leave` that runs while the claim span is the current span. It
 //!    does not check that the claim span is dropped before `leave`.
 //!
 //! Setting the parent after the span is entered (`set_parent` on
@@ -51,7 +51,7 @@ thread_local! {
 
     /// The ids of the claim spans that are open, innermost last. The harness
     /// pushes one when it creates a claim span and pops it after `leave`, so
-    /// that `leave` can check that its claim span is closed.
+    /// that `leave` can check that its claim span is not the current span.
     static OPEN_CLAIMS: RefCell<Vec<Option<span::Id>>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -273,5 +273,45 @@ fn inner_pair_restores_the_outer_context() {
             assert_eq!(restored.span_id().to_bytes(), outer.span_id);
             assert_eq!(restored.trace_id().to_bytes(), outer.trace_id);
         });
+    });
+}
+
+#[test]
+fn inner_claim_without_context_restores_the_outer_context() {
+    let exporter = InMemorySpanExporter::default();
+    let provider = SdkTracerProvider::builder()
+        .with_simple_exporter(exporter)
+        .build();
+    let layer = tracing_opentelemetry::layer().with_tracer(provider.tracer("test"));
+    let subscriber = Registry::default().with(layer);
+    let hook = Otel;
+    let outer_received = TraceContext {
+        trace_id: [1; 16],
+        span_id: [1; 8],
+        flags: 1,
+    };
+
+    tracing::subscriber::with_default(subscriber, || {
+        let serve = tracing::trace_span!("serve loop");
+        let _serve_entered = serve.enter();
+        let serve_loop = Context::current().span().span_context().clone();
+
+        serve_claim(&hook, Some(outer_received), || {
+            let outer = Context::current().span().span_context().clone();
+            assert_eq!(outer.trace_id().to_bytes(), outer_received.trace_id);
+            serve_claim(&hook, None, || {
+                let inner = Context::current().span().span_context().clone();
+                assert_eq!(inner.trace_id(), outer.trace_id());
+                assert_ne!(inner.span_id(), outer.span_id());
+            });
+            assert_eq!(
+                Context::current().span().span_context().span_id(),
+                outer.span_id()
+            );
+        });
+
+        let after = Context::current().span().span_context().clone();
+        assert_eq!(after.span_id(), serve_loop.span_id());
+        assert_eq!(after.trace_id(), serve_loop.trace_id());
     });
 }

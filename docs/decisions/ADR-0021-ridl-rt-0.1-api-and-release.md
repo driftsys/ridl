@@ -993,16 +993,17 @@ trusted with no `unsafe` and no second verification pass.
       when the span is created. That context activation is on by default since
       `tracing-opentelemetry` 0.32.0. The rustdoc of `Propagation` states this
       reliance.
-    - **Rejected orders.** Two other orders were observed to fail with
-      `tracing-opentelemetry` 0.34.0, with `opentelemetry` and
-      `opentelemetry_sdk` 0.33.0 and the layer's default configuration. Calling
+    - **Rejected orders.** Two other orders fail, as the source of
+      `tracing-opentelemetry` 0.34.0 shows (`src/layer.rs` and
+      `src/span_ext.rs`), with `opentelemetry` and `opentelemetry_sdk` 0.33.0
+      and the layer's default configuration. When `enter(received)` has not
+      attached the context before the claim span is created, calling
       `set_parent` on the claim span after it is entered returns
-      `AlreadyStarted`, because `on_enter` starts the OpenTelemetry span
-      (`src/layer.rs`, `src/span_ext.rs`), and the exported claim span then has
-      the application's span as its parent. Creating the claim span as an
-      explicit root (`parent: None`) gives it an empty parent context, so it
-      starts a new trace and ignores the received context. No test pins these
-      two results.
+      `AlreadyStarted`, because `on_enter` starts the OpenTelemetry span, and
+      the claim span keeps the application's span as its parent. Creating the
+      claim span as an explicit root (`parent: None`) gives it an empty parent
+      context, so it starts a new trace and ignores the received context. No
+      test pins these two results.
     - **One hook per process.** `set_propagation` stores the hook in a
       `std::sync::OnceLock`, and a second call returns `AlreadySet` and keeps
       the first hook. No hook is registered by default, and `propagation()`
