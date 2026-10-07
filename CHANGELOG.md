@@ -1,5 +1,473 @@
 # Changelog
 
+## [0.6.0] (2026-10-07)
+
+### Refactoring
+
+- **ridl-core:** carry command and query timing defaults through the manifest
+  ([4bcb741])
+- **ridl-ir:** move the payload sizer out of ridl-descriptor ([1c7ff96])
+
+### Documentation
+
+- **adr:** record the rejected claim span orders and correct a row ([782e7d7])
+- **ridl-rt:** record that trace links std, and state the hook's contract
+  ([56dc99c])
+- **ridl-rt:** name generated code as the hook's caller ([a7550e1])
+- **docs:** add the phase 1 implementation plan for generated observation
+  ([92285db]), refs driftsys/ridl#754
+- **docs:** record that the case 3 telemetry library consumes tracing spans
+  ([3153736]), refs [#754]
+- **docs:** resolve the trace context source with an application hook
+  ([881000e]), refs [#754]
+- **docs:** add the design for observation from the generated Rust face
+  ([b7bac2b]), refs [#754]
+- **ridl-ir:** state the limit of an in-place enum value in the compatibility
+  rule ([48a98fc])
+- **ridl-ir:** correct the pascal field comment on which readers are strict
+  ([3055c67])
+- **ridl-ir:** state that a second-phase request error has no position
+  ([210bcf8])
+- **ridl-ir:** say a new enum value needs a rebuilt plugin, in every statement
+  ([2bce411])
+- **docs:** state that an unknown enum name stays an error ([4cefe3d])
+- **docs:** record that the codegen request reader ignores unknown keys
+  ([855ff18])
+- **docs:** garden the generated-file marker and header design and plan
+  ([3b63166])
+- **docs:** state that a package build names its package in the crate files'
+  marker ([137581c])
+- **docs:** record the generated-file marker and the codegen header ([234b6e2])
+- **docs:** add the generated-file marker and licence header plan ([01d0de1]),
+  refs 746.
+- **docs:** name the trace field of ShortClaim in the design records
+  ([2acef73]), refs [#758]
+- **docs:** name the trace context in the loopback, technote and archive records
+  ([7844947]), refs [#758]
+- **ridl-rt:** list TraceContext under versioning and separate its module
+  paragraph ([6398b57]), refs [#758]
+- **adr:** record decision 21 as a breaking change under decision 10
+  ([e8d482e]), refs [#758]
+- **docs:** garden the trace context design and plan into the records
+  ([ef59133]), refs [#752]
+- **adr:** correct the trace context records after review ([11c8b6c]), refs
+  [#752]
+- **adr:** record the trace context on calls and events ([c37b8e8]), refs [#752]
+- **docs:** add the trace context propagation plan ([74b3fdf])
+- **docs:** add the design for trace context propagation in ridl-rt ([3ebe67c])
+- **repo:** remove the remaining story references and reflow edited comments
+  ([b19c227])
+- **repo:** remove story ids of the form "E<n> task <n>" from comments
+  ([4bd57fe])
+- **docs:** correct stale default-bound comments and record the ADR amendments
+  ([20178c7])
+- **docs:** garden the default response bound design and plan ([007a72d])
+- **docs:** remove the last statements that a command or query has no default
+  bound ([3c446ad])
+- **ridl-core:** name every [defaults] key in the workspace loader comments
+  ([55f7ca5])
+- **ridl-rt:** describe call_deadline under the default response bound
+  ([dbd2bd4])
+- **docs:** describe the default response bound of commands and queries
+  ([6d3f4d2])
+- **adr:** amend ADR-0015 so commands and queries take a default response bound
+  ([a3d6758])
+- **ridl-diff:** update RPC bound text for a default that can apply ([cea3440])
+- **docs:** add the implementation plan for a default RPC response bound
+  ([e01a573])
+- **docs:** add the design note for a default RPC response bound ([a21753c])
+- **ridlc:** wrap the codegen_request rustdoc at the file's width ([abfd11c])
+- **docs:** state what the Rust backend reads in the record's opening and in
+  ridlc's rustdoc ([d69c346])
+- **docs:** correct what the Rust backend reads and when the request is built
+  ([b965add])
+- **docs:** match the in-process host's record to the code and state how the
+  request nests the model ([836d0ec]), fixes 744., 745.
+- **docs:** add the generated-file marker and licence header design ([95ea0c9])
+- **docs:** word the schema-copy rule so that it stays true after a release
+  ([e129c08])
+- **docs:** state which schema files a release tag holds and how the request
+  nests the model ([bbae978])
+- **docs:** add the chapter "Writing a codegen plugin" to the book ([765cdf4])
+- **docs:** correct five book statements that describe an older state
+  ([fa8eb36])
+- **docs:** bring four records in line with the design lints, the MCP tools and
+  evals ([#742]) ([52aac58])
+- **docs:** correct the layout-inputs records after the second review
+  ([23da72a])
+- **docs:** name the layout test plugin as the only plugin that reads the
+  deployment section ([b3b4edc])
+- **adr:** date the rewrite of ADR-0022's decision 3 note ([dad602c])
+- **roadmap:** state that the layout proof's messages carry the proto3 bound
+  only ([caba173])
+- **docs:** correct the layout-inputs records against the test plugin
+  ([8c01bff])
+- **docs:** point the archived layout-inputs plan at the archived design
+  ([4dd41c7])
+- **docs:** garden the layout-inputs design and plan ([fe74aa1])
+- **roadmap:** repair the E17.2 row of the landed record ([6ef52bf])
+- **roadmap:** record the layout inputs for backend plugins as built ([68647a5])
+- **rsdl:** state the depth pass's package dependency and the diff's silence on
+  sizing ([fc7bfbb])
+- **rsdl:** specify the depth, slots and budget keys ([71614c2])
+- **docs:** log the delegated decisions of the two depth warnings ([bd2c62d])
+- **docs:** log the delegated decisions of the rsdl sizing keys ([ddaf9cc])
+- **docs:** record the deployment section's delegated decisions ([07f6410])
+- **docs:** correct the deployment section record after review ([c625070])
+- **docs:** record the deployment section of the codegen request ([2617c38])
+- **docs:** record the size states' delegated decisions ([ddd9336])
+- **docs:** layout inputs for backend plugins, the design and the plan ([#722])
+  ([43fbd10])
+- **roadmap:** add layout inputs for backend plugins as priority 1 and order the
+  P2 devex track ([#721]) ([fac5abc])
+- **roadmap:** garden lane E16's working memory into the records and the archive
+  ([#702]) ([112da94])
+- **roadmap:** point the E16 driver at stage D8 and record D7's decisions
+  ([#698]) ([ebad724])
+- **docs:** specify design lints and the eval seed ([#694]) ([b49a8c9])
+- **roadmap:** point the E16 driver at stage D7 and record D6's decisions
+  ([#695]) ([ed6e34d])
+- **roadmap:** point the E16 driver at stage D6 and record D5's decisions
+  ([#691]) ([c1e6335])
+- **adr:** garden the workspace-aware MCP tools (1a) into ADR-0025 ([#689])
+  ([d972d68])
+- **repo:** list ADR-0024 in the AGENTS.md reading map ([f3f1298])
+- **roadmap:** point the E16 driver at stage D5 and record D4's decisions
+  ([#685]) ([a622a1f])
+- **adr:** garden the lint foundation (spec 0) into ADR-0024 ([#683])
+  ([8a57f68])
+- **roadmap:** point the E16 driver at stage D4 and record D3's decisions
+  ([#680]) ([fffde63])
+- **roadmap:** record the E16 decisions taken under delegation ([#674])
+  ([4a99c6e])
+- **roadmap:** design and plan for the lint foundation (spec 0) ([#671])
+  ([69670a8])
+- **roadmap:** rsdl uses in the MCP review tools, and the follow-up plan
+  ([#673]) ([ac60f62])
+- **roadmap:** point the E16 driver at stage D3 ([#672]) ([99cb616])
+- **roadmap:** re-baseline the catalog descriptor plan against main (E16 D1)
+  ([#667]) ([9995826])
+- **roadmap:** record the answers to the E16 driver's eleven questions ([#666])
+  ([440dfb5])
+- **roadmap:** design and plan for the workspace-aware MCP tools ([#664])
+  ([fd05240])
+- **roadmap:** add the driver for lane E16, the catalog descriptor ([#662])
+  ([472c4f8])
+- **roadmap:** add the scope brief for the devex and agent tracks ([#656])
+  ([29b221a])
+
+### Features
+
+- **ridl-rt:** add the trace-context propagation hook ([fadd91c])
+- **ridlc:** mark the crate files, allow the emitter's two clippy lints, and
+  gate the list ([54d1ad9])
+- **ridlc:** write the generated-file marker and the project header ([10bbe90])
+- **ridl-core:** read the codegen header file named in the manifest ([76c4449])
+- **ridl-ir:** carry the generated-file marker and header in the codegen request
+  ([7ca995c])
+- **ridl-rt:** carry the trace context on ReadError::ShortClaim ([7abf9b0]),
+  refs [#758]
+- **ridl-loopback:** deliver the sender's trace context on claims and
+  occurrences ([3e160c0]), refs [#752]
+- **ridl-rt:** carry an optional trace context on calls and events ([85bd8da]),
+  refs [#752]
+- **ridl-sem:** default the response bound of untimed commands and queries
+  ([26c7049])
+- **ridl-diff:** classify a defaulted RPC bound made explicit as compatible
+  ([9acc91d])
+- **ridl-sem:** parse response-bound defaults for commands and queries
+  ([35cec3f])
+- **ridlc:** calibrate the design lints on the evals corpus and garden piece 1b
+  ([#738]) ([54a34bf])
+- **ridl-sem:** warn on a depth below the contract bound and on an underivable
+  depth ([d99f698])
+- **ridl-ir:** resolve the declared sizing values into each consumer link
+  ([b7485ba])
+- **ridl-ir:** carry the declared sizing values in the system IR ([9dd202d])
+- **ridl-sem:** read the depth, slots and budget keys on deployments and
+  placement lines ([0cc59b8])
+- **ridl-ir:** carry the known transport bindings' overheads in the deployment
+  section ([e0c4fb0])
+- **ridlc:** select a deployment and carry it in every codegen request
+  ([e9000ef])
+- **ridl-ir:** emit the deployment section from the lowered system ([36ba6fe])
+- **ridl-ir:** derive an event ring depth from its timing bounds ([d4e872f])
+- **ridl-ir:** add the deployment section to the codegen request schema
+  ([2ac4dd0])
+- **repo:** give examples/cabin a system and a deployment ([303fbc0])
+- **ridl-ir:** tabulate the reservation and the table budget per encoding
+  ([f5d8cb4])
+- **ridl-ir:** size every request and reply shape, absent with a cause where no
+  codec defines it ([c7b17e4])
+- **ridl-ir:** carry a size state per encoding on every payload ([3ffca3f])
+- **ridlc:** add workspace design lints and metrics ([#712]) ([8ef2f28])
+- **ridl-sem:** documentation in the source (spec 2a) ([#703]) ([5964c8f]),
+  closes [#529]
+- **repo:** add the design eval corpus and task seed ([#707]) ([d694fba])
+- **ridlc:** embed the catalog hash in each region of the lowered system (E6.17)
+  ([#699]) ([eaeb3a5]), closes 367.
+- **ridl:** ridl describe and the catalog descriptor's JSON view (E16.6)
+  ([#696]) ([681e666])
+- **ridl-descriptor:** the lowering, --emit catalog and the port's catalog check
+  (E16.5) ([#692]) ([a8ad508])
+- **ridl-descriptor:** the proto3 and FlatBuffers size state per payload (E16.4)
+  ([#686]) ([d317c96])
+- **ridl-mcp:** rsdl uses in the review tools, and review follow-ups ([#677])
+  ([a87599a])
+- **ridl-descriptor:** the size context, the type leaves and the string byte
+  capacity (E16.3) ([#681]) ([eb36d16])
+- lint foundation — named lints, [lints] in ridl.toml, SARIF (spec 0) ([#678])
+  ([fe30c4f])
+- **ridl-descriptor:** interface numbers and the catalog hash (E16.2) ([#676])
+  ([742c0a3]), refs 378., 378.
+- **ridl-descriptor:** the catalog descriptor crate, schema and verifier (E16.1)
+  ([#669]) ([004ca06]), refs [#377]
+- **ridl-mcp:** workspace-aware MCP tools (1a) ([#668]) ([edeec6e])
+
+### Bug Fixes
+
+- **ridl-ir:** keep an unknown enum name an error in the request reader
+  ([5adbe70])
+- **ridl-ir:** ignore unknown keys in the codegen request reader ([27c53b1])
+- **ridl-ir:** refuse every Unicode control and line-separator character in the
+  header file ([b63053d])
+- **ridl-core:** refuse a control character in the codegen header file
+  ([4b1127a])
+- **ridl-lsp:** name only the maximum as defaulted on an RPC hover with a
+  minimum ([c7d6f47])
+- **ridl-sem:** name the default as the source of a filled maximum ([57d42bd])
+- **ridl-sem:** state the RPC default in the IR schema and pin its edges
+  ([30e06e9])
+- **ridl-sem:** name the deployment in the depth warnings and pin the review
+  findings ([1e1e953])
+- **ridl-ir:** pin the deployment section's behaviour and select by what the
+  source declares ([8982c4d])
+- **ridlc:** report a dropped deployment's error and pin the selection
+  ([f30826d])
+- **ridl-ir:** key a route's interface on its name alone ([31a3a75])
+- **ridl-ir:** pin the padded scale and treat a zero depth as not derivable
+  ([0f72d7f])
+- **repo:** align the cabin service line with the formatter and cite the durable
+  record ([bbd6f96])
+- **ridl-ir:** pin the size states and mark their breaking changes ([02f632e])
+
+### BREAKING CHANGES
+
+- every ReadError::ShortClaim literal, and every pattern
+that names its fields without `..`, gains the `trace` field.
+- the three send methods of the port traits take one more
+argument, and Claim and RawOccurrence have one more field.
+- every command and query now carries a response bound in
+the IR. An untimed command lapses after 1 s and an untimed query after 3 s
+unless [defaults] command_timing or query_timing says otherwise. Catalogs
+with untimed commands or queries get a new catalog hash, so a provider and
+its clients must be rebuilt together.
+- two public structs of `ridlc` gain a field. `CliRun`
+gains `usage_error: bool`, which carries the exit-code-2 outcome a bad
+`--deployment` value now has instead of an I/O error, and
+`WorkspaceOutput` gains `declared_deployments: Vec<String>`, the
+deployment names the source declares. Neither struct is
+`#[non_exhaustive]`, so a downstream crate that builds either with a
+struct literal, or matches one exhaustively, no longer compiles; adding
+the field to the literal is the fix. `UnknownDeployment`, also public,
+gains `has_system: bool` for the same reason, and `select_deployment`
+takes the declared names as a new second argument — both of those
+shipped first in this release series, so only the two structs above
+affect code written against `v0.5.1`.
+- `ridl_descriptor::size` is gone. Its contents are
+- a member entry point now loads its workspace. The
+root's `[lints]`, `[defaults].timing` and `[imports]` apply, a member
+build fails on another member's error, the generated crate of a member
+build is named `ridl_generated`, and the lockfile is the root's.
+- a generated Client, blocking Client or Publisher bound
+to a port attached to a catalog other than the one the face was
+generated from, and a serve over such a handler port, now panics. Until
+this change such a face read and wrote another interface's slots with
+no error. Attach the runtime to the generated CATALOG, or compare
+port.catalog() with <Iface as Interface>::CATALOG before binding.
+
+[0.6.0]: https://github.com/driftsys/ridl/compare/v0.5.1...v0.6.0
+[4bcb741]: https://github.com/driftsys/ridl/commit/4bcb741
+[1c7ff96]: https://github.com/driftsys/ridl/commit/1c7ff96
+[782e7d7]: https://github.com/driftsys/ridl/commit/782e7d7
+[56dc99c]: https://github.com/driftsys/ridl/commit/56dc99c
+[a7550e1]: https://github.com/driftsys/ridl/commit/a7550e1
+[92285db]: https://github.com/driftsys/ridl/commit/92285db
+[3153736]: https://github.com/driftsys/ridl/commit/3153736
+[#754]: https://github.com/driftsys/ridl/issues/754
+[881000e]: https://github.com/driftsys/ridl/commit/881000e
+[b7bac2b]: https://github.com/driftsys/ridl/commit/b7bac2b
+[48a98fc]: https://github.com/driftsys/ridl/commit/48a98fc
+[3055c67]: https://github.com/driftsys/ridl/commit/3055c67
+[210bcf8]: https://github.com/driftsys/ridl/commit/210bcf8
+[2bce411]: https://github.com/driftsys/ridl/commit/2bce411
+[4cefe3d]: https://github.com/driftsys/ridl/commit/4cefe3d
+[855ff18]: https://github.com/driftsys/ridl/commit/855ff18
+[3b63166]: https://github.com/driftsys/ridl/commit/3b63166
+[137581c]: https://github.com/driftsys/ridl/commit/137581c
+[234b6e2]: https://github.com/driftsys/ridl/commit/234b6e2
+[01d0de1]: https://github.com/driftsys/ridl/commit/01d0de1
+[2acef73]: https://github.com/driftsys/ridl/commit/2acef73
+[#758]: https://github.com/driftsys/ridl/issues/758
+[7844947]: https://github.com/driftsys/ridl/commit/7844947
+[6398b57]: https://github.com/driftsys/ridl/commit/6398b57
+[e8d482e]: https://github.com/driftsys/ridl/commit/e8d482e
+[ef59133]: https://github.com/driftsys/ridl/commit/ef59133
+[#752]: https://github.com/driftsys/ridl/issues/752
+[11c8b6c]: https://github.com/driftsys/ridl/commit/11c8b6c
+[c37b8e8]: https://github.com/driftsys/ridl/commit/c37b8e8
+[74b3fdf]: https://github.com/driftsys/ridl/commit/74b3fdf
+[3ebe67c]: https://github.com/driftsys/ridl/commit/3ebe67c
+[b19c227]: https://github.com/driftsys/ridl/commit/b19c227
+[4bd57fe]: https://github.com/driftsys/ridl/commit/4bd57fe
+[20178c7]: https://github.com/driftsys/ridl/commit/20178c7
+[007a72d]: https://github.com/driftsys/ridl/commit/007a72d
+[3c446ad]: https://github.com/driftsys/ridl/commit/3c446ad
+[55f7ca5]: https://github.com/driftsys/ridl/commit/55f7ca5
+[dbd2bd4]: https://github.com/driftsys/ridl/commit/dbd2bd4
+[6d3f4d2]: https://github.com/driftsys/ridl/commit/6d3f4d2
+[a3d6758]: https://github.com/driftsys/ridl/commit/a3d6758
+[cea3440]: https://github.com/driftsys/ridl/commit/cea3440
+[e01a573]: https://github.com/driftsys/ridl/commit/e01a573
+[a21753c]: https://github.com/driftsys/ridl/commit/a21753c
+[abfd11c]: https://github.com/driftsys/ridl/commit/abfd11c
+[d69c346]: https://github.com/driftsys/ridl/commit/d69c346
+[b965add]: https://github.com/driftsys/ridl/commit/b965add
+[836d0ec]: https://github.com/driftsys/ridl/commit/836d0ec
+[95ea0c9]: https://github.com/driftsys/ridl/commit/95ea0c9
+[e129c08]: https://github.com/driftsys/ridl/commit/e129c08
+[bbae978]: https://github.com/driftsys/ridl/commit/bbae978
+[765cdf4]: https://github.com/driftsys/ridl/commit/765cdf4
+[fa8eb36]: https://github.com/driftsys/ridl/commit/fa8eb36
+[52aac58]: https://github.com/driftsys/ridl/commit/52aac58
+[#742]: https://github.com/driftsys/ridl/issues/742
+[23da72a]: https://github.com/driftsys/ridl/commit/23da72a
+[b3b4edc]: https://github.com/driftsys/ridl/commit/b3b4edc
+[dad602c]: https://github.com/driftsys/ridl/commit/dad602c
+[caba173]: https://github.com/driftsys/ridl/commit/caba173
+[8c01bff]: https://github.com/driftsys/ridl/commit/8c01bff
+[4dd41c7]: https://github.com/driftsys/ridl/commit/4dd41c7
+[fe74aa1]: https://github.com/driftsys/ridl/commit/fe74aa1
+[6ef52bf]: https://github.com/driftsys/ridl/commit/6ef52bf
+[68647a5]: https://github.com/driftsys/ridl/commit/68647a5
+[fc7bfbb]: https://github.com/driftsys/ridl/commit/fc7bfbb
+[71614c2]: https://github.com/driftsys/ridl/commit/71614c2
+[bd2c62d]: https://github.com/driftsys/ridl/commit/bd2c62d
+[ddaf9cc]: https://github.com/driftsys/ridl/commit/ddaf9cc
+[07f6410]: https://github.com/driftsys/ridl/commit/07f6410
+[c625070]: https://github.com/driftsys/ridl/commit/c625070
+[2617c38]: https://github.com/driftsys/ridl/commit/2617c38
+[ddd9336]: https://github.com/driftsys/ridl/commit/ddd9336
+[43fbd10]: https://github.com/driftsys/ridl/commit/43fbd10
+[#722]: https://github.com/driftsys/ridl/issues/722
+[fac5abc]: https://github.com/driftsys/ridl/commit/fac5abc
+[#721]: https://github.com/driftsys/ridl/issues/721
+[112da94]: https://github.com/driftsys/ridl/commit/112da94
+[#702]: https://github.com/driftsys/ridl/issues/702
+[ebad724]: https://github.com/driftsys/ridl/commit/ebad724
+[#698]: https://github.com/driftsys/ridl/issues/698
+[b49a8c9]: https://github.com/driftsys/ridl/commit/b49a8c9
+[#694]: https://github.com/driftsys/ridl/issues/694
+[ed6e34d]: https://github.com/driftsys/ridl/commit/ed6e34d
+[#695]: https://github.com/driftsys/ridl/issues/695
+[c1e6335]: https://github.com/driftsys/ridl/commit/c1e6335
+[#691]: https://github.com/driftsys/ridl/issues/691
+[d972d68]: https://github.com/driftsys/ridl/commit/d972d68
+[#689]: https://github.com/driftsys/ridl/issues/689
+[f3f1298]: https://github.com/driftsys/ridl/commit/f3f1298
+[a622a1f]: https://github.com/driftsys/ridl/commit/a622a1f
+[#685]: https://github.com/driftsys/ridl/issues/685
+[8a57f68]: https://github.com/driftsys/ridl/commit/8a57f68
+[#683]: https://github.com/driftsys/ridl/issues/683
+[fffde63]: https://github.com/driftsys/ridl/commit/fffde63
+[#680]: https://github.com/driftsys/ridl/issues/680
+[4a99c6e]: https://github.com/driftsys/ridl/commit/4a99c6e
+[#674]: https://github.com/driftsys/ridl/issues/674
+[69670a8]: https://github.com/driftsys/ridl/commit/69670a8
+[#671]: https://github.com/driftsys/ridl/issues/671
+[ac60f62]: https://github.com/driftsys/ridl/commit/ac60f62
+[#673]: https://github.com/driftsys/ridl/issues/673
+[99cb616]: https://github.com/driftsys/ridl/commit/99cb616
+[#672]: https://github.com/driftsys/ridl/issues/672
+[9995826]: https://github.com/driftsys/ridl/commit/9995826
+[#667]: https://github.com/driftsys/ridl/issues/667
+[440dfb5]: https://github.com/driftsys/ridl/commit/440dfb5
+[#666]: https://github.com/driftsys/ridl/issues/666
+[fd05240]: https://github.com/driftsys/ridl/commit/fd05240
+[#664]: https://github.com/driftsys/ridl/issues/664
+[472c4f8]: https://github.com/driftsys/ridl/commit/472c4f8
+[#662]: https://github.com/driftsys/ridl/issues/662
+[29b221a]: https://github.com/driftsys/ridl/commit/29b221a
+[#656]: https://github.com/driftsys/ridl/issues/656
+[fadd91c]: https://github.com/driftsys/ridl/commit/fadd91c
+[54d1ad9]: https://github.com/driftsys/ridl/commit/54d1ad9
+[10bbe90]: https://github.com/driftsys/ridl/commit/10bbe90
+[76c4449]: https://github.com/driftsys/ridl/commit/76c4449
+[7ca995c]: https://github.com/driftsys/ridl/commit/7ca995c
+[7abf9b0]: https://github.com/driftsys/ridl/commit/7abf9b0
+[3e160c0]: https://github.com/driftsys/ridl/commit/3e160c0
+[85bd8da]: https://github.com/driftsys/ridl/commit/85bd8da
+[26c7049]: https://github.com/driftsys/ridl/commit/26c7049
+[9acc91d]: https://github.com/driftsys/ridl/commit/9acc91d
+[35cec3f]: https://github.com/driftsys/ridl/commit/35cec3f
+[54a34bf]: https://github.com/driftsys/ridl/commit/54a34bf
+[#738]: https://github.com/driftsys/ridl/issues/738
+[d99f698]: https://github.com/driftsys/ridl/commit/d99f698
+[b7485ba]: https://github.com/driftsys/ridl/commit/b7485ba
+[9dd202d]: https://github.com/driftsys/ridl/commit/9dd202d
+[0cc59b8]: https://github.com/driftsys/ridl/commit/0cc59b8
+[e0c4fb0]: https://github.com/driftsys/ridl/commit/e0c4fb0
+[e9000ef]: https://github.com/driftsys/ridl/commit/e9000ef
+[36ba6fe]: https://github.com/driftsys/ridl/commit/36ba6fe
+[d4e872f]: https://github.com/driftsys/ridl/commit/d4e872f
+[2ac4dd0]: https://github.com/driftsys/ridl/commit/2ac4dd0
+[303fbc0]: https://github.com/driftsys/ridl/commit/303fbc0
+[f5d8cb4]: https://github.com/driftsys/ridl/commit/f5d8cb4
+[c7b17e4]: https://github.com/driftsys/ridl/commit/c7b17e4
+[3ffca3f]: https://github.com/driftsys/ridl/commit/3ffca3f
+[8ef2f28]: https://github.com/driftsys/ridl/commit/8ef2f28
+[#712]: https://github.com/driftsys/ridl/issues/712
+[5964c8f]: https://github.com/driftsys/ridl/commit/5964c8f
+[#703]: https://github.com/driftsys/ridl/issues/703
+[#529]: https://github.com/driftsys/ridl/issues/529
+[d694fba]: https://github.com/driftsys/ridl/commit/d694fba
+[#707]: https://github.com/driftsys/ridl/issues/707
+[eaeb3a5]: https://github.com/driftsys/ridl/commit/eaeb3a5
+[#699]: https://github.com/driftsys/ridl/issues/699
+[681e666]: https://github.com/driftsys/ridl/commit/681e666
+[#696]: https://github.com/driftsys/ridl/issues/696
+[a8ad508]: https://github.com/driftsys/ridl/commit/a8ad508
+[#692]: https://github.com/driftsys/ridl/issues/692
+[d317c96]: https://github.com/driftsys/ridl/commit/d317c96
+[#686]: https://github.com/driftsys/ridl/issues/686
+[a87599a]: https://github.com/driftsys/ridl/commit/a87599a
+[#677]: https://github.com/driftsys/ridl/issues/677
+[eb36d16]: https://github.com/driftsys/ridl/commit/eb36d16
+[#681]: https://github.com/driftsys/ridl/issues/681
+[fe30c4f]: https://github.com/driftsys/ridl/commit/fe30c4f
+[#678]: https://github.com/driftsys/ridl/issues/678
+[742c0a3]: https://github.com/driftsys/ridl/commit/742c0a3
+[#676]: https://github.com/driftsys/ridl/issues/676
+[004ca06]: https://github.com/driftsys/ridl/commit/004ca06
+[#669]: https://github.com/driftsys/ridl/issues/669
+[#377]: https://github.com/driftsys/ridl/issues/377
+[edeec6e]: https://github.com/driftsys/ridl/commit/edeec6e
+[#668]: https://github.com/driftsys/ridl/issues/668
+[5adbe70]: https://github.com/driftsys/ridl/commit/5adbe70
+[27c53b1]: https://github.com/driftsys/ridl/commit/27c53b1
+[b63053d]: https://github.com/driftsys/ridl/commit/b63053d
+[4b1127a]: https://github.com/driftsys/ridl/commit/4b1127a
+[c7d6f47]: https://github.com/driftsys/ridl/commit/c7d6f47
+[57d42bd]: https://github.com/driftsys/ridl/commit/57d42bd
+[30e06e9]: https://github.com/driftsys/ridl/commit/30e06e9
+[1e1e953]: https://github.com/driftsys/ridl/commit/1e1e953
+[8982c4d]: https://github.com/driftsys/ridl/commit/8982c4d
+[f30826d]: https://github.com/driftsys/ridl/commit/f30826d
+[31a3a75]: https://github.com/driftsys/ridl/commit/31a3a75
+[0f72d7f]: https://github.com/driftsys/ridl/commit/0f72d7f
+[bbd6f96]: https://github.com/driftsys/ridl/commit/bbd6f96
+[02f632e]: https://github.com/driftsys/ridl/commit/02f632e
+
 ## [0.5.1] (2026-10-03)
 
 ### Bug Fixes
