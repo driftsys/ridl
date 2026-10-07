@@ -309,22 +309,13 @@ it runs inside the handler. Signal spans are left to a later request.
   `tracing` cell. The minimum Rust version of `tracing` is checked against
   `rust-version` in the plan.
 
-## Open question
+### D-9. The case 3 library consumes `tracing` spans
 
-### OQ-1. Does the case 3 library consume `tracing` spans?
-
-In case 3, the application's telemetry library either consumes `tracing` spans,
-as a `tracing` subscriber or layer, or it has its own span API.
-
-- If it consumes `tracing`, the features `tracing` and `trace-context` together
-  cover case 3, and this design is complete.
-- If it has its own span API and also wants RIDL's spans through that API, the
-  `observe` module would forward to a public observation port in `ridl-rt`
-  instead of to `tracing`. That is the alternative "A public observation port"
-  below, and it would be its own design.
-
-Propagation alone does not depend on the answer: `trace-context` works without
-`tracing`.
+Decided 2026-10-07: the telemetry library of case 3 consumes `tracing` spans, as
+a `tracing` subscriber or layer. So the features `tracing` and `trace-context`
+together cover case 3, and no public observation port is needed. A library with
+its own span API would need that port, which stays under "Alternatives
+considered".
 
 ## Phase 2: metrics (decided, not designed in detail)
 
