@@ -70,6 +70,12 @@ pub mod v2 {
         descriptor("ridl.ir.v2.System")
     }
 
+    /// The `ridl.codegen.v1.CodegenRequest` message descriptor — the entry
+    /// point of the request reader that ignores unknown keys.
+    pub(crate) fn codegen_request_descriptor() -> prost_reflect::MessageDescriptor {
+        descriptor("ridl.codegen.v1.CodegenRequest")
+    }
+
     /// The `ridl.codegen.v1.Model` message descriptor — the prototext entry
     /// point of the lowered codegen model, from the same pool, because
     /// `build.rs` compiles both schemas in one `protox` call.
@@ -297,6 +303,48 @@ pub mod v2 {
     where
         M: serde::de::DeserializeOwned + Send,
     {
+        check_nesting(text)?;
+        on_parse_stack(|| parse_json(text))
+    }
+
+    /// Reads a request-shaped message the way [`read_json`] does, except that
+    /// a key the schema does not declare is ignored at every nesting level.
+    /// The same nesting cap and parse stack apply.
+    ///
+    /// The text is read into a `DynamicMessage` over `descriptor`, which
+    /// drops the unknown keys, written back out as canonical JSON, and then
+    /// read by the generated deserializer of `M`. The second read means the
+    /// value is the one the strict reader gives for the same known keys, and
+    /// it avoids prost's binary decoder, whose fixed recursion limit of 100
+    /// levels is below the depth the front end admits in a model (see
+    /// [`MAX_JSON_NESTING`]). Every other check the strict reader makes
+    /// (a wrong value type, an unknown enum name) is made by one of the two
+    /// reads.
+    pub(crate) fn read_json_ignoring_unknown<M>(
+        descriptor: prost_reflect::MessageDescriptor,
+        text: &str,
+    ) -> Result<M, serde_json::Error>
+    where
+        M: serde::de::DeserializeOwned + Send,
+    {
+        check_nesting(text)?;
+        on_parse_stack(|| {
+            let mut deserializer = serde_json::Deserializer::from_str(text);
+            deserializer.disable_recursion_limit();
+            let options = prost_reflect::DeserializeOptions::new().deny_unknown_fields(false);
+            let message = prost_reflect::DynamicMessage::deserialize_with_options(
+                descriptor,
+                &mut deserializer,
+                &options,
+            )?;
+            deserializer.end()?;
+            let known = serde_json::to_string(&message)?;
+            parse_json(&known)
+        })
+    }
+
+    /// Refuses input that nests past `MAX_JSON_NESTING`.
+    fn check_nesting(text: &str) -> Result<(), serde_json::Error> {
         if max_json_nesting(text) > MAX_JSON_NESTING {
             return Err(<serde_json::Error as serde::de::Error>::custom(format!(
                 "the input nests deeper than {MAX_JSON_NESTING} JSON levels, the ceiling this \
@@ -304,6 +352,12 @@ pub mod v2 {
                  shallower"
             )));
         }
+        Ok(())
+    }
+
+    /// Runs a parse on its own stack of `JSON_PARSE_STACK` bytes, or in line
+    /// on the wasm family.
+    fn on_parse_stack<R: Send>(parse: impl FnOnce() -> R + Send) -> R {
         if cfg!(target_family = "wasm") {
             // The wasm family has no spawnable threads: `spawn_scoped`
             // returns `Err(Unsupported)` at run time on
@@ -311,14 +365,14 @@ pub mod v2 {
             // spawn here would turn every call into a panic. The parse runs
             // in line instead, on the caller's stack. What this path loses
             // is the deterministic stack — the ceiling is the ambient stack
-            // — and the `MAX_JSON_NESTING` cap above is the guard that
-            // matters: it is what turns an abort into an error.
-            parse_json(text)
+            // — and the `MAX_JSON_NESTING` cap is the guard that matters: it
+            // is what turns an abort into an error.
+            parse()
         } else {
             std::thread::scope(|scope| {
                 let handle = std::thread::Builder::new()
                     .stack_size(JSON_PARSE_STACK)
-                    .spawn_scoped(scope, || parse_json(text))
+                    .spawn_scoped(scope, parse)
                     .expect("the JSON parse thread spawns");
                 match handle.join() {
                     Ok(result) => result,
