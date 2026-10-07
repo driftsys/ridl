@@ -840,7 +840,7 @@ pub fn an_oversized_querys_context_is_reported_on_every_presentation<F: Factory>
     }
 }
 
-/// A call sent with [`TRACE_ZERO`] that is reported through
+/// A call sent with `TRACE_ZERO` that is reported through
 /// `ReadError::ShortClaim` carries that context on the error, not `None`.
 pub fn an_oversized_all_zero_context_is_reported_on_the_error<F: Factory>() {
     let mut rt = runtime::<F>();
@@ -874,7 +874,7 @@ pub fn an_oversized_claims_context_is_the_offered_calls_not_the_latest<F: Factor
     );
 }
 
-/// A command sent with [`TRACE_ZERO`] arrives with it unchanged.
+/// A command sent with `TRACE_ZERO` arrives with it unchanged.
 pub fn an_all_zero_commands_context_is_carried_unchanged<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");

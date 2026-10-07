@@ -171,7 +171,7 @@ pub fn a_short_buffer_keeps_the_occurrences_context<F: Factory>() {
     assert_eq!(occurrence.trace, Some(TRACE_A));
 }
 
-/// An occurrence raised with [`TRACE_ZERO`] arrives with it unchanged.
+/// An occurrence raised with `TRACE_ZERO` arrives with it unchanged.
 pub fn an_all_zero_occurrence_context_is_carried_unchanged<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.subscribe(IFACE, &[ORD]).expect("subscribe");

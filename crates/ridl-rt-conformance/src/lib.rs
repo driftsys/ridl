@@ -438,9 +438,11 @@ mod tests {
     }
 
     /// Whether a function's text names a trace constant (`TRACE_A`,
-    /// `TRACE_B` or `TRACE_ZERO`) as a whole identifier in code. Comment
-    /// lines are ignored, so a doc comment that names a constant does not
-    /// count, and neither does the doc comment of the next function.
+    /// `TRACE_B` or `TRACE_ZERO`) as a whole identifier on a line that is
+    /// not a comment line. A line whose first non-blank text is `//` is
+    /// ignored, so a doc comment that names a constant does not count, and
+    /// neither does the doc comment of the next function. A string literal
+    /// or a trailing comment that names a constant still counts.
     fn carries_trace(text: &str) -> bool {
         let is_identifier_byte = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
         text.lines()
