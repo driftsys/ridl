@@ -959,10 +959,14 @@ trusted with no `unsafe` and no second verification pass.
     }
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub struct AlreadySet;
+    impl core::fmt::Display for AlreadySet { /* ... */ }
+    impl std::error::Error for AlreadySet {}
     pub fn set_propagation(p: &'static dyn Propagation) -> Result<(), AlreadySet>;
     pub fn propagation() -> Option<&'static dyn Propagation>;
     ```
 
+    - **`AlreadySet`.** It has `Display` and `std::error::Error` impls. They are
+      the first of either in `ridl-rt`: the port error enums have neither.
     - **The hook.** `current` returns the context to send, and is called just
       before a call or a raise is sent. `enter` receives the context that came
       with a claim, and is called before the claim span exists and before the

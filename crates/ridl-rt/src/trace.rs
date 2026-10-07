@@ -9,6 +9,9 @@
 //! application gives generated code the context to send and receives the
 //! context that arrived.
 
+#[cfg(feature = "std")]
+extern crate std;
+
 /// A trace id, a span id and the trace flags, in the layout of the W3C Trace
 /// Context `traceparent` header without its version byte.
 ///
@@ -25,31 +28,33 @@ pub struct TraceContext {
 }
 
 #[cfg(feature = "std")]
-extern crate std;
-
-#[cfg(feature = "std")]
 use std::sync::OnceLock;
 
 /// The hook through which an application connects its telemetry library to the
 /// trace context that crosses a port. Available with the `std` feature.
 ///
-/// `ridl-rt` carries the bytes and calls the hook at fixed points. Which span
-/// is current, how ids are created and where traces are exported belong to the
-/// application's library. No hook is registered until the application calls
-/// [`set_propagation`], and until then a sender passes `None`.
+/// `ridl-rt` carries the bytes. The code that a generated crate emits calls the
+/// hook at the points below. No generated code calls it yet: the generated face
+/// still passes `None` as the trace context (driftsys/ridl#754 tracks the
+/// change). Which span is current, how ids are created and where traces are
+/// exported belong to the application's library. No hook is registered until
+/// the application calls [`set_propagation`].
 ///
 /// # Call points
 ///
-/// - [`current`](Propagation::current) is called just before a call or a raise
-///   is sent. It returns the context to send, or `None`.
-/// - [`enter`](Propagation::enter) is called when a claim is received, before
-///   the claim span exists and before the handler runs.
-/// - [`leave`](Propagation::leave) is called after the handler has returned,
-///   and also when it panics.
+/// Generated code calls the hook at these points:
+///
+/// - [`current`](Propagation::current) just before a call or a raise is sent.
+///   It returns the context to send, or `None`.
+/// - [`enter`](Propagation::enter) when a claim is received, before the claim
+///   span exists and before the handler runs.
+/// - [`leave`](Propagation::leave) after the handler has returned, and also
+///   when it panics.
 ///
 /// # Call order for a claim
 ///
-/// A dispatcher that serves a claim calls the hook in this order:
+/// Generated code that serves a claim follows this order when it calls the
+/// hook:
 ///
 /// 1. `enter(received)`, where `received` is the context that came over the
 ///    wire. It is `None` for a claim that carried no context, and `leave` is
@@ -66,6 +71,13 @@ use std::sync::OnceLock;
 /// context activation is on by default since `tracing-opentelemetry` 0.32.0.
 /// Setting the parent after the claim span is entered fails, because entering
 /// the span starts it.
+///
+/// # Nesting and threads
+///
+/// Each `enter` is paired with one `leave`. Pairs nest: a handler that serves
+/// another claim produces an inner pair inside the outer one. The `leave` of a
+/// pair runs on the thread that ran its `enter`, so an implementation can keep
+/// what `enter` attached on a per-thread stack.
 #[cfg(feature = "std")]
 pub trait Propagation: Sync {
     /// Called just before a call or a raise is sent. Returns the context to

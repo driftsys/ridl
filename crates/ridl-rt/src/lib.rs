@@ -41,7 +41,9 @@
 //! preludes already bring every item it would add.
 //!
 //! The ninth module, [`trace`], holds `TraceContext`, the optional trace context
-//! that a call or an event carries across a port.
+//! that a call or an event carries across a port. With the `std` feature it also
+//! holds `Propagation`, `AlreadySet`, `set_propagation` and `propagation`, the
+//! application's hook for that context.
 //!
 //! # Where to start
 //!
