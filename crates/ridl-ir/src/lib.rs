@@ -320,6 +320,10 @@ pub mod v2 {
     /// key is dropped; an unknown enum name is an error, because it changes
     /// the meaning of a known field. A value of a `google.protobuf` message
     /// is left untouched.
+    ///
+    /// An error from the second phase, the generated deserializer reading the
+    /// filtered value, carries no line and column, because the value no longer
+    /// has a position in the text.
     pub(crate) fn read_json_ignoring_unknown<M>(
         descriptor: prost_reflect::MessageDescriptor,
         text: &str,
