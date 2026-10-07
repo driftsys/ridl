@@ -142,7 +142,9 @@ in different positions.
   conformance claim measurable. The one exception is the codegen request reader,
   `ridl_ir::codegen::request_from_json`, which ignores an unknown key so that a
   plugin keeps reading the requests of a later `ridl` (ADR-0020 decision 9). It
-  rejects an unknown enum name, as the strict reader does.
+  rejects an unknown enum name, as the strict reader does, so a plugin built on
+  an older `ridl-ir` rejects a request that carries a newer enum value and must
+  be rebuilt against the `ridl-ir` that adds it.
 - **A consumer's reader is lenient on unknown keys.** A key it does not know is
   ignored, an absent key is the field's default, and a 64-bit value is parsed
   from its string form. This is proto3's rule for unknown fields, and it is what
@@ -228,14 +230,14 @@ meaning it saw before, and a reader built after the change reads output from
 before it and sees the field's default where the writer wrote nothing. An
 additive change is made in place.
 
-| Change                                                | Rule                                                                                                                                                                       |
-| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| a new field, with a number never used in that message | additive, if its default carries the meaning the old writer implied by omitting it; a new field a reader cannot ignore is breaking                                         |
-| a new `oneof` member                                  | additive on the same condition; an old reader sees the `oneof` unset                                                                                                       |
-| a new enum value                                      | additive; the IR's enums are closed and the checker never writes a value outside the schema, so the obligation falls on a reader's schema version rather than on its input |
-| a new message, reached only through a new field       | additive                                                                                                                                                                   |
-| a comment, a doc string, a `deprecated` option        | additive                                                                                                                                                                   |
-| retiring a field's meaning                            | additive only as `[deprecated = true]` with the field kept, still written and still read; the field itself leaves in the next major package (§7)                           |
+| Change                                                | Rule                                                                                                                                                                                                                                             |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| a new field, with a number never used in that message | additive, if its default carries the meaning the old writer implied by omitting it; a new field a reader cannot ignore is breaking                                                                                                               |
+| a new `oneof` member                                  | additive on the same condition; an old reader sees the `oneof` unset                                                                                                                                                                             |
+| a new enum value                                      | added in place, but a reader built on an older schema rejects an input that carries it, so that reader must be rebuilt against the schema that adds the value; the IR's enums are closed and the checker never writes a value outside the schema |
+| a new message, reached only through a new field       | additive                                                                                                                                                                                                                                         |
+| a comment, a doc string, a `deprecated` option        | additive                                                                                                                                                                                                                                         |
+| retiring a field's meaning                            | additive only as `[deprecated = true]` with the field kept, still written and still read; the field itself leaves in the next major package (§7)                                                                                                 |
 
 Everything else is **breaking**, and is never made in place:
 

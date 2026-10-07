@@ -254,7 +254,8 @@ pub fn request_to_json(request: &v1::CodegenRequest) -> Result<String, super::Se
 /// IR specification's compatibility rule, section 6). An unknown value is not
 /// ignored: an enum name the reader does not know is an error, because it
 /// changes the meaning of a known field, so a later `ridl` that adds an enum
-/// value is a change an older plugin reports as an error. Everything else the
+/// value is a change an older plugin reports as an error, and that plugin must
+/// be rebuilt against the `ridl-ir` that adds the value. Everything else the
 /// strict reader rejects is still rejected: a value of the wrong type, a field
 /// written twice, malformed JSON and input past the nesting cap. A plugin
 /// built against a `ridl-ir` release from before this rule must be rebuilt

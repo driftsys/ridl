@@ -113,13 +113,16 @@ only `plugin.proto` and `model.proto`.
 The rules are the IR specification's §6 to §8. In short:
 
 - **Additive changes are made in place.** A new field, a new enum value or a new
-  `oneof` member can appear in `ridl.codegen.v1` at any release. Any other
+  `oneof` member can appear in `ridl.codegen.v1` at any release. A plugin whose
+  request reader is built on an older `ridl-ir` still rejects a request that
+  carries a new enum value, so that plugin must be rebuilt against the
+  `ridl-ir` that adds the value. Any other
   change — a removal, a rename, a renumbering, a change of type or of meaning —
   is a new package, `ridl.codegen.v2`, compiled beside the old one.
 - **A plugin reads the request leniently.** It ignores keys it does not know,
   so a request from a newer `ridl` still reads. `ridl_ir::codegen::request_from_json`
-  does this at every nesting level of the request, from the release that
-  introduced this rule on. It still rejects an unknown enum name, because that
+  does this at every nesting level of the request, from `ridl-ir` 0.6.0
+  on. It still rejects an unknown enum name, because that
   changes the meaning of a known field, so a new enum value is a change an older
   plugin reports as an error. A Rust plugin built against an earlier `ridl-ir`
   rejects a request that carries a key that release does not know, and must be

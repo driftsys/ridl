@@ -130,7 +130,8 @@ JSON levels; the deepest request the front end admits nests to 265 (the model's
 request, so a plugin built on `ridl-ir` keeps reading the requests of a later
 `ridl` that adds a field. It still rejects an unknown enum name, because that
 changes the meaning of a known field: a later `ridl` that adds an enum value is
-a change an older plugin reports as an error. A plugin built against a `ridl-ir`
+a change an older plugin reports as an error, and that plugin must be rebuilt
+against the `ridl-ir` that adds the value. A plugin built against a `ridl-ir`
 release from before this rule must be rebuilt once. The response reader stays
 strict: it rejects an unknown key, so a plugin that answers with a field this
 schema does not have is reported as malformed rather than silently accepted. A
