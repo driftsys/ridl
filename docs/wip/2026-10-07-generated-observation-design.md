@@ -211,7 +211,8 @@ pub trait Propagation: Sync {
     /// Returns the W3C context to send, or `None`.
     fn current(&self) -> Option<TraceContext>;
 
-    /// Called when a claim is received, before the handler runs.
+    /// Called when a claim is received, before the claim span is created
+    /// and before the handler runs.
     /// `received` is the context that came over the wire.
     fn enter(&self, received: Option<TraceContext>);
 
@@ -241,11 +242,59 @@ to the application's library.
   without `unsafe` and without `std`, is not possible with `core` atomics, and
   `ridl-rt` has no `unsafe` code. The hook is held in a `OnceLock`. An
   application with a telemetry library has `std`.
-- **The signature is provisional.** The `enter` and `leave` pair must let an
-  OpenTelemetry implementation set the remote parent before the span starts
-  (`tracing-opentelemetry`'s `set_parent` returns `AlreadyStarted` otherwise).
-  The first step of the plan is a spike that implements the hook with
-  `tracing-opentelemetry` in a test and fixes the signature.
+- **The signature is fixed.** The `enter` and `leave` pair lets an OpenTelemetry
+  implementation make the received context the remote parent before the claim
+  span is created (`tracing-opentelemetry` chooses a span's parent at creation,
+  and its `set_parent` returns `AlreadyStarted` once the span is entered). The
+  first step of the plan was a spike that implemented the hook with
+  `tracing-opentelemetry` in a test. The signature above did not change; the
+  call order below is what the spike fixed.
+
+**Call order.** Proven by `crates/ridl-backend-rust/tests/otel_propagation.rs`
+against `tracing-opentelemetry` 0.34.0, with `opentelemetry` and
+`opentelemetry_sdk` 0.33.0, and with the layer's default configuration. The test
+runs `dispatch` inside an enclosing application span, which is the case most
+likely to give the claim span the wrong parent. `dispatch` calls the hook and
+opens the claim span in this order:
+
+1. `enter(claim.trace)`, before the claim span exists. An OpenTelemetry hook
+   attaches a context that carries the received span context
+   (`Context::current().with_remote_span_context(..).attach()`), and keeps the
+   guard.
+2. Create the claim span with no `parent:` argument, and enter it.
+3. Run the handler.
+4. Exit and drop the claim span.
+5. `leave()`. An OpenTelemetry hook drops the guard it kept in step 1.
+
+The guard that calls `leave` is created before the claim span and dropped after
+it, so steps 4 and 5 keep this order on a panic as well.
+
+Why this order, from the source of `tracing-opentelemetry` 0.34.0
+(`src/layer.rs`): `OpenTelemetryLayer::on_new_span` chooses the parent once,
+when the `tracing` span is created, through `parent_context`. A span with no
+`parent:` argument takes `opentelemetry::Context::current()`, the attached
+context, when the layer's context activation is on; it is on by default since
+0.32.0 (`with_context_activation`). A span created with `parent: None` takes an
+empty context. The OpenTelemetry span itself is built later, by `start_cx`, the
+first time a started context is needed, and `on_enter` is one of those times:
+entering the `tracing` span starts the OpenTelemetry span so that its context
+can be attached. From then on `OpenTelemetrySpanExt::set_parent`
+(`src/span_ext.rs`) returns `SetParentError::AlreadyStarted`.
+
+The rejected orders, and what the test observed for each:
+
+- Create and enter the claim span, then `enter(received)` calling `set_parent`
+  on `Span::current()` (the order this section first described): `set_parent`
+  returned `Err(AlreadyStarted)`, and the exported claim span had the enclosing
+  application span as its parent, in the application's trace.
+- `enter(received)` first, then the claim span as an explicit root
+  (`parent: None`): the exported claim span had an all-zero parent id and a new
+  trace id. The attached context was ignored.
+
+With context activation turned off, a span with no `parent:` argument takes the
+started context of the current `tracing` span instead, and the attached context
+is read only when no `tracing` span is current. The kept order relies on the
+default, and the rustdoc of `Propagation` states it.
 
 **What the generated code does, with the `trace-context` feature on:**
 
@@ -254,10 +303,11 @@ to the application's library.
   `Caller::command`, `Caller::query` or `EventSink::raise`. With the `tracing`
   feature also on, it does so while the call span is entered, so the remote
   parent is the call span.
-- **Receiving a claim.** `dispatch` calls `enter(claim.trace)` before it runs
-  the handler, and `leave()` after, through a guard that also runs on panic. A
-  call or raise made inside the handler then gets the application's child
-  context from `current()`.
+- **Receiving a claim.** `dispatch` calls `enter(claim.trace)` before it creates
+  the claim span and runs the handler, and `leave()` after the claim span is
+  dropped, through a guard that also runs on panic, in the order the "Call
+  order" paragraph fixes. A call or raise made inside the handler then gets the
+  application's child context from `current()`.
 - **No hook registered.** Each point costs one atomic load and one branch, and
   `None` is sent. This is case 1.
 - **Feature off.** Nothing is compiled, and `None` is sent, as today.

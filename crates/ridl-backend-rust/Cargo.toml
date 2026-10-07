@@ -92,3 +92,23 @@ ridl-diff = { path = "../ridl-diff" }
 planus.workspace = true
 planus-codegen.workspace = true
 planus-translation.workspace = true
+# The propagation hook spike. The design of generated observation gives
+# `ridl_rt::trace::Propagation` to the application, and the one test that
+# proves the hook's call order implements it with `tracing-opentelemetry` over
+# an in-memory exporter, then reads the exported spans back. The three
+# OpenTelemetry crates follow the version `tracing-opentelemetry` declares in
+# its own manifest. Dev-dependencies only: the backend's library links none of
+# them, and neither does `ridl-rt`.
+opentelemetry = { version = "0.33", default-features = false, features = [
+  "trace",
+] }
+opentelemetry_sdk = { version = "0.33", default-features = false, features = [
+  "trace",
+  "testing",
+] }
+tracing = "0.1"
+tracing-opentelemetry = { version = "0.34", default-features = false }
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+  "registry",
+  "std",
+] }
