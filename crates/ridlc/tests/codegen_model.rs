@@ -236,9 +236,10 @@ fn the_deepest_package_the_front_end_admits_pins_the_model_nesting_bound() {
                 brackets, *json_levels,
                 "{shape}: the JSON levels are the bound the design note states"
             );
-            // The request reader goes through the protobuf binary decoder,
-            // which has its own recursion limit; the deepest model the
-            // front end admits must still read back inside a request.
+            // The request reader filters a `serde_json::Value` against the
+            // descriptor, then runs the generated deserializer; the deepest
+            // model the front end admits must still read back inside a
+            // request.
             let request = v1::CodegenRequest {
                 model: Some(model),
                 ..Default::default()
@@ -254,8 +255,9 @@ fn the_deepest_package_the_front_end_admits_pins_the_model_nesting_bound() {
 }
 
 /// Every corpus package lowers to a model whose request reads back equal
-/// through `request_from_json`, which ignores unknown keys by way of a
-/// dynamic message: the dynamic path gives the value the strict path gave.
+/// through `request_from_json`, which ignores unknown keys by filtering a
+/// `serde_json::Value` against the descriptor before the generated
+/// deserializer reads it: that path gives the value the strict path gave.
 #[test]
 fn every_corpus_request_round_trips_through_the_request_reader() {
     for (entry, packages) in corpus_packages() {
