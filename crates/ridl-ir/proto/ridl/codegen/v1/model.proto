@@ -106,8 +106,8 @@ message Spellings {
   // Empty in a model written by a toolchain older than this field; a reader
   // that meets an empty value derives it as `camel_case(snake)`. Additive in
   // the sense of the IR stability design's D-5: a plugin's lenient reader
-  // ignores a key it does not know, while the toolchain's own reader is
-  // strict by design (ADR-0014).
+  // ignores a key it does not know, as does the toolchain's request reader;
+  // the toolchain's response and IR readers stay strict (ADR-0014).
   string pascal = 5;
 }
 
