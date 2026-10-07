@@ -1340,6 +1340,37 @@ mod tests {
 
     // --- RPC default response bound (ridl §9.3) ---------------------
 
+    /// What an RPC annotation the parser could not read takes from the
+    /// default, with a default that has a minimum. A `Timing` node with no
+    /// range takes the whole default, its `min` included. A range whose
+    /// bound tokens the parser dropped is a range with neither bound, so it
+    /// takes only `max`, and no call throttle appears.
+    #[test]
+    fn unreadable_rpc_annotation_takes_from_the_default_what_the_parser_left_unwritten() {
+        let default = parse_rpc_default_timing("[10ms..1s]").expect("valid default");
+        for (decl, kind, min) in [
+            (
+                "query getSpeed(): Speed @fast",
+                InteractionKind::Query,
+                "10ms",
+            ),
+            (
+                "command setTarget(p: Speed) @[20xs..50ms]",
+                InteractionKind::Command,
+                "",
+            ),
+        ] {
+            let (timing, parse_codes) = annot_and_parse_codes(decl);
+            assert!(parse_codes.contains(&"FORM-101"), "{decl}: {parse_codes:?}");
+            let (spec, _) = resolve(Some(&timing), kind, &default);
+            let spec = spec.expect("a malformed annotation still resolves");
+            let expected_min = if min.is_empty() { None } else { value_of(min) };
+            assert_eq!(spec.min_us, expected_min, "{decl}: min");
+            assert_eq!(spec.max_us, value_of("1s"), "{decl}: max from the default");
+            assert!(spec.default_applied, "{decl}");
+        }
+    }
+
     /// Both RPC kinds, each with a sample declaration whose annotation the
     /// caller appends.
     const RPC_KINDS: [(&str, InteractionKind); 2] = [
@@ -1446,6 +1477,21 @@ mod tests {
             );
             assert!(message.contains("explicit maximum"), "{kind:?}: {message}");
             assert!(!message.contains("staleness"), "{kind:?}: {message}");
+            assert!(
+                message.contains("`2s` is longer than the default"),
+                "{kind:?}: {message}"
+            );
+            assert!(
+                message.contains("_timing` or the built-in default"),
+                "{kind:?}: {message}"
+            );
+            assert!(message.contains("`@[2s..max]`"), "{kind:?}: {message}");
+            let severity = diags
+                .iter()
+                .find(|diag| diag.code.as_str() == "RIDL-101")
+                .expect("RIDL-101")
+                .severity;
+            assert_eq!(severity, Severity::Error, "{kind:?}");
             let spec = spec.expect("resolved");
             assert_eq!(spec.min_us, value_of("2s"), "{kind:?}");
             assert_eq!(spec.max_us, value_of("1s"), "{kind:?}");
@@ -1475,6 +1521,16 @@ mod tests {
         );
         assert!(message.contains("explicit maximum"), "{message}");
         assert!(!message.contains("staleness"), "{message}");
+        assert!(
+            message.contains("`1s` equals the default"),
+            "the message names the relation: {message}"
+        );
+        assert!(
+            message.contains("`[defaults].command_timing` or the built-in default"),
+            "{message}"
+        );
+        assert!(message.contains("`@[1s..max]`"), "{message}");
+        assert_eq!(diags[0].severity, Severity::Warning);
         let spec = spec.expect("resolved");
         assert_eq!(spec.min_us, value_of("1s"));
         assert_eq!(spec.max_us, value_of("1s"));
