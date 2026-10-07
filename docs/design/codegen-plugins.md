@@ -118,18 +118,24 @@ source span, because the model carries none. An unset severity is an error, so a
 backend that forgets to set it has failed rather than warned.
 
 **The encoding on the pipe** is canonical protobuf JSON, pretty-printed, through
-the same generated impls and the same reader as the IR and the model
-(`request_to_json`, `request_from_json`, `response_to_json`,
-`response_from_json` in `ridl_ir::codegen`). The request's `model` is the same
-JSON value as the `--emit codegen-model` artifact, one indentation level deeper,
-so the two are equal as JSON but not byte for byte; a plugin author's fixture is
-therefore a file `ridlc` wrote, wrapped. The reader keeps the IR's nesting
-ceiling of 1,000 JSON levels; the deepest request the front end admits nests to
-265 (the model's 264 plus one for the field), and a plugin's parser must
-provision that much. The generated reader rejects an unknown key, so a plugin
-that answers with a field this schema does not have is reported as malformed
-rather than silently accepted; a plugin's own reader should be lenient, per the
-IR specification §8.
+the same generated impls as the IR and the model (`request_to_json`,
+`request_from_json`, `response_to_json`, `response_from_json` in
+`ridl_ir::codegen`). The request's `model` is the same JSON value as the
+`--emit codegen-model` artifact, one indentation level deeper, so the two are
+equal as JSON but not byte for byte; a plugin author's fixture is therefore a
+file `ridlc` wrote, wrapped. The reader keeps the IR's nesting ceiling of 1,000
+JSON levels; the deepest request the front end admits nests to 265 (the model's
+264 plus one for the field), and a plugin's parser must provision that much.
+`request_from_json` ignores an unknown key at every nesting level of the
+request, so a plugin built on `ridl-ir` keeps reading the requests of a later
+`ridl` that adds a field. It still rejects an unknown enum name, because that
+changes the meaning of a known field: a later `ridl` that adds an enum value is
+a change an older plugin reports as an error. A plugin built against a `ridl-ir`
+release from before this rule must be rebuilt once. The response reader stays
+strict: it rejects an unknown key, so a plugin that answers with a field this
+schema does not have is reported as malformed rather than silently accepted. A
+plugin that does not use `ridl-ir` reads the request leniently, per the IR
+specification §8.
 
 **Sizes and reservations.** The model states the maximum encoded size of every
 payload, of every command and query request, and of every query reply, once per
@@ -375,9 +381,9 @@ messages in P's model: the section carries no payload size.
 request is byte for byte the request written before the field existed. The field
 is additive under the compatibility rule of
 [the IR specification](../specification/ir-specification.md) §6. The generated
-reader of this toolchain rejects an unknown key, as §2 says, so an in-tree
-plugin is rebuilt with the schema; a plugin outside this workspace reads
-leniently and ignores a field it does not know.
+request reader of `ridl-ir` ignores an unknown key, as §2 says, so a plugin
+built on it and a plugin outside this workspace both ignore a field they do not
+know.
 
 ### What the section carries
 

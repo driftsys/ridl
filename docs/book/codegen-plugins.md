@@ -117,7 +117,13 @@ The rules are the IR specification's §6 to §8. In short:
   change — a removal, a rename, a renumbering, a change of type or of meaning —
   is a new package, `ridl.codegen.v2`, compiled beside the old one.
 - **A plugin reads the request leniently.** It ignores keys it does not know,
-  so a request from a newer `ridl` still reads.
+  so a request from a newer `ridl` still reads. `ridl_ir::codegen::request_from_json`
+  does this at every nesting level of the request, from the release that
+  introduced this rule on. It still rejects an unknown enum name, because that
+  changes the meaning of a known field, so a new enum value is a change an older
+  plugin reports as an error. A Rust plugin built against an earlier `ridl-ir`
+  rejects a request that carries a key that release does not know, and must be
+  rebuilt once.
 - **A plugin refuses an unknown `schema`.** `schema` is the first field of the
   request. A plugin that does not know its value answers with an error
   diagnostic naming both values. A plugin never refuses on `toolchain`, which

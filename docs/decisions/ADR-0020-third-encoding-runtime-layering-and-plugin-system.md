@@ -58,6 +58,11 @@ inputs (driftsys/ridl#715).
 carries two more host facts, `generated_marker = 7` and `header = 8`
 (driftsys/ridl#746).
 
+**Amended 2026-10-07 — decision 9, the request reader ignores unknown keys.**
+`ridl_ir::codegen::request_from_json` ignores a key it does not know at every
+nesting level of the request (driftsys/ridl#759). The response reader and the IR
+readers stay strict.
+
 ## Context
 
 Three problems came out of one session, and each has the same shape: a record
@@ -365,6 +370,17 @@ as its public contract.
    comment_preamble, normalise_header}`.
    The as-built record is
    [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md) section 2.
+
+   **Amendment (2026-10-07) — the request reader ignores unknown keys.**
+   `ridl_ir::codegen::request_from_json` ignores a key it does not know, at the
+   top level of the request and inside `model` and `deployment`, so a plugin
+   built on `ridl-ir` keeps reading the requests of a later `ridl` that adds a
+   request field. Before this amendment the reader rejected such a key, and the
+   two fields of the previous amendment, which the writer always emits, made
+   every plugin built on an earlier `ridl-ir` fail on every request. A plugin
+   built against an earlier `ridl-ir` must be rebuilt once. The response reader
+   (`response_from_json`) and the IR readers stay strict: ADR-0014 decision 11's
+   conformance test relies on that strictness.
 
 10. **Two hosts for that contract; the process host is this release's.** The
     in-tree Rust and TypeScript backends implement the contract in-process. The

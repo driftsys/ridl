@@ -139,7 +139,9 @@ in different positions.
   out-of-range numeric enum value, `null` for a repeated field, a duplicate key
   and a float-form integer (ADR-0014 decisions 11 and 14). Its input is its own
   output or a committed baseline, and the strictness is what makes the
-  conformance claim measurable.
+  conformance claim measurable. The one exception is the codegen request reader,
+  `ridl_ir::codegen::request_from_json`, which ignores an unknown key so that a
+  plugin keeps reading the requests of a later `ridl` (ADR-0020 decision 9).
 - **A consumer's reader is lenient on unknown keys.** A key it does not know is
   ignored, an absent key is the field's default, and a 64-bit value is parsed
   from its string form. This is proto3's rule for unknown fields, and it is what
