@@ -2795,6 +2795,33 @@ fn request_from_json_ignores_an_unknown_top_level_key() {
 }
 
 #[test]
+fn request_from_json_reads_a_key_written_in_its_proto_name() {
+    let request = full_request();
+    let json = super::request_to_json(&request).expect("the request renders");
+    let renamed = json
+        .replace("\"artifactBase\"", "\"artifact_base\"")
+        .replace("\"generatedMarker\"", "\"generated_marker\"");
+    assert!(renamed.contains("\"artifact_base\""));
+    assert!(renamed.contains("\"generated_marker\""));
+    assert_eq!(
+        super::request_from_json(&renamed).expect("the proto-name keys are read"),
+        request
+    );
+}
+
+#[test]
+fn request_from_json_reads_null_for_a_message_field_as_absent() {
+    let request = full_request();
+    let json = super::request_to_json(&request).expect("the request renders");
+    let mut value: serde_json::Value = serde_json::from_str(&json).expect("the JSON parses");
+    value["model"] = serde_json::Value::Null;
+    let nulled = serde_json::to_string(&value).expect("the JSON renders");
+    let read = super::request_from_json(&nulled).expect("null reads as absent");
+    assert_eq!(read.model, None);
+    assert_eq!(read.artifact_base, request.artifact_base);
+}
+
+#[test]
 fn request_from_json_ignores_an_unknown_key_inside_the_model_and_its_messages() {
     let request = full_request();
     let json = super::request_to_json(&request).expect("the request renders");
