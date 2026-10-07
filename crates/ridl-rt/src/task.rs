@@ -39,8 +39,6 @@
 //! Nothing here names a port, an interface or a generated type; the module
 //! knows only `core::future::Future`.
 
-extern crate std;
-
 use core::future::Future;
 use core::pin::pin;
 use core::sync::atomic::{AtomicBool, Ordering};

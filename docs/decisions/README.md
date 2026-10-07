@@ -268,7 +268,10 @@ other entry below is Accepted.
   argument on `Caller::command`, `Caller::query` and `EventSink::raise` and as a
   field on `Claim`, `RawOccurrence` and `ReadError::ShortClaim`, under four
   delivery rules, leaving `Envelope` unchanged (driftsys/ridl#752); a breaking
-  change to be released with the workspace as 0.6.0.
+  change to be released with the workspace as 0.6.0. A 2026-10-07 amendment adds
+  decision 22: under the `std` feature, `trace::Propagation`, `AlreadySet`,
+  `set_propagation` and `propagation`, the application's hook for the trace
+  context, called by no generated code yet (driftsys/ridl#754).
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
   and what carries it: a `System` message in `system.proto`, its own artifact

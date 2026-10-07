@@ -38,7 +38,7 @@ adds:
 | `correlate`   | since the call-table move: `Table`, `Settled`, `Forgotten`, `Waiters`                                                                                                                                                                                                |
 | `error`       | `Contract`, `Transport`, `CallError`, `ClientError`, `ProviderError`                                                                                                                                                                                                 |
 | `face`        | since 2026-09-28 (driftsys/ridl#580): `Bind`, `Events`, `Publish`; `Timeout` under the `std` feature — the traits a generated face implements, the section "The face traits" below                                                                                   |
-| `trace`       | `TraceContext`, the optional trace context a call or an event carries across a port (ADR-0021 decision 21)                                                                                                                                                           |
+| `trace`       | `TraceContext`, the optional trace context a call or an event carries across a port (ADR-0021 decision 21); under the `std` feature, `Propagation`, `AlreadySet`, `set_propagation` and `propagation`, the application's hook (decision 22)                          |
 | `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with the Rust codec emitter             |
 | `task`        | under the `std` feature, since 2026-09-25: `block_on`, `noop_waker`; `flag_waker` and `WakeFlag` since 2026-09-28 (driftsys/ridl#568)                                                                                                                                |
 
@@ -442,12 +442,14 @@ cloned. The module is for a blocking client written as `block_on` over an async
 one, and for a frame loop that polls a future once per frame. It exists because
 `Waker::noop()` needs Rust 1.85, above the crate's minimum of 1.83, and a raw
 waker needs `unsafe`, which the crate forbids. It takes no dependency and
-contains no `unsafe`; every other module stays `no_std` with the feature on; and
-the feature compiles for `wasm32-unknown-unknown`, which `just wasm-check`'s
-`--all-features` line requires, but `block_on` is not usable on that target:
-`Instant::now()` panics there and a park does not block the thread, so a frame
-loop on wasm polls with `noop_waker` and never calls `block_on`. ADR-0021
-decision 8 carries the dated note.
+contains no `unsafe`; the `trace` module also links the standard library under
+the feature, for the propagation hook of ADR-0021 decision 22; every other
+module stays `no_std` with the feature on; and the feature compiles for
+`wasm32-unknown-unknown`, which `just wasm-check`'s `--all-features` line
+requires, but `block_on` is not usable on that target: `Instant::now()` panics
+there and a park does not block the thread, so a frame loop on wasm polls with
+`noop_waker` and never calls `block_on`. ADR-0021 decision 8 carries the dated
+note.
 
 **Since 2026-09-28 (driftsys/ridl#568) the `task` module has a third function,**
 `flag_waker() -> (Waker, WakeFlag)`. The waker is `Waker::from(Arc<Flag>)` over

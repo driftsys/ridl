@@ -77,7 +77,9 @@ registration is a refresh.
 the generated `Serve` to 32 claims, after which the future wakes itself. A frame
 loop that polls with `noop_waker` loses that wake, so decision 8 gains a third
 `task` function, `flag_waker`, whose wake the loop can read. Sebastien took the
-decision during the review of driftsys/ridl#584.
+decision during the review of driftsys/ridl#584. A 2026-10-07 note: decision 22
+adds a second user of the `std` feature, the `trace` module's propagation hook,
+so `task` is no longer the only module that links the standard library.
 
 **Amendment (2026-09-28) — decision 5 amended: `ReadError::ShortClaim`.** A
 claim whose argument bytes exceed the buffer a provider passes to
@@ -130,6 +132,16 @@ unable to gain a public field without a breaking change, so that list now holds
 sixteen. The design note is
 [`2026-10-06-trace-context-propagation-design.md`](../archive/2026-10-06-trace-context-propagation-design.md)
 (driftsys/ridl#752).
+
+**Amendment (2026-10-07) — decision 22: `trace::Propagation`.** The application
+needs a place to connect its telemetry library to the trace context, so that a
+generated crate can send the context of the current span and make a received
+context the parent of a claim span (driftsys/ridl#754). `ridl_rt::trace` gains,
+under the `std` feature, the `Propagation` trait, the `AlreadySet` error and the
+functions `set_propagation` and `propagation`. This is an addition under
+decision 10, with no dependency and no `unsafe` code. Nothing calls the hook in
+this version: the generated face still passes `None`. The `trace` module is now
+the second module that links the standard library under `std`.
 
 ## Context
 
@@ -946,6 +958,69 @@ trusted with no `unsafe` and no second verification pass.
     move every runtime from struct literals to constructors, which the other
     structs under decision 10 do not do.
 
+22. **Amendment (2026-10-07) — `trace::Propagation`: the application's hook for
+    the trace context, behind `std`.** `ridl_rt::trace` gains four items under
+    the `std` feature. The change is an addition to the API, with no dependency
+    and no `unsafe` code:
+
+    ```rust
+    pub trait Propagation: Sync {
+        fn current(&self) -> Option<TraceContext>;
+        fn enter(&self, received: Option<TraceContext>);
+        fn leave(&self);
+    }
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct AlreadySet;
+    impl core::fmt::Display for AlreadySet { /* ... */ }
+    impl std::error::Error for AlreadySet {}
+    pub fn set_propagation(p: &'static dyn Propagation) -> Result<(), AlreadySet>;
+    pub fn propagation() -> Option<&'static dyn Propagation>;
+    ```
+
+    - **`AlreadySet`.** It has `Display` and `std::error::Error` impls. They are
+      the first of either in `ridl-rt`: the port error enums have neither.
+    - **The hook.** `current` returns the context to send, and is called just
+      before a call or a raise is sent. `enter` receives the context that came
+      with a claim, and is called before the claim span exists and before the
+      handler runs. `leave` is called after the handler returns, and also when
+      it panics. `enter(None)` is a valid call for a claim that carried no
+      context, and `leave` is still called to pair with it.
+    - **The call order for a claim.** `enter(received)`, then the claim span is
+      created with no explicit parent, then the handler runs, then the span is
+      closed, then `leave()`. An OpenTelemetry implementation of `enter`
+      attaches a context that carries the received span context, and relies on
+      `tracing-opentelemetry` choosing a span's parent from the attached context
+      when the span is created. That context activation is on by default since
+      `tracing-opentelemetry` 0.32.0. The rustdoc of `Propagation` states this
+      reliance.
+    - **Rejected orders.** Two other orders fail, as the source of
+      `tracing-opentelemetry` 0.34.0 shows (`src/layer.rs` and
+      `src/span_ext.rs`), with `opentelemetry` and `opentelemetry_sdk` 0.33.0
+      and the layer's default configuration. When `enter(received)` has not
+      attached the context before the claim span is created, calling
+      `set_parent` on the claim span after it is entered returns
+      `AlreadyStarted`, because `on_enter` starts the OpenTelemetry span, and
+      the claim span keeps the application's span as its parent. Creating the
+      claim span as an explicit root (`parent: None`) gives it an empty parent
+      context, so it starts a new trace and ignores the received context. No
+      test pins these two results.
+    - **One hook per process.** `set_propagation` stores the hook in a
+      `std::sync::OnceLock`, and a second call returns `AlreadySet` and keeps
+      the first hook. No hook is registered by default, and `propagation()`
+      returns `None` until the application registers one. `std` is required
+      because `ridl-rt` has no `unsafe` code, and `core` atomics cannot store a
+      trait object that is set at run time without it.
+    - **Alternatives rejected.** `ridl-rt` creating its own W3C ids, with a
+      thread-local current context, because no use case needs it and it would
+      put `ridl-rt` on the path to its own context propagation framework. A hook
+      in each generated crate, because a handler in one generated crate that
+      calls a client of another would not see the context, and the application
+      would register the hook once for each crate. A dependency on
+      `opentelemetry`, because it would break the no-dependency rule of decision
+      8 and tie the crate to the application's OpenTelemetry version.
+    - **Generated code.** This decision adds the hook and does not call it. The
+      generated face still passes `None` until generated observation lands.
+
 ## Alternatives considered
 
 | Question                    | Alternative                                                           | Why it was not chosen                                                                                                                                                                                                                      |
@@ -1081,6 +1156,8 @@ trusted with no `unsafe` and no second verification pass.
 | `crates/ridl-rt/src/port.rs`                                                                     | the `Caller`, `EventSink`, `Handler` and `EventSource` docs state the four delivery rules (decision 21)                                                                                                                                                                                                                          |
 | [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decision 5             | a 2026-10-06 amendment records `trace` as the ninth unconditional module (decision 21)                                                                                                                                                                                                                                           |
 | `crates/ridl-rt/src/lib.rs`, `crates/ridl-rt/README.md`                                          | the crate documentation and the README name the `trace` module (decision 21)                                                                                                                                                                                                                                                     |
+| [the `ridl-rt` design record](../design/ridl-rt.md)                                              | the `trace` row of the module table lists `Propagation`, `AlreadySet`, `set_propagation` and `propagation` (decision 22)                                                                                                                                                                                                         |
+| `crates/ridl-rt/src/lib.rs`, `crates/ridl-rt/README.md`, `crates/ridl-rt/Cargo.toml`             | the crate documentation names the `trace` hook and no longer calls `task` the one module that links the standard library; the README and the feature comment name the hook (decision 22)                                                                                                                                         |
 
 ## References
 
