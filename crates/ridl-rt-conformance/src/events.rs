@@ -171,9 +171,7 @@ pub fn a_short_buffer_keeps_the_occurrences_context<F: Factory>() {
     assert_eq!(occurrence.trace, Some(TRACE_A));
 }
 
-/// An occurrence raised with an all-zero trace context arrives with it
-/// unchanged: `ridl-rt` does not validate the context, so a runtime does not
-/// drop it or replace it with `None`.
+/// An occurrence raised with [`TRACE_ZERO`] arrives with it unchanged.
 pub fn an_all_zero_occurrence_context_is_carried_unchanged<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.subscribe(IFACE, &[ORD]).expect("subscribe");

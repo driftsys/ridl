@@ -9,6 +9,7 @@
 use ridl_rt::contract::InterfaceNo;
 use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{Caller, ClaimId, Handler, ReadError, SendError, SettleError};
+use ridl_rt::trace::TraceContext;
 
 use crate::{Factory, IFACE, ORD, TRACE_A, TRACE_B, TRACE_ZERO, runtime};
 
@@ -635,6 +636,17 @@ pub fn two_handlers_each_receive_only_what_they_served<F: Factory>() {
     assert!(second.next_claim(&mut buf).expect("next_claim").is_none());
 }
 
+/// The trace context that the `ReadError::ShortClaim` of the next
+/// `next_claim` carries, for a call whose arguments are three bytes long.
+fn short_claim_trace(rt: &mut impl Handler, short: &mut [u8]) -> Option<TraceContext> {
+    match rt.next_claim(short) {
+        Err(ReadError::ShortClaim {
+            needed: 3, trace, ..
+        }) => trace,
+        other => panic!("a buffer shorter than the arguments reports ShortClaim: {other:?}"),
+    }
+}
+
 /// The trace context a command is sent with arrives on its claim.
 pub fn a_commands_context_arrives_on_its_claim<F: Factory>() {
     let mut rt = runtime::<F>();
@@ -754,12 +766,11 @@ pub fn an_oversized_claims_context_survives_its_second_presentation<F: Factory>(
         .expect("send");
 
     let mut short = [0u8; 1];
-    match rt.next_claim(&mut short) {
-        Err(ReadError::ShortClaim {
-            needed: 3, trace, ..
-        }) => assert_eq!(trace, Some(TRACE_A), "the ShortClaim error"),
-        other => panic!("a buffer shorter than the arguments reports ShortClaim: {other:?}"),
-    }
+    assert_eq!(
+        short_claim_trace(&mut rt, &mut short),
+        Some(TRACE_A),
+        "the ShortClaim error"
+    );
 
     let mut buf = [0u8; 8];
     let claim = rt
@@ -779,12 +790,11 @@ pub fn an_oversized_querys_context_is_reported_on_the_error<F: Factory>() {
         .expect("send");
 
     let mut short = [0u8; 1];
-    match rt.next_claim(&mut short) {
-        Err(ReadError::ShortClaim {
-            needed: 3, trace, ..
-        }) => assert_eq!(trace, Some(TRACE_A), "the ShortClaim error"),
-        other => panic!("a buffer shorter than the arguments reports ShortClaim: {other:?}"),
-    }
+    assert_eq!(
+        short_claim_trace(&mut rt, &mut short),
+        Some(TRACE_A),
+        "the ShortClaim error"
+    );
 
     let mut buf = [0u8; 8];
     let claim = rt
@@ -804,13 +814,46 @@ pub fn an_oversized_claims_context_is_reported_on_every_presentation<F: Factory>
 
     let mut short = [0u8; 1];
     for presentation in ["first", "second", "third"] {
-        match rt.next_claim(&mut short) {
-            Err(ReadError::ShortClaim {
-                needed: 3, trace, ..
-            }) => assert_eq!(trace, Some(TRACE_A), "the {presentation} ShortClaim error"),
-            other => panic!("a buffer shorter than the arguments reports ShortClaim: {other:?}"),
-        }
+        assert_eq!(
+            short_claim_trace(&mut rt, &mut short),
+            Some(TRACE_A),
+            "the {presentation} ShortClaim error"
+        );
     }
+}
+
+/// A query that is reported through `ReadError::ShortClaim` more than once
+/// carries its trace context on every report, not only the first.
+pub fn an_oversized_querys_context_is_reported_on_every_presentation<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    rt.query(IFACE, ORD, &[1, 2, 3], Some(TRACE_A))
+        .expect("send");
+
+    let mut short = [0u8; 1];
+    for presentation in ["first", "second", "third"] {
+        assert_eq!(
+            short_claim_trace(&mut rt, &mut short),
+            Some(TRACE_A),
+            "the {presentation} ShortClaim error"
+        );
+    }
+}
+
+/// A call sent with [`TRACE_ZERO`] that is reported through
+/// `ReadError::ShortClaim` carries that context on the error, not `None`.
+pub fn an_oversized_all_zero_context_is_reported_on_the_error<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    rt.command(IFACE, ORD, &[1, 2, 3], Some(TRACE_ZERO))
+        .expect("send");
+
+    let mut short = [0u8; 1];
+    assert_eq!(
+        short_claim_trace(&mut rt, &mut short),
+        Some(TRACE_ZERO),
+        "the ShortClaim error"
+    );
 }
 
 /// The trace context a `ReadError::ShortClaim` carries is the context of the
@@ -824,18 +867,15 @@ pub fn an_oversized_claims_context_is_the_offered_calls_not_the_latest<F: Factor
     rt.command(IFACE, ORD, &[9], Some(TRACE_B)).expect("send");
 
     let mut short = [0u8; 1];
-    match rt.next_claim(&mut short) {
-        Err(ReadError::ShortClaim {
-            needed: 3, trace, ..
-        }) => assert_eq!(trace, Some(TRACE_A), "the ShortClaim error"),
-        other => panic!("a buffer shorter than the arguments reports ShortClaim: {other:?}"),
-    }
+    assert_eq!(
+        short_claim_trace(&mut rt, &mut short),
+        Some(TRACE_A),
+        "the ShortClaim error"
+    );
 }
 
-/// A trace context whose bytes are all zero is carried like any other value:
-/// `ridl-rt` does not validate the context, so a runtime does not drop it or
-/// replace it with `None`.
-pub fn an_all_zero_context_is_carried_unchanged<F: Factory>() {
+/// A command sent with [`TRACE_ZERO`] arrives with it unchanged.
+pub fn an_all_zero_commands_context_is_carried_unchanged<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
     rt.command(IFACE, ORD, &[1], Some(TRACE_ZERO))
