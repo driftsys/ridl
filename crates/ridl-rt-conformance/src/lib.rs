@@ -301,7 +301,8 @@ macro_rules! suite {
             calls::an_oversized_querys_context_is_reported_on_the_error,
             calls::an_oversized_claims_context_is_reported_on_every_presentation,
             calls::an_oversized_querys_context_is_reported_on_every_presentation,
-            calls::an_oversized_all_zero_context_is_reported_on_the_error,
+            calls::an_oversized_all_zero_commands_context_is_reported_on_the_error,
+            calls::an_oversized_all_zero_querys_context_is_reported_on_the_error,
             calls::an_oversized_claims_context_is_the_offered_calls_not_the_latest,
             calls::a_reused_call_slot_does_not_keep_the_previous_context,
             calls::an_all_zero_commands_context_is_carried_unchanged,
@@ -567,10 +568,17 @@ mod tests {
     }
 
     #[test]
+    fn a_string_literal_or_a_trailing_comment_that_names_a_constant_counts() {
+        assert!(carries_trace("let s = \"TRACE_A\";"));
+        assert!(carries_trace("f(); // TRACE_A"));
+    }
+
+    #[test]
     fn a_body_that_names_no_trace_constant_carries_no_trace() {
         assert!(!carries_trace("rt.command(I, O, &[1], None)"));
         assert!(!carries_trace("let n = MAX_TRACE_LEN;"));
         assert!(!carries_trace("let n = TRACE_AB + XTRACE_A;"));
         assert!(!carries_trace("/// see TRACE_A\n// and TRACE_B\nNone"));
+        assert!(!carries_trace("    // TRACE_A\n    None"));
     }
 }

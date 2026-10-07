@@ -840,9 +840,9 @@ pub fn an_oversized_querys_context_is_reported_on_every_presentation<F: Factory>
     }
 }
 
-/// A call sent with `TRACE_ZERO` that is reported through
+/// A command sent with `TRACE_ZERO` that is reported through
 /// `ReadError::ShortClaim` carries that context on the error, not `None`.
-pub fn an_oversized_all_zero_context_is_reported_on_the_error<F: Factory>() {
+pub fn an_oversized_all_zero_commands_context_is_reported_on_the_error<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
     rt.command(IFACE, ORD, &[1, 2, 3], Some(TRACE_ZERO))
@@ -856,9 +856,27 @@ pub fn an_oversized_all_zero_context_is_reported_on_the_error<F: Factory>() {
     );
 }
 
+/// A query sent with `TRACE_ZERO` that is reported through
+/// `ReadError::ShortClaim` carries that context on the error, not `None`.
+pub fn an_oversized_all_zero_querys_context_is_reported_on_the_error<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    rt.query(IFACE, ORD, &[1, 2, 3], Some(TRACE_ZERO))
+        .expect("send");
+
+    let mut short = [0u8; 1];
+    assert_eq!(
+        short_claim_trace(&mut rt, &mut short),
+        Some(TRACE_ZERO),
+        "the ShortClaim error"
+    );
+}
+
 /// The trace context a `ReadError::ShortClaim` carries is the context of the
 /// call it offers, not that of another call in flight: the oversized call is
-/// sent first and a later call with another context is sent after it.
+/// sent first and a later call with another context is sent after it. The
+/// context is the offered call's on every presentation of the claim, not only
+/// the first.
 pub fn an_oversized_claims_context_is_the_offered_calls_not_the_latest<F: Factory>() {
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
@@ -867,11 +885,13 @@ pub fn an_oversized_claims_context_is_the_offered_calls_not_the_latest<F: Factor
     rt.command(IFACE, ORD, &[9], Some(TRACE_B)).expect("send");
 
     let mut short = [0u8; 1];
-    assert_eq!(
-        short_claim_trace(&mut rt, &mut short),
-        Some(TRACE_A),
-        "the ShortClaim error"
-    );
+    for presentation in ["first", "second", "third"] {
+        assert_eq!(
+            short_claim_trace(&mut rt, &mut short),
+            Some(TRACE_A),
+            "the {presentation} ShortClaim error"
+        );
+    }
 }
 
 /// A command sent with `TRACE_ZERO` arrives with it unchanged.
