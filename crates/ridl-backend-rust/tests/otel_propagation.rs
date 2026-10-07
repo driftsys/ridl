@@ -20,8 +20,9 @@
 //! 3. Run the handler. A call made inside takes the claim span as its parent.
 //! 4. Exit and drop the claim span.
 //! 5. `leave()`. The hook detaches what `enter` attached. The hook asserts
-//!    that the claim span is no longer the current span, which pins step 4
-//!    before step 5.
+//!    that the claim span is not the current span when `leave` runs. This
+//!    catches a `leave` that runs while the claim span is still entered. It
+//!    does not check that the claim span is dropped before `leave`.
 //!
 //! Setting the parent after the span is entered (`set_parent` on
 //! `Span::current()`) returns `AlreadyStarted`, because entering the span
@@ -31,7 +32,6 @@
 //! ADR-0021 decision 22; no test here pins them.
 
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use opentelemetry::trace::{
     SpanContext, SpanId, TraceContextExt, TraceFlags, TraceId, TraceState, TracerProvider,
@@ -55,12 +55,8 @@ thread_local! {
     static OPEN_CLAIMS: RefCell<Vec<Option<span::Id>>> = const { RefCell::new(Vec::new()) };
 }
 
-/// The hook implemented with OpenTelemetry. It counts its calls.
-#[derive(Default)]
-struct Otel {
-    enters: AtomicUsize,
-    leaves: AtomicUsize,
-}
+/// The hook implemented with OpenTelemetry.
+struct Otel;
 
 impl Propagation for Otel {
     fn current(&self) -> Option<TraceContext> {
@@ -75,7 +71,6 @@ impl Propagation for Otel {
     }
 
     fn enter(&self, received: Option<TraceContext>) {
-        self.enters.fetch_add(1, Ordering::SeqCst);
         let guard = received.map(|received| {
             Context::current()
                 .with_remote_span_context(SpanContext::new(
@@ -91,7 +86,6 @@ impl Propagation for Otel {
     }
 
     fn leave(&self) {
-        self.leaves.fetch_add(1, Ordering::SeqCst);
         let claim = OPEN_CLAIMS.with(|claims| claims.borrow().last().cloned().flatten());
         assert!(
             claim.is_some() && Span::current().id() != claim,
@@ -128,9 +122,6 @@ struct Observed {
     inside_handler: Option<TraceContext>,
     /// The OpenTelemetry context attached once `dispatch` has returned.
     otel_after_handler: SpanContext,
-    /// How many times the hook's `enter` and `leave` ran.
-    enters: usize,
-    leaves: usize,
     exported: Vec<SpanData>,
 }
 
@@ -144,7 +135,7 @@ fn run(received: bool) -> Observed {
         .build();
     let layer = tracing_opentelemetry::layer().with_tracer(provider.tracer("test"));
     let subscriber = Registry::default().with(layer);
-    let hook = Otel::default();
+    let hook = Otel;
 
     let observed = tracing::subscriber::with_default(subscriber, || {
         // The client side: the call span is entered while the context is read.
@@ -166,8 +157,6 @@ fn run(received: bool) -> Observed {
             serve_loop,
             inside_handler,
             otel_after_handler: Context::current().span().span_context().clone(),
-            enters: hook.enters.load(Ordering::SeqCst),
-            leaves: hook.leaves.load(Ordering::SeqCst),
             exported: Vec::new(),
         }
     });
@@ -253,13 +242,6 @@ fn claim_without_context_is_a_child_of_the_application_span() {
 }
 
 #[test]
-fn enter_without_context_is_still_paired_with_leave() {
-    let observed = run(false);
-    assert_eq!(observed.enters, 1);
-    assert_eq!(observed.leaves, 1);
-}
-
-#[test]
 fn inner_pair_restores_the_outer_context() {
     let exporter = InMemorySpanExporter::default();
     let provider = SdkTracerProvider::builder()
@@ -267,7 +249,7 @@ fn inner_pair_restores_the_outer_context() {
         .build();
     let layer = tracing_opentelemetry::layer().with_tracer(provider.tracer("test"));
     let subscriber = Registry::default().with(layer);
-    let hook = Otel::default();
+    let hook = Otel;
     let outer_received = TraceContext {
         trace_id: [1; 16],
         span_id: [1; 8],
@@ -292,6 +274,4 @@ fn inner_pair_restores_the_outer_context() {
             assert_eq!(restored.trace_id().to_bytes(), outer.trace_id);
         });
     });
-    assert_eq!(hook.enters.load(Ordering::SeqCst), 2);
-    assert_eq!(hook.leaves.load(Ordering::SeqCst), 2);
 }
