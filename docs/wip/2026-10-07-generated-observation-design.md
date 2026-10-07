@@ -28,6 +28,19 @@ for it, and phase 2 gets its own issue and plan.
   three days" and "events between A and B started being dropped".
 - Levels, so that a production build pays nothing for what it does not enable.
 - Metrics behind their own feature, in a second phase.
+- No dependency on the OpenTelemetry crates, in RIDL or in an application that
+  does not choose them.
+
+## Three use cases for trace context
+
+| Case                                                                    | What RIDL does                                                           | Ids on the wire           |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------- |
+| 1. Perfetto, no W3C ids                                                 | `tracing` spans only; nesting inside a process comes from `tracing`      | `None`                    |
+| 2. The application uses OpenTelemetry                                   | Calls the application's propagation hook, implemented with OpenTelemetry | The application's W3C ids |
+| 3. The application uses another, lighter telemetry library with W3C ids | Calls the same hook, implemented with that library                       | The application's W3C ids |
+
+Cases 2 and 3 need the same mechanism: a hook that does not depend on any
+telemetry library (D-6). No case needs RIDL to create W3C ids itself.
 
 ## Constraints
 
@@ -60,7 +73,7 @@ example `observe::call_span!`), and the generated code invokes them once per
 member. Each member has its own call site, and the shape of every span is still
 defined in one place.
 
-### D-2. One Cargo feature, `tracing`, off by default
+### D-2. Two Cargo features, `tracing` and `trace-context`, both off by default
 
 The manifest that `ridlc` renders (`render_cargo_toml` in
 `crates/ridlc/src/lib.rs`) gains:
@@ -68,12 +81,18 @@ The manifest that `ridlc` renders (`render_cargo_toml` in
 ```toml
 [features]
 tracing = ["dep:tracing"]
+trace-context = ["std"]
 std = ["ridl-rt/std", "tracing?/std"]
 
 [dependencies]
 tracing = { version = "0.1", default-features = false, optional = true }
 ```
 
+- `tracing` turns on the spans of D-4 and the events of D-5.
+- `trace-context` turns on the calls to the propagation hook of D-6. It does not
+  need `tracing`, so case 3 works with a telemetry library that does not consume
+  `tracing` spans. It needs `std`, because the hook does (D-6).
+- The two features are independent. Any combination is valid.
 - `tracing` is optional, as `regex` already is (TYPL-220).
 - `default-features = false` keeps the generated crate usable on `no_std`
   targets that have an allocator. `tracing` without `std` needs `alloc` and
@@ -174,21 +193,88 @@ is at `error` because it means the provider's own code broke its contract.
 Each event carries the identity fields of D-4 and the claim's remote parent
 fields, so the event can be found from either side of the call.
 
-### D-6. Trace context: incoming is recorded, outgoing waits on an open decision
+### D-6. Trace context: an application hook in `ridl-rt`
 
 `ridl-rt` carries an optional `TraceContext` (W3C ids: `trace_id`, `span_id`,
 `flags`) on `Claim`, `RawOccurrence`, `Caller::command`, `Caller::query` and
 `EventSink::raise` (ADR-0021 decision 21). A `tracing` span has only a local
-`u64` id. Turning one into the other needs OpenTelemetry, which the generated
-crate does not depend on.
+`u64` id, which the subscriber assigns and reuses after the span closes, so it
+cannot be sent on the wire. RIDL does not create W3C ids itself. The ids come
+from the application, through a hook.
 
-- **Incoming (decided).** The claim and occurrence spans, and the events of D-5,
-  record the received context as fields `trace.trace_id`, `trace.parent_span_id`
-  and `trace.flags`. The values are written as lowercase hexadecimal by a
-  `Display` wrapper that does not allocate. A subscriber that knows
-  OpenTelemetry can use them to set the remote parent.
-- **Outgoing (open, see OD-1).** Until OD-1 is decided, the generated code keeps
-  passing `None`.
+**The hook.** `ridl_rt::trace` gains, behind its `std` feature and with no
+dependency:
+
+```rust
+pub trait Propagation: Sync {
+    /// Called just before a call or a raise is sent.
+    /// Returns the W3C context to send, or `None`.
+    fn current(&self) -> Option<TraceContext>;
+
+    /// Called when a claim is received, before the handler runs.
+    /// `received` is the context that came over the wire.
+    fn enter(&self, received: Option<TraceContext>);
+
+    /// Called after the handler has returned, and also when it panics.
+    fn leave(&self);
+}
+
+/// Registers the hook once for the process. A second call returns an error.
+pub fn set_propagation(p: &'static dyn Propagation) -> Result<(), AlreadySet>;
+```
+
+**Disabled by default.** An application does not have to do anything. The
+`trace-context` feature is off by default, and with the feature on, no hook is
+registered until the application calls `set_propagation`. Until then, `None` is
+sent, as today.
+
+An application that wants propagation implements `Propagation` with its own
+telemetry library and registers it once at start-up, as `log::set_logger` does
+for the `log` crate. RIDL calls the hook at fixed points and carries the bytes.
+Which span is current, how ids are created and where traces are exported belong
+to the application's library.
+
+- **One hook per process**, in `ridl-rt`, so that every generated crate in the
+  process uses the same one. A handler in one generated crate that calls a
+  client of another generated crate continues the same trace.
+- **`std` only.** Storing a function or trait object that is set at run time,
+  without `unsafe` and without `std`, is not possible with `core` atomics, and
+  `ridl-rt` has no `unsafe` code. The hook is held in a `OnceLock`. An
+  application with a telemetry library has `std`.
+- **The signature is provisional.** The `enter` and `leave` pair must let an
+  OpenTelemetry implementation set the remote parent before the span starts
+  (`tracing-opentelemetry`'s `set_parent` returns `AlreadyStarted` otherwise).
+  The first step of the plan is a spike that implements the hook with
+  `tracing-opentelemetry` in a test and fixes the signature.
+
+**What the generated code does, with the `trace-context` feature on:**
+
+- **Sending.** A generated `Client` method or `Publisher` raise calls
+  `propagation().and_then(|p| p.current())` and passes the result to
+  `Caller::command`, `Caller::query` or `EventSink::raise`. With the `tracing`
+  feature also on, it does so while the call span is entered, so the remote
+  parent is the call span.
+- **Receiving a claim.** `dispatch` calls `enter(claim.trace)` before it runs
+  the handler, and `leave()` after, through a guard that also runs on panic. A
+  call or raise made inside the handler then gets the application's child
+  context from `current()`.
+- **No hook registered.** Each point costs one atomic load and one branch, and
+  `None` is sent. This is case 1.
+- **Feature off.** Nothing is compiled, and `None` is sent, as today.
+
+**Receiving an event.** `poll_next_event` decodes the occurrence and returns the
+event to the application, which handles it after the future completes. There is
+no point inside the face where the handling runs, so `enter` and `leave` are not
+called for an occurrence. A call that the application makes in reaction to an
+event is not linked to the event's trace. Phase 1 documents this limit. Closing
+it needs the received context exposed with the event, which changes the face's
+API, and waits for an event chain that needs it.
+
+**Recording.** With the `tracing` feature on, the claim and occurrence spans,
+and the events of D-5, record the received context as fields `trace.trace_id`,
+`trace.parent_span_id` and `trace.flags`. The values are written as lowercase
+hexadecimal by a `Display` wrapper that does not allocate. In case 1 these
+fields are absent, because nothing is sent.
 
 ### D-7. Signals are out of phase 1
 
@@ -210,27 +296,35 @@ it runs inside the handler. Signal spans are left to a later request.
 - **Dispatch events:** a test drives `dispatch` with an unknown ordinal, a short
   claim and a broken `ensure`, through `ridl-loopback`, and asserts each event
   and its level.
+- **Propagation:** a test registers a `Propagation` that records each call, and
+  drives a chain A → B → C through `ridl-loopback`, where B's handler calls C.
+  It asserts that A's `current()` value reaches B's `enter`, that B's
+  `current()` value reaches C, and that `leave` runs after each handler,
+  including one that panics. A second test, with no hook registered, asserts
+  that `None` is sent.
+- **The spike:** the plan's first step implements `Propagation` with
+  `tracing-opentelemetry` in a test only, as a dev-dependency, and fixes the
+  hook's signature before anything else is built on it.
 - The bare-`rustc` cell of `just compat-check` runs offline and does not get a
   `tracing` cell. The minimum Rust version of `tracing` is checked against
   `rust-version` in the plan.
 
-## Open decision
+## Open question
 
-### OD-1. Where the outgoing trace context comes from
+### OQ-1. Does the case 3 library consume `tracing` spans?
 
-To pass `Some(TraceContext)` on a call or a raise, the generated code needs the
-W3C ids of the current span. Options:
+In case 3, the application's telemetry library either consumes `tracing` spans,
+as a `tracing` subscriber or layer, or it has its own span API.
 
-- **(a) A hook in `ridl-rt`.** `ridl_rt::trace` gains a function-pointer slot
-  that the application sets once, for example from `tracing-opentelemetry`, and
-  that returns the current context. It costs one atomic load per call and adds
-  no dependency. It is a `ridl-rt` API change. _Recommended_, because every
-  generated crate in a process then shares one setting.
-- **(b) A hook per generated crate.** The same slot, in each generated crate's
-  `observe` module. It needs no `ridl-rt` change, but the application must set
-  it once for each generated crate it links.
-- **(c) No outgoing context in phase 1.** Spans stay local to each process,
-  linked only by the incoming fields of D-6.
+- If it consumes `tracing`, the features `tracing` and `trace-context` together
+  cover case 3, and this design is complete.
+- If it has its own span API and also wants RIDL's spans through that API, the
+  `observe` module would forward to a public observation port in `ridl-rt`
+  instead of to `tracing`. That is the alternative "A public observation port"
+  below, and it would be its own design.
+
+Propagation alone does not depend on the answer: `trace-context` works without
+`tracing`.
 
 ## Phase 2: metrics (decided, not designed in detail)
 
@@ -297,18 +391,39 @@ Each layer counts what only it can see.
 - **Metrics derived from spans in a subscriber.** Rejected, because metrics
   would disappear when spans are compiled out, which is the field setting.
 - **Signal spans in phase 1.** Deferred; see D-7.
+- **RIDL creates its own W3C ids**, with a random generator per process and a
+  thread-local "current context" set while `dispatch` runs a handler. This
+  follows the W3C format, so it would work with OpenTelemetry. Rejected, because
+  none of the three use cases needs it: case 1 sends no ids, and cases 2 and 3
+  have their own source of ids. It would also put RIDL on the path to its own
+  context propagation framework.
+- **The generated crate depends on `opentelemetry` and `tracing-opentelemetry`**
+  to read and set the context itself. Rejected, because those crates are large,
+  change their API often, and would tie the generated crate to the application's
+  OpenTelemetry version. The hook keeps that code in the application, and only
+  in an application that chooses OpenTelemetry.
+- **A hook in each generated crate's `observe` module.** Rejected, because a
+  handler in one generated crate that calls a client of another would not see
+  the context, and the application would have to register the hook once for each
+  generated crate.
+- **A `tracing::span::Id` as the `span_id` on the wire.** Rejected, because the
+  subscriber assigns it, it is local to one process, and it is reused after the
+  span closes.
 
 ## Records to amend
 
 - **ADR-0023**, the amendment "the face passes no trace context", and decision
   6: what the face emits for a call, with the feature on.
-- **ADR-0021 decision 21**, the bullet "Generated code".
+- **ADR-0021 decision 21**, the bullet "Generated code", and a new decision for
+  the `Propagation` trait, `set_propagation` and `propagation` in
+  `ridl_rt::trace`, behind `std`. This is an addition to the `ridl-rt` API.
 - **`docs/design/interaction-face.md`**: a new section on observation, and "The
   consumer face", "The provider face" and the settlement table.
 - **`render_cargo_toml`** in `crates/ridlc/src/lib.rs`, its doc comment, and the
   guard test that keeps the manifest literals in sync.
 - **The book:** a chapter, or a section of an existing one, on enabling and
-  filtering observation, with the two settings of D-3.
+  filtering observation, with the two settings of D-3, the three use cases, an
+  example `Propagation`, and the limit for events of D-6.
 
 ## Dependencies
 
