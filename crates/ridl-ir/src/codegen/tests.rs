@@ -2956,6 +2956,35 @@ fn request_from_json_ignores_an_unknown_key_inside_a_repeated_message_element() 
 }
 
 #[test]
+fn request_from_json_rejects_a_field_written_in_both_its_names() {
+    let json = super::request_to_json(&minimal_request()).expect("the request renders");
+    let both = json.replacen("{", "{\"artifact_base\": \"b\",", 1);
+    assert!(both.contains("\"artifactBase\"") && both.contains("\"artifact_base\""));
+    let err = super::request_from_json(&both).expect_err("one field in two names is a duplicate");
+    assert!(err.to_string().contains("duplicate field"), "{err}");
+}
+
+#[test]
+fn request_from_json_rejects_null_for_a_repeated_field_as_the_strict_reader_does() {
+    let json = super::request_to_json(&minimal_request()).expect("the request renders");
+    let nulled = json.replace("\"options\": []", "\"options\": null");
+    assert_ne!(nulled, json, "the replacement applies");
+    let strict = serde_json::from_str::<v1::CodegenRequest>(&nulled);
+    assert!(strict.is_err(), "the strict reader rejects null here");
+    super::request_from_json(&nulled).expect_err("the request reader rejects it too");
+}
+
+#[test]
+fn request_from_json_reports_a_second_phase_error_without_a_position() {
+    let json = super::request_to_json(&minimal_request()).expect("the request renders");
+    let wrong = json.replace("\"artifactBase\": \"a\"", "\"artifactBase\": 5");
+    let text = super::request_from_json(&wrong)
+        .expect_err("a number is not a string")
+        .to_string();
+    assert!(!text.contains("line") && !text.contains("column"), "{text}");
+}
+
+#[test]
 fn request_from_json_rejects_a_field_written_twice() {
     let json = super::request_to_json(&minimal_request()).expect("the request renders");
     let twice = json.replacen("{", "{\"artifactBase\": \"b\",", 1);
