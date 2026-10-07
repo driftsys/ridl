@@ -4,11 +4,14 @@
 //! The design of generated observation gives `ridl_rt::trace::Propagation`
 //! to the application: `current` reads the context to send, `enter` makes a
 //! received context the parent of what follows, and `leave` undoes `enter`.
-//! This test holds a local copy of that trait, implements it with
-//! `tracing-opentelemetry` over an in-memory exporter, simulates one call and
-//! one claim in one thread, and reads the exported OpenTelemetry spans back.
+//! This test implements that trait with `tracing-opentelemetry` over an
+//! in-memory exporter, simulates one call and one claim in one thread, and
+//! reads the exported OpenTelemetry spans back. The hook object is passed
+//! directly and is not registered, so the test does not depend on the
+//! process-wide hook.
 //!
-//! The order that passes, and that the generated `dispatch` follows:
+//! The order that passes, and that the generated `dispatch` must follow, as
+//! recorded in the design note:
 //!
 //! 1. `enter(received)`, before the claim span exists. The hook attaches an
 //!    OpenTelemetry context that carries the received span context.
@@ -32,25 +35,11 @@ use opentelemetry::trace::{
 };
 use opentelemetry::{Context, ContextGuard};
 use opentelemetry_sdk::trace::{InMemorySpanExporter, SdkTracerProvider, SpanData};
+use ridl_rt::trace::{Propagation, TraceContext};
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::Registry;
 use tracing_subscriber::layer::SubscriberExt;
-
-/// A local copy of `ridl_rt::trace::TraceContext`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct TraceContext {
-    trace_id: [u8; 16],
-    span_id: [u8; 8],
-    flags: u8,
-}
-
-/// A local copy of the hook the design note gives to `ridl_rt::trace`.
-trait Propagation: Sync {
-    fn current(&self) -> Option<TraceContext>;
-    fn enter(&self, received: Option<TraceContext>);
-    fn leave(&self);
-}
 
 thread_local! {
     /// What `enter` attached, popped by `leave`. An entry is `None` when
@@ -111,8 +100,9 @@ struct Observed {
 }
 
 /// Simulates `dispatch` in the order the module comment states, inside an
-/// enclosing application span, with the layer's default configuration.
-fn run() -> Observed {
+/// enclosing application span, with the layer's default configuration. When
+/// `received` is false, the claim carries no context.
+fn run(received: bool) -> Observed {
     let exporter = InMemorySpanExporter::default();
     let provider = SdkTracerProvider::builder()
         .with_simple_exporter(exporter.clone())
@@ -134,7 +124,7 @@ fn run() -> Observed {
         let _serve_entered = serve.enter();
         let serve_loop = hook.current().expect("the serve loop span has a context");
 
-        hook.enter(Some(sent));
+        hook.enter(received.then_some(sent));
         let inside_handler = {
             let claim = tracing::trace_span!("Cabin/setLevel");
             let _entered = claim.enter();
@@ -182,7 +172,7 @@ fn claim_span(observed: &Observed) -> &SpanData {
 
 #[test]
 fn claim_span_has_the_remote_parent() {
-    let observed = run();
+    let observed = run(true);
     let claim = claim_span(&observed);
     assert_eq!(claim.parent_span_id.to_bytes(), observed.sent.span_id);
     assert_eq!(
@@ -194,7 +184,7 @@ fn claim_span_has_the_remote_parent() {
 
 #[test]
 fn nested_call_is_a_child_of_the_claim() {
-    let observed = run();
+    let observed = run(true);
     let claim = claim_span(&observed);
     let inside = observed
         .inside_handler
@@ -205,7 +195,7 @@ fn nested_call_is_a_child_of_the_claim() {
 
 #[test]
 fn leave_restores_the_application_span() {
-    let observed = run();
+    let observed = run(true);
     assert_eq!(observed.after_handler, Some(observed.serve_loop));
     assert_eq!(
         observed.otel_after_handler.span_id().to_bytes(),
@@ -214,5 +204,22 @@ fn leave_restores_the_application_span() {
     assert_eq!(
         observed.otel_after_handler.trace_id().to_bytes(),
         observed.serve_loop.trace_id
+    );
+}
+
+#[test]
+fn claim_without_context_is_a_child_of_the_application_span() {
+    let observed = run(false);
+    let claim = claim_span(&observed);
+    assert_eq!(claim.parent_span_id.to_bytes(), observed.serve_loop.span_id);
+    assert_eq!(
+        claim.span_context.trace_id().to_bytes(),
+        observed.serve_loop.trace_id
+    );
+    assert!(!claim.parent_span_is_remote);
+    assert_eq!(observed.after_handler, Some(observed.serve_loop));
+    assert_eq!(
+        observed.otel_after_handler.span_id().to_bytes(),
+        observed.serve_loop.span_id
     );
 }
