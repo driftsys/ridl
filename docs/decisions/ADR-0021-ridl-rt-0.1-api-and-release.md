@@ -993,6 +993,16 @@ trusted with no `unsafe` and no second verification pass.
       when the span is created. That context activation is on by default since
       `tracing-opentelemetry` 0.32.0. The rustdoc of `Propagation` states this
       reliance.
+    - **Rejected orders.** Two other orders were observed to fail with
+      `tracing-opentelemetry` 0.34.0, with `opentelemetry` and
+      `opentelemetry_sdk` 0.33.0 and the layer's default configuration. Calling
+      `set_parent` on the claim span after it is entered returns
+      `AlreadyStarted`, because `on_enter` starts the OpenTelemetry span
+      (`src/layer.rs`, `src/span_ext.rs`), and the exported claim span then has
+      the application's span as its parent. Creating the claim span as an
+      explicit root (`parent: None`) gives it an empty parent context, so it
+      starts a new trace and ignores the received context. No test pins these
+      two results.
     - **One hook per process.** `set_propagation` stores the hook in a
       `std::sync::OnceLock`, and a second call returns `AlreadySet` and keeps
       the first hook. No hook is registered by default, and `propagation()`
@@ -1146,7 +1156,7 @@ trusted with no `unsafe` and no second verification pass.
 | [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decision 5             | a 2026-10-06 amendment records `trace` as the ninth unconditional module (decision 21)                                                                                                                                                                                                                                           |
 | `crates/ridl-rt/src/lib.rs`, `crates/ridl-rt/README.md`                                          | the crate documentation and the README name the `trace` module (decision 21)                                                                                                                                                                                                                                                     |
 | [the `ridl-rt` design record](../design/ridl-rt.md)                                              | the `trace` row of the module table lists `Propagation`, `AlreadySet`, `set_propagation` and `propagation` (decision 22)                                                                                                                                                                                                         |
-| `crates/ridl-rt/src/lib.rs`, `crates/ridl-rt/README.md`, `crates/ridl-rt/Cargo.toml`             | the crate documentation, the README and the feature comment name the `trace` hook and no longer call `task` the one module that links the standard library (decision 22)                                                                                                                                                         |
+| `crates/ridl-rt/src/lib.rs`, `crates/ridl-rt/README.md`, `crates/ridl-rt/Cargo.toml`             | the crate documentation names the `trace` hook and no longer calls `task` the one module that links the standard library; the README and the feature comment name the hook (decision 22)                                                                                                                                         |
 
 ## References
 
