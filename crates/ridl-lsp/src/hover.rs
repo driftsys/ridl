@@ -1663,6 +1663,8 @@ mod tests {
             "{line}"
         );
         assert!(!line.contains("default [20ms"), "{line}");
+        assert!(line.contains("response bound (the reply)"), "{line}");
+        assert!(!line.contains("acceptance"), "{line}");
     }
 
     /// With no minimum the whole range is the default, so the line says the
