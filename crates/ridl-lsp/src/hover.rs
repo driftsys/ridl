@@ -1653,6 +1653,20 @@ mod tests {
         assert!(!line.contains("default [20ms"), "{line}");
     }
 
+    /// The same wording holds on a query, whose reading is the reply and not
+    /// the acceptance.
+    #[test]
+    fn timing_line_names_only_the_maximum_as_defaulted_on_a_query_with_a_minimum() {
+        let line = timing_line(&defaulted_range(Some("20000"), "3000000"), Reading::Reply);
+        assert!(
+            line.contains("`[20ms..3000ms]` (maximum 3s taken from the default)"),
+            "{line}"
+        );
+        assert!(!line.contains("default [20ms"), "{line}");
+        assert!(line.contains("response bound (the reply)"), "{line}");
+        assert!(!line.contains("acceptance"), "{line}");
+    }
+
     /// With no minimum the whole range is the default, so the line says the
     /// default was applied, on an RPC and on a signal alike.
     #[test]
