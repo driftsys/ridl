@@ -308,18 +308,18 @@ pub mod v2 {
     }
 
     /// Reads a request-shaped message the way [`read_json`] does, except that
-    /// a key the schema does not declare is ignored at every nesting level.
-    /// The same nesting cap and parse stack apply.
+    /// an object key the schema does not declare is ignored at every nesting
+    /// level. The same nesting cap and parse stack apply.
     ///
-    /// The text is read into a `DynamicMessage` over `descriptor`, which
-    /// drops the unknown keys, written back out as canonical JSON, and then
-    /// read by the generated deserializer of `M`. The second read means the
-    /// value is the one the strict reader gives for the same known keys, and
-    /// it avoids prost's binary decoder, whose fixed recursion limit of 100
-    /// levels is below the depth the front end admits in a model (see
-    /// [`MAX_JSON_NESTING`]). Every other check the strict reader makes
-    /// (a wrong value type, an unknown enum name) is made by one of the two
-    /// reads.
+    /// The text is read once into a `serde_json::Value` that keeps only the
+    /// keys `descriptor` declares at each point (by JSON name or proto name),
+    /// including inside repeated and map message values, and the value is
+    /// then read by the generated deserializer of `M`. That reader still
+    /// rejects what it rejects for the strict path: a value of the wrong
+    /// type, an unknown enum name, and a field written twice. Only an unknown
+    /// key is dropped; an unknown enum name is an error, because it changes
+    /// the meaning of a known field. A value of a `google.protobuf` message
+    /// is left untouched.
     pub(crate) fn read_json_ignoring_unknown<M>(
         descriptor: prost_reflect::MessageDescriptor,
         text: &str,
@@ -327,20 +327,154 @@ pub mod v2 {
     where
         M: serde::de::DeserializeOwned + Send,
     {
+        use serde::de::DeserializeSeed as _;
         check_nesting(text)?;
         on_parse_stack(|| {
             let mut deserializer = serde_json::Deserializer::from_str(text);
             deserializer.disable_recursion_limit();
-            let options = prost_reflect::DeserializeOptions::new().deny_unknown_fields(false);
-            let message = prost_reflect::DynamicMessage::deserialize_with_options(
-                descriptor,
-                &mut deserializer,
-                &options,
-            )?;
+            let known = Shape::Message(descriptor).deserialize(&mut deserializer)?;
             deserializer.end()?;
-            let known = serde_json::to_string(&message)?;
-            parse_json(&known)
+            serde::Deserialize::deserialize(known)
         })
+    }
+
+    /// What a JSON value is expected to be, as far as dropping unknown keys
+    /// needs to know.
+    #[derive(Clone)]
+    enum Shape {
+        /// A message: an object whose unknown keys are dropped.
+        Message(prost_reflect::MessageDescriptor),
+        /// A repeated field: an array of the inner shape.
+        List(Box<Shape>),
+        /// A map field: an object whose values have the inner shape.
+        Map(Box<Shape>),
+        /// Anything else: kept as read.
+        Opaque,
+    }
+
+    impl Shape {
+        /// The shape of the value of one field.
+        fn of(field: &prost_reflect::FieldDescriptor) -> Shape {
+            use prost_reflect::Kind;
+            if field.is_map() {
+                let Kind::Message(entry) = field.kind() else {
+                    return Shape::Opaque;
+                };
+                return Shape::Map(Box::new(Shape::of_kind(
+                    &entry.map_entry_value_field().kind(),
+                )));
+            }
+            let item = Shape::of_kind(&field.kind());
+            if field.is_list() {
+                Shape::List(Box::new(item))
+            } else {
+                item
+            }
+        }
+
+        fn of_kind(kind: &prost_reflect::Kind) -> Shape {
+            match kind {
+                prost_reflect::Kind::Message(message)
+                    if !message.full_name().starts_with("google.protobuf.") =>
+                {
+                    Shape::Message(message.clone())
+                }
+                _ => Shape::Opaque,
+            }
+        }
+    }
+
+    impl<'de> serde::de::DeserializeSeed<'de> for Shape {
+        type Value = serde_json::Value;
+
+        fn deserialize<D: serde::Deserializer<'de>>(
+            self,
+            deserializer: D,
+        ) -> Result<Self::Value, D::Error> {
+            match self {
+                Shape::Opaque => serde::Deserialize::deserialize(deserializer),
+                shape => deserializer.deserialize_any(ShapeVisitor(shape)),
+            }
+        }
+    }
+
+    struct ShapeVisitor(Shape);
+
+    impl<'de> serde::de::Visitor<'de> for ShapeVisitor {
+        type Value = serde_json::Value;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str(match self.0 {
+                Shape::List(_) => "an array",
+                _ => "an object",
+            })
+        }
+
+        // `null` is passed on: the generated reader decides what it means.
+        fn visit_unit<E>(self) -> Result<Self::Value, E> {
+            Ok(serde_json::Value::Null)
+        }
+
+        fn visit_seq<A: serde::de::SeqAccess<'de>>(
+            self,
+            mut seq: A,
+        ) -> Result<Self::Value, A::Error> {
+            let Shape::List(item) = self.0 else {
+                return Err(serde::de::Error::invalid_type(
+                    serde::de::Unexpected::Seq,
+                    &self,
+                ));
+            };
+            let mut items = Vec::new();
+            while let Some(value) = seq.next_element_seed((*item).clone())? {
+                items.push(value);
+            }
+            Ok(serde_json::Value::Array(items))
+        }
+
+        fn visit_map<A: serde::de::MapAccess<'de>>(
+            self,
+            mut map: A,
+        ) -> Result<Self::Value, A::Error> {
+            use serde::de::Error as _;
+            let mut out = serde_json::Map::new();
+            match &self.0 {
+                Shape::Message(descriptor) => {
+                    let mut seen = std::collections::HashSet::new();
+                    while let Some(key) = map.next_key::<String>()? {
+                        let field = descriptor
+                            .get_field_by_json_name(&key)
+                            .or_else(|| descriptor.get_field_by_name(&key));
+                        match field {
+                            Some(field) => {
+                                if !seen.insert(field.number()) {
+                                    return Err(A::Error::custom(format!(
+                                        "duplicate field `{key}`"
+                                    )));
+                                }
+                                let value = map.next_value_seed(Shape::of(&field))?;
+                                out.insert(key, value);
+                            }
+                            None => {
+                                map.next_value::<serde::de::IgnoredAny>()?;
+                            }
+                        }
+                    }
+                }
+                Shape::Map(value_shape) => {
+                    while let Some(key) = map.next_key::<String>()? {
+                        let value = map.next_value_seed((**value_shape).clone())?;
+                        if out.insert(key.clone(), value).is_some() {
+                            return Err(A::Error::custom(format!("duplicate key `{key}`")));
+                        }
+                    }
+                }
+                Shape::List(_) | Shape::Opaque => {
+                    return Err(A::Error::invalid_type(serde::de::Unexpected::Map, &self));
+                }
+            }
+            Ok(serde_json::Value::Object(out))
+        }
     }
 
     /// Refuses input that nests past `MAX_JSON_NESTING`.

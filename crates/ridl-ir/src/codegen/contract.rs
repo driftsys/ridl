@@ -247,15 +247,18 @@ pub fn request_to_json(request: &v1::CodegenRequest) -> Result<String, super::Se
 /// request nests the model one level deeper, so the bound a reader must
 /// provision is 265 JSON levels (design note §6.2, plus one).
 ///
-/// A key the reader does not know is ignored, at the top level of the request
-/// and inside `model` and `deployment`, so a plugin built on this crate keeps
-/// reading requests from a later `ridl` that adds a request field (the IR
-/// specification's compatibility rule, section 6). For the same reason an
-/// enum name the reader does not know reads as the enum's `_UNSPECIFIED`
-/// value, and is dropped from a repeated field. Everything else the strict
-/// reader rejects is still rejected: a value of the wrong type, malformed
-/// JSON and input past the nesting cap. A plugin built against a `ridl-ir`
-/// release from before this rule must be rebuilt once.
+/// A key the reader does not know is ignored, at every nesting level of the
+/// request: the top level, inside `model` and `deployment`, and inside the
+/// elements of a repeated message field. A plugin built on this crate then
+/// keeps reading requests from a later `ridl` that adds a request field (the
+/// IR specification's compatibility rule, section 6). An unknown value is not
+/// ignored: an enum name the reader does not know is an error, because it
+/// changes the meaning of a known field, so a later `ridl` that adds an enum
+/// value is a change an older plugin reports as an error. Everything else the
+/// strict reader rejects is still rejected: a value of the wrong type, a field
+/// written twice, malformed JSON and input past the nesting cap. A plugin
+/// built against a `ridl-ir` release from before this rule must be rebuilt
+/// once.
 pub fn request_from_json(text: &str) -> Result<v1::CodegenRequest, serde_json::Error> {
     v2::read_json_ignoring_unknown(v2::codegen_request_descriptor(), text)
 }

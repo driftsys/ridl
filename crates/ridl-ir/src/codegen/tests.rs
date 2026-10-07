@@ -2873,9 +2873,8 @@ fn response_from_json_still_rejects_an_unknown_key() {
 }
 
 #[test]
-fn request_from_json_reads_an_unknown_enum_name_as_unspecified() {
-    let request = full_request();
-    let json = super::request_to_json(&request).expect("the request renders");
+fn request_from_json_rejects_an_unknown_enum_name() {
+    let json = super::request_to_json(&full_request()).expect("the request renders");
     let known = [
         "\"CROSSING_SAME_MACHINE\"",
         "\"CROSSING_DIFFERENT_MACHINE\"",
@@ -2888,13 +2887,50 @@ fn request_from_json_reads_an_unknown_enum_name_as_unspecified() {
     ]
     .into_iter()
     .find(|name| json.contains(name))
-    .expect("the full request carries an enum value");
+    .expect("the full request carries an enum value in the deployment");
     let extended = json.replacen(known, "\"A_VALUE_FROM_A_LATER_RIDL\"", 1);
-    let back = super::request_from_json(&extended).expect("the unknown enum name is ignored");
-    assert_ne!(back, request, "the field reads as its default value");
-    // pbjson omits a default enum value, so the rendered request carries one
-    // fewer occurrence of the replaced name and no unknown name.
-    let again = super::request_to_json(&back).expect("it renders");
-    assert_eq!(again.matches(known).count() + 1, json.matches(known).count());
-    assert!(!again.contains("A_VALUE_FROM_A_LATER_RIDL"));
+    super::request_from_json(&extended).expect_err("an unknown enum name is an error");
+
+    // An enum field of the model.
+    let mut value: serde_json::Value = serde_json::from_str(&json).expect("the JSON parses");
+    let declaration = value["model"]["declarations"][0]
+        .as_object_mut()
+        .expect("a declaration is an object");
+    declaration.insert(
+        "visibility".to_string(),
+        serde_json::json!("VISIBILITY_FUTURE"),
+    );
+    let extended = serde_json::to_string(&value).expect("the JSON renders");
+    super::request_from_json(&extended).expect_err("an unknown enum name in the model is an error");
+}
+
+#[test]
+fn request_from_json_ignores_an_unknown_key_inside_a_repeated_message_element() {
+    let request = full_request();
+    let json = super::request_to_json(&request).expect("the request renders");
+    let mut value: serde_json::Value = serde_json::from_str(&json).expect("the JSON parses");
+    for path in [["model", "declarations"], ["deployment", "regions"]] {
+        let elements = value[path[0]][path[1]]
+            .as_array_mut()
+            .unwrap_or_else(|| panic!("{path:?} is an array"));
+        assert!(!elements.is_empty(), "{path:?} holds an element");
+        for element in elements {
+            element
+                .as_object_mut()
+                .expect("an element is an object")
+                .insert("futureField".to_string(), serde_json::json!({"a": [1]}));
+        }
+    }
+    let extended = serde_json::to_string(&value).expect("the JSON renders");
+    assert_eq!(
+        super::request_from_json(&extended).expect("the unknown keys are ignored"),
+        request
+    );
+}
+
+#[test]
+fn request_from_json_rejects_a_field_written_twice() {
+    let json = super::request_to_json(&minimal_request()).expect("the request renders");
+    let twice = json.replacen("{", "{\"artifactBase\": \"b\",", 1);
+    super::request_from_json(&twice).expect_err("a duplicate field is an error");
 }
