@@ -10,7 +10,7 @@ use ridl_rt::contract::InterfaceNo;
 use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{Caller, ClaimId, Handler, ReadError, SendError, SettleError};
 
-use crate::{Factory, IFACE, ORD, TRACE_A, TRACE_B, runtime};
+use crate::{Factory, IFACE, ORD, TRACE_A, TRACE_B, TRACE_ZERO, runtime};
 
 /// A command reaches the handler with its arguments, and the settlement is
 /// observable through `ack`.
@@ -769,19 +769,91 @@ pub fn an_oversized_claims_context_survives_its_second_presentation<F: Factory>(
     assert_eq!(claim.trace, Some(TRACE_A));
 }
 
+/// A query reported through `ReadError::ShortClaim` carries its trace context
+/// on the error, and the claim presented once the buffer is large enough
+/// carries it too.
+pub fn an_oversized_querys_context_is_reported_on_the_error<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    rt.query(IFACE, ORD, &[1, 2, 3], Some(TRACE_A))
+        .expect("send");
+
+    let mut short = [0u8; 1];
+    match rt.next_claim(&mut short) {
+        Err(ReadError::ShortClaim {
+            needed: 3, trace, ..
+        }) => assert_eq!(trace, Some(TRACE_A), "the ShortClaim error"),
+        other => panic!("a buffer shorter than the arguments reports ShortClaim: {other:?}"),
+    }
+
+    let mut buf = [0u8; 8];
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("read")
+        .expect("still waiting");
+    assert_eq!(claim.trace, Some(TRACE_A));
+}
+
+/// A claim that is reported through `ReadError::ShortClaim` more than once
+/// carries its trace context on every report, not only the first.
+pub fn an_oversized_claims_context_is_reported_on_every_presentation<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    rt.command(IFACE, ORD, &[1, 2, 3], Some(TRACE_A))
+        .expect("send");
+
+    let mut short = [0u8; 1];
+    for presentation in ["first", "second", "third"] {
+        match rt.next_claim(&mut short) {
+            Err(ReadError::ShortClaim {
+                needed: 3, trace, ..
+            }) => assert_eq!(trace, Some(TRACE_A), "the {presentation} ShortClaim error"),
+            other => panic!("a buffer shorter than the arguments reports ShortClaim: {other:?}"),
+        }
+    }
+}
+
+/// The trace context a `ReadError::ShortClaim` carries is the context of the
+/// call it offers, not that of another call in flight: the oversized call is
+/// sent first and a later call with another context is sent after it.
+pub fn an_oversized_claims_context_is_the_offered_calls_not_the_latest<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    rt.command(IFACE, ORD, &[1, 2, 3], Some(TRACE_A))
+        .expect("send");
+    rt.command(IFACE, ORD, &[9], Some(TRACE_B)).expect("send");
+
+    let mut short = [0u8; 1];
+    match rt.next_claim(&mut short) {
+        Err(ReadError::ShortClaim {
+            needed: 3, trace, ..
+        }) => assert_eq!(trace, Some(TRACE_A), "the ShortClaim error"),
+        other => panic!("a buffer shorter than the arguments reports ShortClaim: {other:?}"),
+    }
+}
+
 /// A trace context whose bytes are all zero is carried like any other value:
 /// `ridl-rt` does not validate the context, so a runtime does not drop it or
 /// replace it with `None`.
 pub fn an_all_zero_context_is_carried_unchanged<F: Factory>() {
-    const TRACE_ZERO: ridl_rt::trace::TraceContext = ridl_rt::trace::TraceContext {
-        trace_id: [0; 16],
-        span_id: [0; 8],
-        flags: 0,
-    };
     let mut rt = runtime::<F>();
     rt.serve(IFACE, &[ORD]).expect("serve");
     rt.command(IFACE, ORD, &[1], Some(TRACE_ZERO))
         .expect("send");
+
+    let mut buf = [0u8; 8];
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("a claim is waiting");
+    assert_eq!(claim.trace, Some(TRACE_ZERO));
+}
+
+/// An all-zero trace context sent with a query is carried unchanged too.
+pub fn an_all_zero_querys_context_is_carried_unchanged<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    rt.query(IFACE, ORD, &[1], Some(TRACE_ZERO)).expect("send");
 
     let mut buf = [0u8; 8];
     let claim = rt

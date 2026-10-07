@@ -298,8 +298,13 @@ macro_rules! suite {
             calls::two_calls_in_flight_each_keep_their_own_context,
             calls::one_callers_calls_in_flight_each_keep_their_own_context,
             calls::an_oversized_claims_context_survives_its_second_presentation,
+            calls::an_oversized_querys_context_is_reported_on_the_error,
+            calls::an_oversized_claims_context_is_reported_on_every_presentation,
+            calls::an_oversized_claims_context_is_the_offered_calls_not_the_latest,
             calls::a_reused_call_slot_does_not_keep_the_previous_context,
             calls::an_all_zero_context_is_carried_unchanged,
+            calls::an_all_zero_querys_context_is_carried_unchanged,
+            events::an_all_zero_occurrence_context_is_carried_unchanged,
         );
     };
     (@tests $factory:ty; $($module:ident :: $test:ident),+ $(,)?) => {
@@ -343,6 +348,15 @@ const TRACE_A: ridl_rt::trace::TraceContext = ridl_rt::trace::TraceContext {
     ],
     span_id: [0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17],
     flags: 0x5A,
+};
+
+/// A trace context whose bytes are all zero. `ridl-rt` does not validate the
+/// context, so the trace cases send it to see that a runtime carries it like
+/// any other value.
+const TRACE_ZERO: ridl_rt::trace::TraceContext = ridl_rt::trace::TraceContext {
+    trace_id: [0; 16],
+    span_id: [0; 8],
+    flags: 0,
 };
 
 /// The second trace context, with different identifiers and flags than
@@ -444,8 +458,8 @@ mod tests {
                 let signature = rest.split('{').next().expect("a function body");
                 // The text up to the next public function holds this one's
                 // body. A test that sends a context, one of the `TRACE_`
-                // constants, asserts that it arrives, which only a runtime
-                // that carries the context does.
+                // constants in any spelling, asserts that it arrives, which
+                // only a runtime that carries the context does.
                 let text = rest.split("\npub fn ").next().expect("a function");
                 let mut asked: Vec<Arm> = [
                     ("ScannableSignals", Arm::Scannable),
@@ -456,7 +470,7 @@ mod tests {
                 .filter(|(extension, _)| signature.contains(extension))
                 .map(|(_, arm)| arm)
                 .collect();
-                if text.contains("Some(TRACE_") {
+                if text.contains("TRACE_") {
                     asked.push(Arm::Trace);
                 }
                 let arm = match asked[..] {
