@@ -236,8 +236,49 @@ fn the_deepest_package_the_front_end_admits_pins_the_model_nesting_bound() {
                 brackets, *json_levels,
                 "{shape}: the JSON levels are the bound the design note states"
             );
+            // The request reader filters a `serde_json::Value` against the
+            // descriptor, then runs the generated deserializer; the deepest
+            // model the front end admits must still read back inside a
+            // request.
+            let request = v1::CodegenRequest {
+                model: Some(model),
+                ..Default::default()
+            };
+            let text = codegen::request_to_json(&request).expect("the request serializes");
+            assert_eq!(
+                codegen::request_from_json(&text).expect("the deepest request reads"),
+                request,
+                "{shape}: the deepest request must round-trip"
+            );
         }
     });
+}
+
+/// Every corpus package lowers to a model whose request reads back equal
+/// through `request_from_json`, which ignores unknown keys by filtering a
+/// `serde_json::Value` against the descriptor before the generated
+/// deserializer reads it: that path gives the value the strict path gave.
+#[test]
+fn every_corpus_request_round_trips_through_the_request_reader() {
+    for (entry, packages) in corpus_packages() {
+        for package in &packages {
+            let others: Vec<&v2::Package> = packages.iter().collect();
+            let request = v1::CodegenRequest {
+                schema: codegen::SCHEMA.to_string(),
+                toolchain: "t".to_string(),
+                model: Some(codegen::lower(package, &others)),
+                artifact_base: package.name.clone(),
+                ..Default::default()
+            };
+            let json = codegen::request_to_json(&request).expect("the request renders");
+            assert_eq!(
+                codegen::request_from_json(&json).expect("the request reads"),
+                request,
+                "{entry}: package {} must round-trip",
+                package.name
+            );
+        }
+    }
 }
 
 /// The D-P4 floor, over the interaction-face fixture: everything an IPC

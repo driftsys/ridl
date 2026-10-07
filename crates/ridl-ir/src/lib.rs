@@ -70,6 +70,12 @@ pub mod v2 {
         descriptor("ridl.ir.v2.System")
     }
 
+    /// The `ridl.codegen.v1.CodegenRequest` message descriptor — the entry
+    /// point of the request reader that ignores unknown keys.
+    pub(crate) fn codegen_request_descriptor() -> prost_reflect::MessageDescriptor {
+        descriptor("ridl.codegen.v1.CodegenRequest")
+    }
+
     /// The `ridl.codegen.v1.Model` message descriptor — the prototext entry
     /// point of the lowered codegen model, from the same pool, because
     /// `build.rs` compiles both schemas in one `protox` call.
@@ -297,6 +303,186 @@ pub mod v2 {
     where
         M: serde::de::DeserializeOwned + Send,
     {
+        check_nesting(text)?;
+        on_parse_stack(|| parse_json(text))
+    }
+
+    /// Reads a request-shaped message the way [`read_json`] does, except that
+    /// an object key the schema does not declare is ignored at every nesting
+    /// level. The same nesting cap and parse stack apply.
+    ///
+    /// The text is read once into a `serde_json::Value` that keeps only the
+    /// keys `descriptor` declares at each point (by JSON name or proto name),
+    /// including inside repeated and map message values, and the value is
+    /// then read by the generated deserializer of `M`. That reader still
+    /// rejects what it rejects for the strict path: a value of the wrong
+    /// type, an unknown enum name, and a field written twice. Only an unknown
+    /// key is dropped; an unknown enum name is an error, because it changes
+    /// the meaning of a known field. A value of a `google.protobuf` message
+    /// is left untouched.
+    ///
+    /// An error from the second phase, the generated deserializer reading the
+    /// filtered value, carries no line and column, because the value no longer
+    /// has a position in the text.
+    pub(crate) fn read_json_ignoring_unknown<M>(
+        descriptor: prost_reflect::MessageDescriptor,
+        text: &str,
+    ) -> Result<M, serde_json::Error>
+    where
+        M: serde::de::DeserializeOwned + Send,
+    {
+        use serde::de::DeserializeSeed as _;
+        check_nesting(text)?;
+        on_parse_stack(|| {
+            let mut deserializer = serde_json::Deserializer::from_str(text);
+            deserializer.disable_recursion_limit();
+            let known = Shape::Message(descriptor).deserialize(&mut deserializer)?;
+            deserializer.end()?;
+            serde::Deserialize::deserialize(known)
+        })
+    }
+
+    /// What a JSON value is expected to be, as far as dropping unknown keys
+    /// needs to know.
+    #[derive(Clone)]
+    enum Shape {
+        /// A message: an object whose unknown keys are dropped.
+        Message(prost_reflect::MessageDescriptor),
+        /// A repeated field: an array of the inner shape.
+        List(Box<Shape>),
+        /// A map field: an object whose values have the inner shape.
+        Map(Box<Shape>),
+        /// Anything else: kept as read.
+        Opaque,
+    }
+
+    impl Shape {
+        /// The shape of the value of one field.
+        fn of(field: &prost_reflect::FieldDescriptor) -> Shape {
+            use prost_reflect::Kind;
+            if field.is_map() {
+                let Kind::Message(entry) = field.kind() else {
+                    return Shape::Opaque;
+                };
+                return Shape::Map(Box::new(Shape::of_kind(
+                    &entry.map_entry_value_field().kind(),
+                )));
+            }
+            let item = Shape::of_kind(&field.kind());
+            if field.is_list() {
+                Shape::List(Box::new(item))
+            } else {
+                item
+            }
+        }
+
+        fn of_kind(kind: &prost_reflect::Kind) -> Shape {
+            match kind {
+                prost_reflect::Kind::Message(message)
+                    if !message.full_name().starts_with("google.protobuf.") =>
+                {
+                    Shape::Message(message.clone())
+                }
+                _ => Shape::Opaque,
+            }
+        }
+    }
+
+    impl<'de> serde::de::DeserializeSeed<'de> for Shape {
+        type Value = serde_json::Value;
+
+        fn deserialize<D: serde::Deserializer<'de>>(
+            self,
+            deserializer: D,
+        ) -> Result<Self::Value, D::Error> {
+            match self {
+                Shape::Opaque => serde::Deserialize::deserialize(deserializer),
+                shape => deserializer.deserialize_any(ShapeVisitor(shape)),
+            }
+        }
+    }
+
+    struct ShapeVisitor(Shape);
+
+    impl<'de> serde::de::Visitor<'de> for ShapeVisitor {
+        type Value = serde_json::Value;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str(match self.0 {
+                Shape::List(_) => "an array",
+                _ => "an object",
+            })
+        }
+
+        // `null` is passed on: the generated reader decides what it means.
+        fn visit_unit<E>(self) -> Result<Self::Value, E> {
+            Ok(serde_json::Value::Null)
+        }
+
+        fn visit_seq<A: serde::de::SeqAccess<'de>>(
+            self,
+            mut seq: A,
+        ) -> Result<Self::Value, A::Error> {
+            let Shape::List(item) = self.0 else {
+                return Err(serde::de::Error::invalid_type(
+                    serde::de::Unexpected::Seq,
+                    &self,
+                ));
+            };
+            let mut items = Vec::new();
+            while let Some(value) = seq.next_element_seed((*item).clone())? {
+                items.push(value);
+            }
+            Ok(serde_json::Value::Array(items))
+        }
+
+        fn visit_map<A: serde::de::MapAccess<'de>>(
+            self,
+            mut map: A,
+        ) -> Result<Self::Value, A::Error> {
+            use serde::de::Error as _;
+            let mut out = serde_json::Map::new();
+            match &self.0 {
+                Shape::Message(descriptor) => {
+                    let mut seen = std::collections::HashSet::new();
+                    while let Some(key) = map.next_key::<String>()? {
+                        let field = descriptor
+                            .get_field_by_json_name(&key)
+                            .or_else(|| descriptor.get_field_by_name(&key));
+                        match field {
+                            Some(field) => {
+                                if !seen.insert(field.number()) {
+                                    return Err(A::Error::custom(format!(
+                                        "duplicate field `{key}`"
+                                    )));
+                                }
+                                let value = map.next_value_seed(Shape::of(&field))?;
+                                out.insert(key, value);
+                            }
+                            None => {
+                                map.next_value::<serde::de::IgnoredAny>()?;
+                            }
+                        }
+                    }
+                }
+                Shape::Map(value_shape) => {
+                    while let Some(key) = map.next_key::<String>()? {
+                        let value = map.next_value_seed((**value_shape).clone())?;
+                        if out.insert(key.clone(), value).is_some() {
+                            return Err(A::Error::custom(format!("duplicate key `{key}`")));
+                        }
+                    }
+                }
+                Shape::List(_) | Shape::Opaque => {
+                    return Err(A::Error::invalid_type(serde::de::Unexpected::Map, &self));
+                }
+            }
+            Ok(serde_json::Value::Object(out))
+        }
+    }
+
+    /// Refuses input that nests past `MAX_JSON_NESTING`.
+    fn check_nesting(text: &str) -> Result<(), serde_json::Error> {
         if max_json_nesting(text) > MAX_JSON_NESTING {
             return Err(<serde_json::Error as serde::de::Error>::custom(format!(
                 "the input nests deeper than {MAX_JSON_NESTING} JSON levels, the ceiling this \
@@ -304,6 +490,12 @@ pub mod v2 {
                  shallower"
             )));
         }
+        Ok(())
+    }
+
+    /// Runs a parse on its own stack of `JSON_PARSE_STACK` bytes, or in line
+    /// on the wasm family.
+    fn on_parse_stack<R: Send>(parse: impl FnOnce() -> R + Send) -> R {
         if cfg!(target_family = "wasm") {
             // The wasm family has no spawnable threads: `spawn_scoped`
             // returns `Err(Unsupported)` at run time on
@@ -311,14 +503,14 @@ pub mod v2 {
             // spawn here would turn every call into a panic. The parse runs
             // in line instead, on the caller's stack. What this path loses
             // is the deterministic stack — the ceiling is the ambient stack
-            // — and the `MAX_JSON_NESTING` cap above is the guard that
-            // matters: it is what turns an abort into an error.
-            parse_json(text)
+            // — and the `MAX_JSON_NESTING` cap is the guard that matters: it
+            // is what turns an abort into an error.
+            parse()
         } else {
             std::thread::scope(|scope| {
                 let handle = std::thread::Builder::new()
                     .stack_size(JSON_PARSE_STACK)
-                    .spawn_scoped(scope, || parse_json(text))
+                    .spawn_scoped(scope, parse)
                     .expect("the JSON parse thread spawns");
                 match handle.join() {
                     Ok(result) => result,
