@@ -151,7 +151,8 @@ jobs:
 
           # Dependency order: a crate publishes only once crates.io already
           # has every crate it depends on. ridl-syntax, ridl-ir and ridl-rt
-          # have no internal dependency and lead; ridlc depends on the rest
+          # have no internal dependency and lead; ridl-rt-conformance depends
+          # only on ridl-rt, so it follows ridl-rt; ridlc depends on the rest
           # of the compiler crates. ridl-lsp and ridl-mcp depend on ridlc (and
           # not on each other, so their relative order does not matter);
           # ridl-cli — the `ridl` binary — depends on both of them plus
@@ -162,6 +163,7 @@ jobs:
           publish ridl-ir
           publish ridl-descriptor
           publish ridl-rt
+          publish ridl-rt-conformance
           publish ridl-loopback
           publish ridl-core
           publish ridl-sem
