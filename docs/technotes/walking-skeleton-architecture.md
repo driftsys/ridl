@@ -273,14 +273,15 @@ here. This list is not a standing count of every crate the workspace holds — s
   runs the suite of `ridl-rt-conformance`. See
   [the design record](../design/ridl-loopback.md).
 
-- **`crates/ridl-rt-conformance`** — the port contract tests, test-only and
-  unpublished: each test is a function generic over a factory trait, which
-  builds a runtime, makes a second event source, caller and handler on it,
-  states the size of its call table, and supplies a hand-driven clock and a
-  settlement fault injected once. A runtime runs the whole suite from its own
-  tests with the crate's `suite!` macro, naming the extensions it implements —
-  the two signal extensions and `Wakeable` — and `trace` when it carries the
-  trace context; `ridl-loopback` is the one runtime that does.
+- **`crates/ridl-rt-conformance`** — the port contract tests, published with
+  every other crate so that a runtime outside this repository can run them: each
+  test is a function generic over a factory trait, which builds a runtime, makes
+  a second event source, caller and handler on it, states the size of its call
+  table, and supplies a hand-driven clock and a settlement fault injected once.
+  A runtime runs the whole suite from its own tests with the crate's `suite!`
+  macro, naming the extensions it implements — the two signal extensions and
+  `Wakeable` — and `trace` when it carries the trace context; `ridl-loopback` is
+  the one runtime that does.
 
 - **`crates/ridlc-gen-model`** — the reference codegen plugin, test-only and
   unpublished: `--emit codegen-model` as a process, over the backend contract
