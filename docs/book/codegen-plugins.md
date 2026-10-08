@@ -331,7 +331,9 @@ repository.
 [`ridl describe`](cli-reference.md#ridl-describe) prints it as JSON.
 
 A plugin does not read the catalog descriptor: the model carries the same
-facts. The [catalog descriptor record][catalog] describes the file.
+facts. The chapter [The catalog descriptor](catalog-descriptor.md) describes
+the file for its readers, and the [catalog descriptor record][catalog] gives
+its byte-level details.
 
 A system descriptor, a file per deployment, is not built
 ([catalog descriptor record, "Not built"][not-built]). The request's deployment

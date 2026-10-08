@@ -84,6 +84,7 @@ use veh_cabin::veh::cabin as api;
 /// it and panic on a mismatch (ADR-0023 decision 8).
 const CATALOG: CatalogRef = *<api::Cabin as Interface>::CATALOG;
 
+// ANCHOR: provider
 struct Cabin {
     levels: Vec<i64>,
     average: api::Average,
@@ -97,6 +98,7 @@ impl cabin::Provider for Cabin {
         self.average
     }
 }
+// ANCHOR_END: provider
 
 /// Polls `future` once, the way a frame loop does.
 fn poll_once<F: Future + Unpin>(future: &mut F, cx: &mut Context<'_>) -> Poll<F::Output> {
@@ -124,6 +126,7 @@ impl Drop for DoneOnDrop<'_> {
     }
 }
 
+// ANCHOR: serve-loop
 /// Serves `provider` over `handler` on the calling thread until `done` is
 /// set: `blocking::serve` returns `Ok(())` at each pass's timeout, and the
 /// loop calls it again. A failure of the handler port ends the loop with it.
@@ -137,11 +140,13 @@ fn serve_until_done(
     }
     Ok(())
 }
+// ANCHOR_END: serve-loop
 
 fn main() {
     let waker = ridl_rt::task::noop_waker();
     let mut cx = Context::from_waker(&waker);
 
+    // ANCHOR: bind
     let rt = Loopback::new(CATALOG);
     let mut publisher = cabin::Publisher::new(rt.attach());
     let mut client = cabin::Client::new(rt.attach());
@@ -152,6 +157,7 @@ fn main() {
         levels: Vec::new(),
         average: api::Average::new(7).expect("7 is inside Average's range"),
     };
+    // ANCHOR_END: bind
 
     // 1 — signal
     {
@@ -192,6 +198,7 @@ fn main() {
         println!("event ok {}", code);
     }
 
+    // ANCHOR: async-command
     // 3 — command
     {
         let mut serve = cabin::serve(&mut handler, &mut provider);
@@ -204,6 +211,7 @@ fn main() {
         // Step 3: the acknowledgment is taken.
         assert_eq!(poll_once(&mut call, &mut cx), Poll::Ready(Ok(())));
     }
+    // ANCHOR_END: async-command
     assert_eq!(provider.levels, vec![42]);
     println!("command ok {}", provider.levels[0]);
 
@@ -224,6 +232,7 @@ fn main() {
     // 5 — command, through the blocking client. `set_level` parks this
     // thread until the serving thread settles the call; `done` then ends
     // that thread's loop, and the scope joins it.
+    // ANCHOR: blocking-command
     let done = AtomicBool::new(false);
     let served = std::thread::scope(|scope| {
         let serving = scope.spawn(|| serve_until_done(&mut handler, &mut provider, &done));
@@ -234,6 +243,7 @@ fn main() {
         assert_eq!(acknowledged, Ok(()));
         serving.join().expect("the serving thread does not panic")
     });
+    // ANCHOR_END: blocking-command
     assert_eq!(served, Ok(()));
     // The command of round trip 3 is the first entry; this one is the second.
     assert_eq!(provider.levels, vec![42, 43]);

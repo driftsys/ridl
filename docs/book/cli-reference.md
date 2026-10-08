@@ -619,6 +619,8 @@ on, a command-only interface gets a `Client`, a `Provider`, a `serve` and a
 declarations gets no face module at all. Beside the per-package files it
 writes a `lib.rs` crate root and a `Cargo.toml` naming `ridl-rt` with the
 encoding's feature, and with `ridl-rt/std` behind the crate's own `std`.
+[Using the generated Rust code](generated-code.md) shows how a program uses
+the crate, and lists its Cargo features.
 
 **Generated files are marked.** The `.rs`, `.ts`, `.proto` and `.fbs` files, and
 the `lib.rs` and `Cargo.toml` of the crate root, begin with a line comment that
