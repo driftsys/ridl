@@ -67,6 +67,11 @@ pub struct LoadedWorkspace {
     /// (ADR-0024 decision 9). The path is in the same form as the file paths
     /// in `sources`.
     pub report_scope: Option<PathBuf>,
+    /// The loaded units: each `[package]` manifest's `name` mapped to its
+    /// directory, in the path form of the file paths in `sources`. A
+    /// workspace root is not a unit; its members are. In single-file mode the
+    /// one unit is the file's package, mapped to the file's directory.
+    pub units: BTreeMap<String, PathBuf>,
 }
 
 /// Unsaved source text for a file in a loaded package directory.
@@ -245,6 +250,7 @@ pub fn load_workspace_with(
         lints: loader.lints,
         codegen_header: loader.codegen_header,
         report_scope,
+        units: loader.units,
     })
 }
 
@@ -405,6 +411,8 @@ struct Loader {
     /// Every member directory of a loaded workspace, in the path form of the
     /// files recorded under it. Empty outside workspace mode.
     member_dirs: Vec<PathBuf>,
+    /// Unit name to manifest directory, for [`LoadedWorkspace::units`].
+    units: BTreeMap<String, PathBuf>,
 }
 
 impl Loader {
@@ -472,7 +480,8 @@ impl Loader {
                 // A standalone package: the manifest's `[imports]` and
                 // `[defaults]` ride on its packages; the workspace maps
                 // stay empty.
-                self.load_package_tree(db, root, &name, &imports, &defaults)?;
+                self.units.insert(name.clone(), root.to_path_buf());
+                self.load_package_tree(db, root, &name, &name, &imports, &defaults)?;
             }
             ManifestKind::Workspace { members } => {
                 // ADR-0002 §5 step 3: the workspace root's `[imports]` and
@@ -562,9 +571,11 @@ impl Loader {
                 // `[defaults]` shadow the workspace defaults per key (ridl §9.1);
                 // a key the member leaves unset takes the workspace value.
                 let member_defaults = defaults.or(&self.workspace_defaults);
+                self.units.insert(name.clone(), workspace_root.join(member));
                 self.load_package_tree(
                     db,
                     &workspace_root.join(member),
+                    &name,
                     &name,
                     &imports,
                     &member_defaults,
@@ -574,7 +585,8 @@ impl Loader {
         Ok(())
     }
 
-    /// Loads the package rooted at `dir` under the package name `name`, then
+    /// Loads the package rooted at `dir` under the package name `name` and the
+    /// unit name `unit` (the manifest's `name`), then
     /// every subdirectory as its own package named by its path — the
     /// package↔directory law's "the name mirrors the directory path relative
     /// to the manifest root" (ADR-0002 §1). Every package in the tree carries
@@ -586,6 +598,7 @@ impl Loader {
         &mut self,
         db: &mut RidlDatabase,
         dir: &Path,
+        unit: &str,
         name: &str,
         imports: &BTreeMap<String, String>,
         defaults: &TimingDefaults,
@@ -636,6 +649,7 @@ impl Loader {
             self.packages.push(Package::new(
                 &*db,
                 name.to_string(),
+                unit.to_string(),
                 files,
                 PackageOrigin::WorkspaceMember,
                 imports.clone(),
@@ -655,6 +669,7 @@ impl Loader {
             self.load_package_tree(
                 db,
                 &subdir,
+                unit,
                 &format!("{name}.{dir_name}"),
                 imports,
                 defaults,
@@ -691,13 +706,17 @@ impl Loader {
         };
         self.packages.push(Package::new(
             &*db,
-            name,
+            name.clone(),
+            name.clone(),
             vec![input],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
             TimingDefaults::default(),
             lock,
         ));
+        if let Some(dir) = path.parent() {
+            self.units.insert(name, dir.to_path_buf());
+        }
         Ok(())
     }
 
@@ -2058,6 +2077,84 @@ mod tests {
             packages[0].name(&db).as_str(),
             "veh.iface",
             "named from the file's declared package",
+        );
+    }
+
+    #[test]
+    fn every_package_of_a_tree_carries_the_manifest_name_as_its_unit() {
+        let dir = TempDir::new("unit-tree");
+        dir.write(
+            "ridl.toml",
+            "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("hmi.ridl", "package veh.hmi\ntype A: m\n");
+        dir.write("cluster/speed.ridl", "package veh.hmi.cluster\ntype S: m\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package tree loads");
+        assert_eq!(loaded.diagnostics, Vec::new());
+
+        let packages = loaded.workspace.packages(&db).clone();
+        assert_eq!(packages.len(), 2);
+        for package in &packages {
+            assert_eq!(package.unit(&db).as_str(), "veh.hmi");
+        }
+        assert_eq!(
+            loaded.units,
+            BTreeMap::from([("veh.hmi".to_string(), dir.path().to_path_buf())]),
+        );
+    }
+
+    #[test]
+    fn a_workspace_member_is_a_unit_and_the_root_is_not() {
+        let dir = TempDir::new("unit-members");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
+        dir.write(
+            "a/ridl.toml",
+            "[package]\nname = \"x.a\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("a/a.ridl", "package x.a\ntype A: m\n");
+        dir.write(
+            "b/ridl.toml",
+            "[package]\nname = \"x.b\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("b/b.ridl", "package x.b\ntype B: m\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert_eq!(loaded.diagnostics, Vec::new());
+
+        assert_eq!(
+            loaded.units,
+            BTreeMap::from([
+                ("x.a".to_string(), dir.path().join("a")),
+                ("x.b".to_string(), dir.path().join("b")),
+            ]),
+        );
+        let units: Vec<String> = loaded
+            .workspace
+            .packages(&db)
+            .iter()
+            .map(|p| p.unit(&db).clone())
+            .collect();
+        assert_eq!(units, vec!["x.a", "x.b"]);
+    }
+
+    #[test]
+    fn a_single_file_is_its_own_unit() {
+        let dir = TempDir::new("unit-single");
+        let path = dir.write("p.ridl", "package p\ntype A: m\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, &path).expect("single-file mode loads");
+        assert_eq!(loaded.diagnostics, Vec::new());
+
+        let packages = loaded.workspace.packages(&db).clone();
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].unit(&db).as_str(), "p");
+        assert_eq!(
+            loaded.units,
+            BTreeMap::from([("p".to_string(), dir.path().to_path_buf())]),
         );
     }
 

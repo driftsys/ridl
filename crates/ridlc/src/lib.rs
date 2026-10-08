@@ -116,6 +116,7 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
     let package_name = declared_package_name(&ast).unwrap_or_else(|| module_name_from_path(path));
     let pkg = Package::new(
         &db,
+        package_name.clone(),
         package_name,
         vec![input],
         PackageOrigin::WorkspaceMember,
@@ -138,6 +139,8 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
             // No manifest: no header file.
             codegen_header: None,
             report_scope: None,
+            // A source text has no directory, so no unit is recorded.
+            units: BTreeMap::new(),
         },
     );
     // The callers, `check_source` and `compile`, report their diagnostics, so
@@ -1570,6 +1573,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         lints,
         codegen_header,
         report_scope,
+        units: _,
     } = loaded;
 
     let packages = workspace.packages(db).clone();

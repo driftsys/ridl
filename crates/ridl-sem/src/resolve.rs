@@ -1133,6 +1133,7 @@ mod package_tests {
         Package::new(
             db,
             name.to_string(),
+            name.to_string(),
             vec![input(db, &format!("{name}.typl"), text)],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
@@ -1150,6 +1151,7 @@ mod package_tests {
     ) -> Package {
         Package::new(
             db,
+            name.to_string(),
             name.to_string(),
             vec![input(db, &format!("{name}.typl"), text)],
             PackageOrigin::WorkspaceMember,
@@ -1428,6 +1430,7 @@ mod package_tests {
         Package::new(
             db,
             name.to_string(),
+            name.to_string(),
             vec![input(db, &format!("{name}.ridl"), text)],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
@@ -1514,6 +1517,7 @@ mod package_tests {
     fn multi_file_package(db: &RidlDatabase, name: &str, texts: &[&str]) -> Package {
         Package::new(
             db,
+            name.to_string(),
             name.to_string(),
             texts
                 .iter()

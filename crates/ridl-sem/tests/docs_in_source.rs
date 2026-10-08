@@ -59,6 +59,7 @@ fn compile(files: &[(&str, &str, String)]) -> Compiled {
             Package::new(
                 &db,
                 name.to_string(),
+                name.to_string(),
                 vec![InputFile::new(&db, path.to_string(), text.clone())],
                 PackageOrigin::WorkspaceMember,
                 BTreeMap::new(),

@@ -6180,6 +6180,7 @@ mod tests {
         Package::new(
             db,
             name.to_string(),
+            name.to_string(),
             vec![file],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
@@ -10731,6 +10732,7 @@ mod tests {
         Package::new(
             db,
             name.to_string(),
+            name.to_string(),
             vec![file],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
@@ -10754,6 +10756,7 @@ mod tests {
         );
         Package::new(
             db,
+            name.to_string(),
             name.to_string(),
             vec![file],
             PackageOrigin::WorkspaceMember,
@@ -13987,6 +13990,7 @@ interface VehicleStatus {
         let pkg = Package::new(
             &db,
             "app".to_string(),
+            "app".to_string(),
             vec![typl, ridl],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
@@ -14607,6 +14611,7 @@ interface VehicleStatus {
         Package::new(
             db,
             name.to_string(),
+            name.to_string(),
             inputs,
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
@@ -14774,6 +14779,7 @@ service veh.hvac.rear { signal r : State @[100ms..1s] }
         let lock = ridl_core::interface_lock::parse(lock_text).expect("the fixture lock parses");
         Package::new(
             db,
+            name.to_string(),
             name.to_string(),
             inputs,
             PackageOrigin::WorkspaceMember,

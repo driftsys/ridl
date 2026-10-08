@@ -1619,6 +1619,7 @@ mod tests {
         let locked = ridl_core::package::Package::new(
             &db,
             "veh.topology".to_string(),
+            "veh.topology".to_string(),
             inputs,
             ridl_core::package::PackageOrigin::WorkspaceMember,
             BTreeMap::new(),

@@ -62,6 +62,12 @@ pub struct PackageLock {
 #[salsa::input(debug)]
 pub struct Package {
     pub name: String,
+    /// The unit this package belongs to: the `name` of the `[package]`
+    /// manifest whose directory tree holds it. Every package of one tree
+    /// shares it. A single-file package and the overlay package of the
+    /// language server carry their own name; `ridl.std` carries `ridl.std`.
+    #[returns(ref)]
+    pub unit: String,
     #[returns(ref)]
     pub files: Vec<InputFile>,
     pub origin: PackageOrigin,
@@ -389,6 +395,7 @@ mod tests {
         let common = Package::new(
             &db,
             "veh.common".to_string(),
+            "veh.common".to_string(),
             vec![file(&db, "veh-common/a.typl", "package veh.common")],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
@@ -397,6 +404,7 @@ mod tests {
         );
         let cluster = Package::new(
             &db,
+            "veh.cluster".to_string(),
             "veh.cluster".to_string(),
             vec![file(&db, "veh-cluster/b.typl", "package veh.cluster")],
             PackageOrigin::WorkspaceMember,
@@ -434,6 +442,7 @@ mod tests {
     fn ridl_package(db: &RidlDatabase, name: &str, text: &str) -> Package {
         Package::new(
             db,
+            name.to_string(),
             name.to_string(),
             vec![file(db, &format!("{}.ridl", name.replace('.', "/")), text)],
             PackageOrigin::WorkspaceMember,

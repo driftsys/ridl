@@ -736,6 +736,7 @@ mod tests {
         Package::new(
             db,
             name.to_string(),
+            name.to_string(),
             files,
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
