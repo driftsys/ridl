@@ -156,18 +156,18 @@ files, runs `ridl lock` to number the unit, and publishes a new baseline with
 
 ## Impact
 
-| Area                     | Change                                                                                                                                                                                          |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ridl-core` loader       | rule 2 and rule 3 diagnostics; a unit boundary visible to later stages                                                                                                                          |
-| `ridl-sem`               | read one lock per unit; number per unit                                                                                                                                                         |
-| `ridl-ir`                | the reduced unit for the catalog hash; ADR-0014 decision 15                                                                                                                                     |
-| `ridl-descriptor`        | `lower` takes a unit, not a package; qualified interface names                                                                                                                                  |
-| `ridlc` / `ridl`         | one catalog file per unit; `ridl lock` writes the unit's lock; `ridl diff` and `ridl baseline` compare numbers per unit                                                                         |
-| `ridl-backend-rust`      | `CATALOG.name` is the unit name; `NUMBER` is the unit's number. Generated modules stay per source package                                                                                       |
-| `ridl-rt`                | no API change. The doc comment of `CatalogRef` ("one package's interfaces") changes to the unit                                                                                                 |
-| system artifact          | regions are per catalog, so there are fewer regions. No format change                                                                                                                           |
-| codegen plugins (Kotlin) | no structural change: generated packages stay per source package. The value of each interface's catalog name and the scope of its number change. A heads-up issue is filed on the Kotlin plugin |
-| `ridl-mcp`, `ridl-lsp`   | none expected beyond the new diagnostics                                                                                                                                                        |
+| Area                     | Change                                                                                                                                                                                                                            |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ridl-core` loader       | rule 2 and rule 3 diagnostics; a unit boundary visible to later stages                                                                                                                                                            |
+| `ridl-sem`               | read one lock per unit; number per unit                                                                                                                                                                                           |
+| `ridl-ir`                | the reduced unit for the catalog hash; ADR-0014 decision 15                                                                                                                                                                       |
+| `ridl-descriptor`        | `lower` takes a unit, not a package; qualified interface names                                                                                                                                                                    |
+| `ridlc` / `ridl`         | one catalog file per unit; `ridl lock` writes the unit's lock; `ridl diff` groups the per-package snapshots by unit (decision 1)                                                                                                  |
+| `ridl-backend-rust`      | `CATALOG.name` is the unit name; `NUMBER` is the unit's number. Generated modules stay per source package                                                                                                                         |
+| `ridl-rt`                | no API change. The doc comment of `CatalogRef` ("one package's interfaces") changes to the unit                                                                                                                                   |
+| system artifact          | regions are per catalog, so there are fewer regions. No format change                                                                                                                                                             |
+| codegen plugins (Kotlin) | no structural change: generated packages stay per source package. `Catalog.package` in the codegen model carries the unit name, and the scope of each number changes (decision 2). A heads-up issue is filed on the Kotlin plugin |
+| `ridl-mcp`, `ridl-lsp`   | none expected beyond the new diagnostics                                                                                                                                                                                          |
 
 Records to amend when this lands:
 
@@ -179,7 +179,9 @@ Records to amend when this lands:
   scope).
 - `docs/design/interaction-face.md` ("The catalog check": the name is the unit
   name).
-- The book's CLI reference for `ridl lock` and the catalog emit.
+- The book's CLI reference for `ridl lock`, `ridl diff` and the catalog emit.
+- The comment of `Catalog.package` in
+  `crates/ridl-ir/proto/ridl/codegen/v1/model.proto`.
 
 ## Alternatives considered
 
@@ -206,17 +208,28 @@ Records to amend when this lands:
 - **Merge existing locks without renumbering.** Rejected for now: a re-baseline
   is simpler, and there is no published catalog that must keep its numbers.
 
-## Open questions
+## Decisions on baselines, plugins and the root package
 
-1. `ridl baseline` writes one snapshot per source package
-   (`.ridl/baseline/<pkg>.ir.json`), and `ridl diff` matches interfaces by
-   number. With numbers per unit, does the snapshot become per unit, or does the
-   comparison group the per-package snapshots by unit?
-2. How does a codegen plugin get the catalog name and hash today: from the
-   request, or computed by the plugin? This decides whether the Kotlin plugin
-   needs a code change or only a new snapshot.
-3. Is the root source package of a unit allowed to hold no files (for example a
-   unit whose files are all in subdirectories)? The design assumes yes.
+1. **Baselines stay per source package.** `ridl baseline` keeps writing one
+   `.ridl/baseline/<pkg>.ir.json` snapshot per source package, because the IR
+   stays per source package. `ridl diff` groups the snapshots by unit and
+   matches interface numbers within a unit. A retired entry in the unit's lock
+   carries its qualified name (`cluster.Old`), so it maps back to its source
+   package. A snapshot per unit was rejected: it needs a new IR shape and gives
+   no other benefit.
+2. **Codegen plugins read the catalog from the codegen model.** A plugin does
+   not compute the catalog name or hash. It reads
+   `Catalog { package, hash, retired }` from the codegen model
+   (`crates/ridl-ir/proto/ridl/codegen/v1/model.proto`). The field `package`
+   keeps its name and its number, and its comment changes: it carries the unit
+   name, which is `CatalogRef.name`. Renaming the field to `name` was rejected:
+   it breaks the generated accessors of every plugin and changes nothing on the
+   wire. If the Kotlin plugin uses `Catalog.package`, it needs only a new test
+   snapshot. The heads-up issue asks its maintainers to confirm this.
+3. **The root source package can be empty.** A unit's manifest directory can
+   hold only `ridl.toml` and `interfaces.lock`, with every source file in a
+   subdirectory. The unit name is still the prefix of every source package and
+   the catalog name, and interface names are qualified from it.
 
 ## Related
 
