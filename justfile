@@ -496,9 +496,10 @@ lint:
 # one) and on a missing SUMMARY.md. It exits 0 on a chapter file that does not
 # exist, on a broken `{{#include}}` (an ERROR line, then exit 0), on a
 # SUMMARY.md holding no list items, on one that is not a summary at all, and on
-# bad nesting. This recipe adds checks for the first two of those, described
-# below. So it is a SUMMARY.md parse check plus those two checks, not a proof
-# that the rendered book is whole.
+# bad nesting. This recipe adds checks for the first two of those, and a third
+# for an include by anchor that does not resolve, described below. So it is a
+# SUMMARY.md parse check plus those three checks, not a proof that the
+# rendered book is whole.
 #
 # It builds a copy, because `mdbook build` writes into its own source: a
 # SUMMARY.md naming a chapter file that does not exist makes mdBook **create
@@ -658,7 +659,7 @@ book-check root="":
     # The fixture. It builds books of its own and runs this recipe over each
     # as a child process, given a root, which is the form that runs the gate
     # and nothing else. It runs no git command, so the git environment a hook
-    # exports does not reach it. Nine cases:
+    # exports does not reach it. Twelve cases:
     #
     # 1. A whole book, whose chapters all exist. The gate has to pass.
     # 2. A chapter that includes a file that does not exist. mdBook logs an
@@ -690,6 +691,18 @@ book-check root="":
     #    under its `generated/`, each a symbolic link to a file that does not
     #    exist. Copying either one fails, so the gate has to pass, which pins
     #    that the copy leaves both directories out.
+    # 10. The book from case 6, with a source that closes the anchor with
+    #     `ANCHOR_END` but never opens it with `ANCHOR`. The gate has to fail
+    #     and name the anchor (check 4).
+    # 11. The book from case 6, with a source whose only anchor is `part-x`
+    #     while the chapter includes `part`. `part` is a prefix of `part-x`,
+    #     not the same name, so the gate has to fail and name the anchor
+    #     (check 4).
+    # 12. The book from case 6, with a chapter that includes a line range of
+    #     the Rust source (`:1:2`), the whole Rust source, and an anchor of a
+    #     `.ridl` source under examples/. The gate has to pass: a line range
+    #     and a whole-file include name no anchor, and the copy carries the
+    #     `.ridl` source.
     fixtures() (
         work="$(mktemp -d)"
         trap 'rm -rf "$work"' EXIT
@@ -852,6 +865,47 @@ book-check root="":
         ln -s "$work/nowhere.rs" "$example/examples/demo/generated/lib.rs"
         if ! "{{just_executable()}}" book-check "$example" >"$run" 2>&1; then
             echo "book-check: the gate did not pass over a fixture whose examples/ holds a target/ and a generated/ directory, so it copied one of them:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+
+        # Case 10: an anchor closed with ANCHOR_END and never opened.
+        printf '%s\n' 'fn main() {' '    let shown = 1;' '    // ANCHOR_END: part' '}' > "$example/examples/demo/src/main.rs"
+        if "{{just_executable()}}" book-check "$example" >"$run" 2>&1; then
+            echo "book-check: the gate returned 0 over a fixture whose source closes an anchor it never opens:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+        if ! grep -q 'anchor part$' "$run"; then
+            echo "book-check: the gate did not name the anchor that has no ANCHOR:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+
+        # Case 11: the source has only an anchor whose name starts with the
+        # included name.
+        printf '%s\n' 'fn main() {' '    // ANCHOR: part-x' '    let shown = 1;' '    // ANCHOR_END: part-x' '}' > "$example/examples/demo/src/main.rs"
+        if "{{just_executable()}}" book-check "$example" >"$run" 2>&1; then
+            echo "book-check: the gate returned 0 over a fixture whose chapter includes an anchor that only prefixes the source's anchor:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+        if ! grep -q 'anchor part$' "$run"; then
+            echo "book-check: the gate did not name the anchor that only prefixes the source's anchor:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+
+        # Case 12: a line range, a whole file, and a `.ridl` anchor.
+        printf '%s\n' 'fn main() {' '    // ANCHOR: part' '    let shown = 1;' '    // ANCHOR_END: part' '}' > "$example/examples/demo/src/main.rs"
+        printf '%s\n' '// ANCHOR: schema' 'package demo' '// ANCHOR_END: schema' > "$example/examples/demo/demo.ridl"
+        printf '%s\n' '# Example' '' \
+            '```rust' '{{{{#include ../../examples/demo/src/main.rs:1:2}}' '```' '' \
+            '```rust' '{{{{#include ../../examples/demo/src/main.rs}}' '```' '' \
+            '```text' '{{{{#include ../../examples/demo/demo.ridl:schema}}' '```' \
+            > "$example/docs/book/example.md"
+        if ! "{{just_executable()}}" book-check "$example" >"$run" 2>&1; then
+            echo "book-check: the gate did not pass over a fixture whose chapter includes a line range, a whole file and a .ridl anchor:" >&2
             cat "$run" >&2
             exit 1
         fi
