@@ -78,8 +78,11 @@ version = "1.0.0"
    - interface shapes in any of its source packages give **one catalog**, named
      after the unit;
    - the `system` gives **the system artifact**;
-   - a unit with only types produces no artifact of its own. Other units import
-     its types, and their catalog hashes include the types they reach.
+   - a unit with only types produces no catalog and no system artifact. Code
+     generation does not change: each backend still emits the types of every
+     source package, as today, because only the catalog emit is gated on an
+     interface shape (`crates/ridlc/src/lib.rs`). Other units import its types,
+     and their catalog hashes include the types they reach.
 
    Rule 4 works per declaration, not per file extension, so a future `.rxdl`
    file (roadmap E7.1, driftsys/ridl#68) fits a unit without a change to this
