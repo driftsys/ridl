@@ -145,7 +145,7 @@ member; rsdl is the apex.
                          ridl-rt-conformance crates as edition
                          2021 with the rust-version in crates/ridl-rt/Cargo.toml
                          and as edition 2024 with the rust-toolchain.toml pin,
-                         check its LICENSE, and check the crate ridl build
+                         check both crates' LICENSE files, and check the crate ridl build
                          emits for examples/cabin as edition 2021 with the
                          rust-version, the first cell of the codegen build
                          matrix (ADR-0021 decision 10)

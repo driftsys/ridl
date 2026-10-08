@@ -668,9 +668,12 @@ impl Store {
     /// wakes every caller's `Slot` waiter, as any reclaim does, and no
     /// handler's `Claim` waiter, because it adds no call to claim.
     pub(crate) fn forget(&mut self, c: Correlation, wake: &mut Vec<Waker>) {
-        if !self.offered(c)
-            && let Some(at) = self.pending.iter().position(|waiting| *waiting == c)
-        {
+        let waiting_at = if self.offered(c) {
+            None
+        } else {
+            self.pending.iter().position(|waiting| *waiting == c)
+        };
+        if let Some(at) = waiting_at {
             self.pending.remove(at);
             self.withdraw(c, wake);
             return;
@@ -814,9 +817,12 @@ impl Store {
             if entry.forgotten {
                 // A forgotten offered call is still among the waiting calls;
                 // `withdraw` expects a call that is not.
-                if !owner.taken
-                    && let Some(at) = self.pending.iter().position(|c| *c == owner.call)
-                {
+                let waiting_at = if owner.taken {
+                    None
+                } else {
+                    self.pending.iter().position(|c| *c == owner.call)
+                };
+                if let Some(at) = waiting_at {
                     self.pending.remove(at);
                 }
                 self.withdraw(owner.call, wake);
@@ -1019,7 +1025,12 @@ impl Store {
         self.claims.remove(&claim.0);
         // An offered call is still among the waiting calls: its settlement
         // takes it out, so no handler is presented it afterwards.
-        if !taken && let Some(at) = self.pending.iter().position(|waiting| *waiting == c) {
+        let waiting_at = if taken {
+            None
+        } else {
+            self.pending.iter().position(|waiting| *waiting == c)
+        };
+        if let Some(at) = waiting_at {
             self.pending.remove(at);
         }
         match self.table.settle(c, outcome.map(|_| ())) {

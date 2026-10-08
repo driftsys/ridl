@@ -202,12 +202,6 @@ wasm-check:
 # #442). ridl-rt has no dependency of its own in any feature combination
 # (ADR-0021 decision 8), so the rebuild this costs is small.
 #
-# ridl-rt-conformance is packaged together with ridl-rt and built and tested
-# on the same terms (edition 2021 at the minimum, edition 2024 at the pin),
-# against the packaged ridl-rt. It also fails on a packaged conformance crate
-# without its README.md, or a manifest that does not name the same
-# rust-version and edition 2021 as ridl-rt.
-#
 # `toolchain-check` is a dependency, and has already proven the running
 # toolchain matches the rust-toolchain.toml pin, so this recipe reads the pin
 # straight from `rustc --version` rather than re-parsing and re-validating the
@@ -233,6 +227,18 @@ wasm-check:
 # failing to check as edition 2021 with the minimum toolchain; or ridl-rt's
 # library, tests, doctests, or examples failing to build or pass as edition
 # 2021 with the minimum toolchain, or as edition 2024 with the pin.
+#
+# ridl-rt-conformance is packaged together with ridl-rt and held to the same
+# terms, against the packaged ridl-rt. The recipe also fails on: a manifest of
+# it that does not set the same rust-version as ridl-rt and edition 2021; a
+# packaged copy without its README.md or without `readme = "README.md"`; a
+# packaged LICENSE of either crate that differs from the root LICENSE; its
+# tests failing to pass as edition 2021 with the minimum toolchain or as
+# edition 2024 with the pin; or `suite!`, expanded with every extension flag
+# over the source of ridl-loopback as edition 2021 (tests/conformance.rs),
+# failing to compile with the minimum toolchain (which also holds that source
+# to the minimum). The last one is needed
+# because the crate's own tests never expand the macro.
 compat-check: toolchain-check
     #!/usr/bin/env bash
     set -euo pipefail
@@ -302,8 +308,9 @@ compat-check: toolchain-check
             exit 1
         fi
     done
-    if [ ! -f "$pkg_conformance/README.md" ]; then
-        echo "compat-check: the packaged ridl-rt-conformance has no README.md." >&2
+    if [ ! -f "$pkg_conformance/README.md" ] || ! grep -qx 'readme = "README.md"' "$pkg_conformance/Cargo.toml"; then
+        echo "compat-check: the packaged ridl-rt-conformance has no README.md or does not" >&2
+        echo "compat-check: name it with readme = \"README.md\"." >&2
         exit 1
     fi
 
@@ -342,6 +349,26 @@ compat-check: toolchain-check
 
     echo "compat-check: $minimum, edition 2021 (packaged ridl-rt-conformance)"
     cargo "+$minimum" test --all-features --offline --manifest-path "$pkg_conformance/Cargo.toml"
+
+    # The crate's own tests never expand `suite!`, so the macro is compiled
+    # here: ridl-loopback's source and its tests/conformance.rs, which expand
+    # it with every extension flag, as edition 2021 against the two packaged
+    # crates. Compile only: the pin runs this test in the workspace. The
+    # loopback source therefore has to build as edition 2021 with the minimum
+    # toolchain, so it uses no let chain.
+    loopback="$PWD/target/compat-check/loopback"
+    mkdir -p "$loopback/tests"
+    cp -R crates/ridl-loopback/src "$loopback/src"
+    cp crates/ridl-loopback/tests/conformance.rs "$loopback/tests/conformance.rs"
+    {
+        printf '[package]\nname = "ridl-loopback"\nversion = "0.0.0"\nedition = "2021"\n'
+        printf 'rust-version = "%s"\n\n' "$minimum"
+        printf '[dependencies]\nridl-rt = { path = "%s" }\n\n' "$pkg"
+        printf '[dev-dependencies]\nridl-rt-conformance = { path = "%s" }\n\n' "$pkg_conformance"
+        printf '[patch.crates-io]\nridl-rt = { path = "%s" }\n\n[workspace]\n' "$pkg"
+    } > "$loopback/Cargo.toml"
+    echo "compat-check: $minimum, edition 2021 (suite! expanded over ridl-loopback)"
+    cargo "+$minimum" test --no-run --offline --manifest-path "$loopback/Cargo.toml"
 
     # Edition 2024 requires rust-version >= 1.85 (cargo refuses to parse the
     # manifest otherwise); the pin already satisfies that, so this run's
