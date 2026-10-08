@@ -72,12 +72,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
+// ANCHOR: imports
 use api::cabin;
 use api::cabin::prelude::*;
 use ridl_loopback::Loopback;
 use ridl_rt::contract::{CatalogRef, Interface};
 use ridl_rt::sample::Provenance;
 use veh_cabin::veh::cabin as api;
+// ANCHOR_END: imports
 
 /// The catalog the runtime is attached to: the one the face was generated
 /// from. The face's `Bind::new` and `serve` compare the port's catalog with
@@ -198,8 +200,8 @@ fn main() {
         println!("event ok {}", code);
     }
 
-    // ANCHOR: async-command
     // 3 — command
+    // ANCHOR: async-command
     {
         let mut serve = cabin::serve(&mut handler, &mut provider);
         let mut call = client.set_level(api::Level::new(42).expect("42 is inside Level's range"));

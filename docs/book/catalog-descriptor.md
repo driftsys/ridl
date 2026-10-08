@@ -18,7 +18,9 @@ questions such as:
 - Is this member a signal, an event, a command or a query, and which payload
   does it carry?
 - What is the largest payload this member can send, so that a buffer can be
-  sized in advance, and so that a larger payload can be refused?
+  sized in advance, and so that a larger payload can be refused? The size
+  counts the payload alone, without the envelope and the framing a transport
+  adds.
 - What timing bound does this member declare?
 - Do both peers speak the same version of the package?
 
@@ -56,7 +58,8 @@ ridl describe out/veh.cabin.catalog.binfb
 ```
 
 The top of the output for `examples/cabin`, with the 32 bytes of the hash left
-out:
+out. `toolchain` is the version of `ridl` that wrote the file, so it changes
+with each release; the excerpt shows it as `<version>`:
 
 ```json
 {
@@ -73,7 +76,7 @@ out:
   ],
   "name": "veh.cabin",
   "retired": [],
-  "toolchain": "0.6.0",
+  "toolchain": "<version>",
   "version": 1
 }
 ```
@@ -129,10 +132,14 @@ does not read, makes `ridl describe` exit with code 2. The
 - **Each payload**: its `role` (`value` for a signal or a `fixed`, `occurrence`
   for an event, `request` for a command or a query, `response` for a query's
   reply), its `type_name`, and one `max_sizes` row per encoding. A row is
-  `Bounded` with the maximum encoded size in bytes, or `Unbounded` with a
-  `cause`, for a payload that has no maximum, such as a stream or a type that
-  contains itself. An encoding with no row has no size computed by this
-  toolchain.
+  `Bounded`, with `bytes` the maximum encoded size of the payload, envelope and
+  framing excluded; or `Unbounded`, with `bytes` 0 and a `cause` that says why
+  the compiler cannot bound it in that encoding. For example, a FlatBuffers row
+  is `Unbounded` when the payload's largest encoding would exceed 4 GiB, the
+  most that FlatBuffers' 32-bit offsets can address. An encoding with no row
+  has no size computed by this toolchain. A stream payload, a request of zero or of several parameters, and an inline
+  `T | E` reply have no row in any encoding. A `repr(C)` payload has no row,
+  and a proto3 row is present only for a payload that is a struct or a union.
 
 The descriptor does not contain type layouts, field lists, constraints other
 than the ones that bound a payload's size, contract clauses, or initial values.
@@ -147,9 +154,11 @@ numbers, and every declaration they reach. Doc comments, labels and
 uses does.
 
 The generated Rust face carries the same package name and hash as its
-`CATALOG`, and checks them against the port's catalog when it binds. So two
-parties that were built from different versions of a package refuse to talk to
-each other at bind time, instead of misreading each other's payloads. The
+`CATALOG`. When a face binds to a port, it compares its `CATALOG` with the
+catalog of that port, and panics when they differ. So a face generated from a
+different version of the package than the one its runtime serves fails at bind
+time, instead of misreading payloads. The face compares itself with its own
+port only; it does not compare catalogs with the party at the other end. The
 [failures section](generated-code.md#failures) of the previous chapter shows
 what that check does.
 

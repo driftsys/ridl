@@ -6,42 +6,44 @@ interface — async and blocking — the Cargo features that select what the cra
 contains, and the failures a call can report. The flag itself is described in
 the [CLI reference](cli-reference.md#ridl-build).
 
-Every Rust snippet in this chapter but one is taken from
+Most Rust snippets in this chapter are taken from
 `examples/cabin/consumer/src/main.rs`, a program that the repository's
 `just demo` gate builds and runs against the crate generated from
-`examples/cabin/cabin.ridl`. The two exceptions are marked as illustrations.
-The interface the snippets call, from that schema:
+`examples/cabin/cabin.ridl`. A snippet that is not taken from that program is
+marked as an illustration in the sentence before it, and is not compiled. The
+interface the snippets call, and the types it uses, from that schema:
 
 ```ridl,ignore
-package veh.cabin
-
-type Level: integer [0..100]
-type Window: integer [0..100000]
-type Average: integer [0..1000]
-
-interface Cabin {
-  signal temperature: Temperature @10ms
-  event warning: Warning @[100ms..1s]
-  command setLevel(level: Level) @[..50ms] [
-    require level < 100
-  ]
-  query average(window: Window): Average @[..200ms] [
-    require window > 0
-    ensure result >= 0
-  ]
-}
+{{#include ../../examples/cabin/cabin.ridl:schema}}
 ```
 
 ## What the crate contains
 
 The build writes one `<package>.rs` file per package, a `lib.rs` that declares
 the module tree, and a `Cargo.toml`. A package `veh.cabin` is the module
-`veh::cabin` of a crate named `veh_cabin`:
+`veh::cabin`. The crate is named after the `[package]` name of the `ridl.toml`
+manifest, with each `.` replaced by `_`: `examples/cabin` declares the package
+`veh.cabin`, so its crate is `veh_cabin`. A `[workspace]` manifest names no
+package, and a build from one names the crate `ridl_generated`.
+
+The cabin program imports the package module as `api`, the face of the
+interface `Cabin` as `cabin`, and the face's `prelude`:
 
 ```rust,noplayground
-use veh_cabin::veh::cabin as api; // the package: types and interfaces
-use api::cabin;                    // the face of the interface `Cabin`
+{{#include ../../examples/cabin/consumer/src/main.rs:imports}}
 ```
+
+`prelude` brings into scope the traits that carry the fixed methods of the
+face: `ridl_rt::face::Bind` (`new`), `Events` (`next_event`), `Publish`
+(`commit`), and, under the crate's `std` feature, `Timeout` (`with_timeout` and
+`set_timeout`); and, without a name, the interface's own `Subscribe`
+(`subscribe_<event>`) and `Invalidate` (`invalidate_<signal>`) traits. Each
+interface's prelude holds only the traits its face implements. These methods
+are trait methods rather than inherent methods so that a member of the
+interface can have one of these names. Without the `use` of the prelude,
+`cabin::Client::new` does not compile. The other imports are for the snippets
+below: `Loopback` is the runtime, `CatalogRef` and `Interface` name the catalog
+the face was generated from, and `Provenance` is read from a signal sample.
 
 The package module holds:
 
@@ -76,6 +78,11 @@ An interface that carries only `fixed` declarations gets no face module. A
 signal-only interface gets a `Client` and a `Publisher` and no `blocking`
 module, because a signal read returns at once.
 
+An interface the face cannot carry gets none of these items and no interaction
+descriptor. In their place, the package module holds a
+`__RIDL_NO_FACE_<NAME>` constant whose documentation names the interface and
+the reason; the [CLI reference](cli-reference.md#ridl-build) lists the cases.
+
 The face opens no socket and holds no runtime. Each `Client`, `Publisher` and
 `serve` runs over a _port_ that the application passes in, and a port comes from
 a runtime. The one runtime in this repository is `ridl-loopback`, which connects
@@ -86,9 +93,11 @@ it:
 {{#include ../../examples/cabin/consumer/src/main.rs:bind}}
 ```
 
-`CATALOG` is the catalog the face was generated from. Binding a face compares
-the port's catalog with it, and panics when they differ; see
-[Failures](#failures).
+`CATALOG` is a constant of the program that holds the catalog the face was
+generated from, read from `<api::Cabin as Interface>::CATALOG`. Binding a face
+compares the port's catalog with it, and panics when they differ; see
+[Failures](#failures). `CLIENT_TIMEOUT` is a `Duration` the program declares,
+and `with_timeout` comes from the `Timeout` trait of the prelude.
 
 ### Implementing the provider
 
@@ -113,7 +122,8 @@ when the method runs, not when its future is first polled.
 
 Inside an async function, the calls read like this. This snippet is an
 illustration and is not compiled; `port` and `handler` stand for ports a
-runtime gives the application:
+runtime gives the application, and `provider` for a value that implements
+`cabin::Provider`:
 
 ```rust,noplayground
 // Illustration: any executor polls these futures.
@@ -127,16 +137,27 @@ let failure = cabin::serve(handler, &mut provider).await;
 ```
 
 No executor is required either. The cabin program polls the same futures by
-hand, the way a frame loop does, with the waker `ridl_rt::task::noop_waker()`:
+hand, the way a frame loop does. `cx` is a `Context` built from the waker
+`ridl_rt::task::noop_waker()`, and `poll_once` is a function of the program
+that polls a future once with it:
 
 ```rust,noplayground
 {{#include ../../examples/cabin/consumer/src/main.rs:async-command}}
 ```
 
+`ridl_rt::task` exists only under `ridl-rt`'s `std` feature, which the
+generated crate's own `std` feature turns on. A frame loop built without it
+uses `core::task::Waker::noop()` instead, which Rust 1.85 and later provide.
+
 A `serve` future settles at most 32 calls in one poll. When it reaches that
-limit, it wakes itself and returns `Pending`, so that one provider does not hold
-a single-threaded executor. A
-future that resolved panics when it is polled again.
+limit, it wakes its own waker and returns `Pending`, so that an executor can run
+other tasks before it polls the `serve` future again. Under `noop_waker` that
+wake is lost, so a frame loop that polls once per frame settles at most 32 calls
+per frame.
+
+The future of a command or a query call, and the `serve` future, panic when
+they are polled again after they resolved. The `next_event` future does not:
+polled again, it waits for the next occurrence.
 
 ## Blocking calls
 
@@ -152,14 +173,17 @@ once, as in the async client.
 
 Blocking `serve` takes the handler, the provider and an optional timeout. It
 returns `Ok(())` when the timeout passes, so a thread that also does other work
-can call it in a loop:
+can call it in a loop. `SERVE_PASS` is a `Duration` of 50 ms the program
+declares:
 
 ```rust,noplayground
 {{#include ../../examples/cabin/consumer/src/main.rs:serve-loop}}
 ```
 
 The cabin program runs that loop on a second thread and calls the blocking
-client on the first:
+client on the first. `DoneOnDrop` is a type of the program that sets `done`
+when it is dropped, so that the serving loop also ends when the first thread
+panics:
 
 ```rust,noplayground
 {{#include ../../examples/cabin/consumer/src/main.rs:blocking-command}}
@@ -175,11 +199,15 @@ The generated `Cargo.toml` declares two features, both on by default:
 
 | Feature            | Enables                                                                                                                                                                          |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `std`              | The `blocking` module of every face, and `ridl-rt/std`. With it off, the crate and `ridl-rt` build as `no_std`, and only the async face remains.                                 |
+| `std`              | The `blocking` module of every face, the `Timeout` trait in each prelude, and `ridl-rt/std`. With it off, only the async face remains. |
 | `validate-pattern` | The check of a typl `match` pattern in a constructor, through the `regex` crate. With it off, `new` does not check patterns; range and length checks are not affected. |
 
-A target without the standard library, or one where `regex` is too large,
-turns the defaults off and selects what it needs:
+With `std` off, `ridl-rt` builds as `no_std`, but the generated crate does
+not: its `lib.rs` does not declare `#![no_std]`, so the crate still links the
+standard library and builds only for a target that has one.
+
+A target where `regex` is too large, or one that does not need the blocking
+face, turns the defaults off and selects what it needs:
 
 ```toml
 [dependencies]
@@ -193,16 +221,19 @@ the codec needs. An application that names `ridl-rt` itself, for example to use
 | `ridl-rt` feature | Default | Enables                                                                                                    |
 | ----------------- | ------- | ---------------------------------------------------------------------------------------------------------- |
 | `flatbuffers`     | off     | The `flatbuffers` module the generated codec calls.                                                        |
-| `std`             | off     | The standard library, and the `task` module: `block_on`, `noop_waker` and `flag_waker`.                    |
+| `std`             | off     | The standard library; the `task` module: `block_on`, `noop_waker` and `flag_waker`; the `face::Timeout` trait; and the propagation hook of the `trace` module, `set_propagation`. |
 | `proto3`          | off     | Nothing yet. It names the proto3 encoding.                                                                 |
 | `repr-c`          | off     | Nothing yet. It names the `repr(C)` encoding.                                                              |
 
 `ridl-rt` has no dependency in any feature combination. It builds for `wasm32`,
-and its minimum Rust version is 1.83.
+and its minimum Rust version is 1.83. The generated crate declares edition 2024,
+so it needs Rust 1.85 or later.
 
 ## Failures
 
-A call reports its failure as a value. The types are in `ridl_rt::error`.
+A call reports its failure as a value. `ClientError`, `CallError`, `Contract`,
+`Transport` and `ProviderError` are in `ridl_rt::error`; the port errors, such
+as `SendError` and `ReadError`, are in `ridl_rt::port`.
 
 A command or query call resolves to `Result<_, ClientError>`:
 
@@ -220,13 +251,17 @@ A command or query call resolves to `Result<_, ClientError>`:
 
 When a call's `max` bound passes, a sent command resolves to
 `Transport::Undelivered` and a sent query to `Transport::Timeout`. The bound is
-measured on the port's clock, so it depends on the runtime: `ridl-loopback`
-measures no bound, so over it a call that is never served returns only at the
-blocking client's own timeout.
+measured on the port's clock, so it depends on the runtime. The clock of
+`ridl-loopback` moves only when the program calls `Loopback::advance`, so over
+it a bound passes only after the program advances the clock past it; until
+then, a call that is never served returns only at the blocking client's own
+timeout.
 
 A signal read returns `Result<Sample<T>, ReadError>`. `serve` resolves to
-`ProviderError` when the handler port fails; the calls it settled before the
-failure stay settled.
+`ProviderError::Serve` when the handler refuses the interface's members, which
+it reports on the first poll, and to `ProviderError::Claim` when the handler
+port fails while a call is read. The calls it settled before a failure stay
+settled.
 
 **A catalog mismatch panics.** Binding a `Client` or a `Publisher`, and starting
 `serve`, compare the port's catalog — the package name and the catalog hash —
@@ -234,9 +269,13 @@ with the `CATALOG` the face was generated from. When they differ, the face was
 generated from a different version of the package than the one the runtime
 serves, and the bind panics with a message that names the interface and both
 catalogs. A program that must not panic compares the two itself before it
-binds. This snippet is an illustration and is not compiled:
+binds. This snippet is an illustration and is not compiled; `port` stands for
+the port the program is about to bind:
 
 ```rust,noplayground
+use ridl_rt::contract::Interface; // carries `CATALOG`
+use ridl_rt::port::Attached;      // carries `catalog()`
+
 if port.catalog() != <api::Cabin as Interface>::CATALOG {
     // refuse the port
 }
