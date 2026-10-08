@@ -69,13 +69,15 @@ Where this chapter mentions rxdl or rmdl, it is describing a plan.
 
 Released binaries of `ridl` and `ridlc` are attached to the GitHub Releases
 tagged `editor-v<version>`. On Linux and macOS, `install.sh` downloads the
-newest one, verifies its SHA-256 checksum, and installs it:
+newest one, verifies its SHA-256 checksum, and installs it. It supports x86_64
+and aarch64 Linux and x86_64 and arm64 macOS, and exits with `unsupported
+platform` on any other:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/driftsys/ridl/main/install.sh | bash
 ```
 
-On Windows, run `install.ps1` from PowerShell:
+On Windows, run `install.ps1` from PowerShell. It installs the x86_64 build:
 
 ```powershell
 irm https://raw.githubusercontent.com/driftsys/ridl/main/install.ps1 | iex
@@ -83,11 +85,11 @@ irm https://raw.githubusercontent.com/driftsys/ridl/main/install.ps1 | iex
 
 Both scripts read the same environment variables:
 
-| Variable              | Effect                                                            |
-| --------------------- | ----------------------------------------------------------------- |
+| Variable              | Effect                                                                             |
+| --------------------- | ---------------------------------------------------------------------------------- |
 | `RIDL_INSTALL_DIR`    | Directory to install into. Default `~/.local/bin` (`$HOME\.local\bin` on Windows). |
-| `RIDL_INSTALL_BINARY` | `ridl` (default) or `ridlc`.                                      |
-| `RIDL_VERSION`        | The release tag to install, instead of the newest `editor-v*` one. |
+| `RIDL_INSTALL_BINARY` | `ridl` (default) or `ridlc`.                                                       |
+| `RIDL_VERSION`        | The release tag to install, instead of the newest `editor-v*` one.                 |
 
 When the install directory is not on your `PATH`, the script prints the command
 that adds it.
@@ -110,9 +112,11 @@ or call it by path. `cargo install --path crates/ridl` installs `ridl` alone.
 Open VSX under the name "RIDL". It highlights `.typl`, `.ridl` and `.rsdl`
 files and runs the language server. It bundles a `ridl` binary and starts it as
 `ridl lsp`, so it needs no separate install. The command **RIDL: Install ridl to
-PATH** copies the bundled binary onto your terminal `PATH`. The setting
-`ridl.serverPath` names a different `ridl` binary to run; empty, the default,
-uses the bundled one. The setting `ridl.trace.server` (`off`, `messages` or
+PATH** copies the bundled binary to `~/.local/bin` (`%LOCALAPPDATA%\Programs\ridl` on
+Windows). When that directory is not on your `PATH`, the command warns and
+offers a command that adds it. The setting `ridl.serverPath` names a different
+`ridl` binary to run, for both `ridl lsp` and `ridl mcp`; empty, the default,
+uses the bundled binary, or `ridl` on `PATH` when none is bundled. The setting `ridl.trace.server` (`off`, `messages` or
 `verbose`) traces the traffic between the editor and the server. The
 [extension README](https://github.com/driftsys/ridl/blob/main/editors/vscode/README.md)
 lists the features.
@@ -124,16 +128,35 @@ in the CLI reference states the accepted flags and exit codes.
 
 **Agent hosts.** `ridl mcp` serves the Model Context Protocol over stdio, with
 read-only tools that check, explain and inspect a workspace. It takes no flag.
-An MCP-aware agent host starts it as a plain command. Most hosts accept a
-server entry of this shape, and the configuration file that holds it depends on
-the host:
+An MCP-aware agent host starts it as a plain command and arguments:
 
 ```json
 { "command": "ridl", "args": ["mcp"] }
 ```
 
-The command `ridl` must be on the `PATH` the host uses. The VS Code extension
-also registers `ridl mcp` as an MCP server definition for hosts inside VS Code.
+Each host wraps this in its own format, in its own file. Claude Code reads it
+from the project's `.mcp.json` (or `claude mcp add ridl -- ridl mcp` writes it):
+
+```json
+{
+  "mcpServers": {
+    "ridl": { "command": "ridl", "args": ["mcp"] }
+  }
+}
+```
+
+Codex reads it from `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.ridl]
+command = "ridl"
+args = ["mcp"]
+```
+
+The command `ridl` must be on the `PATH` the host uses. On VS Code 1.101 or
+newer, the RIDL extension registers `ridl mcp` automatically, so GitHub Copilot
+in VS Code needs no configuration.
+
 [`ridl mcp`](cli-reference.md#ridl-mcp) lists the tools, and the
 [`ridl-mcp` README](https://github.com/driftsys/ridl/blob/main/crates/ridl-mcp/README.md)
 documents their input and output schemas.
