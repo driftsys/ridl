@@ -121,8 +121,9 @@ implementer and the reviewer read the same choice.
   manifest, and does not load the second claimant's package.
 - **An `interfaces.lock` in a subdirectory of a unit** is not read. It draws a
   warning on the file, saying that only the lock beside the unit's `ridl.toml`
-  is read (author's answer 1). The code is the next free code in the RIDL-4xx
-  range, with a lint name, added as ADR-0024 and `docs/book/lints.md` require.
+  is read (author's answer 1). The code is RIDL-415, the next free code in the
+  RIDL-4xx range (RIDL-414 is the last one in `crates/ridl-core/src/diag.rs`),
+  with a lint name, added as ADR-0024 and `docs/book/lints.md` require.
 - **The vss corpus directory of a member is its package name**
   (`evals/corpus/vss/vehicle.cabin.hvac.station.row1.driver/`); the book harness
   uses the same rule (`<root>/<package name>/`).
@@ -355,9 +356,11 @@ fn the_vss_workspace_has_no_manifest_below_a_member() {
       `cargo test -p ridl-cli --test lints` — expected: PASS.
 - [ ] **Step 7: Gate** (the five common recipes plus `just link-check`,
       `just doc-path-check`, `just story-id-check`).
-- [ ] **Step 8: Commit** (two commits: the move, then the calibration):
-      `chore(repo): re-cut the vss corpus as flat workspace members` and
-      `chore(repo): regenerate the calibration records for the flat vss layout`.
+- [ ] **Step 8: Commit** (two commits: the move, then the calibration; the scope
+      is `ridlc`, the scope of the last commit that touched `evals/`, as the
+      Global Constraints state):
+      `chore(ridlc): re-cut the vss corpus as flat workspace members` and
+      `chore(ridlc): regenerate the calibration records for the flat vss layout`.
 
 ---
 
@@ -441,7 +444,8 @@ fn a_root_package_already_claimed_by_a_sibling_tree_is_mani_014() {
     // members = ["base", "hmi"]; base/ridl.toml name "com.example" with base/hmi/x.ridl
     //   (package com.example.hmi); hmi/ridl.toml name "com.example.hmi" with hmi/y.ridl
     // assert: codes == ["MANI-014"]; its primary file is "<root>/hmi/ridl.toml"
-    // assert: package_of(ws, "com.example.hmi") is the one loaded from base/hmi (unit "com.example")
+    // assert: the package named "com.example.hmi" in loaded.packages is the one loaded
+    //   from base/hmi (unit "com.example"); `package_of` takes a salsa Workspace, not LoadedWorkspace
 }
 
 #[test]
@@ -495,7 +499,7 @@ fn every_package_of_a_unit_carries_the_lock_of_the_manifest_directory() {
 fn a_lock_in_a_subdirectory_is_not_read() {
     // name "veh.hmi"; cluster/interfaces.lock holding malformed text "x"
     // assert: no RIDL-410; the cluster package's lock(db) is None;
-    // exactly one warning with the new RIDL-4xx code, on cluster/interfaces.lock
+    // exactly one RIDL-415 warning, on cluster/interfaces.lock
 }
 ```
 
@@ -504,11 +508,16 @@ fn a_lock_in_a_subdirectory_is_not_read() {
 - [ ] **Step 3: Implement**: read the lock in `load_root`/`load_member` for the
       unit's directory and pass `lock: &Option<PackageLock>` down
       `load_package_tree`; remove the per-directory `read_lock` call there, and
-      report the new warning for an `interfaces.lock` found in a subdirectory.
-      Add the code to the catalogue in `crates/ridl-core/src/diag.rs`, the ridl
-      reference's diagnostics table, and `docs/book/lints.md` (ADR-0024). Update
-      the `Package.lock` doc comment: "the unit's `interfaces.lock`, read by the
-      loader from the manifest directory".
+      report the RIDL-415 warning for an `interfaces.lock` found in a
+      subdirectory. Add the code to the catalogue in
+      `crates/ridl-core/src/diag.rs` with its lint name, add the pair to the
+      expected lint-name list of the catalogue's inline test (the test around
+      `diag.rs:2060` that asserts "the lint names differ from the expected list
+      in this test"), add the row to the ridl reference's diagnostics table and
+      to `docs/book/lints.md` (ADR-0024; `crates/ridl/tests/book_lints.rs`
+      checks that table against the catalogue and fails on a missing row).
+      Update the `Package.lock` doc comment: "the unit's `interfaces.lock`, read
+      by the loader from the manifest directory".
 - [ ] **Step 4: Run** `cargo test -p ridl-core` and `just test` — expected:
       PASS. `crates/ridl/tests/lock_cli.rs` still passes because its fixtures
       keep the lock beside the manifest.
@@ -631,7 +640,10 @@ expect exit 0 and OURS holding both lines.
       FAIL on `key("cluster.SpeedDisplay")` (parse error).
 - [ ] **Step 3: Implement** the grammar in `from_str`; keep `is_ident` for each
       segment. The existing test that lists invalid keys (around line 883) keeps
-      `service:a..b` and `service:a.b.` invalid.
+      `service:a..b` and `service:a.b.` invalid; remove `"a.b 1"` from that list
+      (`a_line_that_does_not_parse_is_malformed`, around line 880) and `"a.b"`
+      from the invalid list of `lock_key_display_and_from_str_agree` (around
+      line 973), because a dotted interface key is now valid.
 - [ ] **Step 4: Run** `cargo test -p ridl-core` and
       `cargo test -p ridl-cli --test lock_merge --test lock_protocol` —
       expected: PASS.
@@ -739,7 +751,9 @@ fn an_empty_root_still_numbers_its_subpackages() {
 ```
 
 - [ ] **Step 2: Run** `cargo test -p ridl-sem --lib check::tests` — expected:
-      FAIL on the first test (`cluster.Speed` is numbered 1, not 2).
+      FAIL on the first test: the key of `u.cluster`'s shape reads `Speed`, not
+      `cluster.Speed`, and its number is 1, not 2, because numbering still runs
+      per package under the short name.
 - [ ] **Step 3: Implement** the split and the fold as the Interfaces block
       states. Provisional order stays `provisional_order` (byte order of the
       key's name, interface before inline shape).
@@ -751,13 +765,14 @@ fn an_empty_root_still_numbers_its_subpackages() {
       `diag` packages numbered in one space: every `adas.*` key before every
       `diag.*` key), plus any `ridl-sem` snapshot that carries a number. Read
       `NOTES` of the appendix corpus and update its numbering sentence.
-- [ ] **Step 5: Run** `just test` — expected: PASS.
-      `crates/ridl/tests/lock_cli.rs` may fail on
-      `workspace_output_prefixes_each_package_path` and
-      `rename_over_more_than_one_package_exits_two`; that is Task 10's
-      deliverable: mark those two
-      `#[ignore = "per-unit lock lands in the next task"]` in this task and
-      remove the attribute in Task 10.
+- [ ] **Step 5: Run** `just test` — expected: PASS,
+      `crates/ridl/tests/lock_cli.rs` included: its fixtures
+      (`package_workspace`, `two_member_workspace`) are root units, so per-unit
+      numbering gives the same numbers as per-package numbering, and the "holds
+      2 packages" text changes only in Task 10. Between this task and Task 10,
+      `ridl lock` on a unit with a subpackage writes the subpackage's short key
+      into the unit's lock; no test exercises that, and Task 10 replaces the
+      command.
 - [ ] **Step 6: Gate** (the five common recipes, `just wasm-check`).
 - [ ] **Step 7: Commit**: `feat(ridl-sem): number interfaces once per unit`,
       footer
@@ -829,8 +844,9 @@ fn lock_on_a_member_allocates_in_that_unit_only() { /* re-point the existing mem
 fn workspace_output_prefixes_each_unit_directory() { /* the existing prefix test, over two units */ }
 ```
 
-Remove the two `#[ignore]` attributes Task 9 added and re-target those tests at
-units.
+Re-target the two existing tests `workspace_output_prefixes_each_package_path`
+and `rename_over_more_than_one_package_exits_two` at units (the "holds 2
+packages" text becomes "holds 2 units").
 
 - [ ] **Step 2: Run** `cargo test -p ridl-cli --test lock_cli` — expected: FAIL:
       the first test finds `root/cluster/interfaces.lock` written and the root
@@ -859,9 +875,13 @@ units.
   (`Catalog.package` comment)
 - Modify: `crates/ridl-descriptor/src/hash.rs` (the re-export names),
   `crates/ridl-descriptor/src/lower.rs:60-62` (call
-  `catalog_hash(&package.unit, others)` — the full signature change of `lower`
-  is Task 12), `crates/ridlc/src/lib.rs:1466-1478` (`embed_catalog_hashes`: find
-  the region's package by name as today, hash its `unit`)
+  `catalog_hash(unit_of(package), &packages)` where `packages` is
+  `once(package).chain(others)` — every test of
+  `crates/ridl-descriptor/tests/lower.rs` passes `others = &[]`, and
+  `golden_hash.rs:48` too, so `others` alone would give an empty unit; the full
+  signature change of `lower` is Task 12), `crates/ridlc/src/lib.rs:1466-1478`
+  (`embed_catalog_hashes`: find the region's package by name as today, hash
+  `unit_of` of it)
 - Modify: `crates/ridl-backend-rust/src/descriptors.rs:110-145` (`CATALOG.name`
   reads `Catalog.package`, if it reads `Model.name` today)
 - Modify: `crates/ridl-rt/src/contract.rs:29-40` (`CatalogRef` doc)
@@ -872,14 +892,27 @@ units.
 
 **Interfaces:**
 
-- Consumes: `Package.unit`, `Package::catalog_name`, `relative_name`.
+- Consumes: `Package.unit`, `Package::catalog_name`, `relative_name`, `unit_of`.
+- **Unit selection is by `unit_of(package) == unit` everywhere** — in
+  `reduced_unit`, `reachable_decls`, `unit_retired`, `Lowering::catalog`, and in
+  Tasks 12 and 13 (`numbered_shapes`, `lower`, `interface_ir`, `regions`,
+  `embed_catalog_hashes`) — never by `package.unit == unit`: a hand-built
+  fixture (`Package { ..Default::default() }` in the hash tests, the descriptor
+  tests, `crates/ridlc/tests/codegen_model.rs`) and a baseline snapshot written
+  before the field existed carry `unit == ""`, and `unit_of` falls back to the
+  name for them. `Index` keeps its dedupe by package name
+  (`catalog_hash.rs:124-135`): a caller may pass the unit's own package twice
+  (`ridlc`'s `catalog_scope` holds every package; `Lowering::catalog`
+  concatenates `scope.package` with `scope.others`), and a second copy must not
+  duplicate shapes or declarations.
 - Produces:
   - `pub fn reduced_unit(unit: &str, packages: &[&Package]) -> Package` —
     `name: unit, unit: unit`; `interfaces`: every shape of every package with
-    `package.unit == unit`, `interface.name = package.catalog_name(&shape)`,
-    visibility from the shape, sorted by `(number, name)`; `decls`: the closure
-    under full canonical names (`Index::canonical` always returns
-    `"{pkg}.{bare}"`, for the unit's own packages too); doc blanking as today.
+    `unit_of(package) == unit` (deduped by package name),
+    `interface.name = package.catalog_name(&shape)`, visibility from the shape,
+    sorted by `(number, name)`; `decls`: the closure under full canonical names
+    (`Index::canonical` always returns `"{pkg}.{bare}"`, for the unit's own
+    packages too); doc blanking as today.
   - `pub fn catalog_hash(unit: &str, packages: &[&Package]) -> [u8; 32]`.
   - `pub fn reachable_decls<'a>(unit: &str, packages: &[&'a Package]) -> BTreeMap<String, &'a Decl>`.
   - `pub fn unit_retired(unit: &str, packages: &[&Package]) -> Vec<RetiredInterface>`
@@ -888,7 +921,10 @@ units.
     entry and a dotted entry (an anchor-carried one) as spelled, in number
     order.
   - `Lowering::catalog` returns
-    `Catalog { package: unit, hash: catalog_hash(unit, scope.package + scope.others), retired: unit_retired(unit, ...) }`.
+    `Catalog { package: unit, hash: catalog_hash(unit, &packages), retired: unit_retired(unit, &packages) }`
+    with `unit = unit_of(scope.package)` and `packages` =
+    `once(scope.package).chain(scope.others)` (the dedupe in `Index` absorbs the
+    second copy when `scope.others` already holds the package).
   - `Catalog.package` comment: "`CatalogRef.name`: the name of the unit the
     package belongs to (`Package.unit`), which names the one catalog of that
     unit. A plugin finds its region in the deployment section by this value."
@@ -968,20 +1004,24 @@ fn unit_retired_qualifies_an_interface_entry_and_keeps_a_service_entry() {
   called once per build after the per-package loop)
 - Modify: `docs/book/cli-reference.md:561`, `:1935` (the `catalog` emit help
   line, checked by `cli_reference.rs`)
-- Test: `crates/ridl-descriptor/tests/lower.rs`; `crates/ridlc/tests/cli.rs`;
+- Test: `crates/ridl-descriptor/tests/lower.rs`; `crates/ridlc/tests/cli.rs`
+  (`emit_catalog_writes_one_file_per_unit` added;
+  `each_region_carries_its_catalog_hash` at line 806 rewritten, see Step 1);
   `crates/ridl/tests/describe_cli.rs`
 
 **Interfaces:**
 
 - Consumes: `catalog_hash(unit, packages)`, `unit_retired`,
-  `Package::catalog_name`.
+  `Package::catalog_name`, `unit_of`.
 - Produces:
   - `pub fn lower(unit: &str, packages: &[&Package]) -> Result<Vec<u8>, LowerError>`
     — `packages` is every checked package of the build plus `ridl.std` when
-    referenced; the unit's packages are those with `unit == unit`; the
-    descriptor's `name` is `unit`, its interfaces are every shape of those
-    packages under `catalog_name`, in (number, name) order, its `retired` is
-    `unit_retired`.
+    referenced; the unit's packages are those with `unit_of(package) == unit`
+    (Task 11's selection rule); the descriptor's `name` is `unit`, its
+    interfaces are every shape of those packages under `catalog_name`, in
+    (number, name) order, its `retired` is `unit_retired`. The existing tests of
+    `tests/lower.rs` become `lower("p", &[&package])` with `"p"` the fixture's
+    name, which `unit_of` returns for a fixture with an empty `unit`.
   - `write_catalogs` writes `<unit>.catalog.binfb` for every unit (in name
     order) that has at least one shape, and nothing for a unit with none.
   - `--emit catalog` help: "The catalog descriptor an engine reads, written to
@@ -1014,12 +1054,21 @@ fn emit_catalog_writes_one_file_per_unit() {
 }
 ```
 
+Also in `crates/ridlc/tests/cli.rs`, rewrite
+`each_region_carries_its_catalog_hash` (line 806): it reads
+`<region.catalog>.catalog.binfb` for the regions `veh.adas` and `veh.diag`, and
+after this task the only file is `veh.catalog.binfb` while the regions stay per
+package until Task 13. Make `descriptor_hash` read the file of the unit of the
+package named `region.catalog` (`unit_of` of the written IR package with that
+name), and keep the `catalogs == ["veh.adas", "veh.diag"]` assertion for Task 13
+to change. Without this rewrite `just test` fails on a missing file.
+
 - [ ] **Step 2: Run** them — expected: FAIL (two files, `veh.adas.catalog.binfb`
       and `veh.diag.catalog.binfb`).
 - [ ] **Step 3: Implement** as the Interfaces block states. `numbered_shapes`
       becomes
       `pub fn numbered_shapes(unit: &str, packages: &[&Package]) -> Result<Vec<Numbered>, ZeroNumber>`:
-      it walks the packages whose `unit == unit` and returns
+      it walks the packages whose `unit_of(package) == unit` and returns
       `Numbered { name: <catalog name>, number, provisional }` in (number, name)
       order.
 - [ ] **Step 4: Update** `describe_cli__corpus_catalog.snap` if the corpus
@@ -1045,23 +1094,27 @@ fn emit_catalog_writes_one_file_per_unit() {
   (`Region.catalog` comment: "The catalog's name — the unit name (vocabulary
   V-16)"; `RegionInterface.name`: "the catalog name")
 - Modify: `crates/ridlc/src/lib.rs:1466-1478` (`embed_catalog_hashes`: a
-  region's catalog is a unit; find any package with `unit == region.catalog` and
-  hash `region.catalog` over `others`)
+  region's catalog is a unit; find any package with
+  `unit_of(package) == region.catalog` and hash `region.catalog` over `others`)
 - Modify: `crates/ridlc/tests/corpus/rsdl-appendix-a/NOTES` (one region, `veh`)
+- Modify: `crates/ridlc/tests/cli.rs` (`each_region_carries_its_catalog_hash`:
+  the `catalogs` assertion becomes `["veh"]`, and `descriptor_hash` reads
+  `veh.catalog.binfb` directly, since a region's catalog is now the unit)
 - Test: `lower.rs` inline tests
   (`a_region_is_the_catalog_that_declares_the_interface`,
   `appendix_a_lowers_its_routes_regions_and_grants`, `region_rows`);
-  `corpus__system@rsdl-appendix-a.snap`; `crates/ridlc/tests/layout.rs`
+  `corpus__system@rsdl-appendix-a.snap`; `crates/ridlc/tests/layout.rs`;
+  `crates/ridlc/tests/cli.rs`
 
 **Interfaces:**
 
 - Consumes: `Package.unit`, `Package::catalog_name`, `catalog_hash(unit, ..)`.
 - Produces:
   `InterfaceRef { catalog: <unit of the declaring package>, name: <catalog name>, inline }`;
-  `interface_ir` finds the shape among the packages whose `unit == catalog` by
-  catalog name and `inline`; `Region.catalog` is the unit, one region per unit,
-  `RegionInterface.name` and `Route.interface` are catalog names;
-  `Grant.regions` are unit names.
+  `interface_ir` finds the shape among the packages whose
+  `unit_of(package) == catalog` by catalog name and `inline`; `Region.catalog`
+  is the unit, one region per unit, `RegionInterface.name` and `Route.interface`
+  are catalog names; `Grant.regions` are unit names.
 
 - [ ] **Step 1: Write the failing test** in `lower.rs` tests (the fixture
       helpers build a workspace from source strings; give the two interface
@@ -1085,7 +1138,8 @@ fn two_source_packages_of_one_unit_share_one_region() {
 - [ ] **Step 4: Update** `corpus__system@rsdl-appendix-a.snap` (predicted: one
       region `veh` with the four interfaces under `adas.`/`diag.` names; the
       routes' `catalog` is `veh` and `interface` is the catalog name; the grants
-      list `veh`) and the corpus `NOTES`.
+      list `veh`), the corpus `NOTES`, and the `catalogs == ["veh"]` assertion
+      of `each_region_carries_its_catalog_hash` in `crates/ridlc/tests/cli.rs`.
 - [ ] **Step 5: Run** `just test` — expected: PASS, including `layout.rs`
       (`examples/cabin` is one unit, so its layout is unchanged).
 - [ ] **Step 6: Gate**: the full `just build`.
@@ -1111,7 +1165,13 @@ fn two_source_packages_of_one_unit_share_one_region() {
 - Produces:
   - `diff_sets_in` builds, over the new side, an index of frozen numbers per
     unit: `(unit_of(package), number) -> (package name, shape key)`, and the
-    union of retired numbers per unit, and passes both to `diff_interfaces`.
+    union of retired numbers per unit, and passes both to `diff_interfaces`. The
+    index also carries one `taken` set per unit, shared across every package
+    pair of that unit and mutated as pairs are walked (or, equivalently, the
+    matching runs unit-wide before the per-package walks): a new-side shape that
+    a frozen number from another package of the unit claimed is never reported
+    as `DeclAdded` when its own package pair is walked, and a frozen old number
+    is matched at most once in the unit.
   - `diff_interfaces` pass 1 looks a frozen old number up in the old package's
     unit; a hit in another package of the unit is a pair: the change is
     `InterfaceRenamed` with path `{new package}/{new name}`, and the body
@@ -1126,8 +1186,12 @@ fn two_source_packages_of_one_unit_share_one_region() {
 ```rust
 #[test]
 fn a_frozen_number_moved_to_a_sibling_package_is_a_rename() {
-    // old: u.cluster { Speed number 1 frozen }; new: u.climate { Speed number 1 frozen }, u.cluster empty
-    let report = diff_sets(&[old_cluster], &[new_cluster, new_climate]);
+    // old: u.cluster { Speed number 1 frozen }, u.climate empty;
+    // new: u.cluster empty, u.climate { Speed number 1 frozen }; every package unit "u".
+    // u.climate is on both sides: a package present on the new side only is a
+    // package-level DeclAdded (lib.rs, the `new_by` loop), which is not what this
+    // test pins.
+    let report = diff_sets(&[old_cluster, old_climate], &[new_cluster, new_climate]);
     assert_eq!(categories(&report), [Category::InterfaceRenamed]);
     assert_eq!(report.changes[0].path, "u.climate/Speed");
     assert_eq!(report.verdict, Verdict::Compatible);
@@ -1151,7 +1215,8 @@ publish a baseline with `cluster.Speed 1`, move the interface to `climate` with
 `ridl lock --rename`, run `ridl baseline` again: exit 0.
 
 - [ ] **Step 2: Run** `cargo test -p ridl-diff` — expected: FAIL: the first test
-      reports `DeclRemoved` and `DeclAdded`.
+      reports `DeclRemoved` (`u.cluster/Speed`) and `DeclAdded`
+      (`u.climate/Speed`).
 - [ ] **Step 3: Implement** as the Interfaces block states; `diff_packages` (one
       pair, no context) keeps its behaviour by building the index over the one
       new package.
@@ -1194,6 +1259,9 @@ publish a baseline with `cluster.Speed 1`, move the interface to `climate` with
   65, 97, 698, 727
 - Modify: `docs/specification/ridl-family-overview.md` (its footer's list of
   sections to update when a reference changes: confirm nothing else is owed)
+- Modify: `docs/decisions/README.md` (lines 136 and 145, the ADR-0015 and
+  ADR-0016 summaries: "its package's `interfaces.lock`" to "its unit's
+  `interfaces.lock`")
 - Test: `just link-check`, `just doc-path-check`, `just story-id-check`,
   `just book-check`, `just check`
 
@@ -1205,10 +1273,13 @@ publish a baseline with `cluster.Speed 1`, move the interface to `climate` with
       others. Every amended ADR gets one line under `## Status`:
       `Amended 2026-10-08 — decision N: one sentence`.
 - [ ] **Step 3: Run**
-      `grep -rn "per package\|its package name\|package's interfaces.lock" docs/decisions docs/design docs/specification`
-      and confirm every remaining match is about a baseline snapshot, a
-      generated module, a codegen request or a plugin run (which stay per
-      package), not about a catalog, a lock, a number or a region.
+      `grep -rn "per package\|per-package\|its package name\|package's interfaces.lock" docs/decisions docs/design docs/specification`
+      (the hyphenated form is the one ADR-0016 line 397, the ridl reference line
+      1933, `docs/decisions/README.md`, `docs/design/README.md` and
+      `docs/specification/frame-specification.md` line 101 use) and confirm
+      every remaining match is about a baseline snapshot, a generated module, a
+      codegen request or a plugin run (which stay per package), not about a
+      catalog, a lock, a number or a region.
 - [ ] **Step 4: Gate**: `just check`, `just link-check`, `just doc-path-check`,
       `just story-id-check`, `just book-check`.
 - [ ] **Step 5: Commit**:
