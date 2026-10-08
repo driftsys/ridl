@@ -1313,6 +1313,11 @@ diag_codes! {
         MANI_013 = "MANI-013", Error,
             "nested manifest — a `ridl.toml` inside a unit's directory tree";
 
+        /// Two units declare the same source package. A source package belongs
+        /// to one unit; the second declaration is not loaded.
+        MANI_014 = "MANI-014", Error,
+            "a source package is declared by two units";
+
         /// A remote import could not be fetched (network failure, a non-2xx HTTP
         /// status, or a value that is not a fetchable `http(s)` URL).
         MANI_101 = "MANI-101", Error,

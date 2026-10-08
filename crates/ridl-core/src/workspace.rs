@@ -384,6 +384,9 @@ type LoadedFile = (InputFile, Vec<(String, TextRange)>);
 /// The accumulating state of one [`load_workspace`] run.
 #[derive(Default)]
 struct Loader {
+    /// Source package name to the unit that claimed it and that unit's
+    /// manifest directory.
+    claims: BTreeMap<String, (String, PathBuf)>,
     overlays: Vec<(PathBuf, Overlay, bool)>,
     sources: SourceMap,
     diagnostics: Vec<Diagnostic>,
@@ -638,7 +641,33 @@ impl Loader {
         source_files.sort();
         subdirs.sort();
 
+        let mut claimed_elsewhere = false;
         if !source_files.is_empty() {
+            let unit_dir = self.units.get(unit).cloned().unwrap_or_default();
+            match self.claims.get(name) {
+                Some((first, first_dir)) if first != unit => {
+                    claimed_elsewhere = true;
+                    let manifest = unit_dir.join("ridl.toml");
+                    let text = fs::read_to_string(&manifest)?;
+                    let file = self.sources.file_id(&path_string(&manifest), &text);
+                    self.diagnostics.push(error(
+                        DiagCode::MANI_014,
+                        file,
+                        package_name_range(&text),
+                        format!(
+                            "source package `{name}` is already declared by unit `{first}` (`{}`); unit `{unit}` declares it too, in `{}`. A source package belongs to one unit",
+                            first_dir.display(),
+                            unit_dir.display()
+                        ),
+                    ));
+                }
+                _ => {
+                    self.claims
+                        .insert(name.to_string(), (unit.to_string(), unit_dir));
+                }
+            }
+        }
+        if !source_files.is_empty() && !claimed_elsewhere {
             let mut files = Vec::new();
             for path in &source_files {
                 if let Some((input, _)) = self.load_file(db, path, Some(name))? {
@@ -900,6 +929,28 @@ fn member_entry_range(text: &str, member: &str) -> TextRange {
         Some(start) => byte_range(start, start + quoted.len()),
         None => byte_range(0, text.len()),
     }
+}
+
+/// The byte range of the quoted `name` value of a manifest's `[package]`
+/// table, or the whole file as a fallback.
+fn package_name_range(text: &str) -> TextRange {
+    let mut offset = 0;
+    for line in text.split_inclusive('\n') {
+        let value = line
+            .trim_start()
+            .strip_prefix("name")
+            .and_then(|rest| rest.trim_start().strip_prefix('='))
+            .map(str::trim_start)
+            .and_then(|value| value.strip_prefix('"').map(|inner| (value, inner)));
+        if let Some((value, inner)) = value
+            && let Some(len) = inner.find('"')
+        {
+            let start = offset + (line.len() - value.len());
+            return byte_range(start, start + len + 2);
+        }
+        offset += line.len();
+    }
+    byte_range(0, text.len())
 }
 
 /// The byte range of the `[workspace]` section header inside a manifest's
@@ -2757,5 +2808,76 @@ service:veh.common.climate 2
             .filter(|c| **c == "MANI-013")
             .count();
         assert_eq!(count, 1, "{:?}", codes(&loaded.diagnostics));
+    }
+
+    #[test]
+    fn a_root_package_already_claimed_by_a_sibling_tree_is_mani_014() {
+        let dir = TempDir::new("claimed-twice");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"base\", \"hmi\"]\n");
+        dir.write(
+            "base/ridl.toml",
+            "[package]\nname = \"com.example\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("base/hmi/x.ridl", "package com.example.hmi\n");
+        let second = "[package]\nname = \"com.example.hmi\"\nversion = \"1.0.0\"\n";
+        let second_path = dir.write("hmi/ridl.toml", second);
+        dir.write("hmi/y.ridl", "package com.example.hmi\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["MANI-014"]);
+        let diag = &loaded.diagnostics[0];
+        assert_eq!(
+            loaded.sources.path(diag.primary.file),
+            Some(path_string(&second_path).as_str())
+        );
+        let start = usize::from(diag.primary.range.start());
+        let end = usize::from(diag.primary.range.end());
+        assert_eq!(&second[start..end], "\"com.example.hmi\"");
+        assert!(
+            diag.message.contains("unit `com.example`")
+                && diag.message.contains("unit `com.example.hmi`"),
+            "{}",
+            diag.message
+        );
+        let packages = loaded.workspace.packages(&db);
+        let claimed: Vec<_> = packages
+            .iter()
+            .filter(|p| p.name(&db) == "com.example.hmi")
+            .collect();
+        assert_eq!(claimed.len(), 1);
+        assert_eq!(claimed[0].unit(&db), "com.example");
+    }
+
+    #[test]
+    fn two_units_with_a_shared_prefix_and_no_overlap_both_load() {
+        let dir = TempDir::new("shared-prefix");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"base\", \"hmi\"]\n");
+        dir.write(
+            "base/ridl.toml",
+            "[package]\nname = \"com.example\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("base/ids.typl", "package com.example\n");
+        dir.write(
+            "hmi/ridl.toml",
+            "[package]\nname = \"com.example.hmi\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("hmi/y.ridl", "package com.example.hmi\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert!(
+            loaded.diagnostics.is_empty(),
+            "{:?}",
+            codes(&loaded.diagnostics)
+        );
+        let units: std::collections::BTreeSet<String> = loaded
+            .workspace
+            .packages(&db)
+            .iter()
+            .map(|p| p.unit(&db).to_string())
+            .collect();
+        assert_eq!(
+            units,
+            ["com.example", "com.example.hmi"].map(String::from).into()
+        );
     }
 }
