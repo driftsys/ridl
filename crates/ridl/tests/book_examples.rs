@@ -557,7 +557,7 @@ fn parse_report(report: &str) -> Vec<Reported> {
 
 // ---------------------------------------------------------------- staging ---
 
-/// Writes the examples into `root` as a RIDL workspace: one member directory
+/// Writes the examples into `root` as a RIDL workspace: one flat member directory
 /// per declared package, one file per block. Returns the staged path of each
 /// example, in the same order as `examples`.
 fn stage(examples: &[Example], root: &Path) -> Vec<PathBuf> {
@@ -571,7 +571,7 @@ fn stage(examples: &[Example], root: &Path) -> Vec<PathBuf> {
 
     let mut staged = vec![PathBuf::new(); examples.len()];
     for (package, blocks) in &members {
-        let directory = root.join(package.replace('.', "/"));
+        let directory = root.join(package);
         std::fs::create_dir_all(&directory).expect("create the package directory");
         std::fs::write(
             directory.join("ridl.toml"),
@@ -593,7 +593,7 @@ fn stage(examples: &[Example], root: &Path) -> Vec<PathBuf> {
 
     let list = members
         .keys()
-        .map(|package| format!("\"{}\"", package.replace('.', "/")))
+        .map(|package| format!("\"{package}\""))
         .collect::<Vec<_>>()
         .join(", ");
     std::fs::write(
@@ -972,6 +972,27 @@ fn formatter_fixed_point(source: &str, profile: ridl_syntax::Profile, path: &Pat
     let _ = formatter_round_trip(source, profile, &path.display().to_string());
     ridl_fmt::format(source, profile, &ridl_fmt::FormatOptions::for_path(path))
         == ridl_fmt::FormatOutcome::Formatted(source.to_string())
+}
+
+#[test]
+fn stage_writes_one_flat_member_per_package() {
+    let example = |package: &str, line: usize| Example {
+        origin: "chapter.md".to_owned(),
+        fence_line: line,
+        language: "ridl".to_owned(),
+        allowed: BTreeSet::new(),
+        body: format!("package {package}\n"),
+        staging_body: format!("package {package}\n"),
+    };
+    let examples = [example("x", 1), example("x.y", 10)];
+    let temp = TempDir::new("flat-members");
+    let root = temp.path();
+    stage(&examples, root);
+    assert!(root.join("x/ridl.toml").is_file());
+    assert!(root.join("x.y/ridl.toml").is_file());
+    assert!(!root.join("x/y").exists());
+    let manifest = std::fs::read_to_string(root.join("ridl.toml")).unwrap();
+    assert_eq!(manifest, "[workspace]\nmembers = [\"x\", \"x.y\"]\n");
 }
 
 #[test]
