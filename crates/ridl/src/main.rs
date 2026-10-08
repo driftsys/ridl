@@ -999,8 +999,8 @@ fn provisional_number_message(
 }
 
 /// The published shape an interface-level `DeclRemoved` names, when the
-/// number it held is one the lock allocated (not 0) and the fresh package
-/// does not retire — the RIDL-412 shape. An interface-level change has a
+/// number it held is one the lock allocated (not 0) and no package of its
+/// unit in the fresh set declares or retires — the RIDL-412 shape. An interface-level change has a
 /// two-segment path and the walk's `interface` marker as its `before`; a
 /// service's own `DeclRemoved` carries `service` there, and a package's has
 /// one segment.
@@ -1024,11 +1024,15 @@ fn dropped_number<'a>(
     if number == 0 {
         return None;
     }
-    let retired = fresh
-        .iter()
-        .find(|package| package.name == pkg)
-        .is_some_and(|package| package.retired.iter().any(|entry| entry.number == number));
-    (!retired).then_some((package, shape))
+    // The number is kept when any package of the unit declares it — a
+    // rename across packages of one unit keeps it — or retires it.
+    let kept = ridl_ir::v2::packages_of_unit(ridl_ir::v2::unit_of(package), fresh).any(|member| {
+        member.retired.iter().any(|entry| entry.number == number)
+            || member
+                .shapes()
+                .any(|shape| !shape.interface.provisional && shape.interface.number == number)
+    });
+    (!kept).then_some((package, shape))
 }
 
 /// The RIDL-412 message: the name and number the baseline holds, and the

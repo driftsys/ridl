@@ -1238,6 +1238,51 @@ fn a_whole_interface_removed_is_refused_by_the_lock_not_the_tombstone_gate() {
     assert_eq!(before, after, "a failed compile rewrites nothing");
 }
 
+/// A rename across packages of one unit keeps the number, so the unit still
+/// declares it and the gate does not refuse the replacement (RIDL-412).
+#[test]
+fn an_interface_moved_to_another_package_of_the_unit_is_not_refused() {
+    let dir = TempDir::new("gate-cross-package-move");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "hmi.ridl",
+        "package veh.hmi\ntype Level: integer [0..9]\ninterface Session { signal s : Level @[100ms..1s] }\n",
+    );
+    let speed = |package: &str| {
+        format!(
+            "package {package}\nimport veh.hmi.Level\ninterface Speed {{ signal v : Level @[100ms..1s] }}\n"
+        )
+    };
+    dir.write("cluster/speed.ridl", &speed("veh.hmi.cluster"));
+    // The package keeps another interface, so it is still in the fresh set.
+    dir.write(
+        "cluster/gauge.ridl",
+        "package veh.hmi.cluster\nimport veh.hmi.Level\ninterface Gauge { signal g : Level @[100ms..1s] }\n",
+    );
+    let root = dir.path().to_path_buf();
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the fixture's lock is allocated: {stderr}");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the first publication: {stderr}");
+
+    std::fs::remove_file(root.join("cluster/speed.ridl")).expect("remove the old source");
+    dir.write("climate/speed.ridl", &speed("veh.hmi.climate"));
+    let (code, _, stderr) = ridl(&[
+        "lock".as_ref(),
+        root.as_os_str(),
+        "--rename".as_ref(),
+        "cluster.Speed=climate.Speed".as_ref(),
+    ]);
+    assert_eq!(code, 0, "the rename is recorded: {stderr}");
+
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the unit still declares the number:\n{stderr}");
+    assert!(!stderr.contains("RIDL-412"), "stderr:\n{stderr}");
+}
+
 // --- The published side the gate cannot resolve (driftsys/ridl#339) --------
 
 /// A declared `interface doors` beside an inline-form `service doors`: the
