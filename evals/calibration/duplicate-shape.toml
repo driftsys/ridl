@@ -3,16 +3,16 @@
 # Agreement sample seed: 20261005.
 # Sample algorithm: rank each agreed finding by SHA-256 of the UTF-8 string "20261005:duplicate-shape:<finding-id>" (lowercase hex, ascending); take the first 10.
 # Agreed findings: 15. Sampled: 10. Shortfall: 0.
-# Sampled: duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row3/Passenger/contract.ridl:1440-1455:0
+# Sampled: duplicate-shape:vss:vehicle.cabin.hvac.station.row3.passenger/contract.ridl:1440-1455:0
 # Sampled: duplicate-shape:ros2:nav2_msgs/interactions.ridl:5991-6003:0
 # Sampled: duplicate-shape:ros2:geometry_msgs/messages.typl:6412-6417:0
-# Sampled: duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row1/Passenger/contract.ridl:1440-1455:0
+# Sampled: duplicate-shape:vss:vehicle.cabin.hvac.station.row1.passenger/contract.ridl:1440-1455:0
 # Sampled: duplicate-shape:ros2:nav2_msgs/interactions.ridl:14368-14378:0
 # Sampled: duplicate-shape:mavlink:common/messages.typl:22691-22706:0
 # Sampled: duplicate-shape:ros2:geometry_msgs/messages.typl:7423-7430:0
 # Sampled: duplicate-shape:ros2:builtin_interfaces/messages.typl:850-854:0
-# Sampled: duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row4/Passenger/contract.ridl:1440-1455:0
-# Sampled: duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row4/Driver/contract.ridl:1434-1449:0
+# Sampled: duplicate-shape:vss:vehicle.cabin.hvac.station.row4.passenger/contract.ridl:1440-1455:0
+# Sampled: duplicate-shape:vss:vehicle.cabin.hvac.station.row4.driver/contract.ridl:1434-1449:0
 # Adjudication: done by Sebastien on 2026-10-06.
 # Agreement sample: Sebastien reviewed every sampled agreement above and agreed with each; the agreed `final` labels stand.
 # Adjudicated disagreements: 1. Sebastien set final = "accept" for duplicate-shape:mavlink:common/messages.typl:25115-25132:0.
@@ -144,9 +144,9 @@ kind = "struct"
 count = 2
 
 [[finding]]
-id = "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row1/Passenger/contract.ridl:1440-1455:0"
+id = "duplicate-shape:vss:vehicle.cabin.hvac.station.row1.passenger/contract.ridl:1440-1455:0"
 workspace = "vss"
-location = "Vehicle/Cabin/HVAC/Station/Row1/Passenger/contract.ridl:45"
+location = "vehicle.cabin.hvac.station.row1.passenger/contract.ridl:45"
 message = "`vehicle.cabin.hvac.station.row1.passenger.AirDistribution` has the same 3 variants as `vehicle.cabin.hvac.station.row1.driver.AirDistribution`"
 claude = "accept"
 claude_reason = "The identical AirDistribution enum is copy-pasted into every seat package; a designer would hoist one shared definition"
@@ -158,9 +158,9 @@ kind = "enum"
 count = 3
 
 [[finding]]
-id = "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row2/Driver/contract.ridl:1434-1449:0"
+id = "duplicate-shape:vss:vehicle.cabin.hvac.station.row2.driver/contract.ridl:1434-1449:0"
 workspace = "vss"
-location = "Vehicle/Cabin/HVAC/Station/Row2/Driver/contract.ridl:45"
+location = "vehicle.cabin.hvac.station.row2.driver/contract.ridl:45"
 message = "`vehicle.cabin.hvac.station.row2.driver.AirDistribution` has the same 3 variants as `vehicle.cabin.hvac.station.row1.driver.AirDistribution`"
 claude = "accept"
 claude_reason = "The identical AirDistribution enum is copy-pasted into every seat package; a designer would hoist one shared definition"
@@ -172,9 +172,9 @@ kind = "enum"
 count = 3
 
 [[finding]]
-id = "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row2/Passenger/contract.ridl:1440-1455:0"
+id = "duplicate-shape:vss:vehicle.cabin.hvac.station.row2.passenger/contract.ridl:1440-1455:0"
 workspace = "vss"
-location = "Vehicle/Cabin/HVAC/Station/Row2/Passenger/contract.ridl:45"
+location = "vehicle.cabin.hvac.station.row2.passenger/contract.ridl:45"
 message = "`vehicle.cabin.hvac.station.row2.passenger.AirDistribution` has the same 3 variants as `vehicle.cabin.hvac.station.row1.driver.AirDistribution`"
 claude = "accept"
 claude_reason = "The identical AirDistribution enum is copy-pasted into every seat package; a designer would hoist one shared definition"
@@ -186,9 +186,9 @@ kind = "enum"
 count = 3
 
 [[finding]]
-id = "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row3/Driver/contract.ridl:1434-1449:0"
+id = "duplicate-shape:vss:vehicle.cabin.hvac.station.row3.driver/contract.ridl:1434-1449:0"
 workspace = "vss"
-location = "Vehicle/Cabin/HVAC/Station/Row3/Driver/contract.ridl:45"
+location = "vehicle.cabin.hvac.station.row3.driver/contract.ridl:45"
 message = "`vehicle.cabin.hvac.station.row3.driver.AirDistribution` has the same 3 variants as `vehicle.cabin.hvac.station.row1.driver.AirDistribution`"
 claude = "accept"
 claude_reason = "The identical AirDistribution enum is copy-pasted into every seat package; a designer would hoist one shared definition"
@@ -200,9 +200,9 @@ kind = "enum"
 count = 3
 
 [[finding]]
-id = "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row3/Passenger/contract.ridl:1440-1455:0"
+id = "duplicate-shape:vss:vehicle.cabin.hvac.station.row3.passenger/contract.ridl:1440-1455:0"
 workspace = "vss"
-location = "Vehicle/Cabin/HVAC/Station/Row3/Passenger/contract.ridl:45"
+location = "vehicle.cabin.hvac.station.row3.passenger/contract.ridl:45"
 message = "`vehicle.cabin.hvac.station.row3.passenger.AirDistribution` has the same 3 variants as `vehicle.cabin.hvac.station.row1.driver.AirDistribution`"
 claude = "accept"
 claude_reason = "The identical AirDistribution enum is copy-pasted into every seat package; a designer would hoist one shared definition"
@@ -214,9 +214,9 @@ kind = "enum"
 count = 3
 
 [[finding]]
-id = "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row4/Driver/contract.ridl:1434-1449:0"
+id = "duplicate-shape:vss:vehicle.cabin.hvac.station.row4.driver/contract.ridl:1434-1449:0"
 workspace = "vss"
-location = "Vehicle/Cabin/HVAC/Station/Row4/Driver/contract.ridl:45"
+location = "vehicle.cabin.hvac.station.row4.driver/contract.ridl:45"
 message = "`vehicle.cabin.hvac.station.row4.driver.AirDistribution` has the same 3 variants as `vehicle.cabin.hvac.station.row1.driver.AirDistribution`"
 claude = "accept"
 claude_reason = "The identical AirDistribution enum is copy-pasted into every seat package; a designer would hoist one shared definition"
@@ -228,9 +228,9 @@ kind = "enum"
 count = 3
 
 [[finding]]
-id = "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row4/Passenger/contract.ridl:1440-1455:0"
+id = "duplicate-shape:vss:vehicle.cabin.hvac.station.row4.passenger/contract.ridl:1440-1455:0"
 workspace = "vss"
-location = "Vehicle/Cabin/HVAC/Station/Row4/Passenger/contract.ridl:45"
+location = "vehicle.cabin.hvac.station.row4.passenger/contract.ridl:45"
 message = "`vehicle.cabin.hvac.station.row4.passenger.AirDistribution` has the same 3 variants as `vehicle.cabin.hvac.station.row1.driver.AirDistribution`"
 claude = "accept"
 claude_reason = "The identical AirDistribution enum is copy-pasted into every seat package; a designer would hoist one shared definition"

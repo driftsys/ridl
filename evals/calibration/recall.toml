@@ -399,13 +399,13 @@ id = "review-0005:1"
 applicable = true
 reason = "The issue is the repetition of declarations across the station packages; this check reports repeated enum declarations (AirDistribution). FanSpeed and Temperature are not structs or enums, so this check cannot report them."
 findings = [
-  "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row1/Passenger/contract.ridl:1440-1455:0",
-  "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row2/Driver/contract.ridl:1434-1449:0",
-  "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row2/Passenger/contract.ridl:1440-1455:0",
-  "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row3/Driver/contract.ridl:1434-1449:0",
-  "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row3/Passenger/contract.ridl:1440-1455:0",
-  "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row4/Driver/contract.ridl:1434-1449:0",
-  "duplicate-shape:vss:Vehicle/Cabin/HVAC/Station/Row4/Passenger/contract.ridl:1440-1455:0",
+  "duplicate-shape:vss:vehicle.cabin.hvac.station.row1.passenger/contract.ridl:1440-1455:0",
+  "duplicate-shape:vss:vehicle.cabin.hvac.station.row2.driver/contract.ridl:1434-1449:0",
+  "duplicate-shape:vss:vehicle.cabin.hvac.station.row2.passenger/contract.ridl:1440-1455:0",
+  "duplicate-shape:vss:vehicle.cabin.hvac.station.row3.driver/contract.ridl:1434-1449:0",
+  "duplicate-shape:vss:vehicle.cabin.hvac.station.row3.passenger/contract.ridl:1440-1455:0",
+  "duplicate-shape:vss:vehicle.cabin.hvac.station.row4.driver/contract.ridl:1434-1449:0",
+  "duplicate-shape:vss:vehicle.cabin.hvac.station.row4.passenger/contract.ridl:1440-1455:0",
 ]
 
 [[check.issue]]
