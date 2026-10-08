@@ -56,14 +56,23 @@ version = "1.0.0"
 2. **No nested manifests.** A `ridl.toml` in a subdirectory of a unit's tree is
    an error. Today the loader skips such a directory without a diagnostic
    (`crates/ridl-core/src/workspace.rs`, `load_package_tree`). This needs a new
-   `MANI-` code.
+   `MANI-` code (MANI-013 is free). Two current users of nesting must change:
+   the `evals/corpus/vss` workspace nests members on purpose (decision 5), and
+   the book harness writes one `ridl.toml` per book package at `root/<a/b/c>/`
+   (`crates/ridl/tests/book_examples.rs`), which would nest if the book declared
+   both `x` and `x.y`. No such pair exists today; the harness is changed to
+   write a flat layout so that the case cannot arise.
 3. **One source package, one unit.** Across every unit that one build loads,
    remote imports included, a source package belongs to exactly one unit. A
    second unit that declares the same source package is an error. This needs a
    new `MANI-` code. Rule 1 prevents this inside one workspace when unit names
    do not overlap. The check is still needed for a remote import, and for two
    unit names where one is a prefix of the other (`com.example` and
-   `com.example.hmi`).
+   `com.example.hmi`). This needs a new `MANI-` code (MANI-014 is free). The
+   loader does not load remote imports yet (`materialize_imports` in
+   `crates/ridl-core/src/fetch.rs` is called only by its tests), so for now the
+   check covers the workspace. When remote imports are wired in, a fetched
+   import is one unit: its own `ridl.toml` and its tree, with rule 2 inside it.
 4. **What a unit produces is inferred from what it holds.** One unit can produce
    both artifacts:
    - interface shapes in any of its source packages give **one catalog**, named
@@ -84,24 +93,86 @@ version = "1.0.0"
   interface shape.
 - **`name`**: the unit name. Today it is the source package name
   (`crates/ridl-descriptor/src/lower.rs`).
-- **Interface names**: qualified by the source package relative to the unit
-  name, for example `cluster.SpeedDisplay`. An interface in the root source
-  package keeps its short name (`Session`). Today the name is always the short
-  name, which is ambiguous when two source packages of one unit declare the same
-  short name.
+- **Interface names**: a declared `interface` is qualified by its source package
+  relative to the unit name, for example `cluster.SpeedDisplay`. An interface in
+  the root source package keeps its short name (`Session`). Today the name is
+  always the short name, which is ambiguous when two source packages of one unit
+  declare the same short name.
+- **Inline-shape services** keep their full global dotted name, with no
+  unit-relative prefix. A service's dotted name is one global namespace, checked
+  workspace-wide (RIDL-140, ridl reference §14.5), and it does not have to start
+  with the unit name. The two forms cannot collide: a declared interface name is
+  relative and an inline shape is marked as inline.
 - **Numbers**: one numbering space per unit (see the next section).
-- **Hash**: SHA-256 over the reduced unit: every interface shape of the unit
-  with its number, and every declaration those shapes reach in any unit of the
-  build. This amends ADR-0014 decision 15, which hashes a reduced package.
+- **Hash**: SHA-256 over the reduced unit. The reduced unit is one IR `Package`
+  named after the unit. It holds every interface shape of the unit under its
+  catalog name (above), sorted by (number, catalog name), and every declaration
+  those shapes reach in any unit of the build, each under its full canonical
+  name (`com.example.hmi.cluster.Foo`). Today `reduced_package`
+  (`crates/ridl-ir/src/catalog_hash.rs`) writes the hashed package's own
+  declarations under bare names; that cannot work when two source packages of
+  one unit both declare `Foo`. Doc strings, `labels` and `deprecated` stay
+  blanked. This amends ADR-0014 decision 15. The golden hash test and the corpus
+  snapshots change.
+- **Scope of a hash change**: a change to any source package of a unit changes
+  the hash of the unit's one catalog, so every port bound to any interface of
+  the unit fails its catalog check until it is rebuilt. Today a change to one
+  source package leaves the catalogs of its sibling packages unchanged. This is
+  the intended semantics (decision 6).
 
 ### `interfaces.lock`
 
 - One `interfaces.lock` per unit, in the manifest directory. Today there is one
   per source package directory (ridl reference §11).
-- Its keys are the qualified interface names of the catalog
-  (`cluster.SpeedDisplay`, `service:climate.control` for an inline shape).
+- Its keys are the catalog names: `cluster.SpeedDisplay` for a declared
+  interface, `Session` in the root source package, and
+  `service:<full dotted
+  name>` for an inline shape, as today.
+- The key grammar changes. Today an interface key is one identifier
+  (`crates/ridl-core/src/interface_lock.rs`), so `cluster.SpeedDisplay` is
+  rejected. The parser, `ridl lock --rename` and `--retire`
+  (`crates/ridl/src/lock.rs`), and the merge driver (`ridl lock merge`) accept a
+  dotted relative name.
 - `ridl lock [PATH]` writes the lock of the unit that `PATH` is in.
 - The number stays 1-based and is now scoped per unit, not per source package.
+- **Numbering runs once per unit.** Today `number_interfaces`
+  (`crates/ridl-sem/src/check.rs`) runs inside the per-package query, starting
+  provisional numbers at the lock's `next` or 1 for each package, so two source
+  packages of one unit would get the same provisional number. A unit-level step
+  reads the unit's lock, gives each interface without an entry a provisional
+  number from `next` upward in byte order of its lock key, and then folds the
+  result into each source package's `Interface.number` and `Package.retired`.
+- A retired entry belongs to the source package that its relative name names.
+  `Package.retired` in the IR keeps short names, as today. The catalog
+  descriptor's `retired` list and the codegen model's `Catalog.retired` carry
+  the unit's whole list under catalog names.
+
+### The unit in the IR
+
+The hash, the system regions and `ridl diff` work on IR packages, and none of
+them can derive the unit from a package name: a prefix is not enough when
+`com.example` and `com.example.hmi` are two units, and `ridl diff` reads
+snapshots without a manifest. So the IR records the unit.
+
+- `v2::Package` gets a new field, `unit`: the unit name. The compiler fills it
+  for every package it loads. A new field follows ADR-0014's rule for adding a
+  field.
+- The baseline snapshots (`.ridl/baseline/<pkg>.ir.json`) carry the field, so
+  the old side of `ridl diff` knows its units without a manifest. A snapshot
+  written before this change has no `unit`, which is one more reason for the
+  re-baseline in the migration.
+- The catalog hash groups packages by `unit`. The rsdl lowering keys regions on
+  the interface's `unit`, not on its package name
+  (`crates/ridl-sem/src/rsdl/lower.rs`).
+
+### Single-file mode
+
+`ridl check x.ridl` on a file outside any manifest, and the LSP and the MCP
+server on such a file, load a synthetic package
+(`crates/ridl-core/src/workspace.rs`). That package is its own unit: the unit
+name is the file's `package` name, and the `interfaces.lock` beside the file is
+read as the unit's lock, as today. A file inside a manifest's tree belongs to
+that manifest's unit, whatever the entry.
 
 ### The runtime identity
 
@@ -156,18 +227,29 @@ files, runs `ridl lock` to number the unit, and publishes a new baseline with
 
 ## Impact
 
-| Area                     | Change                                                                                                                                                                                                                            |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ridl-core` loader       | rule 2 and rule 3 diagnostics; a unit boundary visible to later stages                                                                                                                                                            |
-| `ridl-sem`               | read one lock per unit; number per unit                                                                                                                                                                                           |
-| `ridl-ir`                | the reduced unit for the catalog hash; ADR-0014 decision 15                                                                                                                                                                       |
-| `ridl-descriptor`        | `lower` takes a unit, not a package; qualified interface names                                                                                                                                                                    |
-| `ridlc` / `ridl`         | one catalog file per unit; `ridl lock` writes the unit's lock; `ridl diff` groups the per-package snapshots by unit (decision 1)                                                                                                  |
-| `ridl-backend-rust`      | `CATALOG.name` is the unit name; `NUMBER` is the unit's number. Generated modules stay per source package                                                                                                                         |
-| `ridl-rt`                | no API change. The doc comment of `CatalogRef` ("one package's interfaces") changes to the unit                                                                                                                                   |
-| system artifact          | regions are per catalog, so there are fewer regions. No format change                                                                                                                                                             |
-| codegen plugins (Kotlin) | no structural change: generated packages stay per source package. `Catalog.package` in the codegen model carries the unit name, and the scope of each number changes (decision 2). A heads-up issue is filed on the Kotlin plugin |
-| `ridl-mcp`, `ridl-lsp`   | none expected beyond the new diagnostics                                                                                                                                                                                          |
+| Area                     | Change                                                                                                                                                                                                                                                                                                            |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ridl-core` loader       | rule 2 and rule 3 diagnostics; a unit boundary visible to later stages                                                                                                                                                                                                                                            |
+| `ridl-sem`               | read one lock per unit; number per unit                                                                                                                                                                                                                                                                           |
+| `ridl-ir`                | the reduced unit for the catalog hash; ADR-0014 decision 15                                                                                                                                                                                                                                                       |
+| `ridl-descriptor`        | `lower` takes a unit, not a package; qualified interface names                                                                                                                                                                                                                                                    |
+| `ridlc` / `ridl`         | one catalog file per unit; `ridl lock` writes the unit's lock; `ridl diff` groups the per-package snapshots by unit (decision 1)                                                                                                                                                                                  |
+| `ridl-backend-rust`      | `CATALOG.name` is the unit name; `NUMBER` is the unit's number. Generated modules stay per source package                                                                                                                                                                                                         |
+| `ridl-rt`                | no API change. The doc comment of `CatalogRef` ("one package's interfaces") changes to the unit                                                                                                                                                                                                                   |
+| system artifact          | regions are per catalog, so there are fewer regions. No format change                                                                                                                                                                                                                                             |
+| codegen plugins (Kotlin) | generated packages stay per source package. A plugin finds its region in the deployment section by `Catalog.package` (the unit name), not by `Model.name`. Region interface names become catalog names, while `Model.interfaces[i].name` stays short (decision 2). A heads-up issue is filed on the Kotlin plugin |
+| `ridl-mcp`, `ridl-lsp`   | the new diagnostics; single-file mode as above                                                                                                                                                                                                                                                                    |
+
+Fixtures and corpora that change:
+
+- `evals/corpus/vss` and its calibration records (decision 5).
+- `crates/ridlc/tests/corpus/rsdl-appendix-a`: one `[package]` with an empty
+  root and four source packages. It has two catalogs and two regions today and
+  one of each after the change; its snapshots change.
+- `crates/ridl-mcp/tests/fixtures/{ws,ws-v2,ws-diag}/a`, which hold a
+  subpackage.
+- The book harness (rule 2).
+- Every snapshot that carries a catalog hash.
 
 Records to amend when this lands:
 
@@ -180,6 +262,14 @@ Records to amend when this lands:
 - `docs/design/interaction-face.md` ("The catalog check": the name is the unit
   name).
 - The book's CLI reference for `ridl lock`, `ridl diff` and the catalog emit.
+- `docs/specification/rsdl-language-reference.md` §13 and vocabulary V-16 ("its
+  package name").
+- ADR-0022 and the comment in `crates/ridl-ir/proto/ridl/ir/v2/system.proto` for
+  regions ("its package name").
+- ADR-0015 and ADR-0016 where they say the lock is per package.
+- `docs/design/codegen-plugins.md` (the deployment section: region lookup).
+- The book: `rsdl.md`, `getting-started.md`, `codegen-plugins.md`, and the
+  `cli-reference.md` entries for `ridl lock`, `ridl baseline` and `ridl diff`.
 - The comment of `Catalog.package` in
   `crates/ridl-ir/proto/ridl/codegen/v1/model.proto`.
 
@@ -224,12 +314,35 @@ Records to amend when this lands:
    keeps its name and its number, and its comment changes: it carries the unit
    name, which is `CatalogRef.name`. Renaming the field to `name` was rejected:
    it breaks the generated accessors of every plugin and changes nothing on the
-   wire. If the Kotlin plugin uses `Catalog.package`, it needs only a new test
-   snapshot. The heads-up issue asks its maintainers to confirm this.
+   wire. Two things do change for a plugin. It finds its region in the
+   deployment section by `Catalog.package`, not by `Model.name`. And region
+   interface names become catalog names (`cluster.SpeedDisplay`), while
+   `Model.interfaces[i].name` stays short. The heads-up issue on the Kotlin
+   plugin states both.
 3. **The root source package can be empty.** A unit's manifest directory can
    hold only `ridl.toml` and `interfaces.lock`, with every source file in a
    subdirectory. The unit name is still the prefix of every source package and
    the catalog name, and interface names are qualified from it.
+
+4. **The IR records the unit.** `v2::Package` gets a `unit` field, filled by the
+   compiler and carried in the baseline snapshots (see "The unit in the IR").
+   Deriving the unit from a name prefix was rejected: it fails when one unit
+   name is a prefix of another, and `ridl diff` has no manifest for its old
+   side.
+5. **The vss corpus is re-cut.** `evals/corpus/vss` nests workspace members on
+   purpose, to mirror the VSS tree (for example member `Station` inside
+   `Vehicle/Cabin/HVAC`). Under rules 1 and 2 that is an error. Each member
+   moves to its own top-level directory and keeps its package name. The
+   calibration records are regenerated, and `evals/corpus/vss/PROVENANCE.md`
+   records the new layout. Relaxing rule 2 for workspace members was rejected:
+   `vehicle.cabin.hvac.station` would then belong to two units, which is an
+   error under rule 3.
+6. **A unit has one identity.** A change in any source package of a unit changes
+   the unit's catalog hash. This matches the release model: a unit is versioned
+   and released as a whole, and releasing one unit never changes another unit's
+   hash. Types that a unit reaches in another unit are part of its hash, as
+   today, because they are part of its wire contract. A unit whose parts change
+   at different rates is split into two units.
 
 ## Related
 
