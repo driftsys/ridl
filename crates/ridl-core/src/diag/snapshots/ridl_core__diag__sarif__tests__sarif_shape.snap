@@ -1032,6 +1032,16 @@ expression: log
               }
             },
             {
+              "id": "RIDL-416",
+              "name": "lock-in-subdirectory",
+              "shortDescription": {
+                "text": "`interfaces.lock` in a subdirectory of a unit is not read"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
               "id": "RSDL-305",
               "shortDescription": {
                 "text": "`instances` is not a parenthesised list of one or more camelCase names"
@@ -1599,7 +1609,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 160,
+          "ruleIndex": 161,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

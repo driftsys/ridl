@@ -14,10 +14,11 @@
 //! declaration in a file is TYPL-001. A bare `.typl` or `.ridl` file with no
 //! manifest anywhere up the tree loads in **single-file mode**: one synthetic
 //! package named from the file's declared package, exempt from TYPL-002 (the
-//! task 20 CLI contract). Every package directory — the bare file's directory
-//! included — is also read for an `interfaces.lock`, which rides on the
-//! [`Package`] as its [`PackageLock`]; a malformed one is RIDL-410 on the
-//! file's own line (lock design §2, §8).
+//! task 20 CLI contract). A unit's manifest directory is read for an
+//! `interfaces.lock`, which rides on every [`Package`] of the unit as its
+//! [`PackageLock`]; the bare file's directory is read the same way. A lock in
+//! any other directory is not read (RIDL-416), and a malformed one is
+//! RIDL-410 on the file's own line (lock design §2, §8).
 //!
 //! Problems in loaded content — manifest diagnostics, the law violations, a
 //! nested workspace (MANI-004), a broken member (MANI-008), a file that is
@@ -484,7 +485,8 @@ impl Loader {
                 // `[defaults]` ride on its packages; the workspace maps
                 // stay empty.
                 self.units.insert(name.clone(), root.to_path_buf());
-                self.load_package_tree(db, root, &name, &name, &imports, &defaults)?;
+                let lock = self.read_lock(root)?;
+                self.load_package_tree(db, root, &name, &name, &imports, &defaults, &lock)?;
             }
             ManifestKind::Workspace { members } => {
                 // ADR-0002 §5 step 3: the workspace root's `[imports]` and
@@ -575,6 +577,7 @@ impl Loader {
                 // a key the member leaves unset takes the workspace value.
                 let member_defaults = defaults.or(&self.workspace_defaults);
                 self.units.insert(name.clone(), workspace_root.join(member));
+                let lock = self.read_lock(&workspace_root.join(member))?;
                 self.load_package_tree(
                     db,
                     &workspace_root.join(member),
@@ -582,6 +585,7 @@ impl Loader {
                     &name,
                     &imports,
                     &member_defaults,
+                    &lock,
                 )?;
             }
         }
@@ -596,7 +600,11 @@ impl Loader {
     /// `imports`, the governing manifest's `[imports]`. Directories are
     /// visited in name order; hidden directories, symlinked directories
     /// (following them could revisit the tree in a cycle), and directories
-    /// with their own `ridl.toml` (separate package roots) are skipped.
+    /// with their own `ridl.toml` (separate package roots) are skipped. Every
+    /// package of the tree carries `lock`, the unit's `interfaces.lock` read
+    /// from the manifest directory; a lock in any other directory is not read
+    /// and is RIDL-416.
+    #[allow(clippy::too_many_arguments)]
     fn load_package_tree(
         &mut self,
         db: &mut RidlDatabase,
@@ -605,6 +613,7 @@ impl Loader {
         name: &str,
         imports: &BTreeMap<String, String>,
         defaults: &TimingDefaults,
+        lock: &Option<PackageLock>,
     ) -> io::Result<()> {
         let mut source_files = Vec::new();
         let mut subdirs = Vec::new();
@@ -674,7 +683,6 @@ impl Loader {
                     files.push(input);
                 }
             }
-            let lock = self.read_lock(dir)?;
             self.packages.push(Package::new(
                 &*db,
                 name.to_string(),
@@ -683,7 +691,7 @@ impl Loader {
                 PackageOrigin::WorkspaceMember,
                 imports.clone(),
                 defaults.clone(),
-                lock,
+                lock.clone(),
             ));
         }
 
@@ -712,6 +720,20 @@ impl Loader {
                 ));
                 continue;
             }
+            let ignored = subdir.join(interface_lock::FILE_NAME);
+            if ignored.is_file() {
+                let ignored_text = fs::read_to_string(&ignored).unwrap_or_default();
+                let ignored_id = self.sources.file_id(&path_string(&ignored), &ignored_text);
+                self.diagnostics.push(warning(
+                    DiagCode::RIDL_416,
+                    ignored_id,
+                    byte_range(0, 0),
+                    format!(
+                        "`{}` is an `interfaces.lock` inside the tree of unit `{unit}`; only the `interfaces.lock` beside the unit's `ridl.toml` is read, so this file is ignored",
+                        ignored.display()
+                    ),
+                ));
+            }
             self.load_package_tree(
                 db,
                 &subdir,
@@ -719,6 +741,7 @@ impl Loader {
                 &format!("{name}.{dir_name}"),
                 imports,
                 defaults,
+                lock,
             )?;
         }
         Ok(())
@@ -766,8 +789,8 @@ impl Loader {
         Ok(())
     }
 
-    /// Reads `dir/interfaces.lock` for the package rooted at `dir` (lock
-    /// design §2). An absent file is `None`. A malformed file — one that is
+    /// Reads `dir/interfaces.lock` for the unit whose manifest directory is
+    /// `dir`, or for the directory of a bare source file (lock design §2). An absent file is `None`. A malformed file — one that is
     /// not valid UTF-8 included — is RIDL-410 on the offending line of the
     /// lock file itself, through this loader's source map, at the empty range
     /// 0..0 when there is no line to point at (plan decision PD-3); the
@@ -978,6 +1001,13 @@ fn error(code: DiagCode, file: FileId, range: TextRange, message: String) -> Dia
         primary: Span { file, range },
         labels: Vec::new(),
         fixits: Vec::new(),
+    }
+}
+
+fn warning(code: DiagCode, file: FileId, range: TextRange, message: String) -> Diagnostic {
+    Diagnostic {
+        severity: Severity::Warning,
+        ..error(code, file, range, message)
     }
 }
 
@@ -2480,30 +2510,62 @@ service:veh.common.climate 2
         assert_eq!(lock.lock.next, 3);
     }
 
-    /// The file is per package (lock design §2): a subdirectory package reads
-    /// its own directory's lock, not its parent's.
+    /// The file is per unit: every package of the unit carries the lock of the
+    /// manifest directory.
     #[test]
-    fn a_subdirectory_package_reads_its_own_lock() {
-        let dir = TempDir::new("subdir-lock");
-        dir.write("ridl.toml", PACKAGE_MANIFEST);
-        dir.write("a.ridl", "package veh.common\ntype A: m\n");
-        dir.write("interfaces.lock", LOCK_TEXT);
-        dir.write("sub/b.ridl", "package veh.common.sub\ntype B: m\n");
+    fn every_package_of_a_unit_carries_the_lock_of_the_manifest_directory() {
+        let dir = TempDir::new("unit-lock");
+        dir.write(
+            "ridl.toml",
+            "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("hmi.ridl", "package veh.hmi\ntype A: m\n");
+        let lock_path = dir.write("interfaces.lock", "next 1\n");
+        dir.write("cluster/speed.ridl", "package veh.hmi.cluster\ntype B: m\n");
 
         let mut db = RidlDatabase::default();
         let loaded = load_workspace(&mut db, dir.path()).expect("the tree loads");
         assert_eq!(loaded.diagnostics, Vec::new());
         let packages = loaded.workspace.packages(&db).clone();
         assert_eq!(packages.len(), 2);
-        assert!(
-            packages[0].lock(&db).is_some(),
-            "the root package has a lock"
+        for package in &packages {
+            let lock = package
+                .lock(&db)
+                .as_ref()
+                .unwrap_or_else(|| panic!("`{}` has the unit's lock", package.name(&db)));
+            assert_eq!(lock.path, path_string(&lock_path));
+        }
+    }
+
+    /// Only the lock beside the manifest is read: a lock in a subdirectory is
+    /// ignored, even a malformed one, and reported as a warning.
+    #[test]
+    fn a_lock_in_a_subdirectory_is_not_read() {
+        let dir = TempDir::new("subdir-lock-ignored");
+        dir.write(
+            "ridl.toml",
+            "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
         );
+        dir.write("hmi.ridl", "package veh.hmi\ntype A: m\n");
+        dir.write("cluster/speed.ridl", "package veh.hmi.cluster\ntype B: m\n");
+        let ignored = dir.write("cluster/interfaces.lock", "x");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the tree loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["RIDL-416"]);
+        let diag = &loaded.diagnostics[0];
+        assert_eq!(diag.severity, Severity::Warning);
         assert_eq!(
-            *packages[1].lock(&db),
-            None,
-            "the subdirectory package has none"
+            loaded.sources.path(diag.primary.file),
+            Some(path_string(&ignored).as_str())
         );
+        assert_eq!(diag.primary.range, byte_range(0, 0));
+        assert!(diag.message.contains("unit `veh.hmi`"), "{}", diag.message);
+        let packages = loaded.workspace.packages(&db).clone();
+        assert_eq!(packages.len(), 2);
+        for package in &packages {
+            assert_eq!(*package.lock(&db), None);
+        }
     }
 
     // Root discovery from a member (ADR-0002 §4, issue #529).
