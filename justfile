@@ -574,6 +574,17 @@ book-check root="":
         trap 'rm -rf "$scratch"' EXIT
         cp "$1/book.toml" "$scratch/"
         cp -R "$1/docs" "$scratch/docs"
+        # A chapter may include a Rust source from examples/ by anchor, so
+        # the code it shows is the code `just demo` builds. Copy those sources
+        # too, and nothing else from examples/: no build output, no generated
+        # crate.
+        if [ -d "$1/examples" ]; then
+            (cd "$1" && find examples -name '*.rs' -not -path '*/target/*' -not -path '*/generated/*') |
+                while IFS= read -r source; do
+                    mkdir -p "$scratch/$(dirname "$source")"
+                    cp "$1/$source" "$scratch/$source"
+                done
+        fi
         root_docs="$scratch/root-docs.txt"
         (cd "$scratch/docs" && find . -type f | LC_ALL=C sort) >"$root_docs"
         if ! mdbook build "$scratch" 2>"$scratch/mdbook.err"; then
@@ -604,7 +615,7 @@ book-check root="":
     # The fixture. It builds books of its own and runs this recipe over each
     # as a child process, given a root, which is the form that runs the gate
     # and nothing else. It runs no git command, so the git environment a hook
-    # exports does not reach it. Five cases:
+    # exports does not reach it. Six cases:
     #
     # 1. A whole book, whose chapters all exist. The gate has to pass.
     # 2. A chapter that includes a file that does not exist. mdBook logs an
@@ -622,6 +633,9 @@ book-check root="":
     #    deletes a tree file and then runs the real mdbook. The gate has to
     #    pass, because the pre-build file list check 3 compares against comes
     #    from the copy, not from reading the tree again after the build.
+    # 6. A chapter that includes a Rust source from examples/ by anchor. The
+    #    gate has to pass, because it copies the examples/ sources beside
+    #    docs/.
     fixtures() (
         work="$(mktemp -d)"
         trap 'rm -rf "$work"' EXIT
@@ -728,6 +742,22 @@ book-check root="":
         chmod +x "$stand_in/mdbook"
         if ! PATH="$stand_in:$PATH" "{{just_executable()}}" book-check "$race" >"$run" 2>&1; then
             echo "book-check: the gate reported a file the tree lost during the build as one mdBook created, so it read the tree again after the build instead of using the pre-build copy:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+
+        # Case 6: a chapter that includes a Rust source from examples/ by
+        # anchor. The gate copies only docs/ and the examples/ sources, so this
+        # pins the second copy: without it mdBook logs an `ERROR` for the
+        # missing file, and the gate fails.
+        example="$work/example"
+        mkdir -p "$example/docs/book" "$example/examples/demo/src"
+        printf '%s\n' '[book]' 'title = "example"' 'src = "docs/book"' > "$example/book.toml"
+        printf '%s\n' '# Summary' '' '- [Example](example.md)' > "$example/docs/book/SUMMARY.md"
+        printf '%s\n' '# Example' '' '```rust' '{{{{#include ../../examples/demo/src/main.rs:part}}' '```' > "$example/docs/book/example.md"
+        printf '%s\n' 'fn main() {' '    // ANCHOR: part' '    let shown = 1;' '    // ANCHOR_END: part' '}' > "$example/examples/demo/src/main.rs"
+        if ! "{{just_executable()}}" book-check "$example" >"$run" 2>&1; then
+            echo "book-check: the gate did not pass over a fixture whose chapter includes a source from examples/:" >&2
             cat "$run" >&2
             exit 1
         fi
