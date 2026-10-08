@@ -246,14 +246,17 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-sem/src/check.rs",
-        lines: 11,
+        lines: 12,
         why: "the lowering that PRODUCES `Package.interfaces` (a service's \
               inline shape is produced by `lower_service_inline` into its \
-              `Service.shapes` slot); `interface_member_names`, which walks \
-              `SourceFile::interfaces()` to find one interface a resolved \
-              symbol already points at — an inline shape has no symbol, so \
-              the RIDL-144 walk cannot need `shapes()`; plus nine test \
-              assertions over the named store",
+              `Service.shapes` slot); the numbering fold of `check_package`, \
+              which writes each shape's number through `&mut` access \
+              `shapes()` cannot yield and walks the inline shapes of \
+              `Service.shapes` beside it; `interface_member_names`, which \
+              walks `SourceFile::interfaces()` to find one interface a \
+              resolved symbol already points at — an inline shape has no \
+              symbol, so the RIDL-144 walk cannot need `shapes()`; plus nine \
+              test assertions over the named store",
     },
     Allowed {
         path: "crates/ridl-sem/src/rsdl/lower.rs",

@@ -328,12 +328,12 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         {
           "name": "veh.diag.access",
           "inline": true,
-          "number": 1,
+          "number": 3,
           "provisional": true,
           "service": "veh.diag.access"
         }
       ],
-      "hash": "SFm0HawHfJ+vAUAccZTPTZzjqu+OzHwsezXib4litgg="
+      "hash": "fzjdDWaTWwHuQ0iKPfqbbIGK6/e80fNB2HTqSC46vz4="
     }
   ],
   "distributions": [
@@ -686,7 +686,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         {
           "catalog": "veh.diag",
-          "interfaceNumber": 1,
+          "interfaceNumber": 3,
           "memberOrdinal": 1,
           "interface": "veh.diag.access",
           "member": "readFaults",
@@ -1113,7 +1113,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         {
           "catalog": "veh.diag",
-          "interfaceNumber": 1,
+          "interfaceNumber": 3,
           "memberOrdinal": 1,
           "interface": "veh.diag.access",
           "member": "readFaults",

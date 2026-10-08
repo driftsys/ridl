@@ -1536,7 +1536,7 @@ ridl check . ; echo "exit: $?"
 ```
 
 ```text
-error[RIDL-409]: `Zone` is a live entry of `interfaces.lock` with no declaration in the package: run `ridl lock . --rename Zone=New` when a declaration without an entry, `New`, is this interface under a new name, or `ridl lock . --retire Zone` when the interface is gone
+error[RIDL-409]: `Zone` is a live entry of `interfaces.lock` with no declaration in the unit: run `ridl lock . --rename Zone=New` when a declaration without an entry, `New`, is this interface under a new name, or `ridl lock . --retire Zone` when the interface is gone
   ┌─ ./interfaces.lock:4:1
   │
 4 │ Zone 2

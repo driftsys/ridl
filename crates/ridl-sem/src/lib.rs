@@ -28,7 +28,9 @@ pub mod testgen;
 pub mod ucum;
 pub mod workspace;
 
-pub use check::{CheckedPackage, ConstValue, check_package, const_value};
+pub use check::{
+    CheckedPackage, ConstValue, UnitNumbering, check_package, const_value, unit_numbering,
+};
 pub use resolve::{
     LinkError, LinkTarget, Resolution, Symbol, SymbolKind, doc_link_members, resolve_doc_link,
     resolve_package,

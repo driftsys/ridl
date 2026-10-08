@@ -18,3 +18,8 @@ each surface set, the grants, and the installation of `Adas` and `Hmi` — are
 all in it. The deployments are in file order, so `Bench` comes first. Each of
 the two regions, `veh.adas` and `veh.diag`, carries its catalog hash, the hash
 `ridlc build --emit catalog` writes in that catalog's descriptor.
+
+The interface numbers are one space for the unit `veh`, in byte order of the
+lock keys: `adas.CruiseControl` is 1, `adas.LaneAssist` is 2, and the inline
+shape of `service veh.diag.access`, keyed `service:veh.diag.access`, is 3. So
+the one shape of `veh.diag` is number 3, not 1.

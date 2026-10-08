@@ -1339,7 +1339,7 @@ fn version_flag_exits_zero() {
 
 /// A live `interfaces.lock` entry with no declaration is RIDL-409, exit 1,
 /// reported on the entry's own line of the lock file and naming `ridl lock`
-/// with the package directory (lock design §4, §8; plan decisions PD-3, PD-4).
+/// with the unit directory (lock design §4, §8; plan decisions PD-3, PD-4).
 #[test]
 fn check_orphan_lock_entry_exits_one_with_ridl_409() {
     let dir = TempDir::new("check-orphan");
@@ -1362,7 +1362,7 @@ fn check_orphan_lock_entry_exits_one_with_ridl_409() {
     );
     let expected = format!(
         "error[RIDL-409]: `Legacy` is a live entry of `interfaces.lock` with no declaration in \
-         the package: run `ridl lock {} --retire Legacy` to record that the interface is gone",
+         the unit: run `ridl lock {} --retire Legacy` to record that the interface is gone",
         dir.path().display()
     );
     assert!(stderr.contains(&expected), "stderr:\n{stderr}");

@@ -25,7 +25,7 @@
 //!   [`crate::init`]. A named type whose init is neither declared nor derivable
 //!   is marked `{ derivable: false }` and reported as TYPL-115 (info).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 use std::sync::{LazyLock, Mutex, PoisonError};
 
@@ -67,13 +67,21 @@ pub struct CheckedPackage {
     pub diagnostics: Vec<Diagnostic>,
 }
 
-/// Checks `pkg` and lowers it to IR v2 (typl reference §4–§12, §16.2–§16.3).
+/// Checks `pkg` and lowers it to IR v2 (typl reference §4–§12, §16.2–§16.3)
+/// without the interface identity fold: every interface shape carries
+/// `number: 0, provisional: true`, `retired` is empty, and no RIDL-409 is
+/// reported. [`check_package`] adds the unit's numbering on top.
+///
+/// The split keeps the per-package work in one memoized query while the
+/// numbering, which reads every package of the unit, runs once per unit in
+/// [`unit_numbering`]: this query never calls [`check_package`], so the two
+/// cannot form a cycle.
 ///
 /// `std` is the embedded `ridl.std` package, threaded in exactly as
 /// [`resolve_package`] takes it (its constructor needs `&mut RidlDatabase`,
 /// which a tracked query cannot hold).
 #[salsa::tracked(returns(clone))]
-pub fn check_package(
+pub(crate) fn lower_package(
     db: &dyn salsa::Database,
     ws: Workspace,
     pkg: Package,
@@ -90,13 +98,6 @@ pub fn check_package(
         .iter()
         .map(|file| sources.file_id(file.path(db), file.text(db)))
         .collect();
-
-    // The package's `interfaces.lock`, when it has one, is interned last, so
-    // a lock diagnostic (RIDL-409) carries the index `files.len()`. Every
-    // renderer that remaps this pass's diagnostics pushes the lock's own id
-    // last in the same way (plan decision PD-12).
-    let lock = pkg.lock(db).as_ref();
-    let lock_file = lock.map(|lock| sources.file_id(&lock.path, &lock.text));
 
     // Resolve the package timing defaults once: `[defaults].timing` for
     // signals and events (ridl §9.1), and `[defaults].command_timing` and
@@ -245,18 +246,127 @@ pub fn check_package(
     // The doc lints (ADR-0026) over the package's `.typl` and `.ridl` files.
     doc_lint::lint_package(&mut checker, &files);
 
-    // The interface identity fold (lock design §3, §4, §8): every declared
-    // interface and every inline shape gets its number from the package's
-    // `interfaces.lock`, or a provisional one when it has no entry, and every
-    // live entry with no declaration is RIDL-409 on its own line of the lock.
-    let numbering = number_interfaces(lock.map(|lock| &lock.lock), &mut interfaces, &mut services);
-    if let (Some(lock), Some(lock_file)) = (lock, lock_file) {
-        let package_dir = package_dir(&lock.path);
+    CheckedPackage {
+        ir: v2::Package {
+            name: package_name,
+            decls,
+            interfaces,
+            services,
+            retired: Vec::new(),
+            unit: pkg.unit(db).clone(),
+        },
+        diagnostics: checker.diagnostics,
+    }
+}
+
+/// Checks `pkg` and lowers it to IR v2 (typl reference §4–§12, §16.2–§16.3),
+/// every interface shape numbered in its unit's one numbering space.
+///
+/// The lowering is [`lower_package`]. The interface identity fold (lock
+/// design §3, §4, §8) runs once per unit in [`unit_numbering`]; this query
+/// folds the unit's result into the package: each shape takes the number of
+/// its lock key (the catalog name, [`v2::relative_name`], for a declared
+/// interface; the service's dotted name for an inline shape),
+/// `Package.retired` takes the retired entries that name this package, and
+/// the unit's anchor package reports one RIDL-409 per live entry with no
+/// declaration, on the entry's line of the unit's lock.
+///
+/// A package outside `ws` — the embedded `ridl.std` checked on its own, or
+/// the language server's overlay for a file outside the workspace — is a
+/// unit of its own and is numbered alone, as a single-file package is.
+///
+/// `std` is the embedded `ridl.std` package, threaded in exactly as
+/// [`resolve_package`] takes it.
+#[salsa::tracked(returns(clone))]
+pub fn check_package(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    pkg: Package,
+    std: Package,
+) -> CheckedPackage {
+    let mut checked = lower_package(db, ws, pkg, std);
+    let unit = pkg.unit(db);
+    let package_name = pkg.name(db);
+    let lock = pkg.lock(db).as_ref();
+    let (numbering, unit_packages) = if ws.packages(db).contains(&pkg) {
+        let members = ws
+            .packages(db)
+            .iter()
+            .filter(|member| member.unit(db) == unit)
+            .map(|member| member.name(db).clone())
+            .collect();
+        (unit_numbering(db, ws, unit.clone(), std), members)
+    } else {
+        let alone = number_unit(unit, lock.map(|lock| &lock.lock), &[&checked.ir]);
+        (alone, vec![package_name.clone()])
+    };
+
+    let number = |interface: &mut v2::Interface, key: &LockKey| {
+        let (number, provisional) = numbering.numbers[key];
+        interface.number = number;
+        interface.provisional = provisional;
+    };
+    for interface in &mut checked.ir.interfaces {
+        let key = LockKey::Interface(v2::relative_name(unit, package_name, &interface.name));
+        number(interface, &key);
+    }
+    for service in &mut checked.ir.services {
+        let key = LockKey::Service(service.name.clone());
+        for slot in &mut service.shapes {
+            if let Some(v2::service_shape::Kind::Inline(inline)) = slot.kind.as_mut() {
+                number(inline, &key);
+            }
+        }
+    }
+
+    // A retired entry belongs to the source package its relative name names,
+    // under its short name. The anchor carries the entries no package of the
+    // unit can: a `service:` entry, and an interface entry whose package is
+    // not in the unit, each spelled as the lock spells it.
+    let is_anchor = numbering.anchor == *package_name;
+    for (key, number) in &numbering.retired {
+        let name = match key {
+            LockKey::Interface(name) => {
+                let (owner, short) = match name.rsplit_once('.') {
+                    Some((dir, short)) => (format!("{unit}.{dir}"), short),
+                    None => (unit.clone(), name.as_str()),
+                };
+                if owner == *package_name {
+                    short.to_string()
+                } else if is_anchor && !unit_packages.contains(&owner) {
+                    key.to_string()
+                } else {
+                    continue;
+                }
+            }
+            LockKey::Service(_) if is_anchor => key.to_string(),
+            LockKey::Service(_) => continue,
+        };
+        checked.ir.retired.push(v2::RetiredInterface {
+            name,
+            number: *number,
+        });
+    }
+
+    if let Some(lock) = lock
+        && is_anchor
+    {
+        // The unit's `interfaces.lock` is interned after the package's own
+        // files, so a lock diagnostic carries the index `files.len()`. Every
+        // renderer that remaps this pass's diagnostics pushes the lock's own
+        // id last in the same way (plan decision PD-12). Only the position
+        // matters here, so the texts are not copied.
+        let mut sources = SourceMap::new();
+        for file in pkg.files(db) {
+            sources.file_id(file.path(db), "");
+        }
+        let lock_file = sources.file_id(&lock.path, "");
+        let unit_dir = unit_dir(&lock.path);
         for entry in &numbering.orphans {
-            checker.diagnostics.push(Diagnostic {
+            checked.diagnostics.push(Diagnostic {
                 code: DiagCode::RIDL_409,
                 severity: Severity::Error,
-                message: orphan_entry_message(&entry.key, &package_dir, numbering.any_provisional),
+                message: orphan_entry_message(&entry.key, &unit_dir, numbering.any_provisional),
                 primary: Span {
                     file: lock_file,
                     range: entry.range,
@@ -266,110 +376,152 @@ pub fn check_package(
             });
         }
     }
-
-    CheckedPackage {
-        ir: v2::Package {
-            name: package_name,
-            decls,
-            interfaces,
-            services,
-            retired: numbering.retired,
-            unit: pkg.unit(db).clone(),
-        },
-        diagnostics: checker.diagnostics,
-    }
+    checked
 }
 
-/// What the interface identity fold ([`number_interfaces`]) found besides the
-/// numbers it wrote into the IR.
-struct Numbering {
-    /// The lock's retired entries in number order — `Package.retired` (lock
-    /// design §9), the key spelled as the lock spells it (plan decision PD-2).
-    retired: Vec<v2::RetiredInterface>,
-    /// The live entries with no declaration, in file order: one RIDL-409 each
-    /// (lock design §4, §8).
-    orphans: Vec<LockEntry>,
-    /// Whether some declaration got a provisional number — the condition that
+/// The interface identity fold of one unit (lock design §3, §4, §8): what
+/// [`unit_numbering`] found, which [`check_package`] folds into each package
+/// of the unit.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnitNumbering {
+    /// Every interface shape of the unit, by its lock key, with its number
+    /// and whether the number is provisional.
+    pub numbers: BTreeMap<LockKey, (u32, bool)>,
+    /// The lock's retired entries in number order, the key spelled as the
+    /// lock spells it (plan decision PD-2).
+    pub retired: Vec<(LockKey, u32)>,
+    /// The live entries with no declaration in the unit, in file order: one
+    /// RIDL-409 each, reported by the anchor package.
+    pub orphans: Vec<LockEntry>,
+    /// Whether some shape got a provisional number — the condition that
     /// makes RIDL-409 name `--rename` beside `--retire`.
-    any_provisional: bool,
+    pub any_provisional: bool,
+    /// The anchor package of the unit: the source package named like the
+    /// unit when it exists, else the first package of the unit in byte order
+    /// of name. It reports the unit's RIDL-409 diagnostics and carries the
+    /// retired entries that name no package of the unit.
+    pub anchor: String,
 }
 
-/// Gives every declared interface and every service's inline shape its
-/// `number` and `provisional` flag (lock design §3).
+/// Numbers every interface shape of the unit `unit` once, over
+/// [`lower_package`] of every package of `ws` that belongs to the unit.
 ///
-/// A shape whose key — the interface's name, or `service:` followed by the
-/// service's dotted name for an inline shape — has a live entry in `lock` is
-/// frozen at the entry's number. Every other shape is provisional: it takes
-/// the numbers from the lock's `next` upward (from 1 with no lock), in byte
-/// order of the name, an interface before an inline shape spelled the same.
-/// The order is the names', never the files', so a file rename or move
-/// changes no provisional number. A retired entry does not freeze anything:
-/// its name is free, and a declaration under it is a new interface (lock
-/// design §4).
-fn number_interfaces(
-    lock: Option<&InterfaceLock>,
-    interfaces: &mut [v2::Interface],
-    services: &mut [v2::Service],
-) -> Numbering {
-    let mut shapes: Vec<(LockKey, &mut v2::Interface)> = interfaces
-        .iter_mut()
-        .map(|interface| (LockKey::Interface(interface.name.clone()), interface))
+/// The unit's lock is the one every package of the unit carries, read by the
+/// loader from the manifest directory.
+#[salsa::tracked(returns(clone))]
+pub fn unit_numbering(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    unit: String,
+    std: Package,
+) -> UnitNumbering {
+    let packages: Vec<Package> = ws
+        .packages(db)
+        .iter()
+        .copied()
+        .filter(|pkg| *pkg.unit(db) == unit)
         .collect();
-    for service in services.iter_mut() {
-        let key = LockKey::Service(service.name.clone());
-        for slot in service.shapes.iter_mut() {
-            if let Some(v2::service_shape::Kind::Inline(inline)) = slot.kind.as_mut() {
-                shapes.push((key.clone(), inline));
-            }
-        }
-    }
+    let lock = packages
+        .first()
+        .and_then(|pkg| pkg.lock(db).as_ref())
+        .map(|lock| &lock.lock);
+    let lowered: Vec<CheckedPackage> = packages
+        .iter()
+        .map(|pkg| lower_package(db, ws, *pkg, std))
+        .collect();
+    let irs: Vec<&v2::Package> = lowered.iter().map(|checked| &checked.ir).collect();
+    number_unit(&unit, lock, &irs)
+}
+
+/// Gives every interface shape of `packages`, the lowered packages of the
+/// unit `unit`, its number (lock design §3).
+///
+/// A shape whose lock key — the catalog name for a declared interface, or
+/// `service:` followed by the service's dotted name for an inline shape — has
+/// a live entry in `lock` is frozen at the entry's number. Every other shape
+/// is provisional: it takes the numbers from the lock's `next` upward (from 1
+/// with no lock), in byte order of the key's name, an interface before an
+/// inline shape spelled the same. The order is the keys', never the files' or
+/// the packages', so a file rename or move changes no provisional number. A
+/// retired entry does not freeze anything: its name is free, and a
+/// declaration under it is a new interface (lock design §4).
+fn number_unit(
+    unit: &str,
+    lock: Option<&InterfaceLock>,
+    packages: &[&v2::Package],
+) -> UnitNumbering {
+    let anchor = packages
+        .iter()
+        .map(|package| package.name.as_str())
+        .find(|name| *name == unit)
+        .or_else(|| packages.iter().map(|package| package.name.as_str()).min())
+        .unwrap_or(unit)
+        .to_string();
+
+    let mut keys: Vec<LockKey> = packages
+        .iter()
+        .flat_map(|package| {
+            package.shapes().map(|shape| {
+                if shape.is_inline() {
+                    LockKey::Service(shape.name.to_string())
+                } else {
+                    LockKey::Interface(package.catalog_name(&shape))
+                }
+            })
+        })
+        .collect();
     // Byte order of the name; the interface first when an interface and an
     // inline shape are spelled the same (`interface cabin`, `service cabin`).
-    shapes.sort_by(|(a, _), (b, _)| provisional_order(a).cmp(&provisional_order(b)));
+    keys.sort_by(|a, b| provisional_order(a).cmp(&provisional_order(b)));
 
     let mut next = lock.map_or(1, |lock| lock.next);
     let mut any_provisional = false;
-    let mut declared: HashSet<&LockKey> = HashSet::new();
-    for (key, interface) in &mut shapes {
-        match lock.and_then(|lock| lock.live(key)) {
-            Some(entry) => {
-                interface.number = entry.number;
-                interface.provisional = false;
-            }
+    let mut numbers = BTreeMap::new();
+    for key in keys {
+        if numbers.contains_key(&key) {
+            // One dotted service name declared inline in two packages: the
+            // duplicate is RIDL-140, reported by the service catalog; both
+            // shapes take the one number.
+            continue;
+        }
+        let number = match lock.and_then(|lock| lock.live(&key)) {
+            Some(entry) => (entry.number, false),
             None => {
-                interface.number = next;
-                interface.provisional = true;
                 next += 1;
                 any_provisional = true;
+                (next - 1, true)
             }
-        }
+        };
+        numbers.insert(key, number);
     }
-    declared.extend(shapes.iter().map(|(key, _)| key));
 
     let Some(lock) = lock else {
-        return Numbering {
+        return UnitNumbering {
+            numbers,
             retired: Vec::new(),
             orphans: Vec::new(),
             any_provisional,
+            anchor,
         };
     };
-    let mut retired: Vec<&LockEntry> = lock.entries.iter().filter(|entry| entry.retired).collect();
-    retired.sort_by_key(|entry| entry.number);
-    Numbering {
-        retired: retired
-            .into_iter()
-            .map(|entry| v2::RetiredInterface {
-                name: entry.key.to_string(),
-                number: entry.number,
-            })
-            .collect(),
+    let mut retired: Vec<(LockKey, u32)> = lock
+        .entries
+        .iter()
+        .filter(|entry| entry.retired)
+        .map(|entry| (entry.key.clone(), entry.number))
+        .collect();
+    retired.sort_by_key(|(_, number)| *number);
+    UnitNumbering {
         orphans: lock
             .entries
             .iter()
-            .filter(|entry| !entry.retired && !declared.contains(&entry.key))
+            .filter(|entry| !entry.retired && !numbers.contains_key(&entry.key))
             .cloned()
             .collect(),
+        numbers,
+        retired,
         any_provisional,
+        anchor,
     }
 }
 
@@ -382,10 +534,10 @@ fn provisional_order(key: &LockKey) -> (&str, bool) {
     }
 }
 
-/// The package directory `ridl lock` takes, as the loader recorded it: the
-/// parent directory of the lock file's path (plan decision PD-4), or `.` when
-/// the path has none.
-fn package_dir(lock_path: &str) -> String {
+/// The unit directory `ridl lock` takes, as the loader recorded it: the
+/// parent directory of the lock file's path, which is the manifest directory
+/// (plan decision PD-4), or `.` when the path has none.
+fn unit_dir(lock_path: &str) -> String {
     match Path::new(lock_path).parent() {
         Some(dir) if !dir.as_os_str().is_empty() => dir.to_string_lossy().into_owned(),
         _ => ".".to_string(),
@@ -394,23 +546,23 @@ fn package_dir(lock_path: &str) -> String {
 
 /// The RIDL-409 message for a live entry with no declaration (lock design §4,
 /// §8). The compiler reads no baseline, so it cannot tell a rename from a new
-/// interface: with a declaration without an entry in the package it names
-/// both `--rename Old=New` and `--retire Old`, and with none it names
+/// interface: with a declaration without an entry in the unit it names both
+/// `--rename Old=New` and `--retire Old`, and with none it names
 /// `--retire Old` alone. The `ridl check` desk check adds the label that
 /// singles out one `--rename` when the baseline shows a same-shape candidate.
-fn orphan_entry_message(key: &LockKey, package_dir: &str, any_provisional: bool) -> String {
+fn orphan_entry_message(key: &LockKey, unit_dir: &str, any_provisional: bool) -> String {
     let file = interface_lock::FILE_NAME;
     if any_provisional {
         format!(
-            "`{key}` is a live entry of `{file}` with no declaration in the package: run \
-             `ridl lock {package_dir} --rename {key}=New` when a declaration without an entry, \
-             `New`, is this interface under a new name, or `ridl lock {package_dir} --retire \
+            "`{key}` is a live entry of `{file}` with no declaration in the unit: run \
+             `ridl lock {unit_dir} --rename {key}=New` when a declaration without an entry, \
+             `New`, is this interface under a new name, or `ridl lock {unit_dir} --retire \
              {key}` when the interface is gone"
         )
     } else {
         format!(
-            "`{key}` is a live entry of `{file}` with no declaration in the package: run \
-             `ridl lock {package_dir} --retire {key}` to record that the interface is gone"
+            "`{key}` is a live entry of `{file}` with no declaration in the unit: run \
+             `ridl lock {unit_dir} --retire {key}` to record that the interface is gone"
         )
     }
 }
@@ -15053,7 +15205,7 @@ interface cabin { signal i : State @[100ms..1s] }
         assert_eq!(diagnostic.severity, Severity::Error);
         assert_eq!(
             diagnostic.message,
-            "`Legacy` is a live entry of `interfaces.lock` with no declaration in the package: run \
+            "`Legacy` is a live entry of `interfaces.lock` with no declaration in the unit: run \
              `ridl lock veh/hvac --retire Legacy` to record that the interface is gone"
         );
         assert_eq!(
@@ -15087,12 +15239,12 @@ interface cabin { signal i : State @[100ms..1s] }
         assert_eq!(
             messages(&checked),
             [
-                "`Legacy` is a live entry of `interfaces.lock` with no declaration in the package: \
+                "`Legacy` is a live entry of `interfaces.lock` with no declaration in the unit: \
                  run `ridl lock veh/hvac --rename Legacy=New` when a declaration without an entry, \
                  `New`, is this interface under a new name, or `ridl lock veh/hvac --retire Legacy` \
                  when the interface is gone",
                 "`service:veh.hvac.old` is a live entry of `interfaces.lock` with no declaration in \
-                 the package: run `ridl lock veh/hvac --rename service:veh.hvac.old=New` when a \
+                 the unit: run `ridl lock veh/hvac --rename service:veh.hvac.old=New` when a \
                  declaration without an entry, `New`, is this interface under a new name, or \
                  `ridl lock veh/hvac --retire service:veh.hvac.old` when the interface is gone",
             ]
@@ -15110,5 +15262,238 @@ interface cabin { signal i : State @[100ms..1s] }
             ],
             "the orphans' numbers are never reused: provisional numbers start at `next`"
         );
+    }
+
+    // --- numbering runs once per unit ---------------------------------------
+
+    /// One unit of several source packages, as the loader builds it: every
+    /// package carries the unit name and the unit's one `interfaces.lock`
+    /// (the loader's [`PackageLock`], with the path it records: the manifest
+    /// directory joined with the file name). Each package is one `.ridl`
+    /// file at the path its dotted name gives.
+    struct UnitFixture {
+        db: RidlDatabase,
+        std: Package,
+        ws: Workspace,
+        unit: String,
+    }
+
+    impl UnitFixture {
+        fn new(unit: &str, lock_text: Option<&str>, packages: &[(&str, &str)]) -> Self {
+            let mut db = RidlDatabase::default();
+            let std = std_package(&mut db);
+            let lock = lock_text.map(|text| PackageLock {
+                path: format!("{}/interfaces.lock", unit.replace('.', "/")),
+                text: text.to_string(),
+                lock: ridl_core::interface_lock::parse(text).expect("the fixture lock parses"),
+            });
+            let packages = packages
+                .iter()
+                .map(|(name, text)| {
+                    let file = InputFile::new(
+                        &db,
+                        format!("{}.ridl", name.replace('.', "/")),
+                        text.to_string(),
+                    );
+                    Package::new(
+                        &db,
+                        name.to_string(),
+                        unit.to_string(),
+                        vec![file],
+                        PackageOrigin::WorkspaceMember,
+                        BTreeMap::new(),
+                        TimingDefaults::default(),
+                        lock.clone(),
+                    )
+                })
+                .collect();
+            let ws = Workspace::new(&db, packages, BTreeMap::new());
+            Self {
+                db,
+                std,
+                ws,
+                unit: unit.to_string(),
+            }
+        }
+
+        /// The two-package unit `u`: `u` holds `interface Session {}` and
+        /// `u.cluster` holds `interface Speed {}`.
+        fn session_and_speed(lock_text: Option<&str>) -> Self {
+            Self::new(
+                "u",
+                lock_text,
+                &[
+                    ("u", "package u\ninterface Session {}\n"),
+                    ("u.cluster", "package u.cluster\ninterface Speed {}\n"),
+                ],
+            )
+        }
+
+        /// The package named `name`, checked, without TYPL-406.
+        fn check(&self, name: &str) -> CheckedPackage {
+            let pkg = package_of(&self.db, self.ws, name.to_string())
+                .expect("the package is in the fixture");
+            without_missing_docs(check_package(&self.db, self.ws, pkg, self.std))
+        }
+
+        /// `(lock key, number, provisional)` for every shape of the package
+        /// named `name`, in IR order: the catalog name for a declared
+        /// interface, `service:<name>` for an inline shape.
+        fn numbers(&self, name: &str) -> Vec<(String, u32, bool)> {
+            let checked = self.check(name);
+            assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+            checked
+                .ir
+                .shapes()
+                .map(|shape| {
+                    let key = if shape.is_inline() {
+                        format!("service:{}", shape.name)
+                    } else {
+                        checked.ir.catalog_name(&shape)
+                    };
+                    (key, shape.interface.number, shape.interface.provisional)
+                })
+                .collect()
+        }
+
+        fn numbering(&self) -> UnitNumbering {
+            unit_numbering(&self.db, self.ws, self.unit.clone(), self.std)
+        }
+    }
+
+    fn retired(name: &str, number: u32) -> v2::RetiredInterface {
+        v2::RetiredInterface {
+            name: name.to_string(),
+            number,
+        }
+    }
+
+    /// Catalog design, `interfaces.lock`: with no lock, the provisional
+    /// numbers run over the whole unit in byte order of the lock key —
+    /// `Session` before `cluster.Speed` — not per package from 1.
+    #[test]
+    fn provisional_numbers_run_over_the_unit_in_key_byte_order() {
+        let unit = UnitFixture::session_and_speed(None);
+        assert_eq!(unit.numbers("u"), [("Session".to_string(), 1, true)]);
+        assert_eq!(
+            unit.numbers("u.cluster"),
+            [("cluster.Speed".to_string(), 2, true)]
+        );
+    }
+
+    /// A subpackage's shape is frozen by the entry under its relative key,
+    /// not under its short name.
+    #[test]
+    fn a_live_entry_freezes_a_subpackage_shape_under_its_relative_key() {
+        let unit = UnitFixture::session_and_speed(Some("next 3\ncluster.Speed 1\nSession 2\n"));
+        assert_eq!(
+            unit.numbers("u.cluster"),
+            [("cluster.Speed".to_string(), 1, false)]
+        );
+        assert_eq!(unit.numbers("u"), [("Session".to_string(), 2, false)]);
+    }
+
+    /// A retired entry reaches `Package.retired` of the source package its
+    /// relative name names, under its short name.
+    #[test]
+    fn a_retired_entry_lands_on_the_package_its_relative_name_names() {
+        let unit = UnitFixture::session_and_speed(Some(
+            "next 4\ncluster.Speed 1\nSession 2\ncluster.Old 3 retired\n",
+        ));
+        assert_eq!(unit.check("u.cluster").ir.retired, [retired("Old", 3)]);
+        assert!(unit.check("u").ir.retired.is_empty());
+    }
+
+    /// A retired entry whose package is not in the unit, and a retired
+    /// `service:` entry, reach the anchor package's `retired` as the lock
+    /// spells them; no other package carries them.
+    #[test]
+    fn a_retired_entry_of_a_missing_package_and_a_service_land_on_the_anchor() {
+        let unit = UnitFixture::session_and_speed(Some(
+            "next 5\ncluster.Speed 1\nSession 2\ngone.Old 3 retired\nservice:veh.x 4 retired\n",
+        ));
+        let anchor = unit.check("u");
+        assert!(codes(&anchor).is_empty(), "got: {:?}", anchor.diagnostics);
+        assert_eq!(
+            anchor.ir.retired,
+            [retired("gone.Old", 3), retired("service:veh.x", 4)]
+        );
+        assert!(unit.check("u.cluster").ir.retired.is_empty());
+    }
+
+    /// A live entry with no declaration anywhere in the unit is one RIDL-409,
+    /// reported by the anchor package on the entry's line of the unit's lock,
+    /// and the message names `ridl lock <unit dir>`.
+    #[test]
+    fn an_orphan_is_ridl_409_once_from_the_anchor_package() {
+        let lock = "next 3\ncluster.Gone 1\n";
+        let unit = UnitFixture::session_and_speed(Some(lock));
+        let anchor = unit.check("u");
+        assert_eq!(codes(&anchor), ["RIDL-409"]);
+        assert!(codes(&unit.check("u.cluster")).is_empty());
+        let diagnostic = &anchor.diagnostics[0];
+        assert_eq!(
+            diagnostic.message,
+            "`cluster.Gone` is a live entry of `interfaces.lock` with no declaration in the unit: \
+             run `ridl lock u --rename cluster.Gone=New` when a declaration without an entry, \
+             `New`, is this interface under a new name, or `ridl lock u --retire cluster.Gone` \
+             when the interface is gone"
+        );
+        assert_eq!(
+            diagnostic.primary.file,
+            lock_file_id(1),
+            "the lock is index `files.len()` of the anchor package"
+        );
+        assert_eq!(diagnostic.primary.range, line_range(lock, "cluster.Gone 1"));
+    }
+
+    /// A lock key is relative to the unit, so one spelled with the unit
+    /// prefix names no declaration: RIDL-409 from the anchor, and the shape
+    /// it meant stays provisional.
+    #[test]
+    fn a_key_spelled_with_the_unit_prefix_names_nothing() {
+        let unit = UnitFixture::new(
+            "u",
+            Some("next 2\nu.cluster.Speed 1\n"),
+            &[
+                ("u", "package u\n"),
+                ("u.cluster", "package u.cluster\ninterface Speed {}\n"),
+            ],
+        );
+        assert_eq!(codes(&unit.check("u")), ["RIDL-409"]);
+        assert_eq!(
+            unit.numbers("u.cluster"),
+            [("cluster.Speed".to_string(), 2, true)]
+        );
+    }
+
+    /// Two source packages of one unit may declare the same short name: the
+    /// relative keys differ, so each gets its own number. With no root
+    /// package, the anchor is the first package of the unit in byte order.
+    #[test]
+    fn the_same_short_name_in_two_packages_gets_two_numbers() {
+        let unit = UnitFixture::new(
+            "u",
+            None,
+            &[
+                ("u.b", "package u.b\ninterface Foo {}\n"),
+                ("u.a", "package u.a\ninterface Foo {}\n"),
+            ],
+        );
+        assert_eq!(unit.numbers("u.a"), [("a.Foo".to_string(), 1, true)]);
+        assert_eq!(unit.numbers("u.b"), [("b.Foo".to_string(), 2, true)]);
+        assert_eq!(unit.numbering().anchor, "u.a");
+    }
+
+    /// Decision 3: a unit whose manifest directory holds no source is still
+    /// numbered from the lock beside its manifest.
+    #[test]
+    fn an_empty_root_still_numbers_its_subpackages() {
+        let unit = UnitFixture::new(
+            "u",
+            Some("next 2\na.Foo 1\n"),
+            &[("u.a", "package u.a\ninterface Foo {}\n")],
+        );
+        assert_eq!(unit.numbers("u.a"), [("a.Foo".to_string(), 1, false)]);
     }
 }

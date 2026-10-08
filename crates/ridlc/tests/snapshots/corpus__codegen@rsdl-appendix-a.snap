@@ -743,7 +743,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   "tuples": [],
   "interfaces": [
     {
-      "number": 1,
+      "number": 3,
       "provisional": true,
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "",
@@ -884,7 +884,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   ],
   "catalog": {
     "package": "veh.diag",
-    "hash": "Rv5VaYt8JifytTuX0KnT4fgFCs4uH4rhZdZFCJIOGlk=",
+    "hash": "8o2Lv41hqD2jEW9XLYGzOmbDiCMzUiF/nvxN2y/j5c4=",
     "retired": []
   },
   "flatbuffers": {
