@@ -696,8 +696,8 @@ whose documentation names the member and the reason. An interface the face
 cannot carry — a call that does not take exactly one named parameter, a query
 whose reply is not a named type, or a contract clause outside the form the
 translator accepts — is skipped along with its descriptors, and gets a
-`__RIDL_NO_FACE_<NAME>` constant naming the interface, the reason and the
-story that removes the limit. Neither is an error: the rest of the package is
+`__RIDL_NO_FACE_<NAME>` constant naming the interface and the reason, and,
+when an issue tracks the limit, that issue. Neither is an error: the rest of the package is
 emitted, and the build succeeds.
 
 The face names the `ridl-rt` port traits and nothing else: the crate carries no

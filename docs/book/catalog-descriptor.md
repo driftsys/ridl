@@ -137,9 +137,10 @@ does not read, makes `ridl describe` exit with code 2. The
   the compiler cannot bound it in that encoding. For example, a FlatBuffers row
   is `Unbounded` when the payload's largest encoding would exceed 4 GiB, the
   most that FlatBuffers' 32-bit offsets can address. An encoding with no row
-  has no size computed by this toolchain. A stream payload, a request of zero or of several parameters, and an inline
-  `T | E` reply have no row in any encoding. A `repr(C)` payload has no row,
-  and a proto3 row is present only for a payload that is a struct or a union.
+  has no size computed by this toolchain. A stream payload, a request of zero
+  or of several parameters, and an inline `T | E` reply have no row in any
+  encoding. A `repr(C)` payload has no row, and a proto3 row is present only
+  for a payload that is a struct or a union.
 
 The descriptor does not contain type layouts, field lists, constraints other
 than the ones that bound a payload's size, contract clauses, or initial values.

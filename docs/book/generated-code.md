@@ -6,12 +6,13 @@ interface — async and blocking — the Cargo features that select what the cra
 contains, and the failures a call can report. The flag itself is described in
 the [CLI reference](cli-reference.md#ridl-build).
 
-Most Rust snippets in this chapter are taken from
+Most code snippets in this chapter are taken from
 `examples/cabin/consumer/src/main.rs`, a program that the repository's
 `just demo` gate builds and runs against the crate generated from
-`examples/cabin/cabin.ridl`. A snippet that is not taken from that program is
-marked as an illustration in the sentence before it, and is not compiled. The
-interface the snippets call, and the types it uses, from that schema:
+`examples/cabin/cabin.ridl`. A snippet that is taken neither from that program
+nor from that schema is marked as an illustration in the sentence before it,
+and is not compiled. The interface the snippets call, and the types it uses,
+from that schema:
 
 ```ridl,ignore
 {{#include ../../examples/cabin/cabin.ridl:schema}}
@@ -197,17 +198,18 @@ with a failure. At the timeout, blocking `next_event` returns `Ok(None)`.
 
 The generated `Cargo.toml` declares two features, both on by default:
 
-| Feature            | Enables                                                                                                                                                                          |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `std`              | The `blocking` module of every face, the `Timeout` trait in each prelude, and `ridl-rt/std`. With it off, only the async face remains. |
-| `validate-pattern` | The check of a typl `match` pattern in a constructor, through the `regex` crate. With it off, `new` does not check patterns; range and length checks are not affected. |
+| Feature            | Enables                                                                                                                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `std`              | The `blocking` module of every face, the `Timeout` trait in the prelude of each interface that has a `blocking` module, and `ridl-rt/std`. With it off, only the async face remains. |
+| `validate-pattern` | The check of a typl `match` pattern in a constructor, through the `regex` crate. With it off, `new` does not check patterns; range and length checks are not affected.               |
 
 With `std` off, `ridl-rt` builds as `no_std`, but the generated crate does
 not: its `lib.rs` does not declare `#![no_std]`, so the crate still links the
 standard library and builds only for a target that has one.
 
 A target where `regex` is too large, or one that does not need the blocking
-face, turns the defaults off and selects what it needs:
+face, turns the defaults off and selects what it needs. This `Cargo.toml`
+fragment is an illustration and is not compiled:
 
 ```toml
 [dependencies]
@@ -218,12 +220,12 @@ The generated crate depends on `ridl-rt` with its `flatbuffers` feature, which
 the codec needs. An application that names `ridl-rt` itself, for example to use
 `ridl_rt::task::noop_waker` or the error types, selects from its features:
 
-| `ridl-rt` feature | Default | Enables                                                                                                    |
-| ----------------- | ------- | ---------------------------------------------------------------------------------------------------------- |
-| `flatbuffers`     | off     | The `flatbuffers` module the generated codec calls.                                                        |
+| `ridl-rt` feature | Default | Enables                                                                                                                                                                           |
+| ----------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `flatbuffers`     | off     | The `flatbuffers` module the generated codec calls.                                                                                                                               |
 | `std`             | off     | The standard library; the `task` module: `block_on`, `noop_waker` and `flag_waker`; the `face::Timeout` trait; and the propagation hook of the `trace` module, `set_propagation`. |
-| `proto3`          | off     | Nothing yet. It names the proto3 encoding.                                                                 |
-| `repr-c`          | off     | Nothing yet. It names the `repr(C)` encoding.                                                              |
+| `proto3`          | off     | Nothing yet. It names the proto3 encoding.                                                                                                                                        |
+| `repr-c`          | off     | Nothing yet. It names the `repr(C)` encoding.                                                                                                                                     |
 
 `ridl-rt` has no dependency in any feature combination. It builds for `wasm32`,
 and its minimum Rust version is 1.83. The generated crate declares edition 2024,
