@@ -80,6 +80,10 @@ version = "1.0.0"
    - the `system` gives **the system artifact**;
    - a unit with only types produces no artifact of its own. Other units import
      its types, and their catalog hashes include the types they reach.
+
+   Rule 4 works per declaration, not per file extension, so a future `.rxdl`
+   file (roadmap E7.1, driftsys/ridl#68) fits a unit without a change to this
+   design.
 5. **Components are not in a catalog.** Components, instances and deployments
    belong to the system artifact, which refers to catalogs by name and hash. A
    deployment change therefore never changes a catalog hash.
