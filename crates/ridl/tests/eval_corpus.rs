@@ -712,3 +712,36 @@ fn design_lint_counts_on_the_corpus_are_pinned() {
         path.display(),
     );
 }
+
+/// A unit's tree holds no second manifest, so every member of the vss
+/// workspace is a direct child of the workspace root.
+#[test]
+fn the_vss_workspace_has_no_manifest_below_a_member() {
+    fn manifests(dir: &Path, found: &mut Vec<PathBuf>) {
+        for entry in
+            std::fs::read_dir(dir).unwrap_or_else(|error| panic!("read {}: {error}", dir.display()))
+        {
+            let path = entry.expect("read a corpus entry").path();
+            if path.is_dir() {
+                manifests(&path, found);
+            } else if path.file_name().and_then(|name| name.to_str()) == Some("ridl.toml") {
+                found.push(path);
+            }
+        }
+    }
+    let root = corpus_root().join("vss");
+    let mut found = Vec::new();
+    manifests(&root, &mut found);
+    let nested: Vec<_> = found
+        .iter()
+        .filter(|path| {
+            let parent = path.parent().expect("a manifest has a parent");
+            parent != root && parent.parent() != Some(root.as_path())
+        })
+        .map(|path| path.strip_prefix(&root).unwrap().display().to_string())
+        .collect();
+    assert!(
+        nested.is_empty(),
+        "manifests below a workspace member: {nested:?}"
+    );
+}
