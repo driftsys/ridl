@@ -67,7 +67,7 @@ Commands:
   test      Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a compile error
   fmt       Reformat `.typl`, `.ridl` and `.rsdl` files in place (defaults to the current directory)
   diff      Compare two IR snapshots or source trees and classify the change: exit 0 compatible or identical, 1 breaking, 2 error
-  lock      Allocate a number to every interface that has none and write each package's `interfaces.lock`; with `--rename` or `--retire`, rewrite one package's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for the file
+  lock      Allocate a number to every interface that has none and write each unit's `interfaces.lock`; with `--rename` or `--retire`, rewrite one unit's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for the file
   lsp       Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this. Stdio is the only transport
   mcp       Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
   describe  Print a catalog descriptor as strict JSON, after verifying it
@@ -1457,7 +1457,7 @@ ridl lock --help
 ```
 
 ```text
-Allocate a number to every interface that has none and write each package's `interfaces.lock`; with `--rename` or `--retire`, rewrite one package's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for the file
+Allocate a number to every interface that has none and write each unit's `interfaces.lock`; with `--rename` or `--retire`, rewrite one unit's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for the file
 
 Usage: ridl lock [OPTIONS] [PATH]
        ridl lock <COMMAND>
@@ -1467,7 +1467,7 @@ Commands:
   help   Print this message or the help of the given subcommand(s)
 
 Arguments:
-  [PATH]  A package directory, a workspace root, or a file. A directory named `merge` is spelled `./merge`, since the bare word is the subcommand [default: .]
+  [PATH]  A unit directory, a workspace root, or a file. A directory named `merge` is spelled `./merge`, since the bare word is the subcommand [default: .]
 
 Options:
       --rename <OLD=NEW>  Rewrite the live entry OLD to hold the key NEW, keeping its number (repeatable). NEW must be a declaration without an entry
@@ -1475,18 +1475,19 @@ Options:
   -h, --help              Print help
 ```
 
-**It writes** `interfaces.lock` in the package directory, beside the `.ridl`
-sources — the line table that gives every interface of the package its
-number (ridl §11): a `#` header, `next N`, then one entry per interface,
-`Name N`, with the word `retired` after the number when the interface is
-gone. A service's inline shape is an interface too and is keyed `service:`
-followed by the service's dotted name. Only `ridl lock` writes the file: the
+**It writes** one `interfaces.lock` per unit, in the directory of the unit's
+`ridl.toml` — the line table that gives every interface of the unit its number
+(ridl §11): a `#` header, `next N`, then one entry per interface, `Name N`,
+with the word `retired` after the number when the interface is gone. An
+interface of a subpackage is keyed by its name relative to the unit, such as
+`cluster.Speed`. A service's inline shape is an interface too and is keyed
+`service:` followed by the service's full dotted name. Only `ridl lock` writes the file: the
 compiler reads it beside the sources, and `ridl fmt` never touches it.
 
 Plain `ridl lock` is the only form that allocates. Every declared interface
 whose name has no live entry gets the next free number, in byte order of the
 name, and the file is written; a declaration that already has its entry is
-left as it is. Over a package holding `interface Zone` and `interface Cabin`
+left as it is. Over a unit holding `interface Zone` and `interface Cabin`
 and no lock file yet:
 
 ```sh
@@ -1507,8 +1508,8 @@ Zone 2
 ```
 
 Run again with nothing to allocate, it prints nothing, writes nothing and
-exits 0. Over a workspace it writes each package's own file, and each output
-line is prefixed with the package directory relative to `PATH` and a colon:
+exits 0. Over a workspace it writes each unit's own file, and each output
+line is prefixed with the unit directory relative to `PATH` and a colon:
 `hvac: allocated Cabin 1`. A `PATH` inside a workspace member compiles the
 whole workspace and allocates in, edits and reports on that member only.
 Until `ridl lock` has run, a declaration with no entry compiles with a
@@ -1526,7 +1527,7 @@ run with RIDL-409 present:
   when nothing declares `NAME` any more. Printed as `retired Name N`.
 
 Both are repeatable, neither allocates, and `PATH` must resolve to exactly one
-package. A rename keeps the number because the number, not the name, is the
+unit. A rename keeps the number because the number, not the name, is the
 interface's wire identity; the old name is then free for a later, unrelated
 interface. Starting from the file above with `interface Zone` renamed to
 `interface Lane` in the source:

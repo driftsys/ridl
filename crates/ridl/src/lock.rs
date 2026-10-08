@@ -1,24 +1,24 @@
-//! `ridl lock` — the one command that writes a package's `interfaces.lock`
+//! `ridl lock` — the one command that writes a unit's `interfaces.lock`
 //! (lock design §5).
 //!
 //! Plain `ridl lock` allocates a number to every interface that has none —
 //! every declared interface and every service's inline shape whose key has
-//! no live entry — and writes each package's own file. It is the only form
-//! that allocates: a branch never allocates, and the release recipe or the
+//! no live entry — and writes each unit's own file, in its manifest
+//! directory. It is the only form that allocates: a branch never allocates, and the release recipe or the
 //! merge queue runs this on `main` (lock design §4). `--rename OLD=NEW` and
 //! `--retire NAME` rewrite one entry each, in place, and never allocate. They
 //! are the fix RIDL-409 names, so they run with RIDL-409 present, and `PATH`
-//! must then resolve to exactly one package. Any other compile error exits 1
-//! and writes nothing, whichever package it is in (plan decision PD-6).
+//! must then resolve to exactly one unit. Any other compile error exits 1
+//! and writes nothing, whichever unit it is in (plan decision PD-6).
 //!
 //! The command compiles first, through [`ridlc::compile_workspace`] — no
-//! network and no `ridl.lock` round trip — and reads each package's directory
+//! network and no `ridl.lock` round trip — and reads each unit's directory
 //! and its lock as loaded from a second [`load_workspace`] over the same
 //! tree: `ridlc`'s output carries the checked IR and the diagnostics but no
 //! package handle, and the two loads read the same files in the same order.
 //! One line per change goes to stdout — `allocated Name N`,
-//! `renamed Old New N`, `retired Name N` — prefixed with the package
-//! directory relative to `PATH` over more than one package (plan decision
+//! `renamed Old New N`, `retired Name N` — prefixed with the unit
+//! directory relative to `PATH` over more than one unit (plan decision
 //! PD-13); diagnostics go to stderr (ADR-0010 decision 2). The exit codes
 //! follow ADR-0010 decision 1: 0 when the file is written or there is nothing
 //! to change, 1 on a diagnostic error over the source, 2 on a bad flag or a
@@ -43,12 +43,14 @@ use ridl_core::{RidlDatabase, load_workspace};
 use ridl_ir::v2;
 use rowan::TextRange;
 
-/// One package of the run: its directory, its lock as loaded — the empty
-/// lock when the directory has none — and its checked IR.
-struct LockedPackage {
+/// One unit of the run: its manifest directory, its lock as loaded — the
+/// empty lock when the directory has none — and the checked IR of each of its
+/// packages.
+struct LockedUnit {
+    name: String,
     dir: PathBuf,
     lock: InterfaceLock,
-    ir: v2::Package,
+    packages: Vec<v2::Package>,
 }
 
 /// Whether no error among `diagnostics` is anything but RIDL-409 — the one
@@ -61,8 +63,8 @@ pub(crate) fn only_lock_orphans<'a>(diagnostics: impl IntoIterator<Item = &'a Di
     })
 }
 
-/// Runs `ridl lock`: plain allocation over every package under `path`, or
-/// the `--rename` and `--retire` edits over the one package there.
+/// Runs `ridl lock`: plain allocation over every unit under `path`, or
+/// the `--rename` and `--retire` edits over the one unit there.
 pub fn run_lock(path: &Path, renames: &[String], retires: &[String]) -> ExitCode {
     // A flag that does not parse is refused before anything is compiled.
     let renames: Vec<(LockKey, LockKey)> =
@@ -113,8 +115,8 @@ pub fn run_lock(path: &Path, renames: &[String], retires: &[String]) -> ExitCode
         .into_iter()
         .map(|checked| checked.ir)
         .collect();
-    let mut packages = match locked_packages(path, irs, output.report_scope.as_deref()) {
-        Ok(packages) => packages,
+    let mut units = match locked_units(path, irs, output.report_scope.as_deref()) {
+        Ok(units) => units,
         Err(err) => {
             eprintln!("error: {err}");
             return ExitCode::from(2);
@@ -122,9 +124,9 @@ pub fn run_lock(path: &Path, renames: &[String], retires: &[String]) -> ExitCode
     };
 
     let outcome = if editing {
-        edit(path, &mut packages, &renames, &retires)
+        edit(path, &mut units, &renames, &retires)
     } else {
-        allocate(path, &mut packages)
+        allocate(path, &mut units)
     };
     if let Err(code) = outcome {
         return code;
@@ -167,79 +169,96 @@ fn usage_error(message: &str) -> ExitCode {
     ExitCode::from(2)
 }
 
-/// Pairs every checked package with its directory and its lock as loaded.
-/// The loader is deterministic over one tree, so the packages come back in
-/// the order `compile_workspace` checked them. With a `scope` (the member
-/// directory a path inside a workspace member names), only the packages
+/// Groups the checked packages by unit and pairs each unit with its manifest
+/// directory and its lock as loaded. With a `scope` (the member directory a
+/// path inside a workspace member names), only the units whose directory is
 /// under it are kept.
-fn locked_packages(
+fn locked_units(
     entry: &Path,
     irs: Vec<v2::Package>,
     scope: Option<&Path>,
-) -> std::io::Result<Vec<LockedPackage>> {
+) -> std::io::Result<Vec<LockedUnit>> {
     let mut db = RidlDatabase::default();
     let loaded = load_workspace(&mut db, entry)?;
     let handles = loaded.workspace.packages(&db).clone();
-    debug_assert_eq!(handles.len(), irs.len());
-    Ok(handles
-        .iter()
-        .zip(irs)
-        .map(|(package, ir)| {
-            debug_assert_eq!(package.name(&db), &ir.name);
-            // The loader keeps only the files directly inside the package
-            // directory, so any file's parent is that directory; a single
-            // file's parent is its own directory (plan decision PD-8).
-            let first = package
-                .files(&db)
-                .first()
-                .expect("a loaded package holds at least one file")
-                .path(&db);
-            let dir = Path::new(first)
-                .parent()
-                .filter(|dir| !dir.as_os_str().is_empty())
-                .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
-            let lock = package
-                .lock(&db)
-                .as_ref()
-                .map_or_else(InterfaceLock::default, |lock| lock.lock.clone());
-            LockedPackage { dir, lock, ir }
-        })
-        .filter(|package| scope.is_none_or(|scope| package.dir.starts_with(scope)))
-        .collect())
+    // Units keep the order in which the workspace first lists one of their
+    // packages.
+    let mut by_unit: Vec<(String, Vec<v2::Package>)> = Vec::new();
+    for ir in irs {
+        let unit = v2::unit_of(&ir);
+        match by_unit.iter_mut().find(|(name, _)| name == unit) {
+            Some((_, packages)) => packages.push(ir),
+            None => by_unit.push((unit.to_string(), vec![ir])),
+        }
+    }
+    let mut units = Vec::new();
+    for (name, packages) in by_unit {
+        let Some(manifest_dir) = loaded.units.get(&name) else {
+            return Err(std::io::Error::other(format!(
+                "no directory is recorded for unit `{name}`"
+            )));
+        };
+        let dir = if manifest_dir.as_os_str().is_empty() {
+            PathBuf::from(".")
+        } else {
+            manifest_dir.clone()
+        };
+        if scope.is_some_and(|scope| !dir.starts_with(scope)) {
+            continue;
+        }
+        // Every package of a unit carries the unit's one lock.
+        let lock = handles
+            .iter()
+            .find(|handle| packages.iter().any(|ir| ir.name == *handle.name(&db)))
+            .and_then(|handle| handle.lock(&db).as_ref().map(|lock| lock.lock.clone()))
+            .unwrap_or_default();
+        units.push(LockedUnit {
+            name,
+            dir,
+            lock,
+            packages,
+        });
+    }
+    Ok(units)
 }
 
-/// Plain `ridl lock`: allocates every provisional shape of every package, in
-/// the order of the numbers the checker showed as provisional — byte order of
-/// the name from `next` — so the number written is the number the package
-/// was checked with. A package with nothing to allocate is not written, so a
-/// file that already holds every declaration stays byte for byte as it is.
-fn allocate(entry: &Path, packages: &mut [LockedPackage]) -> Result<(), ExitCode> {
-    let prefixed = packages.len() > 1;
-    for package in packages.iter_mut() {
-        let mut provisional: Vec<(u32, LockKey)> = package
-            .ir
-            .shapes()
-            .filter(|shape| shape.interface.provisional)
-            .map(|shape| (shape.interface.number, shape_key(&shape)))
+/// Plain `ridl lock`: allocates every provisional shape of every package of
+/// each unit, in the order of the numbers the checker showed as provisional —
+/// byte order of the catalog name from `next` — so the number written is the
+/// number the unit was checked with. A unit with nothing to allocate is not
+/// written, so a file that already holds every declaration stays byte for
+/// byte as it is.
+fn allocate(entry: &Path, units: &mut [LockedUnit]) -> Result<(), ExitCode> {
+    let prefixed = units.len() > 1;
+    for unit in units.iter_mut() {
+        let mut provisional: Vec<(u32, LockKey)> = unit
+            .packages
+            .iter()
+            .flat_map(|package| {
+                package
+                    .shapes()
+                    .filter(|shape| shape.interface.provisional)
+                    .map(|shape| (shape.interface.number, shape_key(package, &shape)))
+            })
             .collect();
         if provisional.is_empty() {
             continue;
         }
         provisional.sort();
         let prefix = if prefixed {
-            format!("{}: ", relative_dir(entry, &package.dir))
+            format!("{}: ", relative_dir(entry, &unit.dir))
         } else {
             String::new()
         };
         let mut lines = Vec::with_capacity(provisional.len());
         for (_, key) in provisional {
-            let number = package
+            let number = unit
                 .lock
                 .allocate(key.clone())
                 .expect("a provisional shape has no live entry: the checker read this lock");
             lines.push(format!("{prefix}allocated {key} {number}"));
         }
-        write(package)?;
+        write(unit)?;
         for line in lines {
             println!("{line}");
         }
@@ -247,22 +266,22 @@ fn allocate(entry: &Path, packages: &mut [LockedPackage]) -> Result<(), ExitCode
     Ok(())
 }
 
-/// `--rename` and `--retire` over the one package `entry` resolves to. Every
+/// `--rename` and `--retire` over the one unit `entry` resolves to. Every
 /// edit is validated and applied in memory first, so a refused flag writes
 /// nothing; the file is written once, then each change is reported.
 fn edit(
     entry: &Path,
-    packages: &mut [LockedPackage],
+    units: &mut [LockedUnit],
     renames: &[(LockKey, LockKey)],
     retires: &[LockKey],
 ) -> Result<(), ExitCode> {
-    let [package] = packages else {
+    let [unit] = units else {
         return Err(usage_error(&format!(
-            "`--rename` and `--retire` edit one package's `{}`, but `{}` holds {} packages; name \
-             the package directory",
+            "`--rename` and `--retire` edit one unit's `{}`, but `{}` holds {} units; name the \
+             unit directory",
             interface_lock::FILE_NAME,
             entry.display(),
-            packages.len()
+            units.len()
         )));
     };
     let mut lines = Vec::new();
@@ -270,75 +289,83 @@ fn edit(
         // The new key must be a declaration without an entry — the shape the
         // checker numbered provisionally. A declaration with an entry, or a
         // name nothing declares, is not a rename target.
-        if !is_provisional(&package.ir, new) {
+        if !is_provisional(&unit.packages, new) {
             return Err(usage_error(&format!(
-                "--rename {old}={new}: `{new}` is not a declaration without an entry in package \
-                 `{}`",
-                package.ir.name
+                "--rename {old}={new}: `{new}` is not a declaration without an entry in unit `{}`",
+                unit.name
             )));
         }
-        let number = package
+        let number = unit
             .lock
             .rename(old, new.clone())
             .map_err(|err| usage_error(&format!("--rename {old}={new}: {err}")))?;
         lines.push(format!("renamed {old} {new} {number}"));
     }
     for key in retires {
-        if is_declared(&package.ir, key) {
+        if is_declared(&unit.packages, key) {
             return Err(usage_error(&format!(
-                "--retire {key}: `{key}` is still declared in package `{}`; remove the declaration \
+                "--retire {key}: `{key}` is still declared in unit `{}`; remove the declaration \
                  first, or keep the entry live",
-                package.ir.name
+                unit.name
             )));
         }
-        let number = package
+        let number = unit
             .lock
             .retire(key)
             .map_err(|err| usage_error(&format!("--retire {key}: {err}")))?;
         lines.push(format!("retired {key} {number}"));
     }
-    write(package)?;
+    write(unit)?;
     for line in lines {
         println!("{line}");
     }
     Ok(())
 }
 
-/// Writes the package's lock to its directory; an I/O failure is exit 2.
-fn write(package: &LockedPackage) -> Result<(), ExitCode> {
-    interface_lock::write(&package.dir, &package.lock).map_err(|err| {
+/// Writes the unit's lock to its manifest directory; an I/O failure is exit 2.
+fn write(unit: &LockedUnit) -> Result<(), ExitCode> {
+    interface_lock::write(&unit.dir, &unit.lock).map_err(|err| {
         eprintln!(
             "error: cannot write {}: {err}",
-            package.dir.join(interface_lock::FILE_NAME).display()
+            unit.dir.join(interface_lock::FILE_NAME).display()
         );
         ExitCode::from(2)
     })
 }
 
-/// The lock key of one shape: the interface's name, or `service:` and the
-/// service's dotted name for an inline shape (lock design §3).
-pub(crate) fn shape_key(shape: &v2::InterfaceShape<'_>) -> LockKey {
+/// The lock key of one shape of `package`: `service:` and the service's
+/// dotted name for an inline shape, else the interface's name in the catalog
+/// of its unit (lock design §3), such as `cluster.Speed` for an interface of
+/// a subpackage.
+pub(crate) fn shape_key(package: &v2::Package, shape: &v2::InterfaceShape<'_>) -> LockKey {
     if shape.is_inline() {
         LockKey::Service(shape.name.to_string())
     } else {
-        LockKey::Interface(shape.name.to_string())
+        LockKey::Interface(package.catalog_name(shape))
     }
 }
 
-/// Whether the package declares the shape `key` names, with or without an
-/// entry.
-fn is_declared(ir: &v2::Package, key: &LockKey) -> bool {
-    ir.shapes().any(|shape| shape_key(&shape) == *key)
+/// Whether a package of the unit declares the shape `key` names, with or
+/// without an entry.
+fn is_declared(packages: &[v2::Package], key: &LockKey) -> bool {
+    packages.iter().any(|package| {
+        package
+            .shapes()
+            .any(|shape| shape_key(package, &shape) == *key)
+    })
 }
 
-/// Whether the package declares the shape `key` names and it has no entry —
-/// the checker gave it a provisional number.
-fn is_provisional(ir: &v2::Package, key: &LockKey) -> bool {
-    ir.shapes()
-        .any(|shape| shape.interface.provisional && shape_key(&shape) == *key)
+/// Whether a package of the unit declares the shape `key` names and it has no
+/// entry — the checker gave it a provisional number.
+fn is_provisional(packages: &[v2::Package], key: &LockKey) -> bool {
+    packages.iter().any(|package| {
+        package
+            .shapes()
+            .any(|shape| shape.interface.provisional && shape_key(package, &shape) == *key)
+    })
 }
 
-/// The package directory relative to `entry`, for the output prefix over a
+/// The unit directory relative to `entry`, for the output prefix over a
 /// workspace (plan decision PD-13): `.` for `entry` itself, and the directory
 /// as the loader recorded it when it is not under `entry`.
 fn relative_dir(entry: &Path, dir: &Path) -> String {

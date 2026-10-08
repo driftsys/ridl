@@ -58,6 +58,15 @@ fn ridl(args: &[&std::ffi::OsStr]) -> (i32, String, String) {
 }
 
 const MANIFEST: &str = "[package]\nname = \"veh.hvac\"\nversion = \"1.0.0\"\n";
+const HMI_MANIFEST: &str = "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n";
+const HMI_SESSION: &str = "package veh.hmi
+type Level: integer [0..9]
+interface Session { signal s : Level @[100ms..1s] }
+";
+const HMI_SPEED: &str = "package veh.hmi.cluster
+import veh.hmi.Level
+interface Speed { signal v : Level @[100ms..1s] }
+";
 const DOOR_MANIFEST: &str = "[package]\nname = \"veh.door\"\nversion = \"1.0.0\"\n";
 const HEADER: &str = "# interfaces.lock — written by ridl lock; do not edit by hand.\n";
 
@@ -116,6 +125,15 @@ fn two_member_workspace(dir: &TempDir, hvac: &str, door: &str) -> PathBuf {
     dir.write("hvac/hvac.ridl", hvac);
     dir.write("door/ridl.toml", DOOR_MANIFEST);
     dir.write("door/door.ridl", door);
+    dir.path().to_path_buf()
+}
+
+/// Lays out one unit `veh.hmi` whose root package holds `root_source` and
+/// whose subpackage `veh.hmi.cluster` holds `sub_source`, and returns its root.
+fn unit_with_subpackage(dir: &TempDir, root_source: &str, sub_source: &str) -> PathBuf {
+    dir.write("ridl.toml", HMI_MANIFEST);
+    dir.write("hmi.ridl", root_source);
+    dir.write("cluster/speed.ridl", sub_source);
     dir.path().to_path_buf()
 }
 
@@ -387,11 +405,11 @@ fn retire_of_a_still_declared_interface_exits_two() {
     assert_eq!(read_lock(&root), text, "byte-identical");
 }
 
-/// §5 exit 2: either flag over more than one package. `PATH` must resolve
-/// to exactly one package; nothing is written.
+/// §5 exit 2: either flag over more than one unit. `PATH` must resolve to
+/// exactly one unit; nothing is written.
 #[test]
-fn rename_over_more_than_one_package_exits_two() {
-    let dir = TempDir::new("two-packages");
+fn rename_over_more_than_one_unit_exits_two() {
+    let dir = TempDir::new("two-units");
     let root = two_member_workspace(&dir, ZONE_AND_CABIN, DOOR);
     let hvac = format!("{HEADER}next 3\nCabin 1\nLegacy 2\n");
     dir.write("hvac/interfaces.lock", &hvac);
@@ -399,23 +417,23 @@ fn rename_over_more_than_one_package_exits_two() {
     let (code, stdout, stderr) = lock(&root, &["--rename", "Legacy=Zone"]);
     assert_eq!(code, 2, "stderr:\n{stderr}");
     assert_eq!(stdout, "");
-    assert!(stderr.contains("holds 2 packages"), "stderr:\n{stderr}");
+    assert!(stderr.contains("holds 2 units"), "stderr:\n{stderr}");
 
     let (code, _, stderr) = lock(&root, &["--retire", "Legacy"]);
     assert_eq!(code, 2, "stderr:\n{stderr}");
     assert_eq!(read_lock(&root.join("hvac")), hvac, "byte-identical");
     assert!(!root.join("door/interfaces.lock").exists());
 
-    // Named directly, the member is one package and the edit runs.
+    // Named directly, the member is one unit and the edit runs.
     let (code, stdout, stderr) = lock(&root.join("hvac"), &["--rename", "Legacy=Zone"]);
     assert_eq!(code, 0, "stderr:\n{stderr}");
     assert_eq!(stdout, "renamed Legacy Zone 2\n");
 }
 
 /// A member path loads the whole workspace, and plain `ridl lock` allocates
-/// in that member only: the sibling member's lock is not written.
+/// in that unit only: the sibling unit's lock is not written.
 #[test]
-fn lock_on_a_member_allocates_in_that_member_only() {
+fn lock_on_a_member_allocates_in_that_unit_only() {
     let dir = TempDir::new("member-allocate");
     let root = two_member_workspace(&dir, ZONE_AND_CABIN, DOOR);
 
@@ -569,11 +587,11 @@ fn a_hand_deleted_line_gets_a_fresh_number() {
     );
 }
 
-/// PD-13: over more than one package, each output line is prefixed with the
-/// package directory relative to `PATH` and a colon; each package's own
-/// file is written.
+/// PD-13: over more than one unit, each output line is prefixed with the
+/// unit directory relative to `PATH` and a colon; each unit's own file is
+/// written.
 #[test]
-fn workspace_output_prefixes_each_package_path() {
+fn workspace_output_prefixes_each_unit_path() {
     let dir = TempDir::new("workspace");
     let root = two_member_workspace(&dir, ZONE_AND_CABIN, DOOR);
 
@@ -612,4 +630,72 @@ fn an_inline_shape_allocates_under_its_service_key() {
     );
     let (code, stderr) = check(&root);
     assert_eq!(code, 0, "stderr:\n{stderr}");
+}
+
+/// A unit holds one lock, at its manifest directory, whose keys are the
+/// catalog names: a subpackage interface is `cluster.Speed`, and the
+/// subpackage directory gets no file of its own.
+#[test]
+fn plain_lock_writes_one_file_at_the_unit_root_with_relative_keys() {
+    let dir = TempDir::new("unit-root");
+    let root = unit_with_subpackage(&dir, HMI_SESSION, HMI_SPEED);
+
+    let (code, stdout, stderr) = lock(&root, &[]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_eq!(stdout, "allocated Session 1\nallocated cluster.Speed 2\n");
+    assert_eq!(
+        read_lock(&root),
+        format!("{HEADER}next 3\nSession 1\ncluster.Speed 2\n")
+    );
+    assert!(!root.join("cluster/interfaces.lock").exists());
+
+    let (code, stderr) = check(&root);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+}
+
+/// Moving an interface to another package of the unit is a rename the lock
+/// records under its catalog names; the number stays.
+#[test]
+fn rename_across_packages_of_one_unit_keeps_the_number() {
+    let dir = TempDir::new("unit-rename");
+    let root = unit_with_subpackage(&dir, HMI_SESSION, HMI_SPEED);
+    dir.write(
+        "interfaces.lock",
+        &format!("{HEADER}next 3\nSession 1\ncluster.Speed 2\n"),
+    );
+    std::fs::remove_file(root.join("cluster/speed.ridl")).expect("remove the old source");
+    dir.write(
+        "climate/climate.ridl",
+        "package veh.hmi.climate
+import veh.hmi.Level
+interface Climate { signal t : Level @[100ms..1s] }
+",
+    );
+
+    let (code, stdout, stderr) = lock(&root, &["--rename", "cluster.Speed=climate.Climate"]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_eq!(stdout, "renamed cluster.Speed climate.Climate 2\n");
+    assert_eq!(
+        read_lock(&root),
+        format!("{HEADER}next 3\nSession 1\nclimate.Climate 2\n")
+    );
+    let (code, stderr) = check(&root);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+}
+
+/// `--retire` over a workspace of two units names no one lock to edit.
+#[test]
+fn retire_over_a_workspace_of_two_units_exits_two() {
+    let dir = TempDir::new("retire-two-units");
+    let root = two_member_workspace(&dir, ZONE_AND_CABIN, DOOR);
+
+    let (code, stdout, stderr) = lock(&root, &["--retire", "Hvac"]);
+    assert_eq!(code, 2, "stderr:\n{stderr}");
+    assert_eq!(stdout, "");
+    assert!(
+        stderr.contains("name the unit directory"),
+        "stderr:\n{stderr}"
+    );
+    assert!(!root.join("hvac/interfaces.lock").exists());
+    assert!(!root.join("door/interfaces.lock").exists());
 }
