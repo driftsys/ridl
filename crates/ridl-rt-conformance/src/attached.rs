@@ -2,7 +2,7 @@
 
 use ridl_rt::port::Attached;
 
-use crate::{Factory, catalog, runtime};
+use crate::{catalog, runtime, Factory};
 
 /// Every port answers with the catalog its runtime was built with, carried
 /// unexamined — the runtime and each handle made from it.

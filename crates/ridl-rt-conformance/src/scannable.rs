@@ -7,7 +7,7 @@
 use ridl_rt::contract::InterfaceNo;
 use ridl_rt::port::{ScannableSignals, SignalWriter, Watermark};
 
-use crate::{Factory, IFACE, ORD, OTHER, blank_change, runtime};
+use crate::{blank_change, runtime, Factory, IFACE, ORD, OTHER};
 
 /// A commit advances the generation of each interface it publishes to once,
 /// however many of its signals it carries, and no other interface's.

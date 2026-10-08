@@ -7,7 +7,7 @@
 
 use ridl_rt::port::{CoherentSignals, ReadError, SignalWriter};
 
-use crate::{Factory, IFACE, ORD, OTHER, blank_sample, runtime};
+use crate::{blank_sample, runtime, Factory, IFACE, ORD, OTHER};
 
 /// A coherent read copies every value one after another and writes one sample
 /// per ordinal, all from one publication.

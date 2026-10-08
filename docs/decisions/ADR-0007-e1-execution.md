@@ -255,6 +255,12 @@ at epic close) and cites these decisions by number.
     because it ships no binary of its own; the `ridl` binary keeps shipping
     through the `editor-v*` train instead. Decided by Sebastien on 2026-09-21.
 
+    _Amended (2026-10-08)._ `ridl-rt-conformance` joins the publish train,
+    dropping `publish = false`, so that a runtime outside this repository can
+    add it as a dev-dependency and run the port contract tests. It publishes
+    right after `ridl-rt`, its only dependency, at the workspace version.
+    Sebastien's decision of 2026-10-08.
+
 15. **`ridl.std` ships embedded in the compiler.** The Appendix A source is
     committed verbatim as an asset of `ridl-core` and loaded via `include_str!`
     as a built-in, implicitly imported package — no filesystem or network

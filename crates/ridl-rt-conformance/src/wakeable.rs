@@ -23,13 +23,13 @@
 
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, mpsc};
+use std::sync::{mpsc, Arc};
 use std::task::{Wake, Waker};
 
 use ridl_rt::contract::InterfaceNo;
 use ridl_rt::port::{Caller, Correlation, EventSink, EventSource, Handler, Interest, Wakeable};
 
-use crate::{Factory, IFACE, ORD, fill, runtime};
+use crate::{fill, runtime, Factory, IFACE, ORD};
 
 /// A second interface, for the tests of a key's interface.
 const IFACE2: InterfaceNo = InterfaceNo(2);

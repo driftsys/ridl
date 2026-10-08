@@ -3,8 +3,9 @@ name: crates-io-release
 # Publishes every workspace crate whose manifest does not set `publish = false`
 # to crates.io, on a `v<version>` tag a maintainer pushes — `just release`
 # (git-std bump) cuts the tag; the push itself is the maintainer act (ADR-0007
-# decision 14, amended 2026-09-21 and 2026-09-22). `xtask` is the one crate
-# left `publish = false`: it is workspace tooling, never published. The `ridl`
+# decision 14, amended 2026-09-21 and 2026-09-22). `xtask`, `ridlc-gen-model` and
+# `ridlc-gen-rust` are the crates left `publish = false`: the first is workspace
+# tooling and the other two are test-only, so none is published. The `ridl`
 # CLI publishes as `ridl-cli` (crates/ridl/Cargo.toml explains the name),
 # alongside `ridl-lsp` and `ridl-mcp`, which it depends on directly — `cargo
 # publish` needs every normal dependency resolvable on the registry, so the
@@ -151,7 +152,8 @@ jobs:
 
           # Dependency order: a crate publishes only once crates.io already
           # has every crate it depends on. ridl-syntax, ridl-ir and ridl-rt
-          # have no internal dependency and lead; ridlc depends on the rest
+          # have no internal dependency and lead; ridl-rt-conformance depends
+          # only on ridl-rt, so it follows ridl-rt; ridlc depends on the rest
           # of the compiler crates. ridl-lsp and ridl-mcp depend on ridlc (and
           # not on each other, so their relative order does not matter);
           # ridl-cli — the `ridl` binary — depends on both of them plus
@@ -162,6 +164,7 @@ jobs:
           publish ridl-ir
           publish ridl-descriptor
           publish ridl-rt
+          publish ridl-rt-conformance
           publish ridl-loopback
           publish ridl-core
           publish ridl-sem

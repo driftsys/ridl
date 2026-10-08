@@ -3,7 +3,7 @@
 use ridl_rt::port::Clock;
 use ridl_rt::sample::Duration;
 
-use crate::{Factory, later, runtime};
+use crate::{later, runtime, Factory};
 
 /// The clock does not move while real time passes, and
 /// [`Factory::advance`] moves it by exactly the amount given. A clock that

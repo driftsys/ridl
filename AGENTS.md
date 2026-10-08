@@ -13,15 +13,16 @@ under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`,
 `ridlc`, `ridl`, `ridl-lsp`, `ridl-mcp`, `ridl-backend-rust`, `ridl-backend-ts`,
 `ridl-backend-proto`, `ridl-backend-flatbuffers`, `ridl-diff`, `ridl-fmt`,
 `ridl-rt`, `ridl-loopback`, `ridl-rt-conformance` (the port contract tests any
-runtime runs, test-only), and `ridlc-gen-model` and `ridlc-gen-rust` (the
-reference codegen plugins, test-only) — plus `xtask` at the root, the
-`editors/vscode` extension, `evals/` (the public corpus, the calibration records
-and the eval tasks for design evaluation, outside the published crates and the
-book), and `examples/`, whose worked examples are compiled and run by the test
-suite rather than being prose. The typl v0.1 toolchain (epic E1), the ridl
-interface layer over it (epic E2) and rsdl's checks, lowering and `ridl diff` at
-the system (epic E6) are built; the boundary model (epic E3) is sequenced in the
-roadmap, and `rmdl` stays a Proposed draft with no implementation. See
+runtime runs, published for runtimes outside this repository), and
+`ridlc-gen-model` and `ridlc-gen-rust` (the reference codegen plugins,
+test-only) — plus `xtask` at the root, the `editors/vscode` extension, `evals/`
+(the public corpus, the calibration records and the eval tasks for design
+evaluation, outside the published crates and the book), and `examples/`, whose
+worked examples are compiled and run by the test suite rather than being prose.
+The typl v0.1 toolchain (epic E1), the ridl interface layer over it (epic E2)
+and rsdl's checks, lowering and `ridl diff` at the system (epic E6) are built;
+the boundary model (epic E3) is sequenced in the roadmap, and `rmdl` stays a
+Proposed draft with no implementation. See
 `docs/technotes/walking-skeleton-architecture.md` for the as-built map.
 
 **Start from the map for your task, then read what the task touches.**
@@ -144,10 +145,11 @@ member; rsdl is the apex.
     just test            run the Rust workspace test suite (--locked)
     just lint            cargo clippy --workspace --all-targets -- -D warnings
     just wasm-check      cargo check for wasm32 with --no-default-features
-    just compat-check    build and test the packaged ridl-rt crate as edition
+    just compat-check    build and test the packaged ridl-rt and
+                         ridl-rt-conformance crates as edition
                          2021 with the rust-version in crates/ridl-rt/Cargo.toml
                          and as edition 2024 with the rust-toolchain.toml pin,
-                         check its LICENSE, and check the crate ridl build
+                         check both crates' LICENSE files, and check the crate ridl build
                          emits for examples/cabin as edition 2021 with the
                          rust-version, the first cell of the codegen build
                          matrix (ADR-0021 decision 10)

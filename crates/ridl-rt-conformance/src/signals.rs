@@ -4,7 +4,7 @@
 use ridl_rt::port::{Clock, ReadError, SignalReader, SignalWriter};
 use ridl_rt::sample::{Cause, Duration, Envelope, Provenance};
 
-use crate::{Factory, IFACE, ORD, OTHER, later, runtime};
+use crate::{later, runtime, Factory, IFACE, ORD, OTHER};
 
 /// A committed value reads back, live.
 pub fn a_signal_publish_and_read_round_trips<F: Factory>() {
