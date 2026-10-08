@@ -11,7 +11,7 @@ Context Protocol server as [`ridl mcp`](#ridl-mcp), both over stdio (see
 cargo build --release
 ```
 
-as [Getting started](getting-started.md#building-the-toolchain) describes.
+as [Getting started](getting-started.md#installing-the-toolchain) describes.
 This page assumes `target/release/ridl` and `target/release/ridlc` are on your
 `PATH`, or called by path.
 
