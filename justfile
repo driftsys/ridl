@@ -508,24 +508,31 @@ lint:
 # is gitignored. The recipe detects the created file by comparing the copy's
 # file list taken right after the copy, before the build runs, against the
 # copy's file list taken after the build: a file present only in the second
-# list is one mdBook created. It reads the tree's `docs/` once, to make the
-# copy, and never again, so a change to the tree while the build runs cannot
-# affect the result.
+# list is one mdBook created. It reads the tree's `docs/`, and the `.rs` and
+# `.ridl` sources under `examples/`, once, to make the copy, and never again, so
+# a change to the tree while the build runs cannot affect the result.
 #
-# The whole of `docs/` is copied, not `docs/book` alone. The six "Language
+# The whole of `docs/` is copied, not `docs/book` alone. The eight "Language
 # reference" chapters are thin wrappers that `{{#include}}` a normative document
 # from `docs/specification/`, so a copy holding only `docs/book` would break
 # every one of those includes and check a book no reader ever sees. `docs/` is
 # about a megabyte; copying it is cheaper than maintaining a list of the
-# directories includes are allowed to reach.
+# directories includes are allowed to reach. A chapter may also include a
+# source from `examples/` by anchor, so that the code it shows is the code
+# `just demo` builds; the recipe copies every `.rs` and `.ridl` file under
+# `examples/`, and nothing under a `target/` or a `generated/` directory, which
+# hold build output and the generated crate.
 #
 # **mdBook exits 0 on a broken `{{#include}}`.** It logs `ERROR Error updating
 # ...`, leaves the directive in the page as literal text, renders the rest, and
 # reports success. `mdbook build` alone therefore cannot see that failure, so
 # checks 1 and 2 below run to catch it. Check 3 catches the other failure this
 # recipe exists for: the chapter file mdBook creates when SUMMARY.md names one
-# that does not exist, described above. Any one of the three checks that fails
-# fails the recipe:
+# that does not exist, described above. **mdBook also exits 0, and logs
+# nothing, on an include by anchor that does not resolve**: an anchor the file
+# does not have renders an empty block, and an anchor with no `ANCHOR_END`
+# renders the rest of the file. Check 4 catches that. Any one of the four
+# checks that fails fails the recipe:
 #
 # 1. mdBook's stderr carries no `ERROR`. This catches every preprocessor
 #    failure, not only a missing include, and it is not anchored to the start of
@@ -539,13 +546,17 @@ lint:
 # 3. Every file in the copy after the build was already there before it. It
 #    compares every file, not only `.md` files, so it also catches anything
 #    else a future mdBook version creates there, not only a missing chapter.
+# 4. Every `{{#include <path>:<anchor>}}` in `docs/book` names a file that
+#    holds both `ANCHOR: <anchor>` and `ANCHOR_END: <anchor>`. An include by
+#    line numbers (`:10`, `:10:20`) is not an anchor and is not checked here.
 #
-# The fixture below verifies all three checks independently: a chapter that
+# The fixture below verifies all four checks independently: a chapter that
 # includes a file that does not exist, for check 1; a chapter carrying a
 # directive mdBook does not recognise, for check 2 (mdBook logs no `ERROR` for
-# this one, so check 1 cannot also catch it); and a chapter SUMMARY.md names
+# this one, so check 1 cannot also catch it); a chapter SUMMARY.md names
 # but that has no file, both at the top level and nested in a subdirectory,
-# for check 3.
+# for check 3; and an include naming an anchor the file does not have, and one
+# naming an anchor with no `ANCHOR_END`, for check 4.
 #
 # The mdBook guard is deliberate. Making this a `build` dependency makes mdBook
 # a hard requirement for every local build, and a missing binary would otherwise
@@ -574,12 +585,12 @@ book-check root="":
         trap 'rm -rf "$scratch"' EXIT
         cp "$1/book.toml" "$scratch/"
         cp -R "$1/docs" "$scratch/docs"
-        # A chapter may include a Rust source from examples/ by anchor, so
-        # the code it shows is the code `just demo` builds. Copy those sources
-        # too, and nothing else from examples/: no build output, no generated
-        # crate.
+        # A chapter may include a source from examples/ by anchor, so the
+        # code it shows is the code `just demo` builds. Copy the `.rs` and
+        # `.ridl` sources too, and nothing else from examples/: no build
+        # output, no generated crate.
         if [ -d "$1/examples" ]; then
-            (cd "$1" && find examples -name '*.rs' -not -path '*/target/*' -not -path '*/generated/*') |
+            (cd "$1" && find examples \( -name '*.rs' -o -name '*.ridl' \) -not -path '*/target/*' -not -path '*/generated/*') |
                 while IFS= read -r source; do
                     mkdir -p "$scratch/$(dirname "$source")"
                     cp "$1/$source" "$scratch/$source"
@@ -611,11 +622,43 @@ book-check root="":
             sed 's#^\./#docs/#' "$created" >&2
             exit 1
         fi
+        # Check 4: an include by anchor resolves to a whole anchor pair.
+        # mdBook renders an empty block, or the rest of the file, and logs
+        # nothing, so checks 1 to 3 cannot see it.
+        unanchored="$scratch/unanchored.txt"
+        : >"$unanchored"
+        { grep -roE '[{][{]#include [^}]+[}][}]' "$scratch/docs/book" || true; } |
+            while IFS= read -r hit; do
+                chapter="${hit%%:*}"
+                argument="$(printf '%s\n' "${hit#*:}" | sed -E 's/^[{][{]#include +//; s/ *[}][}]$//')"
+                case "$argument" in
+                    *:*) ;;
+                    *) continue ;;
+                esac
+                path="${argument%%:*}"
+                anchor="${argument#*:}"
+                # A line range (`:10`, `:10:20`, `::20`) is not an anchor.
+                if printf '%s\n' "$anchor" | grep -qE '^[0-9]*(:[0-9]*)?$'; then
+                    continue
+                fi
+                source="$(dirname "$chapter")/$path"
+                # A file that does not exist is check 1's to report.
+                [ -f "$source" ] || continue
+                if ! grep -qE "ANCHOR:[[:space:]]*${anchor}([^A-Za-z0-9_-]|$)" "$source" ||
+                    ! grep -qE "ANCHOR_END:[[:space:]]*${anchor}([^A-Za-z0-9_-]|$)" "$source"; then
+                    printf '%s: %s: anchor %s\n' "${chapter#"$scratch"/}" "$path" "$anchor" >>"$unanchored"
+                fi
+            done
+        if [ -s "$unanchored" ]; then
+            echo "book-check: an include names an anchor its file does not open with ANCHOR and close with ANCHOR_END:" >&2
+            cat "$unanchored" >&2
+            exit 1
+        fi
     )
     # The fixture. It builds books of its own and runs this recipe over each
     # as a child process, given a root, which is the form that runs the gate
     # and nothing else. It runs no git command, so the git environment a hook
-    # exports does not reach it. Six cases:
+    # exports does not reach it. Nine cases:
     #
     # 1. A whole book, whose chapters all exist. The gate has to pass.
     # 2. A chapter that includes a file that does not exist. mdBook logs an
@@ -636,6 +679,17 @@ book-check root="":
     # 6. A chapter that includes a Rust source from examples/ by anchor. The
     #    gate has to pass, because it copies the examples/ sources beside
     #    docs/.
+    # 7. The book from case 6, with a chapter that includes an anchor the
+    #    source does not have. mdBook renders an empty block and logs nothing;
+    #    the gate has to fail and name the chapter, the path and the anchor
+    #    (check 4).
+    # 8. The book from case 6, with a source whose anchor has no
+    #    `ANCHOR_END`. mdBook renders the rest of the file and logs nothing;
+    #    the gate has to fail and name the anchor (check 4).
+    # 9. The book from case 6, with a `.rs` under examples/'s `target/` and one
+    #    under its `generated/`, each a symbolic link to a file that does not
+    #    exist. Copying either one fails, so the gate has to pass, which pins
+    #    that the copy leaves both directories out.
     fixtures() (
         work="$(mktemp -d)"
         trap 'rm -rf "$work"' EXIT
@@ -758,6 +812,46 @@ book-check root="":
         printf '%s\n' 'fn main() {' '    // ANCHOR: part' '    let shown = 1;' '    // ANCHOR_END: part' '}' > "$example/examples/demo/src/main.rs"
         if ! "{{just_executable()}}" book-check "$example" >"$run" 2>&1; then
             echo "book-check: the gate did not pass over a fixture whose chapter includes a source from examples/:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+
+        # Case 7: an include naming an anchor the source does not have.
+        printf '%s\n' '# Example' '' '```rust' '{{{{#include ../../examples/demo/src/main.rs:absent}}' '```' > "$example/docs/book/example.md"
+        if "{{just_executable()}}" book-check "$example" >"$run" 2>&1; then
+            echo "book-check: the gate returned 0 over a fixture whose chapter includes an anchor its source does not have:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+        if ! grep -q 'example.md: ../../examples/demo/src/main.rs: anchor absent$' "$run"; then
+            echo "book-check: the gate did not name the chapter, the path and the anchor that does not resolve:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+
+        # Case 8: an anchor with no ANCHOR_END.
+        printf '%s\n' '# Example' '' '```rust' '{{{{#include ../../examples/demo/src/main.rs:part}}' '```' > "$example/docs/book/example.md"
+        printf '%s\n' 'fn main() {' '    // ANCHOR: part' '    let shown = 1;' '}' > "$example/examples/demo/src/main.rs"
+        if "{{just_executable()}}" book-check "$example" >"$run" 2>&1; then
+            echo "book-check: the gate returned 0 over a fixture whose source opens an anchor and never closes it:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+        if ! grep -q 'anchor part$' "$run"; then
+            echo "book-check: the gate did not name the anchor that has no ANCHOR_END:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+
+        # Case 9: the copy leaves target/ and generated/ out. A symbolic link
+        # to a file that does not exist cannot be copied, so the gate fails if
+        # the copy reaches either one.
+        printf '%s\n' 'fn main() {' '    // ANCHOR: part' '    let shown = 1;' '    // ANCHOR_END: part' '}' > "$example/examples/demo/src/main.rs"
+        mkdir -p "$example/examples/demo/target/debug" "$example/examples/demo/generated"
+        ln -s "$work/nowhere.rs" "$example/examples/demo/target/debug/build.rs"
+        ln -s "$work/nowhere.rs" "$example/examples/demo/generated/lib.rs"
+        if ! "{{just_executable()}}" book-check "$example" >"$run" 2>&1; then
+            echo "book-check: the gate did not pass over a fixture whose examples/ holds a target/ and a generated/ directory, so it copied one of them:" >&2
             cat "$run" >&2
             exit 1
         fi

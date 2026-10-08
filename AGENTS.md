@@ -111,12 +111,16 @@ member; rsdl is the apex.
     just install-check   end-to-end test of install.sh (and install.ps1's dry
                          run) against a fixture release
     just fmt-check       cargo fmt --all --check (no writes; repair with cargo fmt --all)
-    just book-check      mdbook build on a copy — catches a SUMMARY.md mdBook
-                         cannot parse, a {{#include}} that does not resolve,
+    just book-check      mdbook build on a copy of docs/ and of the
+                         examples/**/*.rs and examples/**/*.ridl sources —
+                         catches a SUMMARY.md mdBook cannot parse, a
+                         {{#include}} that does not resolve, an include whose
+                         anchor has no ANCHOR or no ANCHOR_END in its file,
                          and a chapter file SUMMARY.md names that mdBook
                          creates instead of reporting as missing (mdBook exits
-                         0 on the last two, so three checks read the log, the
-                         rendered output, and the copy's file list)
+                         0 on the last three, so four checks read the log, the
+                         rendered output, the included anchors, and the copy's
+                         file list)
     just link-check      every relative Markdown link resolves, over every
                          tracked .md — book-check cannot do this, because
                          mdBook exits 0 on an unresolved relative link
