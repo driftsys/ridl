@@ -119,8 +119,10 @@ implementer and the reviewer read the same choice.
 - **MANI-014** reports the second claim in load order (members in `members`
   order, a unit's tree in name order) on the `name` line of the second unit's
   manifest, and does not load the second claimant's package.
-- **An `interfaces.lock` in a subdirectory of a unit** is not read. It draws no
-  diagnostic (see Questions for the author).
+- **An `interfaces.lock` in a subdirectory of a unit** is not read. It draws a
+  warning on the file, saying that only the lock beside the unit's `ridl.toml`
+  is read (author's answer 1). The code is the next free code in the RIDL-4xx
+  range, with a lint name, added as ADR-0024 and `docs/book/lints.md` require.
 - **The vss corpus directory of a member is its package name**
   (`evals/corpus/vss/vehicle.cabin.hvac.station.row1.driver/`); the book harness
   uses the same rule (`<root>/<package name>/`).
@@ -492,7 +494,8 @@ fn every_package_of_a_unit_carries_the_lock_of_the_manifest_directory() {
 #[test]
 fn a_lock_in_a_subdirectory_is_not_read() {
     // name "veh.hmi"; cluster/interfaces.lock holding malformed text "x"
-    // assert: no RIDL-410; the cluster package's lock(db) is None
+    // assert: no RIDL-410; the cluster package's lock(db) is None;
+    // exactly one warning with the new RIDL-4xx code, on cluster/interfaces.lock
 }
 ```
 
@@ -500,9 +503,12 @@ fn a_lock_in_a_subdirectory_is_not_read() {
       the first test; RIDL-410 is drawn in the second).
 - [ ] **Step 3: Implement**: read the lock in `load_root`/`load_member` for the
       unit's directory and pass `lock: &Option<PackageLock>` down
-      `load_package_tree`; remove the per-directory `read_lock` call there.
-      Update the `Package.lock` doc comment: "the unit's `interfaces.lock`, read
-      by the loader from the manifest directory".
+      `load_package_tree`; remove the per-directory `read_lock` call there, and
+      report the new warning for an `interfaces.lock` found in a subdirectory.
+      Add the code to the catalogue in `crates/ridl-core/src/diag.rs`, the ridl
+      reference's diagnostics table, and `docs/book/lints.md` (ADR-0024). Update
+      the `Package.lock` doc comment: "the unit's `interfaces.lock`, read by the
+      loader from the manifest directory".
 - [ ] **Step 4: Run** `cargo test -p ridl-core` and `just test` — expected:
       PASS. `crates/ridl/tests/lock_cli.rs` still passes because its fixtures
       keep the lock beside the manifest.
@@ -1303,23 +1309,14 @@ texts.
   `lower(unit, packages)` in `ridl_descriptor`; `shape_key(package, shape)` in
   `ridl::lock`.
 
-## Questions for the author
+## Answers from the author (2026-10-08)
 
-1. **A stale `interfaces.lock` in a subdirectory of a unit.** The migration
-   tells a project to delete its per-package lock files. The plan (Task 6)
-   ignores a lock in a subdirectory without a diagnostic, which leaves a
-   forgotten file silent. A warning would need a code the spec does not allocate
-   (RIDL-4xx or MANI-0xx). Should one be added, and which?
-2. **The anchor package.** The spec says a retired entry belongs to the source
-   package its relative name names, and the IR keeps short names. It does not
-   say which package carries a retired `service:` entry, or a retired entry of a
-   source package that no longer exists, or which package reports RIDL-409 when
-   the root source package is empty (decision 3). The plan uses the anchor
-   package (Decisions the plan takes). Confirm, or name the rule the records
-   should state.
-3. **A moved interface in `ridl diff`.** Matching numbers within a unit means an
-   interface moved from `u.cluster` to `u.climate` under the same number is
-   reported as `InterfaceRenamed` (its catalog name changed) and its body is
-   compared. The spec does not name the category. Confirm `InterfaceRenamed`, or
-   ask for a new category (which would also touch `ridl diff --explain` and the
-   classifier's wildcard-free matches).
+1. **A stale `interfaces.lock` in a subdirectory** draws a warning (Task 6).
+2. **The anchor package** is confirmed: the root source package, or the first
+   source package by name when the root is empty. It carries retired `service:`
+   entries, retired entries of a source package that no longer exists, and
+   RIDL-409 positions that are not on a lock line. It is needed because
+   baselines stay per source package (spec decision 1) and every retired number
+   must be in some snapshot.
+3. **A moved interface in `ridl diff`** is reported as `InterfaceRenamed`. No
+   new category.
