@@ -112,11 +112,12 @@ or call it by path. `cargo install --path crates/ridl` installs `ridl` alone.
 Open VSX under the name "RIDL". It highlights `.typl`, `.ridl` and `.rsdl`
 files and runs the language server. It bundles a `ridl` binary and starts it as
 `ridl lsp`, so it needs no separate install. The command **RIDL: Install ridl to
-PATH** copies the bundled binary to `~/.local/bin` (`%LOCALAPPDATA%\Programs\ridl` on
-Windows). When that directory is not on your `PATH`, the command warns and
+PATH** copies the bundled binary to `~/.local/bin`
+(`%LOCALAPPDATA%\Programs\ridl` on Windows). When that directory is not on your `PATH`, the command warns and
 offers a command that adds it. The setting `ridl.serverPath` names a different
 `ridl` binary to run, for both `ridl lsp` and `ridl mcp`; empty, the default,
-uses the bundled binary, or `ridl` on `PATH` when none is bundled. The setting `ridl.trace.server` (`off`, `messages` or
+uses the bundled binary, or `ridl` on `PATH` when none is bundled. The setting
+`ridl.trace.server` (`off`, `messages` or
 `verbose`) traces the traffic between the editor and the server. The
 [extension README](https://github.com/driftsys/ridl/blob/main/editors/vscode/README.md)
 lists the features.
