@@ -229,11 +229,6 @@ at epic close) and cites these decisions by number.
     bundled with the VS Code extension; crates.io is a second, direct
     `cargo install ridl-cli` path alongside it, not a replacement for it.
 
-    _Amended (2026-10-08)._ `ridl-rt-conformance` joins the publish train,
-    dropping `publish = false`, so that a runtime outside this repository can
-    add it as a dev-dependency and run the port contract tests. It publishes
-    right after `ridl-rt`, its only dependency, at the workspace version.
-
     `ridl-rt` joins the shared version and the `v*` tag; its standalone
     `ridl-rt@<version>` tag and its by-hand `cargo publish -p ridl-rt` are
     retired with it — [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md)
@@ -259,6 +254,12 @@ at epic close) and cites these decisions by number.
     attest binaries — machinery this workspace's crates.io train has no use for,
     because it ships no binary of its own; the `ridl` binary keeps shipping
     through the `editor-v*` train instead. Decided by Sebastien on 2026-09-21.
+
+    _Amended (2026-10-08)._ `ridl-rt-conformance` joins the publish train,
+    dropping `publish = false`, so that a runtime outside this repository can
+    add it as a dev-dependency and run the port contract tests. It publishes
+    right after `ridl-rt`, its only dependency, at the workspace version.
+    Sebastien's decision of 2026-10-08.
 
 15. **`ridl.std` ships embedded in the compiler.** The Appendix A source is
     committed verbatim as an asset of `ridl-core` and loaded via `include_str!`

@@ -65,10 +65,11 @@ readers stay strict.
 
 **Amended 2026-10-08 — decision 6, `ridl-rt-conformance` is published.** The
 table of decision 6 said the port contract suite is not published. It is
-published with every other crate at a `v<version>` tag, at the workspace
-version, so that a runtime outside this repository adds it as a dev-dependency
-and runs the suite. Its public surface follows the port contract of `ridl-rt` at
-the same version.
+published with every crate whose manifest does not set `publish = false`, at a
+`v<version>` tag and at the workspace version, so that a runtime outside this
+repository adds it as a dev-dependency and runs the suite. Its public surface
+follows the port contract of `ridl-rt` at the same version. Sebastien's decision
+of 2026-10-08.
 
 ## Context
 
