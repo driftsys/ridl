@@ -505,6 +505,7 @@ fn base_package(shape: &BaseShape) -> v2::Package {
         interfaces: vec![ctrl],
         services: Vec::new(),
         retired: Vec::new(),
+        unit: String::new(),
     }
 }
 

@@ -92,6 +92,7 @@ fn pkg(name: &str, iface: v2::Interface) -> v2::Package {
         interfaces: vec![iface],
         services: Vec::new(),
         retired: Vec::new(),
+        unit: String::new(),
     }
 }
 
@@ -832,6 +833,7 @@ fn package(
         interfaces,
         services,
         retired,
+        unit: String::new(),
     }
 }
 

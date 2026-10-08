@@ -274,6 +274,7 @@ pub fn check_package(
             interfaces,
             services,
             retired: numbering.retired,
+            unit: pkg.unit(db).clone(),
         },
         diagnostics: checker.diagnostics,
     }

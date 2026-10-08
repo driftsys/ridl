@@ -855,5 +855,6 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
   ],
   "interfaces": [],
   "services": [],
-  "retired": []
+  "retired": [],
+  "unit": "veh.common"
 }

@@ -857,7 +857,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
   ],
   "interfaces": [],
   "services": [],
-  "retired": []
+  "retired": [],
+  "unit": "veh.common"
 }
 
 // ===== package veh.cluster =====
@@ -3068,5 +3069,6 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       ]
     }
   ],
-  "retired": []
+  "retired": [],
+  "unit": "veh.cluster"
 }

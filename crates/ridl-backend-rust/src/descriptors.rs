@@ -785,6 +785,7 @@ mod tests {
             interfaces: vec![interface],
             services: Vec::new(),
             retired: Vec::new(),
+            unit: String::new(),
         };
 
         let source = generate_face(&package).expect("generate_face").rust_source;

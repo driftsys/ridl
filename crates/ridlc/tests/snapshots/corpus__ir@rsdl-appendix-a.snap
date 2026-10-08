@@ -169,7 +169,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       ]
     }
   ],
-  "retired": []
+  "retired": [],
+  "unit": "veh"
 }
 
 // ===== package veh.common =====
@@ -309,7 +310,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   ],
   "interfaces": [],
   "services": [],
-  "retired": []
+  "retired": [],
+  "unit": "veh"
 }
 
 // ===== package veh.diag =====
@@ -371,7 +373,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       ]
     }
   ],
-  "retired": []
+  "retired": [],
+  "unit": "veh"
 }
 
 // ===== package veh.topology =====
@@ -380,5 +383,6 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   "decls": [],
   "interfaces": [],
   "services": [],
-  "retired": []
+  "retired": [],
+  "unit": "veh"
 }

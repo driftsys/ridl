@@ -69,6 +69,8 @@ pub fn reduced_package(package: &Package, others: &[&Package]) -> Package {
             .collect(),
         services: vec![],
         retired: vec![],
+        // The unit is not part of the hash input.
+        unit: String::new(),
     };
     for interface in &mut reduced.interfaces {
         interface.doc.clear();

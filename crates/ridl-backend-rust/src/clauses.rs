@@ -317,6 +317,7 @@ mod tests {
             }],
             services: Vec::new(),
             retired: Vec::new(),
+            unit: String::new(),
         }
     }
 

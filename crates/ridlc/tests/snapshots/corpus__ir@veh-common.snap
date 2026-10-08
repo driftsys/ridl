@@ -857,5 +857,6 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
   ],
   "interfaces": [],
   "services": [],
-  "retired": []
+  "retired": [],
+  "unit": "veh.common"
 }

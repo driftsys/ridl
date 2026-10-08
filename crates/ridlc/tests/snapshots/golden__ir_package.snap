@@ -49,5 +49,6 @@ expression: "ridl_ir::v2::to_json_pretty(&output.package).expect(\"the fixture p
   ],
   "interfaces": [],
   "services": [],
-  "retired": []
+  "retired": [],
+  "unit": "fixtures"
 }
