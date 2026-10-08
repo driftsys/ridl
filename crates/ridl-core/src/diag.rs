@@ -1307,6 +1307,12 @@ diag_codes! {
         MANI_012 = "MANI-012", Error,
             "`[codegen] header-file` is set in a workspace member";
 
+        /// A `ridl.toml` sits in a subdirectory of a unit's directory tree. A
+        /// unit holds one manifest; the nested directory is not loaded as part
+        /// of the unit.
+        MANI_013 = "MANI-013", Error,
+            "nested manifest — a `ridl.toml` inside a unit's directory tree";
+
         /// A remote import could not be fetched (network failure, a non-2xx HTTP
         /// status, or a value that is not a fetchable `http(s)` URL).
         MANI_101 = "MANI-101", Error,

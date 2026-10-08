@@ -333,6 +333,7 @@ are `1xx`.
 | MANI-010 | `[lints]` entry names no lint, or its value is not a level          | warning  |
 | MANI-011 | `[codegen] header-file` cannot be read or holds a control character | error    |
 | MANI-012 | `[codegen] header-file` is set in a workspace member                | error    |
+| MANI-013 | nested manifest — a `ridl.toml` inside a unit's directory tree      | error    |
 | MANI-101 | remote import fetch failed                                          | error    |
 | MANI-102 | fetched content hash does not match the lockfile                    | error    |
 | MANI-103 | `--frozen`: no lockfile entry for a remote import                   | error    |

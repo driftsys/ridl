@@ -663,7 +663,24 @@ impl Loader {
             else {
                 continue;
             };
-            if dir_name.starts_with('.') || subdir.join("ridl.toml").is_file() {
+            if dir_name.starts_with('.') {
+                continue;
+            }
+            let nested_manifest = subdir.join("ridl.toml");
+            if nested_manifest.is_file() {
+                let nested_text = fs::read_to_string(&nested_manifest)?;
+                let nested_id = self
+                    .sources
+                    .file_id(&path_string(&nested_manifest), &nested_text);
+                self.diagnostics.push(error(
+                    DiagCode::MANI_013,
+                    nested_id,
+                    byte_range(0, 0),
+                    format!(
+                        "`{}` is a `ridl.toml` inside the tree of unit `{unit}`; a unit holds one manifest. Move the directory beside the unit, or delete the manifest",
+                        nested_manifest.display()
+                    ),
+                ));
                 continue;
             }
             self.load_package_tree(
@@ -2689,5 +2706,56 @@ service:veh.common.climate 2
         let end = usize::from(diag.primary.range.end());
         assert_eq!(&member[start..end], "\"M.txt\"");
         assert_eq!(loaded.codegen_header.as_deref(), Some("root header"));
+    }
+
+    #[test]
+    fn a_manifest_below_a_unit_is_mani_013_and_its_tree_is_not_loaded() {
+        let dir = TempDir::new("nested-manifest");
+        dir.write(
+            "ridl.toml",
+            "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("hmi.ridl", "package veh.hmi\n");
+        let nested = dir.write(
+            "cluster/ridl.toml",
+            "[package]\nname = \"veh.hmi.cluster\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("cluster/x.ridl", "package veh.hmi.cluster\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the unit loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["MANI-013"]);
+        let diag = &loaded.diagnostics[0];
+        assert_eq!(
+            loaded.sources.path(diag.primary.file),
+            Some(path_string(&nested).as_str())
+        );
+        assert_eq!(diag.primary.range, byte_range(0, 0));
+        assert!(diag.message.contains("unit `veh.hmi`"), "{}", diag.message);
+        let packages = loaded.workspace.packages(&db);
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].name(&db), "veh.hmi");
+    }
+
+    #[test]
+    fn a_member_whose_tree_holds_another_member_is_mani_013() {
+        let dir = TempDir::new("nested-member");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"a/b\"]\n");
+        dir.write(
+            "a/ridl.toml",
+            "[package]\nname = \"a\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("a/a.typl", "package a\n");
+        dir.write(
+            "a/b/ridl.toml",
+            "[package]\nname = \"b\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("a/b/b.typl", "package b\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let count = codes(&loaded.diagnostics)
+            .iter()
+            .filter(|c| **c == "MANI-013")
+            .count();
+        assert_eq!(count, 1, "{:?}", codes(&loaded.diagnostics));
     }
 }

@@ -1470,6 +1470,15 @@ expression: log
               }
             },
             {
+              "id": "MANI-013",
+              "shortDescription": {
+                "text": "nested manifest — a `ridl.toml` inside a unit's directory tree"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
               "id": "MANI-101",
               "shortDescription": {
                 "text": "remote import fetch failed"
@@ -1581,7 +1590,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 158,
+          "ruleIndex": 159,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

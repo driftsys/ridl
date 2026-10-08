@@ -1915,7 +1915,11 @@ fn check_refuses_an_empty_baseline_directory() {
 fn check_refuses_an_empty_baseline_directory_holding_only_a_manifest() {
     let dir = TempDir::new("emptydir-manifest");
     let root = package_workspace(&dir, BASE);
-    let manifest_only = dir.path().join("manifest-only");
+    // A separate `TempDir`, not a subdirectory of `root`: a `ridl.toml`
+    // nested under `root` is refused as MANI-013, which is not what this
+    // fixture is testing.
+    let baseline_dir = TempDir::new("emptydir-manifest-baseline");
+    let manifest_only = baseline_dir.path().join("manifest-only");
     std::fs::create_dir_all(&manifest_only).expect("create the manifest-only directory");
     std::fs::write(manifest_only.join("ridl.toml"), MANIFEST).expect("write the manifest");
 
