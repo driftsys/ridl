@@ -10,6 +10,10 @@ behind a port: reads and writes, scanning, events, calls and claims, and the
 optional extensions. The public surface follows that port contract, so use the
 same version of this crate as of `ridl-rt`.
 
+A patch release can add tests to `suite!`. A runtime that wants a fixed set of
+tests pins this crate with `=` in its `dev-dependencies`, for example
+`ridl-rt-conformance = "=0.6.0"`, and raises the pin when it chooses to.
+
 ## Usage
 
 Implement `Factory` once for the runtime. It states how to build a runtime, how
@@ -56,19 +60,9 @@ runs the suite this way.
 
 ## What the suite does not check
 
-The crate documentation lists, in one place, what the suite leaves out. In
-summary:
-
-- what the port contract leaves to a runtime, such as where the clock starts;
-- a handler that has served nothing, and two event sinks on one event channel;
-- how a `fixed` is provisioned into a runtime;
-- anything a runtime reports from a catalog descriptor;
-- the threading model of a runtime;
-- a wake the contract allows but does not require;
-- which serving handlers a call wakes, and what a forget does to a call no
-  handler has claimed.
-
-A runtime that wants one of these pinned keeps its own test of it.
+The crate documentation lists, in one place, what the suite leaves out:
+<https://docs.rs/ridl-rt-conformance>, section "What the suite leaves out". A
+runtime that wants one of these pinned keeps its own test of it.
 
 ## License
 

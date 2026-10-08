@@ -1,21 +1,24 @@
 [package]
 name = "ridl-rt-conformance"
 version.workspace = true
-edition.workspace = true
+# Edition 2021, as `ridl-rt`'s: edition 2024 cannot build before Rust 1.85, and
+# a port author on `ridl-rt`'s minimum must be able to build this suite.
+edition = "2021"
 license.workspace = true
 repository.workspace = true
 description = "The port contract tests of ridl-rt, generic over a runtime factory, so a runtime runs them from its own test suite."
 readme = "README.md"
 keywords = ["ridl", "idl", "runtime", "conformance", "testing"]
 categories = ["development-tools::testing"]
-# The oldest Rust this crate supports: the lowest version that builds edition
-# 2024, which this crate inherits from the workspace.
-rust-version = "1.85"
-# The crate is published with every other crate at a `v<version>` tag, at the
-# workspace version (ADR-0007 decision 14's 2026-09-21 amendment). Its public
-# surface — the factory trait and the `suite!` macro — follows the port
-# contract of `ridl-rt` at the same version, so a runtime outside this
-# repository pins both crates to one version.
+# The oldest Rust this crate supports, the same as `ridl-rt`'s. `just
+# compat-check` builds and tests the crate with that toolchain.
+rust-version = "1.83"
+# The crate is published with every crate whose manifest does not set
+# `publish = false`, at a `v<version>` tag and at the workspace version
+# (ADR-0007 decision 14's 2026-10-08 amendment). Its public surface — the
+# factory trait and the `suite!` macro — follows the port contract of `ridl-rt`
+# at the same version, so a runtime outside this repository pins both crates to
+# one version.
 
 # `ridl-rt` is its only dependency: the suite drives a runtime through the
 # port traits and through the hooks of its own `Factory` trait.

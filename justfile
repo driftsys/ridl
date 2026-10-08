@@ -202,6 +202,12 @@ wasm-check:
 # #442). ridl-rt has no dependency of its own in any feature combination
 # (ADR-0021 decision 8), so the rebuild this costs is small.
 #
+# ridl-rt-conformance is packaged together with ridl-rt and built and tested
+# on the same terms (edition 2021 at the minimum, edition 2024 at the pin),
+# against the packaged ridl-rt. It also fails on a packaged conformance crate
+# without its README.md, or a manifest that does not name the same
+# rust-version and edition 2021 as ridl-rt.
+#
 # `toolchain-check` is a dependency, and has already proven the running
 # toolchain matches the rust-toolchain.toml pin, so this recipe reads the pin
 # straight from `rustc --version` rather than re-parsing and re-validating the
@@ -265,17 +271,39 @@ compat-check: toolchain-check
         exit 1
     fi
 
-    echo "compat-check: packaging ridl-rt $version"
-    cargo package -p ridl-rt --no-verify --allow-dirty
+    # ridl-rt-conformance is held to the same minimum: a port author on
+    # ridl-rt's minimum must be able to build the suite.
+    conformance_manifest="crates/ridl-rt-conformance/Cargo.toml"
+    if ! grep -qx "rust-version = \"$minimum\"" "$conformance_manifest" \
+        || ! grep -qx 'edition = "2021"' "$conformance_manifest"; then
+        echo "compat-check: $conformance_manifest must set edition = \"2021\" and" >&2
+        echo "compat-check: rust-version = \"$minimum\", the same as $manifest." >&2
+        exit 1
+    fi
+
+    # Both crates in one command: the packaged ridl-rt-conformance depends on
+    # ridl-rt at this version, which is not on the registry until the release
+    # publishes it, so the single-crate form fails while the version is
+    # unpublished.
+    echo "compat-check: packaging ridl-rt and ridl-rt-conformance $version"
+    cargo package -p ridl-rt -p ridl-rt-conformance --no-verify --allow-dirty
 
     pkg="$PWD/target/compat-check/pkg"
-    mkdir -p "$pkg"
+    pkg_conformance="$PWD/target/compat-check/pkg-conformance"
+    mkdir -p "$pkg" "$pkg_conformance"
     tar -xzf "${CARGO_TARGET_DIR:-target}/package/ridl-rt-$version.crate" -C "$pkg" --strip-components=1
+    tar -xzf "${CARGO_TARGET_DIR:-target}/package/ridl-rt-conformance-$version.crate" -C "$pkg_conformance" --strip-components=1
 
-    if ! cmp -s "$pkg/LICENSE" LICENSE; then
-        echo "compat-check: $pkg/LICENSE differs from the root LICENSE." >&2
-        echo "compat-check: crates/ridl-rt/LICENSE is meant to be a symlink to it —" >&2
-        echo "compat-check: check whether the checkout turned the symlink into a text file." >&2
+    for dir in "$pkg" "$pkg_conformance"; do
+        if ! cmp -s "$dir/LICENSE" LICENSE; then
+            echo "compat-check: $dir/LICENSE differs from the root LICENSE." >&2
+            echo "compat-check: the crate's LICENSE is meant to be a symlink to it —" >&2
+            echo "compat-check: check whether the checkout turned the symlink into a text file." >&2
+            exit 1
+        fi
+    done
+    if [ ! -f "$pkg_conformance/README.md" ]; then
+        echo "compat-check: the packaged ridl-rt-conformance has no README.md." >&2
         exit 1
     fi
 
@@ -284,6 +312,9 @@ compat-check: toolchain-check
     # without this table cargo reports that it believes the package is part
     # of that workspace and refuses to build it standalone.
     printf '\n[workspace]\n' >> "$pkg/Cargo.toml"
+    # The conformance crate takes the packaged ridl-rt instead of the registry
+    # copy, which may not exist at this version yet.
+    printf '\n[workspace]\n\n[patch.crates-io]\nridl-rt = { path = "%s" }\n' "$pkg" >> "$pkg_conformance/Cargo.toml"
 
     # The emitted cabin crate as edition 2021 at the minimum. The CLI is
     # built with the pin, in the workspace's own target directory, before
@@ -309,22 +340,30 @@ compat-check: toolchain-check
     echo "compat-check: $minimum, edition 2021 (packaged)"
     cargo "+$minimum" test --all-features --offline --manifest-path "$pkg/Cargo.toml"
 
+    echo "compat-check: $minimum, edition 2021 (packaged ridl-rt-conformance)"
+    cargo "+$minimum" test --all-features --offline --manifest-path "$pkg_conformance/Cargo.toml"
+
     # Edition 2024 requires rust-version >= 1.85 (cargo refuses to parse the
     # manifest otherwise); the pin already satisfies that, so this run's
     # rust-version becomes the pin rather than the minimum.
-    sed -i.bak \
-        -e 's/^edition = "2021"$/edition = "2024"/' \
-        -e "s/^rust-version = \"$minimum\"\$/rust-version = \"$pin\"/" \
-        "$pkg/Cargo.toml"
-    rm -f "$pkg/Cargo.toml.bak"
-    if ! grep -qx 'edition = "2024"' "$pkg/Cargo.toml" || ! grep -qx "rust-version = \"$pin\"" "$pkg/Cargo.toml"; then
-        echo "compat-check: could not set edition 2024 and rust-version $pin in $pkg/Cargo.toml;" >&2
-        echo "compat-check: its edition or rust-version line no longer has the form this recipe edits." >&2
-        exit 1
-    fi
+    for dir in "$pkg" "$pkg_conformance"; do
+        sed -i.bak \
+            -e 's/^edition = "2021"$/edition = "2024"/' \
+            -e "s/^rust-version = \"$minimum\"\$/rust-version = \"$pin\"/" \
+            "$dir/Cargo.toml"
+        rm -f "$dir/Cargo.toml.bak"
+        if ! grep -qx 'edition = "2024"' "$dir/Cargo.toml" || ! grep -qx "rust-version = \"$pin\"" "$dir/Cargo.toml"; then
+            echo "compat-check: could not set edition 2024 and rust-version $pin in $dir/Cargo.toml;" >&2
+            echo "compat-check: its edition or rust-version line no longer has the form this recipe edits." >&2
+            exit 1
+        fi
+    done
 
     echo "compat-check: $pin, edition 2024 (packaged)"
     cargo "+$pin" test --all-features --offline --manifest-path "$pkg/Cargo.toml"
+
+    echo "compat-check: $pin, edition 2024 (packaged ridl-rt-conformance)"
+    cargo "+$pin" test --all-features --offline --manifest-path "$pkg_conformance/Cargo.toml"
 
 # Generate the cabin example's crate and run the program that links it.
 #

@@ -145,6 +145,7 @@ ridl-loopback = { path = "crates/ridl-loopback", version = "0.6.0" }
 ridl-lsp = { path = "crates/ridl-lsp", version = "0.6.0" }
 ridl-mcp = { path = "crates/ridl-mcp", version = "0.6.0" }
 ridl-rt = { path = "crates/ridl-rt", version = "0.6.0" }
+ridl-rt-conformance = { path = "crates/ridl-rt-conformance", version = "0.6.0" }
 ridl-sem = { path = "crates/ridl-sem", version = "0.6.0" }
 ridl-syntax = { path = "crates/ridl-syntax", version = "0.6.0" }
 ridlc = { path = "crates/ridlc", version = "0.6.0" }
