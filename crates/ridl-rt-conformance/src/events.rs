@@ -3,7 +3,7 @@
 
 use ridl_rt::port::{EventSink, EventSource, ReadError};
 
-use crate::{Factory, IFACE, ORD, OTHER, TRACE_A, TRACE_B, TRACE_ZERO, runtime};
+use crate::{runtime, Factory, IFACE, ORD, OTHER, TRACE_A, TRACE_B, TRACE_ZERO};
 
 /// A raised occurrence reaches a subscribed source, whole.
 pub fn an_event_raise_and_receive_round_trips<F: Factory>() {

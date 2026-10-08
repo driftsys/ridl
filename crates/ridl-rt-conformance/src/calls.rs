@@ -11,7 +11,7 @@ use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{Caller, ClaimId, Handler, ReadError, SendError, SettleError};
 use ridl_rt::trace::TraceContext;
 
-use crate::{Factory, IFACE, ORD, TRACE_A, TRACE_B, TRACE_ZERO, runtime};
+use crate::{runtime, Factory, IFACE, ORD, TRACE_A, TRACE_B, TRACE_ZERO};
 
 /// A command reaches the handler with its arguments, and the settlement is
 /// observable through `ack`.
@@ -488,11 +488,10 @@ pub fn forget_between_the_claim_and_the_settlement_leaves_the_settlement_valid<F
     rt.settle(claim.id, Ok(&[7]))
         .expect("the provider's settlement is not the caller's to revoke");
     let mut out = [0u8; 8];
-    assert!(
-        rt.reply(correlation, &mut out)
-            .expect("reply read")
-            .is_none()
-    );
+    assert!(rt
+        .reply(correlation, &mut out)
+        .expect("reply read")
+        .is_none());
 }
 
 /// A `forget` between the offer of a claim through `ShortClaim` and its
