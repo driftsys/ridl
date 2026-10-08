@@ -817,6 +817,10 @@ declares, and `ridl.std` ships with the compiler. `catalog` is the other
 exception: `ridl.std` declares no interface, so no `ridl.std.catalog.binfb`
 is written.
 
+[Using the generated Rust code](generated-code.md) shows how a program calls
+the crate that `--emit rust` writes, and
+[The catalog descriptor](catalog-descriptor.md) explains the `catalog` file.
+
 There is no transport binding and no code generator for SOME/IP, gRPC, DDS,
 MQTT or AIDL yet. Those mappings are specified in the ridl language reference,
 Appendix B, and are the work of later epics.

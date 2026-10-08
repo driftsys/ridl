@@ -4,6 +4,8 @@
 - [Reading guide](reading-guide.md)
 - [Getting started](getting-started.md)
 - [Describing a system](rsdl.md)
+- [Using the generated Rust code](generated-code.md)
+- [The catalog descriptor](catalog-descriptor.md)
 - [Documenting your API](documenting.md)
 - [Writing a codegen plugin](codegen-plugins.md)
 - [CLI reference](cli-reference.md)
