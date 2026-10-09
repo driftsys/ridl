@@ -267,10 +267,14 @@ pub(crate) fn lower_package(
 /// folds the unit's result into the package: each shape takes the number of
 /// its lock key (the catalog name, [`v2::relative_name`], for a declared
 /// interface; the service's dotted name for an inline shape),
-/// `Package.retired` takes the retired entries that name this package, each
+/// `Package.retired` takes the retired entries this package owns, each
 /// spelled as its lock key, and the unit's anchor package reports one
 /// RIDL-409 per live entry with no declaration, on the entry's line of the
-/// unit's lock.
+/// unit's lock. A retired interface entry is owned by the package its key
+/// names (the unit's root for a key with no dot); an entry whose owner is not
+/// a package of the unit (a deleted package, or the root when no file of the
+/// unit declares the root package), and every `service:` entry, goes on the
+/// unit's anchor instead.
 ///
 /// A package outside `ws` — the embedded `ridl.std` checked on its own, or
 /// the language server's overlay for a file outside the workspace — is a
@@ -321,10 +325,10 @@ pub fn check_package(
         }
     }
 
-    // A retired entry belongs to the source package its relative name names.
-    // The anchor carries the entries no package of the unit can: a `service:`
-    // entry, and an interface entry whose package is not in the unit (the
-    // root's, when the root package is empty). Every entry is spelled as the
+    // A retired interface entry goes on the package that owns its key. An
+    // entry whose owner is not a package of the unit (a deleted package, or
+    // the root when no file of the unit declares the root package), and every
+    // `service:` entry, goes on the unit's anchor. Every entry is spelled as the
     // lock spells it, which is its catalog name, so the unit's list is the
     // concatenation of its packages' lists.
     let is_anchor = numbering.anchor == *package_name;
@@ -15368,10 +15372,10 @@ interface cabin { signal i : State @[100ms..1s] }
     }
 
     /// Catalog design, `interfaces.lock`: with no lock, the provisional
-    /// numbers run over the whole unit in byte order of the lock key —
+    /// numbers run over the whole unit in byte order of the name —
     /// `Session` before `cluster.Speed` — not per package from 1.
     #[test]
-    fn provisional_numbers_run_over_the_unit_in_key_byte_order() {
+    fn provisional_numbers_run_over_the_unit_in_name_byte_order() {
         let unit = UnitFixture::session_and_speed(None);
         assert_eq!(unit.numbers("u"), [("Session".to_string(), 1, true)]);
         assert_eq!(
@@ -15380,13 +15384,12 @@ interface cabin { signal i : State @[100ms..1s] }
         );
     }
 
-    /// The order is the byte order of the name, not the package order and not
-    /// the whole lock key: the `service:` prefix of an inline shape is not
-    /// part of the order. The root's inline service `alpha` (key
-    /// `service:alpha`) sorts before `cluster.Speed` by name, and after it by
-    /// whole key, so the numbering tells the two rules apart.
+    /// The order is the byte order of the name, not the whole lock key: the
+    /// `service:` prefix of an inline shape is not part of the order. The
+    /// root's inline service `alpha` (key `service:alpha`) sorts before
+    /// `cluster.Speed` by name, and after it by whole key.
     #[test]
-    fn provisional_numbers_follow_name_byte_order_not_package_order() {
+    fn provisional_numbers_follow_name_byte_order_not_whole_key_order() {
         let unit = UnitFixture::new(
             "u",
             None,
@@ -15403,6 +15406,29 @@ interface cabin { signal i : State @[100ms..1s] }
             [("cluster.Speed".to_string(), 2, true)]
         );
         assert_eq!(unit.numbers("u"), [("service:alpha".to_string(), 1, true)]);
+    }
+
+    /// The order is the byte order of the name, not the package order: the
+    /// root's inline service `zone` sorts after `cluster.Speed` by name,
+    /// although its package `u` sorts before `u.cluster`.
+    #[test]
+    fn provisional_numbers_follow_name_byte_order_not_package_order() {
+        let unit = UnitFixture::new(
+            "u",
+            None,
+            &[
+                (
+                    "u",
+                    "package u\ntype Level: integer [0..1]\nservice zone { signal z : Level @[100ms..1s] }\n",
+                ),
+                ("u.cluster", "package u.cluster\ninterface Speed {}\n"),
+            ],
+        );
+        assert_eq!(
+            unit.numbers("u.cluster"),
+            [("cluster.Speed".to_string(), 1, true)]
+        );
+        assert_eq!(unit.numbers("u"), [("service:zone".to_string(), 2, true)]);
     }
 
     /// A subpackage's shape is frozen by the entry under its relative key,
