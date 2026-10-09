@@ -119,6 +119,8 @@ const WIP_X: &str = concat!("docs", "/wip/x.md");
 const WIP_OLD_MD: &str = concat!("docs", "/wip/old.md");
 const WIP_OLD_RS: &str = concat!("docs", "/wip/old.rs");
 const ARCHIVE_OLD_MD: &str = concat!("docs", "/archive/old.md");
+const BOOK_PAGE: &str = concat!("docs", "/book/intro.md");
+const SPEC_PAGE: &str = concat!("docs", "/specification/typl-language-reference.md");
 
 fn git(dir: &Path, args: &[&str]) {
     let out = Command::new("git")
@@ -226,9 +228,10 @@ fn a_mixed_change_runs_both() {
 }
 
 #[test]
-fn a_rename_out_of_a_skipped_path_counts_the_old_name() {
-    // With rename detection the diff would list only the new name, which is a
-    // skipped path, and the Rust jobs would not run.
+fn a_rename_from_a_rust_path_to_a_skipped_path_counts_the_old_name() {
+    // The old name is a Rust path and the new name is a skipped path. With
+    // rename detection the diff would list only the new name, and the Rust jobs
+    // would not run.
     let out = run_filter(
         "pull_request",
         &["crates/ridl/src/old.rs"],
@@ -245,6 +248,24 @@ fn a_rename_into_a_skipped_path_from_a_skipped_path_skips_rust() {
         Change::Rename(WIP_OLD_MD, ARCHIVE_OLD_MD),
     );
     assert_eq!(out, "rust=false\nmarkdown=true\n");
+}
+
+#[test]
+fn a_book_page_runs_rust() {
+    assert_eq!(pr(Change::Add(&[BOOK_PAGE])), "rust=true\nmarkdown=true\n");
+}
+
+#[test]
+fn a_specification_page_runs_rust() {
+    assert_eq!(pr(Change::Add(&[SPEC_PAGE])), "rust=true\nmarkdown=true\n");
+}
+
+#[test]
+fn third_party_notices_runs_rust() {
+    assert_eq!(
+        pr(Change::Add(&["THIRD-PARTY-NOTICES.txt"])),
+        "rust=true\nmarkdown=true\n"
+    );
 }
 
 #[test]
@@ -267,6 +288,9 @@ fn an_empty_diff_runs_both() {
 
 #[test]
 fn the_eval_corpus_runs_rust() {
+    // The `^evals/` clause of the filter guards against a later widening of the
+    // skip list. No path reaches it today, because the skip list does not match
+    // `evals/`, so this test pins the current result only.
     assert_eq!(
         pr(Change::Add(&["evals/corpus/x.md"])),
         "rust=true\nmarkdown=true\n"
@@ -307,6 +331,12 @@ fn a_push_event_runs_both() {
 }
 
 #[test]
+fn a_workflow_dispatch_event_runs_both() {
+    let out = run_filter("workflow_dispatch", &[], Change::Add(&[WIP_X]));
+    assert_eq!(out, "rust=true\nmarkdown=true\n");
+}
+
+#[test]
 fn gate_jobs_depend_on_changes_and_gate_on_its_outputs() {
     let workflow = workflow_text();
     for (job, output) in [("rust", "rust"), ("wasm", "rust"), ("markdown", "markdown")] {
@@ -333,7 +363,14 @@ fn gate_jobs_depend_on_changes_and_gate_on_its_outputs() {
         .split(',')
         .map(str::trim)
         .collect();
-    assert!(listed.contains(&"changes"), "ci needs {listed:?}");
+    for job in ["changes", "rust", "wasm", "markdown", "book", "commit-lint"] {
+        assert!(listed.contains(&job), "ci needs {job}: {listed:?}");
+    }
+    assert_eq!(
+        job_key(&ci, "if").as_deref(),
+        Some("always()"),
+        "ci runs even when a needed job fails or is skipped"
+    );
 
     let changes = job_block(&workflow, "changes");
     assert!(
