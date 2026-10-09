@@ -42,6 +42,17 @@ package. The input is one IR package named after the unit, `reduced_unit`
 replaces `reduced_package`, interfaces carry their catalog names, and reached
 declarations carry their full canonical names. Decisions 1 to 14 are unchanged.
 
+**Amended 2026-10-09 — decision 15, the compatible catalogs.** The hash is
+unchanged. Beside it, the catalog descriptor and the codegen model carry the
+list of earlier catalog hashes the toolchain judged compatible with the current
+catalog, and a provider accepts an `attach` that names one of them (frame
+specification §6.1). `ridl baseline` records the chain, `ridl build` emits the
+list from it, both through `ridl diff`'s classifier scoped to the unit, and a
+breaking change restarts it. The reasoning trail is
+[the catalog compatibility design note](../wip/2026-10-09-catalog-compat-design.md)
+(lane H stage H2, ruling R-1 of its driver); the implementation is its plan,
+tracked as driftsys/ridl#787. Decisions 1 to 14 are unchanged.
+
 The reasoning trail is
 [`docs/archive/2026-08-03-ir-protobuf-encodings-design.md`](../archive/2026-08-03-ir-protobuf-encodings-design.md),
 which carries the measurements and the API confirmations this record summarises.
@@ -586,18 +597,69 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     compiler's lowering, or this decision, and that commit's message names the
     cause.
 
+    **The compatible catalogs (amendment of 2026-10-09).** The hash identifies
+    one catalog exactly, and an `attach` that names another hash is refused —
+    which refuses a deployed consumer after every change, the compatible ones
+    included, although `ridl diff` exits 0 for them. So the toolchain records,
+    beside the hash, the earlier hashes it judged compatible with the current
+    catalog, and a provider accepts an `attach` naming one of them (frame
+    specification §6.1). The rule:
+    - **The chain is recorded at publication.** `ridl baseline` writes one
+      `<unit>.catalogs` file per unit with an interface shape, beside the
+      snapshots: the hash of the catalog it publishes, computed at publication
+      over the build's scope, then the hashes carried over from the replaced
+      baseline's file when the unit's verdict from the replaced baseline to the
+      fresh snapshots is `Compatible` or `Identical`, newest first, no hash
+      twice. A `Breaking` verdict, a replaced baseline with no such file, and a
+      first publication each write the one new hash. An earlier hash is the
+      value the publishing toolchain computed, never recomputed from a snapshot.
+    - **The list is emitted at the build, and the `ridl` facade computes it.**
+      `ridl build` discovers `.ridl/baseline/` as `ridl check` does and, per
+      unit, classifies the baseline against the current tree: `Compatible` or
+      `Identical` gives every hash of the file except the current catalog's own;
+      `Breaking`, no baseline, no snapshot and no file each give an empty list,
+      which is the exact-match behaviour the hash alone gives. A baseline that
+      is present and cannot be loaded fails the build, exit 2. The facade passes
+      the per-unit lists to `ridlc::run_build_with` as an input of the build,
+      and `ridlc` writes them into the descriptor and the codegen model without
+      reading any baseline: the compiler stays the pure source → IR function of
+      [ADR-0008](ADR-0008-e2-execution.md) decisions 9 and 14, and `ridlc build`
+      writes an empty list.
+    - **The verdict is `ridl diff`'s, scoped to the unit.**
+      `ridl_diff::unit_verdict` takes the maximum over the changes whose package
+      is one of the unit's source packages on either side, or whose top-level
+      declaration one of the unit's interfaces reaches on either side
+      (`reachable_decls`): the closure the hash covers. `ridl diff`'s own report
+      and exit code are unchanged.
+    - **Where the list lives.** The descriptor's `Catalog` gains `compatible`, a
+      vector of `EarlierCatalog { hash }` tables appended at the end of the
+      table and not required, under the schema's append-only rule;
+      `SCHEMA_VERSION` stays 1, and `verify` walks the field when present. The
+      codegen model's `Catalog` gains `repeated bytes compatible = 4`. The
+      generated Rust face is unchanged, and its catalog check (ADR-0023
+      decision 8) stays `CatalogRef` equality: it is local to one program.
+    - **Direction.** An older consumer attaches to a newer provider; the reverse
+      is refused, because `ridl diff`'s verdict is one-directional.
+    - **Transitivity.** The chain is judged link by link; every compatible
+      category is monotone, so the composition of compatible changes is
+      compatible. No earlier baseline is kept.
+
 ## Alternatives considered
 
-| Candidate                                             | Verdict                        | Reason                                                                                                                                                                                                                                                                                                                                                                                        |
-| ----------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pbjson-build` instead of `prost-reflect`             | adopted for JSON (decision 14) | generates canonical JSON at build time with no runtime pool, and was the recommendation until prototext entered scope. It is JSON only, and prototext needs a runtime descriptor pool, so its single advantage disappears — the original verdict, outweighed once decision 12 measured the transcode failing on legal source: a correctness trigger, not a cost one. Prototext keeps the pool |
-| Prototext for goldens                                 | rejected                       | it reads better — `snake_case` names, bare enum names, no 64-bit stringification — but a golden in a format no shipped artifact uses tests the renderer rather than the artifact                                                                                                                                                                                                              |
-| Prototext as the recommended interchange format       | rejected                       | TypeScript has no usable text-format parser, and TypeScript is a named target of ADR-0004                                                                                                                                                                                                                                                                                                     |
-| Additive only — keep `serde` JSON, add new emits      | rejected                       | zero churn, but it leaves the misleading artifact shipped under the name every consumer reaches for first, and raises the dialect count instead of lowering it                                                                                                                                                                                                                                |
-| A compatibility shim for existing baselines           | rejected                       | the version is `0.0.0` with no tags and nothing published, so no baseline exists outside this repository                                                                                                                                                                                                                                                                                      |
-| Reuse `TimingChanged`-style enumeration in the filter | rejected                       | see decision 10 — an enumeration of variants is what allowed the defect to be latent, and the next encoding would reintroduce it                                                                                                                                                                                                                                                              |
-| The canonical JSON as the catalog hash's input        | rejected (decision 15)         | it is the canonical encoding, but it writes every non-`optional` field at its default, so each IR field added later would change every catalog hash at a toolchain upgrade with no source change                                                                                                                                                                                              |
-| The hash in `ridl-descriptor`, as the plan placed it  | rejected (decision 15)         | the codegen model is lowered in `ridl-ir` and must carry the hash, and `ridl-ir` cannot depend on `ridl-descriptor`, which depends on it                                                                                                                                                                                                                                                      |
+| Candidate                                                      | Verdict                            | Reason                                                                                                                                                                                                                                                                                                                                                                                        |
+| -------------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pbjson-build` instead of `prost-reflect`                      | adopted for JSON (decision 14)     | generates canonical JSON at build time with no runtime pool, and was the recommendation until prototext entered scope. It is JSON only, and prototext needs a runtime descriptor pool, so its single advantage disappears — the original verdict, outweighed once decision 12 measured the transcode failing on legal source: a correctness trigger, not a cost one. Prototext keeps the pool |
+| Prototext for goldens                                          | rejected                           | it reads better — `snake_case` names, bare enum names, no 64-bit stringification — but a golden in a format no shipped artifact uses tests the renderer rather than the artifact                                                                                                                                                                                                              |
+| Prototext as the recommended interchange format                | rejected                           | TypeScript has no usable text-format parser, and TypeScript is a named target of ADR-0004                                                                                                                                                                                                                                                                                                     |
+| Additive only — keep `serde` JSON, add new emits               | rejected                           | zero churn, but it leaves the misleading artifact shipped under the name every consumer reaches for first, and raises the dialect count instead of lowering it                                                                                                                                                                                                                                |
+| A compatibility shim for existing baselines                    | rejected                           | the version is `0.0.0` with no tags and nothing published, so no baseline exists outside this repository                                                                                                                                                                                                                                                                                      |
+| Reuse `TimingChanged`-style enumeration in the filter          | rejected                           | see decision 10 — an enumeration of variants is what allowed the defect to be latent, and the next encoding would reintroduce it                                                                                                                                                                                                                                                              |
+| The canonical JSON as the catalog hash's input                 | rejected (decision 15)             | it is the canonical encoding, but it writes every non-`optional` field at its default, so each IR field added later would change every catalog hash at a toolchain upgrade with no source change                                                                                                                                                                                              |
+| A constant for the compatible catalogs on every generated face | rejected (decision 15, 2026-10-09) | the face's check is local equality and a new associated constant on `ridl_rt::contract::Interface` is a breaking `ridl-rt` change; the descriptor and the codegen model carry the list, as they carry `retired`                                                                                                                                                                               |
+| A `SCHEMA_VERSION` bump for the `compatible` field             | rejected (decision 15, 2026-10-09) | an appended, non-required field is what the descriptor's append-only rule exists for; a bump would make every engine built against version 1 refuse every new file                                                                                                                                                                                                                            |
+| Recompute an earlier catalog's hash from its snapshot          | rejected (decision 15, 2026-10-09) | a consumer holds the hash its toolchain computed; a toolchain upgrade that changes the IR schema moves every hash, so the value is recorded at publication                                                                                                                                                                                                                                    |
+| Accept a newer consumer on an older provider                   | rejected (decision 15, 2026-10-09) | `ridl diff` judges one direction, and two catalogs compatible with a common ancestor can be incompatible with each other                                                                                                                                                                                                                                                                      |
+| The hash in `ridl-descriptor`, as the plan placed it           | rejected (decision 15)             | the codegen model is lowered in `ridl-ir` and must carry the hash, and `ridl-ir` cannot depend on `ridl-descriptor`, which depends on it                                                                                                                                                                                                                                                      |
 
 The `prost-reflect` cost is real and small, and is recorded rather than hidden.
 It renders JSON by transcoding the typed message and then walking that tree with
@@ -673,6 +735,12 @@ same change.
 | [the ADR index](README.md)                                                        | this record's entry states the canonical-form policy as amended                                                                             |
 | `crates/ridl-ir/src/lib.rs`                                                       | `to_binary`'s doc comment no longer calls binary the canonical interchange encoding; `MAX_JSON_NESTING`'s carries the corrected 516 and 1.9 |
 | `crates/ridlc/src/lib.rs`, `crates/ridlc/tests/corpus.rs`                         | the same correction where `Emit::IrBinary` and the corpus round-trip repeated it                                                            |
+
+The 2026-10-09 amendment of decision 15 (the compatible catalogs) amends
+[the frame specification](../specification/frame-specification.md) §6.1, §6.4
+and §12 in the same change.
+[`docs/design/catalog-descriptor.md`](../design/catalog-descriptor.md) describes
+the descriptor as built and changes when the field lands.
 
 ## References
 

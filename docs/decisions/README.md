@@ -120,7 +120,11 @@ other entry below is Accepted.
   the canonical JSON, states the determinism rule for that binary, and pins the
   corpus package's hash with a golden test in the gate; the 2026-10-09 amendment
   makes the hashed input one unit, with interfaces under catalog names and
-  reached declarations under full canonical names.
+  reached declarations under full canonical names. A second 2026-10-09 amendment
+  of decision 15 adds the compatible catalogs: the descriptor and the codegen
+  model carry the earlier hashes `ridl diff` judged compatible, recorded by
+  `ridl baseline` and emitted by `ridl build`, and a provider accepts an
+  `attach` naming one of them (frame specification §6.1).
 
 - **ADR-0015 — QoS absorption, RPC bounds, and the interface as the unit.** ridl
   expresses QoS as semantic obligation, never as a transport knob, so it
