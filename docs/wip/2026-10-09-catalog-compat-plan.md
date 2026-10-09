@@ -33,7 +33,9 @@ decision 15 as amended on 2026-10-09 and frame specification §6.1.
   (R-H2-13).
 - The generated Rust face, `ridl-rt`, `interfaces.lock` and the baseline
   snapshots' shape are unchanged (R-H2-7).
-- `ridlc build` and `ridl build` write byte-identical descriptors (R-H2-14).
+- `ridlc` reads no baseline: the `ridl` facade computes the per-unit lists and
+  passes them to `ridlc::run_build_with`; `ridlc build` writes an empty list
+  (R-4, decided by the main session; ADR-0008 decisions 9 and 14).
 - A `Breaking` unit verdict resets the chain to the one new hash at publication
   and emits an empty list at build time (R-H2-3).
 - Every earlier hash is read from the `<unit>.catalogs` file, never recomputed
@@ -577,42 +579,52 @@ git commit -m "feat(ridl): record the chain of compatible catalogs at publicatio
 
 ---
 
-### Task 6: `ridl build` emits the list
+### Task 6: `ridl build` computes the list and `ridlc` writes it
 
 **Files:**
 
-- Create: `crates/ridlc/src/compat.rs`
-- Modify: `crates/ridlc/src/lib.rs` (`pub mod compat;`; `run_build_with`
-  computes the per-unit lists once and passes each unit's list to
-  `write_catalogs` and to `codegen_request`; `write_catalogs` gains a
-  `&BTreeMap<String, Vec<[u8; 32]>>` parameter)
+- Modify: `crates/ridlc/src/lib.rs` (`run_build_with` gains a parameter
+  `compatible: &BTreeMap<String, Vec<[u8; 32]>>`, keyed by unit name, and passes
+  each unit's list to `write_catalogs` and to `codegen_request`;
+  `write_catalogs` gains the same parameter; `run_build` and every other caller
+  pass an empty map)
+- Modify: `crates/ridlc/src/main.rs` (`ridlc build` passes an empty map)
+- Modify: `crates/ridl/src/catalogs.rs` (Task 5's module gains the reader
+  below), `crates/ridl/src/main.rs` (`run_build` computes the map before it
+  calls `ridlc::run_build_with`, only when the build writes a catalog or
+  generates code)
 - Test: `crates/ridl/tests/catalog_chain.rs` (extend),
-  `crates/ridlc/tests/cli.rs` (one parity test)
+  `crates/ridlc/tests/cli.rs` (one test)
 
 **Interfaces:**
 
 - Consumes: Task 1's `unit_verdict`; Task 2's `parse` and `FILE_SUFFIX`;
-  `ridlc::{load_diff_side, catalog_scope}`; `ridl_core::find_root`.
-- Produces:
-  `pub fn compatible_catalogs(entry: &Path, packages: &[&Package], std_ir: Option<&Package>) -> std::io::Result<BTreeMap<String, Vec<[u8; 32]>>>`
-  — called by `run_build_with` only when the build writes a catalog
-  (`Emit::Catalog`) or lowers a codegen model (`generates_code`), so
-  `ridl baseline`'s own IR-only run and an IR dump never read the baseline. The
-  baseline directory is `.ridl/baseline/` under `find_root(entry)` (falling back
-  to the entry's directory as `default_baseline_dir` in
-  `crates/ridl/src/main.rs` does; move that rule here and have `ridl` call it).
-  An absent directory, or one with no `.ir.json` file directly inside, yields an
-  empty map. Otherwise the snapshots are loaded with `load_diff_side`; a load
-  error is an `io::Error` carrying its message. The report is
-  `diff_sets_in(&baseline, &current, &[std])`. For each unit of `packages` with
-  a shape: when `<unit>.catalogs` is absent, no entry (empty list); when present
-  and the unit's verdict is `Breaking`, an empty list; otherwise the file's
-  hashes minus the current catalog hash
-  (`catalog_hash(unit, catalog_scope(packages, std_ir))`). A malformed history
-  file is an `io::Error`.
+  `ridlc::{compile_workspace, load_diff_side, catalog_scope, std_ir}`;
+  `default_baseline_dir` in `crates/ridl/src/main.rs`.
+- Produces, in `crates/ridl/src/catalogs.rs`:
+  `pub(crate) fn compatible_catalogs(db: &mut RidlDatabase, entry: &Path) -> Result<BTreeMap<String, Vec<[u8; 32]>>, ExitCode>`
+  — the baseline directory is `default_baseline_dir(entry)`. An absent
+  directory, or one with no `.ir.json` file directly inside, yields an empty map
+  without compiling anything. Otherwise the snapshots are loaded with
+  `load_diff_side` (a load error is reported as `ridl check` reports it, exit
+  2), the workspace is compiled with `compile_workspace` (a compile error is
+  left to `run_build_with`, which reports it: return an empty map), and the
+  report is `diff_sets_in(&baseline, &current, &[std_ir()])`. For each unit of
+  the compiled packages with a shape: when `<unit>.catalogs` is absent, no
+  entry; when present and `unit_verdict` is `Breaking`, an empty list; otherwise
+  the file's hashes minus the current catalog hash
+  (`catalog_hash(unit, catalog_scope(current refs, Some(&std)))`). A malformed
+  history file is exit 2 with its line named.
+- Produces, in `ridlc`:
+  `pub fn run_build_with(entry, out_dir, emits, plugins, plugin_timeout, frozen, apply_lints, deployment, compatible: &BTreeMap<String, Vec<[u8; 32]>>) -> io::Result<CliRun>`
+  — writes each unit's list into the descriptor (Task 3's `lower`) and the
+  codegen request (Task 4's `codegen_request`); a unit absent from the map gets
+  an empty list. `ridlc` reads no baseline in this task or any other (ADR-0008
+  decisions 9 and 14, ruling R-4).
 
-- [ ] **Step 1: Add `compatible_catalogs` returning an empty map, and thread the
-      map through `run_build_with`, `write_catalogs` and `codegen_request`**
+- [ ] **Step 1: Thread the map through `ridlc` (every caller passes an empty
+      map), add `compatible_catalogs` returning an empty map, and call it from
+      `run_build`**
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -664,16 +676,17 @@ In `crates/ridlc/tests/cli.rs`:
 
 ```rust
 #[test]
-fn ridlc_build_writes_the_same_descriptor_as_ridl_build() {
-    // publish with ridl baseline; append an event; build with both binaries
-    assert_eq!(ridlc_bytes, ridl_bytes);
+fn ridlc_build_reads_no_baseline() {
+    // publish with ridl baseline; append an event; build with ridlc:
+    // the descriptor's compatible list is empty although the chain exists
+    assert_eq!(compatible_of(&out, unit), Vec::<String>::new());
 }
 ```
 
 - [ ] **Step 3: Run them and confirm the assertion failures**
 
 Run:
-`cargo test -p ridl-cli --test catalog_chain && cargo test -p ridlc --test cli ridlc_build_writes_the_same_descriptor_as_ridl_build`
+`cargo test -p ridl-cli --test catalog_chain && cargo test -p ridlc --test cli ridlc_build_reads_no_baseline`
 Expected: the `lists_the_baseline_hash`, `the_current_hash_is_never_listed` and
 the two failure-path tests fail on assertions.
 
@@ -740,15 +753,15 @@ git commit -m "docs: describe the compatible catalogs as built"
 
 ## Models
 
-| Task | Work                             | Model  | Why                                                                                       |
-| ---- | -------------------------------- | ------ | ----------------------------------------------------------------------------------------- |
-| 1    | `unit_verdict`                   | Opus   | The filter decides when a chain resets; its tests must cover the reached-declaration rule |
-| 2    | the history file                 | Sonnet | A line format with a parser and a writer                                                  |
-| 3    | the descriptor field             | Sonnet | Schema, regeneration, a parameter and a walk, under an existing pattern (`retired`)       |
-| 4    | the model field                  | Sonnet | One proto field and a parameter threaded through callers                                  |
-| 5    | `ridl baseline` writes the chain | Opus   | Staging, publication and two gates interact                                               |
-| 6    | `ridl build` emits the list      | Fable  | The rule at the heart of the design; every input class in Review Focus lands here         |
-| 7    | records and book                 | Sonnet | As-built prose over a finished behaviour                                                  |
+| Task | Work                                              | Model  | Why                                                                                       |
+| ---- | ------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------- |
+| 1    | `unit_verdict`                                    | Opus   | The filter decides when a chain resets; its tests must cover the reached-declaration rule |
+| 2    | the history file                                  | Sonnet | A line format with a parser and a writer                                                  |
+| 3    | the descriptor field                              | Sonnet | Schema, regeneration, a parameter and a walk, under an existing pattern (`retired`)       |
+| 4    | the model field                                   | Sonnet | One proto field and a parameter threaded through callers                                  |
+| 5    | `ridl baseline` writes the chain                  | Opus   | Staging, publication and two gates interact                                               |
+| 6    | `ridl build` computes the list, `ridlc` writes it | Fable  | The rule at the heart of the design; every input class in Review Focus lands here         |
+| 7    | records and book                                  | Sonnet | As-built prose over a finished behaviour                                                  |
 
 Each task has a reviewer with both verdicts (the brief is met; the code is
 sound) before the next task's implementer starts, then `/review` over the pull

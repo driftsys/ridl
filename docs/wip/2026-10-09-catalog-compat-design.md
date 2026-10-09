@@ -113,19 +113,38 @@ written twice. The `.catalogs` files are published wholesale with the snapshots:
 the directory ends up holding exactly one per unit with a shape, and a stale one
 is removed.
 
-**`ridl build` reads the chain.** `ridlc::run_build_with` discovers the baseline
-the way `ridl check` does (`.ridl/baseline/` under `ridl_core::find_root`, no
-flag), for every build that writes a catalog descriptor or lowers a codegen
-model. When the directory holds snapshots and a `<unit>.catalogs` file for the
-unit, the build classifies baseline → current for that unit; when the verdict is
-`Compatible` or `Identical`, the unit's list is every hash of the file except
-the current catalog's own hash; when it is `Breaking`, the list is empty. With
+**`ridl build` reads the chain, and `ridlc` writes what it is given.** The
+`ridl` facade discovers the baseline the way `ridl check` does
+(`.ridl/baseline/` under `ridl_core::find_root`, no flag), for every build that
+writes a catalog descriptor or lowers a codegen model. When the directory holds
+snapshots and a `<unit>.catalogs` file for the unit, `ridl build` compiles the
+workspace (as `ridl check` compiles it a second time for its baseline
+comparison, `crates/ridl/src/main.rs:1187-1200`), classifies baseline → current
+for that unit with `ridl_diff`, and builds the unit's list: when the verdict is
+`Compatible` or `Identical`, every hash of the file except the current catalog's
+own hash; when it is `Breaking`, nothing. It passes the per-unit lists to
+`ridlc::run_build_with` as an input of the build, and `ridlc` writes them into
+the descriptor and the codegen model without reading any baseline itself. With
 no baseline directory, no snapshot, or no `<unit>.catalogs` file, the list is
 empty, which is today's behaviour: the provider accepts its own hash and nothing
-else. A baseline directory that is present and cannot be loaded (a malformed
-snapshot, a refused encoding) is the error `ridl check` reports for it, exit 2,
-because a provider built over a baseline the toolchain cannot read would
-silently refuse every deployed consumer.
+else. `ridlc build` always passes an empty list, because the compiler is a pure
+source → IR function and reading a workspace-local baseline is workflow, outside
+the tool-qualification boundary
+([ADR-0008](../decisions/ADR-0008-e2-execution.md) decisions 9 and 14,
+`crates/ridl/src/main.rs:23-27`). A baseline directory that is present and
+cannot be loaded (a malformed snapshot, a refused encoding) is the error
+`ridl check` reports for it, exit 2, because a provider built over a baseline
+the toolchain cannot read would silently refuse every deployed consumer.
+
+`ridlc::load_diff_side` (`crates/ridlc/src/diff_side.rs:150`) does read a
+snapshot directory, and it sets no precedent for discovery inside `ridlc`: it
+loads a path its caller names as an input — the `ridl` facade's `diff` and
+`check` — the way the compiler loads a source tree, and `ridlc`'s own CLI never
+calls it. The dependency `ridlc` → `ridl-diff` that it needs for `load_ir_json`
+(`crates/ridlc/Cargo.toml:17`) does contradict the letter of ADR-0008 decision
+9's 2026-07-26 extension, which says `ridl-diff` is a dependency of nothing
+`ridlc` compiles; that drift predates this design and is recorded as
+driftsys/ridl#786, not changed here.
 
 **The verdict is per unit.** `ridl diff`'s report verdict is workspace-wide. A
 new function, `ridl_diff::unit_verdict(report, unit, old, new) -> Verdict`,
@@ -182,14 +201,15 @@ The cost is a migration step: a baseline published before this change has no
 
 ### Alternatives considered
 
-| Alternative                                                                                         | Why not                                                                                                                                                                                                                                                                               |
-| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Record the chain in `interfaces.lock`                                                               | The lock is the number allocator, one line table with a merge driver (`crates/ridl-core/src/interface_lock.rs:10-25`); hashes are not numbers, and the merge driver would have to merge a list it cannot judge. The baseline is the published contract; the chain is a fact about it. |
-| Keep every earlier baseline (`.ridl/baseline/<hash>/`) and diff the current tree against each       | Exact instead of transitive, but the baseline directory grows with every release, `ridl check`'s discovery and the publication gates all assume one published snapshot per package, and the compatible categories are monotone, so the exactness buys nothing today.                  |
-| Recompute the earlier hash from the snapshot at build time instead of recording it                  | Wrong after a toolchain upgrade that changes the IR schema: the consumer holds the hash its toolchain computed. The golden-hash test shows a snapshot re-hashes stably under one toolchain, not across two.                                                                           |
-| The workspace-wide verdict decides every unit's chain                                               | Simpler, and safe, but a breaking change in one unit would refuse the deployed consumers of every other unit in the workspace. The per-unit verdict is a filter over the same report and costs one function.                                                                          |
-| A hand-written list in `ridl.toml`                                                                  | A second source of truth beside `ridl diff`, the thing ridl §11 rejected for a version block: a hand-maintained list drifts, and a hash is not something a person writes.                                                                                                             |
-| Let `ridl build` list the baseline hash without classifying, and let `ridl baseline` do all judging | The tree between two publications can be breaking relative to the baseline (a type changed, not yet published); a provider built from it would accept consumers it cannot serve. The build must judge its own tree.                                                                   |
+| Alternative                                                                                                       | Why not                                                                                                                                                                                                                                                                                                                                                                    |
+| ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Record the chain in `interfaces.lock`                                                                             | The lock is the number allocator, one line table with a merge driver (`crates/ridl-core/src/interface_lock.rs:10-25`); hashes are not numbers, and the merge driver would have to merge a list it cannot judge. The baseline is the published contract; the chain is a fact about it.                                                                                      |
+| Keep every earlier baseline (`.ridl/baseline/<hash>/`) and diff the current tree against each                     | Exact instead of transitive, but the baseline directory grows with every release, `ridl check`'s discovery and the publication gates all assume one published snapshot per package, and the compatible categories are monotone, so the exactness buys nothing today.                                                                                                       |
+| Recompute the earlier hash from the snapshot at build time instead of recording it                                | Wrong after a toolchain upgrade that changes the IR schema: the consumer holds the hash its toolchain computed. The golden-hash test shows a snapshot re-hashes stably under one toolchain, not across two.                                                                                                                                                                |
+| The workspace-wide verdict decides every unit's chain                                                             | Simpler, and safe, but a breaking change in one unit would refuse the deployed consumers of every other unit in the workspace. The per-unit verdict is a filter over the same report and costs one function.                                                                                                                                                               |
+| A hand-written list in `ridl.toml`                                                                                | A second source of truth beside `ridl diff`, the thing ridl §11 rejected for a version block: a hand-maintained list drifts, and a hash is not something a person writes.                                                                                                                                                                                                  |
+| Discover the baseline inside `ridlc::run_build_with`, so `ridlc build` and `ridl build` write the same descriptor | Rejected by ruling R-4 of the main session: reading a workspace-local baseline is workflow, and ADR-0008 decisions 9 and 14 keep it in the `ridl` facade so that `ridlc` stays the pure source → IR function the tool-qualification argument covers. `ridlc build` writes an empty list, and the descriptor's bytes depend on which binary wrote them in that field alone. |
+| Let `ridl build` list the baseline hash without classifying, and let `ridl baseline` do all judging               | The tree between two publications can be breaking relative to the baseline (a type changed, not yet published); a provider built from it would accept consumers it cannot serve. The build must judge its own tree.                                                                                                                                                        |
 
 ## Question 2 — where the list lives
 
@@ -399,8 +419,8 @@ The records left unchanged, and why:
 outline, in dependency order: the per-unit verdict in `ridl-diff`; the
 `<unit>.catalogs` file's reader and writer in `ridl-core`; the descriptor schema
 field, its lowering, verification and JSON view; the codegen model field;
-`ridl baseline` writing the chain; `ridl build` reading it and emitting the
-list; then the records and the book.
+`ridl baseline` writing the chain; `ridl build` reading it and passing the list
+to `ridlc`, which writes it; then the records and the book.
 
 ## Migration
 
@@ -477,10 +497,19 @@ Each ruling: what was decided — why — what it costs if wrong.
 - **R-H2-13** `ridl diff`'s own output and exit code are unchanged — the
   per-unit verdict is a build-time input, not a report to a person — if wrong, a
   `--unit` flag is added later over the same function.
-- **R-H2-14** `ridlc build` and `ridl build` emit the same descriptor: the
-  baseline discovery moves into `ridlc::run_build_with` — the descriptor's bytes
-  must not depend on which binary wrote them — if wrong, `ridlc` learns about
-  `.ridl/baseline/` for nothing, and the discovery moves back to `ridl`.
+- **R-H2-14** (withdrawn, replaced by R-4 below) `ridlc build` and `ridl build`
+  were to emit the same descriptor by moving the baseline discovery into
+  `ridlc::run_build_with`. The pass 1 review found that this crosses the
+  boundary ADR-0008 decisions 9 and 14 draw.
+- **R-4 (decided by the main session, 2026-10-09)** `ridlc` stays a pure source
+  → IR function: the `ridl` facade reads the baseline, computes the per-unit
+  lists with `ridl_diff`, and passes them to `ridlc::run_build_with` as an input
+  of the build; `ridlc` only writes what it is given, and `ridlc build` writes
+  an empty list — ADR-0008 decisions 9 and 14 keep baseline reading outside the
+  tool-qualification boundary, and ADR-0008 is not amended — if wrong, a
+  `ridlc build` descriptor differs from a `ridl build` one in the `compatible`
+  field alone, and a user who builds with `ridlc` directly gets exact-match
+  attach behaviour.
 
 ## Open items
 

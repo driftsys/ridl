@@ -613,13 +613,18 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
       twice. A `Breaking` verdict, a replaced baseline with no such file, and a
       first publication each write the one new hash. An earlier hash is the
       value the publishing toolchain computed, never recomputed from a snapshot.
-    - **The list is emitted at the build.** `ridlc::run_build_with` discovers
-      `.ridl/baseline/` as `ridl check` does and, per unit, classifies the
-      baseline against the current tree: `Compatible` or `Identical` emits every
-      hash of the file except the current catalog's own; `Breaking`, no
-      baseline, no snapshot and no file each emit an empty list, which is the
-      exact-match behaviour the hash alone gives. A baseline that is present and
-      cannot be loaded fails the build, exit 2.
+    - **The list is emitted at the build, and the `ridl` facade computes it.**
+      `ridl build` discovers `.ridl/baseline/` as `ridl check` does and, per
+      unit, classifies the baseline against the current tree: `Compatible` or
+      `Identical` gives every hash of the file except the current catalog's own;
+      `Breaking`, no baseline, no snapshot and no file each give an empty list,
+      which is the exact-match behaviour the hash alone gives. A baseline that
+      is present and cannot be loaded fails the build, exit 2. The facade passes
+      the per-unit lists to `ridlc::run_build_with` as an input of the build,
+      and `ridlc` writes them into the descriptor and the codegen model without
+      reading any baseline: the compiler stays the pure source → IR function of
+      [ADR-0008](ADR-0008-e2-execution.md) decisions 9 and 14, and `ridlc build`
+      writes an empty list.
     - **The verdict is `ridl diff`'s, scoped to the unit.**
       `ridl_diff::unit_verdict` takes the maximum over the changes whose package
       is one of the unit's source packages on either side, or whose top-level

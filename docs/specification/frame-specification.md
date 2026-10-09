@@ -503,8 +503,8 @@ a buffer and one that frames it.
   descriptor lists as compatible (`Catalog.compatible`,
   [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15 as amended on
   2026-10-09); the encoding is one the provider serves; and every interface
-  number and ordinal of the consumer's catalog fits the binding's native fields
-  (§4). The session is open.
+  number and ordinal of the catalog the provider serves fits the binding's
+  native fields (§4). The session is open.
 - **`refused(reason)`**, with `reason` one of `unknown_catalog` (the name is not
   served), `catalog_mismatch` (the name is served, and the hash is neither the
   provider's own nor one its descriptor lists), `encoding_unsupported`,
@@ -512,14 +512,18 @@ a buffer and one that frames it.
   field). The session is not open; nothing else is exchanged.
 
 **The compatible catalogs list.** The toolchain writes the list at the
-provider's build, from the lock and baseline workflow: an earlier catalog is
-listed when `ridl diff` judges every change from it to the current catalog
-compatible, and a breaking change restarts the list
-([ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15, as amended on
-2026-10-09). The direction is fixed: an **older consumer** attaches to a **newer
-provider**. A newer consumer attaching to an older provider is refused
-`catalog_mismatch`, because no tool judges that direction and the provider is
-the authority on what it serves.
+provider's build: `ridl baseline` records, per unit, the chain of published
+catalog hashes whose successive changes `ridl diff` judged compatible, and
+`ridl build` emits that chain when the change from the published baseline to the
+tree it builds is compatible too; a breaking change at either step restarts the
+chain. [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15, as amended
+on 2026-10-09, states the rule. The direction is fixed: an **older consumer**
+attaches to a **newer provider**. A newer consumer attaching to an older
+provider is refused `catalog_mismatch`, because no tool judges that direction
+and the provider is the authority on what it serves. **Not built yet:** the
+descriptor field, the chain file and the emit land with the plan that ADR-0014's
+amendment names; until then every descriptor carries no list, and the rule above
+with an empty list is the exact-match rule it replaces.
 
 The catalog check is the peers' agreement on the contract, taken once. On a
 session whose `attach` named the provider's own hash, the two runtimes hold the
@@ -879,7 +883,8 @@ so that each catches one way of being wrong.
 1. An `attach` naming a catalog the provider serves under a hash that is neither
    the provider's own nor one its descriptor lists as compatible is refused
    `catalog_mismatch`, and no other frame is exchanged; one naming a listed
-   earlier hash is accepted (§6.1).
+   earlier hash is accepted (§6.1; the list is not built yet, so a descriptor
+   written today lists nothing).
 2. A `subscribe` to a signal is followed by exactly one `publish` before any
    provider action: `Init`, `seq` 0, no payload, before a first publication; the
    last publication otherwise (§5.1, §6.2).

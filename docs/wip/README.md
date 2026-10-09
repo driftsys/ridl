@@ -228,8 +228,8 @@ records.
   of the catalog hash conflict): `ridl baseline` records the chain of hashes
   `ridl diff` judged compatible, `ridl build` emits it in the descriptor and the
   codegen model, and a provider accepts an `attach` naming one of them. Amends
-  ADR-0014 decision 15 and frame specification §6.1; the plan is seven tasks.
-  Gardened by lane H stage H5 once the plan lands.
+  ADR-0014 decision 15 and frame specification §6.1, §6.4 and §12; the plan is
+  seven tasks. Gardened by lane H stage H5 once the plan lands.
 
 ridl-boundary-model-review.md, superseded by ADR-0012, is archived too — see
 [`../archive/README.md`](../archive/README.md). So is
