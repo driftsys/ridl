@@ -289,6 +289,7 @@ pub fn check_package(
     let unit = pkg.unit(db);
     let package_name = pkg.name(db);
     let lock = pkg.lock(db).as_ref();
+    let alone;
     let (numbering, unit_packages) = if ws.packages(db).contains(&pkg) {
         let members = ws
             .packages(db)
@@ -298,8 +299,8 @@ pub fn check_package(
             .collect();
         (unit_numbering(db, ws, unit.clone(), std), members)
     } else {
-        let alone = number_unit(unit, lock.map(|lock| &lock.lock), &[&checked.ir]);
-        (alone, vec![package_name.clone()])
+        alone = number_unit(unit, lock.map(|lock| &lock.lock), &[&checked.ir]);
+        (&alone, vec![package_name.clone()])
     };
 
     let number = |interface: &mut v2::Interface, key: &LockKey| {
@@ -406,7 +407,7 @@ pub struct UnitNumbering {
 ///
 /// The unit's lock is the one every package of the unit carries, read by the
 /// loader from the manifest directory.
-#[salsa::tracked(returns(clone))]
+#[salsa::tracked(returns(ref))]
 pub fn unit_numbering(
     db: &dyn salsa::Database,
     ws: Workspace,
@@ -15354,7 +15355,7 @@ interface cabin { signal i : State @[100ms..1s] }
                 .collect()
         }
 
-        fn numbering(&self) -> UnitNumbering {
+        fn numbering(&self) -> &UnitNumbering {
             unit_numbering(&self.db, self.ws, self.unit.clone(), self.std)
         }
     }
@@ -15379,27 +15380,29 @@ interface cabin { signal i : State @[100ms..1s] }
         );
     }
 
-    /// The order is the byte order of the keys, not the package order then
-    /// the name: `service:zone` sorts after `cluster.Speed`, so the root's
-    /// inline shape is numbered after the subpackage's interface.
+    /// The order is the byte order of the name, not the package order and not
+    /// the whole lock key: the `service:` prefix of an inline shape is not
+    /// part of the order. The root's inline service `alpha` (key
+    /// `service:alpha`) sorts before `cluster.Speed` by name, and after it by
+    /// whole key, so the numbering tells the two rules apart.
     #[test]
-    fn provisional_numbers_follow_key_byte_order_not_package_order() {
+    fn provisional_numbers_follow_name_byte_order_not_package_order() {
         let unit = UnitFixture::new(
             "u",
             None,
             &[
                 (
                     "u",
-                    "package u\ntype Level: integer [0..1]\nservice zone { signal z : Level @[100ms..1s] }\n",
+                    "package u\ntype Level: integer [0..1]\nservice alpha { signal z : Level @[100ms..1s] }\n",
                 ),
                 ("u.cluster", "package u.cluster\ninterface Speed {}\n"),
             ],
         );
         assert_eq!(
             unit.numbers("u.cluster"),
-            [("cluster.Speed".to_string(), 1, true)]
+            [("cluster.Speed".to_string(), 2, true)]
         );
-        assert_eq!(unit.numbers("u"), [("service:zone".to_string(), 2, true)]);
+        assert_eq!(unit.numbers("u"), [("service:alpha".to_string(), 1, true)]);
     }
 
     /// A subpackage's shape is frozen by the entry under its relative key,
