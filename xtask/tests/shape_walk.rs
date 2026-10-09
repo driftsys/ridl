@@ -176,8 +176,8 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-descriptor/tests/lower.rs",
-        lines: 4,
-        why: "the `vehicle()` helper and two tests, each reading the catalog \
+        lines: 5,
+        why: "the `vehicle()` helper and three tests, each reading the catalog \
               descriptor's own `Catalog.interfaces` field back out of a \
               buffer, and a test that zeroes the number of the one interface \
               its package declares; the lowering itself walks `shapes()`",
@@ -204,7 +204,7 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-ir/src/catalog_hash.rs",
-        lines: 37,
+        lines: 39,
         why: "the reduced unit's own `interfaces` field, which the hash \
               fills from a `shapes()` walk over every package of the unit, \
               sorts and blanks; the rest are test fixtures that build or \
