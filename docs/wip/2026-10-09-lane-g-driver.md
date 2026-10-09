@@ -259,3 +259,15 @@ Each ruling: what was decided — why — what it costs if wrong.
   one follow-up `debt` issue filed by G4, not into G4's pull request, because G3
   changes `ridl-sem` at the same time; the `ridl-mcp` test helper stays — if
   wrong, a lone-CR file misses the detached-doc lint until that issue lands.
+- **R-20** #770: the overlay loader accepts a `.rxdl` overlay and reports it
+  with RIDL-417 without compiling it; ADR-0025 decision 7 (with a dated
+  amendment line in its `## Status`) and rule 2 of
+  `docs/design/mcp-workspace-tools.md` §4.1 are amended in the same pull request
+  — R-10 requires the warning on the overlay path, which a refused overlay
+  cannot give — if wrong, a client that relied on the `LoadError` for a `.rxdl`
+  overlay now gets a warning instead.
+- **R-21** #770: a `.rxdl` file given alone (single-file mode, no `ridl.toml`)
+  also draws RIDL-417 and is not compiled, instead of being compiled as typl —
+  the documentation says a `.rxdl` file is not compiled, and compiling it as
+  typl gives diagnostics about a language it is not written in — if wrong, a
+  user who used `ridl check x.rxdl` as a typl check loses that.
