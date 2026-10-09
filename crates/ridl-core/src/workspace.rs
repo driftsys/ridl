@@ -360,6 +360,14 @@ fn unreadable_manifest(dir: &Path) -> Option<io::Error> {
     })
 }
 
+/// `error` with the path that failed added to its message.
+fn cannot_read(path: &Path, error: io::Error) -> io::Error {
+    io::Error::new(
+        error.kind(),
+        format!("cannot read `{}`: {error}", path.display()),
+    )
+}
+
 /// The manifest kind of `dir/ridl.toml`, or `None` when the file cannot be
 /// read as UTF-8 or does not parse as a manifest.
 fn read_manifest_kind(dir: &Path) -> Option<ManifestKind> {
@@ -620,7 +628,8 @@ impl Loader {
             ));
             return Ok(());
         }
-        let text = fs::read_to_string(&manifest_path)?;
+        let text =
+            fs::read_to_string(&manifest_path).map_err(|e| cannot_read(&manifest_path, e))?;
         let file_id = self.sources.file_id(&path_string(&manifest_path), &text);
         let (manifest, diags) = parse_manifest(file_id, &text);
         self.diagnostics.extend(diags);
@@ -851,7 +860,8 @@ impl Loader {
             }
             let nested_manifest = subdir.join("ridl.toml");
             if nested_manifest.is_file() {
-                let nested_text = fs::read_to_string(&nested_manifest)?;
+                let nested_text = fs::read_to_string(&nested_manifest)
+                    .map_err(|e| cannot_read(&nested_manifest, e))?;
                 let nested_id = self
                     .sources
                     .file_id(&path_string(&nested_manifest), &nested_text);
@@ -1030,7 +1040,7 @@ impl Loader {
         let replacement = self.take_overlay(path);
         let text = match replacement
             .map(Ok)
-            .unwrap_or_else(|| fs::read_to_string(path))
+            .unwrap_or_else(|| fs::read_to_string(path).map_err(|e| cannot_read(path, e)))
         {
             Ok(text) => text,
             Err(err) if err.kind() == io::ErrorKind::InvalidData => {

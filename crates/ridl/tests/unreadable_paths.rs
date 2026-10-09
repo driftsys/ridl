@@ -55,6 +55,16 @@ fn is_root() -> bool {
         .unwrap_or(false)
 }
 
+/// Whether the test must return early because it runs as root, with a notice
+/// on stderr so that the skip is visible in the test output.
+fn skip_as_root() -> bool {
+    let root = is_root();
+    if root {
+        eprintln!("skipped: the process is root, and `chmod 000` does not bind root");
+    }
+    root
+}
+
 /// A readable package whose root directory is then made unreadable.
 fn unreadable_root() -> Fixture {
     let mut fixture = Fixture::new("root");
@@ -93,7 +103,7 @@ const COMMANDS: &[&[&str]] = &[&["check"], &["build"], &["baseline"], &["test"]]
 
 #[test]
 fn an_unreadable_root_reports_the_os_error_and_the_path() {
-    if is_root() {
+    if skip_as_root() {
         return;
     }
     let fixture = unreadable_root();
@@ -118,7 +128,7 @@ fn an_unreadable_root_reports_the_os_error_and_the_path() {
 
 #[test]
 fn an_unreadable_subdirectory_is_named_with_the_os_error() {
-    if is_root() {
+    if skip_as_root() {
         return;
     }
     let fixture = unreadable_subdirectory();
@@ -130,6 +140,88 @@ fn an_unreadable_subdirectory_is_named_with_the_os_error() {
         assert!(
             stderr.contains("Permission denied"),
             "ridl {args:?} names the cause: {stderr}"
+        );
+    }
+}
+
+/// Runs every command over `fixture`, expecting exit code 2 with `path` and the
+/// operating system's cause on stderr.
+fn assert_names_path_and_cause(fixture: &Fixture, path: &Path) {
+    let path = path.display().to_string();
+    for args in COMMANDS {
+        let (code, stderr) = run(RIDL, args, &fixture.root);
+        assert_eq!(code, 2, "ridl {args:?}: {stderr}");
+        assert!(
+            stderr.contains(&format!("cannot read `{path}`")),
+            "ridl {args:?} names `{path}`: {stderr}"
+        );
+        assert!(
+            stderr.contains("Permission denied"),
+            "ridl {args:?} names the cause: {stderr}"
+        );
+    }
+}
+
+#[test]
+fn an_unreadable_source_file_is_named_with_the_os_error() {
+    if skip_as_root() {
+        return;
+    }
+    let mut fixture = Fixture::new("source");
+    std::fs::write(fixture.root.join("ridl.toml"), MANIFEST).unwrap();
+    let source = fixture.root.join("a.ridl");
+    std::fs::write(&source, SOURCE).unwrap();
+    fixture.lock_down(&source);
+    assert_names_path_and_cause(&fixture, &source);
+}
+
+#[test]
+fn an_unreadable_member_manifest_is_named_with_the_os_error() {
+    if skip_as_root() {
+        return;
+    }
+    let mut fixture = Fixture::new("member");
+    std::fs::write(
+        fixture.root.join("ridl.toml"),
+        "[workspace]\nmembers = [\"m\"]\n",
+    )
+    .unwrap();
+    std::fs::create_dir(fixture.root.join("m")).unwrap();
+    let manifest = fixture.root.join("m").join("ridl.toml");
+    std::fs::write(&manifest, MANIFEST).unwrap();
+    std::fs::write(fixture.root.join("m").join("a.ridl"), SOURCE).unwrap();
+    fixture.lock_down(&manifest);
+    assert_names_path_and_cause(&fixture, &manifest);
+}
+
+#[test]
+fn an_unreadable_nested_manifest_is_named_with_the_os_error() {
+    if skip_as_root() {
+        return;
+    }
+    let mut fixture = Fixture::new("nested");
+    std::fs::write(fixture.root.join("ridl.toml"), MANIFEST).unwrap();
+    std::fs::write(fixture.root.join("a.ridl"), SOURCE).unwrap();
+    std::fs::create_dir(fixture.root.join("sub")).unwrap();
+    let nested = fixture.root.join("sub").join("ridl.toml");
+    std::fs::write(&nested, MANIFEST).unwrap();
+    fixture.lock_down(&nested);
+    assert_names_path_and_cause(&fixture, &nested);
+}
+
+#[test]
+fn a_manifest_that_links_to_itself_in_an_ancestor_is_named() {
+    let fixture = Fixture::new("loop");
+    let manifest = fixture.root.join("ridl.toml");
+    std::os::unix::fs::symlink("ridl.toml", &manifest).unwrap();
+    let entry = fixture.root.join("sub");
+    std::fs::create_dir(&entry).unwrap();
+    for args in COMMANDS {
+        let (code, stderr) = run(RIDL, args, &entry);
+        assert_eq!(code, 2, "ridl {args:?}: {stderr}");
+        assert!(
+            stderr.contains(&format!("cannot read `{}`", manifest.display())),
+            "ridl {args:?} names the ancestor manifest: {stderr}"
         );
     }
 }
