@@ -792,11 +792,7 @@ fn build_system(entry: &Path, system: &str, emits: &str) -> (ridl_ir::v2::System
 /// The catalog hash in the descriptor of the unit of the package `catalog`:
 /// the unit is read from the `<catalog>.ir.json` the same build wrote, and the
 /// descriptor is `<unit>.catalog.binfb`.
-fn descriptor_hash(out: &Path, catalog: &str) -> Vec<u8> {
-    let json = std::fs::read_to_string(out.join(format!("{catalog}.ir.json")))
-        .expect("the package IR is written");
-    let package = ridl_ir::v2::from_json(&json).expect("the IR parses");
-    let unit = ridl_ir::v2::unit_of(&package);
+fn descriptor_hash(out: &Path, unit: &str) -> Vec<u8> {
     let bytes = std::fs::read(out.join(format!("{unit}{}", ridl_descriptor::FILE_SUFFIX)))
         .expect("the catalog descriptor is written");
     let descriptor = ridl_descriptor::verify(&bytes).expect("the descriptor verifies");
@@ -892,7 +888,7 @@ fn each_region_carries_its_catalog_hash() {
         .iter()
         .map(|region| region.catalog.as_str())
         .collect();
-    assert_eq!(catalogs, ["veh.adas", "veh.diag"]);
+    assert_eq!(catalogs, ["veh"]);
     for region in &written.regions {
         assert_eq!(region.hash.len(), 32, "`{}`", region.catalog);
         assert_eq!(
@@ -902,8 +898,6 @@ fn each_region_carries_its_catalog_hash() {
             region.catalog
         );
     }
-    // Both regions belong to the unit `veh`, so both carry the unit's hash.
-    assert_eq!(written.regions[0].hash, written.regions[1].hash);
 
     let mut db = ridl_core::RidlDatabase::default();
     let output = ridlc::compile_workspace(&mut db, entry).expect("the corpus entry loads");
