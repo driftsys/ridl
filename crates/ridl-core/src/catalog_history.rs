@@ -39,13 +39,12 @@ impl std::error::Error for HistoryError {}
 /// repeats.
 pub fn parse(text: &str) -> Result<CatalogHistory, HistoryError> {
     let mut hashes: Vec<[u8; 32]> = Vec::new();
-    for (index, raw) in text.lines().enumerate() {
+    for (index, raw) in text.split_terminator('\n').enumerate() {
         let line = index + 1;
-        let trimmed = raw.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
+        if raw.is_empty() || raw.starts_with('#') {
             continue;
         }
-        let hash = decode_hash(trimmed).ok_or_else(|| HistoryError {
+        let hash = decode_hash(raw).ok_or_else(|| HistoryError {
             line,
             message: "expected 64 lowercase hex characters".to_string(),
         })?;
@@ -135,6 +134,27 @@ mod tests {
     #[test]
     fn a_line_longer_than_64_characters_is_refused() {
         assert!(parse(&format!("{}00\n", "00".repeat(32))).is_err());
+    }
+
+    #[test]
+    fn hex_decodes_to_the_exact_bytes() {
+        const HEX: &str = "00a302a904af06b508bb0ac10cc70ecd10d312d914df16e518eb1af11cf71efd";
+        const BYTES: [u8; 32] = [
+            0x00, 0xa3, 0x02, 0xa9, 0x04, 0xaf, 0x06, 0xb5, 0x08, 0xbb, 0x0a, 0xc1, 0x0c, 0xc7,
+            0x0e, 0xcd, 0x10, 0xd3, 0x12, 0xd9, 0x14, 0xdf, 0x16, 0xe5, 0x18, 0xeb, 0x1a, 0xf1,
+            0x1c, 0xf7, 0x1e, 0xfd,
+        ];
+        let parsed = parse(&format!("{HEX}\n")).unwrap();
+        assert_eq!(parsed.hashes, vec![BYTES]);
+        assert_eq!(parsed.render(), format!("{HEADER}\n{HEX}\n"));
+    }
+
+    #[test]
+    fn surrounding_whitespace_and_crlf_are_refused() {
+        let line = "00".repeat(32);
+        assert!(parse(&format!("{line}\r\n")).is_err());
+        assert!(parse(&format!(" {line}\n")).is_err());
+        assert!(parse(&format!("{line} \n")).is_err());
     }
 
     #[test]
