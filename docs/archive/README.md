@@ -508,3 +508,11 @@ provenance. Nothing here is normative — the current references live in
   [the catalog descriptor design record](../design/catalog-descriptor.md), the
   ridl reference section 11, and
   [ADR-0002](../decisions/ADR-0002-module-system.md) sections 1 and 4.
+- **2026-10-09-review-residuals-778-plan.md** — the follow-up to the
+  one-catalog-per-unit work: tests that pin the baseline gate, the lock protocol
+  and the descriptor lowering, the doc statements the branch review found false,
+  and small code follow-ups (driftsys/ridl#778). The plan is archived verbatim;
+  the issue is its spec. The one behaviour it fixes that a user can observe, a
+  workspace member listed twice, is recorded in
+  [ADR-0002](../decisions/ADR-0002-module-system.md) section 1. Its other
+  decisions are implementation choices or were left on the issue.
