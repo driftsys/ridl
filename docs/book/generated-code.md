@@ -213,8 +213,9 @@ package files name `::std::string::String` and `::std::vec::Vec` for strings,
 bytes, arrays and maps. Single-file mode writes no `lib.rs`, so the crate that
 includes the file decides. A crate that is always `no_std` declares
 `extern crate alloc as std;` in its own root. A crate that is `no_std` only
-under a condition declares it under the same condition, because a crate that
-links the standard library cannot also name `alloc` `std`.
+under a condition declares it under the same condition: where the alias is
+declared, `::std` names `alloc`, so a path that only the standard library has,
+such as `::std::sync::LazyLock`, no longer resolves.
 
 A target where `regex` is too large, or one that does not need the blocking
 face, turns the defaults off and selects what it needs. This `Cargo.toml`
