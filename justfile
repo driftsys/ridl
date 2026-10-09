@@ -449,11 +449,10 @@ compat-check: toolchain-check
 # `compat-check` shares and neither closes.
 #
 # Fails on: the build drawing an error; the emitted crate or the consumer
-# failing to compile; the emitted crate failing to check with its `std`
-# feature off for `thumbv7em-none-eabihf`, or with only `validate-pattern`
-# off; the crate emitted for the veh-cluster corpus failing to check with its
-# `std` feature off for that target, or with only `validate-pattern` on; the
-# program exiting non-zero or not reporting all four
+# failing to compile; the emitted crate failing to check with its default
+# features off for `thumbv7em-none-eabihf`; the crate emitted for the
+# veh-cluster corpus failing to check the same way, or with only
+# `validate-pattern` on; the program exiting non-zero or not reporting all four
 # round trips; the lock being out of date; the consumer being unformatted or
 # drawing a clippy warning; the generated crate drawing a clippy warning that
 # its `lib.rs` does not allow, or an allow that no longer fires; a `lib.rs`
@@ -509,22 +508,20 @@ demo:
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p veh_cabin --locked --no-deps -- -D warnings
     mv examples/cabin/generated/lib.rs.bak examples/cabin/generated/lib.rs
     trap - EXIT
-    # The generated crate with its `std` feature off, for a target that has no
-    # standard library, which is the proof that it links none: a target that
-    # has one, `wasm32-unknown-unknown` included, builds a crate that is
+    # The generated crate with its default features off, for a target that
+    # has no standard library, which is the proof that it links none: a target
+    # that has one, `wasm32-unknown-unknown` included, builds a crate that is
     # missing `no_std` without an error. Through cargo and the emitted
     # manifest rather than a bare `rustc`, so that what the features forward
     # to `ridl-rt` is checked as well. The target comes from
-    # rust-toolchain.toml. Then with only `validate-pattern` off, which keeps
-    # `std` and the `blocking` module it gates.
+    # rust-toolchain.toml.
     cargo check --manifest-path examples/cabin/Cargo.toml -p veh_cabin --locked \
         --no-default-features --target thumbv7em-none-eabihf
-    cargo check --manifest-path examples/cabin/Cargo.toml -p veh_cabin --locked \
-        --no-default-features --features std
     # The same check over the crate for the veh-cluster corpus, whose string,
     # bytes, array and map types reach `String` and `Vec` through the
-    # `alloc` that `lib.rs` links as `std`; then with only `validate-pattern`
-    # on, for the `ridl.std` pattern checks, which turn `std` on.
+    # `alloc` that `lib.rs` links as `std`; then on this machine with only
+    # `validate-pattern` on, for the `ridl.std` pattern checks, under which
+    # the crate links the standard library while `std` stays off.
     cargo check --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked \
         --no-default-features --target thumbv7em-none-eabihf
     cargo check --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked \
@@ -798,10 +795,11 @@ book-check root="":
     # 8. The book from case 6, with a source whose anchor has no
     #    `ANCHOR_END`. mdBook renders the rest of the file and logs nothing;
     #    the gate has to fail and name the anchor (check 4).
-    # 9. The book from case 6, with a `.rs` under examples/'s `target/` and one
-    #    under its `generated/`, each a symbolic link to a file that does not
-    #    exist. Copying either one fails, so the gate has to pass, which pins
-    #    that the copy leaves both directories out.
+    # 9. The book from case 6, with a `.rs` under examples/'s `target/`, one
+    #    under its `generated/` and one under its `generated-corpus/`, each a
+    #    symbolic link to a file that does not exist. Copying any one fails,
+    #    so the gate has to pass, which pins that the copy leaves the three
+    #    directories out.
     # 10. The book from case 6, with a source that closes the anchor with
     #     `ANCHOR_END` but never opens it with `ANCHOR`. The gate has to fail
     #     and name the anchor (check 4).
@@ -967,15 +965,17 @@ book-check root="":
             exit 1
         fi
 
-        # Case 9: the copy leaves target/ and generated/ out. A symbolic link
-        # to a file that does not exist cannot be copied, so the gate fails if
-        # the copy reaches either one.
+        # Case 9: the copy leaves target/, generated/ and generated-corpus/
+        # out. A symbolic link to a file that does not exist cannot be copied,
+        # so the gate fails if the copy reaches any one of them.
         printf '%s\n' 'fn main() {' '    // ANCHOR: part' '    let shown = 1;' '    // ANCHOR_END: part' '}' > "$example/examples/demo/src/main.rs"
-        mkdir -p "$example/examples/demo/target/debug" "$example/examples/demo/generated"
+        mkdir -p "$example/examples/demo/target/debug" "$example/examples/demo/generated" \
+            "$example/examples/demo/generated-corpus"
         ln -s "$work/nowhere.rs" "$example/examples/demo/target/debug/build.rs"
         ln -s "$work/nowhere.rs" "$example/examples/demo/generated/lib.rs"
+        ln -s "$work/nowhere.rs" "$example/examples/demo/generated-corpus/lib.rs"
         if ! "{{just_executable()}}" book-check "$example" >"$run" 2>&1; then
-            echo "book-check: the gate did not pass over a fixture whose examples/ holds a target/ and a generated/ directory, so it copied one of them:" >&2
+            echo "book-check: the gate did not pass over a fixture whose examples/ holds a target/, a generated/ and a generated-corpus/ directory, so it copied one of them:" >&2
             cat "$run" >&2
             exit 1
         fi

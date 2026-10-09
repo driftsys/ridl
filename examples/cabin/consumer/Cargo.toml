@@ -2,8 +2,10 @@
 # application outside this repository would depend on one it generated, and on
 # `ridl-loopback` for the ports the face runs over.
 #
-# `generated/` is written by `ridl build --emit rust` and is not in git, so
-# this manifest resolves only after `just demo` has run the build once.
+# `generated/` and the workspace's other generated member,
+# `generated-corpus/`, are written by `ridl build --emit rust` and are not in
+# git, so this manifest resolves only after `just demo` has run both builds
+# once.
 [package]
 name = "consumer"
 version = "0.0.0"

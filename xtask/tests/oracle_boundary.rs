@@ -48,11 +48,12 @@
 //!
 //! The generated package is the second half of that rule, and this workspace
 //! cannot see it: `ridl build` writes it into `examples/cabin/generated/`,
-//! which is not in git, and `examples/cabin` is its own cargo workspace
+//! and a second crate into `examples/cabin/generated-corpus/`, neither of
+//! which is in git, and `examples/cabin` is its own cargo workspace
 //! (`AGENTS.md`). [`the_generated_crate_reaches_no_planus_crate`] reads that
-//! workspace's resolved graph, so it can run only after the crate is
+//! workspace's resolved graph, so it can run only after both crates are
 //! generated. It is `#[ignore]`d for a plain `cargo test`, and `just demo`
-//! runs it right after `ridl build` writes the crate, so `just build` and CI
+//! runs it right after `ridl build` writes them, so `just build` and CI
 //! run it on every change.
 //!
 //! This guard reads the resolved dependency graph instead, via
@@ -384,16 +385,17 @@ fn the_runtime_reaches_no_planus_crate() {
 /// workspace that holds the crate `ridl build` generates for `cabin.ridl` and
 /// the program that links it (lane E16 driver, section 4, answer 8).
 ///
-/// `examples/cabin/generated/` is written by `just demo` and is not in git,
-/// so `cargo metadata` cannot resolve the workspace before that, and this
+/// `examples/cabin/generated/` and `examples/cabin/generated-corpus/` are
+/// written by `just demo` and are not in git, so `cargo metadata` cannot
+/// resolve the workspace before that, and this
 /// test is ignored for a plain `cargo test`. `just demo` runs it with
-/// `--ignored` right after `ridl build` writes the crate.
+/// `--ignored` right after `ridl build` writes both crates.
 ///
 /// The graph is resolved with `--all-features`, so a planus crate behind a
 /// feature of the generated crate or of the consumer that nothing turns on
 /// still fails this test.
 #[test]
-#[ignore = "needs examples/cabin/generated, which `just demo` writes; `just demo` runs it"]
+#[ignore = "needs examples/cabin/generated and generated-corpus, which `just demo` writes; `just demo` runs it"]
 fn the_generated_crate_reaches_no_planus_crate() {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/cabin/Cargo.toml");
     let metadata = cargo_metadata_of(Some(&manifest), true);
@@ -401,7 +403,8 @@ fn the_generated_crate_reaches_no_planus_crate() {
     assert!(
         names.values().any(|&name| name == "veh_cabin"),
         "the resolved graph of `examples/cabin` has no `veh_cabin` package — \
-         did `ridl build` write `examples/cabin/generated/`?"
+         did `ridl build` write `examples/cabin/generated/` and \
+         `examples/cabin/generated-corpus/`?"
     );
     for forbidden in PLANUS_CRATES {
         assert!(
