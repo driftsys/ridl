@@ -112,9 +112,10 @@ Options:
   -h, --help                 Print help
 ```
 
-`PATH` is a `.typl`/`.ridl` file, a package directory, or a workspace root, and
-defaults to the current directory. A `PATH` inside a workspace member loads the
-whole workspace whose `members` lists the member (ADR-0002 §4): the root's
+`PATH` is a `.typl`, `.ridl` or `.rsdl` file, a package directory, or a
+workspace root, and defaults to the current directory. A `.rxdl` or `.rmdl`
+file is refused as `PATH` when no `ridl.toml` is at or above it, as the next
+paragraph says. A `PATH` inside a workspace member loads the whole workspace whose `members` lists the member (ADR-0002 §4): the root's
 `[lints]`, the `[defaults]` keys and `[imports]` apply, imports of sibling members
 resolve, and the report holds only the diagnostics of files under the member.
 `ridl build` on a member also writes the whole workspace. An error in another
@@ -128,11 +129,14 @@ before [ADR-0010][adr-0010], `ridl check --help` rendered it with a blank line
 where the description belongs.
 
 The loader compiles the `.typl`, `.ridl` and `.rsdl` files of a package
-directory. A `.rxdl` file there is not compiled, because the rxdl profile has
-no implementation (driftsys/ridl#68): each one draws the warning RIDL-417
-(`unsupported-source-file`) on the file itself, and its declarations are not in
-the build. A bare `.rxdl` file given as the entry with no `ridl.toml` at or
-above it draws the same warning and is not compiled either.
+directory. A `.rxdl` or `.rmdl` file there is not compiled, because the rxdl
+and rmdl profiles have no implementation (driftsys/ridl#68): each one draws the
+warning RIDL-417 (`unsupported-source-file`) on the file itself, and its
+declarations are not in the build. A bare `.rxdl` or `.rmdl` file given as the
+entry with no `ridl.toml` at or above it is refused: every command that loads
+source through the loader, such as `ridl check`, `ridl build` and `ridl diff`,
+exits 2 with an error that names the extension as unsupported, and compiles
+nothing.
 
 **It writes `~/.ridl/cache` and `ridl.lock`, but only when the manifest
 declares `[imports]`.** `ridl check` loads, resolves, and checks the

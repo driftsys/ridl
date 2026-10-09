@@ -187,22 +187,50 @@ fn unsupported_source_file_takes_its_level_from_the_lints_table() {
     }
 }
 
-/// RIDL-417 in single-file mode: `ridl check` on a bare `.rxdl` file, with
-/// no `ridl.toml` above it, reports the warning once on the file, does not
-/// compile the file (so no typl diagnostic appears), and exits 0.
+/// A lone `.rxdl` or `.rmdl` file, with no `ridl.toml` above it, is a load
+/// error in every command: `ridl check`, `ridl build` and `ridl diff` exit 2
+/// with an error that names the extension as unsupported, compile nothing,
+/// and report no RIDL-417. With a warning instead, `ridl diff` printed
+/// `identical` over two different files and `ridl build` wrote nothing and
+/// exited 0.
 #[test]
-fn a_bare_rxdl_file_is_reported_and_not_compiled() {
-    let dir = TempDir::new("bare-rxdl");
-    let path = dir.write("hmi.rxdl", "package veh.hmi\ntype B: m\n");
-
-    let (code, _, stderr) = ridl(&["check".as_ref(), path.as_os_str()]);
-    assert_eq!(code, 0, "stderr:\n{stderr}");
-    assert_eq!(
-        stderr.matches("warning[RIDL-417]").count(),
-        1,
-        "stderr:\n{stderr}"
-    );
-    assert!(!stderr.contains("TYPL-"), "stderr:\n{stderr}");
+fn a_bare_rxdl_or_rmdl_file_is_refused_by_every_command() {
+    for extension in ["rxdl", "rmdl"] {
+        let dir = TempDir::new("bare-unsupported");
+        let old = dir.write(
+            &format!("old/hmi.{extension}"),
+            "package veh.hmi\ntype B: m\n",
+        );
+        let new = dir.write(
+            &format!("new/hmi.{extension}"),
+            "package veh.hmi\ntype C: m\n",
+        );
+        let out = dir.path().join("out");
+        let commands: [Vec<&OsStr>; 3] = [
+            vec!["check".as_ref(), old.as_os_str()],
+            vec![
+                "build".as_ref(),
+                old.as_os_str(),
+                "--out-dir".as_ref(),
+                out.as_os_str(),
+            ],
+            vec!["diff".as_ref(), old.as_os_str(), new.as_os_str()],
+        ];
+        for args in commands {
+            let (code, stdout, stderr) = ridl(&args);
+            let context = format!("{args:?}\nstdout:\n{stdout}\nstderr:\n{stderr}");
+            assert_eq!(code, 2, "{context}");
+            assert!(
+                stderr.contains(&format!(
+                    "`.{extension}` is not a supported source file extension"
+                )),
+                "{context}"
+            );
+            assert!(!stderr.contains("RIDL-417"), "{context}");
+            assert!(!stdout.contains("identical"), "{context}");
+        }
+        assert!(!out.exists(), "`ridl build` wrote {}", out.display());
+    }
 }
 
 /// A workspace with one member whose interface declares one `command`, with

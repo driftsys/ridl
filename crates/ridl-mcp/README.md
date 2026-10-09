@@ -29,13 +29,14 @@ the whole workspace that lists the member, so sibling imports resolve, and
 `ridl_check` reports only the diagnostics of files under the member.
 
 Optional `overlays: [{path, source}]` replace unsaved text inside the loader.
-Paths match by canonical parent plus file name. Only `.typl`, `.ridl`, `.rsdl`
-and `.rxdl` files are accepted. A `.rxdl` overlay draws the warning RIDL-417
-(`unsupported-source-file`) and is not compiled. A new file is accepted in an
-existing loaded package directory; create its directory first. Empty text is
-valid. An overlay outside the loaded workspace, in a hidden directory or
-separate package root, or for another file in single-file mode is a tool error.
-Tools never write files or fetch remote imports.
+Paths match by canonical parent plus file name. Only `.typl`, `.ridl`, `.rsdl`,
+`.rxdl` and `.rmdl` files are accepted. A `.rxdl` or `.rmdl` overlay in a
+package directory draws the warning RIDL-417 (`unsupported-source-file`) and is
+not compiled. A lone `.rxdl` or `.rmdl` file as `path` is a tool error. A new
+file is accepted in an existing loaded package directory; create its directory
+first. Empty text is valid. An overlay outside the loaded workspace, in a hidden
+directory or separate package root, or for another file in single-file mode is a
+tool error. Tools never write files or fetch remote imports.
 
 Workspace results carry `workspace: {root, errors, warnings, notes}`. Locations
 are `{path, start, end}` with 1-based `{line, column}` and an exclusive end. The

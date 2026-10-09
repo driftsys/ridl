@@ -1045,7 +1045,7 @@ expression: log
               "id": "RIDL-417",
               "name": "unsupported-source-file",
               "shortDescription": {
-                "text": "`.rxdl` file is not compiled: the rxdl profile is not supported"
+                "text": "`.rxdl` or `.rmdl` file is not compiled: its profile is not supported"
               },
               "defaultConfiguration": {
                 "level": "warning"

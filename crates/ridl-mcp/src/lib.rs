@@ -30,7 +30,7 @@ use types::{OverlayInput, WorkspaceStatus};
 // `.ridl` or `.rsdl` as typl, so a profile name this enum did not reject
 // would be checked as typl rather than refused.
 /// Which language a source text is parsed as. These are the three profiles the
-/// compiler has; there is no rxdl profile yet. An rsdl text
+/// compiler has; there is no rxdl or rmdl profile yet. An rsdl text
 /// is checked as a workspace of one file, so the rsdl system checks run over
 /// it as `ridl check` runs them over the same text in a file. The checks of
 /// files beside a file on disk (an `interfaces.lock`, a `.ridl/baseline/`
@@ -639,10 +639,10 @@ mod tests {
         assert_eq!(resolve(path).await, with_line_doc);
     }
 
-    // A `.rxdl` overlay is accepted (ADR-0025 decision 7): the loader reports
-    // it as the warning RIDL-417 on the overlay's path and does not compile it,
-    // so the check is not a tool error and the overlay's text draws no
-    // diagnostic. The text names an unknown type, which would draw TYPL-011
+    // A `.rxdl` overlay in a package directory is accepted (ADR-0025 decision
+    // 7): the loader reports it as the warning RIDL-417 on the overlay's path
+    // and does not compile it, so the check is not a tool error and the
+    // overlay's text draws no diagnostic. The text names an unknown type, which would draw TYPL-011
     // if the overlay were compiled.
     #[tokio::test]
     async fn path_mode_check_reports_a_rxdl_overlay_as_ridl_417() {
@@ -691,7 +691,8 @@ mod tests {
     }
 
     // An overlay with any other extension is still a tool error (ADR-0025
-    // decision 7): only `.typl`, `.ridl`, `.rsdl` and `.rxdl` are accepted.
+    // decision 7): only `.typl`, `.ridl`, `.rsdl`, `.rxdl` and `.rmdl` are
+    // accepted.
     #[tokio::test]
     async fn path_mode_check_refuses_a_txt_overlay() {
         let path = snapshot::tests::fixture("ws");
@@ -709,10 +710,45 @@ mod tests {
         assert!(text.text.contains("notes.txt"), "{}", text.text);
         assert!(
             text.text
-                .ends_with("is not a `.typl`, `.ridl`, `.rsdl` or `.rxdl` file"),
+                .ends_with("is not a `.typl`, `.ridl`, `.rsdl`, `.rxdl` or `.rmdl` file"),
             "{}",
             text.text
         );
+    }
+
+    // A lone `.rxdl` or `.rmdl` file as the path, with or without an overlay
+    // of the same path, is a tool error that names the extension (ADR-0025
+    // decision 7 as amended): the loader refuses the entry in single-file mode.
+    #[tokio::test]
+    async fn path_mode_check_refuses_a_lone_rxdl_or_rmdl_file() {
+        for extension in ["rxdl", "rmdl"] {
+            let dir = std::env::temp_dir()
+                .join(format!("ridl-mcp-lone-{extension}-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            let file = dir.join(format!("hmi.{extension}"));
+            std::fs::write(&file, "package veh.hmi\n").unwrap();
+            let path = file.to_str().unwrap().to_string();
+            for overlays in [
+                json!([]),
+                json!([{"path": path, "source": "package veh.hmi\n"}]),
+            ] {
+                let params =
+                    serde_json::from_value(json!({"path": path, "overlays": overlays})).unwrap();
+                let result = RidlMcp::new().ridl_check(Parameters(params)).await.unwrap();
+                assert_eq!(result.is_error, Some(true), "{:?}", result.content);
+                let [ContentBlock::Text(text)] = result.content.as_slice() else {
+                    panic!("one text block");
+                };
+                assert!(
+                    text.text.contains(&format!(
+                        "`.{extension}` is not a supported source file extension"
+                    )),
+                    "{}",
+                    text.text
+                );
+            }
+            std::fs::remove_dir_all(&dir).unwrap();
+        }
     }
 
     // Path mode applies the project's `[lints]` levels (ADR-0024 decisions 6

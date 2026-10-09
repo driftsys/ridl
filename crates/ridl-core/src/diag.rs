@@ -1028,14 +1028,19 @@ diag_codes! {
         RIDL_416 = "RIDL-416", Warning,
             "`interfaces.lock` in a subdirectory of a unit is not read", lint = "lock-in-subdirectory";
 
-        /// A `.rxdl` file sits in a package directory. Warning. Emitted by the
-        /// loader on the file itself, once per file: the loader compiles
-        /// `.typl`, `.ridl` and `.rsdl` files, and the rxdl profile has no
-        /// implementation (driftsys/ridl#68), so the file's declarations are
-        /// not in the build. The fix is to move the declarations into a
-        /// supported file, or to accept that the file is not compiled.
+        /// A `.rxdl` or `.rmdl` file sits in a package directory, on disk or as
+        /// an overlay. Warning. Emitted by the loader on the file itself, at
+        /// the empty range 0..0, once per file and in path order within a
+        /// directory: the loader compiles `.typl`, `.ridl` and `.rsdl` files,
+        /// and the rxdl and rmdl profiles have no implementation
+        /// (driftsys/ridl#68), so the file's declarations are not in the
+        /// build. A lone `.rxdl` or `.rmdl` file given as the entry, with no
+        /// manifest at or above it, does not draw this warning: the load fails
+        /// with an error that names the extension. The fix is to move the
+        /// declarations into a supported file, or to accept that the file is
+        /// not compiled.
         RIDL_417 = "RIDL-417", Warning,
-            "`.rxdl` file is not compiled: the rxdl profile is not supported", lint = "unsupported-source-file";
+            "`.rxdl` or `.rmdl` file is not compiled: its profile is not supported", lint = "unsupported-source-file";
     }
 
     /// The rsdl catalogue: every `RSDL-` code declared in this module, with the

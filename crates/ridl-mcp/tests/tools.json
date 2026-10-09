@@ -6,7 +6,7 @@
         "OverlayInput": {
           "properties": {
             "path": {
-              "description": "The .typl, .ridl, .rsdl or .rxdl file path whose parent directory exists, relative to the server's working directory unless absolute. A .rxdl overlay draws the warning RIDL-417 and is not compiled.",
+              "description": "The .typl, .ridl, .rsdl, .rxdl or .rmdl file path whose parent directory exists, relative to the server's working directory unless absolute. A .rxdl or .rmdl overlay in a package directory draws the warning RIDL-417 and is not compiled.",
               "type": "string"
             },
             "source": {
@@ -21,7 +21,7 @@
           "type": "object"
         },
         "Profile": {
-          "description": "Which language a source text is parsed as. These are the three profiles the\ncompiler has; there is no rxdl profile yet. An rsdl text\nis checked as a workspace of one file, so the rsdl system checks run over\nit as `ridl check` runs them over the same text in a file. The checks of\nfiles beside a file on disk (an `interfaces.lock`, a `.ridl/baseline/`\nsnapshot) do not run: a source text has no such files.",
+          "description": "Which language a source text is parsed as. These are the three profiles the\ncompiler has; there is no rxdl or rmdl profile yet. An rsdl text\nis checked as a workspace of one file, so the rsdl system checks run over\nit as `ridl check` runs them over the same text in a file. The checks of\nfiles beside a file on disk (an `interfaces.lock`, a `.ridl/baseline/`\nsnapshot) do not run: a source text has no such files.",
           "enum": [
             "typl",
             "ridl",
@@ -134,7 +134,7 @@
         "OverlayInput": {
           "properties": {
             "path": {
-              "description": "The .typl, .ridl, .rsdl or .rxdl file path whose parent directory exists, relative to the server's working directory unless absolute. A .rxdl overlay draws the warning RIDL-417 and is not compiled.",
+              "description": "The .typl, .ridl, .rsdl, .rxdl or .rmdl file path whose parent directory exists, relative to the server's working directory unless absolute. A .rxdl or .rmdl overlay in a package directory draws the warning RIDL-417 and is not compiled.",
               "type": "string"
             },
             "source": {
@@ -270,7 +270,7 @@
         "OverlayInput": {
           "properties": {
             "path": {
-              "description": "The .typl, .ridl, .rsdl or .rxdl file path whose parent directory exists, relative to the server's working directory unless absolute. A .rxdl overlay draws the warning RIDL-417 and is not compiled.",
+              "description": "The .typl, .ridl, .rsdl, .rxdl or .rmdl file path whose parent directory exists, relative to the server's working directory unless absolute. A .rxdl or .rmdl overlay in a package directory draws the warning RIDL-417 and is not compiled.",
               "type": "string"
             },
             "source": {
@@ -426,7 +426,7 @@
         "OverlayInput": {
           "properties": {
             "path": {
-              "description": "The .typl, .ridl, .rsdl or .rxdl file path whose parent directory exists, relative to the server's working directory unless absolute. A .rxdl overlay draws the warning RIDL-417 and is not compiled.",
+              "description": "The .typl, .ridl, .rsdl, .rxdl or .rmdl file path whose parent directory exists, relative to the server's working directory unless absolute. A .rxdl or .rmdl overlay in a package directory draws the warning RIDL-417 and is not compiled.",
               "type": "string"
             },
             "source": {
@@ -562,7 +562,7 @@
         "OverlayInput": {
           "properties": {
             "path": {
-              "description": "The .typl, .ridl, .rsdl or .rxdl file path whose parent directory exists, relative to the server's working directory unless absolute. A .rxdl overlay draws the warning RIDL-417 and is not compiled.",
+              "description": "The .typl, .ridl, .rsdl, .rxdl or .rmdl file path whose parent directory exists, relative to the server's working directory unless absolute. A .rxdl or .rmdl overlay in a package directory draws the warning RIDL-417 and is not compiled.",
               "type": "string"
             },
             "source": {
@@ -902,7 +902,7 @@
         "OverlayInput": {
           "properties": {
             "path": {
-              "description": "The .typl, .ridl, .rsdl or .rxdl file path whose parent directory exists, relative to the server's working directory unless absolute. A .rxdl overlay draws the warning RIDL-417 and is not compiled.",
+              "description": "The .typl, .ridl, .rsdl, .rxdl or .rmdl file path whose parent directory exists, relative to the server's working directory unless absolute. A .rxdl or .rmdl overlay in a package directory draws the warning RIDL-417 and is not compiled.",
               "type": "string"
             },
             "source": {
@@ -1097,7 +1097,7 @@
         "OverlayInput": {
           "properties": {
             "path": {
-              "description": "The .typl, .ridl, .rsdl or .rxdl file path whose parent directory exists, relative to the server's working directory unless absolute. A .rxdl overlay draws the warning RIDL-417 and is not compiled.",
+              "description": "The .typl, .ridl, .rsdl, .rxdl or .rmdl file path whose parent directory exists, relative to the server's working directory unless absolute. A .rxdl or .rmdl overlay in a package directory draws the warning RIDL-417 and is not compiled.",
               "type": "string"
             },
             "source": {
