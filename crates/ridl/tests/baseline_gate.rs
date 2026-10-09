@@ -2094,6 +2094,10 @@ fn a_whole_unit_gone_from_the_fresh_set_is_refused() {
         stderr.contains("delete the snapshots of unit `veh.cluster` from `.ridl/baseline/`"),
         "the message names the deliberate override:\n{stderr}",
     );
+    assert!(
+        !stderr.contains("Restore the line"),
+        "the unit's lock is gone with it, so no line is offered to restore:\n{stderr}",
+    );
     let after = std::fs::read(snapshot(&root)).expect("the published snapshot survives");
     assert_eq!(before, after, "a refused publication rewrites nothing");
 }
@@ -2146,7 +2150,59 @@ fn a_package_gone_from_a_unit_that_remains_is_refused() {
         "stderr:\n{stderr}",
     );
     assert!(
-        stderr.contains("delete the snapshots of unit `veh.hmi` from `.ridl/baseline/`"),
-        "the message names the deliberate override:\n{stderr}",
+        stderr.contains("Restore the line `cluster.Speed 2`")
+            && !stderr.contains(".ridl/baseline/"),
+        "the unit remains, so the plain lost-interface message stands, with no snapshot hint:\n{stderr}",
+    );
+}
+
+/// The sanctioned removal of a package from a unit that remains: its number
+/// is retired in the unit's lock, so the gate has nothing to refuse.
+#[test]
+fn a_package_gone_with_its_number_retired_is_not_refused() {
+    let dir = TempDir::new("gate-package-gone-retired");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("hmi.ridl", SESSION);
+    dir.write(
+        "cluster/speed.ridl",
+        "package veh.hmi.cluster\nimport veh.hmi.Level\ninterface Speed { signal v : Level @[100ms..1s] }\n",
+    );
+    let root = dir.path().to_path_buf();
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the fixture's lock is allocated: {stderr}");
+    publish(&root);
+
+    std::fs::remove_dir_all(root.join("cluster")).expect("remove the package");
+    let (code, _, stderr) = ridl(&[
+        "lock".as_ref(),
+        root.as_os_str(),
+        "--retire".as_ref(),
+        "cluster.Speed".as_ref(),
+    ]);
+    assert_eq!(code, 0, "the retirement is recorded: {stderr}");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 0, "a retired number publishes:\n{stderr}");
+    assert!(!stderr.contains("RIDL-412"), "stderr:\n{stderr}");
+}
+
+/// The provisional order puts an interface before an inline shape of the same
+/// name (language reference, the lock section). `ridl lock` allocates in that
+/// order.
+#[test]
+fn an_interface_is_numbered_before_an_inline_shape_of_the_same_name() {
+    let dir = TempDir::new("gate-tie-break");
+    dir.write("ridl.toml", MANIFEST);
+    dir.write("cluster.ridl", INTERFACE_AND_SERVICE_SHARING_A_NAME);
+    let root = dir.path().to_path_buf();
+    let (code, stdout, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 0, "the lock is allocated: {stderr}");
+    assert_eq!(
+        stdout, "allocated doors 1\nallocated service:doors 2\n",
+        "the interface takes the lower number",
     );
 }

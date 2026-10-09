@@ -961,7 +961,8 @@ fn interface_refusals(
             let report = ridl_diff::diff_sets(&published, &fresh);
             for change in &report.changes {
                 for (package, shape) in dropped_numbers(change, &published, &fresh) {
-                    let gone = !fresh.iter().any(|current| current.name == package.name);
+                    let unit = published_unit(package, &fresh);
+                    let gone = ridl_ir::v2::packages_of_unit(unit, &fresh).next().is_none();
                     refusals.push(Diagnostic {
                         code: DiagCode::RIDL_412,
                         severity: Severity::Error,
@@ -1093,7 +1094,7 @@ fn dropped_number_message(
     package: &ridl_ir::v2::Package,
     shape: &ridl_ir::v2::InterfaceShape<'_>,
     unit: &str,
-    package_gone: bool,
+    unit_gone: bool,
 ) -> String {
     // The key is spelled relative to `unit`, which for a legacy snapshot is
     // not the unit the package itself names.
@@ -1103,21 +1104,25 @@ fn dropped_number_message(
         LockKey::Interface(ridl_ir::v2::relative_name(unit, &package.name, shape.name))
     };
     let number = shape.interface.number;
-    let override_hint = if package_gone {
-        format!(
-            " When the package is gone on purpose, delete the snapshots of unit `{unit}` from \
-             `.ridl/baseline/`: a first publication holds no number to lose."
-        )
-    } else {
-        String::new()
-    };
+    if unit_gone {
+        // The unit's `interfaces.lock` left with the unit, so there is no
+        // line to restore: the override is to publish from an empty baseline.
+        return format!(
+            "`{key}` holds interface number {number} in the baseline being replaced, in unit \
+             `{unit}`, but the workspace no longer has that unit. Publishing would lose the only \
+             record that the number was allocated. When the unit is removed on purpose, delete \
+             the snapshots of unit `{unit}` from `.ridl/baseline/`: a first publication holds no \
+             number to lose. Otherwise restore the unit and its `interfaces.lock` from version \
+             control."
+        );
+    }
     format!(
         "`{key}` holds interface number {number} in the baseline being replaced, in unit \
          `{unit}`, but the fresh snapshot neither declares that number nor retires it. \
          Publishing would lose the only record that the number was allocated, and `next` could \
          hand it to a later interface. Restore the line `{key} {number}` in the unit's \
          `interfaces.lock` from version control — `{key} {number} retired` when the interface is \
-         gone.{override_hint}"
+         gone."
     )
 }
 
