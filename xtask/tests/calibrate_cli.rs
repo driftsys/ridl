@@ -478,6 +478,10 @@ fn executable_dump_rejects_hard_linked_files_before_build_or_publication() {
     }
 }
 
+/// Unlike `committed_summary_is_the_derivation_of_the_committed_labels` in
+/// `xtask/src/calibrate.rs`, which derives in process, this test runs the CLI
+/// `--write` path over a copy of `evals/`.
+#[cfg(unix)]
 #[test]
 fn derive_over_the_real_records_matches_what_is_committed() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
@@ -496,9 +500,12 @@ fn derive_over_the_real_records_matches_what_is_committed() {
     fs::remove_file(&written).unwrap();
     let output = fixture.command(&["calibrate", "derive", "--write"]);
     success(&output);
-    assert_eq!(
-        String::from_utf8_lossy(&fs::read(&written).unwrap()),
+    let derived = fs::read(&written).unwrap();
+    assert!(
+        derived == committed,
+        "evals/calibration/summary.md is stale; run `cargo xtask calibrate derive --write`\n\
+         derived:\n{}\ncommitted:\n{}",
+        String::from_utf8_lossy(&derived),
         String::from_utf8_lossy(&committed),
-        "evals/calibration/summary.md is stale; run `cargo xtask calibrate derive --write`"
     );
 }
