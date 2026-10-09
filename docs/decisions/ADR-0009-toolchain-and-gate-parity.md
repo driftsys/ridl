@@ -161,7 +161,9 @@ prediction.
    came to run in CI alone, and how `wasm-check` came to be a recipe nothing
    depended on (#182). The recipe reads `build`'s dependency list from the
    justfile and fails when any member is not invoked by a `run:` step in
-   `.github/workflows/ci.yml`.
+   `.github/workflows/ci.yml`. It also holds the expected members in a list of
+   its own and fails when `build` loses or gains one, so a member removed from
+   `build` is refused instead of shrinking what is checked (#426).
 
    What it proves is narrow: that the text of each step is present. It does not
    prove the step is reached — dropping a job from the `ci` aggregate's

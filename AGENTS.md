@@ -206,9 +206,10 @@ driftsys/git-std (commits, versioning, hooks) and driftsys/prim
 **The justfile is the single definition of every gate command.**
 `.github/workflows/ci.yml` installs tools and then invokes these recipes; what
 remains in the workflow is tool installation and job plumbing, never a gate
-command. Adding a check means adding a recipe, adding it to `build`, and adding
+command. Adding a check means adding a recipe, adding it to `build`, adding its
+name to the `expected` list in the `gate-parity` recipe, and adding
 `run: just <recipe>` to the workflow — `just gate-parity` fails until the last
-of those is done. When CI needs a variant of a check, give the recipe a
+two of those are done. When CI needs a variant of a check, give the recipe a
 parameter and pass it (as `commit-lint` does with `just lint-commits <base>`);
 do not write a second copy of the command into the workflow (ADR-0009).
 
