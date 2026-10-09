@@ -13014,6 +13014,33 @@ interface I {\n\
         }
     }
 
+    /// The other direction of the guard in `lookup_path_in`: the checked
+    /// package owns the `internal` type, but the path is written in another
+    /// package's view. `app` declares `const MAX: veh.common.Hidden`, which
+    /// `app` cannot see (typl §3.3), so `MAX` has no named type. Checking
+    /// `veh.common`, which imports `app.MAX`, resolves that path in `app`'s
+    /// view and must not find `Hidden`, so `const USE: Visible = MAX` draws
+    /// no TYPL-108. A guard that also accepted the checked package as the
+    /// owner would find `Hidden` and report TYPL-108.
+    #[test]
+    fn no_typl_108_through_a_qualified_internal_type_written_in_a_foreign_view() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let app = package(
+            &db,
+            "app",
+            "package app\nconst MAX: veh.common.Hidden = 5\n",
+        );
+        let veh = package(
+            &db,
+            "veh.common",
+            "package veh.common\nimport app.MAX\ninternal type Hidden: integer [0..10]\ninternal type Visible: integer [0..10]\ninternal const USE: Visible = MAX\n",
+        );
+        let ws = Workspace::new(&db, vec![app, veh], BTreeMap::new());
+        let checked = without_missing_docs(check_package(&db, ws, veh, std));
+        assert_eq!(codes(&checked), Vec::<&str>::new());
+    }
+
     // The ridl §11 ordinal assignment over the Appendix A interface — 1-based,
     // declaration order, one sequence across all kinds, the reserved tombstone
     // counted at #6 — is asserted on the lowered IR by
@@ -14149,6 +14176,38 @@ interface VehicleStatus {
         );
         assert_eq!(codes(&checked), vec!["RIDL-304"]);
         assert_eq!(checked.diagnostics[0].severity, Severity::Warning);
+    }
+
+    /// A result union is recognised from its arms resolved in the union's own
+    /// package, not in the checked package. `veh.common.Outcome` writes its
+    /// error arm as `veh.common.Fault`, an `internal` error type that
+    /// `veh.common` owns, so `Outcome` is a result union and the parameter
+    /// in `app` draws RIDL-304. Resolving the arm with `app` as the owner
+    /// would hide `Fault` and draw nothing.
+    #[test]
+    fn foreign_result_union_with_a_qualified_internal_error_arm_draws_ridl_304() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let veh = package(
+            &db,
+            "veh.common",
+            "package veh.common\nstruct Report {\n  count : integer [0..64]\n}\ninternal error enum Fault {\n  BROKEN = 0\n}\nunion Outcome {\n  ok : Report\n  err : veh.common.Fault\n}\n",
+        );
+        let app = ridl_package(
+            &db,
+            "app",
+            "package app\nimport veh.common.Outcome\ninterface I {\n  command c(o: Outcome) @[..50ms]\n}\n",
+        );
+        let ws = Workspace::new(&db, vec![app, veh], BTreeMap::new());
+        let checked = without_missing_docs(check_package(&db, ws, app, std));
+        assert_eq!(codes(&checked), vec!["RIDL-304"]);
+        assert!(
+            checked.diagnostics[0]
+                .message
+                .contains("result-union type `Outcome`"),
+            "{}",
+            checked.diagnostics[0].message
+        );
     }
 
     #[test]
