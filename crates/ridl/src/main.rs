@@ -1169,12 +1169,18 @@ fn staging_dir(out_dir: &Path) -> PathBuf {
 /// failure, and an empty directory is a first publication to
 /// [`untombstoned_removals`]: the next run would have skipped the gate.
 ///
-/// The histories are removed first so that a failure never leaves a history
-/// beside a snapshot it does not describe. A history left from the replaced
-/// baseline beside a fresh snapshot lets the next run carry hashes past a
-/// breaking change; a fresh history beside a replaced snapshot lists a
-/// catalog that is not published. After a failure, a unit has its fresh
-/// history or none, and a unit with none starts its chain again.
+/// The histories are removed first, and the fresh ones move in only after
+/// every fresh snapshot, so that a failure never leaves a history of the
+/// replaced baseline beside a fresh snapshot, nor a fresh history beside a
+/// replaced snapshot of the same package. A history of the replaced baseline
+/// beside a fresh snapshot lets the next run carry hashes past a breaking
+/// change; a fresh history beside a replaced snapshot lists a catalog that is
+/// not published. After a failure in the first three steps, a unit has its
+/// fresh history or none, and a unit with none starts its chain again. A
+/// failure in step 4 leaves every fresh history beside every fresh snapshot,
+/// plus the stale snapshot of a package the workspace no longer declares;
+/// that snapshot is compared as a removed package by the next run and
+/// removed by its publication, and no history describes it.
 fn publish_baseline(staging: &Path, out_dir: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(out_dir)?;
     for history in catalogs_files(out_dir)? {
@@ -2820,6 +2826,40 @@ mod tests {
         assert!(
             !left.contains("marker"),
             "the replaced history is gone: {left:?}"
+        );
+    }
+
+    /// A snapshot rename that fails leaves no history at all: the fresh
+    /// histories move in only after every fresh snapshot.
+    #[test]
+    fn a_failed_snapshot_rename_leaves_no_history() {
+        let root = std::env::temp_dir().join(format!(
+            "ridl-publish-snapshot-fails-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let staging = root.join("staging");
+        let out_dir = root.join("out");
+        std::fs::create_dir_all(&staging).unwrap();
+        std::fs::create_dir_all(out_dir.join("a.ir.json").join("blocker")).unwrap();
+        for name in ["a.ir.json", "b.ir.json"] {
+            std::fs::write(staging.join(name), "{}").unwrap();
+        }
+        for name in ["a.catalogs", "b.catalogs"] {
+            std::fs::write(staging.join(name), "fresh\n").unwrap();
+        }
+
+        let result = publish_baseline(&staging, &out_dir);
+
+        let histories = catalogs_files(&out_dir).unwrap();
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(
+            result.is_err(),
+            "the snapshot rename onto a directory fails"
+        );
+        assert!(
+            histories.is_empty(),
+            "no history is published: {histories:?}"
         );
     }
 }
