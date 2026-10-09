@@ -15,7 +15,7 @@ use crate::{DiffReport, Verdict};
 /// The function reads each change's [`Change::path`](crate::Change::path),
 /// which the walk builds as `<package>/<name>[/<member>...]`: the first
 /// `/`-separated segment is the dotted name of the package that holds the new
-/// side, and the second, when present, is the bare name of a package-level
+/// side, or the old side when the package is gone, and the second, when present, is the bare name of a package-level
 /// declaration, interface or service of that package. A package name holds
 /// dots and a declaration name holds none, so the first two segments joined
 /// by `.` are the declaration's canonical name, the key that
@@ -205,14 +205,6 @@ mod tests {
         assert_eq!(unit_verdict(&report, "b", &old, &new), Verdict::Identical);
     }
 
-    #[test]
-    fn a_declaration_reached_only_on_the_new_side_concerns_the_unit() {
-        let old = baseline();
-        let new = vec![unit_a("c.T"), unit_b(IntWidth::I32), unit_c(IntWidth::I64)];
-        let report = diff_sets(&old, &new);
-        assert_eq!(unit_verdict(&report, "a", &old, &new), Verdict::Breaking);
-    }
-
     /// An event appended to unit `a`'s interface, with payload `payload`.
     fn appended_event(payload: &str) -> Decl {
         Decl {
@@ -226,20 +218,20 @@ mod tests {
         }
     }
 
-    // The test above cannot tell the new-side reach from the change to unit
-    // `a`'s own package, which is breaking by itself. Here the change to `a`
-    // is compatible, so only the new-side reach of `c.T` makes `a` breaking.
+    // The change to unit `a`'s own package, an appended event, is compatible,
+    // so only the new-side reach of `c.T` makes `a` breaking.
     #[test]
-    fn a_break_reached_only_through_an_appended_interaction_concerns_the_unit() {
+    fn a_declaration_reached_only_on_the_new_side_concerns_the_unit() {
         let old = baseline();
         let mut a = unit_a("b.S");
         a.interfaces[0].interactions.push(appended_event("c.T"));
         let new = vec![a, unit_b(IntWidth::I32), unit_c(IntWidth::I64)];
         let report = diff_sets(&old, &new);
         assert_eq!(unit_verdict(&report, "a", &old, &new), Verdict::Breaking);
+        assert_eq!(unit_verdict(&report, "b", &old, &new), Verdict::Identical);
     }
 
-    // The mirror of the test above: the interaction that reached `c.T` is
+    // The mirror of `a_declaration_reached_only_on_the_new_side_concerns_the_unit`: the interaction that reached `c.T` is
     // retired to a tombstone in its own slot, which is compatible, so only the
     // old-side reach of `c.T` makes `a` breaking.
     #[test]
@@ -260,5 +252,42 @@ mod tests {
         let new = vec![a_new, unit_b(IntWidth::I32), unit_c(IntWidth::I64)];
         let report = diff_sets(&old, &new);
         assert_eq!(unit_verdict(&report, "a", &old, &new), Verdict::Breaking);
+        assert_eq!(unit_verdict(&report, "b", &old, &new), Verdict::Identical);
+    }
+
+    /// Package `a.sub` of unit `a`, holding `struct U { z: i32 }`.
+    fn sub_package() -> Package {
+        let mut sub = package(
+            "a.sub",
+            vec![one_field_struct("U", "z", IntWidth::I32)],
+            Vec::new(),
+        );
+        sub.unit = "a".to_owned();
+        sub
+    }
+
+    // The removed package exists only on the old side, so only the old-side
+    // package rule makes the removal concern unit `a`.
+    #[test]
+    fn a_package_removed_from_a_unit_concerns_that_unit() {
+        let mut old = baseline();
+        old.push(sub_package());
+        let new = baseline();
+        let report = diff_sets(&old, &new);
+        assert_eq!(unit_verdict(&report, "a", &old, &new), Verdict::Breaking);
+        assert_eq!(unit_verdict(&report, "b", &old, &new), Verdict::Identical);
+    }
+
+    // The compatible package addition is reported after the breaking change to
+    // `b.S`, so a fold that keeps the last verdict instead of the maximum
+    // returns `Compatible`.
+    #[test]
+    fn the_unit_verdict_is_the_maximum_over_its_changes() {
+        let old = baseline();
+        let mut new = vec![unit_a("b.S"), unit_b(IntWidth::I64), unit_c(IntWidth::I32)];
+        new.push(sub_package());
+        let report = diff_sets(&old, &new);
+        assert_eq!(unit_verdict(&report, "a", &old, &new), Verdict::Breaking);
+        assert_eq!(unit_verdict(&report, "c", &old, &new), Verdict::Identical);
     }
 }
