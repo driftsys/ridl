@@ -5,6 +5,7 @@
 - [Getting started](getting-started.md)
 - [Describing a system](rsdl.md)
 - [Using the generated Rust code](generated-code.md)
+- [Writing a port](writing-a-port.md)
 - [The catalog descriptor](catalog-descriptor.md)
 - [Documenting your API](documenting.md)
 - [Writing a codegen plugin](codegen-plugins.md)

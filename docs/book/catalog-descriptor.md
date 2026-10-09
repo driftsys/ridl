@@ -172,8 +172,8 @@ that port, and panics when they differ. So a face generated from a different
 version of the unit than the one its runtime serves fails at bind time,
 instead of misreading payloads. The face compares itself with its own
 port only; it does not compare catalogs with the party at the other end. The
-[failures section](generated-code.md#failures) of the previous chapter shows
-what that check does.
+[failures section](generated-code.md#failures) of "Using the generated Rust
+code" shows what that check does.
 
 ## Stability
 
