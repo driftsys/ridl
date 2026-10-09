@@ -747,7 +747,8 @@ discriminant question, not a naming one.
 three payload codecs. **Exit criteria:** a generated package links `ridl-rt`,
 constructs and validates its types, and round-trips a payload through
 FlatBuffers, through proto3 and through the `repr(C)` layout, with byte-level
-conformance against a `protoc`-generated implementation for proto3.
+conformance against a `prost`-generated implementation (through `protox`) for
+proto3.
 
 **E11.12 is a new identifier**, the next free one in Epic 11, for the `repr(C)`
 payload codec the 2026-09-12 note §3.3 adds. Its layout rules — the
