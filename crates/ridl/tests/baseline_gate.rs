@@ -2196,6 +2196,8 @@ fn the_diffs_retire_rule_lets_a_package_gone_with_its_number_retired_through() {
 /// snapshot in the unit named after the package, so it finds no retired entry
 /// and reports a removal; the gate compares it in the unit of the fresh
 /// package of the same name, finds number 7 retired there, and does not refuse.
+/// `Gauge` keeps the package in the fresh set; without it the unit-gone path
+/// would be the one tested.
 #[test]
 fn a_legacy_interface_removed_with_its_number_retired_in_the_unit_is_not_refused() {
     let dir = TempDir::new("gate-legacy-retired");
