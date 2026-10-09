@@ -191,3 +191,10 @@ Each ruling: what was decided — why — what it costs if wrong.
 - **R-9** #631: the 2026-10-01 decision stands — fixed space/2 indentation, the
   EditorConfig indentation work stays debt for a later lane; G6 gives it a
   milestone — if wrong, a user with tab indentation keeps reformatted files.
+- **R-10** #770: a `.rxdl` file the loader finds draws `RIDL-417`, a warning,
+  lint name `unsupported-source-file`, emitted where the loader collects source
+  files (both the disk and the overlay paths) — it follows RIDL-416, the one
+  existing loader warning about a file the unit does not read, and the name is
+  not tied to one extension so a later skipped kind reuses it — if wrong, the
+  code is renamed before a release; a lint name is cheap to change before users
+  configure it in `[lints]`.
