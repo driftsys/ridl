@@ -673,12 +673,12 @@ fn plain_lock_writes_one_file_at_the_unit_root_with_relative_keys() {
 }
 
 /// The allocation order is the byte order of the name over the unit, not
-/// the package order and not the whole lock key: the root's inline service
-/// `alpha` is keyed `service:alpha`, which sorts before `cluster.Speed` by
-/// name and after it by whole key.
+/// the whole lock key: the root's inline service `alpha` is keyed
+/// `service:alpha`, which sorts before `cluster.Speed` by name and after it
+/// by whole key.
 #[test]
-fn plain_lock_allocates_in_name_byte_order_over_the_unit() {
-    let dir = TempDir::new("unit-byte-order");
+fn plain_lock_allocates_in_name_byte_order_not_whole_key_order() {
+    let dir = TempDir::new("unit-byte-order-key");
     let root = unit_with_subpackage(
         &dir,
         "package veh.hmi\ntype Level: integer [0..9]\nservice alpha { signal z : Level @[100ms..1s] }\n",
@@ -694,6 +694,31 @@ fn plain_lock_allocates_in_name_byte_order_over_the_unit() {
     assert_eq!(
         read_lock(&root),
         format!("{HEADER}next 3\nservice:alpha 1\ncluster.Speed 2\n")
+    );
+}
+
+/// The allocation order is the byte order of the name over the unit, not
+/// the package order: the root's inline service `zone` sorts after
+/// `cluster.Speed` by name, although its package `veh.hmi` sorts before
+/// `veh.hmi.cluster`.
+#[test]
+fn plain_lock_allocates_in_name_byte_order_not_package_order() {
+    let dir = TempDir::new("unit-byte-order-package");
+    let root = unit_with_subpackage(
+        &dir,
+        "package veh.hmi\ntype Level: integer [0..9]\nservice zone { signal z : Level @[100ms..1s] }\n",
+        HMI_SPEED,
+    );
+
+    let (code, stdout, stderr) = lock(&root, &[]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_eq!(
+        stdout,
+        "allocated cluster.Speed 1\nallocated service:zone 2\n"
+    );
+    assert_eq!(
+        read_lock(&root),
+        format!("{HEADER}next 3\ncluster.Speed 1\nservice:zone 2\n")
     );
 }
 
