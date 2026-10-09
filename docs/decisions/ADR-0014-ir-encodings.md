@@ -50,8 +50,8 @@ specification §6.1). `ridl baseline` records the chain, `ridl build` emits the
 list from it, both through `ridl diff`'s classifier scoped to the unit, and a
 breaking change restarts it. The reasoning trail is
 [the catalog compatibility design note](../wip/2026-10-09-catalog-compat-design.md)
-(lane H stage H2, ruling R-1 of its driver); the implementation is its plan.
-Decisions 1 to 14 are unchanged.
+(lane H stage H2, ruling R-1 of its driver); the implementation is its plan,
+tracked as driftsys/ridl#787. Decisions 1 to 14 are unchanged.
 
 The reasoning trail is
 [`docs/archive/2026-08-03-ir-protobuf-encodings-design.md`](../archive/2026-08-03-ir-protobuf-encodings-design.md),
