@@ -932,6 +932,83 @@ fn a_structural_type_name_is_spelled_in_the_typl_syntax_over_the_canonical_value
     assert_eq!(spelled, expected);
 }
 
+/// A subpackage interface's payload is sized in the subpackage: `Point` is
+/// declared in `u.cluster` beside `Speed`, which names it bare, and the root
+/// package `u` declares no `Point`. The rows are the ones a one-package build
+/// of the same declarations gives.
+#[test]
+fn a_subpackage_payload_is_sized_in_its_own_package() {
+    let root = Package {
+        name: "u".to_owned(),
+        interfaces: vec![Interface {
+            name: "Session".to_owned(),
+            number: 1,
+            interactions: vec![interaction(
+                "s",
+                1,
+                decl::Kind::SignalDef(SignalDef {
+                    payload: "integer".to_owned(),
+                    ..Default::default()
+                }),
+            )],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let cluster = Package {
+        name: "u.cluster".to_owned(),
+        unit: "u".to_owned(),
+        decls: package().decls,
+        interfaces: vec![Interface {
+            name: "Speed".to_owned(),
+            number: 2,
+            interactions: vec![interaction(
+                "position",
+                1,
+                decl::Kind::SignalDef(SignalDef {
+                    payload: "Point".to_owned(),
+                    ..Default::default()
+                }),
+            )],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let bytes = lower("u", &[&root, &cluster]).unwrap();
+    let catalog = verify(&bytes).unwrap();
+    let speed = catalog.interfaces().unwrap().get(1).unwrap().unwrap();
+    assert_eq!(speed.name().unwrap(), "cluster.Speed");
+    let payload = speed
+        .members()
+        .unwrap()
+        .get(0)
+        .unwrap()
+        .unwrap()
+        .payloads()
+        .unwrap()
+        .get(0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(payload.type_name().unwrap(), "Point");
+    assert_eq!(
+        rows(payload),
+        vec![
+            (
+                Encoding::Proto3,
+                SizeStateTag::Bounded,
+                12,
+                UnboundedCause::Unspecified
+            ),
+            (
+                Encoding::FlatBuffers,
+                SizeStateTag::Bounded,
+                point_fb_bound(&cluster),
+                UnboundedCause::Unspecified
+            ),
+        ]
+    );
+}
+
 /// Unit `u` has the root package `u` (interface `Session`, number 2) and the
 /// package `u.cluster` (interface `Speed`, number 1, retired `Old` 3, spelled
 /// as its lock key).
