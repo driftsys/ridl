@@ -126,14 +126,19 @@ The behaviour that is not in the README:
    is `OverlayOutsideWorkspace` with `missing_directory`, and its message says
    to create the directory first. The canonicalisation runs only when there is
    an overlay.
-2. An overlay path must end in `.typl`, `.ridl` or `.rsdl`.
+2. An overlay path must end in `.typl`, `.ridl`, `.rsdl` or `.rxdl`. A `.rxdl`
+   overlay is accepted, reported with the warning RIDL-417
+   (`unsupported-source-file`) on its path, and not compiled, as a `.rxdl` file
+   on disk is. Its text is interned for the span of that warning and is not
+   parsed; rules 4 to 6 apply to it as to any other overlay.
 3. A source file whose key matches an overlay is read from the overlay text,
    which is what is parsed, checked and interned for spans.
 4. A package directory listing adds every overlay whose parent is that directory
    and whose file is not on disk, sorted together with the disk files, so a new
    file joins the package of its directory as if it had been saved.
 5. In single-file mode the entry file is the only file read, and an overlay for
-   it replaces its text.
+   it replaces its text. A `.rxdl` entry is reported with RIDL-417 and not
+   compiled, so the load holds no package.
 6. An overlay that rules 3 to 5 did not consume is `OverlayOutsideWorkspace`:
    its directory is outside the root, hidden, a separate package root, or not
    loaded in single-file mode.
