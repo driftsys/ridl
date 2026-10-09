@@ -180,12 +180,16 @@ fn parse_default_range(text: &str, require_min: bool) -> Result<TimingSpec, Stri
 /// with `default_applied` set (ridl §9.3). An annotation the parser could not
 /// read resolves differently by shape: a node with no range, such as `@fast`,
 /// takes the whole `default`, its `min` included, and a range whose bounds
-/// cannot be read takes only `max`. RIDL-112 covers what was not declared —
-/// no annotation at all, or the half-open `@[min..]` — and stays quiet on an
-/// annotation the parser could not read, whose only report is the parser's
-/// FORM-101. For `fixed` the result is always `None` and no diagnostic is
-/// produced — the kind carries no timing, and the structural checker already
-/// reports any annotation written on it (RIDL-106).
+/// cannot be read takes only `max`. A range that keeps a readable minimum but
+/// does not parse whole, such as `@[20ms..50xs]` or `@[20ms 50ms]`, keeps that
+/// written `min` and takes only `max`, and RIDL-101 and RIDL-108 do not
+/// compare the two, because the maximum the author wrote could not be read.
+/// RIDL-112 covers what was not declared — no annotation at all, or the
+/// half-open `@[min..]` — and stays quiet on an annotation the parser could
+/// not read, whose only report is the parser's FORM-101. For `fixed` the
+/// result is always `None` and no diagnostic is produced — the kind carries no
+/// timing, and the structural checker already reports any annotation written
+/// on it (RIDL-106).
 ///
 /// Validity diagnostics carry `file` as their span source: RIDL-100 (default
 /// applied, warning, anchored on `anchor` — the interaction that received the
@@ -263,6 +267,15 @@ pub fn resolve_timing(
         // RIDL-108 below name the default as its source and ask for an
         // explicit maximum, instead of the signal wording that quotes the
         // annotation as if the author had typed both bounds.
+        //
+        // That message quotes `@[min..]`, which is true only when the range
+        // parsed whole. A range that kept a readable minimum and then stopped
+        // (`@[5s..10xs]`) or wrote no `..` (`@[5s 10s]`) already drew
+        // FORM-101 and writes a maximum the parser could not read, so the
+        // filled maximum is not compared with the minimum: the comparison
+        // would be with a bound the author did not choose. The filled maximum
+        // still lowers, as on any unreadable response bound.
+        let parsed_whole = range_parsed_whole(annot, &range);
         let filled_max = default_applied && max.is_some();
         if let (Some(lo), Some(hi)) = (&min, &max) {
             if filled_max {
@@ -271,7 +284,7 @@ pub fn resolve_timing(
                 } else {
                     (DiagCode::RIDL_108, Severity::Warning, "equals")
                 };
-                if lo >= hi {
+                if parsed_whole && lo >= hi {
                     diags.push(diagnostic(
                         code,
                         severity,
@@ -355,7 +368,7 @@ pub fn resolve_timing(
         if matches!(kind, InteractionKind::Command | InteractionKind::Query)
             && min_token.is_some()
             && max_token.is_none()
-            && range_parsed_whole(annot, &range)
+            && parsed_whole
         {
             diags.push(missing_response_bound(
                 kind,
@@ -1306,19 +1319,28 @@ mod tests {
         // on either side, a range whose parse stopped before the closing
         // `]`, and a range with both bounds written and no `..` between them
         // — one spelling for each degenerate shape the parser leaves.
-        for (decl, kind) in [
-            ("query getSpeed(): Speed @fast", InteractionKind::Query),
+        // The third column is the `min` the range keeps: a readable minimum
+        // before the point where the parse stopped stays written.
+        for (decl, kind, min) in [
+            (
+                "query getSpeed(): Speed @fast",
+                InteractionKind::Query,
+                None,
+            ),
             (
                 "command setTarget(p: Speed) @[20xs..50ms]",
                 InteractionKind::Command,
+                None,
             ),
             (
                 "query getSpeed(): Speed @[20ms..50xs]",
                 InteractionKind::Query,
+                Some("20ms"),
             ),
             (
                 "query getSpeed(): Speed @[20ms 50ms]",
                 InteractionKind::Query,
+                Some("20ms"),
             ),
         ] {
             let (timing, parse_codes) = annot_and_parse_codes(decl);
@@ -1338,6 +1360,7 @@ mod tests {
             // as applied, the same fallback a malformed signal timing takes.
             let spec = spec.expect("a malformed annotation still resolves");
             assert_eq!(spec.max_us, default.max_us, "{decl}: max from the default");
+            assert_eq!(spec.min_us, min.and_then(value_of), "{decl}: min");
             assert!(spec.default_applied, "{decl}: the default is applied");
         }
     }
@@ -1348,7 +1371,10 @@ mod tests {
     /// default, with a default that has a minimum. A `Timing` node with no
     /// range takes the whole default, its `min` included. A range whose
     /// bound tokens the parser dropped is a range with neither bound, so it
-    /// takes only `max`, and no call throttle appears.
+    /// takes only `max`, and no call throttle appears. A range that keeps a
+    /// readable minimum but did not parse whole keeps that minimum and takes
+    /// only `max`; the completed range draws no RIDL-101 or RIDL-108 even
+    /// when the minimum is longer than or equal to the default's `max`.
     #[test]
     fn unreadable_rpc_annotation_takes_from_the_default_what_the_parser_left_unwritten() {
         let default = parse_rpc_default_timing("[10ms..1s]").expect("valid default");
@@ -1373,11 +1399,34 @@ mod tests {
                 InteractionKind::Command,
                 None,
             ),
+            // A readable minimum longer than the default `max` (RIDL-101 on
+            // a readable `@[5s..]`) and one equal to it (RIDL-108 on a
+            // readable `@[1s..]`), each in a range that did not parse whole.
+            (
+                "command setTarget(p: Speed) @[5s..10xs]",
+                InteractionKind::Command,
+                Some("5s"),
+            ),
+            (
+                "query getSpeed(): Speed @[5s 10s]",
+                InteractionKind::Query,
+                Some("5s"),
+            ),
+            (
+                "command setTarget(p: Speed) @[1s..10xs]",
+                InteractionKind::Command,
+                Some("1s"),
+            ),
+            (
+                "query getSpeed(): Speed @[1s 10s]",
+                InteractionKind::Query,
+                Some("1s"),
+            ),
         ] {
             let (timing, parse_codes) = annot_and_parse_codes(decl);
             let (spec, diags) = resolve(Some(&timing), kind, &default);
-            // FORM-101 from the parser is the only report: no RIDL-112 and
-            // no RIDL-101 from the completed range.
+            // FORM-101 from the parser is the only report: no RIDL-112, and
+            // no RIDL-101 or RIDL-108 from the completed range.
             assert!(
                 !parse_codes.is_empty() && parse_codes.iter().all(|code| *code == "FORM-101"),
                 "{decl}: {parse_codes:?}"

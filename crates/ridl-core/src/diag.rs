@@ -684,10 +684,14 @@ diag_codes! {
             "type declaration inside an `interface` or `service` body";
 
         /// A range annotation `@[X..X]` whose bounds are equal — a degenerate
-        /// range, the rate floor equal to its staleness bound, on a `signal` and an
-        /// `event` alike (ridl §9.2, §16.1; ADR-0008 decision 17). Not a spelling
-        /// of the strict-periodic `@Xms`, which is a separate `TimingMode`.
-        /// Warning. Emitted by the checker.
+        /// range, on every kind that admits the range: on a `signal` and an
+        /// `event` the rate floor equals its staleness bound, and on a
+        /// `command` and a `query` the call throttle equals the response bound
+        /// (ridl §9.2, §16.1; ADR-0008 decision 17). It also fires on a
+        /// `command` or a `query` written `@[X..]` whose call throttle equals
+        /// the default response bound the member takes (ridl §9.3). Not a
+        /// spelling of the strict-periodic `@Xms`, which is a separate
+        /// `TimingMode`. Warning. Emitted by the checker.
         RIDL_108 = "RIDL-108", Warning,
             "degenerate timing range `@[X..X]`", lint = "degenerate-timing-range";
 

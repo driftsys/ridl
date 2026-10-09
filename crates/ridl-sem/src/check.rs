@@ -13657,6 +13657,37 @@ interface VehicleStatus {
         assert!(timing.default_applied);
     }
 
+    /// An RPC annotation that keeps a readable minimum but did not parse
+    /// whole draws FORM-101 from the parser, and the checker draws no
+    /// RIDL-101 or RIDL-108 from the maximum the default supplied: under the
+    /// built-in defaults (`[..1s]` for a command, `[..3s]` for a query) each
+    /// minimum here is longer than or equal to that maximum. The minimum
+    /// stays written and the maximum is the default's.
+    #[test]
+    fn unreadable_rpc_range_draws_no_ridl_101_or_108_from_the_default_maximum() {
+        let source = format!(
+            "{PRELUDE}interface I {{\n  query q(): Speed @[5s 10s]\n  command c(p: Speed) @[5s..10xs]\n  command e(p: Speed) @[1s..10xs]\n}}\n"
+        );
+        let parse = ridl_syntax::parse(&source, ridl_syntax::Profile::Ridl);
+        let parse_codes: Vec<&str> = parse.errors().iter().map(|error| error.code).collect();
+        assert!(
+            !parse_codes.is_empty() && parse_codes.iter().all(|code| *code == "FORM-101"),
+            "{parse_codes:?}"
+        );
+        let checked = check_ridl("app", &source);
+        assert_eq!(codes(&checked), Vec::<&str>::new());
+        for (name, min, max) in [
+            ("q", "5000000", "3000000"),
+            ("c", "5000000", "1000000"),
+            ("e", "1000000", "1000000"),
+        ] {
+            let timing = rpc_timing(&checked, name).expect("the range lowers");
+            assert_eq!(timing.min_us.as_deref(), Some(min), "{name}: min");
+            assert_eq!(timing.max_us.as_deref(), Some(max), "{name}: max");
+            assert!(timing.default_applied, "{name}");
+        }
+    }
+
     /// A package `[defaults].command_timing` and `[defaults].query_timing`
     /// replace the built-ins for the untimed members of their kind.
     #[test]

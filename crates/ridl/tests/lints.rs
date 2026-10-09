@@ -246,6 +246,33 @@ fn missing_response_bound_deny_exits_1_until_the_bound_is_written() {
     assert!(!stderr.contains("RIDL-112"), "no RIDL-112:\n{stderr}");
 }
 
+/// An RPC annotation that keeps a readable minimum but did not parse whole is
+/// reported by the parser's FORM-101 alone: the maximum the default supplies
+/// draws no RIDL-101 or RIDL-108, although each minimum is longer than the
+/// built-in default response bound (`1s` for a command, `3s` for a query).
+#[test]
+fn unreadable_rpc_range_draws_form_101_and_no_ridl_101_or_108() {
+    let dir = TempDir::new("unreadable-rpc-range");
+    dir.write(
+        "demo/ridl.toml",
+        "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "demo/actuator.ridl",
+        "package demo\n\ntype Speed: integer [0..300]\n\ninterface Actuator {\n  \
+         query getSpeed(): Speed @[5s 10s]\n  command setTarget(speed: Speed) @[5s..10xs]\n}\n",
+    );
+    let (code, _, stderr) = ridl(&["check".as_ref(), dir.path().join("demo").as_os_str()]);
+    assert_eq!(code, 1, "FORM-101 is an error:\n{stderr}");
+    assert_eq!(
+        stderr.matches("error[FORM-101]").count(),
+        2,
+        "one FORM-101 for each annotation:\n{stderr}"
+    );
+    assert!(!stderr.contains("RIDL-101"), "no RIDL-101:\n{stderr}");
+    assert!(!stderr.contains("RIDL-108"), "no RIDL-108:\n{stderr}");
+}
+
 #[test]
 fn text_deny_exits_1() {
     let dir = TempDir::new("text-deny");
