@@ -417,6 +417,9 @@ struct Loader {
     member_dirs: Vec<PathBuf>,
     /// Unit name to manifest directory, for [`LoadedWorkspace::units`].
     units: BTreeMap<String, PathBuf>,
+    /// Unit name to its manifest's file id and the range of the manifest's
+    /// quoted `[package] name`, where a MANI-014 against the unit points.
+    unit_name_spans: BTreeMap<String, (FileId, TextRange)>,
 }
 
 impl Loader {
@@ -480,11 +483,17 @@ impl Loader {
         root_lints.overlay(&lints);
         self.lints.insert(root.to_path_buf(), root_lints.clone());
         match kind {
-            ManifestKind::Package { name, .. } => {
+            ManifestKind::Package {
+                name, name_span, ..
+            } => {
                 // A standalone package: the manifest's `[imports]` and
                 // `[defaults]` ride on its packages; the workspace maps
                 // stay empty.
                 self.units.insert(name.clone(), root.to_path_buf());
+                self.unit_name_spans.insert(
+                    name.clone(),
+                    (file_id, byte_range(name_span.start, name_span.end)),
+                );
                 let lock = self.read_lock(root)?;
                 self.load_package_tree(db, root, root, &name, &name, &imports, &defaults, &lock)?;
             }
@@ -569,7 +578,9 @@ impl Loader {
                     ),
                 ));
             }
-            ManifestKind::Package { name, .. } => {
+            ManifestKind::Package {
+                name, name_span, ..
+            } => {
                 // ADR-0002 §5 step 2: the member's `[imports]` ride on the
                 // member's packages only — never merged into the workspace
                 // map, never visible to a sibling member. Its
@@ -580,15 +591,20 @@ impl Loader {
                 // Two members with one `[package] name` are two units that
                 // claim the same source package: MANI-014 on the second
                 // manifest in load order, whose tree is not loaded, so the
-                // first unit keeps its directory in `units`.
-                if let Some(first_dir) = self.units.get(&name)
-                    && *first_dir != member_dir
-                {
+                // first unit keeps its directory in `units`. A member listed
+                // twice in `[workspace] members` finds its own directory
+                // there: it is already loaded, so it is skipped with no
+                // diagnostic.
+                let name_range = byte_range(name_span.start, name_span.end);
+                if let Some(first_dir) = self.units.get(&name) {
+                    if *first_dir == member_dir {
+                        return Ok(());
+                    }
                     let first_dir = first_dir.clone();
                     self.diagnostics.push(error(
                         DiagCode::MANI_014,
                         file_id,
-                        package_name_range(&text),
+                        name_range,
                         format!(
                             "source package `{name}` is already declared by the unit in `{}`; the unit in `{}` declares it too. A source package belongs to one unit",
                             first_dir.display(),
@@ -598,6 +614,8 @@ impl Loader {
                     return Ok(());
                 }
                 self.units.insert(name.clone(), member_dir.clone());
+                self.unit_name_spans
+                    .insert(name.clone(), (file_id, name_range));
                 let lock = self.read_lock(&member_dir)?;
                 self.load_package_tree(
                     db,
@@ -627,7 +645,9 @@ impl Loader {
     /// directory already claims is MANI-014 and is not loaded. Every package
     /// of the tree carries `lock`, the unit's `interfaces.lock` read from the
     /// manifest directory; a lock in any other directory is not read and is
-    /// RIDL-416.
+    /// RIDL-416. A member listed twice in `[workspace] members` reaches this
+    /// function once: its second listing finds its directory in `units` and
+    /// is skipped.
     #[allow(clippy::too_many_arguments)]
     fn load_package_tree(
         &mut self,
@@ -680,13 +700,13 @@ impl Loader {
             match self.claims.get(name) {
                 Some((first, first_dir)) if first_dir != unit_dir => {
                     claimed_elsewhere = true;
-                    let manifest = unit_dir.join("ridl.toml");
-                    let text = fs::read_to_string(&manifest)?;
-                    let file = self.sources.file_id(&path_string(&manifest), &text);
+                    // Every unit whose tree is loaded has its entry,
+                    // inserted beside its entry in `units`.
+                    let (file, name_range) = self.unit_name_spans[unit];
                     self.diagnostics.push(error(
                         DiagCode::MANI_014,
                         file,
-                        package_name_range(&text),
+                        name_range,
                         format!(
                             "source package `{name}` is already declared by unit `{first}` (`{}`); unit `{unit}` declares it too, in `{}`. A source package belongs to one unit",
                             first_dir.display(),
@@ -978,28 +998,6 @@ fn member_entry_range(text: &str, member: &str) -> TextRange {
         Some(start) => byte_range(start, start + quoted.len()),
         None => byte_range(0, text.len()),
     }
-}
-
-/// The byte range of the quoted `name` value of a manifest's `[package]`
-/// table, or the whole file as a fallback.
-fn package_name_range(text: &str) -> TextRange {
-    let mut offset = 0;
-    for line in text.split_inclusive('\n') {
-        let value = line
-            .trim_start()
-            .strip_prefix("name")
-            .and_then(|rest| rest.trim_start().strip_prefix('='))
-            .map(str::trim_start)
-            .and_then(|value| value.strip_prefix('"').map(|inner| (value, inner)));
-        if let Some((value, inner)) = value
-            && let Some(len) = inner.find('"')
-        {
-            let start = offset + (line.len() - value.len());
-            return byte_range(start, start + len + 2);
-        }
-        offset += line.len();
-    }
-    byte_range(0, text.len())
 }
 
 /// The byte range of the `[workspace]` section header inside a manifest's
@@ -2921,12 +2919,12 @@ service:veh.common.climate 2
         let start = usize::from(diag.primary.range.start());
         let end = usize::from(diag.primary.range.end());
         assert_eq!(&second[start..end], "\"com.example.hmi\"");
-        assert!(
-            diag.message.contains("unit `com.example`")
-                && diag.message.contains("unit `com.example.hmi`"),
-            "{}",
-            diag.message
+        let order = format!(
+            "already declared by unit `com.example` (`{}`); unit `com.example.hmi` declares it too, in `{}`",
+            dir.path().join("base").display(),
+            dir.path().join("hmi").display()
         );
+        assert!(diag.message.contains(&order), "{}", diag.message);
         let packages = loaded.workspace.packages(&db);
         let claimed: Vec<_> = packages
             .iter()
@@ -2965,11 +2963,12 @@ service:veh.common.climate 2
         let start = usize::from(diag.primary.range.start());
         let end = usize::from(diag.primary.range.end());
         assert_eq!(&manifest[start..end], "\"x\"");
-        assert!(
-            diag.message.contains("source package `x`"),
-            "{}",
-            diag.message
+        let order = format!(
+            "source package `x` is already declared by the unit in `{}`; the unit in `{}` declares it too",
+            dir.path().join(first).display(),
+            dir.path().join(second).display()
         );
+        assert!(diag.message.contains(&order), "{}", diag.message);
         assert_eq!(loaded.units.get("x"), Some(&dir.path().join(first)));
         let packages = loaded.workspace.packages(&db);
         assert_eq!(packages.len(), 1);
@@ -2991,6 +2990,31 @@ service:veh.common.climate 2
     #[test]
     fn two_members_with_one_name_are_mani_014_on_the_second_in_reverse_order() {
         two_members_with_one_name("[\"b\", \"a\"]", "b", "a");
+    }
+
+    #[test]
+    fn a_member_listed_twice_is_loaded_once() {
+        let dir = TempDir::new("member-twice");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"a\"]\n");
+        dir.write(
+            "a/ridl.toml",
+            "[package]\nname = \"x\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("a/x.ridl", "package x\n\ninterface A {}\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let codes = codes(&loaded.diagnostics);
+        assert!(!codes.contains(&"MANI-014"), "{codes:?}");
+        for (i, diag) in loaded.diagnostics.iter().enumerate() {
+            assert!(
+                !loaded.diagnostics[..i].contains(diag),
+                "{} appears twice",
+                diag.code.as_str()
+            );
+        }
+        let packages = loaded.workspace.packages(&db);
+        let named_x = packages.iter().filter(|p| p.name(&db) == "x").count();
+        assert_eq!(named_x, 1);
     }
 
     #[test]
