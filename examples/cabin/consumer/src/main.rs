@@ -16,9 +16,10 @@
 //! these — a line rewritten to a bare literal would still match, and would
 //! be checking nothing.
 //!
-//! It is also `just demo`'s program. `examples/cabin/Cargo.toml` is a
-//! two-member cargo workspace — this crate and the generated one — outside
-//! the repository's own workspace, which excludes `examples`. So this file is
+//! It is also `just demo`'s program. `examples/cabin/Cargo.toml` is a cargo
+//! workspace — this crate, the generated one, and a second generated crate
+//! that `just demo` only checks — outside the repository's own workspace,
+//! which excludes `examples`. So this file is
 //! built two ways from one source: by `cargo` for the demo, and by a bare
 //! `rustc` for the test. The crate name is `veh_cabin` in both, because that
 //! is the package name `ridlc` writes into the generated `Cargo.toml`.

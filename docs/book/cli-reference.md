@@ -690,7 +690,10 @@ generated/** linguist-generated=true
 ```
 
 **The crate root allows two lints.** The emitted `lib.rs` carries
-`#![allow(clippy::derivable_impls, clippy::module_inception)]`. These are the
+`#![allow(clippy::derivable_impls, clippy::module_inception)]`, after the
+attribute that makes the crate `no_std` and before the line that links `alloc`
+under the name `std` ([Cargo features](generated-code.md#cargo-features)
+says when each applies, and what a single-file consumer declares). These are the
 two lints that the emitter draws on the `examples/cabin` crate under
 `cargo clippy`: `module_inception` from the package and interface naming
 (`veh.cabin` and `Cabin`), and `derivable_impls`. The list is closed for that

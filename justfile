@@ -418,8 +418,8 @@ compat-check: toolchain-check
 # compiling.
 #
 # `examples/cabin` is its own cargo workspace, outside this repository's. Its
-# `generated/` member is written here and is not in git, so nothing in the
-# repository's own workspace depends on a build output.
+# `generated/` and `generated-corpus/` members are written here and are not in
+# git, so nothing in the repository's own workspace depends on a build output.
 # `--locked` holds the committed `examples/cabin/Cargo.lock`; a dependency
 # change that the lock does not carry fails rather than silently resolving.
 #
@@ -449,7 +449,10 @@ compat-check: toolchain-check
 # `compat-check` shares and neither closes.
 #
 # Fails on: the build drawing an error; the emitted crate or the consumer
-# failing to compile; the program exiting non-zero or not reporting all four
+# failing to compile; the emitted crate failing to check with its default
+# features off for `thumbv7em-none-eabihf`; the crate emitted for the
+# veh-cluster corpus failing to check the same way, or with only
+# `validate-pattern` on; the program exiting non-zero or not reporting all four
 # round trips; the lock being out of date; the consumer being unformatted or
 # drawing a clippy warning; the generated crate drawing a clippy warning that
 # its `lib.rs` does not allow, or an allow that no longer fires; a `lib.rs`
@@ -475,8 +478,12 @@ demo:
     # Cleared first: `--out-dir` writes over what it writes and leaves
     # everything else, so a file the emitter stops writing would survive here
     # and keep this green while a fresh clone failed.
-    rm -rf examples/cabin/generated
+    rm -rf examples/cabin/generated examples/cabin/generated-corpus
     "$target/debug/ridl" build examples/cabin --emit rust --out-dir examples/cabin/generated
+    # Only for the `no_std` check below: cabin's schema has no string, bytes,
+    # array, map or pattern, and this workspace has each of them.
+    "$target/debug/ridl" build crates/ridlc/tests/corpus/veh-cluster --emit rust \
+        --out-dir examples/cabin/generated-corpus
     # This line is the only one that runs the generated crate's planus check,
     # which is ignored for a plain `cargo test`. A filter that matches no test
     # exits 0, so a renamed test would pass here unseen: the result line must
@@ -501,6 +508,24 @@ demo:
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p veh_cabin --locked --no-deps -- -D warnings
     mv examples/cabin/generated/lib.rs.bak examples/cabin/generated/lib.rs
     trap - EXIT
+    # The generated crate with its default features off, for a target that
+    # has no standard library, which is the proof that it links none: a target
+    # that has one, `wasm32-unknown-unknown` included, builds a crate that is
+    # missing `no_std` without an error. Through cargo and the emitted
+    # manifest rather than a bare `rustc`, so that what the features forward
+    # to `ridl-rt` is checked as well. The target comes from
+    # rust-toolchain.toml.
+    cargo check --manifest-path examples/cabin/Cargo.toml -p veh_cabin --locked \
+        --no-default-features --target thumbv7em-none-eabihf
+    # The same check over the crate for the veh-cluster corpus, whose string,
+    # bytes, array and map types reach `String` and `Vec` through the
+    # `alloc` that `lib.rs` links as `std`; then on this machine with only
+    # `validate-pattern` on, for the `ridl.std` pattern checks, under which
+    # the crate links the standard library while `std` stays off.
+    cargo check --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked \
+        --no-default-features --target thumbv7em-none-eabihf
+    cargo check --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked \
+        --no-default-features --features validate-pattern
     cargo fmt --manifest-path examples/cabin/consumer/Cargo.toml --check
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p consumer --locked --all-targets --no-deps -- -D warnings
     # The output is checked, not just the status, and each line carries the
@@ -603,8 +628,9 @@ lint:
 # directories includes are allowed to reach. A chapter may also include a
 # source from `examples/` by anchor, so that the code it shows is the code
 # `just demo` builds; the recipe copies every `.rs` and `.ridl` file under
-# `examples/`, and nothing under a `target/` or a `generated/` directory, which
-# hold build output and the generated crate.
+# `examples/`, and nothing under a `target/`, a `generated/` or a
+# `generated-corpus/` directory, which hold build output and the generated
+# crates.
 #
 # **mdBook exits 0 on a broken `{{#include}}`.** It logs `ERROR Error updating
 # ...`, leaves the directive in the page as literal text, renders the rest, and
@@ -671,9 +697,9 @@ book-check root="":
         # A chapter may include a source from examples/ by anchor, so the
         # code it shows is the code `just demo` builds. Copy the `.rs` and
         # `.ridl` sources too, and nothing else from examples/: no build
-        # output, no generated crate.
+        # output, no generated crates.
         if [ -d "$1/examples" ]; then
-            (cd "$1" && find examples \( -name '*.rs' -o -name '*.ridl' \) -not -path '*/target/*' -not -path '*/generated/*') |
+            (cd "$1" && find examples \( -name '*.rs' -o -name '*.ridl' \) -not -path '*/target/*' -not -path '*/generated/*' -not -path '*/generated-corpus/*') |
                 while IFS= read -r source; do
                     mkdir -p "$scratch/$(dirname "$source")"
                     cp "$1/$source" "$scratch/$source"
@@ -769,10 +795,11 @@ book-check root="":
     # 8. The book from case 6, with a source whose anchor has no
     #    `ANCHOR_END`. mdBook renders the rest of the file and logs nothing;
     #    the gate has to fail and name the anchor (check 4).
-    # 9. The book from case 6, with a `.rs` under examples/'s `target/` and one
-    #    under its `generated/`, each a symbolic link to a file that does not
-    #    exist. Copying either one fails, so the gate has to pass, which pins
-    #    that the copy leaves both directories out.
+    # 9. The book from case 6, with a `.rs` under examples/'s `target/`, one
+    #    under its `generated/` and one under its `generated-corpus/`, each a
+    #    symbolic link to a file that does not exist. Copying any one fails,
+    #    so the gate has to pass, which pins that the copy leaves the three
+    #    directories out.
     # 10. The book from case 6, with a source that closes the anchor with
     #     `ANCHOR_END` but never opens it with `ANCHOR`. The gate has to fail
     #     and name the anchor (check 4).
@@ -938,15 +965,17 @@ book-check root="":
             exit 1
         fi
 
-        # Case 9: the copy leaves target/ and generated/ out. A symbolic link
-        # to a file that does not exist cannot be copied, so the gate fails if
-        # the copy reaches either one.
+        # Case 9: the copy leaves target/, generated/ and generated-corpus/
+        # out. A symbolic link to a file that does not exist cannot be copied,
+        # so the gate fails if the copy reaches any one of them.
         printf '%s\n' 'fn main() {' '    // ANCHOR: part' '    let shown = 1;' '    // ANCHOR_END: part' '}' > "$example/examples/demo/src/main.rs"
-        mkdir -p "$example/examples/demo/target/debug" "$example/examples/demo/generated"
+        mkdir -p "$example/examples/demo/target/debug" "$example/examples/demo/generated" \
+            "$example/examples/demo/generated-corpus"
         ln -s "$work/nowhere.rs" "$example/examples/demo/target/debug/build.rs"
         ln -s "$work/nowhere.rs" "$example/examples/demo/generated/lib.rs"
+        ln -s "$work/nowhere.rs" "$example/examples/demo/generated-corpus/lib.rs"
         if ! "{{just_executable()}}" book-check "$example" >"$run" 2>&1; then
-            echo "book-check: the gate did not pass over a fixture whose examples/ holds a target/ and a generated/ directory, so it copied one of them:" >&2
+            echo "book-check: the gate did not pass over a fixture whose examples/ holds a target/, a generated/ and a generated-corpus/ directory, so it copied one of them:" >&2
             cat "$run" >&2
             exit 1
         fi

@@ -3442,7 +3442,7 @@ impl ::core::convert::From<FanTag> for ::std::string::String {
 }
 impl ::core::default::Default for FanTag {
     fn default() -> Self {
-        FanTag::new_unchecked("unset".to_string())
+        FanTag::new_unchecked(::std::string::String::from("unset"))
     }
 }
 /// The cabin fan's label.

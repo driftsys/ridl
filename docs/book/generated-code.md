@@ -198,14 +198,24 @@ with a failure. At the timeout, blocking `next_event` returns `Ok(None)`.
 
 The generated `Cargo.toml` declares two features, both on by default:
 
-| Feature            | Enables                                                                                                                                                                              |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `std`              | The `blocking` module of every face, the `Timeout` trait in the prelude of each interface that has a `blocking` module, and `ridl-rt/std`. With it off, only the async face remains. |
-| `validate-pattern` | The check of a typl `match` pattern in a constructor, through the `regex` crate. With it off, `new` does not check patterns; range and length checks are not affected.               |
+| Feature            | Enables                                                                                                                                                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `std`              | The `blocking` module of every face, the `Timeout` trait in the prelude of each interface that has a `blocking` module, and `ridl-rt/std`. With it off, only the async face remains.                                     |
+| `validate-pattern` | The check of a typl `match` pattern in a constructor, through the `regex` crate. With it on, the crate links the standard library. With it off, `new` does not check patterns; range and length checks are not affected. |
 
-With `std` off, `ridl-rt` builds as `no_std`, but the generated crate does
-not: its `lib.rs` does not declare `#![no_std]`, so the crate still links the
-standard library and builds only for a target that has one.
+With `std` and `validate-pattern` both off, the generated crate and `ridl-rt`
+are both `no_std` and build for a target that has no standard library. Its
+`lib.rs` declares this with
+`#![cfg_attr(not(any(feature = "std", feature = "validate-pattern")), no_std)]`.
+The crate still needs an allocator: under the same condition its `lib.rs`
+links `alloc` under the name `std` (`extern crate alloc as std;`), because the
+package files name `::std::string::String` and `::std::vec::Vec` for strings,
+bytes, arrays and maps. Single-file mode writes no `lib.rs`, so the crate that
+includes the file decides. A crate that is always `no_std` declares
+`extern crate alloc as std;` in its own root. A crate that is `no_std` only
+under a condition declares it under the same condition: where the alias is
+declared, `::std` names `alloc`, so a path that only the standard library has,
+such as `::std::sync::LazyLock`, no longer resolves.
 
 A target where `regex` is too large, or one that does not need the blocking
 face, turns the defaults off and selects what it needs. This `Cargo.toml`
