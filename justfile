@@ -449,7 +449,9 @@ compat-check: toolchain-check
 # `compat-check` shares and neither closes.
 #
 # Fails on: the build drawing an error; the emitted crate or the consumer
-# failing to compile; the program exiting non-zero or not reporting all four
+# failing to compile; the emitted crate failing to check with its `std`
+# feature off for `thumbv7em-none-eabihf`, or with only `validate-pattern`
+# off; the program exiting non-zero or not reporting all four
 # round trips; the lock being out of date; the consumer being unformatted or
 # drawing a clippy warning; the generated crate drawing a clippy warning that
 # its `lib.rs` does not allow, or an allow that no longer fires; a `lib.rs`
@@ -501,6 +503,18 @@ demo:
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p veh_cabin --locked --no-deps -- -D warnings
     mv examples/cabin/generated/lib.rs.bak examples/cabin/generated/lib.rs
     trap - EXIT
+    # The generated crate with its `std` feature off, for a target that has no
+    # standard library, which is the proof that it links none: a target that
+    # has one, `wasm32-unknown-unknown` included, builds a crate that is
+    # missing `no_std` without an error. Through cargo and the emitted
+    # manifest rather than a bare `rustc`, so that what the features forward
+    # to `ridl-rt` is checked as well. The target comes from
+    # rust-toolchain.toml. Then with only `validate-pattern` off, which keeps
+    # `std` and the `blocking` module it gates.
+    cargo check --manifest-path examples/cabin/Cargo.toml -p veh_cabin --locked \
+        --no-default-features --target thumbv7em-none-eabihf
+    cargo check --manifest-path examples/cabin/Cargo.toml -p veh_cabin --locked \
+        --no-default-features --features std
     cargo fmt --manifest-path examples/cabin/consumer/Cargo.toml --check
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p consumer --locked --all-targets --no-deps -- -D warnings
     # The output is checked, not just the status, and each line carries the
