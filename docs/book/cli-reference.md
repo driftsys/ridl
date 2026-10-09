@@ -412,9 +412,10 @@ provisional — a declaration with no entry in the unit's `interfaces.lock`
 — is refused (RIDL-411, exit 1, nothing published), on a first publication as
 on a replacement, until plain `ridl lock` records the number; and a number the
 published baseline holds that the fresh snapshot neither carries nor retires
-is refused too (RIDL-412) — a lock line deleted by hand, since a live entry
-with no declaration already fails the build with RIDL-409, or a package deleted
-without retiring its numbers. A whole service
+is refused too (RIDL-412). That covers a lock line deleted by hand, since a
+live entry with no declaration already fails the build with RIDL-409. It also
+covers a package deleted, without retiring its numbers, from a unit that still
+has other packages. A whole service
 removed from the source is reported by `ridl diff` as breaking but is not
 refused here (ridl §17.14), and a named-form service's list is a set the gate
 does not read. Deleting `doorClosed` outright, with `doorOpened` and `doorLocked`
@@ -1284,7 +1285,8 @@ compatible on the wire, visible in source:
 ```
 
 An interface is matched by its number from the unit's `interfaces.lock`,
-within the unit, not by its name — a declared `interface` and a service's inline shape alike. A
+within the unit, not by its name — a declared `interface` and a service's
+inline shape alike. A
 rename that keeps its number, recorded with `ridl lock <unit dir> --rename Old=New`,
 is `interface_renamed`: compatible on the wire, because the number is the
 routing identity, and visible in source, because the generated identity-table

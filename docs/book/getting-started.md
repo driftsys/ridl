@@ -874,7 +874,8 @@ ridl build --emit rust --out-dir out
 
 `ridl build` compiles a workspace and writes one artifact per package for each
 emit target, except that `catalog` writes one per unit and none for a unit that
-declares no interface and no service with an inline body. Nine emit targets exist today:
+declares no interface and no service with an inline body.
+Nine emit targets exist today:
 
 | `--emit`        | Output                    | Contents                                                                     |
 | --------------- | ------------------------- | ---------------------------------------------------------------------------- |
