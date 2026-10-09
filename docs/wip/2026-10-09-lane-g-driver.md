@@ -336,3 +336,9 @@ Each ruling: what was decided — why — what it costs if wrong.
   family member with a reference and no implementation, like rxdl), and R-29
   covers a lone `.rmdl` entry — the lint name was chosen to be shared — if
   wrong, a `.rmdl` file draws a warning that names a profile not built yet.
+- **R-31** R-29's refusal is carried as `io::Error` of kind `InvalidInput` from
+  `load_single_file`, not as a new `LoadError` variant — every caller already
+  turns an `Io` error into exit 2 and `ridl-mcp` into a request error, while a
+  new variant would reach two `unreachable!` arms; the module rustdoc names the
+  exception — if wrong, a caller that must tell this case from a filesystem
+  failure needs the dedicated variant, a contained change.
