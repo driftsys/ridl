@@ -382,12 +382,14 @@ messages in P's model: the section carries no payload size.
 unit ([ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 6),
 and P can be one of several source packages of that unit. P's model carries
 `Catalog.package`, which holds the unit name and keeps its field name and number
-for that reason, so a plugin looks its region up by `Catalog.package` and not by
-`Model.name`. The interface names of a region are catalog names, relative to the
-unit (`cluster.SpeedDisplay`), while `Model.interfaces[i].name` stays the short
-name. `Catalog.hash` is the hash of the unit's catalog and `Catalog.retired`
-lists the unit's retired entries as the lock spells them, for every request of
-every source package of the unit.
+for that reason (renaming it to `name` was rejected: it breaks the generated
+accessors of every plugin and changes nothing on the wire), so a plugin looks
+its region up by `Catalog.package` and not by `Model.name`. The interface names
+of a region are catalog names, relative to the unit (`cluster.SpeedDisplay`),
+while `Model.interfaces[i].name` stays the short name. `Catalog.hash` is the
+hash of the unit's catalog and `Catalog.retired` lists the unit's retired
+entries as the lock spells them, for every request of every source package of
+the unit.
 
 **A request with no deployment is unchanged.** The field is absent, and the
 request is byte for byte the request written before the field existed. The field

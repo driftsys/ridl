@@ -527,7 +527,9 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
 
     A change to any source package of a unit that an interface of the unit
     reaches changes the unit's hash, and a change to a unit never changes the
-    hash of another unit that does not reach it.
+    hash of another unit that does not reach it. A unit has one identity: it is
+    versioned and released as a whole, so a unit whose parts change at different
+    rates is split into two units.
 
     **What is not covered, and why.** `Package.retired`: the hash identifies
     what a peer can call, and the retired list is carried beside it, in the

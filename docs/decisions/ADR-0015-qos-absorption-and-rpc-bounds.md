@@ -469,7 +469,13 @@ indistinguishable, so no claim about any of the three can be exercised.
     `InterfaceRenamed` or `InterfaceRetired` when the unit accounts for their
     numbers, and `DeclRemoved` otherwise, which `ridl baseline` refuses with
     RIDL-412. A source package whose whole unit vanished is one package-level
-    `DeclRemoved`, as before.
+    `DeclRemoved`, as before. `ridl baseline` still writes one snapshot per
+    source package, because the IR stays per source package; a snapshot per unit
+    was rejected because it needs a new IR shape and gives no other benefit. A
+    retired entry in the unit's lock carries its qualified name, so it maps back
+    to its source package. Merging existing per-package locks without
+    renumbering was rejected: a re-baseline is simpler and no published catalog
+    needs to keep its numbers.
 
 18. **Diagnostics: three codes minted, two existing codes become per-element.**
     The service codes occupy 140 to 143 and RIDL-112 is minted by decision 6, so

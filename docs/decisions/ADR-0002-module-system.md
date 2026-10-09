@@ -109,6 +109,21 @@ produces one catalog when it declares an interface shape (see
 [the catalog descriptor](../design/catalog-descriptor.md)), and one
 `interfaces.lock` beside its manifest (ridl language reference, §11).
 
+**Alternatives rejected for the unit.** An engine that loads every catalog whose
+name starts with a prefix keeps N catalogs and N ports, which is the cost the
+unit removes. A wildcard import only brings names into scope and does not move
+an interface into another catalog. A separate `[module]` table would keep
+"package" to one meaning, but `[package]` already names the unit, as the
+`package` attribute of an Android manifest does. A free unit name with a `root`
+field is not needed, because the unit name as the root of every source package
+makes a clash between two units impossible inside one workspace. The Kotlin rule
+(the `package` line decides, the directory is a convention) gives up "one place
+a package can live" and lets two units claim one source package. Exclusive unit
+kinds were rejected because one unit can hold both contracts and a system, as
+`examples/cabin` does. A workspace member nested inside another member's tree is
+an error, because `vehicle.cabin.hvac.station` would then belong to two units;
+`evals/corpus/vss` is laid out with top-level members for that reason.
+
 ### 2. Imports
 
 Imports are qualified and named:
