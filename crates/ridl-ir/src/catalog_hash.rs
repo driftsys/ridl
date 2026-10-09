@@ -2077,11 +2077,13 @@ mod tests {
         assert_eq!(reached, ["u.a.Foo", "u.b.Foo"]);
     }
 
+    /// The checker spells every retired entry as its lock key, so the unit's
+    /// list concatenates the packages' entries as they are, in number order.
     #[test]
-    fn unit_retired_qualifies_an_interface_entry_and_keeps_a_service_entry() {
+    fn unit_retired_keeps_every_entry_as_spelled() {
         let (mut u, mut cluster, mut v) = two_unit_fixture();
         cluster.retired.push(RetiredInterface {
-            name: "Old".to_owned(),
+            name: "cluster.Old".to_owned(),
             number: 3,
         });
         u.retired.push(RetiredInterface {
@@ -2103,5 +2105,26 @@ mod tests {
                 ("service:veh.x".to_owned(), 4)
             ]
         );
+    }
+
+    /// A unit with an empty root: the anchor `u.a` carries the root's
+    /// retired `Old` beside its own `a.Gone`, both as the lock spells them.
+    /// No entry is re-qualified by the package that carries it.
+    #[test]
+    fn unit_retired_does_not_qualify_a_root_entry_by_its_anchor() {
+        let mut a = unit_package("u.a", "u", vec![], ("A", 1, vec![]));
+        a.retired.push(RetiredInterface {
+            name: "Old".to_owned(),
+            number: 3,
+        });
+        a.retired.push(RetiredInterface {
+            name: "a.Gone".to_owned(),
+            number: 5,
+        });
+        let retired: Vec<(String, u32)> = crate::v2::unit_retired("u", &[&a])
+            .into_iter()
+            .map(|entry| (entry.name, entry.number))
+            .collect();
+        assert_eq!(retired, [("Old".to_owned(), 3), ("a.Gone".to_owned(), 5)]);
     }
 }

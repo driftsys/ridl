@@ -65,9 +65,11 @@ message Package {
 
 // One retired entry of a package's `interfaces.lock` (lock design §2, §9).
 message RetiredInterface {
-  // The lock key as the file spells it: the interface's CamelCase name, or
-  // `service:` followed by the dotted name of the service whose inline
-  // shape the entry numbered (lock design §3).
+  // The lock key as the file spells it, which is the entry's catalog name:
+  // the interface's name relative to the unit (`cluster.Old`; `Old` for an
+  // interface of the root package), or `service:` followed by the dotted
+  // name of the service whose inline shape the entry numbered (lock design
+  // §3).
   string name = 1;
   // The number the entry holds forever; 1-based, never 0 (lock design §1).
   uint32 number = 2;

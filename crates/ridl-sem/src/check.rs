@@ -267,9 +267,10 @@ pub(crate) fn lower_package(
 /// folds the unit's result into the package: each shape takes the number of
 /// its lock key (the catalog name, [`v2::relative_name`], for a declared
 /// interface; the service's dotted name for an inline shape),
-/// `Package.retired` takes the retired entries that name this package, and
-/// the unit's anchor package reports one RIDL-409 per live entry with no
-/// declaration, on the entry's line of the unit's lock.
+/// `Package.retired` takes the retired entries that name this package, each
+/// spelled as its lock key, and the unit's anchor package reports one
+/// RIDL-409 per live entry with no declaration, on the entry's line of the
+/// unit's lock.
 ///
 /// A package outside `ws` — the embedded `ridl.std` checked on its own, or
 /// the language server's overlay for a file outside the workspace — is a
@@ -319,33 +320,30 @@ pub fn check_package(
         }
     }
 
-    // A retired entry belongs to the source package its relative name names,
-    // under its short name. The anchor carries the entries no package of the
-    // unit can: a `service:` entry, and an interface entry whose package is
-    // not in the unit, each spelled as the lock spells it.
+    // A retired entry belongs to the source package its relative name names.
+    // The anchor carries the entries no package of the unit can: a `service:`
+    // entry, and an interface entry whose package is not in the unit (the
+    // root's, when the root package is empty). Every entry is spelled as the
+    // lock spells it, which is its catalog name, so the unit's list is the
+    // concatenation of its packages' lists.
     let is_anchor = numbering.anchor == *package_name;
     for (key, number) in &numbering.retired {
-        let name = match key {
+        let carried = match key {
             LockKey::Interface(name) => {
-                let (owner, short) = match name.rsplit_once('.') {
-                    Some((dir, short)) => (format!("{unit}.{dir}"), short),
-                    None => (unit.clone(), name.as_str()),
+                let owner = match name.rsplit_once('.') {
+                    Some((dir, _)) => format!("{unit}.{dir}"),
+                    None => unit.clone(),
                 };
-                if owner == *package_name {
-                    short.to_string()
-                } else if is_anchor && !unit_packages.contains(&owner) {
-                    key.to_string()
-                } else {
-                    continue;
-                }
+                owner == *package_name || (is_anchor && !unit_packages.contains(&owner))
             }
-            LockKey::Service(_) if is_anchor => key.to_string(),
-            LockKey::Service(_) => continue,
+            LockKey::Service(_) => is_anchor,
         };
-        checked.ir.retired.push(v2::RetiredInterface {
-            name,
-            number: *number,
-        });
+        if carried {
+            checked.ir.retired.push(v2::RetiredInterface {
+                name: key.to_string(),
+                number: *number,
+            });
+        }
     }
 
     if let Some(lock) = lock
@@ -15394,14 +15392,37 @@ interface cabin { signal i : State @[100ms..1s] }
     }
 
     /// A retired entry reaches `Package.retired` of the source package its
-    /// relative name names, under its short name.
+    /// relative name names, spelled as its lock key.
     #[test]
     fn a_retired_entry_lands_on_the_package_its_relative_name_names() {
         let unit = UnitFixture::session_and_speed(Some(
             "next 4\ncluster.Speed 1\nSession 2\ncluster.Old 3 retired\n",
         ));
-        assert_eq!(unit.check("u.cluster").ir.retired, [retired("Old", 3)]);
+        assert_eq!(
+            unit.check("u.cluster").ir.retired,
+            [retired("cluster.Old", 3)]
+        );
         assert!(unit.check("u").ir.retired.is_empty());
+    }
+
+    /// A unit whose root package is empty has no package named like the
+    /// unit, so the anchor is the first package in byte order. A retired
+    /// entry of the root (`Old`) is carried by that anchor as the lock
+    /// spells it, which is also the entry's catalog name.
+    #[test]
+    fn a_root_owned_retired_entry_lands_on_a_non_root_anchor_as_spelled() {
+        let unit = UnitFixture::new(
+            "u",
+            Some("next 4\na.Foo 1\nb.Foo 2\nOld 3 retired\n"),
+            &[
+                ("u.a", "package u.a\ninterface Foo {}\n"),
+                ("u.b", "package u.b\ninterface Foo {}\n"),
+            ],
+        );
+        let anchor = unit.check("u.a");
+        assert!(codes(&anchor).is_empty(), "got: {:?}", anchor.diagnostics);
+        assert_eq!(anchor.ir.retired, [retired("Old", 3)]);
+        assert!(unit.check("u.b").ir.retired.is_empty());
     }
 
     /// A retired entry whose package is not in the unit, and a retired
