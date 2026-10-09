@@ -439,6 +439,13 @@ compat-check: toolchain-check
 # emitter, and a listed lint that no longer fires fails through
 # `unfulfilled_lint_expectations`, so the list cannot go stale.
 #
+# The crate emitted for the veh-cluster corpus is linted too, with no
+# command-line allowance except `dead_code`, because the corpus declares items
+# that nothing uses; the lints the emitted `lib.rs` allows stay allowed. Unlike
+# the run above, this one keeps `allow`: `clippy::module_inception` does not
+# fire on the corpus crate, so a stale entry there does not fail. Any other
+# warning is a defect in the emitter.
+#
 # The binary is reached through `CARGO_TARGET_DIR` where it is set, the way
 # `compat-check` reads it, rather than through a hardcoded `./target`: a
 # contributor who exports that variable would otherwise get a missing-file
@@ -456,7 +463,8 @@ compat-check: toolchain-check
 # round trips; the lock being out of date; the consumer being unformatted or
 # drawing a clippy warning; the generated crate drawing a clippy warning that
 # its `lib.rs` does not allow, or an allow that no longer fires; a `lib.rs`
-# with no `#![allow(` line to rewrite; a planus crate
+# with no `#![allow(` line to rewrite; the crate emitted for the veh-cluster
+# corpus drawing a clippy warning other than `dead_code`; a planus crate
 # in the resolved graph of `examples/cabin`; the planus check running no test or
 # more than one, which is what a renamed test or a changed filter does.
 #
@@ -480,8 +488,8 @@ demo:
     # and keep this green while a fresh clone failed.
     rm -rf examples/cabin/generated examples/cabin/generated-corpus
     "$target/debug/ridl" build examples/cabin --emit rust --out-dir examples/cabin/generated
-    # Only for the `no_std` check below: cabin's schema has no string, bytes,
-    # array, map or pattern, and this workspace has each of them.
+    # For the `no_std` check and the clippy run below: cabin's schema has no
+    # string, bytes, array, map or pattern, and this workspace has each of them.
     "$target/debug/ridl" build crates/ridlc/tests/corpus/veh-cluster --emit rust \
         --out-dir examples/cabin/generated-corpus
     # This line is the only one that runs the generated crate's planus check,
@@ -526,6 +534,13 @@ demo:
         --no-default-features --target thumbv7em-none-eabihf
     cargo check --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked \
         --no-default-features --features validate-pattern
+    # The corpus crate is linted as well. The only allowance on the command line is
+    # `dead_code`, and the lints that its `lib.rs` allows stay allowed.
+    # `dead_code` is allowed for this one run: the corpus declares items that
+    # nothing uses, and the `dead_code` warnings come from the corpus's
+    # `internal` structs, not from the emitter. Every other lint fails the run.
+    cargo clippy --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked --no-deps \
+        -- -D warnings -A dead_code
     cargo fmt --manifest-path examples/cabin/consumer/Cargo.toml --check
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p consumer --locked --all-targets --no-deps -- -D warnings
     # The output is checked, not just the status, and each line carries the

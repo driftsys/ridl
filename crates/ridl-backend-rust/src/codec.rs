@@ -460,6 +460,11 @@ struct Operand {
     place: TokenStream,
     /// An expression of type `&T`.
     reference: TokenStream,
+    /// An expression a method is called on without borrowing again: the
+    /// place for an owned value, the binding for a reference. `get`,
+    /// `as_str` and `as_slice` already return references, so a `&` before
+    /// the call draws `clippy::needless_borrow`.
+    receiver: TokenStream,
 }
 
 impl Operand {
@@ -468,6 +473,7 @@ impl Operand {
     fn owned(place: TokenStream) -> Self {
         Operand {
             reference: quote! { &#place },
+            receiver: place.clone(),
             place,
         }
     }
@@ -477,6 +483,7 @@ impl Operand {
     fn borrowed(reference: TokenStream) -> Self {
         Operand {
             place: quote! { *#reference },
+            receiver: reference.clone(),
             reference,
         }
     }
@@ -1709,6 +1716,7 @@ impl<'a> Codec<'a> {
     /// position.
     fn encode_pos(&self, wire: &Wire, expr: &Operand) -> Result<TokenStream, GenerateError> {
         let reference = &expr.reference;
+        let receiver = &expr.receiver;
         Ok(match wire {
             Wire::Scalar(_) => {
                 return Err(GenerateError {
@@ -1717,15 +1725,15 @@ impl<'a> Codec<'a> {
             }
             Wire::Text(named, _) => {
                 let text = match named {
-                    Some(_) => quote! { #reference.get() },
-                    None => quote! { #reference.as_str() },
+                    Some(_) => quote! { #receiver.get() },
+                    None => quote! { #receiver.as_str() },
                 };
                 quote! { builder.push_string(#text)? }
             }
             Wire::Bytes(named, _) => {
                 let bytes = match named {
-                    Some(_) => quote! { #reference.get() },
-                    None => quote! { #reference.as_slice() },
+                    Some(_) => quote! { #receiver.get() },
+                    None => quote! { #receiver.as_slice() },
                 };
                 quote! { builder.push_vector(#bytes, 1usize)? }
             }

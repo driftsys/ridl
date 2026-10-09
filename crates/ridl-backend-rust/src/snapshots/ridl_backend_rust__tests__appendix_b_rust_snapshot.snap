@@ -46,118 +46,121 @@ impl Speed {
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        if {
-            let __checked: ::core::primitive::f64 = value as ::core::primitive::f32
-                as ::core::primitive::f64;
-            {
-                let __factor: ::core::primitive::f64 = 1f64;
-                let __original_step: ::core::primitive::f64 = 0.5f64;
-                let __step: ::core::primitive::f64 = 0.5f64;
-                let __step_low: ::core::primitive::f64 = 0f64;
-                let __phase: ::core::primitive::f64 = 0f64;
-                let __phase_low: ::core::primitive::f64 = 0f64;
-                if !__checked.is_finite() {
-                    true
-                } else {
-                    let __represented = (__checked as ::core::primitive::f32).abs();
-                    let __bits = __represented.to_bits();
-                    let __below = if __bits == 0 {
-                        -::core::primitive::f32::from_bits(1)
+        {
+            let __step_invalid: ::core::primitive::bool = {
+                let __checked: ::core::primitive::f64 = value as ::core::primitive::f32
+                    as ::core::primitive::f64;
+                {
+                    let __factor: ::core::primitive::f64 = 1f64;
+                    let __original_step: ::core::primitive::f64 = 0.5f64;
+                    let __step: ::core::primitive::f64 = 0.5f64;
+                    let __step_low: ::core::primitive::f64 = 0f64;
+                    let __phase: ::core::primitive::f64 = 0f64;
+                    let __phase_low: ::core::primitive::f64 = 0f64;
+                    if !__checked.is_finite() {
+                        true
                     } else {
-                        ::core::primitive::f32::from_bits(__bits - 1)
-                    };
-                    let __above = ::core::primitive::f32::from_bits(__bits + 1);
-                    let __lower_gap = (__represented - __below)
-                        as ::core::primitive::f64;
-                    let __upper_gap = if __above.is_finite() {
-                        (__above - __represented) as ::core::primitive::f64
-                    } else {
-                        __lower_gap
-                    };
-                    let __cell = (__lower_gap + __upper_gap) / 2.0;
-                    if __original_step < __cell {
-                        false
-                    } else {
-                        let __scaled_value = __checked * __factor;
-                        let __delta = __scaled_value - __phase;
-                        let __quotient = if __delta.is_finite() {
-                            __delta / __step
+                        let __represented = (__checked as ::core::primitive::f32).abs();
+                        let __bits = __represented.to_bits();
+                        let __below = if __bits == 0 {
+                            -::core::primitive::f32::from_bits(1)
                         } else {
-                            __scaled_value / __step - __phase / __step
+                            ::core::primitive::f32::from_bits(__bits - 1)
                         };
-                        let __fraction = __quotient % 1.0;
-                        let __index = __quotient - __fraction
-                            + if __fraction >= 0.5 {
-                                1.0
-                            } else if __fraction <= -0.5 {
-                                -1.0
+                        let __above = ::core::primitive::f32::from_bits(__bits + 1);
+                        let __lower_gap = (__represented - __below)
+                            as ::core::primitive::f64;
+                        let __upper_gap = if __above.is_finite() {
+                            (__above - __represented) as ::core::primitive::f64
+                        } else {
+                            __lower_gap
+                        };
+                        let __cell = (__lower_gap + __upper_gap) / 2.0;
+                        if __original_step < __cell {
+                            false
+                        } else {
+                            let __scaled_value = __checked * __factor;
+                            let __delta = __scaled_value - __phase;
+                            let __quotient = if __delta.is_finite() {
+                                __delta / __step
                             } else {
-                                0.0
+                                __scaled_value / __step - __phase / __step
                             };
-                        let __scale = __checked
-                            .abs()
-                            .max((__phase / __factor).abs())
-                            .max(__original_step.abs());
-                        let __tolerance = (4.0
-                            * (::core::primitive::f32::EPSILON as ::core::primitive::f64)
-                            * __scale)
-                            .min(__original_step / 4.0);
-                        let mut __distance = ::core::primitive::f64::INFINITY;
-                        let __rescale = if __scaled_value
-                            .abs()
-                            .max(__phase.abs())
-                            .max(__step.abs()) > ::core::primitive::f64::MAX / 4.0
-                        {
-                            0.25
-                        } else {
-                            1.0
-                        };
-                        let __product_with_error = |
-                            __left: ::core::primitive::f64,
-                            __right: ::core::primitive::f64|
-                        {
-                            let __product = __left * __right;
-                            let __left_high = ::core::primitive::f64::from_bits(
-                                __left.to_bits() & !((1u64 << 27) - 1),
-                            );
-                            let __right_high = ::core::primitive::f64::from_bits(
-                                __right.to_bits() & !((1u64 << 27) - 1),
-                            );
-                            let __left_low = __left - __left_high;
-                            let __right_low = __right - __right_high;
-                            let __error = ((__left_high * __right_high - __product)
-                                + __left_high * __right_low + __left_low * __right_high)
-                                + __left_low * __right_low;
-                            (__product, __error)
-                        };
-                        for __candidate in [__index - 1.0, __index, __index + 1.0] {
-                            let (__product, __product_error) = __product_with_error(
-                                __candidate,
-                                __step * __rescale,
-                            );
-                            let __scaled_phase = __phase * __rescale;
-                            let __sum = __product + __scaled_phase;
-                            let __part = __sum - __product;
-                            let __sum_error = (__product - (__sum - __part))
-                                + (__scaled_phase - __part);
-                            let __low = __candidate * (__step_low * __rescale)
-                                + __phase_low * __rescale + __product_error + __sum_error;
-                            let __nearest = __sum + __low;
-                            let __nearest = (__nearest / __factor / __rescale)
-                                as ::core::primitive::f32 as ::core::primitive::f64;
-                            if __nearest.is_finite() {
-                                __distance = __distance.min((__checked - __nearest).abs());
+                            let __fraction = __quotient % 1.0;
+                            let __index = __quotient - __fraction
+                                + if __fraction >= 0.5 {
+                                    1.0
+                                } else if __fraction <= -0.5 {
+                                    -1.0
+                                } else {
+                                    0.0
+                                };
+                            let __scale = __checked
+                                .abs()
+                                .max((__phase / __factor).abs())
+                                .max(__original_step.abs());
+                            let __tolerance = (4.0
+                                * (::core::primitive::f32::EPSILON
+                                    as ::core::primitive::f64) * __scale)
+                                .min(__original_step / 4.0);
+                            let mut __distance = ::core::primitive::f64::INFINITY;
+                            let __rescale = if __scaled_value
+                                .abs()
+                                .max(__phase.abs())
+                                .max(__step.abs()) > ::core::primitive::f64::MAX / 4.0
+                            {
+                                0.25
+                            } else {
+                                1.0
+                            };
+                            let __product_with_error = |
+                                __left: ::core::primitive::f64,
+                                __right: ::core::primitive::f64|
+                            {
+                                let __product = __left * __right;
+                                let __left_high = ::core::primitive::f64::from_bits(
+                                    __left.to_bits() & !((1u64 << 27) - 1),
+                                );
+                                let __right_high = ::core::primitive::f64::from_bits(
+                                    __right.to_bits() & !((1u64 << 27) - 1),
+                                );
+                                let __left_low = __left - __left_high;
+                                let __right_low = __right - __right_high;
+                                let __error = ((__left_high * __right_high - __product)
+                                    + __left_high * __right_low + __left_low * __right_high)
+                                    + __left_low * __right_low;
+                                (__product, __error)
+                            };
+                            for __candidate in [__index - 1.0, __index, __index + 1.0] {
+                                let (__product, __product_error) = __product_with_error(
+                                    __candidate,
+                                    __step * __rescale,
+                                );
+                                let __scaled_phase = __phase * __rescale;
+                                let __sum = __product + __scaled_phase;
+                                let __part = __sum - __product;
+                                let __sum_error = (__product - (__sum - __part))
+                                    + (__scaled_phase - __part);
+                                let __low = __candidate * (__step_low * __rescale)
+                                    + __phase_low * __rescale + __product_error + __sum_error;
+                                let __nearest = __sum + __low;
+                                let __nearest = (__nearest / __factor / __rescale)
+                                    as ::core::primitive::f32 as ::core::primitive::f64;
+                                if __nearest.is_finite() {
+                                    __distance = __distance.min((__checked - __nearest).abs());
+                                }
                             }
+                            !__quotient.is_finite() || __distance > __tolerance
                         }
-                        !__quotient.is_finite() || __distance > __tolerance
                     }
                 }
+            };
+            if __step_invalid {
+                return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                    type_name: "Speed",
+                    rule: ::ridl_rt::payload::Rule::Step,
+                });
             }
-        } {
-            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Speed",
-                rule: ::ridl_rt::payload::Rule::Step,
-            });
         }
         ::core::result::Result::Ok(())
     }
@@ -235,118 +238,121 @@ impl Temperature {
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        if {
-            let __checked: ::core::primitive::f64 = value as ::core::primitive::f32
-                as ::core::primitive::f64;
-            {
-                let __factor: ::core::primitive::f64 = 1f64;
-                let __original_step: ::core::primitive::f64 = 0.1f64;
-                let __step: ::core::primitive::f64 = 0.1f64;
-                let __step_low: ::core::primitive::f64 = -0.000000000000000005551115123125783f64;
-                let __phase: ::core::primitive::f64 = 0f64;
-                let __phase_low: ::core::primitive::f64 = 0f64;
-                if !__checked.is_finite() {
-                    true
-                } else {
-                    let __represented = (__checked as ::core::primitive::f32).abs();
-                    let __bits = __represented.to_bits();
-                    let __below = if __bits == 0 {
-                        -::core::primitive::f32::from_bits(1)
+        {
+            let __step_invalid: ::core::primitive::bool = {
+                let __checked: ::core::primitive::f64 = value as ::core::primitive::f32
+                    as ::core::primitive::f64;
+                {
+                    let __factor: ::core::primitive::f64 = 1f64;
+                    let __original_step: ::core::primitive::f64 = 0.1f64;
+                    let __step: ::core::primitive::f64 = 0.1f64;
+                    let __step_low: ::core::primitive::f64 = -0.000000000000000005551115123125783f64;
+                    let __phase: ::core::primitive::f64 = 0f64;
+                    let __phase_low: ::core::primitive::f64 = 0f64;
+                    if !__checked.is_finite() {
+                        true
                     } else {
-                        ::core::primitive::f32::from_bits(__bits - 1)
-                    };
-                    let __above = ::core::primitive::f32::from_bits(__bits + 1);
-                    let __lower_gap = (__represented - __below)
-                        as ::core::primitive::f64;
-                    let __upper_gap = if __above.is_finite() {
-                        (__above - __represented) as ::core::primitive::f64
-                    } else {
-                        __lower_gap
-                    };
-                    let __cell = (__lower_gap + __upper_gap) / 2.0;
-                    if __original_step < __cell {
-                        false
-                    } else {
-                        let __scaled_value = __checked * __factor;
-                        let __delta = __scaled_value - __phase;
-                        let __quotient = if __delta.is_finite() {
-                            __delta / __step
+                        let __represented = (__checked as ::core::primitive::f32).abs();
+                        let __bits = __represented.to_bits();
+                        let __below = if __bits == 0 {
+                            -::core::primitive::f32::from_bits(1)
                         } else {
-                            __scaled_value / __step - __phase / __step
+                            ::core::primitive::f32::from_bits(__bits - 1)
                         };
-                        let __fraction = __quotient % 1.0;
-                        let __index = __quotient - __fraction
-                            + if __fraction >= 0.5 {
-                                1.0
-                            } else if __fraction <= -0.5 {
-                                -1.0
+                        let __above = ::core::primitive::f32::from_bits(__bits + 1);
+                        let __lower_gap = (__represented - __below)
+                            as ::core::primitive::f64;
+                        let __upper_gap = if __above.is_finite() {
+                            (__above - __represented) as ::core::primitive::f64
+                        } else {
+                            __lower_gap
+                        };
+                        let __cell = (__lower_gap + __upper_gap) / 2.0;
+                        if __original_step < __cell {
+                            false
+                        } else {
+                            let __scaled_value = __checked * __factor;
+                            let __delta = __scaled_value - __phase;
+                            let __quotient = if __delta.is_finite() {
+                                __delta / __step
                             } else {
-                                0.0
+                                __scaled_value / __step - __phase / __step
                             };
-                        let __scale = __checked
-                            .abs()
-                            .max((__phase / __factor).abs())
-                            .max(__original_step.abs());
-                        let __tolerance = (4.0
-                            * (::core::primitive::f32::EPSILON as ::core::primitive::f64)
-                            * __scale)
-                            .min(__original_step / 4.0);
-                        let mut __distance = ::core::primitive::f64::INFINITY;
-                        let __rescale = if __scaled_value
-                            .abs()
-                            .max(__phase.abs())
-                            .max(__step.abs()) > ::core::primitive::f64::MAX / 4.0
-                        {
-                            0.25
-                        } else {
-                            1.0
-                        };
-                        let __product_with_error = |
-                            __left: ::core::primitive::f64,
-                            __right: ::core::primitive::f64|
-                        {
-                            let __product = __left * __right;
-                            let __left_high = ::core::primitive::f64::from_bits(
-                                __left.to_bits() & !((1u64 << 27) - 1),
-                            );
-                            let __right_high = ::core::primitive::f64::from_bits(
-                                __right.to_bits() & !((1u64 << 27) - 1),
-                            );
-                            let __left_low = __left - __left_high;
-                            let __right_low = __right - __right_high;
-                            let __error = ((__left_high * __right_high - __product)
-                                + __left_high * __right_low + __left_low * __right_high)
-                                + __left_low * __right_low;
-                            (__product, __error)
-                        };
-                        for __candidate in [__index - 1.0, __index, __index + 1.0] {
-                            let (__product, __product_error) = __product_with_error(
-                                __candidate,
-                                __step * __rescale,
-                            );
-                            let __scaled_phase = __phase * __rescale;
-                            let __sum = __product + __scaled_phase;
-                            let __part = __sum - __product;
-                            let __sum_error = (__product - (__sum - __part))
-                                + (__scaled_phase - __part);
-                            let __low = __candidate * (__step_low * __rescale)
-                                + __phase_low * __rescale + __product_error + __sum_error;
-                            let __nearest = __sum + __low;
-                            let __nearest = (__nearest / __factor / __rescale)
-                                as ::core::primitive::f32 as ::core::primitive::f64;
-                            if __nearest.is_finite() {
-                                __distance = __distance.min((__checked - __nearest).abs());
+                            let __fraction = __quotient % 1.0;
+                            let __index = __quotient - __fraction
+                                + if __fraction >= 0.5 {
+                                    1.0
+                                } else if __fraction <= -0.5 {
+                                    -1.0
+                                } else {
+                                    0.0
+                                };
+                            let __scale = __checked
+                                .abs()
+                                .max((__phase / __factor).abs())
+                                .max(__original_step.abs());
+                            let __tolerance = (4.0
+                                * (::core::primitive::f32::EPSILON
+                                    as ::core::primitive::f64) * __scale)
+                                .min(__original_step / 4.0);
+                            let mut __distance = ::core::primitive::f64::INFINITY;
+                            let __rescale = if __scaled_value
+                                .abs()
+                                .max(__phase.abs())
+                                .max(__step.abs()) > ::core::primitive::f64::MAX / 4.0
+                            {
+                                0.25
+                            } else {
+                                1.0
+                            };
+                            let __product_with_error = |
+                                __left: ::core::primitive::f64,
+                                __right: ::core::primitive::f64|
+                            {
+                                let __product = __left * __right;
+                                let __left_high = ::core::primitive::f64::from_bits(
+                                    __left.to_bits() & !((1u64 << 27) - 1),
+                                );
+                                let __right_high = ::core::primitive::f64::from_bits(
+                                    __right.to_bits() & !((1u64 << 27) - 1),
+                                );
+                                let __left_low = __left - __left_high;
+                                let __right_low = __right - __right_high;
+                                let __error = ((__left_high * __right_high - __product)
+                                    + __left_high * __right_low + __left_low * __right_high)
+                                    + __left_low * __right_low;
+                                (__product, __error)
+                            };
+                            for __candidate in [__index - 1.0, __index, __index + 1.0] {
+                                let (__product, __product_error) = __product_with_error(
+                                    __candidate,
+                                    __step * __rescale,
+                                );
+                                let __scaled_phase = __phase * __rescale;
+                                let __sum = __product + __scaled_phase;
+                                let __part = __sum - __product;
+                                let __sum_error = (__product - (__sum - __part))
+                                    + (__scaled_phase - __part);
+                                let __low = __candidate * (__step_low * __rescale)
+                                    + __phase_low * __rescale + __product_error + __sum_error;
+                                let __nearest = __sum + __low;
+                                let __nearest = (__nearest / __factor / __rescale)
+                                    as ::core::primitive::f32 as ::core::primitive::f64;
+                                if __nearest.is_finite() {
+                                    __distance = __distance.min((__checked - __nearest).abs());
+                                }
                             }
+                            !__quotient.is_finite() || __distance > __tolerance
                         }
-                        !__quotient.is_finite() || __distance > __tolerance
                     }
                 }
+            };
+            if __step_invalid {
+                return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                    type_name: "Temperature",
+                    rule: ::ridl_rt::payload::Rule::Step,
+                });
             }
-        } {
-            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Temperature",
-                rule: ::ridl_rt::payload::Rule::Step,
-            });
         }
         ::core::result::Result::Ok(())
     }
@@ -424,118 +430,121 @@ impl RPM {
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        if {
-            let __checked: ::core::primitive::f64 = value as ::core::primitive::f32
-                as ::core::primitive::f64;
-            {
-                let __factor: ::core::primitive::f64 = 1f64;
-                let __original_step: ::core::primitive::f64 = 10f64;
-                let __step: ::core::primitive::f64 = 10f64;
-                let __step_low: ::core::primitive::f64 = 0f64;
-                let __phase: ::core::primitive::f64 = 0f64;
-                let __phase_low: ::core::primitive::f64 = 0f64;
-                if !__checked.is_finite() {
-                    true
-                } else {
-                    let __represented = (__checked as ::core::primitive::f32).abs();
-                    let __bits = __represented.to_bits();
-                    let __below = if __bits == 0 {
-                        -::core::primitive::f32::from_bits(1)
+        {
+            let __step_invalid: ::core::primitive::bool = {
+                let __checked: ::core::primitive::f64 = value as ::core::primitive::f32
+                    as ::core::primitive::f64;
+                {
+                    let __factor: ::core::primitive::f64 = 1f64;
+                    let __original_step: ::core::primitive::f64 = 10f64;
+                    let __step: ::core::primitive::f64 = 10f64;
+                    let __step_low: ::core::primitive::f64 = 0f64;
+                    let __phase: ::core::primitive::f64 = 0f64;
+                    let __phase_low: ::core::primitive::f64 = 0f64;
+                    if !__checked.is_finite() {
+                        true
                     } else {
-                        ::core::primitive::f32::from_bits(__bits - 1)
-                    };
-                    let __above = ::core::primitive::f32::from_bits(__bits + 1);
-                    let __lower_gap = (__represented - __below)
-                        as ::core::primitive::f64;
-                    let __upper_gap = if __above.is_finite() {
-                        (__above - __represented) as ::core::primitive::f64
-                    } else {
-                        __lower_gap
-                    };
-                    let __cell = (__lower_gap + __upper_gap) / 2.0;
-                    if __original_step < __cell {
-                        false
-                    } else {
-                        let __scaled_value = __checked * __factor;
-                        let __delta = __scaled_value - __phase;
-                        let __quotient = if __delta.is_finite() {
-                            __delta / __step
+                        let __represented = (__checked as ::core::primitive::f32).abs();
+                        let __bits = __represented.to_bits();
+                        let __below = if __bits == 0 {
+                            -::core::primitive::f32::from_bits(1)
                         } else {
-                            __scaled_value / __step - __phase / __step
+                            ::core::primitive::f32::from_bits(__bits - 1)
                         };
-                        let __fraction = __quotient % 1.0;
-                        let __index = __quotient - __fraction
-                            + if __fraction >= 0.5 {
-                                1.0
-                            } else if __fraction <= -0.5 {
-                                -1.0
+                        let __above = ::core::primitive::f32::from_bits(__bits + 1);
+                        let __lower_gap = (__represented - __below)
+                            as ::core::primitive::f64;
+                        let __upper_gap = if __above.is_finite() {
+                            (__above - __represented) as ::core::primitive::f64
+                        } else {
+                            __lower_gap
+                        };
+                        let __cell = (__lower_gap + __upper_gap) / 2.0;
+                        if __original_step < __cell {
+                            false
+                        } else {
+                            let __scaled_value = __checked * __factor;
+                            let __delta = __scaled_value - __phase;
+                            let __quotient = if __delta.is_finite() {
+                                __delta / __step
                             } else {
-                                0.0
+                                __scaled_value / __step - __phase / __step
                             };
-                        let __scale = __checked
-                            .abs()
-                            .max((__phase / __factor).abs())
-                            .max(__original_step.abs());
-                        let __tolerance = (4.0
-                            * (::core::primitive::f32::EPSILON as ::core::primitive::f64)
-                            * __scale)
-                            .min(__original_step / 4.0);
-                        let mut __distance = ::core::primitive::f64::INFINITY;
-                        let __rescale = if __scaled_value
-                            .abs()
-                            .max(__phase.abs())
-                            .max(__step.abs()) > ::core::primitive::f64::MAX / 4.0
-                        {
-                            0.25
-                        } else {
-                            1.0
-                        };
-                        let __product_with_error = |
-                            __left: ::core::primitive::f64,
-                            __right: ::core::primitive::f64|
-                        {
-                            let __product = __left * __right;
-                            let __left_high = ::core::primitive::f64::from_bits(
-                                __left.to_bits() & !((1u64 << 27) - 1),
-                            );
-                            let __right_high = ::core::primitive::f64::from_bits(
-                                __right.to_bits() & !((1u64 << 27) - 1),
-                            );
-                            let __left_low = __left - __left_high;
-                            let __right_low = __right - __right_high;
-                            let __error = ((__left_high * __right_high - __product)
-                                + __left_high * __right_low + __left_low * __right_high)
-                                + __left_low * __right_low;
-                            (__product, __error)
-                        };
-                        for __candidate in [__index - 1.0, __index, __index + 1.0] {
-                            let (__product, __product_error) = __product_with_error(
-                                __candidate,
-                                __step * __rescale,
-                            );
-                            let __scaled_phase = __phase * __rescale;
-                            let __sum = __product + __scaled_phase;
-                            let __part = __sum - __product;
-                            let __sum_error = (__product - (__sum - __part))
-                                + (__scaled_phase - __part);
-                            let __low = __candidate * (__step_low * __rescale)
-                                + __phase_low * __rescale + __product_error + __sum_error;
-                            let __nearest = __sum + __low;
-                            let __nearest = (__nearest / __factor / __rescale)
-                                as ::core::primitive::f32 as ::core::primitive::f64;
-                            if __nearest.is_finite() {
-                                __distance = __distance.min((__checked - __nearest).abs());
+                            let __fraction = __quotient % 1.0;
+                            let __index = __quotient - __fraction
+                                + if __fraction >= 0.5 {
+                                    1.0
+                                } else if __fraction <= -0.5 {
+                                    -1.0
+                                } else {
+                                    0.0
+                                };
+                            let __scale = __checked
+                                .abs()
+                                .max((__phase / __factor).abs())
+                                .max(__original_step.abs());
+                            let __tolerance = (4.0
+                                * (::core::primitive::f32::EPSILON
+                                    as ::core::primitive::f64) * __scale)
+                                .min(__original_step / 4.0);
+                            let mut __distance = ::core::primitive::f64::INFINITY;
+                            let __rescale = if __scaled_value
+                                .abs()
+                                .max(__phase.abs())
+                                .max(__step.abs()) > ::core::primitive::f64::MAX / 4.0
+                            {
+                                0.25
+                            } else {
+                                1.0
+                            };
+                            let __product_with_error = |
+                                __left: ::core::primitive::f64,
+                                __right: ::core::primitive::f64|
+                            {
+                                let __product = __left * __right;
+                                let __left_high = ::core::primitive::f64::from_bits(
+                                    __left.to_bits() & !((1u64 << 27) - 1),
+                                );
+                                let __right_high = ::core::primitive::f64::from_bits(
+                                    __right.to_bits() & !((1u64 << 27) - 1),
+                                );
+                                let __left_low = __left - __left_high;
+                                let __right_low = __right - __right_high;
+                                let __error = ((__left_high * __right_high - __product)
+                                    + __left_high * __right_low + __left_low * __right_high)
+                                    + __left_low * __right_low;
+                                (__product, __error)
+                            };
+                            for __candidate in [__index - 1.0, __index, __index + 1.0] {
+                                let (__product, __product_error) = __product_with_error(
+                                    __candidate,
+                                    __step * __rescale,
+                                );
+                                let __scaled_phase = __phase * __rescale;
+                                let __sum = __product + __scaled_phase;
+                                let __part = __sum - __product;
+                                let __sum_error = (__product - (__sum - __part))
+                                    + (__scaled_phase - __part);
+                                let __low = __candidate * (__step_low * __rescale)
+                                    + __phase_low * __rescale + __product_error + __sum_error;
+                                let __nearest = __sum + __low;
+                                let __nearest = (__nearest / __factor / __rescale)
+                                    as ::core::primitive::f32 as ::core::primitive::f64;
+                                if __nearest.is_finite() {
+                                    __distance = __distance.min((__checked - __nearest).abs());
+                                }
                             }
+                            !__quotient.is_finite() || __distance > __tolerance
                         }
-                        !__quotient.is_finite() || __distance > __tolerance
                     }
                 }
+            };
+            if __step_invalid {
+                return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                    type_name: "RPM",
+                    rule: ::ridl_rt::payload::Rule::Step,
+                });
             }
-        } {
-            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "RPM",
-                rule: ::ridl_rt::payload::Rule::Step,
-            });
         }
         ::core::result::Result::Ok(())
     }
@@ -613,118 +622,121 @@ impl Ratio {
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        if {
-            let __checked: ::core::primitive::f64 = value as ::core::primitive::f32
-                as ::core::primitive::f64;
-            {
-                let __factor: ::core::primitive::f64 = 1f64;
-                let __original_step: ::core::primitive::f64 = 0.1f64;
-                let __step: ::core::primitive::f64 = 0.1f64;
-                let __step_low: ::core::primitive::f64 = -0.000000000000000005551115123125783f64;
-                let __phase: ::core::primitive::f64 = 0f64;
-                let __phase_low: ::core::primitive::f64 = 0f64;
-                if !__checked.is_finite() {
-                    true
-                } else {
-                    let __represented = (__checked as ::core::primitive::f32).abs();
-                    let __bits = __represented.to_bits();
-                    let __below = if __bits == 0 {
-                        -::core::primitive::f32::from_bits(1)
+        {
+            let __step_invalid: ::core::primitive::bool = {
+                let __checked: ::core::primitive::f64 = value as ::core::primitive::f32
+                    as ::core::primitive::f64;
+                {
+                    let __factor: ::core::primitive::f64 = 1f64;
+                    let __original_step: ::core::primitive::f64 = 0.1f64;
+                    let __step: ::core::primitive::f64 = 0.1f64;
+                    let __step_low: ::core::primitive::f64 = -0.000000000000000005551115123125783f64;
+                    let __phase: ::core::primitive::f64 = 0f64;
+                    let __phase_low: ::core::primitive::f64 = 0f64;
+                    if !__checked.is_finite() {
+                        true
                     } else {
-                        ::core::primitive::f32::from_bits(__bits - 1)
-                    };
-                    let __above = ::core::primitive::f32::from_bits(__bits + 1);
-                    let __lower_gap = (__represented - __below)
-                        as ::core::primitive::f64;
-                    let __upper_gap = if __above.is_finite() {
-                        (__above - __represented) as ::core::primitive::f64
-                    } else {
-                        __lower_gap
-                    };
-                    let __cell = (__lower_gap + __upper_gap) / 2.0;
-                    if __original_step < __cell {
-                        false
-                    } else {
-                        let __scaled_value = __checked * __factor;
-                        let __delta = __scaled_value - __phase;
-                        let __quotient = if __delta.is_finite() {
-                            __delta / __step
+                        let __represented = (__checked as ::core::primitive::f32).abs();
+                        let __bits = __represented.to_bits();
+                        let __below = if __bits == 0 {
+                            -::core::primitive::f32::from_bits(1)
                         } else {
-                            __scaled_value / __step - __phase / __step
+                            ::core::primitive::f32::from_bits(__bits - 1)
                         };
-                        let __fraction = __quotient % 1.0;
-                        let __index = __quotient - __fraction
-                            + if __fraction >= 0.5 {
-                                1.0
-                            } else if __fraction <= -0.5 {
-                                -1.0
+                        let __above = ::core::primitive::f32::from_bits(__bits + 1);
+                        let __lower_gap = (__represented - __below)
+                            as ::core::primitive::f64;
+                        let __upper_gap = if __above.is_finite() {
+                            (__above - __represented) as ::core::primitive::f64
+                        } else {
+                            __lower_gap
+                        };
+                        let __cell = (__lower_gap + __upper_gap) / 2.0;
+                        if __original_step < __cell {
+                            false
+                        } else {
+                            let __scaled_value = __checked * __factor;
+                            let __delta = __scaled_value - __phase;
+                            let __quotient = if __delta.is_finite() {
+                                __delta / __step
                             } else {
-                                0.0
+                                __scaled_value / __step - __phase / __step
                             };
-                        let __scale = __checked
-                            .abs()
-                            .max((__phase / __factor).abs())
-                            .max(__original_step.abs());
-                        let __tolerance = (4.0
-                            * (::core::primitive::f32::EPSILON as ::core::primitive::f64)
-                            * __scale)
-                            .min(__original_step / 4.0);
-                        let mut __distance = ::core::primitive::f64::INFINITY;
-                        let __rescale = if __scaled_value
-                            .abs()
-                            .max(__phase.abs())
-                            .max(__step.abs()) > ::core::primitive::f64::MAX / 4.0
-                        {
-                            0.25
-                        } else {
-                            1.0
-                        };
-                        let __product_with_error = |
-                            __left: ::core::primitive::f64,
-                            __right: ::core::primitive::f64|
-                        {
-                            let __product = __left * __right;
-                            let __left_high = ::core::primitive::f64::from_bits(
-                                __left.to_bits() & !((1u64 << 27) - 1),
-                            );
-                            let __right_high = ::core::primitive::f64::from_bits(
-                                __right.to_bits() & !((1u64 << 27) - 1),
-                            );
-                            let __left_low = __left - __left_high;
-                            let __right_low = __right - __right_high;
-                            let __error = ((__left_high * __right_high - __product)
-                                + __left_high * __right_low + __left_low * __right_high)
-                                + __left_low * __right_low;
-                            (__product, __error)
-                        };
-                        for __candidate in [__index - 1.0, __index, __index + 1.0] {
-                            let (__product, __product_error) = __product_with_error(
-                                __candidate,
-                                __step * __rescale,
-                            );
-                            let __scaled_phase = __phase * __rescale;
-                            let __sum = __product + __scaled_phase;
-                            let __part = __sum - __product;
-                            let __sum_error = (__product - (__sum - __part))
-                                + (__scaled_phase - __part);
-                            let __low = __candidate * (__step_low * __rescale)
-                                + __phase_low * __rescale + __product_error + __sum_error;
-                            let __nearest = __sum + __low;
-                            let __nearest = (__nearest / __factor / __rescale)
-                                as ::core::primitive::f32 as ::core::primitive::f64;
-                            if __nearest.is_finite() {
-                                __distance = __distance.min((__checked - __nearest).abs());
+                            let __fraction = __quotient % 1.0;
+                            let __index = __quotient - __fraction
+                                + if __fraction >= 0.5 {
+                                    1.0
+                                } else if __fraction <= -0.5 {
+                                    -1.0
+                                } else {
+                                    0.0
+                                };
+                            let __scale = __checked
+                                .abs()
+                                .max((__phase / __factor).abs())
+                                .max(__original_step.abs());
+                            let __tolerance = (4.0
+                                * (::core::primitive::f32::EPSILON
+                                    as ::core::primitive::f64) * __scale)
+                                .min(__original_step / 4.0);
+                            let mut __distance = ::core::primitive::f64::INFINITY;
+                            let __rescale = if __scaled_value
+                                .abs()
+                                .max(__phase.abs())
+                                .max(__step.abs()) > ::core::primitive::f64::MAX / 4.0
+                            {
+                                0.25
+                            } else {
+                                1.0
+                            };
+                            let __product_with_error = |
+                                __left: ::core::primitive::f64,
+                                __right: ::core::primitive::f64|
+                            {
+                                let __product = __left * __right;
+                                let __left_high = ::core::primitive::f64::from_bits(
+                                    __left.to_bits() & !((1u64 << 27) - 1),
+                                );
+                                let __right_high = ::core::primitive::f64::from_bits(
+                                    __right.to_bits() & !((1u64 << 27) - 1),
+                                );
+                                let __left_low = __left - __left_high;
+                                let __right_low = __right - __right_high;
+                                let __error = ((__left_high * __right_high - __product)
+                                    + __left_high * __right_low + __left_low * __right_high)
+                                    + __left_low * __right_low;
+                                (__product, __error)
+                            };
+                            for __candidate in [__index - 1.0, __index, __index + 1.0] {
+                                let (__product, __product_error) = __product_with_error(
+                                    __candidate,
+                                    __step * __rescale,
+                                );
+                                let __scaled_phase = __phase * __rescale;
+                                let __sum = __product + __scaled_phase;
+                                let __part = __sum - __product;
+                                let __sum_error = (__product - (__sum - __part))
+                                    + (__scaled_phase - __part);
+                                let __low = __candidate * (__step_low * __rescale)
+                                    + __phase_low * __rescale + __product_error + __sum_error;
+                                let __nearest = __sum + __low;
+                                let __nearest = (__nearest / __factor / __rescale)
+                                    as ::core::primitive::f32 as ::core::primitive::f64;
+                                if __nearest.is_finite() {
+                                    __distance = __distance.min((__checked - __nearest).abs());
+                                }
                             }
+                            !__quotient.is_finite() || __distance > __tolerance
                         }
-                        !__quotient.is_finite() || __distance > __tolerance
                     }
                 }
+            };
+            if __step_invalid {
+                return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                    type_name: "Ratio",
+                    rule: ::ridl_rt::payload::Rule::Step,
+                });
             }
-        } {
-            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Ratio",
-                rule: ::ridl_rt::payload::Rule::Step,
-            });
         }
         ::core::result::Result::Ok(())
     }
@@ -829,118 +841,121 @@ impl Gain {
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        if {
-            let __checked: ::core::primitive::f64 = value as ::core::primitive::f32
-                as ::core::primitive::f64;
-            {
-                let __factor: ::core::primitive::f64 = 1f64;
-                let __original_step: ::core::primitive::f64 = 0.01f64;
-                let __step: ::core::primitive::f64 = 0.01f64;
-                let __step_low: ::core::primitive::f64 = -0.00000000000000000020816681711721684f64;
-                let __phase: ::core::primitive::f64 = 0f64;
-                let __phase_low: ::core::primitive::f64 = 0f64;
-                if !__checked.is_finite() {
-                    true
-                } else {
-                    let __represented = (__checked as ::core::primitive::f32).abs();
-                    let __bits = __represented.to_bits();
-                    let __below = if __bits == 0 {
-                        -::core::primitive::f32::from_bits(1)
+        {
+            let __step_invalid: ::core::primitive::bool = {
+                let __checked: ::core::primitive::f64 = value as ::core::primitive::f32
+                    as ::core::primitive::f64;
+                {
+                    let __factor: ::core::primitive::f64 = 1f64;
+                    let __original_step: ::core::primitive::f64 = 0.01f64;
+                    let __step: ::core::primitive::f64 = 0.01f64;
+                    let __step_low: ::core::primitive::f64 = -0.00000000000000000020816681711721684f64;
+                    let __phase: ::core::primitive::f64 = 0f64;
+                    let __phase_low: ::core::primitive::f64 = 0f64;
+                    if !__checked.is_finite() {
+                        true
                     } else {
-                        ::core::primitive::f32::from_bits(__bits - 1)
-                    };
-                    let __above = ::core::primitive::f32::from_bits(__bits + 1);
-                    let __lower_gap = (__represented - __below)
-                        as ::core::primitive::f64;
-                    let __upper_gap = if __above.is_finite() {
-                        (__above - __represented) as ::core::primitive::f64
-                    } else {
-                        __lower_gap
-                    };
-                    let __cell = (__lower_gap + __upper_gap) / 2.0;
-                    if __original_step < __cell {
-                        false
-                    } else {
-                        let __scaled_value = __checked * __factor;
-                        let __delta = __scaled_value - __phase;
-                        let __quotient = if __delta.is_finite() {
-                            __delta / __step
+                        let __represented = (__checked as ::core::primitive::f32).abs();
+                        let __bits = __represented.to_bits();
+                        let __below = if __bits == 0 {
+                            -::core::primitive::f32::from_bits(1)
                         } else {
-                            __scaled_value / __step - __phase / __step
+                            ::core::primitive::f32::from_bits(__bits - 1)
                         };
-                        let __fraction = __quotient % 1.0;
-                        let __index = __quotient - __fraction
-                            + if __fraction >= 0.5 {
-                                1.0
-                            } else if __fraction <= -0.5 {
-                                -1.0
+                        let __above = ::core::primitive::f32::from_bits(__bits + 1);
+                        let __lower_gap = (__represented - __below)
+                            as ::core::primitive::f64;
+                        let __upper_gap = if __above.is_finite() {
+                            (__above - __represented) as ::core::primitive::f64
+                        } else {
+                            __lower_gap
+                        };
+                        let __cell = (__lower_gap + __upper_gap) / 2.0;
+                        if __original_step < __cell {
+                            false
+                        } else {
+                            let __scaled_value = __checked * __factor;
+                            let __delta = __scaled_value - __phase;
+                            let __quotient = if __delta.is_finite() {
+                                __delta / __step
                             } else {
-                                0.0
+                                __scaled_value / __step - __phase / __step
                             };
-                        let __scale = __checked
-                            .abs()
-                            .max((__phase / __factor).abs())
-                            .max(__original_step.abs());
-                        let __tolerance = (4.0
-                            * (::core::primitive::f32::EPSILON as ::core::primitive::f64)
-                            * __scale)
-                            .min(__original_step / 4.0);
-                        let mut __distance = ::core::primitive::f64::INFINITY;
-                        let __rescale = if __scaled_value
-                            .abs()
-                            .max(__phase.abs())
-                            .max(__step.abs()) > ::core::primitive::f64::MAX / 4.0
-                        {
-                            0.25
-                        } else {
-                            1.0
-                        };
-                        let __product_with_error = |
-                            __left: ::core::primitive::f64,
-                            __right: ::core::primitive::f64|
-                        {
-                            let __product = __left * __right;
-                            let __left_high = ::core::primitive::f64::from_bits(
-                                __left.to_bits() & !((1u64 << 27) - 1),
-                            );
-                            let __right_high = ::core::primitive::f64::from_bits(
-                                __right.to_bits() & !((1u64 << 27) - 1),
-                            );
-                            let __left_low = __left - __left_high;
-                            let __right_low = __right - __right_high;
-                            let __error = ((__left_high * __right_high - __product)
-                                + __left_high * __right_low + __left_low * __right_high)
-                                + __left_low * __right_low;
-                            (__product, __error)
-                        };
-                        for __candidate in [__index - 1.0, __index, __index + 1.0] {
-                            let (__product, __product_error) = __product_with_error(
-                                __candidate,
-                                __step * __rescale,
-                            );
-                            let __scaled_phase = __phase * __rescale;
-                            let __sum = __product + __scaled_phase;
-                            let __part = __sum - __product;
-                            let __sum_error = (__product - (__sum - __part))
-                                + (__scaled_phase - __part);
-                            let __low = __candidate * (__step_low * __rescale)
-                                + __phase_low * __rescale + __product_error + __sum_error;
-                            let __nearest = __sum + __low;
-                            let __nearest = (__nearest / __factor / __rescale)
-                                as ::core::primitive::f32 as ::core::primitive::f64;
-                            if __nearest.is_finite() {
-                                __distance = __distance.min((__checked - __nearest).abs());
+                            let __fraction = __quotient % 1.0;
+                            let __index = __quotient - __fraction
+                                + if __fraction >= 0.5 {
+                                    1.0
+                                } else if __fraction <= -0.5 {
+                                    -1.0
+                                } else {
+                                    0.0
+                                };
+                            let __scale = __checked
+                                .abs()
+                                .max((__phase / __factor).abs())
+                                .max(__original_step.abs());
+                            let __tolerance = (4.0
+                                * (::core::primitive::f32::EPSILON
+                                    as ::core::primitive::f64) * __scale)
+                                .min(__original_step / 4.0);
+                            let mut __distance = ::core::primitive::f64::INFINITY;
+                            let __rescale = if __scaled_value
+                                .abs()
+                                .max(__phase.abs())
+                                .max(__step.abs()) > ::core::primitive::f64::MAX / 4.0
+                            {
+                                0.25
+                            } else {
+                                1.0
+                            };
+                            let __product_with_error = |
+                                __left: ::core::primitive::f64,
+                                __right: ::core::primitive::f64|
+                            {
+                                let __product = __left * __right;
+                                let __left_high = ::core::primitive::f64::from_bits(
+                                    __left.to_bits() & !((1u64 << 27) - 1),
+                                );
+                                let __right_high = ::core::primitive::f64::from_bits(
+                                    __right.to_bits() & !((1u64 << 27) - 1),
+                                );
+                                let __left_low = __left - __left_high;
+                                let __right_low = __right - __right_high;
+                                let __error = ((__left_high * __right_high - __product)
+                                    + __left_high * __right_low + __left_low * __right_high)
+                                    + __left_low * __right_low;
+                                (__product, __error)
+                            };
+                            for __candidate in [__index - 1.0, __index, __index + 1.0] {
+                                let (__product, __product_error) = __product_with_error(
+                                    __candidate,
+                                    __step * __rescale,
+                                );
+                                let __scaled_phase = __phase * __rescale;
+                                let __sum = __product + __scaled_phase;
+                                let __part = __sum - __product;
+                                let __sum_error = (__product - (__sum - __part))
+                                    + (__scaled_phase - __part);
+                                let __low = __candidate * (__step_low * __rescale)
+                                    + __phase_low * __rescale + __product_error + __sum_error;
+                                let __nearest = __sum + __low;
+                                let __nearest = (__nearest / __factor / __rescale)
+                                    as ::core::primitive::f32 as ::core::primitive::f64;
+                                if __nearest.is_finite() {
+                                    __distance = __distance.min((__checked - __nearest).abs());
+                                }
                             }
+                            !__quotient.is_finite() || __distance > __tolerance
                         }
-                        !__quotient.is_finite() || __distance > __tolerance
                     }
                 }
+            };
+            if __step_invalid {
+                return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                    type_name: "Gain",
+                    rule: ::ridl_rt::payload::Rule::Step,
+                });
             }
-        } {
-            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Gain",
-                rule: ::ridl_rt::payload::Rule::Step,
-            });
         }
         ::core::result::Result::Ok(())
     }
@@ -2849,7 +2864,7 @@ pub(crate) fn __ridl_fb_encode_RawWheelFrame(
         slot: 1u16,
         offset: 8u16,
         value: ::ridl_rt::flatbuffers::Field::Offset(
-            builder.push_vector(&value.frame.as_slice(), 1usize)?,
+            builder.push_vector(value.frame.as_slice(), 1usize)?,
         ),
     };
     __n += 1;
