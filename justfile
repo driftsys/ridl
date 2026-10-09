@@ -122,7 +122,9 @@ test:
     fi
 
 # Check the compiler crates build for wasm32-unknown-unknown with fs/fetch
-# off (ADR-0007 decision 5) — the E4.4 browser playground guard. The backend
+# off (ADR-0007 decision 5) — the E4.4 browser playground guard — and that
+# `ridl-descriptor` builds with its `std` feature off for a target with no
+# standard library, and with its features on for wasm32. The backend
 # crates are included so this recipe actually exercises them: previously it
 # checked a fixed non-backend list, so it never built ridl-backend-proto or
 # ridl-backend-flatbuffers and could not have caught a change to either.
@@ -157,7 +159,7 @@ wasm-check:
     set -euo pipefail
     if [ -f Cargo.toml ]; then
         if ! command -v rustup >/dev/null 2>&1; then
-            echo "wasm-check: rustup is required to add the wasm32 target." >&2
+            echo "wasm-check: rustup is required to add the wasm32 and thumbv7em targets." >&2
             echo "wasm-check: install it, or install the target another way." >&2
             exit 1
         fi

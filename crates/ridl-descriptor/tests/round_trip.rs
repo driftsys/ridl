@@ -162,4 +162,12 @@ fn a_repeated_string_is_written_once() {
         .filter(|w| *w == needle.as_slice())
         .count();
     assert_eq!(count, 1, "the role `value` is written once");
+    // The vtable cache shows in the length: the two interfaces, and their
+    // members and payloads, have the same shape and share one vtable each.
+    // Without `vtable-cache` the same catalog is 652 bytes.
+    assert_eq!(
+        bytes.len(),
+        576,
+        "the buffer length with the builder caches on"
+    );
 }

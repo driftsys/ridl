@@ -559,3 +559,18 @@ fn every_field_the_walk_reads_is_checked() {
         "verify accepted a buffer with one damaged field: {accepted:?}"
     );
 }
+
+/// With `std` off the crate still implements `core::error::Error` for
+/// `VerifyError` and keeps its constants. This test runs in both feature
+/// configurations (`just test` runs the crate with `std` off as well).
+#[test]
+fn the_error_type_and_the_constants_are_present_without_std() {
+    let error: &dyn core::error::Error = &ridl_descriptor::VerifyError::TooShort(3);
+    assert_eq!(
+        error.to_string(),
+        "3 bytes is shorter than a catalog descriptor header"
+    );
+    assert_eq!(ridl_descriptor::FILE_SUFFIX, ".catalog.binfb");
+    assert_eq!(ridl_descriptor::FILE_IDENTIFIER, *b"RDLC");
+    assert_eq!(ridl_descriptor::SCHEMA_VERSION, 1);
+}
