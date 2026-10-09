@@ -1435,7 +1435,10 @@ fn render_lib_rs(package_names: &[String], preamble: &str) -> String {
     // `::std::vec::Vec`, and call `<[u8]>::to_vec`, all of which `alloc`
     // provides. With `std` off, `alloc` is linked under the name `std`, so
     // those paths resolve to the same types in `alloc` and the package files
-    // stay the same in both modes and in single-file mode. What only `std`
+    // stay the same in both modes and in single-file mode. The alias exists so
+    // that a single-file consumer with `std` keeps compiling without an
+    // `extern crate alloc;` of its own, which `::alloc::` paths in the package
+    // files would require of it. What only `std`
     // has is gated: the `blocking` module by the `std` feature, and the
     // `match` pattern check (`::std::sync::LazyLock`) by `validate-pattern`,
     // which turns `std` on.

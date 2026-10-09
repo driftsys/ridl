@@ -451,7 +451,9 @@ compat-check: toolchain-check
 # Fails on: the build drawing an error; the emitted crate or the consumer
 # failing to compile; the emitted crate failing to check with its `std`
 # feature off for `thumbv7em-none-eabihf`, or with only `validate-pattern`
-# off; the program exiting non-zero or not reporting all four
+# off; the crate emitted for the veh-cluster corpus failing to check with its
+# `std` feature off for that target, or with only `validate-pattern` on; the
+# program exiting non-zero or not reporting all four
 # round trips; the lock being out of date; the consumer being unformatted or
 # drawing a clippy warning; the generated crate drawing a clippy warning that
 # its `lib.rs` does not allow, or an allow that no longer fires; a `lib.rs`
@@ -477,8 +479,12 @@ demo:
     # Cleared first: `--out-dir` writes over what it writes and leaves
     # everything else, so a file the emitter stops writing would survive here
     # and keep this green while a fresh clone failed.
-    rm -rf examples/cabin/generated
+    rm -rf examples/cabin/generated examples/cabin/generated-corpus
     "$target/debug/ridl" build examples/cabin --emit rust --out-dir examples/cabin/generated
+    # Only for the `no_std` check below: cabin's schema has no string, bytes,
+    # array, map or pattern, and this workspace has each of them.
+    "$target/debug/ridl" build crates/ridlc/tests/corpus/veh-cluster --emit rust \
+        --out-dir examples/cabin/generated-corpus
     # This line is the only one that runs the generated crate's planus check,
     # which is ignored for a plain `cargo test`. A filter that matches no test
     # exits 0, so a renamed test would pass here unseen: the result line must
@@ -515,6 +521,14 @@ demo:
         --no-default-features --target thumbv7em-none-eabihf
     cargo check --manifest-path examples/cabin/Cargo.toml -p veh_cabin --locked \
         --no-default-features --features std
+    # The same check over the crate for the veh-cluster corpus, whose string,
+    # bytes, array and map types reach `String` and `Vec` through the
+    # `alloc` that `lib.rs` links as `std`; then with only `validate-pattern`
+    # on, for the `ridl.std` pattern checks, which turn `std` on.
+    cargo check --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked \
+        --no-default-features --target thumbv7em-none-eabihf
+    cargo check --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked \
+        --no-default-features --features validate-pattern
     cargo fmt --manifest-path examples/cabin/consumer/Cargo.toml --check
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p consumer --locked --all-targets --no-deps -- -D warnings
     # The output is checked, not just the status, and each line carries the

@@ -1,5 +1,7 @@
 # The demo workspace: the program a person runs, and the crate `ridlc` wrote
-# for `cabin.ridl`.
+# for `cabin.ridl`. `generated-corpus` is the crate `ridlc` writes for
+# `crates/ridlc/tests/corpus/veh-cluster`, which `just demo` checks as
+# `no_std` and nothing links.
 #
 # It is its own workspace, outside the repository's, because `generated/` is a
 # build output and a member that is not in git has no place in the workspace
@@ -10,7 +12,7 @@
 # the separation is stated where a reader of the root manifest looks.
 [workspace]
 resolver = "2"
-members = ["consumer", "generated"]
+members = ["consumer", "generated", "generated-corpus"]
 
 # The generated manifest requires `ridl-rt = "0.6"`, which is what a consumer
 # outside this repository would resolve from crates.io. The demo must exercise

@@ -11,6 +11,11 @@
 # git is the schema it is generated from and the program that links it.
 /examples/cabin/generated/
 
+# The crate `just demo` generates from `crates/ridlc/tests/corpus/veh-cluster`
+# for its `no_std` check, which cabin's schema alone cannot reach: it has no
+# string, bytes, array, map or pattern.
+/examples/cabin/generated-corpus/
+
 # Node (the VS Code extension's own dependencies)
 node_modules/
 
