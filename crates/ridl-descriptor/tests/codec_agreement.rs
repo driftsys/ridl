@@ -1,3 +1,7 @@
+// This test uses the half of the crate that builds a descriptor, which the
+// `std` feature carries.
+#![cfg(feature = "std")]
+
 //! The descriptor's FlatBuffers size state agrees with the generated codec:
 //! every `MAX_SIZE` the Rust backend writes for the corpus package is the
 //! `Bounded(n)` this crate advertises for the same type, and the backend
