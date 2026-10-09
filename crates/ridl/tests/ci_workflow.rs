@@ -113,6 +113,13 @@ fn filter_script(workflow: &str) -> String {
     script
 }
 
+// Fixture paths for the filter. `concat!` keeps each one out of the source as a
+// literal `docs/` path, which `just doc-path-check` would try to resolve.
+const WIP_X: &str = concat!("docs", "/wip/x.md");
+const WIP_OLD_MD: &str = concat!("docs", "/wip/old.md");
+const WIP_OLD_RS: &str = concat!("docs", "/wip/old.rs");
+const ARCHIVE_OLD_MD: &str = concat!("docs", "/archive/old.md");
+
 fn git(dir: &Path, args: &[&str]) {
     let out = Command::new("git")
         .current_dir(dir)
@@ -199,10 +206,7 @@ fn pr(change: Change) -> String {
 
 #[test]
 fn documentation_only_skips_rust_and_runs_markdown() {
-    assert_eq!(
-        pr(Change::Add(&["docs/wip/x.md"])),
-        "rust=false\nmarkdown=true\n"
-    );
+    assert_eq!(pr(Change::Add(&[WIP_X])), "rust=false\nmarkdown=true\n");
 }
 
 #[test]
@@ -216,7 +220,7 @@ fn rust_source_only_runs_rust_and_skips_markdown() {
 #[test]
 fn a_mixed_change_runs_both() {
     assert_eq!(
-        pr(Change::Add(&["docs/wip/x.md", "crates/ridl/src/main.rs"])),
+        pr(Change::Add(&[WIP_X, "crates/ridl/src/main.rs"])),
         "rust=true\nmarkdown=true\n"
     );
 }
@@ -228,7 +232,7 @@ fn a_rename_out_of_a_skipped_path_counts_the_old_name() {
     let out = run_filter(
         "pull_request",
         &["crates/ridl/src/old.rs"],
-        Change::Rename("crates/ridl/src/old.rs", "docs/wip/old.rs"),
+        Change::Rename("crates/ridl/src/old.rs", WIP_OLD_RS),
     );
     assert_eq!(out, "rust=true\nmarkdown=false\n");
 }
@@ -237,8 +241,8 @@ fn a_rename_out_of_a_skipped_path_counts_the_old_name() {
 fn a_rename_into_a_skipped_path_from_a_skipped_path_skips_rust() {
     let out = run_filter(
         "pull_request",
-        &["docs/wip/old.md"],
-        Change::Rename("docs/wip/old.md", "docs/archive/old.md"),
+        &[WIP_OLD_MD],
+        Change::Rename(WIP_OLD_MD, ARCHIVE_OLD_MD),
     );
     assert_eq!(out, "rust=false\nmarkdown=true\n");
 }
@@ -298,7 +302,7 @@ fn a_list_over_64_kib_is_read_whole() {
 
 #[test]
 fn a_push_event_runs_both() {
-    let out = run_filter("push", &[], Change::Add(&["docs/wip/x.md"]));
+    let out = run_filter("push", &[], Change::Add(&[WIP_X]));
     assert_eq!(out, "rust=true\nmarkdown=true\n");
 }
 
