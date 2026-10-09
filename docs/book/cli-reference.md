@@ -417,9 +417,9 @@ live entry with no declaration already fails the build with RIDL-409. It also
 covers a package deleted, without retiring its numbers, from a unit that still
 has other packages, and a whole unit deleted from the workspace. For a package
 the message names the line to restore in the unit's `interfaces.lock`. For a
-whole unit the lock left with it, so the message names the deliberate override instead:
-delete the snapshots of that unit from `.ridl/baseline/`, so that the next
-publication holds no number to lose.
+whole unit the lock left with it, so the message names the deliberate override
+instead: delete the snapshots of that unit from `.ridl/baseline/`, so that the
+next publication holds no number to lose.
 A published snapshot written before the IR recorded the
 unit carries no `unit`; the gate compares it in the unit of the fresh package
 of the same name, so the migration to one `interfaces.lock` per unit — delete
