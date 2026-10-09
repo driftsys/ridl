@@ -2,8 +2,9 @@
 //!
 //! The walk matches package declarations, services, and interactions by name
 //! within their container, and interfaces — declared ones and the inline
-//! shapes of services alike — by the number each carries from its package's
-//! `interfaces.lock` (lock design §7; see `diff_interfaces`). It then compares
+//! shapes of services alike — by the number each carries from its unit's
+//! `interfaces.lock` (lock design §7; see [`Matching`] and
+//! `diff_interfaces`). It then compares
 //! the aspects that carry contract identity — ordinals, payloads, timings,
 //! returns, parameters, contracts, widths, constraints, and inits — emitting
 //! one [`Change`](crate::Change) per difference with an honest path.
@@ -49,10 +50,17 @@ use crate::classify::{struct_slots, union_slots};
 use crate::{Category, Change, emit, frozen};
 
 /// Walks two matched packages, appending every difference to `changes`.
-pub(crate) fn walk_packages(old: &v2::Package, new: &v2::Package, changes: &mut Vec<Change>) {
+/// `matching` is the unit-wide pass 1 of the interface walk over the two
+/// sets the pair comes from ([`Matching::new`]).
+pub(crate) fn walk_packages<'a>(
+    old: &'a v2::Package,
+    new: &'a v2::Package,
+    matching: &Matching<'a>,
+    changes: &mut Vec<Change>,
+) {
     let pkg = new.name.as_str();
     diff_decls(pkg, &old.decls, &new.decls, changes);
-    diff_interfaces(pkg, old, new, changes);
+    diff_interfaces(pkg, old, new, matching, changes);
     diff_services(pkg, &old.services, &new.services, changes);
 }
 
@@ -331,85 +339,186 @@ fn diff_composite(
 /// and so that the declared interfaces sort before the inline shapes.
 type ShapeKey<'a> = (bool, &'a str);
 
+/// A shape's place across a set of packages: its package's name, then its
+/// [`ShapeKey`].
+type ShapeAddress<'a> = (&'a str, ShapeKey<'a>);
+
+/// A new-side shape with the package that holds it.
+type Held<'a> = (&'a v2::Package, v2::InterfaceShape<'a>);
+
+fn shape_key<'a>(shape: &v2::InterfaceShape<'a>) -> ShapeKey<'a> {
+    (shape.is_inline(), shape.name)
+}
+
 fn shapes_by_key(package: &v2::Package) -> BTreeMap<ShapeKey<'_>, v2::InterfaceShape<'_>> {
     package
         .shapes()
-        .map(|shape| ((shape.is_inline(), shape.name), shape))
+        .map(|shape| (shape_key(&shape), shape))
         .collect()
+}
+
+/// Pass 1 of the interface walk (see `diff_interfaces`), run once over both
+/// sets before any package pair is walked: an old shape with a frozen number
+/// matches the new shape that carries the number in the old package's unit,
+/// in whichever package of the unit it now sits. Running it unit-wide is
+/// what makes a shape whose number moved to another package one interface
+/// in every pair's walk — the pair that now holds it does not report it as
+/// `DeclAdded`, and the pair that held it reports the move — and what claims
+/// a new shape at most once in the unit.
+///
+/// The unit of a package is [`v2::unit_of`]: its `unit` field, else its name,
+/// for a snapshot written before the field existed. A package the new side
+/// lists under one unit and the old side under another is not matched by
+/// number: the numbers were allocated in different lock files.
+///
+/// The retired numbers of a unit are the union over the unit's packages on
+/// the new side. The checker carries a retired entry on the package its lock
+/// key names, or on the unit's anchor package when that package is gone, and
+/// either sanctions the removal.
+pub(crate) struct Matching<'a> {
+    /// An old shape with a frozen number, to the new shape that carries the
+    /// number in its unit.
+    pairs: BTreeMap<ShapeAddress<'a>, Held<'a>>,
+    /// The new shapes `pairs` claimed.
+    taken: BTreeSet<ShapeAddress<'a>>,
+    /// The retired numbers of each unit on the new side.
+    retired: BTreeMap<&'a str, BTreeSet<u32>>,
+}
+
+impl<'a> Matching<'a> {
+    /// Matches the frozen numbers of `old` within their units on `new`. Both
+    /// sides are read in package name order, then shape key order, so the
+    /// result does not depend on the order of the slices.
+    pub(crate) fn new(old: &'a [v2::Package], new: &'a [v2::Package]) -> Self {
+        // Each unit's frozen numbers on the new side. Two new shapes of one
+        // unit cannot carry one frozen number — the checker refuses the lock
+        // that would give them one (RIDL-410) — so the first is kept.
+        let mut by_number: BTreeMap<(&str, u32), Held<'a>> = BTreeMap::new();
+        let mut retired: BTreeMap<&str, BTreeSet<u32>> = BTreeMap::new();
+        for package in by_name(new) {
+            let unit = v2::unit_of(package);
+            for shape in shapes_by_key(package).into_values() {
+                if frozen(shape.interface) {
+                    by_number
+                        .entry((unit, shape.interface.number))
+                        .or_insert((package, shape));
+                }
+            }
+            retired
+                .entry(unit)
+                .or_default()
+                .extend(package.retired.iter().map(|entry| entry.number));
+        }
+
+        // One frozen number in two old packages of a unit is a corrupt
+        // snapshot set — the unit's lock holds each number once — and is read
+        // the way two new shapes with one number are: the first claims it.
+        let mut pairs = BTreeMap::new();
+        let mut taken = BTreeSet::new();
+        for package in by_name(old) {
+            let unit = v2::unit_of(package);
+            for (key, shape) in shapes_by_key(package) {
+                if !frozen(shape.interface) {
+                    continue;
+                }
+                if let Some(&held) = by_number.get(&(unit, shape.interface.number))
+                    && taken.insert((held.0.name.as_str(), shape_key(&held.1)))
+                {
+                    pairs.insert((package.name.as_str(), key), held);
+                }
+            }
+        }
+        Self {
+            pairs,
+            taken,
+            retired,
+        }
+    }
+
+    /// Whether `number` is retired in `unit` on the new side.
+    fn retires(&self, unit: &str, number: u32) -> bool {
+        self.retired
+            .get(unit)
+            .is_some_and(|numbers| numbers.contains(&number))
+    }
+}
+
+/// The packages of `set`, in name order.
+fn by_name(set: &[v2::Package]) -> Vec<&v2::Package> {
+    let mut packages: Vec<&v2::Package> = set.iter().collect();
+    packages.sort_by_key(|package| package.name.as_str());
+    packages
 }
 
 /// The interface walk, over every shape of the package — the declared
 /// interfaces and the inline shapes of its services alike — matched by the
-/// number each carries from its `interfaces.lock` (lock design §7; plan
-/// decision PD-1), in three passes:
+/// number each carries from its unit's `interfaces.lock` (lock design §7), in
+/// three passes:
 ///
 /// 1. an old shape with a frozen, non-zero number matches the new shape with
-///    the same frozen number, whatever either is named;
+///    the same frozen number in the old package's unit, whatever either is
+///    named and whichever package of the unit now holds it — [`Matching`],
+///    run before the pair is walked;
 /// 2. an old shape with no identity — `number` 0, from a snapshot published
 ///    before the lock existed, or a provisional number — matches by name and
-///    form among the new shapes pass 1 left unmatched;
+///    form among the new shapes of this package that pass 1 left unmatched;
 /// 3. an old shape still unmatched is `InterfaceRetired` when its frozen
-///    number is in the new side's retired entries and `DeclRemoved`
-///    otherwise; a new shape still unmatched is `DeclAdded`.
+///    number is in the retired entries of its unit on the new side and
+///    `DeclRemoved` otherwise; a new shape still unmatched is `DeclAdded`.
 ///
 /// A frozen old number therefore never matches a new provisional shape: a
 /// rename keeps its number, so a provisional shape is always a new interface.
-/// Two new shapes cannot carry one frozen number — the checker refuses the
-/// lock that would give them one (RIDL-410) — so pass 1 reads the first.
 ///
-/// A matched pair whose names differ is `InterfaceRenamed`, compatible, and
-/// its body is then diffed as any other pair's; every change path carries the
-/// new side's name (plan decision PD-14), so the desk check's index finds a
-/// span, and the classifier re-finds the old side by number. The envelope and
-/// the visibility of a declared interface are compared here; an inline
-/// shape's are its service's, which `diff_service` compares under the same
-/// path, so an inline shape whose service is added or removed is reported at
-/// both levels: once as the service, once as the interface whose number went
-/// with it.
+/// A matched pair whose catalog names differ — a rename, or a move to another
+/// package of the unit — is `InterfaceRenamed`, compatible, with the two
+/// catalog names as its sides, and its body is then diffed as any other
+/// pair's; every change path carries the new side's package and name, so the
+/// desk check's index finds a span, and the classifier re-finds the old side
+/// by number. The envelope and the visibility of a declared interface are
+/// compared here; an inline shape's are its service's, which `diff_service`
+/// compares under the same path, so an inline shape whose service is added or
+/// removed is reported at both levels: once as the service, once as the
+/// interface whose number went with it.
 ///
 /// Changes come out in the old side's key order — the declared interfaces by
 /// name, then the inline shapes by service name — and the additions in the new
 /// side's key order.
-fn diff_interfaces(pkg: &str, old: &v2::Package, new: &v2::Package, changes: &mut Vec<Change>) {
+fn diff_interfaces<'a>(
+    pkg: &str,
+    old: &'a v2::Package,
+    new: &'a v2::Package,
+    matching: &Matching<'a>,
+    changes: &mut Vec<Change>,
+) {
     let old_shapes = shapes_by_key(old);
     let new_shapes = shapes_by_key(new);
 
-    let new_by_number: BTreeMap<u32, ShapeKey<'_>> = new_shapes
-        .iter()
-        .rev()
-        .filter(|(_, shape)| frozen(shape.interface))
-        .map(|(key, shape)| (shape.interface.number, *key))
+    // Old key to the new shape and its package, and the new keys of this
+    // package taken so far: by pass 1, from any pair of the unit, then by
+    // pass 2 here.
+    let mut pairs: BTreeMap<ShapeKey<'_>, Held<'_>> = BTreeMap::new();
+    let mut taken: BTreeSet<ShapeKey<'_>> = new_shapes
+        .keys()
+        .copied()
+        .filter(|key| matching.taken.contains(&(new.name.as_str(), *key)))
         .collect();
-
-    // Old key to new key, and the new keys taken so far.
-    let mut pairs: BTreeMap<ShapeKey<'_>, ShapeKey<'_>> = BTreeMap::new();
-    let mut taken: BTreeSet<ShapeKey<'_>> = BTreeSet::new();
-    // Pass 1: by frozen number.
-    for (old_key, old_shape) in &old_shapes {
-        if !frozen(old_shape.interface) {
-            continue;
-        }
-        if let Some(new_key) = new_by_number.get(&old_shape.interface.number)
-            && taken.insert(*new_key)
-        {
-            pairs.insert(*old_key, *new_key);
-        }
-    }
-    // Pass 2: by name and form, for an old shape with no identity.
     for (old_key, old_shape) in &old_shapes {
         if frozen(old_shape.interface) {
-            continue;
-        }
-        if new_shapes.contains_key(old_key) && taken.insert(*old_key) {
-            pairs.insert(*old_key, *old_key);
+            if let Some(held) = matching.pairs.get(&(old.name.as_str(), *old_key)) {
+                pairs.insert(*old_key, *held);
+            }
+        } else if let Some(new_shape) = new_shapes.get(old_key)
+            && taken.insert(*old_key)
+        {
+            pairs.insert(*old_key, (new, *new_shape));
         }
     }
 
     for (old_key, old_shape) in &old_shapes {
-        let Some(new_key) = pairs.get(old_key) else {
+        let Some((new_package, new_shape)) = pairs.get(old_key) else {
             let number = old_shape.interface.number;
-            let sanctioned = frozen(old_shape.interface)
-                && new.retired.iter().any(|entry| entry.number == number);
+            let sanctioned =
+                frozen(old_shape.interface) && matching.retires(v2::unit_of(old), number);
             if sanctioned {
                 emit(
                     changes,
@@ -429,22 +538,26 @@ fn diff_interfaces(pkg: &str, old: &v2::Package, new: &v2::Package, changes: &mu
             }
             continue;
         };
-        let new_shape = &new_shapes[new_key];
+        // The path carries the package that holds the new side, which is
+        // `pkg` unless the number moved to another package of the unit.
+        let held_by = new_package.name.as_str();
         let name = new_shape.name;
-        if old_shape.name != name {
+        let old_catalog_name = old.catalog_name(old_shape);
+        let new_catalog_name = new_package.catalog_name(new_shape);
+        if old_catalog_name != new_catalog_name {
             emit(
                 changes,
-                format!("{pkg}/{name}"),
+                format!("{held_by}/{name}"),
                 Category::InterfaceRenamed,
-                Some(old_shape.name.to_string()),
-                Some(name.to_string()),
+                Some(old_catalog_name),
+                Some(new_catalog_name),
             );
         }
         if !new_shape.is_inline() {
             if interface_envelope_differs(old_shape.interface, new_shape.interface) {
                 emit(
                     changes,
-                    format!("{pkg}/{name}"),
+                    format!("{held_by}/{name}"),
                     Category::DocOnly,
                     None,
                     None,
@@ -452,12 +565,18 @@ fn diff_interfaces(pkg: &str, old: &v2::Package, new: &v2::Package, changes: &mu
             }
             emit_visibility(
                 changes,
-                format!("{pkg}/{name}"),
+                format!("{held_by}/{name}"),
                 old_shape.visibility(),
                 new_shape.visibility(),
             );
         }
-        diff_interface(pkg, name, old_shape.interface, new_shape.interface, changes);
+        diff_interface(
+            held_by,
+            name,
+            old_shape.interface,
+            new_shape.interface,
+            changes,
+        );
     }
     for (new_key, new_shape) in &new_shapes {
         if !taken.contains(new_key) {

@@ -755,6 +755,61 @@ fn the_text_report_groups_renames_and_set_removals_under_one_heading() {
     );
 }
 
+/// An interface whose number moved to another package of its unit is one
+/// interface: `interface_renamed` under the package that holds it now, with
+/// the two catalog names as its sides. Each side is a unit of three packages
+/// with one `interfaces.lock` at the manifest's directory.
+#[test]
+fn the_text_report_names_a_move_between_packages_of_a_unit_as_a_rename() {
+    const HEADER: &str = "# interfaces.lock — written by ridl lock; do not edit by hand.\n";
+    let dir = TempDir::new("moved-within-unit");
+    for side in ["old", "new"] {
+        dir.write(
+            &format!("{side}/ridl.toml"),
+            "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write(
+            &format!("{side}/hmi.ridl"),
+            "package veh.hmi\ntype Level: integer [0..9]\ninterface Session { signal s : Level @[100ms..1s] }\n",
+        );
+        dir.write(
+            &format!("{side}/cluster/gauge.ridl"),
+            "package veh.hmi.cluster\nimport veh.hmi.Level\ninterface Gauge { signal g : Level @[100ms..1s] }\n",
+        );
+        dir.write(
+            &format!("{side}/climate/fan.ridl"),
+            "package veh.hmi.climate\nimport veh.hmi.Level\ninterface Fan { signal f : Level @[100ms..1s] }\n",
+        );
+    }
+    let speed = |package: &str| {
+        format!(
+            "package {package}\nimport veh.hmi.Level\ninterface Speed {{ signal v : Level @[100ms..1s] }}\n"
+        )
+    };
+    dir.write("old/cluster/speed.ridl", &speed("veh.hmi.cluster"));
+    dir.write(
+        "old/interfaces.lock",
+        &format!("{HEADER}next 5\nSession 1\nclimate.Fan 2\ncluster.Gauge 3\ncluster.Speed 4\n"),
+    );
+    dir.write("new/climate/speed.ridl", &speed("veh.hmi.climate"));
+    dir.write(
+        "new/interfaces.lock",
+        &format!("{HEADER}next 5\nSession 1\nclimate.Fan 2\ncluster.Gauge 3\nclimate.Speed 4\n"),
+    );
+    let old = dir.path().join("old");
+    let new = dir.path().join("new");
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    assert_eq!(
+        code, 0,
+        "a move within the unit is compatible, stderr:\n{stderr}"
+    );
+    assert_eq!(
+        stdout,
+        "compatible\ncompatible on the wire, visible in source:\n  [compatible] interface_renamed veh.hmi.climate/Speed: cluster.Speed -> climate.Speed\n"
+    );
+}
+
 /// A directory side holding a snapshot-named entry whose metadata cannot be
 /// read — a symlink to a file that is gone — is exit 2 naming the entry,
 /// not a snapshot set one short (driftsys/ridl#339 case 3): the listing is

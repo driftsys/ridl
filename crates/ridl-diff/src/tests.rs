@@ -1542,3 +1542,280 @@ fn a_member_doc_change_is_doc_only() {
     }
     only_doc_only(&diff_packages(&old, &on_arm), "veh.cluster/U");
 }
+
+// --------------------------------------------------------------------------
+// Units — a frozen number is matched within the unit of its package, and a
+// number the unit retired sanctions the removal whichever package held it.
+// --------------------------------------------------------------------------
+
+/// `package`, placed in `unit` under `name`.
+fn in_unit(unit: &str, name: &str, package: v2::Package) -> v2::Package {
+    v2::Package {
+        name: name.to_string(),
+        unit: unit.to_string(),
+        ..package
+    }
+}
+
+/// A frozen number that moved from one package of the unit to a sibling is
+/// one interface: `InterfaceRenamed`, compatible, under the new package's
+/// path, with the catalog names as its sides. `u.climate` sorts before
+/// `u.cluster`, so its pair is walked first: the moved shape is claimed
+/// before that walk, and is not also `DeclAdded`. `u.climate` is on both
+/// sides on purpose: a package on the new side only is a package-level
+/// `DeclAdded`, which is not what this test pins.
+#[test]
+fn a_frozen_number_moved_to_a_sibling_package_is_a_rename() {
+    let speed = || frozen("Speed", 1, door_opened("DoorState"));
+    let old = [
+        in_unit("u", "u.cluster", package(vec![speed()], vec![], vec![])),
+        in_unit("u", "u.climate", package(vec![], vec![], vec![])),
+    ];
+    let new = [
+        in_unit("u", "u.cluster", package(vec![], vec![], vec![])),
+        in_unit("u", "u.climate", package(vec![speed()], vec![], vec![])),
+    ];
+    let report = diff_sets(&old, &new);
+    assert_eq!(report.verdict, Verdict::Compatible);
+    assert_eq!(
+        report.changes,
+        vec![change(
+            "u.climate/Speed",
+            Category::InterfaceRenamed,
+            Verdict::Compatible,
+            Some("cluster.Speed"),
+            Some("climate.Speed"),
+        )]
+    );
+}
+
+/// The body of a moved interface is compared as any other pair's, under the
+/// new package's path, and classified against the package that holds it: an
+/// appended interaction is compatible.
+#[test]
+fn a_moved_interface_has_its_body_compared_and_classified() {
+    let old = [
+        in_unit(
+            "u",
+            "u.cluster",
+            package(
+                vec![frozen("Speed", 1, door_opened("DoorState"))],
+                vec![],
+                vec![],
+            ),
+        ),
+        in_unit("u", "u.climate", package(vec![], vec![], vec![])),
+    ];
+    let new = [
+        in_unit("u", "u.cluster", package(vec![], vec![], vec![])),
+        in_unit(
+            "u",
+            "u.climate",
+            package(
+                vec![frozen(
+                    "Speed",
+                    1,
+                    vec![
+                        event("doorOpened", 1, "DoorState"),
+                        event("doorClosed", 2, "DoorState"),
+                    ],
+                )],
+                vec![],
+                vec![],
+            ),
+        ),
+    ];
+    let report = diff_sets(&old, &new);
+    assert_eq!(report.verdict, Verdict::Compatible);
+    assert_eq!(
+        report
+            .changes
+            .iter()
+            .map(|change| (change.path.as_str(), change.category, change.verdict))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                "u.climate/Speed",
+                Category::InterfaceRenamed,
+                Verdict::Compatible
+            ),
+            (
+                "u.climate/Speed/doorClosed",
+                Category::InteractionAppended,
+                Verdict::Compatible
+            ),
+        ]
+    );
+}
+
+/// A number the unit retired sanctions the removal in whichever package held
+/// it: the retired entry is carried by the unit's anchor package under its
+/// lock key, `cluster.Old` on `u`.
+#[test]
+fn a_retired_number_carried_by_the_anchor_sanctions_a_removal_in_a_sibling() {
+    let old = [
+        in_unit("u", "u", package(vec![], vec![], vec![])),
+        in_unit(
+            "u",
+            "u.cluster",
+            package(
+                vec![frozen("Old", 3, door_opened("DoorState"))],
+                vec![],
+                vec![],
+            ),
+        ),
+    ];
+    let new = [
+        in_unit(
+            "u",
+            "u",
+            package(vec![], vec![], vec![retired("cluster.Old", 3)]),
+        ),
+        in_unit("u", "u.cluster", package(vec![], vec![], vec![])),
+    ];
+    let report = diff_sets(&old, &new);
+    assert_eq!(report.verdict, Verdict::Compatible);
+    assert_eq!(
+        report.changes,
+        vec![change(
+            "u.cluster/Old",
+            Category::InterfaceRetired,
+            Verdict::Compatible,
+            Some("interface"),
+            Some("retired"),
+        )]
+    );
+}
+
+/// A package gone from the new side while its unit is still there is read
+/// shape by shape, not as one package-level `DeclRemoved`: a number the unit
+/// retired is `InterfaceRetired`.
+#[test]
+fn a_retired_number_sanctions_the_removal_of_a_package_of_a_living_unit() {
+    let old = [
+        in_unit("u", "u", package(vec![], vec![], vec![])),
+        in_unit(
+            "u",
+            "u.cluster",
+            package(
+                vec![frozen("Old", 3, door_opened("DoorState"))],
+                vec![],
+                vec![],
+            ),
+        ),
+    ];
+    let new = [in_unit(
+        "u",
+        "u",
+        package(vec![], vec![], vec![retired("cluster.Old", 3)]),
+    )];
+    let report = diff_sets(&old, &new);
+    assert_eq!(report.verdict, Verdict::Compatible);
+    assert_eq!(
+        report.changes,
+        vec![change(
+            "u.cluster/Old",
+            Category::InterfaceRetired,
+            Verdict::Compatible,
+            Some("interface"),
+            Some("retired"),
+        )]
+    );
+}
+
+/// In a package gone from a living unit, a shape whose number moved to a
+/// sibling is `InterfaceRenamed`; a shape that is neither moved nor retired,
+/// and every other declaration of the package, is `DeclRemoved` on its own
+/// line. A package whose whole unit is gone stays one package-level
+/// `DeclRemoved` (`a_new_package_is_compatible_and_a_dropped_one_is_breaking`).
+#[test]
+fn a_package_gone_from_a_living_unit_is_read_declaration_by_declaration() {
+    let speed = || frozen("Speed", 1, door_opened("DoorState"));
+    let mut cluster = package(
+        vec![speed(), frozen("Gone", 2, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    cluster.decls.push(v2::Decl {
+        name: "Level".to_string(),
+        ..Default::default()
+    });
+    let old = [
+        in_unit("u", "u", package(vec![], vec![], vec![])),
+        in_unit("u", "u.cluster", cluster),
+    ];
+    let new = [in_unit("u", "u", package(vec![speed()], vec![], vec![]))];
+    let report = diff_sets(&old, &new);
+    assert_eq!(report.verdict, Verdict::Breaking);
+    assert_eq!(
+        report.changes,
+        vec![
+            change(
+                "u.cluster/Level",
+                Category::DeclRemoved,
+                Verdict::Breaking,
+                Some("declaration"),
+                None,
+            ),
+            change(
+                "u.cluster/Gone",
+                Category::DeclRemoved,
+                Verdict::Breaking,
+                Some("interface"),
+                None,
+            ),
+            change(
+                "u/Speed",
+                Category::InterfaceRenamed,
+                Verdict::Compatible,
+                Some("cluster.Speed"),
+                Some("Speed"),
+            ),
+        ]
+    );
+}
+
+/// A snapshot written before the IR carried `unit` has an empty one, and is
+/// its own unit: for the root package, that unit is the one the new side
+/// records, so the two match number for number.
+#[test]
+fn a_snapshot_without_a_unit_is_its_own_unit() {
+    let foo = || frozen("Foo", 1, door_opened("DoorState"));
+    let old = [in_unit("", "p", package(vec![foo()], vec![], vec![]))];
+    let new = [in_unit("p", "p", package(vec![foo()], vec![], vec![]))];
+    let report = diff_sets(&old, &new);
+    assert_eq!(report.verdict, Verdict::Identical);
+    assert_eq!(report.changes, vec![]);
+}
+
+/// For a package below the root, the unit an old snapshot without `unit`
+/// stands for is the package itself, and the new side's unit is another one:
+/// no number is matched across them, which is why the migration publishes a
+/// new baseline.
+#[test]
+fn a_sub_package_snapshot_without_a_unit_is_outside_the_new_unit() {
+    let speed = || frozen("Speed", 1, door_opened("DoorState"));
+    let old = [in_unit(
+        "",
+        "u.cluster",
+        package(vec![speed()], vec![], vec![]),
+    )];
+    let new = [in_unit(
+        "u",
+        "u.cluster",
+        package(vec![speed()], vec![], vec![]),
+    )];
+    let report = diff_sets(&old, &new);
+    assert_eq!(report.verdict, Verdict::Breaking);
+    assert_eq!(
+        report
+            .changes
+            .iter()
+            .map(|change| (change.path.as_str(), change.category))
+            .collect::<Vec<_>>(),
+        vec![
+            ("u.cluster/Speed", Category::DeclRemoved),
+            ("u.cluster/Speed", Category::DeclAdded),
+        ]
+    );
+}
