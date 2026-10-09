@@ -421,7 +421,7 @@ indistinguishable, so no claim about any of the three can be exercised.
 
     **Amendment (2026-09-15) — the slot model is retired.** An interface's
     number comes from its unit's `interfaces.lock` (lock design §2 and §3; rsdl
-    decision D-7), not from its place in a service's list: 1-based per package,
+    decision D-7), not from its place in a service's list: 1-based per unit,
     allocated by plain `ridl lock` alone, kept across a rename, and retired in
     the lock with the word `retired` — never by a tombstone in the list, which
     holds no slot. A declaration with no entry compiles with a provisional
