@@ -486,7 +486,7 @@ impl Loader {
                 // stay empty.
                 self.units.insert(name.clone(), root.to_path_buf());
                 let lock = self.read_lock(root)?;
-                self.load_package_tree(db, root, &name, &name, &imports, &defaults, &lock)?;
+                self.load_package_tree(db, root, root, &name, &name, &imports, &defaults, &lock)?;
             }
             ManifestKind::Workspace { members } => {
                 // ADR-0002 §5 step 3: the workspace root's `[imports]` and
@@ -576,11 +576,33 @@ impl Loader {
                 // `[defaults]` shadow the workspace defaults per key (ridl §9.1);
                 // a key the member leaves unset takes the workspace value.
                 let member_defaults = defaults.or(&self.workspace_defaults);
-                self.units.insert(name.clone(), workspace_root.join(member));
-                let lock = self.read_lock(&workspace_root.join(member))?;
+                let member_dir = workspace_root.join(member);
+                // Two members with one `[package] name` are two units that
+                // claim the same source package: MANI-014 on the second
+                // manifest in load order, whose tree is not loaded, so the
+                // first unit keeps its directory in `units`.
+                if let Some(first_dir) = self.units.get(&name)
+                    && *first_dir != member_dir
+                {
+                    let first_dir = first_dir.clone();
+                    self.diagnostics.push(error(
+                        DiagCode::MANI_014,
+                        file_id,
+                        package_name_range(&text),
+                        format!(
+                            "source package `{name}` is already declared by the unit in `{}`; the unit in `{}` declares it too. A source package belongs to one unit",
+                            first_dir.display(),
+                            member_dir.display()
+                        ),
+                    ));
+                    return Ok(());
+                }
+                self.units.insert(name.clone(), member_dir.clone());
+                let lock = self.read_lock(&member_dir)?;
                 self.load_package_tree(
                     db,
-                    &workspace_root.join(member),
+                    &member_dir,
+                    &member_dir,
                     &name,
                     &name,
                     &imports,
@@ -593,22 +615,25 @@ impl Loader {
     }
 
     /// Loads the package rooted at `dir` under the package name `name` and the
-    /// unit name `unit` (the manifest's `name`), then
-    /// every subdirectory as its own package named by its path — the
-    /// package↔directory law's "the name mirrors the directory path relative
-    /// to the manifest root" (ADR-0002 §1). Every package in the tree carries
-    /// `imports`, the governing manifest's `[imports]`. Directories are
-    /// visited in name order; hidden directories, symlinked directories
-    /// (following them could revisit the tree in a cycle), and directories
-    /// with their own `ridl.toml` (separate package roots) are skipped. Every
-    /// package of the tree carries `lock`, the unit's `interfaces.lock` read
-    /// from the manifest directory; a lock in any other directory is not read
-    /// and is RIDL-416.
+    /// unit name `unit` (the manifest's `name`, whose directory is
+    /// `unit_dir`), then every subdirectory as its own package named by its
+    /// path — the package↔directory law's "the name mirrors the directory
+    /// path relative to the manifest root" (ADR-0002 §1). Every package in
+    /// the tree carries `imports`, the governing manifest's `[imports]`.
+    /// Directories are visited in name order; hidden directories and
+    /// symlinked directories (following them could revisit the tree in a
+    /// cycle) are skipped, and a directory with its own `ridl.toml` is
+    /// MANI-013 and is not entered. A source package that another unit's
+    /// directory already claims is MANI-014 and is not loaded. Every package
+    /// of the tree carries `lock`, the unit's `interfaces.lock` read from the
+    /// manifest directory; a lock in any other directory is not read and is
+    /// RIDL-416.
     #[allow(clippy::too_many_arguments)]
     fn load_package_tree(
         &mut self,
         db: &mut RidlDatabase,
         dir: &Path,
+        unit_dir: &Path,
         unit: &str,
         name: &str,
         imports: &BTreeMap<String, String>,
@@ -652,9 +677,8 @@ impl Loader {
 
         let mut claimed_elsewhere = false;
         if !source_files.is_empty() {
-            let unit_dir = self.units.get(unit).cloned().unwrap_or_default();
             match self.claims.get(name) {
-                Some((first, first_dir)) if first != unit => {
+                Some((first, first_dir)) if first_dir != unit_dir => {
                     claimed_elsewhere = true;
                     let manifest = unit_dir.join("ridl.toml");
                     let text = fs::read_to_string(&manifest)?;
@@ -672,7 +696,7 @@ impl Loader {
                 }
                 _ => {
                     self.claims
-                        .insert(name.to_string(), (unit.to_string(), unit_dir));
+                        .insert(name.to_string(), (unit.to_string(), unit_dir.to_path_buf()));
                 }
             }
         }
@@ -737,6 +761,7 @@ impl Loader {
             self.load_package_tree(
                 db,
                 &subdir,
+                unit_dir,
                 unit,
                 &format!("{name}.{dir_name}"),
                 imports,
@@ -2908,6 +2933,63 @@ service:veh.common.climate 2
             .collect();
         assert_eq!(claimed.len(), 1);
         assert_eq!(claimed[0].unit(&db), "com.example");
+    }
+
+    /// Two members whose manifests carry one `[package] name`, in the member
+    /// order `members`: MANI-014 on the manifest of `second`, whose tree is
+    /// not loaded, while `first` keeps its directory in `units` and its
+    /// interface in the package.
+    fn two_members_with_one_name(members: &str, first: &str, second: &str) {
+        let dir = TempDir::new("one-name-twice");
+        dir.write("ridl.toml", &format!("[workspace]\nmembers = {members}\n"));
+        let manifest = "[package]\nname = \"x\"\nversion = \"1.0.0\"\n";
+        dir.write(&format!("{first}/ridl.toml"), manifest);
+        dir.write(
+            &format!("{first}/x.ridl"),
+            &format!("package x\n\ninterface {}A {{}}\n", first.to_uppercase()),
+        );
+        let second_path = dir.write(&format!("{second}/ridl.toml"), manifest);
+        dir.write(
+            &format!("{second}/x.ridl"),
+            &format!("package x\n\ninterface {}A {{}}\n", second.to_uppercase()),
+        );
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["MANI-014"]);
+        let diag = &loaded.diagnostics[0];
+        assert_eq!(
+            loaded.sources.path(diag.primary.file),
+            Some(path_string(&second_path).as_str())
+        );
+        let start = usize::from(diag.primary.range.start());
+        let end = usize::from(diag.primary.range.end());
+        assert_eq!(&manifest[start..end], "\"x\"");
+        assert!(
+            diag.message.contains("source package `x`"),
+            "{}",
+            diag.message
+        );
+        assert_eq!(loaded.units.get("x"), Some(&dir.path().join(first)));
+        let packages = loaded.workspace.packages(&db);
+        assert_eq!(packages.len(), 1);
+        let files = packages[0].files(&db);
+        assert_eq!(files.len(), 1);
+        assert!(
+            files[0]
+                .text(&db)
+                .contains(&format!("{}A", first.to_uppercase())),
+            "the package holds `{first}`'s file"
+        );
+    }
+
+    #[test]
+    fn two_members_with_one_name_are_mani_014_on_the_second() {
+        two_members_with_one_name("[\"a\", \"b\"]", "a", "b");
+    }
+
+    #[test]
+    fn two_members_with_one_name_are_mani_014_on_the_second_in_reverse_order() {
+        two_members_with_one_name("[\"b\", \"a\"]", "b", "a");
     }
 
     #[test]
