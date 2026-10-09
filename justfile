@@ -171,6 +171,11 @@ wasm-check:
         # with no standard library is the proof that it links none.
         rustup target add thumbv7em-none-eabihf
         cargo check --target thumbv7em-none-eabihf -p ridl-descriptor --no-default-features
+        # `ridl-descriptor` with its `std` feature on, so that the half of it
+        # that builds a descriptor (`lower`, `describe`) is still checked for
+        # the browser target, which the first check no longer does now that
+        # `std` is a default feature of that crate.
+        cargo check --target wasm32-unknown-unknown -p ridl-descriptor --all-features
         # And once more with the encoding features on. ADR-0020 decision 2
         # makes the generated Rust compiled to wasm32 the codec a TypeScript
         # consumer loads, so the helpers that codec calls must build for
