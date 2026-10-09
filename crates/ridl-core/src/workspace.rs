@@ -382,6 +382,21 @@ fn up(path: &Path, levels: usize) -> PathBuf {
 /// range), as [`Loader::load_file`] returns them.
 type LoadedFile = (InputFile, Vec<(String, TextRange)>);
 
+/// The scope of one unit that every package in its directory tree shares.
+#[derive(Clone, Copy)]
+struct TreeScope<'a> {
+    /// The directory that holds the unit's manifest.
+    unit_dir: &'a Path,
+    /// The manifest's `name`.
+    unit: &'a str,
+    /// The governing manifest's `[imports]`.
+    imports: &'a BTreeMap<String, String>,
+    /// The timing defaults that apply to the unit's packages.
+    defaults: &'a TimingDefaults,
+    /// The unit's `interfaces.lock`, read from the manifest directory.
+    lock: &'a Option<PackageLock>,
+}
+
 /// The accumulating state of one [`load_workspace`] run.
 #[derive(Default)]
 struct Loader {
@@ -495,7 +510,14 @@ impl Loader {
                     (file_id, byte_range(name_span.start, name_span.end)),
                 );
                 let lock = self.read_lock(root)?;
-                self.load_package_tree(db, root, root, &name, &name, &imports, &defaults, &lock)?;
+                let scope = TreeScope {
+                    unit_dir: root,
+                    unit: &name,
+                    imports: &imports,
+                    defaults: &defaults,
+                    lock: &lock,
+                };
+                self.load_package_tree(db, root, &name, &scope)?;
             }
             ManifestKind::Workspace { members } => {
                 // ADR-0002 §5 step 3: the workspace root's `[imports]` and
@@ -621,16 +643,14 @@ impl Loader {
                 self.unit_name_spans
                     .insert(name.clone(), (file_id, name_range));
                 let lock = self.read_lock(&member_dir)?;
-                self.load_package_tree(
-                    db,
-                    &member_dir,
-                    &member_dir,
-                    &name,
-                    &name,
-                    &imports,
-                    &member_defaults,
-                    &lock,
-                )?;
+                let scope = TreeScope {
+                    unit_dir: &member_dir,
+                    unit: &name,
+                    imports: &imports,
+                    defaults: &member_defaults,
+                    lock: &lock,
+                };
+                self.load_package_tree(db, &member_dir, &name, &scope)?;
             }
         }
         Ok(())
@@ -651,18 +671,20 @@ impl Loader {
     /// manifest directory; a lock in any other directory is not read and is
     /// RIDL-416. A member listed twice in `[workspace] members` reaches this
     /// function once: the `members` loop skips its later listings.
-    #[allow(clippy::too_many_arguments)]
     fn load_package_tree(
         &mut self,
         db: &mut RidlDatabase,
         dir: &Path,
-        unit_dir: &Path,
-        unit: &str,
         name: &str,
-        imports: &BTreeMap<String, String>,
-        defaults: &TimingDefaults,
-        lock: &Option<PackageLock>,
+        scope: &TreeScope<'_>,
     ) -> io::Result<()> {
+        let TreeScope {
+            unit_dir,
+            unit,
+            imports,
+            defaults,
+            lock,
+        } = *scope;
         let mut source_files = Vec::new();
         let mut subdirs = Vec::new();
         for entry in fs::read_dir(dir)? {
@@ -781,16 +803,7 @@ impl Loader {
                     ),
                 ));
             }
-            self.load_package_tree(
-                db,
-                &subdir,
-                unit_dir,
-                unit,
-                &format!("{name}.{dir_name}"),
-                imports,
-                defaults,
-                lock,
-            )?;
+            self.load_package_tree(db, &subdir, &format!("{name}.{dir_name}"), scope)?;
         }
         Ok(())
     }
