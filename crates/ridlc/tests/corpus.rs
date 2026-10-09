@@ -2539,7 +2539,6 @@ fn reserved_integer_in_a_struct_or_union_is_inert() {
 }
 
 /// The reference's rule cell for `code`, read through the table reader.
-#[cfg(test)]
 fn real_rule(rows: &BTreeMap<String, (String, String)>, code: &str) -> String {
     rows.get(code)
         .unwrap_or_else(|| panic!("{code} has a row"))
