@@ -973,6 +973,14 @@ mod tests {
     }
 
     #[test]
+    fn a_backslash_and_a_final_lone_cr_end_an_unterminated_string() {
+        assert_eq!(
+            pairs("\"a\\\r"),
+            vec![(SyntaxKind::Error, "\"a\\"), (SyntaxKind::Whitespace, "\r"),],
+        );
+    }
+
+    #[test]
     fn a_lone_cr_ends_an_unterminated_regex() {
         let tokens = pairs("const V = /abc\rx");
         assert_eq!(

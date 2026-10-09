@@ -1493,8 +1493,7 @@ pub struct LineCol {
 ///
 /// A line ends at an LF, a CRLF pair or a lone CR, the line-break rule of the
 /// language server's line index. A CRLF pair is one line break, and its CR is
-/// counted as a column of the line it ends, so the column of the LF in a CRLF
-/// pair is one past the position the language server reports for it.
+/// counted as a column of the line it ends.
 pub fn line_col(text: &str, offset: TextSize) -> LineCol {
     let mut offset = usize::from(offset).min(text.len());
     while !text.is_char_boundary(offset) {

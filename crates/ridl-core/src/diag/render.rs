@@ -277,9 +277,15 @@ mod tests {
             );
             // The printed source line stops at the line break, so the next
             // line's text is not part of the snippet.
+            let printed: Vec<&str> = rendered
+                .lines()
+                .filter(|line| line.contains("Speed: km/h"))
+                .collect();
+            assert_eq!(printed.len(), 1, "one snippet line in:\n{rendered}");
             assert!(
-                !rendered.contains('x'),
-                "snippet ran past the line:\n{rendered}"
+                printed[0].trim_end().ends_with("type Speed: km/h"),
+                "snippet line `{}` in:\n{rendered}",
+                printed[0]
             );
         }
     }

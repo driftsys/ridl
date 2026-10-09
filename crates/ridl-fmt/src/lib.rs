@@ -8,7 +8,8 @@
 //!   including trivia (whitespace, comments, doc comments);
 //! - **trivia-aware** — comments and doc comments are preserved and re-anchored
 //!   to what they precede; an inline trailing comment stays on its line, except
-//!   after a machine block, where it belongs to the deployment body;
+//!   after a machine block and after a separator comma that is on a line of its
+//!   own, where it leads the next member;
 //! - **total** — every syntactically valid input formats; a file with parse
 //!   errors is never reformatted (fmt must not eat broken code, so it returns
 //!   [`FormatOutcome::ParseErrors`] untouched);
@@ -87,7 +88,8 @@
 //! precedes, and an inline trailing comment stays on its line — including a
 //! comment on the opening-brace line of a block. Comments after a machine's
 //! closing brace belong to the deployment body, with or without a separator
-//! comma. A comment embedded *inside* a
+//! comma, and a comment after a separator comma that is on a line of its own
+//! leads the next member. A comment embedded *inside* a
 //! single-line construct — between the brackets of a constraint or a
 //! collection, the parentheses of a tuple, or the tokens of one declaration —
 //! cannot be reflowed into the tight style without risking its meaning, so the
@@ -1678,8 +1680,8 @@ mod tests {
 
     /// A lone CR is one line break, as an LF is, and a CRLF pair is one line
     /// break: a file with either line ending formats to the same text as the
-    /// same file with LF line endings. Output the formatter lays out itself uses LF; a member kept verbatim keeps
-    /// the line endings it had.
+    /// same file with LF line endings. Output the formatter lays out itself
+    /// uses LF; a member kept verbatim keeps the line endings it had.
     #[test]
     fn a_lone_cr_and_a_crlf_pair_each_format_as_one_line_break() {
         let lf = "// Copyright Acme\n\npackage p\n\n\n// lead\nstruct S { // brace\n  a : A   // note\n  // own line\n  b : B\n\n\n  c : C\n}\n/// doc\nstruct T {\n  a : A\n}\nstruct U {\n  // first\n  a : A\n}\nstruct V {\n  a : A\n  b : B\n}\n";
@@ -1698,6 +1700,17 @@ mod tests {
                 "line ending {ending:?}",
             );
         }
+    }
+
+    /// The CR that ends a line comment's text belongs to the break after the
+    /// token; a CR or an LF inside a block comment is a break of its own.
+    #[test]
+    fn a_comment_breaks_a_line_only_inside_its_own_text() {
+        assert!(!comment_breaks_line("/// x\r"));
+        assert!(!comment_breaks_line("// x"));
+        assert!(comment_breaks_line("/* a\rb */"));
+        assert!(comment_breaks_line("/* a\nb */"));
+        assert!(comment_breaks_line("/* a\r\nb */"));
     }
 
     /// A member with an inline annotation comment formats the same with an LF,
