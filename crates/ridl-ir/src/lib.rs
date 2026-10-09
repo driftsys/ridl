@@ -2035,7 +2035,6 @@ mod v2_round_trip {
             retired: vec![v2::RetiredInterface {
                 name: "cluster.Old".to_string(),
                 number: 3,
-                ..Default::default()
             }],
             ..Default::default()
         };
