@@ -157,3 +157,37 @@ Each ruling: what was decided — why — what it costs if wrong.
   prefix not counted — the code's rule is pinned by four tests and whole-key
   order would push every inline shape behind every interface — a reader of the
   old sentence predicted different provisional numbers before locking.
+- **R-4** G1 does not start until lane H's H3 plan exists and has been read — on
+  2026-10-09 H2's design was not yet written, and option A makes `ridl diff` the
+  step that judges an earlier catalog hash compatible, so H3 is likely to change
+  `crates/ridl-diff`; if the plan names that crate, G1 waits for H3 to merge.
+  G2, G3 and G4 start now and fill the three agent slots — if wrong, G1 starts
+  later than it could have.
+- **R-5** #735: leave it as built and close the issue as not planned. A channel
+  that no link consumes has no ring to size, and the request already records the
+  depth as absent with source `UNDERIVABLE`, which tells a plugin why. A warning
+  on an event nobody consumes would fire on every unused event, and dropping the
+  channel from the request would change what every plugin reads — if wrong,
+  RSDL-806 is widened later; adding a warning case is a compatible change under
+  ADR-0024.
+- **R-6** #704: approved as scoped in its 2026-10-05 comment (design note first,
+  then the IR field, the lowering, the Rust backend), outside this lane, label
+  `ready`. It changes the IR and the plugin protocol, which no stage of this
+  lane touches — if wrong, the narrow translator stays one lane longer.
+- **R-7** #486: derive `Debug` on the generated `Event` enum always, and
+  `Clone, Copy, PartialEq, Eq` whenever every payload derives them; do not mark
+  it `#[non_exhaustive]` (the generated crate is regenerated with its consumer,
+  so the attribute would only force a wildcard arm that hides a new event);
+  reword the `Provider` doc to the first reason alone. Recorded in
+  `docs/design/interaction-face.md` by the change that implements it. Label
+  `ready`, outside this lane, because lane H's H1 and H3 change the Rust backend
+  now — if wrong, consumers keep matching into events one lane longer.
+- **R-8** #487: decline the crate-root re-export for a single-package workspace
+  (two spellings for one item, and the paths change when a second package is
+  added); record the stack buffers sized by `MAX_SIZE` as a known property with
+  the two ways out the issue names. Both are lines in
+  `docs/design/interaction-face.md`, done in the same change as R-7. Label
+  `ready` — if wrong, a single-package consumer keeps the longer path.
+- **R-9** #631: the 2026-10-01 decision stands — fixed space/2 indentation, the
+  EditorConfig indentation work stays debt for a later lane; G6 gives it a
+  milestone — if wrong, a user with tab indentation keeps reformatted files.
