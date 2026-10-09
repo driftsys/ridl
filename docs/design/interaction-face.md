@@ -552,7 +552,7 @@ the loopback sets one (F-11).
 **The feature.** The manifest `ridl build` emits declares
 `std = ["ridl-rt/std"]`, on by default, and the `blocking` module is under the
 emitted crate's own `std`, so a build with default features off has no
-`blocking` module, links `ridl-rt` as `no_std`, and builds for
+`blocking` module, is `no_std` and links `ridl-rt` as `no_std`, and builds for
 `wasm32-unknown-unknown`. `block_on` is what `ridl-rt`'s `std` feature carries
 ([the `ridl-rt` design record](ridl-rt.md), the `task` module); it is not usable
 on wasm, where `Instant::now()` panics, and a frame loop there polls with
