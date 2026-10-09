@@ -58,6 +58,7 @@ fn sample() -> Catalog {
             name: "LaneAssist".to_owned(),
             number: 2,
         }],
+        compatible: None,
     }
 }
 

@@ -2003,7 +2003,7 @@ fn write_catalogs(
         .map(|package| ridl_ir::v2::unit_of(package))
         .collect();
     for unit in units {
-        let bytes = ridl_descriptor::lower(unit, others)
+        let bytes = ridl_descriptor::lower(unit, others, &[])
             .map_err(|err| std::io::Error::other(err.to_string()))?;
         std::fs::write(
             out_dir.join(format!("{unit}{}", ridl_descriptor::FILE_SUFFIX)),

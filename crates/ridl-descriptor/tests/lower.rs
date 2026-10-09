@@ -20,7 +20,36 @@ use ridl_ir::v2::{
 
 /// Lowers the unit of `package` when `package` is its only member.
 fn lower_one(package: &Package) -> Result<Vec<u8>, LowerError> {
-    lower(unit_of(package), &[package])
+    lower(unit_of(package), &[package], &[])
+}
+
+#[test]
+fn the_compatible_catalogs_are_written_in_order() {
+    let package = Package {
+        name: "u".to_owned(),
+        ..Default::default()
+    };
+    let bytes = lower(unit_of(&package), &[&package], &[[1; 32], [2; 32]]).unwrap();
+    let catalog = verify(&bytes).unwrap();
+    let listed: Vec<Vec<u8>> = catalog
+        .compatible()
+        .unwrap()
+        .unwrap()
+        .iter()
+        .map(|entry| entry.unwrap().hash().unwrap().to_vec())
+        .collect();
+    assert_eq!(listed, vec![vec![1; 32], vec![2; 32]]);
+}
+
+#[test]
+fn an_empty_list_is_written_as_an_empty_vector() {
+    let package = Package {
+        name: "u".to_owned(),
+        ..Default::default()
+    };
+    let bytes = lower_one(&package).unwrap();
+    let catalog = verify(&bytes).unwrap();
+    assert_eq!(catalog.compatible().unwrap().unwrap().len(), 0);
 }
 
 fn i16_def() -> TypeDef {
@@ -738,7 +767,7 @@ fn importing_and_imported() -> (Package, Package) {
 #[test]
 fn a_payload_from_another_package_is_sized_and_hashed_through_others() {
     let (cluster, geo) = importing_and_imported();
-    let with = lower("veh.cluster", &[&cluster, &geo]).unwrap();
+    let with = lower("veh.cluster", &[&cluster, &geo], &[]).unwrap();
     let without = lower_one(&cluster).unwrap();
 
     let catalog = verify(&with).unwrap();
@@ -989,7 +1018,7 @@ fn a_subpackage_payload_is_sized_in_its_own_package() {
         }],
         ..Default::default()
     };
-    let bytes = lower("u", &[&root, &cluster]).unwrap();
+    let bytes = lower("u", &[&root, &cluster], &[]).unwrap();
     let catalog = verify(&bytes).unwrap();
     let payload_of = |index: usize, name: &str| {
         let interface = catalog.interfaces().unwrap().get(index).unwrap().unwrap();
@@ -1081,7 +1110,7 @@ fn a_unit_of_two_packages_lowers_to_one_descriptor_with_qualified_names() {
         }],
         ..Default::default()
     };
-    let bytes = lower("u", &[&root, &cluster]).unwrap();
+    let bytes = lower("u", &[&root, &cluster], &[]).unwrap();
     let catalog = verify(&bytes).unwrap();
     assert_eq!(catalog.name().unwrap(), "u");
     let interfaces = catalog.interfaces().unwrap();
@@ -1111,7 +1140,7 @@ fn a_unit_of_two_packages_lowers_to_one_descriptor_with_qualified_names() {
         ..Default::default()
     };
     assert_eq!(
-        lower("u", &[&root, &cluster, &other, &sibling]).unwrap(),
+        lower("u", &[&root, &cluster, &other, &sibling], &[]).unwrap(),
         bytes
     );
 }

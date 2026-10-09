@@ -3249,10 +3249,280 @@ mod root {
                 }
             }
 
+            /// The table `EarlierCatalog` in the namespace `ridl.descriptor`
+            ///
+            /// Generated from these locations:
+            /// * Table `EarlierCatalog` in the file `crates/ridl-descriptor/schema/catalog.fbs:98`
+            #[derive(
+                Clone,
+                Debug,
+                PartialEq,
+                PartialOrd,
+                Eq,
+                Ord,
+                Hash,
+                ::serde::Serialize,
+                ::serde::Deserialize,
+            )]
+            pub struct EarlierCatalog {
+                /// The field `hash` in the table `EarlierCatalog`
+                pub hash: ::planus::alloc::vec::Vec<u8>,
+            }
+
+            #[allow(clippy::derivable_impls)]
+            impl ::core::default::Default for EarlierCatalog {
+                fn default() -> Self {
+                    Self {
+                        hash: ::core::default::Default::default(),
+                    }
+                }
+            }
+
+            impl EarlierCatalog {
+                /// Creates a [EarlierCatalogBuilder] for serializing an instance of this table.
+                #[inline]
+                pub fn builder() -> EarlierCatalogBuilder<()> {
+                    EarlierCatalogBuilder(())
+                }
+
+                #[allow(clippy::too_many_arguments)]
+                pub fn create(
+                    builder: &mut ::planus::Builder,
+                    field_hash: impl ::planus::WriteAs<::planus::Offset<[u8]>>,
+                ) -> ::planus::Offset<Self> {
+                    let prepared_hash = field_hash.prepare(builder);
+
+                    let mut table_writer: ::planus::table_writer::TableWriter<6> =
+                        ::core::default::Default::default();
+                    table_writer.write_entry::<::planus::Offset<[u8]>>(0);
+
+                    unsafe {
+                        table_writer.finish(builder, |object_writer| {
+                            object_writer.write::<_, _, 4>(&prepared_hash);
+                        });
+                    }
+                    builder.current_offset()
+                }
+            }
+
+            impl ::planus::WriteAs<::planus::Offset<EarlierCatalog>> for EarlierCatalog {
+                type Prepared = ::planus::Offset<Self>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::planus::Offset<EarlierCatalog> {
+                    ::planus::WriteAsOffset::prepare(self, builder)
+                }
+            }
+
+            impl ::planus::WriteAsOptional<::planus::Offset<EarlierCatalog>> for EarlierCatalog {
+                type Prepared = ::planus::Offset<Self>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<::planus::Offset<EarlierCatalog>> {
+                    ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+                }
+            }
+
+            impl ::planus::WriteAsOffset<EarlierCatalog> for EarlierCatalog {
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::planus::Offset<EarlierCatalog> {
+                    EarlierCatalog::create(builder, &self.hash)
+                }
+            }
+
+            /// Builder for serializing an instance of the [EarlierCatalog] type.
+            ///
+            /// Can be created using the [EarlierCatalog::builder] method.
+            #[derive(Debug)]
+            #[must_use]
+            pub struct EarlierCatalogBuilder<State>(State);
+
+            impl EarlierCatalogBuilder<()> {
+                /// Setter for the [`hash` field](EarlierCatalog#structfield.hash).
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn hash<T0>(self, value: T0) -> EarlierCatalogBuilder<(T0,)>
+                where
+                    T0: ::planus::WriteAs<::planus::Offset<[u8]>>,
+                {
+                    EarlierCatalogBuilder((value,))
+                }
+            }
+
+            impl<T0> EarlierCatalogBuilder<(T0,)> {
+                /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [EarlierCatalog].
+                #[inline]
+                pub fn finish(
+                    self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::planus::Offset<EarlierCatalog>
+                where
+                    Self: ::planus::WriteAsOffset<EarlierCatalog>,
+                {
+                    ::planus::WriteAsOffset::prepare(&self, builder)
+                }
+            }
+
+            impl<T0: ::planus::WriteAs<::planus::Offset<[u8]>>>
+                ::planus::WriteAs<::planus::Offset<EarlierCatalog>>
+                for EarlierCatalogBuilder<(T0,)>
+            {
+                type Prepared = ::planus::Offset<EarlierCatalog>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::planus::Offset<EarlierCatalog> {
+                    ::planus::WriteAsOffset::prepare(self, builder)
+                }
+            }
+
+            impl<T0: ::planus::WriteAs<::planus::Offset<[u8]>>>
+                ::planus::WriteAsOptional<::planus::Offset<EarlierCatalog>>
+                for EarlierCatalogBuilder<(T0,)>
+            {
+                type Prepared = ::planus::Offset<EarlierCatalog>;
+
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::core::option::Option<::planus::Offset<EarlierCatalog>> {
+                    ::core::option::Option::Some(::planus::WriteAsOffset::prepare(self, builder))
+                }
+            }
+
+            impl<T0: ::planus::WriteAs<::planus::Offset<[u8]>>>
+                ::planus::WriteAsOffset<EarlierCatalog> for EarlierCatalogBuilder<(T0,)>
+            {
+                #[inline]
+                fn prepare(
+                    &self,
+                    builder: &mut ::planus::Builder,
+                ) -> ::planus::Offset<EarlierCatalog> {
+                    let (v0,) = &self.0;
+                    EarlierCatalog::create(builder, v0)
+                }
+            }
+
+            /// Reference to a deserialized [EarlierCatalog].
+            #[derive(Copy, Clone)]
+            pub struct EarlierCatalogRef<'a>(#[allow(dead_code)] ::planus::table_reader::Table<'a>);
+
+            impl<'a> EarlierCatalogRef<'a> {
+                /// Getter for the [`hash` field](EarlierCatalog#structfield.hash).
+                #[inline]
+                pub fn hash(&self) -> ::planus::Result<&'a [u8]> {
+                    self.0.access_required(0, "EarlierCatalog", "hash")
+                }
+            }
+
+            impl<'a> ::core::fmt::Debug for EarlierCatalogRef<'a> {
+                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                    let mut f = f.debug_struct("EarlierCatalogRef");
+                    f.field("hash", &self.hash());
+                    f.finish()
+                }
+            }
+
+            impl<'a> ::core::convert::TryFrom<EarlierCatalogRef<'a>> for EarlierCatalog {
+                type Error = ::planus::Error;
+
+                #[allow(unreachable_code)]
+                fn try_from(value: EarlierCatalogRef<'a>) -> ::planus::Result<Self> {
+                    ::core::result::Result::Ok(Self {
+                        hash: value.hash()?.to_vec(),
+                    })
+                }
+            }
+
+            impl<'a> ::planus::TableRead<'a> for EarlierCatalogRef<'a> {
+                #[inline]
+                fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'a>,
+                    offset: usize,
+                ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
+                    ::core::result::Result::Ok(Self(::planus::table_reader::Table::from_buffer(
+                        buffer, offset,
+                    )?))
+                }
+            }
+
+            impl<'a> ::planus::VectorReadInner<'a> for EarlierCatalogRef<'a> {
+                type Error = ::planus::Error;
+                const STRIDE: usize = 4;
+
+                unsafe fn from_buffer(
+                    buffer: ::planus::SliceWithStartOffset<'a>,
+                    offset: usize,
+                ) -> ::planus::Result<Self> {
+                    ::planus::TableRead::from_buffer(buffer, offset).map_err(|error_kind| {
+                        error_kind.with_error_location(
+                            "[EarlierCatalogRef]",
+                            "get",
+                            buffer.offset_from_start,
+                        )
+                    })
+                }
+            }
+
+            /// # Safety
+            /// The planus compiler generates implementations that initialize
+            /// the bytes in `write_values`.
+            unsafe impl ::planus::VectorWrite<::planus::Offset<EarlierCatalog>> for EarlierCatalog {
+                type Value = ::planus::Offset<EarlierCatalog>;
+                const STRIDE: usize = 4;
+                #[inline]
+                fn prepare(&self, builder: &mut ::planus::Builder) -> Self::Value {
+                    ::planus::WriteAs::prepare(self, builder)
+                }
+
+                #[inline]
+                unsafe fn write_values(
+                    values: &[::planus::Offset<EarlierCatalog>],
+                    bytes: *mut ::core::mem::MaybeUninit<u8>,
+                    buffer_position: u32,
+                ) {
+                    let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
+                    for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
+                        ::planus::WriteAsPrimitive::write(
+                            v,
+                            ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
+                            buffer_position - (Self::STRIDE * i) as u32,
+                        );
+                    }
+                }
+            }
+
+            impl<'a> ::planus::ReadAsRoot<'a> for EarlierCatalogRef<'a> {
+                fn read_as_root(slice: &'a [u8]) -> ::planus::Result<Self> {
+                    ::planus::TableRead::from_buffer(
+                        ::planus::SliceWithStartOffset {
+                            buffer: slice,
+                            offset_from_start: 0,
+                        },
+                        0,
+                    )
+                    .map_err(|error_kind| {
+                        error_kind.with_error_location("[EarlierCatalogRef]", "read_as_root", 0)
+                    })
+                }
+            }
+
             /// The table `Catalog` in the namespace `ridl.descriptor`
             ///
             /// Generated from these locations:
-            /// * Table `Catalog` in the file `crates/ridl-descriptor/schema/catalog.fbs:96`
+            /// * Table `Catalog` in the file `crates/ridl-descriptor/schema/catalog.fbs:102`
             #[derive(
                 Clone,
                 Debug,
@@ -3277,6 +3547,9 @@ mod root {
                 pub interfaces: ::planus::alloc::vec::Vec<self::Interface>,
                 /// The field `retired` in the table `Catalog`
                 pub retired: ::planus::alloc::vec::Vec<self::RetiredInterface>,
+                /// The field `compatible` in the table `Catalog`
+                pub compatible:
+                    ::core::option::Option<::planus::alloc::vec::Vec<self::EarlierCatalog>>,
             }
 
             #[allow(clippy::derivable_impls)]
@@ -3289,6 +3562,7 @@ mod root {
                         toolchain: ::core::default::Default::default(),
                         interfaces: ::core::default::Default::default(),
                         retired: ::core::default::Default::default(),
+                        compatible: ::core::default::Default::default(),
                     }
                 }
             }
@@ -3313,6 +3587,9 @@ mod root {
                     field_retired: impl ::planus::WriteAs<
                         ::planus::Offset<[::planus::Offset<self::RetiredInterface>]>,
                     >,
+                    field_compatible: impl ::planus::WriteAsOptional<
+                        ::planus::Offset<[::planus::Offset<self::EarlierCatalog>]>,
+                    >,
                 ) -> ::planus::Offset<Self> {
                     let prepared_version = field_version.prepare(builder, &0);
                     let prepared_name = field_name.prepare(builder);
@@ -3320,8 +3597,9 @@ mod root {
                     let prepared_toolchain = field_toolchain.prepare(builder);
                     let prepared_interfaces = field_interfaces.prepare(builder);
                     let prepared_retired = field_retired.prepare(builder);
+                    let prepared_compatible = field_compatible.prepare(builder);
 
-                    let mut table_writer: ::planus::table_writer::TableWriter<16> =
+                    let mut table_writer: ::planus::table_writer::TableWriter<18> =
                         ::core::default::Default::default();
                     if prepared_version.is_some() {
                         table_writer.write_entry::<u32>(0);
@@ -3332,6 +3610,9 @@ mod root {
                     table_writer
                         .write_entry::<::planus::Offset<[::planus::Offset<self::Interface>]>>(4);
                     table_writer.write_entry::<::planus::Offset<[::planus::Offset<self::RetiredInterface>]>>(5);
+                    if prepared_compatible.is_some() {
+                        table_writer.write_entry::<::planus::Offset<[::planus::Offset<self::EarlierCatalog>]>>(6);
+                    }
 
                     unsafe {
                         table_writer.finish(builder, |object_writer| {
@@ -3344,6 +3625,11 @@ mod root {
                             object_writer.write::<_, _, 4>(&prepared_toolchain);
                             object_writer.write::<_, _, 4>(&prepared_interfaces);
                             object_writer.write::<_, _, 4>(&prepared_retired);
+                            if let ::core::option::Option::Some(prepared_compatible) =
+                                prepared_compatible
+                            {
+                                object_writer.write::<_, _, 4>(&prepared_compatible);
+                            }
                         });
                     }
                     builder.current_offset()
@@ -3382,6 +3668,7 @@ mod root {
                         &self.toolchain,
                         &self.interfaces,
                         &self.retired,
+                        &self.compatible,
                     )
                 }
             }
@@ -3480,6 +3767,31 @@ mod root {
             }
 
             impl<T0, T1, T2, T3, T4, T5> CatalogBuilder<(T0, T1, T2, T3, T4, T5)> {
+                /// Setter for the [`compatible` field](Catalog#structfield.compatible).
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn compatible<T6>(
+                    self,
+                    value: T6,
+                ) -> CatalogBuilder<(T0, T1, T2, T3, T4, T5, T6)>
+                where
+                    T6: ::planus::WriteAsOptional<
+                            ::planus::Offset<[::planus::Offset<self::EarlierCatalog>]>,
+                        >,
+                {
+                    let (v0, v1, v2, v3, v4, v5) = self.0;
+                    CatalogBuilder((v0, v1, v2, v3, v4, v5, value))
+                }
+
+                /// Sets the [`compatible` field](Catalog#structfield.compatible) to null.
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn compatible_as_null(self) -> CatalogBuilder<(T0, T1, T2, T3, T4, T5, ())> {
+                    self.compatible(())
+                }
+            }
+
+            impl<T0, T1, T2, T3, T4, T5, T6> CatalogBuilder<(T0, T1, T2, T3, T4, T5, T6)> {
                 /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [Catalog].
                 #[inline]
                 pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<Catalog>
@@ -3497,8 +3809,11 @@ mod root {
                 T3: ::planus::WriteAs<::planus::Offset<str>>,
                 T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Interface>]>>,
                 T5: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::RetiredInterface>]>>,
+                T6: ::planus::WriteAsOptional<
+                        ::planus::Offset<[::planus::Offset<self::EarlierCatalog>]>,
+                    >,
             > ::planus::WriteAs<::planus::Offset<Catalog>>
-                for CatalogBuilder<(T0, T1, T2, T3, T4, T5)>
+                for CatalogBuilder<(T0, T1, T2, T3, T4, T5, T6)>
             {
                 type Prepared = ::planus::Offset<Catalog>;
 
@@ -3515,8 +3830,11 @@ mod root {
                 T3: ::planus::WriteAs<::planus::Offset<str>>,
                 T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Interface>]>>,
                 T5: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::RetiredInterface>]>>,
+                T6: ::planus::WriteAsOptional<
+                        ::planus::Offset<[::planus::Offset<self::EarlierCatalog>]>,
+                    >,
             > ::planus::WriteAsOptional<::planus::Offset<Catalog>>
-                for CatalogBuilder<(T0, T1, T2, T3, T4, T5)>
+                for CatalogBuilder<(T0, T1, T2, T3, T4, T5, T6)>
             {
                 type Prepared = ::planus::Offset<Catalog>;
 
@@ -3536,12 +3854,15 @@ mod root {
                 T3: ::planus::WriteAs<::planus::Offset<str>>,
                 T4: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Interface>]>>,
                 T5: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::RetiredInterface>]>>,
-            > ::planus::WriteAsOffset<Catalog> for CatalogBuilder<(T0, T1, T2, T3, T4, T5)>
+                T6: ::planus::WriteAsOptional<
+                        ::planus::Offset<[::planus::Offset<self::EarlierCatalog>]>,
+                    >,
+            > ::planus::WriteAsOffset<Catalog> for CatalogBuilder<(T0, T1, T2, T3, T4, T5, T6)>
             {
                 #[inline]
                 fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Catalog> {
-                    let (v0, v1, v2, v3, v4, v5) = &self.0;
-                    Catalog::create(builder, v0, v1, v2, v3, v4, v5)
+                    let (v0, v1, v2, v3, v4, v5, v6) = &self.0;
+                    Catalog::create(builder, v0, v1, v2, v3, v4, v5, v6)
                 }
             }
 
@@ -3592,6 +3913,18 @@ mod root {
                 > {
                     self.0.access_required(5, "Catalog", "retired")
                 }
+
+                /// Getter for the [`compatible` field](Catalog#structfield.compatible).
+                #[inline]
+                pub fn compatible(
+                    &self,
+                ) -> ::planus::Result<
+                    ::core::option::Option<
+                        ::planus::Vector<'a, ::planus::Result<self::EarlierCatalogRef<'a>>>,
+                    >,
+                > {
+                    self.0.access(6, "Catalog", "compatible")
+                }
             }
 
             impl<'a> ::core::fmt::Debug for CatalogRef<'a> {
@@ -3603,6 +3936,11 @@ mod root {
                     f.field("toolchain", &self.toolchain());
                     f.field("interfaces", &self.interfaces());
                     f.field("retired", &self.retired());
+                    if let ::core::option::Option::Some(field_compatible) =
+                        self.compatible().transpose()
+                    {
+                        f.field("compatible", &field_compatible);
+                    }
                     f.finish()
                 }
             }
@@ -3619,6 +3957,13 @@ mod root {
                         toolchain: ::core::convert::Into::into(value.toolchain()?),
                         interfaces: value.interfaces()?.to_vec_result()?,
                         retired: value.retired()?.to_vec_result()?,
+                        compatible: if let ::core::option::Option::Some(compatible) =
+                            value.compatible()?
+                        {
+                            ::core::option::Option::Some(compatible.to_vec_result()?)
+                        } else {
+                            ::core::option::Option::None
+                        },
                     })
                 }
             }

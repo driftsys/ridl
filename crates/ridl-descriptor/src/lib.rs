@@ -36,9 +36,9 @@ use core::fmt;
 use planus::ReadAsRoot;
 
 pub use generated::ridl::descriptor::{
-    Catalog, CatalogRef, Encoding, Interface, InterfaceRef, Kind, MaxSize, MaxSizeRef, Member,
-    MemberRef, Payload, PayloadRef, RetiredInterface, RetiredInterfaceRef,
-    SizeState as SizeStateTag, Timing, TimingMode, TimingRef, UnboundedCause,
+    Catalog, CatalogRef, EarlierCatalog, EarlierCatalogRef, Encoding, Interface, InterfaceRef,
+    Kind, MaxSize, MaxSizeRef, Member, MemberRef, Payload, PayloadRef, RetiredInterface,
+    RetiredInterfaceRef, SizeState as SizeStateTag, Timing, TimingMode, TimingRef, UnboundedCause,
 };
 #[cfg(feature = "std")]
 pub use lower::lower;
@@ -176,6 +176,12 @@ fn walk(catalog: CatalogRef<'_>) -> planus::Result<()> {
         let retired = retired?;
         retired.name()?;
         retired.number()?;
+    }
+    // Absent in a file written before the field existed.
+    if let Some(compatible) = catalog.compatible()? {
+        for earlier in compatible {
+            earlier?.hash()?;
+        }
     }
     Ok(())
 }

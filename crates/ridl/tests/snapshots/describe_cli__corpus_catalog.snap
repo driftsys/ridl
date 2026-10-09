@@ -3,6 +3,7 @@ source: crates/ridl/tests/describe_cli.rs
 expression: stdout
 ---
 {
+  "compatible": [],
   "hash": [
     80,
     62,
