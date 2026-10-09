@@ -271,18 +271,18 @@ indistinguishable, so no claim about any of the three can be exercised.
    **Amendment (2026-09-16) — the group's identity is the interface number.**
    The last sentence of the quoted rule is the one the lock changes, and the
    ridl §17 disposition pass (story driftsys/ridl#319) changed it in the
-   reference. Decision 17 as amended keys a binding on (package, interface
-   number), and ridl §11 keeps that number across a rename, so identifying the
-   coherence group by the interface **name** would make a rename move the group
-   while the wire key held. The group is the **provided interface**, identified
-   by its number in the unit's `interfaces.lock` — an inline shape included,
-   under its `service:` entry — and the interface's name, or the service's
-   dotted name for an inline shape, is how the group is written rather than what
-   identifies it. Nothing else in this decision changes: the rule is still about
-   production, still implicit, and still conditional on the binding for what a
-   consumer observes. rsdl §3.2's citation of "ridl §14.5, group identity" for
-   an inline-shape service's dotted name stands, because that name is still how
-   the group is written.
+   reference. Decision 17 as amended keys a binding on (unit, interface number),
+   and ridl §11 keeps that number across a rename, so identifying the coherence
+   group by the interface **name** would make a rename move the group while the
+   wire key held. The group is the **provided interface**, identified by its
+   number in the unit's `interfaces.lock` — an inline shape included, under its
+   `service:` entry — and the interface's name, or the service's dotted name for
+   an inline shape, is how the group is written rather than what identifies it.
+   Nothing else in this decision changes: the rule is still about production,
+   still implicit, and still conditional on the binding for what a consumer
+   observes. rsdl §3.2's citation of "ridl §14.5, group identity" for an
+   inline-shape service's dotted name stands, because that name is still how the
+   group is written.
 
    It is **implicit, not declared.** Three rules the family already states
    produce it: §4.2 gives every flow exactly one owning provider; a provider
@@ -663,10 +663,10 @@ indistinguishable, so no claim about any of the three can be exercised.
     shape list the walk is unable to key.
 
     **Amendment (2026-09-15) — RIDL-147 and RIDL-148 retired with their rules.**
-    A binding keys on (package, interface number) (decision 17 as amended), so
-    two interfaces whose names collide are told apart by their numbers and
-    RIDL-147 has no rule left; a service's list holds no tombstone (decision 12
-    as amended), so RIDL-148 has nothing to spell. Both are retired by the lock
+    A binding keys on (unit, interface number) (decision 17 as amended), so two
+    interfaces whose names collide are told apart by their numbers and RIDL-147
+    has no rule left; a service's list holds no tombstone (decision 12 as
+    amended), so RIDL-148 has nothing to spell. Both are retired by the lock
     (ridl §16.4 keeps their rows, marked retired; the numbers are never reused).
     A retargeted slot no longer exists: a changed reference is
     `service_interface_removed` plus `service_interface_added`, both compatible
@@ -741,7 +741,7 @@ indistinguishable, so no claim about any of the three can be exercised.
 | ridl Appendix F                | the gRPC-deadline row moves from "≈ relocated" to in-contract, with the per-call override staying Stratum 3                                           |
 | general form R5                | the postfix order contradicts the shipped grammar — recorded as roadmap story E9.12, outside the scope of E9.4 to E9.6                                |
 | ridl §11 (2026-09-15)          | the one-level-up paragraph replaced by the lock model: numbers from the unit's `interfaces.lock`, provisional until `ridl lock`, RIDL-409 to RIDL-412 |
-| ridl §14.5 (2026-09-15)        | the list is a set; the ids, append-only and tombstone paragraphs replaced; the ordinal spaces keyed on (package, interface number)                    |
+| ridl §14.5 (2026-09-15)        | the list is a set; the ids, append-only and tombstone paragraphs replaced; the ordinal spaces keyed on (unit, interface number)                       |
 | ridl §16.4 (2026-09-15)        | RIDL-146 to RIDL-148 marked retired by the lock; RIDL-409 to RIDL-412 added                                                                           |
 | `ir.proto` (2026-09-15)        | `ServiceShape` reserves fields 1 and 12; `Interface.number`, `Interface.provisional`, `Package.retired` (decision 20 as amended)                      |
 | ADR-0016 (2026-09-15)          | its two RIDL-147 mentions (decision 3, References) cite the retirement                                                                                |

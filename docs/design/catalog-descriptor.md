@@ -179,12 +179,13 @@ unit, with the interface shapes of every source package of the unit under their
 catalog names in (number, catalog name) order with their numbers, and every
 declaration they reach in any unit of the build under its full canonical name,
 with doc strings, `labels` and `deprecated` blanked, and no services and no
-retired entries. A change to any source package of a unit changes the unit's
-hash, and so every port bound to an interface of the unit fails its catalog
-check until it is rebuilt. ADR-0014 decision 15 is the full rule, with the
-determinism rule for the binary and the reason the canonical JSON is not the
-input. There is one identity: the schema hash driftsys/ridl#275 asked for is
-this hash, so it does not depend on which wire schema a build emits.
+retired entries. A change to any source package of a unit that an interface of
+the unit reaches changes the unit's hash, and so every port bound to an
+interface of the unit fails its catalog check until it is rebuilt. ADR-0014
+decision 15 is the full rule, with the determinism rule for the binary and the
+reason the canonical JSON is not the input. There is one identity: the schema
+hash driftsys/ridl#275 asked for is this hash, so it does not depend on which
+wire schema a build emits.
 
 It is computed in `ridl-ir`, not in `ridl-descriptor`, because three artifacts
 carry it and `ridl-ir` is below all of them:
