@@ -418,8 +418,8 @@ compat-check: toolchain-check
 # compiling.
 #
 # `examples/cabin` is its own cargo workspace, outside this repository's. Its
-# `generated/` member is written here and is not in git, so nothing in the
-# repository's own workspace depends on a build output.
+# `generated/` and `generated-corpus/` members are written here and are not in
+# git, so nothing in the repository's own workspace depends on a build output.
 # `--locked` holds the committed `examples/cabin/Cargo.lock`; a dependency
 # change that the lock does not carry fails rather than silently resolving.
 #
@@ -631,8 +631,9 @@ lint:
 # directories includes are allowed to reach. A chapter may also include a
 # source from `examples/` by anchor, so that the code it shows is the code
 # `just demo` builds; the recipe copies every `.rs` and `.ridl` file under
-# `examples/`, and nothing under a `target/` or a `generated/` directory, which
-# hold build output and the generated crate.
+# `examples/`, and nothing under a `target/`, a `generated/` or a
+# `generated-corpus/` directory, which hold build output and the generated
+# crates.
 #
 # **mdBook exits 0 on a broken `{{#include}}`.** It logs `ERROR Error updating
 # ...`, leaves the directive in the page as literal text, renders the rest, and
@@ -699,9 +700,9 @@ book-check root="":
         # A chapter may include a source from examples/ by anchor, so the
         # code it shows is the code `just demo` builds. Copy the `.rs` and
         # `.ridl` sources too, and nothing else from examples/: no build
-        # output, no generated crate.
+        # output, no generated crates.
         if [ -d "$1/examples" ]; then
-            (cd "$1" && find examples \( -name '*.rs' -o -name '*.ridl' \) -not -path '*/target/*' -not -path '*/generated/*') |
+            (cd "$1" && find examples \( -name '*.rs' -o -name '*.ridl' \) -not -path '*/target/*' -not -path '*/generated/*' -not -path '*/generated-corpus/*') |
                 while IFS= read -r source; do
                     mkdir -p "$scratch/$(dirname "$source")"
                     cp "$1/$source" "$scratch/$source"
