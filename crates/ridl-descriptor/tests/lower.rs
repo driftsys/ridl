@@ -981,11 +981,21 @@ fn a_unit_of_two_packages_lowers_to_one_descriptor_with_qualified_names() {
         (old.name().unwrap(), old.number().unwrap()),
         ("cluster.Old", 3)
     );
-    // A package of another unit is not part of the descriptor.
+    // A package of another unit is not part of the descriptor, whether its
+    // name is unrelated or extends the unit's (`u.sib` is not in `u`).
     let other = Package {
         name: "w".to_owned(),
         interfaces: vec![interface("Other", 1)],
         ..Default::default()
     };
-    assert_eq!(lower("u", &[&root, &cluster, &other]).unwrap(), bytes);
+    let sibling = Package {
+        name: "u.sib".to_owned(),
+        unit: "u.sib".to_owned(),
+        interfaces: vec![interface("Sib", 4)],
+        ..Default::default()
+    };
+    assert_eq!(
+        lower("u", &[&root, &cluster, &other, &sibling]).unwrap(),
+        bytes
+    );
 }

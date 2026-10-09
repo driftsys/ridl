@@ -840,6 +840,45 @@ fn emit_catalog_writes_one_file_per_unit() {
     );
 }
 
+/// A unit with only types has no catalog: of a workspace with the unit
+/// `veh.a` (an interface) and the unit `veh.b` (a type), only `veh.a` gets a
+/// file.
+#[test]
+fn emit_catalog_writes_nothing_for_a_unit_without_an_interface() {
+    let dir = TempDir::new("catalog-type-only");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
+    dir.write(
+        "a/ridl.toml",
+        "[package]\nname = \"veh.a\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "a/a.ridl",
+        "package veh.a\ntype Level: integer [0..100]\ninterface Panel {\n  signal level: Level @10ms\n}\n",
+    );
+    dir.write(
+        "b/ridl.toml",
+        "[package]\nname = \"veh.b\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("b/b.typl", "package veh.b\ntype B: s\n");
+    let out = TempDir::new("catalog-type-only-out");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        dir.path().as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "catalog".as_ref(),
+    ]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    let mut files: Vec<String> = std::fs::read_dir(out.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|name| name.ends_with(ridl_descriptor::FILE_SUFFIX))
+        .collect();
+    files.sort();
+    assert_eq!(files, ["veh.a.catalog.binfb"]);
+}
+
 /// rsdl reference §13 (driftsys/ridl#367): each region of
 /// the lowered system carries the catalog hash of its catalog, 32 bytes, equal
 /// to the hash in the catalog descriptor the same build writes. The build

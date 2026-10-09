@@ -171,7 +171,11 @@ mod tests {
         root.services.push(inline_service("veh.x", 3));
         let mut other = package(vec![interface("Other", 1, false)]);
         other.name = "w".to_owned();
-        let names: Vec<String> = numbered_shapes("u", &[&root, &cluster, &other, &root])
+        // Its name extends the unit's, but it is the root of its own unit.
+        let mut sibling = package(vec![interface("Sib", 4, false)]);
+        sibling.name = "u.sib".to_owned();
+        sibling.unit = "u.sib".to_owned();
+        let names: Vec<String> = numbered_shapes("u", &[&root, &cluster, &other, &sibling, &root])
             .unwrap()
             .into_iter()
             .map(|n| n.name)
