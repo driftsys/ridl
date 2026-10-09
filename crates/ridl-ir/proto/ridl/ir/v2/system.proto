@@ -44,7 +44,7 @@ syntax = "proto3";
 // (ridl §14.5) — and whether it is inline, because the two names may be spelled the same. None
 // of these names is a wire identity (rsdl §1.3): the routing key is
 // (catalog, interface number, member ordinal), and the interface numbers
-// come from each package's lock through `Interface.number` in `ir.proto`.
+// come from each unit's lock through `Interface.number` in `ir.proto`.
 //
 // Field numbering follows `ir.proto`: data fields start at 1; oneof members
 // start at 10.
@@ -247,7 +247,7 @@ message RegionInterface {
   string name = 1;
   // True for the inline shape of a service.
   bool inline = 2;
-  // The interface number from the package's lock (`Interface.number`).
+  // The interface number from the unit's lock (`Interface.number`).
   uint32 number = 3;
   // True when the number has no lock entry yet (`Interface.provisional`).
   bool provisional = 4;

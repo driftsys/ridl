@@ -789,9 +789,8 @@ fn build_system(entry: &Path, system: &str, emits: &str) -> (ridl_ir::v2::System
     (system, out)
 }
 
-/// The catalog hash in the descriptor of the unit of the package `catalog`:
-/// the unit is read from the `<catalog>.ir.json` the same build wrote, and the
-/// descriptor is `<unit>.catalog.binfb`.
+/// The catalog hash in the descriptor of `unit`, `<unit>.catalog.binfb`,
+/// that the build wrote to `out`.
 fn descriptor_hash(out: &Path, unit: &str) -> Vec<u8> {
     let bytes = std::fs::read(out.join(format!("{unit}{}", ridl_descriptor::FILE_SUFFIX)))
         .expect("the catalog descriptor is written");

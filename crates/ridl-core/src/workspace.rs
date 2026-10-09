@@ -815,7 +815,8 @@ impl Loader {
     }
 
     /// Reads `dir/interfaces.lock` for the unit whose manifest directory is
-    /// `dir`, or for the directory of a bare source file (lock design §2). An absent file is `None`. A malformed file — one that is
+    /// `dir`, or for the directory of a bare source file (lock design §2). An
+    /// absent file is `None`. A malformed file — one that is
     /// not valid UTF-8 included — is RIDL-410 on the offending line of the
     /// lock file itself, through this loader's source map, at the empty range
     /// 0..0 when there is no line to point at (plan decision PD-3); the

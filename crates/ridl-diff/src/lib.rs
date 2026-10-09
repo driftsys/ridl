@@ -287,7 +287,7 @@ pub(crate) fn emit(
 }
 
 /// Whether an interface carries an identity: a frozen, non-zero number from
-/// its package's `interfaces.lock` (lock design §7). A provisional number is
+/// its unit's `interfaces.lock` (lock design §7). A provisional number is
 /// no identity, and `number` 0 — never allocated — marks a snapshot published
 /// before the lock existed. The walk matches by number only when both sides
 /// have one, and the classifier re-finds the old side the same way.

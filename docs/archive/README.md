@@ -495,3 +495,14 @@ provenance. Nothing here is normative — the current references live in
   [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 21,
   whose alternatives table carries the design's rejected options. The as-built
   behaviour is in [the `ridl-rt` design record](../design/ridl-rt.md).
+- **2026-10-08-catalog-per-unit-design.md**,
+  **2026-10-08-catalog-per-unit-plan.md**,
+  **2026-10-08-catalog-per-unit-handoff.md** and **catalog-per-unit-handoff.md**
+  — one catalog, one `interfaces.lock` and one interface-number space per unit,
+  the unit being one `[package]` manifest and its directory tree
+  (driftsys/ridl#777): the spec, the plan, the execution handoff, and the Kotlin
+  heads-up with the release note and its migration steps. All four are archived
+  verbatim. The as-built behaviour is in
+  [the catalog descriptor design record](../design/catalog-descriptor.md), the
+  ridl reference section 11, and
+  [ADR-0002](../decisions/ADR-0002-module-system.md) sections 1 and 4.

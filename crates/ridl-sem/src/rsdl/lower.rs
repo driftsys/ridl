@@ -5,7 +5,7 @@
 //! reads the checked model and the lowered IR of the workspace's packages,
 //! which carries the inputs rsdl does not own (rsdl §13): each interface's
 //! number and provisional flag (`Interface.number`, `Interface.provisional`,
-//! from the package's lock) and each member's ordinal (`Decl.ordinal`, ridl
+//! from the unit's lock) and each member's ordinal (`Decl.ordinal`, ridl
 //! §11).
 //!
 //! **Gating (rsdl §13).** An error in the closure blocks lowering for every

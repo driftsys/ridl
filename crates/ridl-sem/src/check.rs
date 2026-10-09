@@ -4061,7 +4061,7 @@ impl Checker<'_> {
 
     /// Lowers a service's list of interfaces (ADR-0015 decisions 12 to 18, as
     /// amended by the lock design): a set of canonical references, in source
-    /// order. An interface's number comes from its package's `interfaces.lock`
+    /// order. An interface's number comes from its unit's `interfaces.lock`
     /// (`Interface.number`), not from its place here, so the list carries no
     /// slot id and no tombstone. Two rules guard the list:
     ///

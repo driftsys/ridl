@@ -1,8 +1,8 @@
-//! The per-package `interfaces.lock` (lock design §2): the line table that
-//! gives every interface of a package its number.
+//! The unit's `interfaces.lock` (lock design §2): the line table that gives
+//! every interface of a unit its number.
 //!
-//! The file lives in the package directory beside the `.ridl` sources, one
-//! per package, and only `ridl lock` writes it. Its form is a line table:
+//! The file lives in the unit's manifest directory, beside its `ridl.toml`,
+//! one per unit, and only `ridl lock` writes it. Its form is a line table:
 //!
 //! ```text
 //! # interfaces.lock — written by ridl lock; do not edit by hand.
@@ -28,7 +28,8 @@
 //!   the dotted name of the service whose inline shape the entry numbers (lock
 //!   design §3). A catalog name is the interface's source package path
 //!   relative to the unit, then its name, joined by `.` (`cluster.Speed`); an
-//!   interface of the unit's root source package keeps its short name. The prefix is needed because `interface cabin` and
+//!   interface of the unit's root source package keeps its short name. The
+//!   `service:` prefix is needed because `interface cabin` and
 //!   `service cabin` check clean together in one package.
 //!
 //! The reader ([`parse`]) skips an empty line and every line whose first
@@ -53,7 +54,7 @@ use std::path::Path;
 
 use rowan::{TextRange, TextSize};
 
-/// The file's name inside the package directory.
+/// The file's name inside the unit's manifest directory.
 pub const FILE_NAME: &str = "interfaces.lock";
 
 /// The first line of every written file. The reader ignores it like any other
@@ -99,8 +100,9 @@ impl FromStr for LockKey {
     type Err = InvalidLockKey;
 
     /// Accepts one or more identifiers (`[A-Za-z][A-Za-z0-9_]*`, the lexer's
-    /// rule) joined by `.` for an interface, or `service:` followed by identifiers joined by `.` for
-    /// an inline shape. No word is reserved: `next` is not a keyword of the
+    /// rule) joined by `.` for an interface, or `service:` followed by
+    /// identifiers joined by `.` for an inline shape. No word is reserved:
+    /// `next` is not a keyword of the
     /// language, so an interface may be named `next`, and [`parse`] finds the
     /// `next N` line by position rather than by its first word (plan decision
     /// PD-19).

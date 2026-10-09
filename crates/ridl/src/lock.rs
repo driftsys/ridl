@@ -4,8 +4,9 @@
 //! Plain `ridl lock` allocates a number to every interface that has none —
 //! every declared interface and every service's inline shape whose key has
 //! no live entry — and writes each unit's own file, in its manifest
-//! directory. It is the only form that allocates: a branch never allocates, and the release recipe or the
-//! merge queue runs this on `main` (lock design §4). `--rename OLD=NEW` and
+//! directory. It is the only form that allocates: a branch never allocates,
+//! and the release recipe or the merge queue runs this on `main` (lock
+//! design §4). `--rename OLD=NEW` and
 //! `--retire NAME` rewrite one entry each, in place, and never allocate. They
 //! are the fix RIDL-409 names, so they run with RIDL-409 present, and `PATH`
 //! must then resolve to exactly one unit. Any other compile error exits 1

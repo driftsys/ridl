@@ -1342,8 +1342,9 @@ fn rename_labels(
 }
 
 /// The orphan entry a RIDL-409 points at: its key, read from the first field
-/// of the lock line under the diagnostic's span, and the package directory —
-/// the lock file's parent — as the message names it (plan decision PD-4).
+/// of the lock line under the diagnostic's span, and the unit's manifest
+/// directory — the lock file's parent — as the message names it (plan
+/// decision PD-4).
 fn orphan_entry(sources: &SourceMap, diagnostic: &Diagnostic) -> Option<(LockKey, String)> {
     let path = sources.path(diagnostic.primary.file)?;
     let text = sources.text(diagnostic.primary.file)?;
@@ -1379,8 +1380,8 @@ fn same_shape(old: &ridl_ir::v2::Interface, new: &ridl_ir::v2::Interface) -> boo
 }
 
 /// The directory a file path sits in, as a string: its parent, or `.` when
-/// the path has none — the form the loader records a package directory in and
-/// the RIDL-409 message names it in.
+/// the path has none — the form the loader records a unit's manifest
+/// directory in and the RIDL-409 message names it in.
 fn directory_of(path: &str) -> String {
     match Path::new(path).parent() {
         Some(dir) if !dir.as_os_str().is_empty() => dir.to_string_lossy().into_owned(),
@@ -2180,9 +2181,10 @@ struct DeclIndex {
     /// keyed by its dotted name, exactly as its diff paths are.
     shapes: BTreeMap<(String, String), (String, TextRange)>,
     /// The package each indexed directory declares, by the directory's path
-    /// as [`directory_of`] spells it. A package's `interfaces.lock` sits in
-    /// the package directory, so the lock file's parent names the package a
-    /// RIDL-409 belongs to.
+    /// as [`directory_of`] spells it. A unit's `interfaces.lock` sits in the
+    /// unit's manifest directory, which is its root package's directory, so
+    /// the lock file's parent names a package of the unit a RIDL-409 belongs
+    /// to.
     packages: BTreeMap<String, String>,
 }
 

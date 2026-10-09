@@ -290,8 +290,9 @@ rewrite.
 
 **No manifest inside a unit** (amended 2026-10-09). A `ridl.toml` in a
 subdirectory of a unit's tree raises MANI-013 (Error), and the loader does not
-treat that directory as a separate package root. A workspace member lives in its
-own top-level directory, not under another member's directory.
+treat that directory as a separate package root. A workspace member's directory
+may not sit inside another unit's tree; where it sits otherwise is the
+workspace's choice.
 
 **Rationale — workspace nesting forbidden.** Cargo permits nested workspaces;
 the feature is rarely used correctly and creates ambiguity when tools try to

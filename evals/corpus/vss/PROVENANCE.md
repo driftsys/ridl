@@ -130,9 +130,10 @@ and signal names remain exactly as upstream; no other lexical rename is needed.
 
 ## Layout
 
-Each translated VSS branch is one top-level workspace member, in a directory
-named after its package, because a unit's tree holds no second manifest: a
-`ridl.toml` inside another member's directory tree is an error.
+Each translated VSS branch is one workspace member, in a directory named after
+its package and outside every other member's tree, because a unit's tree holds
+no second manifest: a `ridl.toml` inside another member's directory tree is an
+error (MANI-013).
 
 ## Instance and source-comment preservation
 
