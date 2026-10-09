@@ -863,13 +863,16 @@ pub mod v2 {
         if package == unit {
             return name.to_owned();
         }
-        debug_assert!(
-            package
-                .strip_prefix(unit)
-                .is_some_and(|rest| rest.starts_with('.')),
-            "package `{package}` is not inside unit `{unit}`"
-        );
-        format!("{}.{name}", &package[unit.len() + 1..])
+        // A package outside the unit — a corrupt or hand-edited snapshot
+        // read by `ridl diff` — keeps its full name, so no name is wrong and
+        // nothing panics in a release build.
+        match package
+            .strip_prefix(unit)
+            .and_then(|rest| rest.strip_prefix('.'))
+        {
+            Some(below) => format!("{below}.{name}"),
+            None => format!("{package}.{name}"),
+        }
     }
 
     impl Package {
@@ -2008,6 +2011,37 @@ mod v2_round_trip {
             v2::relative_name("com.example.hmi", "com.example.hmi.cluster.front", "A"),
             "cluster.front.A"
         );
+    }
+
+    /// A package that is not inside the unit keeps its full name: no slice
+    /// past the unit's length, whatever the snapshot says.
+    #[test]
+    fn relative_name_keeps_the_full_name_of_a_package_outside_the_unit() {
+        assert_eq!(
+            v2::relative_name("u", "w.cluster", "Speed"),
+            "w.cluster.Speed"
+        );
+        assert_eq!(v2::relative_name("u", "ux", "A"), "ux.A");
+        assert_eq!(v2::relative_name("u.cluster", "u", "Session"), "u.Session");
+    }
+
+    /// A package named twice in the slice contributes its retired entries
+    /// once.
+    #[test]
+    fn unit_retired_reads_a_package_named_twice_once() {
+        let package = v2::Package {
+            name: "u.cluster".to_string(),
+            unit: "u".to_string(),
+            retired: vec![v2::RetiredInterface {
+                name: "cluster.Old".to_string(),
+                number: 3,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let once = v2::unit_retired("u", &[&package]);
+        assert_eq!(once.len(), 1);
+        assert_eq!(v2::unit_retired("u", &[&package, &package]), once);
     }
 
     #[test]
