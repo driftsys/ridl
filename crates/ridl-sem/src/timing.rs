@@ -1439,6 +1439,38 @@ mod tests {
         }
     }
 
+    /// A readable zero minimum in an RPC range that did not parse whole still
+    /// draws RIDL-102. The guard that keeps RIDL-101 and RIDL-108 off the
+    /// completed range compares the minimum with a maximum the author did not
+    /// write; the zero check reads only the written minimum, so the parser's
+    /// FORM-101 does not replace it.
+    #[test]
+    fn ridl_102_on_a_readable_zero_minimum_in_a_range_that_did_not_parse_whole() {
+        let default = parse_rpc_default_timing("[10ms..1s]").expect("valid default");
+        for (decl, kind) in [
+            (
+                "command setTarget(p: Speed) @[0ms..10xs]",
+                InteractionKind::Command,
+            ),
+            (
+                "query getSpeed(): Speed @[0ms..10xs]",
+                InteractionKind::Query,
+            ),
+        ] {
+            let (timing, parse_codes) = annot_and_parse_codes(decl);
+            assert!(
+                !parse_codes.is_empty() && parse_codes.iter().all(|code| *code == "FORM-101"),
+                "{decl}: {parse_codes:?}"
+            );
+            let (spec, diags) = resolve(Some(&timing), kind, &default);
+            assert_eq!(codes(&diags), vec!["RIDL-102"], "{decl}");
+            assert_written_units(&diags[0].message, &["0ms"]);
+            let spec = spec.expect("a malformed annotation still resolves");
+            assert_eq!(spec.min_us, value_of("0ms"), "{decl}: min");
+            assert_eq!(spec.max_us, value_of("1s"), "{decl}: max from the default");
+        }
+    }
+
     /// Both RPC kinds, each with a sample declaration whose annotation the
     /// caller appends.
     const RPC_KINDS: [(&str, InteractionKind); 2] = [
