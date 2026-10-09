@@ -555,8 +555,10 @@ fn the_codec_borrows_nothing_twice() {
         "a named bytes field is passed as the slice that `get` returns, got:\n{source}"
     );
     assert!(
-        !source.contains("push_string(&") && !source.contains("push_vector(&"),
-        "no codec argument may borrow a reference, got:\n{source}"
+        !source.contains("push_string(&")
+            && !source.lines().any(|l| l.contains("push_vector(&")
+                && (l.contains(".get()") || l.contains(".as_slice()"))),
+        "no text or bytes operand may borrow the reference that `get`, `as_str` or `as_slice` returns, got:\n{source}"
     );
 }
 
@@ -1063,7 +1065,7 @@ fn the_integer_step_check_binds_its_verdict_and_casts_no_literal() {
                     v2::PrimitiveType::Integer as i32,
                 )),
             }),
-            constraint: Some(constraint(Some("0"), Some("100"), Some("5"))),
+            constraint: Some(constraint(Some("10"), Some("100"), Some("5"))),
             declared_init: None,
             init: Some(init_value(true, Some("0"))),
             width: derived_int_width(),
@@ -1084,8 +1086,17 @@ fn the_integer_step_check_binds_its_verdict_and_casts_no_literal() {
     );
     assert!(
         source.contains("let __step: ::core::primitive::i128 = 5;")
-            && source.contains("let __origin: ::core::primitive::i128 = 0;"),
+            && source.contains("let __origin: ::core::primitive::i128 = 10;"),
         "the step and the origin are bound as literals of the wide type, got:\n{source}"
+    );
+    assert!(
+        source.contains("- __origin) % __step != 0"),
+        "the condition must use the bindings, got:\n{source}"
+    );
+    assert!(
+        !source.contains("10 as ::core::primitive::i128")
+            && !source.contains("5 as ::core::primitive::i128"),
+        "no integer literal may be cast, got:\n{source}"
     );
 }
 

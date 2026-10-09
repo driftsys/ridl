@@ -534,7 +534,8 @@ demo:
         --no-default-features --target thumbv7em-none-eabihf
     cargo check --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked \
         --no-default-features --features validate-pattern
-    # The corpus crate is linted as well, under no allowance for the emitter.
+    # The corpus crate is linted as well. The only allowance on the command line is
+    # `dead_code`, and the lints that its `lib.rs` allows stay allowed.
     # `dead_code` is allowed for this one run: the corpus declares items that
     # nothing uses, and the `dead_code` warnings come from the corpus's
     # `internal` structs, not from the emitter. Every other lint fails the run.
