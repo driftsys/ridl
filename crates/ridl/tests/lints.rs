@@ -271,6 +271,7 @@ fn unreadable_rpc_range_draws_form_101_and_no_ridl_101_or_108() {
     );
     assert!(!stderr.contains("RIDL-101"), "no RIDL-101:\n{stderr}");
     assert!(!stderr.contains("RIDL-108"), "no RIDL-108:\n{stderr}");
+    assert!(!stderr.contains("RIDL-112"), "no RIDL-112:\n{stderr}");
 }
 
 #[test]

@@ -1644,17 +1644,24 @@ mod tests {
         );
         assert_eq!(codes(&zero), vec!["RIDL-102"]);
 
-        let (_, degenerate) = resolve(
-            Some(&annot("query getSpeed(): Speed @[30ms..30ms]")),
-            InteractionKind::Query,
-            &builtin_default_timing(),
-        );
-        assert_eq!(codes(&degenerate), vec!["RIDL-108"]);
-        assert!(
-            !degenerate[0].message.contains("@30ms"),
-            "an RPC has no strict period to be offered: {}",
-            degenerate[0].message,
-        );
+        for (decl, kind) in [
+            (
+                "query getSpeed(): Speed @[30ms..30ms]",
+                InteractionKind::Query,
+            ),
+            (
+                "command setTarget(speed: Speed) @[30ms..30ms]",
+                InteractionKind::Command,
+            ),
+        ] {
+            let (_, degenerate) = resolve(Some(&annot(decl)), kind, &builtin_default_timing());
+            assert_eq!(codes(&degenerate), vec!["RIDL-108"], "{decl}");
+            assert!(
+                !degenerate[0].message.contains("@30ms"),
+                "{decl}: an RPC has no strict period to be offered: {}",
+                degenerate[0].message,
+            );
+        }
     }
 
     #[test]
