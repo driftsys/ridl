@@ -741,6 +741,10 @@ message Catalog {
   bytes hash = 2;
   // `Package.retired`, number order.
   repeated RetiredInterface retired = 3;
+  // The descriptor's list of compatible catalog hashes, in the same order:
+  // each a 32-byte SHA-256 catalog hash of an earlier catalog this one is
+  // compatible with. Empty when no history applies.
+  repeated bytes compatible = 4;
 }
 
 message RetiredInterface {

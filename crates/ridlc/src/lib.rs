@@ -1786,6 +1786,7 @@ pub fn codegen_request(
     base: &str,
     package: &ridl_ir::v2::Package,
     others: &[&ridl_ir::v2::Package],
+    compatible: &[[u8; 32]],
     options: Vec<v1::BackendOption>,
     deployment: Option<v1::Deployment>,
     header: Option<&str>,
@@ -1793,7 +1794,7 @@ pub fn codegen_request(
     v1::CodegenRequest {
         schema: codegen::SCHEMA.to_string(),
         toolchain: env!("CARGO_PKG_VERSION").to_string(),
-        model: Some(codegen::lower(package, others)),
+        model: Some(codegen::lower_with(package, others, compatible)),
         options,
         artifact_base: base.to_string(),
         deployment,
@@ -2066,8 +2067,17 @@ fn write_emits(
     // One request per package, built only when something reads it: an IR
     // dump alone lowers nothing.
     let needs_request = !plugins.is_empty() || emits.iter().any(|emit| !emit.is_ir_dump());
-    let request = needs_request
-        .then(|| codegen_request(base, ir, others, Vec::new(), deployment.cloned(), header));
+    let request = needs_request.then(|| {
+        codegen_request(
+            base,
+            ir,
+            others,
+            &[],
+            Vec::new(),
+            deployment.cloned(),
+            header,
+        )
+    });
     let raw = codegen::RawIr {
         package: ir,
         others,

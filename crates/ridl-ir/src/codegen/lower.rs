@@ -32,6 +32,17 @@ use crate::v2;
 /// and a plugin must be able to tell "this reference names a package I was
 /// not given" from "this reference names nothing".
 pub fn lower(package: &v2::Package, others: &[&v2::Package]) -> v1::Model {
+    lower_with(package, others, &[])
+}
+
+/// Lowers one package like [`lower`], and records `compatible` as the
+/// catalog's list of compatible earlier catalog hashes, in the order given.
+/// The list is carried through unchanged and never feeds the catalog hash.
+pub fn lower_with(
+    package: &v2::Package,
+    others: &[&v2::Package],
+    compatible: &[[u8; 32]],
+) -> v1::Model {
     let scope = Scope { package, others };
     let mut lowering = Lowering {
         scope,
@@ -73,7 +84,7 @@ pub fn lower(package: &v2::Package, others: &[&v2::Package]) -> v1::Model {
             .collect(),
         interfaces,
         services: lowering.services(),
-        catalog: Some(lowering.catalog()),
+        catalog: Some(lowering.catalog(compatible)),
         flatbuffers: None,
         foreign: lowering.foreign.clone(),
         tuple_collisions: lowering.collisions.clone(),
@@ -1086,10 +1097,11 @@ impl<'a> Lowering<'a> {
 
     /// The catalog of the unit the package belongs to: the unit name, the
     /// unit's hash (ADR-0014 decision 15) over the same scope the model is
-    /// lowered over, and the unit's retired entries. The package is listed
-    /// before the scope's others, which may hold it too; the hash and the
-    /// retired list read a package named twice once.
-    fn catalog(&mut self) -> v1::Catalog {
+    /// lowered over, the unit's retired entries, and the `compatible` hashes as
+    /// given. The hash does not read `compatible`. The package is listed before
+    /// the scope's others, which may hold it too; the hash and the retired list
+    /// read a package named twice once.
+    fn catalog(&mut self, compatible: &[[u8; 32]]) -> v1::Catalog {
         let unit = v2::unit_of(self.scope.package);
         let packages: Vec<&v2::Package> = std::iter::once(self.scope.package)
             .chain(self.scope.others.iter().copied())
@@ -1104,6 +1116,7 @@ impl<'a> Lowering<'a> {
                     number: entry.number,
                 })
                 .collect(),
+            compatible: compatible.iter().map(|hash| hash.to_vec()).collect(),
         }
     }
 }

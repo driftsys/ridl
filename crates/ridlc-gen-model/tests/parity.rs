@@ -87,8 +87,15 @@ fn the_plugin_answers_every_corpus_request_as_the_in_process_backend_does() {
     for (entry, packages) in corpus_packages() {
         let others: Vec<&v2::Package> = packages.iter().collect();
         for package in &packages {
-            let request =
-                ridlc::codegen_request(&package.name, package, &others, Vec::new(), None, None);
+            let request = ridlc::codegen_request(
+                &package.name,
+                package,
+                &others,
+                &[],
+                Vec::new(),
+                None,
+                None,
+            );
             let label = format!("{entry}: package {}", package.name);
 
             let in_process = ModelBackend.generate(&request);

@@ -1,5 +1,6 @@
 ---
 source: crates/ridlc/tests/corpus.rs
+assertion_line: 378
 expression: compiled.codegen
 input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
 ---
@@ -1458,7 +1459,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
   "catalog": {
     "package": "veh.common",
     "hash": "9upx9DugcGTvaIBLAnIraYj6oje9uwMK5AnG/8ZEwt4=",
-    "retired": []
+    "retired": [],
+    "compatible": []
   },
   "flatbuffers": {
     "roots": [

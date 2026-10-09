@@ -1,5 +1,6 @@
 ---
 source: crates/ridlc/tests/corpus.rs
+assertion_line: 378
 expression: compiled.codegen
 input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
 ---
@@ -378,7 +379,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   "catalog": {
     "package": "veh",
     "hash": "lJ/A1xcXiHvJmhNNG8aqjkDJe21IyYJgZFy7xHoNpNo=",
-    "retired": []
+    "retired": [],
+    "compatible": []
   },
   "flatbuffers": {
     "roots": [],
@@ -764,7 +766,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   "catalog": {
     "package": "veh",
     "hash": "lJ/A1xcXiHvJmhNNG8aqjkDJe21IyYJgZFy7xHoNpNo=",
-    "retired": []
+    "retired": [],
+    "compatible": []
   },
   "flatbuffers": {
     "roots": [
@@ -1034,7 +1037,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   "catalog": {
     "package": "veh",
     "hash": "lJ/A1xcXiHvJmhNNG8aqjkDJe21IyYJgZFy7xHoNpNo=",
-    "retired": []
+    "retired": [],
+    "compatible": []
   },
   "flatbuffers": {
     "roots": [],
@@ -1139,7 +1143,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   "catalog": {
     "package": "veh",
     "hash": "lJ/A1xcXiHvJmhNNG8aqjkDJe21IyYJgZFy7xHoNpNo=",
-    "retired": []
+    "retired": [],
+    "compatible": []
   },
   "flatbuffers": {
     "roots": [],

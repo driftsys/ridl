@@ -288,6 +288,7 @@ fn request_for(entry: &Path, name: &str) -> (v1::CodegenRequest, Option<v2::Syst
         name,
         &packages[0],
         &refs[1..],
+        &[],
         Vec::new(),
         Some(deployment),
         None,

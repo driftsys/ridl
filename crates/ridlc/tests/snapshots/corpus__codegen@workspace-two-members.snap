@@ -1,5 +1,6 @@
 ---
 source: crates/ridlc/tests/corpus.rs
+assertion_line: 378
 expression: compiled.codegen
 input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
 ---
@@ -107,7 +108,8 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
   "catalog": {
     "package": "veh.common",
     "hash": "9upx9DugcGTvaIBLAnIraYj6oje9uwMK5AnG/8ZEwt4=",
-    "retired": []
+    "retired": [],
+    "compatible": []
   },
   "flatbuffers": {
     "roots": [
@@ -254,7 +256,8 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
   "catalog": {
     "package": "veh.cluster",
     "hash": "iFJsv67oBbagUgoaz+HO3behuC8zWYDcY6FDr6/eOHE=",
-    "retired": []
+    "retired": [],
+    "compatible": []
   },
   "flatbuffers": {
     "roots": [
