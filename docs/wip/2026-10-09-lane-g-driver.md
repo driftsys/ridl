@@ -230,3 +230,16 @@ Each ruling: what was decided — why — what it costs if wrong.
   inline shape of the same name) that no test pins; G2 adds that test, proven by
   a mutation that reverses the tie-break — the specification must not state a
   rule the suite does not hold — if wrong, one extra test.
+- **R-16** G2 RIDL-412 wording: the snapshot-deletion override is offered only
+  when the whole unit is gone from the fresh set, and then the message does not
+  lead with restoring a line in the unit's `interfaces.lock`, which no longer
+  exists. A package gone from a unit that remains keeps the lost-interface
+  message, whose remedy (retire the number) is enough — deleting a unit's
+  snapshots drops the gate for every package of that unit for one publication,
+  which is too broad for one package — if wrong, a user removing one package
+  reads one remedy fewer.
+- **R-17** G2: a legacy snapshot with no `unit` that loses a package is now
+  refused instead of passing silently; accepted and stated in the pull request
+  body, with no new test — it occurs only during the migration to per-unit
+  locks, and refusing is the gate's purpose — if wrong, a user mid-migration
+  retires or restores the number by hand.
