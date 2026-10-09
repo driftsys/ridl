@@ -700,9 +700,9 @@ impl Loader {
     /// of the tree carries `lock`, the unit's `interfaces.lock` read from the
     /// manifest directory; a lock in any other directory is not read and is
     /// RIDL-416. A `.rxdl` or `.rmdl` file, on disk or as an overlay, is not
-    /// compiled and is RIDL-417, once per file, in path order. A member listed twice in `[workspace]
-    /// members` reaches this function once: the `members` loop skips its
-    /// later listings. Two
+    /// compiled and is RIDL-417, once per file, in path order. A member
+    /// listed twice in `[workspace] members` reaches this function once: the
+    /// `members` loop skips its later listings. Two
     /// directories of one unit that give one package name (`a.b/` and
     /// `a/b/`) are not MANI-014: both are loaded.
     fn load_package_tree(
@@ -2802,7 +2802,11 @@ service:veh.common.climate 2
             .iter()
             .map(|diag| {
                 assert_eq!(diag.severity, Severity::Warning);
-                assert!(diag.message.contains("`.rmdl`"), "{}", diag.message);
+                assert!(
+                    diag.message.contains("is a `.rmdl` file; the rmdl profile"),
+                    "{}",
+                    diag.message
+                );
                 loaded.sources.path(diag.primary.file).map(str::to_string)
             })
             .collect();
@@ -2832,6 +2836,40 @@ service:veh.common.climate 2
             loaded.sources.text(loaded.diagnostics[0].primary.file),
             Some(text)
         );
+    }
+
+    /// Without an overlay the RIDL-417 span is interned with no text: the
+    /// span is empty, so the file on disk is not read.
+    #[test]
+    fn a_rxdl_file_on_disk_interns_no_text() {
+        let (dir, _) = overlay_fixture();
+        dir.write("p/b.rxdl", "package p\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, &dir.path().join("p")).expect("the tree loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["RIDL-417"]);
+        assert_eq!(
+            loaded.sources.text(loaded.diagnostics[0].primary.file),
+            Some("")
+        );
+    }
+
+    /// A `.rxdl` or `.rmdl` file given as the entry inside a package
+    /// directory is not a load error: the package loads, and the file draws
+    /// RIDL-417 as the other files of the directory do.
+    #[test]
+    fn a_rxdl_or_rmdl_entry_in_a_package_directory_is_a_warning() {
+        for extension in ["rxdl", "rmdl"] {
+            let (dir, typl) = overlay_fixture();
+            let entry = dir.write(&format!("p/b.{extension}"), "package p\n");
+            let mut db = RidlDatabase::default();
+            let loaded = load_workspace(&mut db, &entry).expect("the package loads");
+            assert_eq!(codes(&loaded.diagnostics), vec!["RIDL-417"]);
+            assert_eq!(
+                loaded.sources.path(loaded.diagnostics[0].primary.file),
+                Some(path_string(&entry).as_str())
+            );
+            assert_eq!(compiled_paths(&db, &loaded), vec![path_string(&typl)]);
+        }
     }
 
     /// RIDL-417 is reported in path order for the files of one directory,

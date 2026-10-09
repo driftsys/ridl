@@ -230,6 +230,20 @@ fn a_bare_rxdl_or_rmdl_file_is_refused_by_every_command() {
             assert!(!stdout.contains("identical"), "{context}");
         }
         assert!(!out.exists(), "`ridl build` wrote {}", out.display());
+
+        // A supported old side does not hide an unsupported new side.
+        let supported = dir.write("supported/hmi.ridl", "package veh.hmi\ntype B: m\n");
+        let (code, stdout, stderr) =
+            ridl(&["diff".as_ref(), supported.as_os_str(), new.as_os_str()]);
+        let context = format!("stdout:\n{stdout}\nstderr:\n{stderr}");
+        assert_eq!(code, 2, "{context}");
+        assert!(
+            stderr.contains(&format!(
+                "`.{extension}` is not a supported source file extension"
+            )),
+            "{context}"
+        );
+        assert!(!stdout.contains("identical"), "{context}");
     }
 }
 
