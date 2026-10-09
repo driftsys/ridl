@@ -118,6 +118,19 @@ pub fn catalog_hash(unit: &str, packages: &[&Package]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
+/// Rewrites every type reference inside `decl`, a declaration of `package`,
+/// to its canonical `pkg.Name`: a bare name that `package` declares gains the
+/// package's name, as [`reduced_unit`] spells it. A qualified name, and a
+/// bare name `package` does not declare, stay as written. The references
+/// rewritten are the ones [`visit_refs`] lists.
+pub fn canonicalize_refs(decl: &mut Decl, package: &Package) {
+    visit_refs(decl, &mut |name| {
+        if package.decls.iter().any(|declared| declared.name == *name) {
+            *name = format!("{}.{name}", package.name);
+        }
+    });
+}
+
 /// The declarations of every package of the build, for name resolution.
 ///
 /// The IR writes a reference as the bare `Name` when the referenced

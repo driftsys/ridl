@@ -1294,24 +1294,20 @@ fn rename_labels(
         })
         .collect();
     for (position, old, dir) in orphans {
-        // The lock sits in the unit's manifest directory, so the package the
-        // index finds there is a package of the unit; the unit holds the
-        // orphan entry's shape under its catalog name.
-        let Some(package) = index.package_of_dir(&dir) else {
+        // The lock sits in the unit's manifest directory, which need not
+        // declare a package itself; the unit holds the orphan entry's shape
+        // under its catalog name, in any of its packages.
+        let Some(unit) = index.unit_of_dir(&dir, current) else {
             continue;
         };
-        let Some(unit) = baseline
-            .iter()
-            .find(|candidate| candidate.name == package)
-            .map(ridl_ir::v2::unit_of)
+        let Some((published_package, published)) = ridl_ir::v2::packages_of_unit(unit, baseline)
+            .find_map(|member| {
+                member
+                    .shapes()
+                    .find(|shape| lock::shape_key(member, shape) == old)
+                    .map(|shape| (member, shape))
+            })
         else {
-            continue;
-        };
-        let Some(published) = ridl_ir::v2::packages_of_unit(unit, baseline).find_map(|member| {
-            member
-                .shapes()
-                .find(|shape| lock::shape_key(member, shape) == old)
-        }) else {
             continue;
         };
         let candidates: Vec<(&ridl_ir::v2::Package, ridl_ir::v2::InterfaceShape<'_>)> =
@@ -1321,7 +1317,10 @@ fn rename_labels(
                         .shapes()
                         .filter(|shape| {
                             shape.interface.provisional
-                                && same_shape(published.interface, shape.interface)
+                                && same_shape(
+                                    (published_package, published.interface),
+                                    (fresh, shape.interface),
+                                )
                         })
                         .map(move |shape| (fresh, shape))
                 })
@@ -1362,8 +1361,19 @@ fn orphan_entry(sources: &SourceMap, diagnostic: &Diagnostic) -> Option<(LockKey
 /// `Interface`'s own fields — name, visibility, doc, number, provisional flag
 /// — are not members and are not compared: the baseline's interface is frozen
 /// and the candidate is provisional, so whole values would never match.
-fn same_shape(old: &ridl_ir::v2::Interface, new: &ridl_ir::v2::Interface) -> bool {
-    fn members(interface: &ridl_ir::v2::Interface) -> Vec<ridl_ir::v2::Decl> {
+///
+/// Each interface comes with the package that declares it, because the two
+/// may sit in different packages of the unit: a type reference is compared in
+/// its canonical `pkg.Name` form ([`ridl_ir::catalog_hash::canonicalize_refs`]),
+/// so a payload written bare in its own package matches the same type written
+/// qualified in another.
+fn same_shape(
+    old: (&ridl_ir::v2::Package, &ridl_ir::v2::Interface),
+    new: (&ridl_ir::v2::Package, &ridl_ir::v2::Interface),
+) -> bool {
+    fn members(
+        (package, interface): (&ridl_ir::v2::Package, &ridl_ir::v2::Interface),
+    ) -> Vec<ridl_ir::v2::Decl> {
         interface
             .interactions
             .iter()
@@ -1372,6 +1382,7 @@ fn same_shape(old: &ridl_ir::v2::Interface, new: &ridl_ir::v2::Interface) -> boo
                 decl.doc = String::new();
                 decl.labels = Vec::new();
                 decl.deprecated = None;
+                ridl_ir::catalog_hash::canonicalize_refs(&mut decl, package);
                 decl
             })
             .collect()
@@ -2182,9 +2193,9 @@ struct DeclIndex {
     shapes: BTreeMap<(String, String), (String, TextRange)>,
     /// The package each indexed directory declares, by the directory's path
     /// as [`directory_of`] spells it. A unit's `interfaces.lock` sits in the
-    /// unit's manifest directory, which is its root package's directory, so
-    /// the lock file's parent names a package of the unit a RIDL-409 belongs
-    /// to.
+    /// unit's manifest directory, so the packages declared in that directory
+    /// and under it are the packages of the unit a RIDL-409 belongs to
+    /// ([`Self::unit_of_dir`]).
     packages: BTreeMap<String, String>,
 }
 
@@ -2415,10 +2426,17 @@ impl DeclIndex {
         }
     }
 
-    /// The package declared in the directory `dir` — the parent of a lock
-    /// file's path — or `None` when no indexed file sits in it.
-    fn package_of_dir(&self, dir: &str) -> Option<&str> {
-        self.packages.get(dir).map(String::as_str)
+    /// The unit whose manifest directory is `dir` — the parent of a lock
+    /// file's path — read from `packages`, the fresh set: the unit of a
+    /// package declared in `dir` or in a directory under it. A unit's tree
+    /// holds no other manifest (MANI-013), so every such package belongs to
+    /// the one unit. `None` when no indexed file of the fresh set sits there.
+    fn unit_of_dir<'a>(&self, dir: &str, packages: &'a [ridl_ir::v2::Package]) -> Option<&'a str> {
+        self.packages
+            .iter()
+            .filter(|(path, _)| Path::new(path).starts_with(dir))
+            .find_map(|(_, name)| packages.iter().find(|package| package.name == *name))
+            .map(ridl_ir::v2::unit_of)
     }
 
     /// The span of a shape's declared name — an `interface` declaration's

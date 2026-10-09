@@ -250,6 +250,136 @@ fn one_same_shape_candidate_adds_the_rename_label() {
     assert_eq!(read_lock(&root), text, "byte-identical");
 }
 
+/// Lays out the unit `veh.hmi` from `files`, `(relative path, text)` pairs,
+/// allocates its lock with `ridl lock` and publishes it as its own baseline.
+fn publish_unit(dir: &TempDir, files: &[(&str, &str)]) -> PathBuf {
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+    );
+    for (path, text) in files {
+        dir.write(path, text);
+    }
+    let root = dir.path().to_path_buf();
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the lock is allocated: {stderr}");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is published: {stderr}");
+    root
+}
+
+/// The unit's manifest directory holds no source file, so no package is
+/// declared in the directory the lock sits in. The unit is still found from
+/// that directory, and the renamed subpackage interface draws the label.
+#[test]
+fn the_rename_hint_appears_when_the_unit_root_declares_no_interface() {
+    let dir = TempDir::new("root-without-source");
+    let root = publish_unit(
+        &dir,
+        &[(
+            "cluster/cluster.ridl",
+            "package veh.hmi.cluster\ntype Level: integer [0..1]\n\
+             interface Speed { signal v : Level @[100ms..1s] }\n",
+        )],
+    );
+    dir.write(
+        "cluster/cluster.ridl",
+        "package veh.hmi.cluster\ntype Level: integer [0..1]\n\
+         interface Velocity { signal v : Level @[100ms..1s] }\n",
+    );
+
+    let (code, stderr) = check(&root);
+    assert_eq!(code, 1, "stderr:\n{stderr}");
+    assert!(stderr.contains("error[RIDL-409]"), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains(&hint(&root, "cluster.Speed", "cluster.Velocity")),
+        "the label names the one rename: {stderr}"
+    );
+}
+
+/// The orphan entry's shape was declared in the unit's root package and the
+/// one candidate is declared in a subpackage: the candidates come from every
+/// package of the unit, not only from the package in the lock's directory.
+/// Both interfaces name the payload through the same qualified reference.
+#[test]
+fn the_rename_hint_searches_every_package_of_the_unit() {
+    let dir = TempDir::new("candidate-in-subpackage");
+    let common = (
+        "common/common.typl",
+        "package veh.hmi.common\ntype Level: integer [0..1]\n",
+    );
+    let root = publish_unit(
+        &dir,
+        &[
+            common,
+            (
+                "hmi.ridl",
+                "package veh.hmi\nimport veh.hmi.common.Level\n\
+                 interface Speed { signal v : Level @[100ms..1s] }\n",
+            ),
+            (
+                "cluster/cluster.ridl",
+                "package veh.hmi.cluster\nimport veh.hmi.common.Level\n\
+                 interface Gauge { event g : Level @[100ms..1s] }\n",
+            ),
+        ],
+    );
+    dir.write("hmi.ridl", "package veh.hmi\n");
+    dir.write(
+        "cluster/cluster.ridl",
+        "package veh.hmi.cluster\nimport veh.hmi.common.Level\n\
+         interface Gauge { event g : Level @[100ms..1s] }\n\
+         interface Velocity { signal v : Level @[100ms..1s] }\n",
+    );
+
+    let (code, stderr) = check(&root);
+    assert_eq!(code, 1, "stderr:\n{stderr}");
+    assert!(stderr.contains("error[RIDL-409]"), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains(&hint(&root, "Speed", "cluster.Velocity")),
+        "the label names the one rename: {stderr}"
+    );
+}
+
+/// The baseline's interface names its payload bare, as a declaration of its
+/// own package (`Level` in `veh.hmi`); the renamed interface, in a
+/// subpackage, names the same type qualified (`veh.hmi.Level`). The two
+/// spellings mean one type, so the shapes match.
+#[test]
+fn the_rename_hint_matches_a_bare_payload_against_its_qualified_spelling() {
+    let dir = TempDir::new("bare-against-qualified");
+    let root = publish_unit(
+        &dir,
+        &[
+            (
+                "hmi.ridl",
+                "package veh.hmi\ntype Level: integer [0..1]\n\
+                 interface Speed { signal v : Level @[100ms..1s] }\n",
+            ),
+            (
+                "cluster/cluster.ridl",
+                "package veh.hmi.cluster\nimport veh.hmi.Level\n\
+                 interface Gauge { event g : Level @[100ms..1s] }\n",
+            ),
+        ],
+    );
+    dir.write("hmi.ridl", "package veh.hmi\ntype Level: integer [0..1]\n");
+    dir.write(
+        "cluster/cluster.ridl",
+        "package veh.hmi.cluster\nimport veh.hmi.Level\n\
+         interface Gauge { event g : Level @[100ms..1s] }\n\
+         interface Velocity { signal v : Level @[100ms..1s] }\n",
+    );
+
+    let (code, stderr) = check(&root);
+    assert_eq!(code, 1, "stderr:\n{stderr}");
+    assert!(stderr.contains("error[RIDL-409]"), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains(&hint(&root, "Speed", "cluster.Velocity")),
+        "the label names the one rename: {stderr}"
+    );
+}
+
 /// The desk check itself runs with RIDL-409 as the only error: an ordinal
 /// drift beside an orphan entry still draws its RIDL-407 warning.
 #[test]
