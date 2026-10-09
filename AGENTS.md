@@ -163,7 +163,7 @@ member; rsdl is the apex.
                          fails; it also checks that no planus crate is in
                          the generated crate's dependency graph, and that the
                          generated crate, and one generated from the
-                         veh-cluster corpus, check with their std feature off
+                         veh-cluster corpus, check with their default features off
                          for thumbv7em-none-eabihf, a target with no standard
                          library. examples/cabin is its own
                          cargo workspace, outside this one, and carries the fmt
