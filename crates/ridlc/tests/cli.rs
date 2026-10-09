@@ -1919,6 +1919,7 @@ fn a_build_with_no_emit_and_a_deployment_name_still_lowers_the_system() {
         ridl_core::Frozen::No,
         ridlc::ApplyLints::Yes,
         Some("Bench"),
+        &std::collections::BTreeMap::new(),
     )
     .expect("the build runs");
     assert!(!run.usage_error, "`Bench` is a declared deployment");
@@ -1969,4 +1970,88 @@ fn build_with_a_deployment_flag_and_a_system_with_no_deployment_says_which() {
         "the system is declared, stderr:\n{stderr}"
     );
     assert!(!fresh.exists(), "a refused build creates no directory");
+}
+
+/// `ridlc` reads no baseline (ADR-0008 decisions 9 and 14): with a published
+/// chain under `.ridl/baseline/` and a compatible change on top of it, the
+/// descriptor `ridlc build` writes lists no earlier catalog. The `ridl`
+/// facade is what computes the list.
+#[test]
+fn ridlc_build_reads_no_baseline() {
+    const MANIFEST: &str = "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n";
+    const BASE: &str = "package veh.cluster
+type Speed: km/h [0.0..250.0 step 0.5]
+type DoorState: integer [0..1]
+interface VehicleStatus {
+  signal currentSpeed: Speed @10ms
+  event doorOpened: DoorState @[100ms..1s]
+}
+";
+    const APPENDED: &str = "package veh.cluster
+type Speed: km/h [0.0..250.0 step 0.5]
+type DoorState: integer [0..1]
+interface VehicleStatus {
+  signal currentSpeed: Speed @10ms
+  event doorOpened: DoorState @[100ms..1s]
+  event doorClosed: DoorState @[100ms..1s]
+}
+";
+    let dir = TempDir::new("reads-no-baseline");
+    let before = TempDir::new("reads-no-baseline-before");
+    let out = TempDir::new("reads-no-baseline-out");
+    dir.write("ridl.toml", MANIFEST);
+    dir.write("cluster.ridl", BASE);
+    // The chain `ridl baseline` would publish: the snapshot, and the history
+    // file holding the catalog's hash.
+    let baseline = dir.path().join(".ridl").join("baseline");
+    for (emit, target) in [("ir-json", baseline.as_path()), ("catalog", before.path())] {
+        let (code, stderr) = ridlc(&[
+            "build".as_ref(),
+            dir.path().as_os_str(),
+            "--out-dir".as_ref(),
+            target.as_os_str(),
+            "--emit".as_ref(),
+            emit.as_ref(),
+        ]);
+        assert_eq!(code, 0, "stderr:\n{stderr}");
+    }
+    let mut hash = [0u8; 32];
+    hash.copy_from_slice(&descriptor_hash(before.path(), "veh.cluster"));
+    let history = ridl_core::catalog_history::CatalogHistory { hashes: vec![hash] };
+    std::fs::write(
+        baseline.join(format!(
+            "veh.cluster{}",
+            ridl_core::catalog_history::FILE_SUFFIX
+        )),
+        history.render(),
+    )
+    .expect("write the history");
+
+    dir.write("cluster.ridl", APPENDED);
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        dir.path().as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "catalog".as_ref(),
+    ]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    let bytes = std::fs::read(
+        out.path()
+            .join(format!("veh.cluster{}", ridl_descriptor::FILE_SUFFIX)),
+    )
+    .expect("the descriptor is written");
+    let descriptor = ridl_descriptor::verify(&bytes).expect("the descriptor verifies");
+    let compatible: Vec<Vec<u8>> = descriptor
+        .compatible()
+        .expect("the field reads")
+        .map(|earlier| {
+            earlier
+                .iter()
+                .map(|entry| entry.unwrap().hash().unwrap().to_vec())
+                .collect()
+        })
+        .unwrap_or_default();
+    assert_eq!(compatible, Vec::<Vec<u8>>::new());
 }

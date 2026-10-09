@@ -378,3 +378,253 @@ fn a_history_of_a_unit_with_no_published_snapshot_is_not_carried() {
     let hash = describe_hash(&root, out.path(), UNIT);
     assert_eq!(history_lines(&root), vec![hash]);
 }
+
+// ==========================================================================
+// What `ridl build` writes from the chain
+// ==========================================================================
+
+/// Runs `ridl build` on `root` into `out` with `--emit <emits>`, returning
+/// `(exit_code, stderr)`.
+fn build(root: &Path, out: &Path, emits: &str) -> (i32, String) {
+    let (code, _, stderr) = ridl(&[
+        "build".as_ref(),
+        root.as_os_str(),
+        "--out-dir".as_ref(),
+        out.as_os_str(),
+        "--emit".as_ref(),
+        emits.as_ref(),
+    ]);
+    (code, stderr)
+}
+
+/// Runs `ridl build --emit catalog` on `root` into `out` and asserts that it
+/// exits 0.
+fn build_catalog(root: &Path, out: &Path) {
+    let (code, stderr) = build(root, out, "catalog");
+    assert_eq!(code, 0, "the catalog builds: {stderr}");
+}
+
+/// `ridl describe` of `out/<unit>.catalog.binfb`.
+fn describe(out: &Path, unit: &str) -> serde_json::Value {
+    let file = out.join(format!("{unit}.catalog.binfb"));
+    let (code, stdout, stderr) = ridl(&["describe".as_ref(), file.as_os_str()]);
+    assert_eq!(code, 0, "the descriptor is described: {stderr}");
+    serde_json::from_str(&stdout).expect("stdout is JSON")
+}
+
+fn hex_of_bytes(bytes: &serde_json::Value) -> String {
+    bytes
+        .as_array()
+        .expect("a hash is an array of bytes")
+        .iter()
+        .map(|byte| format!("{:02x}", byte.as_u64().expect("a hash byte is a number")))
+        .collect()
+}
+
+/// The `compatible` hashes of the descriptor `out/<unit>.catalog.binfb`, as
+/// lowercase hex, in the descriptor's order.
+fn compatible_of(out: &Path, unit: &str) -> Vec<String> {
+    describe(out, unit)["compatible"]
+        .as_array()
+        .expect("the descriptor has a compatible array")
+        .iter()
+        .map(hex_of_bytes)
+        .collect()
+}
+
+/// The `catalog.compatible` hashes of the codegen model `out/<pkg>.codegen.json`,
+/// as lowercase hex, in the model's order. The model serializes a byte
+/// string as standard base64.
+fn model_compatible_of(out: &Path, pkg: &str) -> Vec<String> {
+    let path = out.join(format!("{pkg}.codegen.json"));
+    let text = std::fs::read_to_string(&path)
+        .unwrap_or_else(|err| panic!("read {}: {err}", path.display()));
+    let json: serde_json::Value = serde_json::from_str(&text).expect("the model is JSON");
+    json["catalog"]["compatible"]
+        .as_array()
+        .expect("the model's catalog has a compatible array")
+        .iter()
+        .map(|hash| base64_to_hex(hash.as_str().expect("a model hash is a base64 string")))
+        .collect()
+}
+
+/// Decodes standard base64 with `=` padding into lowercase hex.
+fn base64_to_hex(text: &str) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut bytes = Vec::new();
+    let mut buffer: u32 = 0;
+    let mut bits = 0;
+    for symbol in text.bytes().filter(|symbol| *symbol != b'=') {
+        let value = ALPHABET
+            .iter()
+            .position(|candidate| *candidate == symbol)
+            .expect("a base64 symbol") as u32;
+        buffer = (buffer << 6) | value;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            bytes.push(((buffer >> bits) & 0xff) as u8);
+        }
+    }
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+#[test]
+fn a_build_after_a_compatible_change_lists_the_baseline_hash() {
+    let dir = TempDir::new("build-compatible");
+    let before = TempDir::new("build-compatible-before");
+    let out = TempDir::new("build-compatible-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    let baseline_hash = describe_hash(&root, before.path(), UNIT);
+    set_source(&dir, APPENDED);
+    let (code, stderr) = build(&root, out.path(), "catalog,codegen-model");
+    assert_eq!(code, 0, "the build succeeds: {stderr}");
+    assert_eq!(compatible_of(out.path(), UNIT), vec![baseline_hash.clone()]);
+    assert_eq!(model_compatible_of(out.path(), UNIT), vec![baseline_hash]);
+}
+
+#[test]
+fn a_build_after_a_breaking_change_lists_nothing() {
+    let dir = TempDir::new("build-breaking");
+    let out = TempDir::new("build-breaking-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    set_source(&dir, APPENDED);
+    publish(&root);
+    assert_eq!(history_lines(&root).len(), 2, "the chain holds two hashes");
+    set_source(&dir, RETYPED);
+    build_catalog(&root, out.path());
+    assert_eq!(compatible_of(out.path(), UNIT), Vec::<String>::new());
+}
+
+#[test]
+fn a_build_with_no_baseline_lists_nothing() {
+    let dir = TempDir::new("build-no-baseline");
+    let out = TempDir::new("build-no-baseline-out");
+    let root = set_source(&dir, BASE);
+    build_catalog(&root, out.path());
+    assert_eq!(compatible_of(out.path(), UNIT), Vec::<String>::new());
+}
+
+#[test]
+fn an_empty_baseline_directory_is_no_baseline() {
+    let dir = TempDir::new("build-empty-baseline");
+    let out = TempDir::new("build-empty-baseline-out");
+    let root = set_source(&dir, BASE);
+    std::fs::create_dir_all(baseline_dir(&root)).expect("create the empty baseline directory");
+    let (code, stderr) = build(&root, out.path(), "catalog");
+    assert_eq!(code, 0, "an empty directory is no baseline: {stderr}");
+    assert_eq!(compatible_of(out.path(), UNIT), Vec::<String>::new());
+}
+
+/// A directory with no snapshot is no baseline, so a history file in it is
+/// not read: there is no earlier baseline for the hashes to name.
+#[test]
+fn a_history_file_without_a_snapshot_is_not_read() {
+    let dir = TempDir::new("build-history-no-snapshot");
+    let out = TempDir::new("build-history-no-snapshot-out");
+    let root = set_source(&dir, BASE);
+    std::fs::create_dir_all(baseline_dir(&root)).expect("create the baseline directory");
+    std::fs::write(
+        baseline_dir(&root).join(format!("{UNIT}.catalogs")),
+        format!("{}\n", "ab".repeat(32)),
+    )
+    .expect("write the stray history");
+    let (code, stderr) = build(&root, out.path(), "catalog");
+    assert_eq!(
+        code, 0,
+        "a directory with no snapshot is no baseline: {stderr}"
+    );
+    assert_eq!(compatible_of(out.path(), UNIT), Vec::<String>::new());
+}
+
+#[test]
+fn the_current_hash_is_never_listed() {
+    let dir = TempDir::new("build-current");
+    let before = TempDir::new("build-current-before");
+    let out = TempDir::new("build-current-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    let older_hash = describe_hash(&root, before.path(), UNIT);
+    set_source(&dir, APPENDED);
+    publish(&root);
+    // The tree is the published baseline: the file's first hash is the
+    // current one, and the list holds the earlier one only.
+    build_catalog(&root, out.path());
+    assert_eq!(compatible_of(out.path(), UNIT), vec![older_hash]);
+}
+
+#[test]
+fn a_baseline_that_cannot_be_loaded_fails_the_build() {
+    let dir = TempDir::new("build-unloadable");
+    let out = TempDir::new("build-unloadable-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    let snapshot = baseline_dir(&root).join(format!("{UNIT}.ir.json"));
+    std::fs::write(&snapshot, "{").expect("damage the snapshot");
+    let (code, stderr) = build(&root, out.path(), "catalog");
+    assert_eq!(code, 2, "stderr:\n{stderr}");
+    assert!(
+        stderr.contains(&snapshot.display().to_string()),
+        "stderr names the snapshot:\n{stderr}"
+    );
+}
+
+#[test]
+fn a_malformed_history_file_fails_the_build() {
+    let dir = TempDir::new("build-malformed-history");
+    let out = TempDir::new("build-malformed-history-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    let history = baseline_dir(&root).join(format!("{UNIT}.catalogs"));
+    std::fs::write(&history, "garbage\n").expect("damage the history");
+    let (code, stderr) = build(&root, out.path(), "catalog");
+    assert_eq!(code, 2, "stderr:\n{stderr}");
+    assert!(
+        stderr.contains(&history.display().to_string()) && stderr.contains("line 1"),
+        "stderr names the file and the line:\n{stderr}"
+    );
+}
+
+/// The list is carried, never hashed: the same tree built with a chain
+/// behind it and with none has the same catalog hash.
+#[test]
+fn the_compatible_list_does_not_feed_the_hash() {
+    let dir = TempDir::new("build-hash-independent");
+    let with_chain = TempDir::new("build-hash-independent-with");
+    let without_chain = TempDir::new("build-hash-independent-without");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    set_source(&dir, APPENDED);
+    build_catalog(&root, with_chain.path());
+    assert_eq!(
+        compatible_of(with_chain.path(), UNIT).len(),
+        1,
+        "the first build lists the baseline"
+    );
+    std::fs::remove_dir_all(baseline_dir(&root)).expect("remove the baseline");
+    build_catalog(&root, without_chain.path());
+    assert_eq!(
+        compatible_of(without_chain.path(), UNIT),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        hex_of_bytes(&describe(with_chain.path(), UNIT)["hash"]),
+        hex_of_bytes(&describe(without_chain.path(), UNIT)["hash"])
+    );
+}
+
+/// An IR dump carries no list, so the build does not read the baseline: a
+/// damaged one fails a catalog build and not an `ir-json` one.
+#[test]
+fn an_ir_dump_build_reads_no_baseline() {
+    let dir = TempDir::new("build-ir-dump");
+    let out = TempDir::new("build-ir-dump-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    std::fs::write(baseline_dir(&root).join(format!("{UNIT}.ir.json")), "{")
+        .expect("damage the snapshot");
+    let (code, stderr) = build(&root, out.path(), "ir-json");
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+}

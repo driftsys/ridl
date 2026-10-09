@@ -172,6 +172,7 @@ fn a_build_through_the_plugin_writes_what_a_build_through_the_emit_writes() {
             ridl_core::Frozen::No,
             ridlc::ApplyLints::Yes,
             None,
+            &std::collections::BTreeMap::new(),
         )
         .expect("the build runs");
         let plugin_run = ridlc::run_build_with(
@@ -183,6 +184,7 @@ fn a_build_through_the_plugin_writes_what_a_build_through_the_emit_writes() {
             ridl_core::Frozen::No,
             ridlc::ApplyLints::Yes,
             None,
+            &std::collections::BTreeMap::new(),
         )
         .expect("the build runs");
 

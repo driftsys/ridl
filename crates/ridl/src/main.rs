@@ -282,16 +282,15 @@ fn main() -> ExitCode {
             plugin_timeout,
             frozen,
             deployment,
-        } => finish(ridlc::run_build_with(
+        } => run_build(
             &path,
             &out_dir,
             &emit,
             &plugin,
             std::time::Duration::from_secs(plugin_timeout),
             frozen.into(),
-            ApplyLints::Yes,
             deployment.as_deref(),
-        )),
+        ),
         Command::Test {
             path,
             samples,
@@ -616,6 +615,47 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
     finish_check(run, format)
 }
 
+/// Builds the workspace at `path`: `ridlc`'s own build, given the earlier
+/// catalogs each unit is compatible with.
+///
+/// The list is read from the published baseline at `.ridl/baseline/`
+/// ([`catalogs::compatible_catalogs`]), and only when the build writes a
+/// catalog descriptor or generates code, which are the artifacts that carry
+/// it: an IR dump reads no baseline, as `ridl baseline` does not. `ridlc`
+/// itself reads no baseline (ADR-0008 decisions 9 and 14): the facade computes
+/// the list and passes it in.
+fn run_build(
+    path: &Path,
+    out_dir: &Path,
+    emits: &[Emit],
+    plugins: &[PluginSpec],
+    plugin_timeout: std::time::Duration,
+    frozen: ridl_core::Frozen,
+    deployment: Option<&str>,
+) -> ExitCode {
+    let carries_the_list = !plugins.is_empty() || emits.iter().any(|emit| !emit.is_ir_dump());
+    let compatible = if carries_the_list {
+        let mut db = ridl_core::RidlDatabase::default();
+        match catalogs::compatible_catalogs(&mut db, path) {
+            Ok(compatible) => compatible,
+            Err(code) => return code,
+        }
+    } else {
+        BTreeMap::new()
+    };
+    finish(ridlc::run_build_with(
+        path,
+        out_dir,
+        emits,
+        plugins,
+        plugin_timeout,
+        frozen,
+        ApplyLints::Yes,
+        deployment,
+        &compatible,
+    ))
+}
+
 /// Publishes the workspace at `path` as a baseline.
 ///
 /// The compile and the write are `ridlc`'s own `build --emit ir-json`, so the
@@ -650,6 +690,8 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
         false.into(),
         ApplyLints::No,
         None,
+        // A snapshot carries no list; the chain is written beside it below.
+        &BTreeMap::new(),
     ) {
         Ok(run) => run,
         Err(err) => {
