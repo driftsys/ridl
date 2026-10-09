@@ -165,6 +165,12 @@ wasm-check:
             -p ridl-backend-rust -p ridl-backend-ts \
             -p ridl-rt -p ridl-fmt \
             --no-default-features
+        # wasm32-unknown-unknown has a standard library, so the check above
+        # cannot show that a crate builds without one. `ridl-descriptor` with
+        # its `std` feature off is the reader an engine links, and a target
+        # with no standard library is the proof that it links none.
+        rustup target add thumbv7em-none-eabihf
+        cargo check --target thumbv7em-none-eabihf -p ridl-descriptor --no-default-features
         # And once more with the encoding features on. ADR-0020 decision 2
         # makes the generated Rust compiled to wasm32 the codec a TypeScript
         # consumer loads, so the helpers that codec calls must build for
