@@ -1,0 +1,159 @@
+# Lane G — gate holes, user-visible defects, and the debt backlog
+
+Created 2026-10-09. The main session drives the lane. Sebastien delegated every
+decision in it on 2026-10-09; each one is recorded under [Rulings](#rulings),
+and the lane's final report lists them.
+
+## Scope
+
+The open-issue sweep of 2026-10-09 (114 open issues) ranked these. Lane H owns
+#782 and #783 and its own items; this lane does not touch them.
+
+1. **Gate integrity** — the lock, diff and build gates let through what they
+   exist to refuse:
+   - #700 `ridl diff` reports `identical` after `ridl lock` freezes a
+     provisional number, although the catalog hash changes.
+   - #397 `ridl-diff` compares enum and enumset members by position, not by
+     their explicit value.
+   - #778 item D-3: deleting a whole unit's last package without retiring its
+     numbers is not refused by the baseline gate (RIDL-412).
+   - #426 `just gate-parity` cannot see a member removed from `just build`.
+2. **User-visible defects**:
+   - #770 a `.rxdl` file in a package is skipped with no diagnostic.
+   - #765 false RIDL-101/RIDL-108 on an unreadable RPC annotation that keeps a
+     minimum (also carries two test gaps and standing drift; read its body).
+   - #643 a qualified internal type is refused in a foreign package view.
+   - #657 `ridl fmt` moves a comment written after an rsdl machine separator to
+     the next machine.
+   - #623 a bare CR is a line break in `ridl-lsp` but not in the lexer.
+   - #728 an rsdl region's interfaces are emitted in name order; the design
+     fixes number order.
+   - #739 `cargo xtask calibrate dump` writes `[lints]` entries for dropped
+     lints.
+   - #196 an unreadable path is reported with the wrong cause, or none.
+3. **Release and CI reliability**: #729 (two timing-flaky plugin tests), #687
+   (no test of the CI changes-job filter and `if:` gates), #734, #646, #645
+   (catalogue-versus-reference drift guards that accept typos and miss removed
+   clauses).
+4. **Decisions waiting**: #735, #704, #486, #487, #631. (#350, #665, #718, #726,
+   #727 wait on other work and stay out of this lane.)
+5. **#778 close-out**: D-2 and the specification sentence (see R-2, R-3), the
+   leftover minors moved to one debt issue, then #778 closed.
+6. **Debt triage**: the 59 open review-debt issues (the sweep's bucket E).
+
+## Stages
+
+| Stage | Work                                                                                                                    | Model                                                      |
+| ----- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| G0    | Rule on the five waiting decisions (item 4); write each ruling below and on its issue; fold any small code into a stage | the main session                                           |
+| G1    | #700 and #397 in `ridl-diff`                                                                                            | Sonnet stage agent; Opus implementers and task reviewers   |
+| G2    | #778 D-3 in the baseline gate; the specification sentence (R-3); #778 close-out (item 5)                                | Sonnet stage agent; Opus implementers and task reviewers   |
+| G3    | #770, #765, #643 (loader and checker diagnostics)                                                                       | Sonnet stage agent; implementers per task                  |
+| G4    | #657, #623, #728 (formatter, LSP positions, rsdl lowering order)                                                        | Sonnet stage agent; implementers per task                  |
+| G5    | #426, #729, #687, #739, #196, #734, #646, #645 (gates, CI, xtask, CLI messages)                                         | Sonnet stage agent; Sonnet implementers, Opus reviewers    |
+| G6    | Debt triage of bucket E: close what is moot, merge duplicates, label the rest; garden this driver with `sdd-gardening`  | Sonnet stage agent; the main session confirms each closure |
+
+**Parallelism.** G1, G2, G3 and G4 change disjoint crates or files and run in
+parallel, at most three stage agents at a time:
+
+- G1 changes `crates/ridl-diff`. Before it starts, read lane H's driver
+  (`.claude/worktrees/lane-h-driver/docs/wip/2026-10-09-lane-h-driver.md`, stage
+  H3). If H3's plan touches `crates/ridl-diff`, G1 waits for H3 to merge.
+- G2 changes `crates/ridl/src/main.rs`, `crates/ridl/tests/baseline_gate.rs` and
+  one sentence of `docs/specification/ridl-language-reference.md`.
+- G3 changes `crates/ridl-core` (loader) and `crates/ridl-sem` (`timing.rs`, the
+  visibility guard).
+- G4 changes `crates/ridl-fmt`, `crates/ridl-lsp`, `crates/ridl-syntax` and the
+  rsdl lowering in `crates/ridl-sem/src/rsdl/`; it rebases over G3 if both touch
+  `ridl-sem`.
+
+G5 starts when one of G1 to G4 has merged, because #729 changes plugin tests the
+other stages' gate runs depend on, and it touches the justfile and the CI
+workflow. G6 runs last.
+
+## Stage briefs
+
+Each stage plans its own work: a short plan under `docs/wip/` (one task per
+issue, or per tightly coupled pair), then
+`superpowers:subagent-driven-development` with a task review per task. Each fix
+starts with a test that reproduces the defect (red), then the fix (green). A
+test that pins existing behaviour is proven by a named semantic mutation.
+
+### G0 — decisions
+
+Read each issue and the record it cites. Rule, write the ruling under
+[Rulings](#rulings) and as a comment on the issue, and either close the issue
+(no code), or hand the code to the stage whose files it touches, or leave it
+with a label `ready` if it fits no stage.
+
+### G1 — the diff gate
+
+- #700: the diff must see a frozen provisional number and the catalog hash
+  change. Read the issue for the region-map part. The verdict for a frozen
+  number is a decision: record it (not `identical`; which category).
+- #397: compare enum and enumset members by explicit value, as the specification
+  already requires; a reorder with unchanged values is not a change, a renumber
+  is breaking.
+
+### G2 — the baseline gate
+
+- D-3: a package or a whole unit present in the baseline and gone from the fresh
+  set: every published, non-retired number of its shapes is refused with
+  RIDL-412, the same message as a lost interface. The deliberate override is
+  deleting that unit's snapshots from `.ridl/baseline/`; say so in the message
+  and in `docs/book/` where RIDL-412 is described. Tests in
+  `crates/ridl/tests/baseline_gate.rs`.
+- R-3's sentence. Then #778's close-out: one new `debt` issue holding the minors
+  listed in the #778 comment of 2026-10-09, D-2 closed per R-2, #778 closed with
+  a comment linking both.
+
+### G3, G4, G5
+
+One task per issue, in the order listed in the table. Each issue's body is the
+requirement. A fix that needs a new diagnostic code follows ADR-0024 (warning or
+info) or the catalogue rules (error); record the code chosen as a ruling.
+
+### G6 — debt triage
+
+For each bucket-E issue: read it against `main`; close it with one sentence when
+the code or a later change made it moot; merge it into another when they
+overlap; otherwise label it `debt` and give it a milestone. Produce the list of
+proposed closures first; the main session confirms them before any issue is
+closed. Then garden this driver.
+
+## Rules every stage follows
+
+- Worktree under `.claude/worktrees/lane-g-<stage>`, created from fresh
+  `origin/main`, then `./bootstrap`. One pull request per stage.
+- `/review` pass 1, fix wave, pass 2, a quick pass over any commit after pass 2,
+  then `just verify` before reporting the pull request ready. Every finding gets
+  a disposition on its ledger line and in the pull request body.
+- Never a tag, a publish or a push to `main`. Merging: the stage reports the
+  pull request ready; the main session merges.
+- Plain literal prose. No story or stage ids in shipped files
+  (`just story-id-check`).
+- Commit trailer: the attribution line the session's system reminder gives.
+- An end-of-stage comment on the coordination issue #328.
+- A stage agent escalates every ruling that this driver or a recorded decision
+  does not cover to the main session. It does not hand back until its pull
+  request is ready or a real blocker stops it; the main session resumes it with
+  `SendMessage`, never with a second agent.
+
+## Rulings
+
+Each ruling: what was decided — why — what it costs if wrong.
+
+- **R-1** #778 D-3 is done in this lane — a published number that escapes the
+  gate because its whole unit disappeared breaks the lock's only invariant — a
+  user who deletes a unit on purpose must also delete its baseline snapshots.
+- **R-2** #778 D-2 (the codegen model rebuilds the unit hash per package) is
+  closed as not planned — `codegen::lower(package, others)` is the per-package
+  API every backend and plugin reads (ADR-0020 decision 9), and the cost is
+  linear in the unit's size per package — reopen if a profile of `ridl build`
+  shows it.
+- **R-3** The specification follows the code on provisional order:
+  `docs/specification/ridl-language-reference.md` (~1243) says byte order of the
+  name, the interface before an inline shape of the same name, the `service:`
+  prefix not counted — the code's rule is pinned by four tests and whole-key
+  order would push every inline shape behind every interface — a reader of the
+  old sentence predicted different provisional numbers before locking.
