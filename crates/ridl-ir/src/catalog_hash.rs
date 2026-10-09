@@ -2028,6 +2028,36 @@ mod tests {
         assert_eq!(decl_names(&reduced), ["u.cluster.Pos"]);
     }
 
+    /// A bare reference is resolved in the package that declares the shape:
+    /// `Pos` in `u.cluster`'s `Speed` is `u.cluster.Pos` although the root
+    /// package declares a `Pos` too, and a `Speed` that names the root's
+    /// `u.Pos` hashes differently.
+    #[test]
+    fn a_bare_reference_in_a_subpackage_resolves_to_its_own_homonym() {
+        let (mut u, cluster, v) = two_unit_fixture();
+        u.decls.push(struct_decl("Pos", &["u32"]));
+        let reduced = reduced_unit("u", &[&u, &cluster, &v]);
+        assert_eq!(decl_names(&reduced), ["u.cluster.Pos"]);
+        let speed = reduced
+            .interfaces
+            .iter()
+            .find(|interface| interface.name == "cluster.Speed")
+            .expect("the subpackage interface");
+        let Some(decl::Kind::SignalDef(signal)) = &speed.interactions[0].kind else {
+            panic!("the interaction is a signal");
+        };
+        assert_eq!(signal.payload, "u.cluster.Pos");
+
+        let mut root_pos = cluster.clone();
+        root_pos.interfaces[0].interactions[0] = self::signal("pos", "u.Pos");
+        let reduced = reduced_unit("u", &[&u, &root_pos, &v]);
+        assert_eq!(decl_names(&reduced), ["u.Pos"]);
+        assert_ne!(
+            catalog_hash("u", &[&u, &cluster, &v]),
+            catalog_hash("u", &[&u, &root_pos, &v])
+        );
+    }
+
     #[test]
     fn a_change_in_one_package_moves_the_hash_of_the_unit() {
         let (u, mut cluster, v) = two_unit_fixture();
