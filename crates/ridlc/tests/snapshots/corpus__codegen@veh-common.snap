@@ -16,7 +16,10 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
   },
   "scope": {
     "package": "veh.common",
-    "others": []
+    "others": [
+      "veh.common",
+      "ridl.std"
+    ]
   },
   "declarations": [
     {
@@ -688,10 +691,10 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "labels": [],
       "closure": {
         "reachesFloat": true,
-        "reachesTextOrBytes": false,
+        "reachesTextOrBytes": true,
         "reachesCollection": false,
         "reachesForeign": true,
-        "reachesUnresolved": true,
+        "reachesUnresolved": false,
         "reachesCycle": false,
         "reachesStreamOrUnspecified": false
       },
@@ -716,11 +719,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "optional": false,
                 "named": {
                   "reference": "ridl.std.Name",
-                  "resolved": false,
-                  "package": "",
+                  "resolved": true,
+                  "package": "ridl.std",
                   "foreign": true,
                   "index": 0,
-                  "kind": "DECL_KIND_UNSPECIFIED"
+                  "kind": "DECL_KIND_SCALAR"
                 }
               },
               "init": {
@@ -844,10 +847,10 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "labels": [],
       "closure": {
         "reachesFloat": true,
-        "reachesTextOrBytes": false,
+        "reachesTextOrBytes": true,
         "reachesCollection": true,
         "reachesForeign": true,
-        "reachesUnresolved": true,
+        "reachesUnresolved": false,
         "reachesCycle": false,
         "reachesStreamOrUnspecified": false
       },
@@ -937,11 +940,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                     "optional": false,
                     "named": {
                       "reference": "ridl.std.Label",
-                      "resolved": false,
-                      "package": "",
+                      "resolved": true,
+                      "package": "ridl.std",
                       "foreign": true,
-                      "index": 0,
-                      "kind": "DECL_KIND_UNSPECIFIED"
+                      "index": 1,
+                      "kind": "DECL_KIND_SCALAR"
                     }
                   },
                   "min": "1",
@@ -974,22 +977,22 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                     "optional": false,
                     "named": {
                       "reference": "ridl.std.Label",
-                      "resolved": false,
-                      "package": "",
+                      "resolved": true,
+                      "package": "ridl.std",
                       "foreign": true,
-                      "index": 0,
-                      "kind": "DECL_KIND_UNSPECIFIED"
+                      "index": 1,
+                      "kind": "DECL_KIND_SCALAR"
                     }
                   },
                   "value": {
                     "optional": false,
                     "named": {
                       "reference": "ridl.std.Name",
-                      "resolved": false,
-                      "package": "",
+                      "resolved": true,
+                      "package": "ridl.std",
                       "foreign": true,
                       "index": 0,
-                      "kind": "DECL_KIND_UNSPECIFIED"
+                      "kind": "DECL_KIND_SCALAR"
                     }
                   },
                   "min": "0",
@@ -1024,10 +1027,10 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "labels": [],
       "closure": {
         "reachesFloat": true,
-        "reachesTextOrBytes": false,
+        "reachesTextOrBytes": true,
         "reachesCollection": false,
         "reachesForeign": true,
-        "reachesUnresolved": true,
+        "reachesUnresolved": false,
         "reachesCycle": false,
         "reachesStreamOrUnspecified": false
       },
@@ -1100,7 +1103,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "reachesTextOrBytes": false,
         "reachesCollection": false,
         "reachesForeign": true,
-        "reachesUnresolved": true,
+        "reachesUnresolved": false,
         "reachesCycle": false,
         "reachesStreamOrUnspecified": false
       },
@@ -1156,11 +1159,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "optional": false,
                 "named": {
                   "reference": "ridl.std.Timestamp",
-                  "resolved": false,
-                  "package": "",
+                  "resolved": true,
+                  "package": "ridl.std",
                   "foreign": true,
-                  "index": 0,
-                  "kind": "DECL_KIND_UNSPECIFIED"
+                  "index": 2,
+                  "kind": "DECL_KIND_SCALAR"
                 }
               },
               "init": {
@@ -1191,10 +1194,10 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "labels": [],
       "closure": {
         "reachesFloat": false,
-        "reachesTextOrBytes": false,
+        "reachesTextOrBytes": true,
         "reachesCollection": false,
         "reachesForeign": true,
-        "reachesUnresolved": true,
+        "reachesUnresolved": false,
         "reachesCycle": false,
         "reachesStreamOrUnspecified": false
       },
@@ -1250,11 +1253,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "optional": false,
                 "named": {
                   "reference": "ridl.std.Message",
-                  "resolved": false,
-                  "package": "",
+                  "resolved": true,
+                  "package": "ridl.std",
                   "foreign": true,
-                  "index": 0,
-                  "kind": "DECL_KIND_UNSPECIFIED"
+                  "index": 3,
+                  "kind": "DECL_KIND_SCALAR"
                 }
               },
               "init": {
@@ -1512,54 +1515,27 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       {
         "declaration": 14,
         "root": "FB_ROOT_KIND_OWN",
-        "unbounded": {
-          "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
-          "unjudgeableMembers": [
-            "name"
-          ]
-        }
+        "maxSize": 606
       },
       {
         "declaration": 15,
         "root": "FB_ROOT_KIND_OWN",
-        "unbounded": {
-          "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
-          "unjudgeableMembers": [
-            "labels",
-            "meta"
-          ]
-        }
+        "maxSize": 31558
       },
       {
         "declaration": 16,
         "root": "FB_ROOT_KIND_UNION_WRAPPER",
-        "unbounded": {
-          "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
-          "unjudgeableMembers": [
-            "ok",
-            "err"
-          ]
-        }
+        "maxSize": 1138
       },
       {
         "declaration": 17,
         "root": "FB_ROOT_KIND_OWN",
-        "unbounded": {
-          "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
-          "unjudgeableMembers": [
-            "timestamp"
-          ]
-        }
+        "maxSize": 63
       },
       {
         "declaration": 18,
         "root": "FB_ROOT_KIND_OWN",
-        "unbounded": {
-          "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
-          "unjudgeableMembers": [
-            "message"
-          ]
-        }
+        "maxSize": 1093
       },
       {
         "declaration": 19,
@@ -1602,6 +1578,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "slots": [
           {
             "id": 0,
+            "wire": {
+              "text": true
+            },
             "needsNullDefault": false,
             "field": 0
           },
@@ -1672,6 +1651,15 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           },
           {
             "id": 2,
+            "wire": {
+              "vector": {
+                "element": {
+                  "text": true
+                },
+                "min": "1",
+                "max": "16"
+              }
+            },
             "needsNullDefault": false,
             "field": 2
           },
@@ -1719,6 +1707,12 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           },
           {
             "id": 1,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_ULONG",
+                "widthBytes": 8
+              }
+            },
             "needsNullDefault": false,
             "field": 1
           }
@@ -1742,6 +1736,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           },
           {
             "id": 1,
+            "wire": {
+              "text": true
+            },
             "needsNullDefault": false,
             "field": 1
           }
@@ -1985,11 +1982,17 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "slots": [
           {
             "id": 0,
+            "wire": {
+              "text": true
+            },
             "needsNullDefault": false,
             "key": true
           },
           {
             "id": 1,
+            "wire": {
+              "text": true
+            },
             "needsNullDefault": false,
             "value": true
           }
@@ -2003,6 +2006,167 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       }
     ]
   },
-  "foreign": [],
+  "foreign": [
+    {
+      "package": "ridl.std",
+      "declaration": {
+        "name": {
+          "declared": "Name",
+          "snake": "name",
+          "camel": "Name",
+          "screaming": "NAME",
+          "pascal": "Name"
+        },
+        "visibility": "VISIBILITY_PUBLIC",
+        "isError": false,
+        "doc": "Human-readable name — max 128 characters",
+        "labels": [],
+        "closure": {
+          "reachesFloat": false,
+          "reachesTextOrBytes": true,
+          "reachesCollection": false,
+          "reachesForeign": false,
+          "reachesUnresolved": false,
+          "reachesCycle": false,
+          "reachesStreamOrUnspecified": false
+        },
+        "init": {
+          "derivable": false,
+          "source": "INIT_SOURCE_NONE",
+          "oneLevel": false
+        },
+        "scalar": {
+          "class": "SCALAR_CLASS_STRING",
+          "constraint": {
+            "lenMin": "1",
+            "lenMax": "128",
+            "pattern": "^[\\x20-\\x7E]+$",
+            "patternConst": "ASCII_PATTERN"
+          },
+          "vacuous": false
+        }
+      }
+    },
+    {
+      "package": "ridl.std",
+      "declaration": {
+        "name": {
+          "declared": "Label",
+          "snake": "label",
+          "camel": "Label",
+          "screaming": "LABEL",
+          "pascal": "Label"
+        },
+        "visibility": "VISIBILITY_PUBLIC",
+        "isError": false,
+        "doc": "Short human-readable label — ASCII printable, max 64 characters",
+        "labels": [],
+        "closure": {
+          "reachesFloat": false,
+          "reachesTextOrBytes": true,
+          "reachesCollection": false,
+          "reachesForeign": false,
+          "reachesUnresolved": false,
+          "reachesCycle": false,
+          "reachesStreamOrUnspecified": false
+        },
+        "init": {
+          "derivable": false,
+          "source": "INIT_SOURCE_NONE",
+          "oneLevel": false
+        },
+        "scalar": {
+          "class": "SCALAR_CLASS_STRING",
+          "constraint": {
+            "lenMin": "1",
+            "lenMax": "64",
+            "pattern": "^[\\x20-\\x7E]+$",
+            "patternConst": "ASCII_PATTERN"
+          },
+          "vacuous": false
+        }
+      }
+    },
+    {
+      "package": "ridl.std",
+      "declaration": {
+        "name": {
+          "declared": "Timestamp",
+          "snake": "timestamp",
+          "camel": "Timestamp",
+          "screaming": "TIMESTAMP",
+          "pascal": "Timestamp"
+        },
+        "visibility": "VISIBILITY_PUBLIC",
+        "isError": false,
+        "doc": "Absolute point in time — platform time domain (ridl §3.1):\nint64 microseconds since the PTP epoch, 1970-01-01 00:00:00 TAI.\nContinuous and leap-second-free; convert to civil datetime only at\npresentation edges.",
+        "labels": [],
+        "closure": {
+          "reachesFloat": false,
+          "reachesTextOrBytes": false,
+          "reachesCollection": false,
+          "reachesForeign": false,
+          "reachesUnresolved": false,
+          "reachesCycle": false,
+          "reachesStreamOrUnspecified": false
+        },
+        "init": {
+          "derivable": true,
+          "value": "0",
+          "source": "INIT_SOURCE_DERIVED",
+          "oneLevel": true
+        },
+        "scalar": {
+          "class": "SCALAR_CLASS_INTEGER",
+          "constraint": {
+            "min": "0",
+            "max": "9223372036854775807"
+          },
+          "vacuous": false,
+          "intWidth": "INT_WIDTH_U64"
+        }
+      }
+    },
+    {
+      "package": "ridl.std",
+      "declaration": {
+        "name": {
+          "declared": "Message",
+          "snake": "message",
+          "camel": "Message",
+          "screaming": "MESSAGE",
+          "pascal": "Message"
+        },
+        "visibility": "VISIBILITY_PUBLIC",
+        "isError": false,
+        "doc": "Short message or description — max 256 characters",
+        "labels": [],
+        "closure": {
+          "reachesFloat": false,
+          "reachesTextOrBytes": true,
+          "reachesCollection": false,
+          "reachesForeign": false,
+          "reachesUnresolved": false,
+          "reachesCycle": false,
+          "reachesStreamOrUnspecified": false
+        },
+        "init": {
+          "derivable": false,
+          "source": "INIT_SOURCE_NONE",
+          "oneLevel": false
+        },
+        "scalar": {
+          "class": "SCALAR_CLASS_STRING",
+          "constraint": {
+            "lenMin": "1",
+            "lenMax": "256",
+            "pattern": "^[\\x20-\\x7E]+$",
+            "patternConst": "ASCII_PATTERN"
+          },
+          "vacuous": false
+        }
+      }
+    }
+  ],
   "tupleCollisions": []
 }

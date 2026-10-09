@@ -16,7 +16,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
   },
   "scope": {
     "package": "fleet.contracts",
-    "others": []
+    "others": [
+      "fleet.contracts",
+      "fleet.legacy",
+      "fleet.vehicle"
+    ]
   },
   "declarations": [
     {
@@ -1122,7 +1126,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
   },
   "scope": {
     "package": "fleet.legacy",
-    "others": []
+    "others": [
+      "fleet.contracts",
+      "fleet.legacy",
+      "fleet.vehicle"
+    ]
   },
   "declarations": [
     {
@@ -1243,7 +1251,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
   },
   "scope": {
     "package": "fleet.vehicle",
-    "others": []
+    "others": [
+      "fleet.contracts",
+      "fleet.legacy",
+      "fleet.vehicle"
+    ]
   },
   "declarations": [],
   "tuples": [],
@@ -1280,29 +1292,28 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "unsized": "foldAngle.payload: fleet.contracts.Percent"
               },
               "flatbuffers": {
-                "unsized": "foldAngle.payload: fleet.contracts.Percent"
+                "bytes": "46"
               }
             },
             "signal": {
               "payload": {
                 "type": {
                   "reference": "fleet.contracts.Percent",
-                  "resolved": false,
-                  "package": "",
+                  "resolved": true,
+                  "package": "fleet.contracts",
                   "foreign": true,
                   "index": 0,
-                  "kind": "DECL_KIND_UNSPECIFIED"
+                  "kind": "DECL_KIND_SCALAR"
                 },
+                "flatbuffersMaxSize": 46,
                 "sizes": {
                   "proto3": {
                     "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
                     }
                   },
                   "flatbuffers": {
-                    "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
-                    }
+                    "bounded": 46
                   }
                 }
               },
@@ -1339,7 +1350,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "unsized": "fold.request: fleet.contracts.DoorId"
               },
               "flatbuffers": {
-                "unsized": "fold.request: fleet.contracts.DoorId"
+                "bytes": "43"
               }
             },
             "command": {
@@ -1356,11 +1367,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                     "optional": false,
                     "named": {
                       "reference": "fleet.contracts.DoorId",
-                      "resolved": false,
-                      "package": "",
+                      "resolved": true,
+                      "package": "fleet.contracts",
                       "foreign": true,
-                      "index": 0,
-                      "kind": "DECL_KIND_UNSPECIFIED"
+                      "index": 1,
+                      "kind": "DECL_KIND_SCALAR"
                     }
                   }
                 }
@@ -1368,22 +1379,21 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "request": {
                 "type": {
                   "reference": "fleet.contracts.DoorId",
-                  "resolved": false,
-                  "package": "",
+                  "resolved": true,
+                  "package": "fleet.contracts",
                   "foreign": true,
-                  "index": 0,
-                  "kind": "DECL_KIND_UNSPECIFIED"
+                  "index": 1,
+                  "kind": "DECL_KIND_SCALAR"
                 },
+                "flatbuffersMaxSize": 43,
                 "sizes": {
                   "proto3": {
                     "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
                     }
                   },
                   "flatbuffers": {
-                    "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
-                    }
+                    "bounded": 43
                   }
                 }
               },
@@ -1391,13 +1401,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "requestSizes": {
                 "proto3": {
                   "absent": {
-                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    "cause": "ABSENT_CAUSE_NO_MESSAGE"
                   }
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_UNRESOLVED"
-                  }
+                  "bounded": 43
                 }
               }
             }
@@ -1427,7 +1435,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "unsized": "readFold.request: fleet.contracts.DoorId"
               },
               "flatbuffers": {
-                "unsized": "readFold.request: fleet.contracts.DoorId"
+                "bytes": "89"
               }
             },
             "query": {
@@ -1444,11 +1452,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                     "optional": false,
                     "named": {
                       "reference": "fleet.contracts.DoorId",
-                      "resolved": false,
-                      "package": "",
+                      "resolved": true,
+                      "package": "fleet.contracts",
                       "foreign": true,
-                      "index": 0,
-                      "kind": "DECL_KIND_UNSPECIFIED"
+                      "index": 1,
+                      "kind": "DECL_KIND_SCALAR"
                     }
                   }
                 }
@@ -1456,22 +1464,21 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "request": {
                 "type": {
                   "reference": "fleet.contracts.DoorId",
-                  "resolved": false,
-                  "package": "",
+                  "resolved": true,
+                  "package": "fleet.contracts",
                   "foreign": true,
-                  "index": 0,
-                  "kind": "DECL_KIND_UNSPECIFIED"
+                  "index": 1,
+                  "kind": "DECL_KIND_SCALAR"
                 },
+                "flatbuffersMaxSize": 43,
                 "sizes": {
                   "proto3": {
                     "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
                     }
                   },
                   "flatbuffers": {
-                    "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
-                    }
+                    "bounded": 43
                   }
                 }
               },
@@ -1480,33 +1487,32 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   "optional": false,
                   "named": {
                     "reference": "fleet.contracts.Percent",
-                    "resolved": false,
-                    "package": "",
+                    "resolved": true,
+                    "package": "fleet.contracts",
                     "foreign": true,
                     "index": 0,
-                    "kind": "DECL_KIND_UNSPECIFIED"
+                    "kind": "DECL_KIND_SCALAR"
                   }
                 }
               },
               "replyPayload": {
                 "type": {
                   "reference": "fleet.contracts.Percent",
-                  "resolved": false,
-                  "package": "",
+                  "resolved": true,
+                  "package": "fleet.contracts",
                   "foreign": true,
                   "index": 0,
-                  "kind": "DECL_KIND_UNSPECIFIED"
+                  "kind": "DECL_KIND_SCALAR"
                 },
+                "flatbuffersMaxSize": 46,
                 "sizes": {
                   "proto3": {
                     "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
                     }
                   },
                   "flatbuffers": {
-                    "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
-                    }
+                    "bounded": 46
                   }
                 }
               },
@@ -1520,7 +1526,12 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   ],
                   "usesResult": false,
                   "observerId": "fleet.vehicle.mirrors.readFold.require[0]",
-                  "refused": "the parameter is not a named integer or float scalar"
+                  "comparison": {
+                    "op": "COMPARISON_OP_LE",
+                    "literal": "7",
+                    "literalClass": "SCALAR_CLASS_INTEGER",
+                    "param": 0
+                  }
                 },
                 {
                   "kind": "CONTRACT_KIND_ENSURE",
@@ -1529,31 +1540,32 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   "paramRefs": [],
                   "usesResult": true,
                   "observerId": "fleet.vehicle.mirrors.readFold.ensure[0]",
-                  "refused": "`result` is not a named integer or float scalar"
+                  "comparison": {
+                    "op": "COMPARISON_OP_GE",
+                    "literal": "0.0",
+                    "literalClass": "SCALAR_CLASS_FLOAT",
+                    "result": true
+                  }
                 }
               ],
               "requestSizes": {
                 "proto3": {
                   "absent": {
-                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    "cause": "ABSENT_CAUSE_NO_MESSAGE"
                   }
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_UNRESOLVED"
-                  }
+                  "bounded": 43
                 }
               },
               "replySizes": {
                 "proto3": {
                   "absent": {
-                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    "cause": "ABSENT_CAUSE_NO_MESSAGE"
                   }
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_UNRESOLVED"
-                  }
+                  "bounded": 46
                 }
               }
             }
@@ -1578,7 +1590,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "unsized": "mirrorCount.payload: fleet.contracts.DoorId"
               },
               "flatbuffers": {
-                "unsized": "mirrorCount.payload: fleet.contracts.DoorId"
+                "bytes": "43"
               }
             },
             "fixed": {
@@ -1586,32 +1598,31 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "optional": false,
                 "named": {
                   "reference": "fleet.contracts.DoorId",
-                  "resolved": false,
-                  "package": "",
+                  "resolved": true,
+                  "package": "fleet.contracts",
                   "foreign": true,
-                  "index": 0,
-                  "kind": "DECL_KIND_UNSPECIFIED"
+                  "index": 1,
+                  "kind": "DECL_KIND_SCALAR"
                 }
               },
               "named": {
                 "type": {
                   "reference": "fleet.contracts.DoorId",
-                  "resolved": false,
-                  "package": "",
+                  "resolved": true,
+                  "package": "fleet.contracts",
                   "foreign": true,
-                  "index": 0,
-                  "kind": "DECL_KIND_UNSPECIFIED"
+                  "index": 1,
+                  "kind": "DECL_KIND_SCALAR"
                 },
+                "flatbuffersMaxSize": 43,
                 "sizes": {
                   "proto3": {
                     "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
                     }
                   },
                   "flatbuffers": {
-                    "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
-                    }
+                    "bounded": 43
                   }
                 }
               }
@@ -1642,7 +1653,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "unsized": "readDoor.request: fleet.contracts.DoorId"
               },
               "flatbuffers": {
-                "unsized": "readDoor.request: fleet.contracts.DoorId"
+                "unsized": "readDoor.reply: fleet.contracts.DoorReport | fleet.contracts.DoorFault"
               }
             },
             "query": {
@@ -1659,11 +1670,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                     "optional": false,
                     "named": {
                       "reference": "fleet.contracts.DoorId",
-                      "resolved": false,
-                      "package": "",
+                      "resolved": true,
+                      "package": "fleet.contracts",
                       "foreign": true,
-                      "index": 0,
-                      "kind": "DECL_KIND_UNSPECIFIED"
+                      "index": 1,
+                      "kind": "DECL_KIND_SCALAR"
                     }
                   }
                 }
@@ -1671,22 +1682,21 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "request": {
                 "type": {
                   "reference": "fleet.contracts.DoorId",
-                  "resolved": false,
-                  "package": "",
+                  "resolved": true,
+                  "package": "fleet.contracts",
                   "foreign": true,
-                  "index": 0,
-                  "kind": "DECL_KIND_UNSPECIFIED"
+                  "index": 1,
+                  "kind": "DECL_KIND_SCALAR"
                 },
+                "flatbuffersMaxSize": 43,
                 "sizes": {
                   "proto3": {
                     "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
                     }
                   },
                   "flatbuffers": {
-                    "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
-                    }
+                    "bounded": 43
                   }
                 }
               },
@@ -1694,19 +1704,19 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "fallible": {
                   "ok": {
                     "reference": "fleet.contracts.DoorReport",
-                    "resolved": false,
-                    "package": "",
+                    "resolved": true,
+                    "package": "fleet.contracts",
                     "foreign": true,
-                    "index": 0,
-                    "kind": "DECL_KIND_UNSPECIFIED"
+                    "index": 2,
+                    "kind": "DECL_KIND_STRUCT"
                   },
                   "err": {
                     "reference": "fleet.contracts.DoorFault",
-                    "resolved": false,
-                    "package": "",
+                    "resolved": true,
+                    "package": "fleet.contracts",
                     "foreign": true,
-                    "index": 0,
-                    "kind": "DECL_KIND_UNSPECIFIED"
+                    "index": 4,
+                    "kind": "DECL_KIND_ENUM"
                   }
                 }
               },
@@ -1714,13 +1724,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "requestSizes": {
                 "proto3": {
                   "absent": {
-                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    "cause": "ABSENT_CAUSE_NO_MESSAGE"
                   }
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_UNRESOLVED"
-                  }
+                  "bounded": 43
                 }
               },
               "replySizes": {
@@ -1762,7 +1770,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "unsized": "readLegacyDoor.request: fleet.contracts.DoorId"
               },
               "flatbuffers": {
-                "unsized": "readLegacyDoor.request: fleet.contracts.DoorId"
+                "unsized": "readLegacyDoor.reply: fleet.contracts.DoorReport | fleet.legacy.DoorFault"
               }
             },
             "query": {
@@ -1779,11 +1787,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                     "optional": false,
                     "named": {
                       "reference": "fleet.contracts.DoorId",
-                      "resolved": false,
-                      "package": "",
+                      "resolved": true,
+                      "package": "fleet.contracts",
                       "foreign": true,
-                      "index": 0,
-                      "kind": "DECL_KIND_UNSPECIFIED"
+                      "index": 1,
+                      "kind": "DECL_KIND_SCALAR"
                     }
                   }
                 }
@@ -1791,22 +1799,21 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "request": {
                 "type": {
                   "reference": "fleet.contracts.DoorId",
-                  "resolved": false,
-                  "package": "",
+                  "resolved": true,
+                  "package": "fleet.contracts",
                   "foreign": true,
-                  "index": 0,
-                  "kind": "DECL_KIND_UNSPECIFIED"
+                  "index": 1,
+                  "kind": "DECL_KIND_SCALAR"
                 },
+                "flatbuffersMaxSize": 43,
                 "sizes": {
                   "proto3": {
                     "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
                     }
                   },
                   "flatbuffers": {
-                    "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
-                    }
+                    "bounded": 43
                   }
                 }
               },
@@ -1814,19 +1821,19 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "fallible": {
                   "ok": {
                     "reference": "fleet.contracts.DoorReport",
-                    "resolved": false,
-                    "package": "",
+                    "resolved": true,
+                    "package": "fleet.contracts",
                     "foreign": true,
-                    "index": 0,
-                    "kind": "DECL_KIND_UNSPECIFIED"
+                    "index": 2,
+                    "kind": "DECL_KIND_STRUCT"
                   },
                   "err": {
                     "reference": "fleet.legacy.DoorFault",
-                    "resolved": false,
-                    "package": "",
+                    "resolved": true,
+                    "package": "fleet.legacy",
                     "foreign": true,
-                    "index": 0,
-                    "kind": "DECL_KIND_UNSPECIFIED"
+                    "index": 5,
+                    "kind": "DECL_KIND_ENUM"
                   }
                 }
               },
@@ -1834,13 +1841,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "requestSizes": {
                 "proto3": {
                   "absent": {
-                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    "cause": "ABSENT_CAUSE_NO_MESSAGE"
                   }
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_UNRESOLVED"
-                  }
+                  "bounded": 43
                 }
               },
               "replySizes": {
@@ -1865,7 +1870,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "unsized": "foldAngle"
         },
         "flatbuffers": {
-          "unsized": "foldAngle"
+          "unsized": "readDoor"
         }
       },
       "service": {
@@ -1976,13 +1981,370 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
   ],
   "catalog": {
     "package": "fleet.vehicle",
-    "hash": "zmiZOiJQTnglpoooTuc6qGAvhV/T22lnJzKtauI6IR0=",
+    "hash": "YsLbSgvYdmyozVaxoW6DMv8KTF6a2/tPlNdT0aZCtzQ=",
     "retired": []
   },
   "flatbuffers": {
     "roots": [],
     "tables": []
   },
-  "foreign": [],
+  "foreign": [
+    {
+      "package": "fleet.contracts",
+      "declaration": {
+        "name": {
+          "declared": "Percent",
+          "snake": "percent",
+          "camel": "Percent",
+          "screaming": "PERCENT",
+          "pascal": "Percent"
+        },
+        "visibility": "VISIBILITY_PUBLIC",
+        "isError": false,
+        "doc": "",
+        "labels": [],
+        "closure": {
+          "reachesFloat": true,
+          "reachesTextOrBytes": false,
+          "reachesCollection": false,
+          "reachesForeign": false,
+          "reachesUnresolved": false,
+          "reachesCycle": false,
+          "reachesStreamOrUnspecified": false
+        },
+        "init": {
+          "derivable": true,
+          "value": "0",
+          "source": "INIT_SOURCE_DERIVED",
+          "oneLevel": true
+        },
+        "scalar": {
+          "class": "SCALAR_CLASS_FLOAT",
+          "unit": "%",
+          "constraint": {
+            "min": "0",
+            "max": "100",
+            "step": "0.5"
+          },
+          "vacuous": false,
+          "floatWidth": "FLOAT_WIDTH_F32"
+        }
+      }
+    },
+    {
+      "package": "fleet.contracts",
+      "declaration": {
+        "name": {
+          "declared": "DoorId",
+          "snake": "door_id",
+          "camel": "DoorId",
+          "screaming": "DOOR_ID",
+          "pascal": "DoorId"
+        },
+        "visibility": "VISIBILITY_PUBLIC",
+        "isError": false,
+        "doc": "",
+        "labels": [],
+        "closure": {
+          "reachesFloat": false,
+          "reachesTextOrBytes": false,
+          "reachesCollection": false,
+          "reachesForeign": false,
+          "reachesUnresolved": false,
+          "reachesCycle": false,
+          "reachesStreamOrUnspecified": false
+        },
+        "init": {
+          "derivable": true,
+          "value": "0",
+          "source": "INIT_SOURCE_DERIVED",
+          "oneLevel": true
+        },
+        "scalar": {
+          "class": "SCALAR_CLASS_INTEGER",
+          "constraint": {
+            "min": "0",
+            "max": "7"
+          },
+          "vacuous": false,
+          "intWidth": "INT_WIDTH_U8"
+        }
+      }
+    },
+    {
+      "package": "fleet.contracts",
+      "declaration": {
+        "name": {
+          "declared": "DoorReport",
+          "snake": "door_report",
+          "camel": "DoorReport",
+          "screaming": "DOOR_REPORT",
+          "pascal": "DoorReport"
+        },
+        "visibility": "VISIBILITY_PUBLIC",
+        "isError": false,
+        "doc": "",
+        "labels": [],
+        "closure": {
+          "reachesFloat": false,
+          "reachesTextOrBytes": false,
+          "reachesCollection": false,
+          "reachesForeign": true,
+          "reachesUnresolved": false,
+          "reachesCycle": false,
+          "reachesStreamOrUnspecified": false
+        },
+        "init": {
+          "derivable": true,
+          "source": "INIT_SOURCE_DERIVED",
+          "oneLevel": false
+        },
+        "struct": {
+          "slots": [
+            {
+              "ordinal": 1,
+              "field": {
+                "name": {
+                  "declared": "door",
+                  "snake": "door",
+                  "camel": "Door",
+                  "screaming": "DOOR",
+                  "pascal": "Door"
+                },
+                "type": {
+                  "optional": false,
+                  "named": {
+                    "reference": "DoorId",
+                    "resolved": true,
+                    "package": "fleet.contracts",
+                    "foreign": true,
+                    "index": 1,
+                    "kind": "DECL_KIND_SCALAR"
+                  }
+                },
+                "init": {
+                  "derivable": true,
+                  "value": "0",
+                  "source": "INIT_SOURCE_DERIVED",
+                  "oneLevel": true
+                },
+                "doc": "",
+                "labels": []
+              }
+            },
+            {
+              "ordinal": 2,
+              "field": {
+                "name": {
+                  "declared": "locked",
+                  "snake": "locked",
+                  "camel": "Locked",
+                  "screaming": "LOCKED",
+                  "pascal": "Locked"
+                },
+                "type": {
+                  "optional": false,
+                  "named": {
+                    "reference": "LockState",
+                    "resolved": true,
+                    "package": "fleet.contracts",
+                    "foreign": true,
+                    "index": 3,
+                    "kind": "DECL_KIND_ENUM"
+                  }
+                },
+                "init": {
+                  "derivable": true,
+                  "value": "0",
+                  "source": "INIT_SOURCE_DERIVED",
+                  "oneLevel": true
+                },
+                "doc": "",
+                "labels": []
+              }
+            }
+          ],
+          "fixedLayout": true
+        }
+      }
+    },
+    {
+      "package": "fleet.contracts",
+      "declaration": {
+        "name": {
+          "declared": "LockState",
+          "snake": "lock_state",
+          "camel": "LockState",
+          "screaming": "LOCK_STATE",
+          "pascal": "LockState"
+        },
+        "visibility": "VISIBILITY_PUBLIC",
+        "isError": false,
+        "doc": "",
+        "labels": [],
+        "closure": {
+          "reachesFloat": false,
+          "reachesTextOrBytes": false,
+          "reachesCollection": false,
+          "reachesForeign": false,
+          "reachesUnresolved": false,
+          "reachesCycle": false,
+          "reachesStreamOrUnspecified": false
+        },
+        "init": {
+          "derivable": true,
+          "source": "INIT_SOURCE_DERIVED",
+          "oneLevel": false
+        },
+        "enum": {
+          "values": [
+            {
+              "name": {
+                "declared": "UNLOCKED",
+                "snake": "unlocked",
+                "camel": "UNLOCKED",
+                "screaming": "UNLOCKED",
+                "pascal": "Unlocked"
+              },
+              "value": "0",
+              "doc": ""
+            },
+            {
+              "name": {
+                "declared": "LOCKED",
+                "snake": "locked",
+                "camel": "LOCKED",
+                "screaming": "LOCKED",
+                "pascal": "Locked"
+              },
+              "value": "1",
+              "doc": ""
+            }
+          ],
+          "retired": [],
+          "zeroMember": 0,
+          "initMember": 0
+        }
+      }
+    },
+    {
+      "package": "fleet.contracts",
+      "declaration": {
+        "name": {
+          "declared": "DoorFault",
+          "snake": "door_fault",
+          "camel": "DoorFault",
+          "screaming": "DOOR_FAULT",
+          "pascal": "DoorFault"
+        },
+        "visibility": "VISIBILITY_PUBLIC",
+        "isError": true,
+        "doc": "",
+        "labels": [],
+        "closure": {
+          "reachesFloat": false,
+          "reachesTextOrBytes": false,
+          "reachesCollection": false,
+          "reachesForeign": false,
+          "reachesUnresolved": false,
+          "reachesCycle": false,
+          "reachesStreamOrUnspecified": false
+        },
+        "init": {
+          "derivable": true,
+          "source": "INIT_SOURCE_DERIVED",
+          "oneLevel": false
+        },
+        "enum": {
+          "values": [
+            {
+              "name": {
+                "declared": "JAMMED",
+                "snake": "jammed",
+                "camel": "JAMMED",
+                "screaming": "JAMMED",
+                "pascal": "Jammed"
+              },
+              "value": "0",
+              "doc": ""
+            },
+            {
+              "name": {
+                "declared": "UNPOWERED",
+                "snake": "unpowered",
+                "camel": "UNPOWERED",
+                "screaming": "UNPOWERED",
+                "pascal": "Unpowered"
+              },
+              "value": "1",
+              "doc": ""
+            }
+          ],
+          "retired": [],
+          "zeroMember": 0,
+          "initMember": 0
+        }
+      }
+    },
+    {
+      "package": "fleet.legacy",
+      "declaration": {
+        "name": {
+          "declared": "DoorFault",
+          "snake": "door_fault",
+          "camel": "DoorFault",
+          "screaming": "DOOR_FAULT",
+          "pascal": "DoorFault"
+        },
+        "visibility": "VISIBILITY_PUBLIC",
+        "isError": true,
+        "doc": "The M1 fleet's door failure set, kept for contracts still on the old wire.",
+        "labels": [],
+        "closure": {
+          "reachesFloat": false,
+          "reachesTextOrBytes": false,
+          "reachesCollection": false,
+          "reachesForeign": false,
+          "reachesUnresolved": false,
+          "reachesCycle": false,
+          "reachesStreamOrUnspecified": false
+        },
+        "init": {
+          "derivable": true,
+          "source": "INIT_SOURCE_DERIVED",
+          "oneLevel": false
+        },
+        "enum": {
+          "values": [
+            {
+              "name": {
+                "declared": "STUCK",
+                "snake": "stuck",
+                "camel": "STUCK",
+                "screaming": "STUCK",
+                "pascal": "Stuck"
+              },
+              "value": "0",
+              "doc": ""
+            },
+            {
+              "name": {
+                "declared": "NO_POWER",
+                "snake": "no_power",
+                "camel": "NOPOWER",
+                "screaming": "NO_POWER",
+                "pascal": "NoPower"
+              },
+              "value": "1",
+              "doc": ""
+            }
+          ],
+          "retired": [],
+          "zeroMember": 0,
+          "initMember": 0
+        }
+      }
+    }
+  ],
   "tupleCollisions": []
 }
