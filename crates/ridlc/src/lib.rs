@@ -1464,8 +1464,9 @@ fn declared_deployments(system: &CheckedSystem) -> Vec<String> {
         .collect()
 }
 
-/// Sets each region's hash of `lowered` to the catalog hash of its package,
-/// computed over `others`, which [`catalog_scope`] builds.
+/// Sets each region's hash of `lowered` to the catalog hash of the unit its
+/// package belongs to, computed over `others`, which [`catalog_scope`]
+/// builds and which holds every package of the unit.
 fn embed_catalog_hashes(
     lowered: &mut ridl_ir::v2::System,
     packages: &[&ridl_ir::v2::Package],
@@ -1476,7 +1477,8 @@ fn embed_catalog_hashes(
             .iter()
             .find(|package| package.name == region.catalog)
             .expect("a region's catalog is a package of the workspace");
-        region.hash = ridl_ir::catalog_hash::catalog_hash(package, others).to_vec();
+        let unit = ridl_ir::v2::unit_of(package);
+        region.hash = ridl_ir::catalog_hash::catalog_hash(unit, others).to_vec();
     }
 }
 

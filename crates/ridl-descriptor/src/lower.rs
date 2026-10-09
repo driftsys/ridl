@@ -9,7 +9,7 @@ use std::fmt;
 use ridl_ir::projection::size::{self, Ctx, PayloadShape, SizeState, size_state};
 use ridl_ir::v2::{
     Constraint, Decl, FieldType, Package, Param, PrimitiveType, ReturnType, StreamType, decl,
-    field_type, return_type, stream_type,
+    field_type, return_type, stream_type, unit_of,
 };
 
 use crate::hash::catalog_hash;
@@ -53,12 +53,16 @@ impl From<ZeroNumber> for LowerError {
 /// Lowers `package` to the finished descriptor bytes. `others` is every
 /// checked package of the build that `ridlc` passes, which can include
 /// `package` itself, plus `ridl.std` when a package references it; name
-/// resolution and the hash closure search it. An entry named like `package` is
-/// skipped by the hash (`ridl_ir::catalog_hash`), so the hash is the same
-/// whether or not `others` holds it.
+/// resolution and the hash closure search it. The hash is the hash of the
+/// unit `package` belongs to, over `package` and `others`; a package named
+/// twice is read once (`ridl_ir::catalog_hash`), so the hash is the same
+/// whether or not `others` holds `package`.
 pub fn lower(package: &Package, others: &[&Package]) -> Result<Vec<u8>, LowerError> {
     let numbered = numbered_shapes(package)?;
-    let hash = catalog_hash(package, others);
+    let packages: Vec<&Package> = std::iter::once(package)
+        .chain(others.iter().copied())
+        .collect();
+    let hash = catalog_hash(unit_of(package), &packages);
     let ctx = Ctx::new(package, others);
 
     let interfaces = package

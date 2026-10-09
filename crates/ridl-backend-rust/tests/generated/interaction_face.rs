@@ -1268,8 +1268,8 @@ impl ::ridl_rt::contract::Interface for Cabin {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            78, 33, 65, 116, 71, 120, 145, 211, 47, 76, 125, 95, 217, 117, 227, 100, 17,
-            184, 94, 72, 55, 15, 72, 145, 231, 68, 122, 125, 166, 37, 212, 205,
+            31, 111, 244, 243, 55, 3, 153, 22, 131, 29, 54, 178, 244, 122, 83, 161, 14,
+            40, 142, 54, 154, 45, 241, 237, 234, 84, 50, 114, 41, 54, 92, 30,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(1);
@@ -1479,8 +1479,8 @@ impl ::ridl_rt::contract::Interface for Horn {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            78, 33, 65, 116, 71, 120, 145, 211, 47, 76, 125, 95, 217, 117, 227, 100, 17,
-            184, 94, 72, 55, 15, 72, 145, 231, 68, 122, 125, 166, 37, 212, 205,
+            31, 111, 244, 243, 55, 3, 153, 22, 131, 29, 54, 178, 244, 122, 83, 161, 14,
+            40, 142, 54, 154, 45, 241, 237, 234, 84, 50, 114, 41, 54, 92, 30,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(2);
@@ -1534,8 +1534,8 @@ impl ::ridl_rt::contract::Interface for Siren {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            78, 33, 65, 116, 71, 120, 145, 211, 47, 76, 125, 95, 217, 117, 227, 100, 17,
-            184, 94, 72, 55, 15, 72, 145, 231, 68, 122, 125, 166, 37, 212, 205,
+            31, 111, 244, 243, 55, 3, 153, 22, 131, 29, 54, 178, 244, 122, 83, 161, 14,
+            40, 142, 54, 154, 45, 241, 237, 234, 84, 50, 114, 41, 54, 92, 30,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(3);
@@ -1601,8 +1601,8 @@ impl ::ridl_rt::contract::Interface for Valve {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            78, 33, 65, 116, 71, 120, 145, 211, 47, 76, 125, 95, 217, 117, 227, 100, 17,
-            184, 94, 72, 55, 15, 72, 145, 231, 68, 122, 125, 166, 37, 212, 205,
+            31, 111, 244, 243, 55, 3, 153, 22, 131, 29, 54, 178, 244, 122, 83, 161, 14,
+            40, 142, 54, 154, 45, 241, 237, 234, 84, 50, 114, 41, 54, 92, 30,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(4);

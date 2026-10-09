@@ -203,11 +203,12 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-ir/src/catalog_hash.rs",
-        lines: 36,
-        why: "the reduced package's own `interfaces` field, which the hash \
-              fills from a `shapes()` walk, sorts and blanks; the rest are \
-              test fixtures that build or edit a package's named \
-              interfaces",
+        lines: 37,
+        why: "the reduced unit's own `interfaces` field, which the hash \
+              fills from a `shapes()` walk over every package of the unit, \
+              sorts and blanks; the rest are test fixtures that build or \
+              edit a package's named interfaces, or read the reduced unit's \
+              field back",
     },
     Allowed {
         path: "crates/ridl-ir/src/codegen/deployment.rs",

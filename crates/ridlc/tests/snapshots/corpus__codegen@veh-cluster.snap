@@ -1454,7 +1454,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
   "services": [],
   "catalog": {
     "package": "veh.common",
-    "hash": "wdQQXr2wooWK1v/hYizJQahjDToitBMCwHEv9u3LwDQ=",
+    "hash": "9upx9DugcGTvaIBLAnIraYj6oje9uwMK5AnG/8ZEwt4=",
     "retired": []
   },
   "flatbuffers": {
@@ -6888,7 +6888,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
   ],
   "catalog": {
     "package": "veh.cluster",
-    "hash": "rjaDDi6cRCTCXZS/TSKYqS9MokoStdaX9aqtpYKblsE=",
+    "hash": "Fp3AIoF7k2gfxldqA5if4fhksaDGmAotHDaEth/+zyM=",
     "retired": []
   },
   "flatbuffers": {

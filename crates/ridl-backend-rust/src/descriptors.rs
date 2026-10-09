@@ -87,7 +87,7 @@ fn one_interface(
     interface: &v1::Interface,
     items: &mut Vec<TokenStream>,
 ) -> Result<(), GenerateError> {
-    let package_name = ctx.package_name();
+    let catalog_name = catalog_name(ctx);
     let iface_name = declared_name(interface).unwrap_or_default();
     let iface_ident = ident(iface_name);
 
@@ -137,7 +137,7 @@ fn one_interface(
         impl ::ridl_rt::contract::Interface for #iface_ident {
             const CATALOG: &'static ::ridl_rt::contract::CatalogRef =
                 &::ridl_rt::contract::CatalogRef {
-                    name: #package_name,
+                    name: #catalog_name,
                     hash: ::ridl_rt::contract::CatalogHash([#(#catalog_hash),*]),
                 };
             const NUMBER: ::ridl_rt::contract::InterfaceNo =
@@ -557,6 +557,18 @@ fn query_param_payload<'a>(
         .request
         .as_ref()
         .ok_or_else(|| no_single_param(&query.params, member))
+}
+
+/// The model's `Catalog.package`: the name of the unit the package belongs
+/// to, which is `CatalogRef.name`. Read from the model, not from
+/// `Scope.package`, which names the source package and is what the module
+/// and path names are built from.
+pub(crate) fn catalog_name<'a>(ctx: &Ctx<'a>) -> &'a str {
+    ctx.model
+        .catalog
+        .as_ref()
+        .map(|catalog| catalog.package.as_str())
+        .unwrap_or_default()
 }
 
 /// The model's `Catalog.hash` (ADR-0014 decision 15) as 32 `u8` literals,

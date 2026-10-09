@@ -834,8 +834,26 @@ pub mod v2 {
         unit: &str,
         packages: &'a [Package],
     ) -> impl Iterator<Item = &'a Package> {
+        select_unit(unit, packages.iter())
+    }
+
+    /// [`packages_of_unit`] over borrowed packages, the form the catalog
+    /// hash and the codegen lowering hold.
+    pub fn members_of_unit<'a>(
+        unit: &str,
+        packages: &[&'a Package],
+    ) -> impl Iterator<Item = &'a Package> {
+        select_unit(unit, packages.iter().copied())
+    }
+
+    /// The one selection behind [`packages_of_unit`] and
+    /// [`members_of_unit`]: by [`unit_of`], never by a name prefix.
+    fn select_unit<'a>(
+        unit: &str,
+        packages: impl Iterator<Item = &'a Package>,
+    ) -> impl Iterator<Item = &'a Package> {
         let unit = unit.to_owned();
-        packages.iter().filter(move |p| unit_of(p) == unit)
+        packages.filter(move |p| unit_of(p) == unit)
     }
 
     /// The name of a declaration relative to its unit: `name` for a package
@@ -865,6 +883,39 @@ pub mod v2 {
                 relative_name(unit_of(self), &self.name, shape.name)
             }
         }
+    }
+
+    /// The retired entries of the catalog of `unit`: every `retired` entry
+    /// of every package of the unit (a package named twice is read once),
+    /// in number order. A package carries its own retired interface under
+    /// its short name, which becomes the catalog name
+    /// ([`relative_name`]); a `service:` entry and a dotted entry, which the
+    /// unit's anchor package carries for an interface of a package no longer
+    /// in the unit, are already spelled as the lock spells them and are
+    /// kept as they are.
+    pub fn unit_retired(unit: &str, packages: &[&Package]) -> Vec<RetiredInterface> {
+        let mut seen: Vec<&str> = Vec::new();
+        let mut retired: Vec<RetiredInterface> = members_of_unit(unit, packages)
+            .filter(|package| {
+                let first = !seen.contains(&package.name.as_str());
+                if first {
+                    seen.push(&package.name);
+                }
+                first
+            })
+            .flat_map(|package| {
+                package.retired.iter().map(|entry| RetiredInterface {
+                    name: if entry.name.starts_with("service:") || entry.name.contains('.') {
+                        entry.name.clone()
+                    } else {
+                        relative_name(unit, &package.name, &entry.name)
+                    },
+                    number: entry.number,
+                })
+            })
+            .collect();
+        retired.sort_by_key(|entry| entry.number);
+        retired
     }
 
     /// Every package named by a type reference in `package`.

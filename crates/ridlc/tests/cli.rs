@@ -821,7 +821,8 @@ fn each_region_carries_its_catalog_hash() {
             region.catalog
         );
     }
-    assert_ne!(written.regions[0].hash, written.regions[1].hash);
+    // Both regions belong to the unit `veh`, so both carry the unit's hash.
+    assert_eq!(written.regions[0].hash, written.regions[1].hash);
 
     let mut db = ridl_core::RidlDatabase::default();
     let output = ridlc::compile_workspace(&mut db, entry).expect("the corpus entry loads");
@@ -872,7 +873,7 @@ fn a_region_hash_covers_the_standard_types_its_catalog_reaches() {
     let package = &output.checked[0].ir;
     assert_ne!(
         region.hash,
-        ridl_ir::catalog_hash::catalog_hash(package, &[]).to_vec(),
+        ridl_ir::catalog_hash::catalog_hash("veh.demo", &[package]).to_vec(),
         "LaneAssist reaches ridl.std.Uuid"
     );
 }
@@ -1507,19 +1508,18 @@ fn build_writes_the_catalog_hash_over_the_other_packages_of_the_build() {
         .map(|checked| &checked.ir)
         .find(|ir| ir.name == "veh.cluster")
         .expect("the entry declares veh.cluster");
-    let others: Vec<&ridl_ir::v2::Package> = output
+    let scope: Vec<&ridl_ir::v2::Package> = output
         .checked
         .iter()
         .map(|checked| &checked.ir)
-        .filter(|ir| ir.name != "veh.cluster")
         .chain(std::iter::once(&output.std_ir))
         .collect();
-    let expected = ridl_ir::catalog_hash::catalog_hash(cluster, &others);
+    let expected = ridl_ir::catalog_hash::catalog_hash("veh.cluster", &scope);
     assert_eq!(written, expected.to_vec());
     // The interfaces reach `veh.common`, so the scope is part of the hash.
     assert_ne!(
         expected,
-        ridl_ir::catalog_hash::catalog_hash(cluster, &[]),
+        ridl_ir::catalog_hash::catalog_hash("veh.cluster", &[cluster]),
         "veh.cluster's interfaces reach a declaration of veh.common"
     );
 }

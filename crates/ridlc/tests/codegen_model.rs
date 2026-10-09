@@ -427,13 +427,15 @@ fn the_face_fixture_carries_the_whole_ipc_floor() {
     }
 
     // The catalog hash (the frame specification §6.1) is the one ADR-0014
-    // decision 15 defines, over the package and the scope the model was
-    // lowered over.
+    // decision 15 defines, over the package's unit and the scope the model
+    // was lowered over.
     let catalog = model.catalog.as_ref().expect("a catalog");
+    let unit = ridl_ir::v2::unit_of(&compiled.package);
+    assert_eq!(catalog.package, unit, "the catalog is named after the unit");
     assert_eq!(
         catalog.hash,
-        ridl_ir::catalog_hash::catalog_hash(&compiled.package, &[]).to_vec(),
-        "the hash is `ridl_ir::catalog_hash::catalog_hash` over the lowered package"
+        ridl_ir::catalog_hash::catalog_hash(unit, &[&compiled.package]).to_vec(),
+        "the hash is `ridl_ir::catalog_hash::catalog_hash` over the lowered package's unit"
     );
     assert!(
         catalog.hash.iter().any(|byte| *byte != 0),

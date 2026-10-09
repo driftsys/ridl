@@ -320,7 +320,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "service": "veh.adas.lane"
         }
       ],
-      "hash": "OIyPkzvltFVj6jqhxoEqSC1G6ggESmnRJKawgwBoeFU="
+      "hash": "lJ/A1xcXiHvJmhNNG8aqjkDJe21IyYJgZFy7xHoNpNo="
     },
     {
       "catalog": "veh.diag",
@@ -333,7 +333,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "service": "veh.diag.access"
         }
       ],
-      "hash": "fzjdDWaTWwHuQ0iKPfqbbIGK6/e80fNB2HTqSC46vz4="
+      "hash": "lJ/A1xcXiHvJmhNNG8aqjkDJe21IyYJgZFy7xHoNpNo="
     }
   ],
   "distributions": [

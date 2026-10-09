@@ -4,4 +4,4 @@
 //! `Catalog.hash`, and the model is lowered there. This module is the name
 //! the descriptor's callers use.
 
-pub use ridl_ir::catalog_hash::{catalog_hash, reachable_decls, reduced_package};
+pub use ridl_ir::catalog_hash::{catalog_hash, reachable_decls, reduced_unit};

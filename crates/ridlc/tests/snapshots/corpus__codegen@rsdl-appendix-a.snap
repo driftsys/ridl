@@ -377,8 +377,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
     }
   ],
   "catalog": {
-    "package": "veh.adas",
-    "hash": "2cFPwN/F3tvfFCYjwjY0xlJr3O97PSn8Z/c/DOxegVE=",
+    "package": "veh",
+    "hash": "Dgya2GZdt1v293F3DhGXLZ9982nwMA/1x53tdnvRaxU=",
     "retired": []
   },
   "flatbuffers": {
@@ -611,8 +611,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   "interfaces": [],
   "services": [],
   "catalog": {
-    "package": "veh.common",
-    "hash": "wdQQXr2wooWK1v/hYizJQahjDToitBMCwHEv9u3LwDQ=",
+    "package": "veh",
+    "hash": "sv4W1tEUP5a9/iB7mGmpSyXngnI7pQ2LK+Kcdw/kqbg=",
     "retired": []
   },
   "flatbuffers": {
@@ -883,8 +883,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
     }
   ],
   "catalog": {
-    "package": "veh.diag",
-    "hash": "8o2Lv41hqD2jEW9XLYGzOmbDiCMzUiF/nvxN2y/j5c4=",
+    "package": "veh",
+    "hash": "Z97CJIqPYHvAIBmeFuxjtkkHHKkPl7YZrfWKQvlPi9Y=",
     "retired": []
   },
   "flatbuffers": {
@@ -915,8 +915,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   "interfaces": [],
   "services": [],
   "catalog": {
-    "package": "veh.topology",
-    "hash": "QIxaTG7uElYcEKtjYhMKM6LlTvNgWOkyGHo9VX5VIoY=",
+    "package": "veh",
+    "hash": "sv4W1tEUP5a9/iB7mGmpSyXngnI7pQ2LK+Kcdw/kqbg=",
     "retired": []
   },
   "flatbuffers": {
