@@ -626,7 +626,11 @@ diag_codes! {
             "`signal` or `event` without a timing annotation", lint = "missing-timing";
 
         /// A range annotation `@[X..Y]` whose lower bound exceeds its upper bound
-        /// (ridl §9.2, §16.1). Emitted by the checker.
+        /// (ridl §9.2, §16.1). It also fires on a `command` or a `query`
+        /// written `@[X..]` whose call throttle is longer than the default
+        /// response bound the member takes (ridl §9.3), unless the range did
+        /// not parse whole: such a range draws FORM-101 and no RIDL-101 from
+        /// the default maximum. Emitted by the checker.
         RIDL_101 = "RIDL-101", Error,
             "timing range `@[X..Y]` with `X > Y`";
 
@@ -689,7 +693,9 @@ diag_codes! {
         /// `command` and a `query` the call throttle equals the response bound
         /// (ridl §9.2, §16.1; ADR-0008 decision 17). It also fires on a
         /// `command` or a `query` written `@[X..]` whose call throttle equals
-        /// the default response bound the member takes (ridl §9.3). Not a
+        /// the default response bound the member takes (ridl §9.3), unless
+        /// the range did not parse whole: such a range draws FORM-101 and no
+        /// RIDL-108 from the default maximum. Not a
         /// spelling of the strict-periodic `@Xms`, which is a separate
         /// `TimingMode`. Warning. Emitted by the checker.
         RIDL_108 = "RIDL-108", Warning,

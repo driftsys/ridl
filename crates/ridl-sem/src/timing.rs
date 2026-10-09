@@ -1442,8 +1442,9 @@ mod tests {
     /// A readable zero minimum in an RPC range that did not parse whole still
     /// draws RIDL-102. The guard that keeps RIDL-101 and RIDL-108 off the
     /// completed range compares the minimum with a maximum the author did not
-    /// write; the zero check reads only the written minimum, so the parser's
-    /// FORM-101 does not replace it.
+    /// write; the zero check is not under that guard. It reads the written
+    /// minimum and the maximum the default supplied, finds the zero minimum,
+    /// and the parser's FORM-101 does not replace it.
     #[test]
     fn ridl_102_on_a_readable_zero_minimum_in_a_range_that_did_not_parse_whole() {
         let default = parse_rpc_default_timing("[10ms..1s]").expect("valid default");
