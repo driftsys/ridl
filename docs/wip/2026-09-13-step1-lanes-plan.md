@@ -295,6 +295,15 @@ receives a heads-up issue when S2 changes the model.
 third encoding when it lands; until then the model marks such a channel as
 having no slot layout.
 
+### Lane H — open items after release 0.7.0
+
+Driver: [`2026-10-09-lane-h-driver.md`](2026-10-09-lane-h-driver.md). Added
+2026-10-09. Four items left open when the book user chapters landed: the emitter
+lints of driftsys/ridl#782, the conflict between `ridl diff`'s compatible
+verdict and the catalog check at `attach` (frame specification §6.1), the book
+chapters "Writing a port" and "Evolving an interface", and an issue for
+`cargo publish --workspace`. Stages H0 to H5 are in the driver.
+
 ## 5. Gates
 
 A gate is a fact a driver checks with a command before starting the stage that
