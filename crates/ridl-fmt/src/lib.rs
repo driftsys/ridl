@@ -9,7 +9,8 @@
 //! - **trivia-aware** — comments and doc comments are preserved and re-anchored
 //!   to what they precede; an inline trailing comment stays on its line, except
 //!   after a machine block and after a separator comma that is on a line of its
-//!   own, where it leads the next member;
+//!   own, where it leads the next member (or stays at the end of the body when
+//!   no member follows);
 //! - **total** — every syntactically valid input formats; a file with parse
 //!   errors is never reformatted (fmt must not eat broken code, so it returns
 //!   [`FormatOutcome::ParseErrors`] untouched);
@@ -89,7 +90,8 @@
 //! comment on the opening-brace line of a block. Comments after a machine's
 //! closing brace belong to the deployment body, with or without a separator
 //! comma, and a comment after a separator comma that is on a line of its own
-//! leads the next member. A comment embedded *inside* a
+//! leads the next member, or stays at the end of the body when no member
+//! follows. A comment embedded *inside* a
 //! single-line construct — between the brackets of a constraint or a
 //! collection, the parentheses of a tuple, or the tokens of one declaration —
 //! cannot be reflowed into the tight style without risking its meaning, so the
@@ -209,7 +211,9 @@ fn format_source_file(file: &SourceFile, options: &FormatOptions) -> String {
 ///
 /// The single forward pass folds leading comments into the block of the node
 /// they precede, keeps an inline trailing comment on the line of the node it
-/// follows, and drops separator commas. `is_source_file` selects the vertical
+/// follows, and drops separator commas. Two comments are the exception to the
+/// trailing rule: one after a machine block's closing brace, and one after a
+/// separator comma on a line of its own; each leads the next member. `is_source_file` selects the vertical
 /// spacing policy: the file forces one blank line between definitions, a brace
 /// block spaces members only where the source did.
 fn layout_container(
@@ -269,7 +273,9 @@ fn layout_container(
 /// One source container unit before its node is rendered. Attribute bodies and
 /// brace bodies share this collector, including leading and trailing comments.
 /// Comments after a machine block belong to the deployment body, including
-/// when the optional separator is absent.
+/// when the optional separator is absent, and a comment after a separator comma
+/// on a line of its own leads the next member; neither trails the node before
+/// it.
 struct ContainerBlock {
     kind: BlockKind,
     gap_blank: bool,
@@ -2381,6 +2387,19 @@ mod tests {
         assert_eq!(
             formatted(input),
             "package p\n\nenum Warning {\n  LOW_FUEL = 0\n  CHECK_ENGINE = 1\n}\n",
+        );
+    }
+
+    /// A comment after a separator comma that is on a line of its own leads the
+    /// next member, on its own line; a comment after a comma on the member's
+    /// line stays trailing.
+    #[test]
+    fn a_comment_after_a_comma_on_its_own_line_leads_the_next_member() {
+        assert_profile_format(
+            "package p\nstruct S {\n  a : A\n  , // c\n  b : B,\n  c : C, // d\n}\n",
+            "package p\n\nstruct S {\n  a: A\n  // c\n  b: B\n  c: C // d\n}\n",
+            Profile::Typl,
+            &FormatOptions::default(),
         );
     }
 
