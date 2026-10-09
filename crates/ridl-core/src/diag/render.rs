@@ -250,8 +250,6 @@ mod tests {
         insta::assert_snapshot!("two_diagnostics_same_offset", rendered);
     }
 
-    /// A fix-it-carrying diagnostic spells its suggested replacement out under
-    /// the diagnostic.
     /// The location header counts a lone CR as a line break, as `line_col` and
     /// the language server do, and a CRLF pair as one line break.
     #[test]
@@ -280,6 +278,8 @@ mod tests {
         }
     }
 
+    /// A fix-it-carrying diagnostic spells its suggested replacement out under
+    /// the diagnostic.
     #[test]
     fn fixit_renders_its_suggestion() {
         let text = "package p\ntype Speed: km/h\n";
