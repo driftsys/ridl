@@ -219,3 +219,14 @@ Each ruling: what was decided — why — what it costs if wrong.
   `the_routing_table_is_sorted_by_interface_number_and_not_by_name`, which G4
   saw fail under two mutations (sort by name, no sort) — if wrong, the issue is
   reopened.
+- **R-14** G2: the two existing tests that move a package out of its unit
+  (`baseline_drops_a_snapshot_whose_package_is_gone`,
+  `a_failed_publication_keeps_the_stale_snapshot`) are adapted by giving the
+  stale snapshot number 0 (not yet published) — each test is about snapshot
+  housekeeping, not number loss, and with a published number the new RIDL-412
+  refusal is the correct result for both — if wrong, the two tests no longer
+  cover a published package that moves, which the three new D-3 tests cover.
+- **R-15** G2: the R-3 sentence states a tie-break (an interface before an
+  inline shape of the same name) that no test pins; G2 adds that test, proven by
+  a mutation that reverses the tie-break — the specification must not state a
+  rule the suite does not hold — if wrong, one extra test.
