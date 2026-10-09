@@ -196,11 +196,15 @@ permitted only inside string literals and doc comments.
 
 ### 2.2 Whitespace, Line Endings, Separators
 
-Whitespace (space, tab, CR, LF) is insignificant except as a token separator.
-`LF` and `CRLF` are both accepted. **Newline and comma are interchangeable
-separators** in all block constructs; trailing comma is permitted. **There are
-no semicolons** — the ADR-0002 example `package veh.common.types;` is errata;
-the grammar has none (concept note §4.1 errata).
+Whitespace (space, tab, CR, LF) is insignificant except as a token separator. A
+line break is an `LF`, a `CRLF` pair, or a lone `CR` (a `CR` that is not
+followed by an `LF`); a `CRLF` pair is one line break. A line comment and a doc
+comment line end at a line break of any of these three forms, a string literal
+and a regex literal cannot contain one, and diagnostic line numbers count each
+of them. **Newline and comma are interchangeable separators** in all block
+constructs; trailing comma is permitted. **There are no semicolons** — the
+ADR-0002 example `package veh.common.types;` is errata; the grammar has none
+(concept note §4.1 errata).
 
 ### 2.3 Identifiers
 

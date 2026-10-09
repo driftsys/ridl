@@ -1490,19 +1490,36 @@ pub struct LineCol {
 /// The line and column of a byte `offset` into `text`. An offset past the end
 /// of the text, or inside a multi-byte character, is moved back to the nearest
 /// character boundary at or before it.
+///
+/// A line ends at an LF, a CRLF pair or a lone CR, the line-break rule of the
+/// language server's line index. A CRLF pair is one line break, and its CR is
+/// counted as a column of the line it ends.
 pub fn line_col(text: &str, offset: TextSize) -> LineCol {
     let mut offset = usize::from(offset).min(text.len());
     while !text.is_char_boundary(offset) {
         offset -= 1;
     }
-    let before = &text[..offset];
-    let line = before.matches('\n').count() as u32 + 1;
-    let column = match before.rfind('\n') {
-        Some(newline) => before[newline + 1..].chars().count(),
-        None => before.chars().count(),
-    } as u32
-        + 1;
+    let bytes = text.as_bytes();
+    let mut line = 1u32;
+    let mut line_start = 0usize;
+    for at in 0..offset {
+        if ends_line(bytes, at) {
+            line += 1;
+            line_start = at + 1;
+        }
+    }
+    let column = text[line_start..offset].chars().count() as u32 + 1;
     LineCol { line, column }
+}
+
+/// Whether the byte at `at` ends a line: an LF, or a CR that is not followed by
+/// an LF. In a CRLF pair the LF ends the line.
+pub(crate) fn ends_line(bytes: &[u8], at: usize) -> bool {
+    match bytes[at] {
+        b'\n' => true,
+        b'\r' => bytes.get(at + 1) != Some(&b'\n'),
+        _ => false,
+    }
 }
 
 /// A span in the JSON diagnostic contract: the file's path as registered in the
@@ -2609,6 +2626,56 @@ mod json_tests {
         // An offset past the end clamps to the end of the text.
         assert_eq!(
             line_col(text, TextSize::from(99)),
+            LineCol { line: 3, column: 1 }
+        );
+    }
+
+    #[test]
+    fn line_col_counts_a_lone_cr_as_a_line_break() {
+        let text = "ab\rcd\re";
+        assert_eq!(
+            line_col(text, TextSize::from(2)),
+            LineCol { line: 1, column: 3 }
+        );
+        assert_eq!(
+            line_col(text, TextSize::from(3)),
+            LineCol { line: 2, column: 1 }
+        );
+        assert_eq!(
+            line_col(text, TextSize::from(4)),
+            LineCol { line: 2, column: 2 }
+        );
+        assert_eq!(
+            line_col(text, TextSize::from(6)),
+            LineCol { line: 3, column: 1 }
+        );
+    }
+
+    #[test]
+    fn line_col_counts_a_final_lone_cr_as_a_line_break() {
+        assert_eq!(
+            line_col("ab\r", TextSize::from(3)),
+            LineCol { line: 2, column: 1 }
+        );
+    }
+
+    #[test]
+    fn line_col_counts_a_crlf_pair_as_one_line_break() {
+        let text = "ab\r\ncd";
+        // The CR of a CRLF pair is the last character of its line.
+        assert_eq!(
+            line_col(text, TextSize::from(3)),
+            LineCol { line: 1, column: 4 }
+        );
+        assert_eq!(
+            line_col(text, TextSize::from(4)),
+            LineCol { line: 2, column: 1 }
+        );
+        // A CR followed by a CRLF pair is two line breaks: the lone CR, then
+        // the pair.
+        let text = "a\r\r\nb";
+        assert_eq!(
+            line_col(text, TextSize::from(4)),
             LineCol { line: 3, column: 1 }
         );
     }

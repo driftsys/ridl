@@ -8,7 +8,9 @@
 //!   including trivia (whitespace, comments, doc comments);
 //! - **trivia-aware** — comments and doc comments are preserved and re-anchored
 //!   to what they precede; an inline trailing comment stays on its line, except
-//!   after a machine block, where it belongs to the deployment body;
+//!   after a machine block and after a separator comma that is on a line of its
+//!   own, where it leads the next member (or stays at the end of the body when
+//!   no member follows);
 //! - **total** — every syntactically valid input formats; a file with parse
 //!   errors is never reformatted (fmt must not eat broken code, so it returns
 //!   [`FormatOutcome::ParseErrors`] untouched);
@@ -87,7 +89,9 @@
 //! precedes, and an inline trailing comment stays on its line — including a
 //! comment on the opening-brace line of a block. Comments after a machine's
 //! closing brace belong to the deployment body, with or without a separator
-//! comma. A comment embedded *inside* a
+//! comma, and a comment after a separator comma that is on a line of its own
+//! leads the next member, or stays at the end of the body when no member
+//! follows. A comment embedded *inside* a
 //! single-line construct — between the brackets of a constraint or a
 //! collection, the parentheses of a tuple, or the tokens of one declaration —
 //! cannot be reflowed into the tight style without risking its meaning, so the
@@ -207,7 +211,9 @@ fn format_source_file(file: &SourceFile, options: &FormatOptions) -> String {
 ///
 /// The single forward pass folds leading comments into the block of the node
 /// they precede, keeps an inline trailing comment on the line of the node it
-/// follows, and drops separator commas. `is_source_file` selects the vertical
+/// follows, and drops separator commas. Two comments are the exception to the
+/// trailing rule: one after a machine block's closing brace, and one after a
+/// separator comma on a line of its own; each leads the next member. `is_source_file` selects the vertical
 /// spacing policy: the file forces one blank line between definitions, a brace
 /// block spaces members only where the source did.
 fn layout_container(
@@ -267,7 +273,9 @@ fn layout_container(
 /// One source container unit before its node is rendered. Attribute bodies and
 /// brace bodies share this collector, including leading and trailing comments.
 /// Comments after a machine block belong to the deployment body, including
-/// when the optional separator is absent.
+/// when the optional separator is absent, and a comment after a separator comma
+/// on a line of its own leads the next member; neither trails the node before
+/// it.
 struct ContainerBlock {
     kind: BlockKind,
     gap_blank: bool,
@@ -285,7 +293,7 @@ fn collect_container(elements: &[SyntaxElement]) -> Vec<ContainerBlock> {
     for element in elements {
         match element {
             NodeOrToken::Token(token) if token.kind() == SyntaxKind::Whitespace => {
-                nl_run += token.text().matches('\n').count();
+                nl_run += line_breaks(token.text());
             }
             NodeOrToken::Token(token) if is_comment(token.kind()) => {
                 let text = token.text().trim_end().to_string();
@@ -660,7 +668,7 @@ fn split_brace_line_comment(elements: &[SyntaxElement]) -> (Option<String>, &[Sy
     while let Some(element) = elements.get(i) {
         match element {
             NodeOrToken::Token(t) if t.kind() == SyntaxKind::Whitespace => {
-                if t.text().contains('\n') {
+                if line_breaks(t.text()) > 0 {
                     break;
                 }
                 i += 1;
@@ -831,13 +839,13 @@ fn has_only_inline_annotation_comments(node: &SyntaxNode) -> bool {
             }
             NodeOrToken::Token(token) if is_comment(token.kind()) => {
                 if !inline
-                    || token.text().contains('\n')
+                    || comment_breaks_line(token.text())
                     || !matches!(owner, Some(SyntaxKind::Timing | SyntaxKind::AttrBlock))
                 {
                     return false;
                 }
             }
-            NodeOrToken::Token(token) if token.text().contains('\n') => inline = false,
+            NodeOrToken::Token(token) if line_breaks(token.text()) > 0 => inline = false,
             _ => {}
         }
     }
@@ -1486,6 +1494,26 @@ fn indent_str(level: usize) -> String {
     "  ".repeat(level)
 }
 
+/// The number of line breaks in source `text`: each LF, and each CR that is
+/// not followed by an LF. A CRLF pair is one line break.
+fn line_breaks(text: &str) -> usize {
+    let bytes = text.as_bytes();
+    (0..bytes.len())
+        .filter(|&at| match bytes[at] {
+            b'\n' => true,
+            b'\r' => bytes.get(at + 1) != Some(&b'\n'),
+            _ => false,
+        })
+        .count()
+}
+
+/// Whether a comment token spans a line break. A line comment ends before its
+/// LF, so the CR of a CRLF pair is the last character of its text; that CR
+/// belongs to the break that follows the token, not to the comment.
+fn comment_breaks_line(text: &str) -> bool {
+    line_breaks(text.strip_suffix('\r').unwrap_or(text)) > 0
+}
+
 fn is_comment(kind: SyntaxKind) -> bool {
     matches!(
         kind,
@@ -1653,6 +1681,95 @@ mod tests {
                     },
                 );
             }
+        }
+    }
+
+    /// A lone CR is one line break, as an LF is, and a CRLF pair is one line
+    /// break: a file with either line ending formats to the same text as the
+    /// same file with LF line endings. Output the formatter lays out itself
+    /// uses LF; a member kept verbatim keeps the line endings it had.
+    #[test]
+    fn a_lone_cr_and_a_crlf_pair_each_format_as_one_line_break() {
+        let lf = "// Copyright Acme\n\npackage p\n\n\n// lead\nstruct S { // brace\n  a : A   // note\n  // own line\n  b : B\n\n\n  c : C\n}\n/// doc\nstruct T {\n  a : A\n}\nstruct U {\n  // first\n  a : A\n}\nstruct V {\n  a : A\n  b : B\n}\n";
+        let expected = format(lf, Profile::Typl, &FormatOptions::default());
+        let FormatOutcome::Formatted(text) = &expected else {
+            panic!("the LF source must format: {expected:?}");
+        };
+        assert!(text.contains("  a: A // note\n  // own line\n  b: B\n\n  c: C\n"));
+        assert!(text.contains("struct U {\n  // first\n  a: A\n}\n"));
+        assert!(text.contains("struct V {\n  a: A\n  b: B\n}\n"));
+        for ending in ["\r", "\r\n"] {
+            let source = lf.replace('\n', ending);
+            assert_eq!(
+                format(&source, Profile::Typl, &FormatOptions::default()),
+                expected,
+                "line ending {ending:?}",
+            );
+        }
+    }
+
+    /// The CR that ends a line comment's text belongs to the break after the
+    /// token; a CR or an LF inside a block comment is a break of its own.
+    #[test]
+    fn a_comment_breaks_a_line_only_inside_its_own_text() {
+        assert!(!comment_breaks_line("/// x\r"));
+        assert!(!comment_breaks_line("// x"));
+        assert!(comment_breaks_line("/* a\rb */"));
+        assert!(comment_breaks_line("/* a\nb */"));
+        assert!(comment_breaks_line("/* a\r\nb */"));
+    }
+
+    /// A member with an inline annotation comment formats the same with an LF,
+    /// a lone CR or a CRLF pair as its line ending. The CR of a CRLF pair is
+    /// the last character of a line comment's text and is not a line break of
+    /// its own.
+    #[test]
+    fn an_inline_annotation_comment_formats_the_same_with_any_line_ending() {
+        let lf = "package p\ninterface I {\n  query  q():T [persist] // a\n  @ 10ms\n}\n";
+        let expected = format(lf, Profile::Ridl, &FormatOptions::default());
+        assert_eq!(
+            expected,
+            FormatOutcome::Formatted(
+                "package p\n\ninterface I {\n  query q(): T @10ms [ persist ] // a\n}\n"
+                    .to_string()
+            )
+        );
+        for ending in ["\r", "\r\n"] {
+            assert_eq!(
+                format(
+                    &lf.replace('\n', ending),
+                    Profile::Ridl,
+                    &FormatOptions::default()
+                ),
+                expected,
+                "line ending {ending:?}",
+            );
+        }
+    }
+
+    /// A comment on its own line between a member's annotations, or a block
+    /// comment that spans lines there, sends the member down the verbatim
+    /// path when the line break is a lone CR, as it does for an LF. The
+    /// verbatim member keeps its source line breaks.
+    #[test]
+    fn a_lone_cr_before_an_annotation_comment_keeps_the_member_verbatim() {
+        for (member, ending) in [
+            "query  q():T [persist] // a\n  // b\n  @ 10ms",
+            "query  q():T [persist] /* a\nb */ @ 10ms",
+        ]
+        .into_iter()
+        .flat_map(|member| ["\n", "\r", "\r\n"].map(|ending| (member, ending)))
+        {
+            let member = member.replace('\n', ending);
+            assert_eq!(
+                format(
+                    &format!("package p\ninterface I {{\n  {member}\n}}\n"),
+                    Profile::Ridl,
+                    &FormatOptions::default(),
+                ),
+                FormatOutcome::Formatted(format!("package p\n\ninterface I {{\n  {member}\n}}\n")),
+                "line ending {ending:?}",
+            );
         }
     }
 
@@ -2270,6 +2387,19 @@ mod tests {
         assert_eq!(
             formatted(input),
             "package p\n\nenum Warning {\n  LOW_FUEL = 0\n  CHECK_ENGINE = 1\n}\n",
+        );
+    }
+
+    /// A comment after a separator comma that is on a line of its own leads the
+    /// next member, on its own line; a comment after a comma on the member's
+    /// line stays trailing.
+    #[test]
+    fn a_comment_after_a_comma_on_its_own_line_leads_the_next_member() {
+        assert_profile_format(
+            "package p\nstruct S {\n  a : A\n  , // c\n  b : B,\n  c : C, // d\n}\n",
+            "package p\n\nstruct S {\n  a: A\n  // c\n  b: B\n  c: C // d\n}\n",
+            Profile::Typl,
+            &FormatOptions::default(),
         );
     }
 
