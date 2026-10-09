@@ -232,11 +232,13 @@ By home; see each reference for full statements.
   call, and a failure declared as data by a result-union element type is Stratum
   1 instead, which does not (§17.6, ridl §12.4) · there is no normative
   `ridl.reflect` package, because the catalog descriptor — specified, and
-  scheduled as Epic 16 — is the enumeration surface (§17.7) · and the three
-  publication-gate questions resolve as no further refusal, with ridl §11 now
-  stating what the gate protects — the record of a retirement — and what
-  `ridl diff` gates (§17.12, §17.13, §17.14). The four closed earlier: the QoS
-  boundary is the ADR-0015 absorption principle (§17.5), the signal-groups
+  scheduled as Epic 16 — is the enumeration surface (§17.7) · and two of the
+  three publication-gate questions resolve as no further refusal, with ridl §11
+  now stating what the gate protects — the record of a retirement — and what
+  `ridl diff` gates (§17.12, §17.14); the third, a whole package removed or
+  renamed, is refused at the interface level (RIDL-412) unless the unit's
+  `interfaces.lock` retires its numbers (§17.13). The four closed earlier: the
+  QoS boundary is the ADR-0015 absorption principle (§17.5), the signal-groups
   question is closed by the ADR-0015 coherence rule with the struct idiom
   confirmed (§17.3), interaction-set reuse is answered by composition — a
   service carries a list of interfaces, and mixins were rejected because they
