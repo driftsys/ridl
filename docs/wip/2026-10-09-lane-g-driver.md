@@ -289,3 +289,9 @@ Each ruling: what was decided — why — what it costs if wrong.
   input it accepted, or read accepted input differently, is marked breaking in
   its squash commit — consumers read the changelog to decide an upgrade — if
   wrong, the changelog lists a breaking entry that a user does not notice.
+- **R-24** #793 is marked breaking under R-23, against the pass-1 deep refuter's
+  verdict on the string and regex case: that verdict holds for a lone CR inside
+  a string or a regex (the reference already forbade it), but a lone CR inside a
+  line comment was accepted text and now ends the comment, so the rest of that
+  line is read as source — if wrong, one changelog entry is marked breaking that
+  affects almost no file.
