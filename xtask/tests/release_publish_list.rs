@@ -8,8 +8,9 @@
 //!
 //! The test checks two properties against `cargo metadata`:
 //!
-//! 1. The listed crates are exactly the workspace members whose manifest does
-//!    not set `publish = false`.
+//! 1. The listed crates are exactly the workspace members that are publishable
+//!    to crates.io (their manifest sets neither `publish = false` nor a
+//!    `publish` registry list that omits `crates-io`).
 //! 2. Each listed crate comes after every workspace crate it depends on
 //!    through a dependency that `cargo publish` keeps, and no listed crate
 //!    depends on a workspace crate that is not published.
@@ -256,9 +257,10 @@ mod unit {
         ]
     }
 
+    type Dep = (&'static str, Option<&'static str>, &'static str, bool);
+
     /// A metadata document for packages given as `(name, publish, deps)`,
     /// where a dependency is `(name, kind, req, has_path)`.
-    type Dep = (&'static str, Option<&'static str>, &'static str, bool);
     fn metadata(packages: &[(&str, serde_json::Value, Vec<Dep>)]) -> serde_json::Value {
         let packages: Vec<_> = packages
             .iter()
@@ -326,8 +328,8 @@ mod unit {
 
     #[test]
     fn a_comment_name_is_not_a_crate() {
-        // `publish # note` has the word `publish` first and a comment second.
-        let parsed = parse_publish_list("publish # note");
+        // `publish #note` is one word after `publish`, and `#` is not a name character.
+        let parsed = parse_publish_list("publish #note");
         assert!(parsed.calls.is_empty());
         assert_eq!(parsed.unreadable.len(), 1);
     }
@@ -399,6 +401,56 @@ mod unit {
         assert_eq!(
             found,
             ["`a` depends on `t`, which is not published to crates.io"]
+        );
+    }
+
+    #[test]
+    fn a_normal_path_dependency_is_an_edge() {
+        let m = metadata(&[
+            ("a", json!(null), vec![]),
+            ("b", json!(null), vec![("a", None, "^1", true)]),
+        ]);
+        assert_eq!(deps_of(&m, "b"), ["a"]);
+    }
+
+    #[test]
+    fn a_listed_member_with_publish_false_is_named() {
+        let mut all = members();
+        all.push(Member {
+            publishable: false,
+            ..member("t", &[])
+        });
+        let found = problems(&list(&["a", "b", "c", "t"]), &all);
+        assert_eq!(
+            found,
+            ["`publish t` names a crate that is not a publishable workspace member"]
+        );
+    }
+
+    #[test]
+    fn the_dependencies_of_an_unpublished_member_are_not_checked() {
+        // `t` is not published, so its own dependency on the unpublished `u`
+        // is not a release problem.
+        let mut all = members();
+        all.push(Member {
+            publishable: false,
+            ..member("t", &["u"])
+        });
+        all.push(Member {
+            publishable: false,
+            ..member("u", &[])
+        });
+        assert!(problems(&list(&["a", "b", "c"]), &all).is_empty());
+    }
+
+    #[test]
+    fn the_first_occurrence_decides_the_position() {
+        // `b` is listed before and after `a`; the first occurrence is wrong,
+        // so the order is reported once for `b`.
+        let found = problems(&list(&["b", "a", "b", "c"]), &members());
+        assert!(
+            found.contains(&"`b` depends on `a` but is published before it".to_string()),
+            "{found:?}"
         );
     }
 
