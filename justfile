@@ -1940,7 +1940,9 @@ story-id-check root="":
 # dropped from CI, or added to `build` and never wired into CI, which is how
 # `mdbook build` came to run in CI and nowhere else. This compares the two
 # lists: every dependency of `build` must appear in .github/workflows/ci.yml as
-# a `run:` step invoking `just <recipe>`.
+# a `run:` step invoking `just <recipe>`. It also checks the members of `build`
+# against the `expected` list in this recipe, so a member added to or removed
+# from `build` without a matching edit here fails.
 #
 # What it checks is narrow, and the narrowness is the point of this paragraph.
 # It checks that the text of a `run: just <member>` step is present in the

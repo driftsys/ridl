@@ -124,16 +124,18 @@ derivation writes; `notes.md` is formatted and linted like any other Markdown.
 [`cargo xtask calibrate`](../../xtask/README.md) has two subcommands:
 
 - `dump <out-dir>` copies each corpus workspace into a temporary directory under
-  `<out-dir>`, sets the five candidate checks to `warn` in a `[lints]` table,
-  runs `ridl check --format json`, and writes one findings file per candidate.
-  The checks run at the thresholds compiled into them: the labelled dump was
-  taken while each constant was at its search start (2 fields, 2 variants, 2
-  groups, a group size of 1), so a dump at the shipped constants no longer
-  reports the cohesion findings below 7 groups, and the two dropped candidates'
-  files are empty (their `[lints]` entries draw MANI-010). A finding has a
-  stable ID built from its check, workspace, relative path, byte range and
-  occurrence index, and a typed `metric` for a thresholded check, parsed from
-  the diagnostic message; a missing or malformed value fails the dump.
+  `<out-dir>`, probes the built `ridl` for the candidate checks it ships, sets
+  only those checks to `warn` in a `[lints]` table, runs
+  `ridl check --format json`, and writes one findings file per candidate. The
+  checks run at the thresholds compiled into them: the labelled dump was taken
+  while each constant was at its search start (2 fields, 2 variants, 2 groups, a
+  group size of 1), so a dump at the shipped constants no longer reports the
+  cohesion findings below 7 groups, and the two dropped candidates' files are
+  empty (the dump does not write them to `[lints]`, and it fails on any
+  MANI-010). A finding has a stable ID built from its check, workspace, relative
+  path, byte range and occurrence index, and a typed `metric` for a thresholded
+  check, parsed from the diagnostic message; a missing or malformed value fails
+  the dump.
 - `derive` (also `--derive`) reads the five label files and `recall.toml`, and
   prints, per check, the precision at every candidate threshold, the recall
   against the rubric issues, and the level and threshold ADR-0027 decision 4
