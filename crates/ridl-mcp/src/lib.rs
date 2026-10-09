@@ -675,6 +675,44 @@ mod tests {
                 .all(|d| d["code"] != "TYPL-011"),
             "{value:?}"
         );
+        // The warning is counted: one more than the same check without the overlay.
+        let without = RidlMcp::new()
+            .ridl_check(Parameters(
+                serde_json::from_value(json!({"path": path})).unwrap(),
+            ))
+            .await
+            .unwrap()
+            .structured_content
+            .unwrap();
+        assert_eq!(
+            value["workspace"]["warnings"].as_u64().unwrap(),
+            without["workspace"]["warnings"].as_u64().unwrap() + 1
+        );
+    }
+
+    // An overlay with any other extension is still a tool error (ADR-0025
+    // decision 7): only `.typl`, `.ridl`, `.rsdl` and `.rxdl` are accepted.
+    #[tokio::test]
+    async fn path_mode_check_refuses_a_txt_overlay() {
+        let path = snapshot::tests::fixture("ws");
+        let overlay = format!("{path}/a/notes.txt");
+        let params = serde_json::from_value(json!({
+            "path": path,
+            "overlays": [{"path": overlay, "source": "package fx.a\n"}]
+        }))
+        .unwrap();
+        let result = RidlMcp::new().ridl_check(Parameters(params)).await.unwrap();
+        assert_eq!(result.is_error, Some(true));
+        let [ContentBlock::Text(text)] = result.content.as_slice() else {
+            panic!("one text block");
+        };
+        assert!(text.text.contains("notes.txt"), "{}", text.text);
+        assert!(
+            text.text
+                .ends_with("is not a `.typl`, `.ridl`, `.rsdl` or `.rxdl` file"),
+            "{}",
+            text.text
+        );
     }
 
     // Path mode applies the project's `[lints]` levels (ADR-0024 decisions 6
