@@ -271,3 +271,21 @@ Each ruling: what was decided — why — what it costs if wrong.
   the documentation says a `.rxdl` file is not compiled, and compiling it as
   typl gives diagnostics about a language it is not written in — if wrong, a
   user who used `ridl check x.rxdl` as a typl check loses that.
+- **R-22** G2 reverses the reference's §17.13 position ("a whole package removed
+  or renamed … publication still does not refuse it"); the reversal is kept and
+  recorded as a decision, not as a wording fix. Its ground: since the
+  one-catalog-per-unit change the unit lock gives a package removed from a unit
+  that remains a retirement in the language (retire its numbers), so the old
+  premise "no package-level retirement" no longer holds for that case; for a
+  whole unit gone, the refusal catches the accidental case (a moved directory, a
+  changed manifest) that would otherwise drop the snapshots and lose the record
+  without a word, and the deliberate case costs one deletion that the message
+  names. The rewritten §17.13 text states this ground and what would reopen it
+  (a unit-level retirement construct). The change is marked breaking in the
+  squash commit (`!` and a `BREAKING CHANGE:` footer), because `ridl build` now
+  refuses a publication it accepted before — if wrong, a user who removes a unit
+  on purpose pays one extra step, and §17.13 is restored.
+- **R-23** Marking rule for this lane: a change that makes the toolchain refuse
+  input it accepted, or read accepted input differently, is marked breaking in
+  its squash commit — consumers read the changelog to decide an upgrade — if
+  wrong, the changelog lists a breaking entry that a user does not notice.
