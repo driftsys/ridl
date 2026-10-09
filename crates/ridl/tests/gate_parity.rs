@@ -146,3 +146,23 @@ fn a_member_added_to_build_and_to_the_workflow_fails_and_is_named() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+#[test]
+fn a_member_listed_twice_in_build_fails_and_is_named() {
+    let justfile = read_repo("justfile");
+    let workflow = read_repo(WORKFLOW);
+    let mut members = build_members(&justfile);
+    let repeated = members[0].clone();
+    members.push(repeated.clone());
+    let output = run_gate_parity(&with_members(&justfile, &members), &workflow);
+    assert!(
+        !output.status.success(),
+        "listing {repeated} twice left gate-parity green"
+    );
+    assert_eq!(
+        named_after(&output, "gate-parity: listed twice in 'build':"),
+        vec![repeated],
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
