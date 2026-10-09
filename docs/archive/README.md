@@ -512,7 +512,11 @@ provenance. Nothing here is normative — the current references live in
   one-catalog-per-unit work: tests that pin the baseline gate, the lock protocol
   and the descriptor lowering, the doc statements the branch review found false,
   and small code follow-ups (driftsys/ridl#778). The plan is archived verbatim;
-  the issue is its spec. The one behaviour it fixes that a user can observe, a
-  workspace member listed twice, is recorded in
-  [ADR-0002](../decisions/ADR-0002-module-system.md) section 1. Its other
-  decisions are implementation choices or were left on the issue.
+  the issue is its spec. The behaviours it changes that a user can observe: a
+  workspace member listed twice is loaded once (recorded in
+  [ADR-0002](../decisions/ADR-0002-module-system.md) section 1); the RIDL-409
+  rename hint appears for a unit whose root declares no package, and for a
+  payload written bare in one package and qualified in another; and the corpus
+  codegen snapshots are lowered over the scope `ridl build` uses. Two items of
+  the issue were left open on the issue by decision. Its other decisions are
+  implementation choices.
