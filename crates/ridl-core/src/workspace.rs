@@ -161,9 +161,10 @@ fn overlay_key(path: &Path) -> Option<PathBuf> {
 ///
 /// `entry` may be:
 ///
-/// - a `.typl` or `.ridl` file — [`find_root`] from the file's directory is
-///   the root; with no manifest anywhere up the tree the file loads in
-///   single-file mode;
+/// - a `.typl`, `.ridl` or `.rsdl` file — [`find_root`] from the file's
+///   directory is the root; with no manifest anywhere up the tree the file
+///   loads in single-file mode. A `.rxdl` entry is not compiled and draws
+///   RIDL-417;
 /// - a package directory or workspace root — [`find_root`] from the
 ///   directory is the root; a `[package]` manifest loads that package's
 ///   directory tree, a `[workspace]` manifest loads every member.
