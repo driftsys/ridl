@@ -1223,30 +1223,52 @@ interface VehicleStatus {
   §9.1) applies
 
 **One level up, an interface's identity is its number, and the number lives
-outside the source.** Every interface of a package — a declared `interface` and
-a service's inline shape (§14.5) alike — carries an **interface number** from
-the package's `interfaces.lock`, a line table in the package directory beside
-the sources that only `ridl lock` writes: a `next N` line, then one entry per
-interface, `Name N`, keyed by the interface's name or, for an inline shape, by
-`service:` and the service's dotted name. The number is 1-based, per package,
-and is the interface's routing identity; a rename keeps it, and an entry is
-never removed or renumbered — a retired interface keeps its line with the word
-`retired`, and its number is never allocated again. A declaration with no entry
-compiles with a **provisional** number, taken from `next` upward in byte order
-of the name, which carries no identity until plain `ridl lock` allocates and
-records it. The compiler reads the file as a package input and refuses the
-departures it cannot resolve: a live entry with no declaration is **RIDL-409**,
-fixed on the branch that made the change with `ridl lock <pkg> --rename Old=New`
-or `ridl lock <pkg> --retire Old` — with a published baseline, `ridl check`
-names the one `--rename` when exactly one declaration without an entry has the
-old interface's shape, member for member — and a malformed file, a merge
-conflict left in it included, is **RIDL-410**. Publication refuses what the
-build cannot see: `ridl baseline` refuses a provisional number (**RIDL-411**)
-and a published number that is absent from the fresh side and not retired
-(**RIDL-412**). An interaction's ordinal space stays local to its interface — a
-binding keys the spaces on the package and the interface **number**, never on a
-name or on a position in a service's list (§14.5) — so the two levels never
-renumber each other.
+outside the source.** Every interface of a unit — a declared `interface` and a
+service's inline shape (§14.5) alike — carries an **interface number** from the
+unit's `interfaces.lock`. A **unit** is one `ridl.toml` with a `[package]` table
+plus every source package in its directory tree (ADR-0002 §1), and the lock is
+one line table in the manifest directory, beside the root source package, that
+only `ridl lock` writes: a `next N` line, then one entry per interface,
+`Name N`, keyed by the interface's **catalog name** or, for an inline shape, by
+`service:` and the service's dotted name. The catalog name of a declared
+interface is its source package relative to the unit, then its name, joined by
+`.`: `cluster.SpeedDisplay` for an interface of the source package
+`com.example.hmi.cluster` in the unit `com.example.hmi`, and `Session` for an
+interface of the root source package. The key is therefore one identifier or a
+dotted path of identifiers ending in the interface name. The number is 1-based,
+per unit, and is the interface's routing identity; a rename keeps it, and an
+entry is never removed or renumbered — a retired interface keeps its line with
+the word `retired`, and its number is never allocated again. A declaration with
+no entry compiles with a **provisional** number, taken from `next` upward in
+byte order of the lock key, which carries no identity until plain `ridl lock`
+allocates and records it. The compiler reads the file as a unit input and
+refuses the departures it cannot resolve: a live entry with no declaration is
+**RIDL-409**, fixed on the branch that made the change with
+`ridl lock <path> --rename Old=New` or `ridl lock <path> --retire Old`, where
+`<path>` is any path inside the unit and `Old` and `New` are catalog names —
+with a published baseline, `ridl check` names the one `--rename` when exactly
+one declaration without an entry has the old interface's shape, member for
+member — and a malformed file, a merge conflict left in it included, is
+**RIDL-410**. Publication refuses what the build cannot see: `ridl baseline`
+refuses a provisional number (**RIDL-411**) and a published number that is
+absent from the fresh side and not retired (**RIDL-412**). An interaction's
+ordinal space stays local to its interface — a binding keys the spaces on the
+unit and the interface **number**, never on a name or on a position in a
+service's list (§14.5) — so the two levels never renumber each other.
+
+**The lock is the unit's, and only the file beside the manifest is read.** An
+`interfaces.lock` in a subdirectory of a unit is not read and draws the warning
+**RIDL-416**. An interface that moves to another source package of its unit
+keeps its number when `ridl lock --rename` records the move from its old catalog
+name to its new one, so a move between sibling packages is a rename and not a
+removal. A retired entry belongs to the source package its catalog name names.
+The IR spells each retired entry (`Package.retired[].name`) as its lock key, the
+catalog name, and the unit's **anchor package** carries the entries that name no
+source package of the unit, and every `service:` entry. The anchor package is
+the source package named like the unit when it exists, and otherwise the first
+source package of the unit in byte order of name; it also reports the unit's
+RIDL-409 orphans. In single-file mode, outside any manifest, the unit is the
+file's `package` name and the lock beside the file is the unit's lock.
 
 ---
 
@@ -1477,9 +1499,9 @@ service veh.hvac.cabin {
 A service composing several interfaces names each in its list, and the list is a
 **set** (rsdl decision D-7; the lock design §7 and §9):
 
-- **An interface's number comes from its package's `interfaces.lock`** (§11),
-  not from its place in a service's list. An inline shape is an interface too
-  and has its own entry there, keyed `service:` followed by the service's dotted
+- **An interface's number comes from its unit's `interfaces.lock`** (§11), not
+  from its place in a service's list. An inline shape is an interface too and
+  has its own entry there, keyed `service:` followed by the service's dotted
   name. The list holds no slot and no tombstone: adding an interface to the set,
   removing one, or reordering the list moves no wire identity, and `ridl diff`
   reports an addition as `service_interface_added` and a removal as
@@ -1539,7 +1561,7 @@ A service composing several interfaces names each in its list, and the list is a
 > consumer reading two or more of them observes such a set wherever the binding
 > preserves the grouping; where a binding cannot, that is a deploy-time
 > constraint, not a weaker contract. The group is the **provided interface**,
-> identified by its number in the package's `interfaces.lock` (§11) — an inline
+> identified by its number in the unit's `interfaces.lock` (§11) — an inline
 > shape included, under its `service:` entry. The interface's name, or the
 > service's dotted name for an inline shape, is how the group is written, not
 > what identifies it: a rename keeps the number, and keeps the group.
@@ -1931,7 +1953,7 @@ sections it points at are.
    (concept note §9.2) needs a generated meta-interface in the language, to be
    specified once the IR specification landed. It landed (ADR-0014), and with it
    the answer moved out of the language: the enumeration surface is the
-   **catalog descriptor** — a per-package artifact carrying each interface, its
+   **catalog descriptor** — a per-unit artifact carrying each interface, its
    members and its numbers in a form an engine reads without decoding, specified
    in
    [the runtime-descriptors design](../archive/2026-09-13-runtime-descriptors-design.md)

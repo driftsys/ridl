@@ -95,24 +95,24 @@ needs a type's exact shape reads
 [the `ridl-rt` design record](../design/ridl-rt.md), which carries every
 definition, or the crate's own source under `crates/ridl-rt/src/`.
 
-| Name          | Defined in          | Meaning here                                                                                                                                            |
-| ------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CatalogRef`  | `ridl_rt::contract` | one package's interfaces: the package name and a 32-byte SHA-256 `CatalogHash`. Two references are equal only when both the name and the hash are equal |
-| `InterfaceNo` | `ridl_rt::contract` | an interface's number in its catalog (ridl §11, `interfaces.lock`), a `u32`, never 0                                                                    |
-| `Ordinal`     | `ridl_rt::contract` | an interaction's position in its interface body, counted from 1 (ridl §11), a `u32`, never 0                                                            |
-| `Kind`        | `ridl_rt::contract` | the five interaction kinds, with the values `Signal = 1`, `Event = 2`, `Command = 3`, `Query = 4`, `Fixed = 5`                                          |
-| `Timestamp`   | `ridl_rt::sample`   | `i64` microseconds since the PTP epoch, 1970-01-01 00:00:00 TAI (ridl §3.1)                                                                             |
-| `Duration`    | `ridl_rt::sample`   | `i64` microseconds                                                                                                                                      |
-| `Envelope`    | `ridl_rt::sample`   | the sender's `stamp: Timestamp` and `seq: u64` (ridl §3.1). Stamped once, at the sender, and changed by nobody after that                               |
-| `Provenance`  | `ridl_rt::sample`   | where a signal's value comes from: `Init`, `Live`, or `Invalid(Cause)` (ridl §4.4, §4.5)                                                                |
-| `Cause`       | `ridl_rt::sample`   | why a channel is invalid: `Declared` by the provider, or `Detected(Detection)` by the consumer's binding                                                |
-| `Detection`   | `ridl_rt::sample`   | what a consumer's binding found: `InvalidValue(Violation)` (a typl constraint, ridl §10.2) or `Corrupt` (not a well-formed encoding, ridl §10.3)        |
-| `Freshness`   | `ridl_rt::sample`   | `Fresh`, `Stale { by }` or `Unbounded`, measured by the consumer's runtime (§8)                                                                         |
-| `Correlation` | `ridl_rt::port`     | a `u64` identifying one sent call to its caller                                                                                                         |
-| `Contract`    | `ridl_rt::error`    | the four contract-error categories of ridl §10.2: `InvalidValue(Violation)`, `PreconditionFailed`, `ContractBroken`, `UnknownInteraction`               |
-| `Transport`   | `ridl_rt::error`    | the detected infrastructure failures of ridl §10.3: `Timeout`, `Undelivered`, `Down`, `Corrupt`, `Busy`                                                 |
-| `Violation`   | `ridl_rt::payload`  | the name of the typl type whose constraint failed, and the `Rule` that failed: `Range`, `Step`, `Length`, `Pattern`, `Variant` or `Unique`              |
-| `Encoding`    | `ridl_rt::encoding` | the closed set of payload encodings: `FlatBuffers`, `Proto3`, `ReprC`, each named as its cargo feature is                                               |
+| Name          | Defined in          | Meaning here                                                                                                                                      |
+| ------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CatalogRef`  | `ridl_rt::contract` | one unit's interfaces: the unit name and a 32-byte SHA-256 `CatalogHash`. Two references are equal only when both the name and the hash are equal |
+| `InterfaceNo` | `ridl_rt::contract` | an interface's number in its catalog (ridl §11, `interfaces.lock`), a `u32`, never 0                                                              |
+| `Ordinal`     | `ridl_rt::contract` | an interaction's position in its interface body, counted from 1 (ridl §11), a `u32`, never 0                                                      |
+| `Kind`        | `ridl_rt::contract` | the five interaction kinds, with the values `Signal = 1`, `Event = 2`, `Command = 3`, `Query = 4`, `Fixed = 5`                                    |
+| `Timestamp`   | `ridl_rt::sample`   | `i64` microseconds since the PTP epoch, 1970-01-01 00:00:00 TAI (ridl §3.1)                                                                       |
+| `Duration`    | `ridl_rt::sample`   | `i64` microseconds                                                                                                                                |
+| `Envelope`    | `ridl_rt::sample`   | the sender's `stamp: Timestamp` and `seq: u64` (ridl §3.1). Stamped once, at the sender, and changed by nobody after that                         |
+| `Provenance`  | `ridl_rt::sample`   | where a signal's value comes from: `Init`, `Live`, or `Invalid(Cause)` (ridl §4.4, §4.5)                                                          |
+| `Cause`       | `ridl_rt::sample`   | why a channel is invalid: `Declared` by the provider, or `Detected(Detection)` by the consumer's binding                                          |
+| `Detection`   | `ridl_rt::sample`   | what a consumer's binding found: `InvalidValue(Violation)` (a typl constraint, ridl §10.2) or `Corrupt` (not a well-formed encoding, ridl §10.3)  |
+| `Freshness`   | `ridl_rt::sample`   | `Fresh`, `Stale { by }` or `Unbounded`, measured by the consumer's runtime (§8)                                                                   |
+| `Correlation` | `ridl_rt::port`     | a `u64` identifying one sent call to its caller                                                                                                   |
+| `Contract`    | `ridl_rt::error`    | the four contract-error categories of ridl §10.2: `InvalidValue(Violation)`, `PreconditionFailed`, `ContractBroken`, `UnknownInteraction`         |
+| `Transport`   | `ridl_rt::error`    | the detected infrastructure failures of ridl §10.3: `Timeout`, `Undelivered`, `Down`, `Corrupt`, `Busy`                                           |
+| `Violation`   | `ridl_rt::payload`  | the name of the typl type whose constraint failed, and the `Rule` that failed: `Range`, `Step`, `Length`, `Pattern`, `Variant` or `Unique`        |
+| `Encoding`    | `ridl_rt::encoding` | the closed set of payload encodings: `FlatBuffers`, `Proto3`, `ReprC`, each named as its cargo feature is                                         |
 
 Two words this document adds, because `ridl-rt` has no need of them:
 

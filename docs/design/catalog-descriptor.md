@@ -1,9 +1,9 @@
 # The catalog descriptor
 
-The FlatBuffers file per package that an engine reads without decoding the IR,
-as built. The binding choices are
-[ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15 (the catalog hash:
-its input, its determinism rule, where it is computed, and its golden test),
+The FlatBuffers file per unit that an engine reads without decoding the IR, as
+built. The binding choices are [ADR-0014](../decisions/ADR-0014-ir-encodings.md)
+decision 15 (the catalog hash: its input, its determinism rule, where it is
+computed, and its golden test),
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 5 as amended 2026-10-03 (the toolchain may depend on planus; `ridl-rt`
 and every generated package must not),
@@ -59,10 +59,13 @@ Sebastien reviews the lane's delegated decisions in the driver's
 ## The artifact
 
 `ridlc build --emit catalog`, and `ridl build --emit catalog`, write one file
-per package, `<base>.catalog.binfb`, beside the IR dumps and under the same base
-name. `catalog` is the ninth `--emit` value. A file is written only for a
-package that has at least one interface shape: a declared `interface`, or a
-`service` with an inline body (`Package::shapes()`). A package with no shape
+per unit, `<unit>.catalog.binfb`. A unit is one `ridl.toml` with a `[package]`
+table plus every source package in its directory tree
+([ADR-0002](../decisions/ADR-0002-module-system.md) §1); in single-file mode the
+unit is the file's `package` name. `catalog` is the ninth `--emit` value. A file
+is written only for a unit that has at least one interface shape in any of its
+source packages: a declared `interface`, or a `service` with an inline body
+(`Package::shapes()`). A unit with no shape, such as one that holds only types,
 gets no file.
 
 The file is a FlatBuffers buffer with the file identifier `RDLC` at bytes 4..8
@@ -116,12 +119,14 @@ for `thumbv7em-none-eabihf`, a target with no standard library.
 
 ## What a catalog contains
 
-`ridl_descriptor::lower(package, others)` writes the whole file in one pass. It
-returns `Result<Vec<u8>, LowerError>`.
+`ridl_descriptor::lower(unit, packages)` writes the whole file in one pass.
+`packages` is every checked package of the build, and the unit's own packages
+are those whose `unit` is the unit name (`ridl_ir::v2::unit_of`). It returns
+`Result<Vec<u8>, LowerError>`.
 
-- **The catalog.** `version`; `name`, the package name; `hash`, the 32-byte
-  catalog hash; `toolchain`, the version of the crate that wrote the file;
-  `interfaces`; and `retired`.
+- **The catalog.** `version`; `name`, the unit name; `hash`, the 32-byte catalog
+  hash; `toolchain`, the version of the crate that wrote the file; `interfaces`;
+  and `retired`.
 - **The numbers are the IR's.** Each `Interface` carries its `name`, `number`
   and `provisional`, copied from the IR's `Interface.number` and
   `Interface.provisional`, which `ridl-sem` folds from `interfaces.lock`. The
@@ -129,9 +134,19 @@ returns `Result<Vec<u8>, LowerError>`.
   number is written and flagged: it is data, and an engine decides what to do
   with it. A number of 0 is `LowerError::ZeroNumber`, an internal error, which
   `ridlc` returns as an I/O error so that the build stops with exit code 2.
-- **An inline service shape** is an interface under the service's dotted name.
-- **The retired list** is `Package.retired`, copied as name and number, so an
-  engine can refuse a peer that still speaks a retired interface.
+- **An interface name** is the catalog name: the name relative to the unit, so
+  `cluster.SpeedDisplay` for an interface of the source package
+  `com.example.hmi.cluster` in the unit `com.example.hmi`, and the short name
+  for an interface of the root source package. Two source packages of one unit
+  can therefore declare the same short name.
+- **An inline service shape** is an interface under the service's full dotted
+  name, with no unit-relative prefix.
+- **The retired list** is the unit's: the `Package.retired` entries of every
+  source package of the unit, copied as name and number and spelled as the lock
+  spells them (`cluster.Old`, `Old`, `service:veh.x`), so an engine can refuse a
+  peer that still speaks a retired interface. The IR spelling and the anchor
+  package that carries an entry which names no source package of the unit are
+  stated in ridl reference §11.
 - **Members.** One `Member` per interaction, in body order: `name`, `ordinal`
   (the position in the body, ridl §11), `kind` (`Signal`, `Event`, `Command`,
   `Query`, `Fixed`), `payloads`, and `timing` (`mode`, `min_us`, `max_us`) when
@@ -159,20 +174,23 @@ the wire backend emits.
 ## The catalog hash
 
 The hash is SHA-256 over `ridl_ir::v2::to_binary` of the package that
-`ridl_ir::catalog_hash::reduced_package` returns: the package name, the
-interface shapes in (number, name) order with their numbers, and every
-declaration they reach in any package of the build, under canonical names, with
-doc strings, `labels` and `deprecated` blanked, and no services and no retired
-entries. ADR-0014 decision 15 is the full rule, with the determinism rule for
-the binary and the reason the canonical JSON is not the input. There is one
-identity: the schema hash driftsys/ridl#275 asked for is this hash, so it does
-not depend on which wire schema a build emits.
+`ridl_ir::catalog_hash::reduced_unit` returns: one IR package named after the
+unit, with the interface shapes of every source package of the unit under their
+catalog names in (number, catalog name) order with their numbers, and every
+declaration they reach in any unit of the build under its full canonical name,
+with doc strings, `labels` and `deprecated` blanked, and no services and no
+retired entries. A change to any source package of a unit changes the unit's
+hash, and so every port bound to an interface of the unit fails its catalog
+check until it is rebuilt. ADR-0014 decision 15 is the full rule, with the
+determinism rule for the binary and the reason the canonical JSON is not the
+input. There is one identity: the schema hash driftsys/ridl#275 asked for is
+this hash, so it does not depend on which wire schema a build emits.
 
 It is computed in `ridl-ir`, not in `ridl-descriptor`, because three artifacts
 carry it and `ridl-ir` is below all of them:
 
 - the catalog descriptor, through `ridl_descriptor::hash`, which re-exports
-  `catalog_hash`, `reduced_package` and `reachable_decls`;
+  `catalog_hash`, `reduced_unit` and `reachable_decls`;
 - the codegen model's `Catalog.hash`, which the Rust backend writes into the
   `CATALOG` of every generated interface descriptor type. The Rust backend
   refuses a model whose hash is missing or is not 32 bytes long;
@@ -189,8 +207,8 @@ regions the same packages: every checked package of the workspace, then
 emit for that reason, so a build with `--emit catalog` alone keeps `ridl.std` in
 `others`, and its hash equals the hash the Rust face carries. The system write
 checks `ridl.std` itself when a package references it and no code emit checked
-it. An entry of `others` named like the hashed package is skipped, so the hash
-is the same whether or not a caller includes the package there.
+it. A package that the list names twice is read once, so the hash is the same
+whether or not a caller includes a package of the unit there a second time.
 
 The golden test is `crates/ridl-descriptor/tests/golden_hash.rs`: it hashes the
 corpus package's checked-in IR snapshot, its shapes numbered 1.. by the test,
@@ -372,7 +390,7 @@ once per binding (ADR-0023 decision 8). `Bind::new` of `Client<P>` and of
 `Publisher<W>` makes the comparison before it stores the port, and `serve` makes
 it on its handler port before it calls `Handler::serve`. The blocking client and
 the blocking `serve` make it through the async ones. The comparison is
-`CatalogRef` equality: the package name and the catalog hash. A mismatch panics
+`CatalogRef` equality: the unit name and the catalog hash. A mismatch panics
 with a message that names the interface, the catalog the face was generated
 from, and the catalog the port is attached to. `check_catalog`, both `Bind::new`
 methods and `serve` are `#[track_caller]`, so the panic reports the program's
@@ -412,18 +430,18 @@ codec exists yet.
 The archived design note keeps each decision's full reasoning. The table gives
 the status in the code and the rejected alternatives in short form.
 
-| Decision                                                     | As built                                                                                                                                                                                                                                               | Rejected                                                                                                                                                                      |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D-1 Two descriptors; the system descriptor is self-contained | Half built: a catalog descriptor for every package with an interface shape. The system descriptor is not built.                                                                                                                                        | A system descriptor that references catalogs by hash only; one file per machine.                                                                                              |
-| D-2 Descriptors are FlatBuffers; the IR stays protobuf       | Built. ADR-0014 is unchanged for the IR.                                                                                                                                                                                                               | Protobuf descriptors; JSON or TOML as the artifact; both encodings.                                                                                                           |
-| D-3 Hand-written, versioned, append-only schemas             | Built for the one schema, `catalog.fbs`. The CI check that compiles the schemas with both `flatc` and `flatcc` is not built; it waits for a C engine.                                                                                                  | A descriptor schema generated from the IR schema.                                                                                                                             |
-| D-4 What the catalog descriptor contains                     | Built, as "What a catalog contains" states. Of the member's bounds and quality-of-service terms, only the timing is carried, because it is the only one the IR has for an interaction. No `stream` flag (driftsys/ridl#336).                           | —                                                                                                                                                                             |
-| D-5 What the system descriptor contains                      | Not built.                                                                                                                                                                                                                                             | —                                                                                                                                                                             |
-| D-6 A size state per payload and encoding                    | Built for proto3 and FlatBuffers, as "The size states" states. `repr(C)` has no rows (driftsys/ridl#317). The max-size conformance test is built for FlatBuffers only.                                                                                 | One number per payload; a number per type rather than per interaction; an induced message, request message or `ok`/`err` union for a payload that is not a struct or a union. |
-| D-7 Not in version 1                                         | Holds: no `.bfbs` payload layouts, no transport per crossing, no envelope or framing overhead.                                                                                                                                                         | —                                                                                                                                                                             |
-| D-8 Readers verify before access                             | Built: `verify`, and `ridl describe` exits 2 with the cause named.                                                                                                                                                                                     | —                                                                                                                                                                             |
-| D-9 Emission and inspection                                  | The catalog emit and `ridl describe` are built. The system descriptor's emission is not built. `ridl describe`'s view differs from `flatc`'s in key order and in `null` for an absent field, where the design said the two views are the same.         | —                                                                                                                                                                             |
-| D-10 Generated code keeps its identity table                 | Built: each generated interface descriptor type carries `CATALOG` (name and hash), `NUMBER` and `PROVISIONAL`, and the face checks the catalog. A runtime's node descriptor derived from a system descriptor is outside this repository and not built. | —                                                                                                                                                                             |
+| Decision                                                     | As built                                                                                                                                                                                                                                                                                                    | Rejected                                                                                                                                                                      |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D-1 Two descriptors; the system descriptor is self-contained | Half built: a catalog descriptor for every unit with an interface shape. The system descriptor is not built.                                                                                                                                                                                                | A system descriptor that references catalogs by hash only; one file per machine.                                                                                              |
+| D-2 Descriptors are FlatBuffers; the IR stays protobuf       | Built. ADR-0014 is unchanged for the IR.                                                                                                                                                                                                                                                                    | Protobuf descriptors; JSON or TOML as the artifact; both encodings.                                                                                                           |
+| D-3 Hand-written, versioned, append-only schemas             | Built for the one schema, `catalog.fbs`. The CI check that compiles the schemas with both `flatc` and `flatcc` is not built; it waits for a C engine.                                                                                                                                                       | A descriptor schema generated from the IR schema.                                                                                                                             |
+| D-4 What the catalog descriptor contains                     | Built, as "What a catalog contains" states. Of the member's bounds and quality-of-service terms, only the timing is carried, because it is the only one the IR has for an interaction. No `stream` flag (driftsys/ridl#336).                                                                                | —                                                                                                                                                                             |
+| D-5 What the system descriptor contains                      | Not built.                                                                                                                                                                                                                                                                                                  | —                                                                                                                                                                             |
+| D-6 A size state per payload and encoding                    | Built for proto3 and FlatBuffers, as "The size states" states. `repr(C)` has no rows (driftsys/ridl#317). The max-size conformance test is built for FlatBuffers only.                                                                                                                                      | One number per payload; a number per type rather than per interaction; an induced message, request message or `ok`/`err` union for a payload that is not a struct or a union. |
+| D-7 Not in version 1                                         | Holds: no `.bfbs` payload layouts, no transport per crossing, no envelope or framing overhead.                                                                                                                                                                                                              | —                                                                                                                                                                             |
+| D-8 Readers verify before access                             | Built: `verify`, and `ridl describe` exits 2 with the cause named.                                                                                                                                                                                                                                          | —                                                                                                                                                                             |
+| D-9 Emission and inspection                                  | The catalog emit and `ridl describe` are built. The system descriptor's emission is not built. `ridl describe`'s view differs from `flatc`'s in key order and in `null` for an absent field, where the design said the two views are the same.                                                              | —                                                                                                                                                                             |
+| D-10 Generated code keeps its identity table                 | Built: each generated interface descriptor type carries `CATALOG` (the unit name and the unit's catalog hash), `NUMBER` (the number in the unit) and `PROVISIONAL`, and the face checks the catalog. A runtime's node descriptor derived from a system descriptor is outside this repository and not built. | —                                                                                                                                                                             |
 
 ### Not built
 

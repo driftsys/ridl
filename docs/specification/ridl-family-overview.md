@@ -36,7 +36,7 @@ their instances on machines — rsdl never stands alone.
 | Document                       | Version   | Status              | Owns                                                                                                                                                                                                                                                              |
 | ------------------------------ | --------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Concept note — the RIDL family | draft     | direction-setting   | motivation, cores, profiles, platform/repo/IR model, naming ledger                                                                                                                                                                                                |
-| ADR-0002 — module system       | accepted  | normative           | `package`/`import`/`as`/`internal`, manifest, lockfile, resolver                                                                                                                                                                                                  |
+| ADR-0002 — module system       | accepted  | normative           | `package`/`import`/`as`/`internal`, the unit (a manifest and its tree of source packages), manifest, lockfile, resolver                                                                                                                                           |
 | ADR-0026 — doc comments        | accepted  | normative           | doc comment carriers, doc links and their resolution, the four doc tags, the doc lints (typl §14, §16.5)                                                                                                                                                          |
 | **typl Language Reference**    | 0.1 draft | normative           | vocabulary layer + family lexicon, keyword registry (§1.4), evolution model (§7.4)                                                                                                                                                                                |
 | **ridl Language Reference**    | 0.2 draft | normative           | interaction layer + interact-core semantics: envelope, timing, init/invalid channels, errors, streams                                                                                                                                                             |
@@ -190,6 +190,12 @@ driftsys/ridl#421). Step is mandatory validation with a lower-bound origin or
 zero when absent, and uses a bounded floating-point representation allowance
 without normalizing the input (typl §4.3, driftsys/ridl#469). A map rejects
 duplicate keys (typl §12.2).
+
+**2026-10-09 unit decision:** a unit, which is one `ridl.toml` with a
+`[package]` table and the source packages in its directory tree, owns one
+catalog, one `interfaces.lock` and one interface-number space. A source package
+belongs to one unit, and a manifest inside a unit's tree is an error (ADR-0002
+§1 and §4, MANI-013 and MANI-014; ridl §11).
 
 ## 6. Open Questions — Consolidated Index
 

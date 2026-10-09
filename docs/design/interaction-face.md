@@ -80,13 +80,12 @@ code a consumer compiles, not precomputed and trusted by the emitter.
 
 - `CATALOG.hash` is the computed catalog hash, copied from the codegen model's
   `Catalog.hash` (`crates/ridl-backend-rust/src/descriptors.rs`): SHA-256 over
-  the protobuf binary of a reduced package — the package's interfaces, their
-  numbers and the types they reach
-  ([ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15). The catalog
-  hash (driftsys/ridl#378) replaced the `CatalogHash([0u8; 32])` placeholder the
-  emitter wrote before it. Since driftsys/ridl#381 the generated `Bind::new` and
-  `serve` compare the port's catalog with `CATALOG`, name and hash (see "The
-  catalog check" below).
+  the protobuf binary of a reduced unit — the unit's interfaces, their numbers
+  and the types they reach ([ADR-0014](../decisions/ADR-0014-ir-encodings.md)
+  decision 15). The catalog hash (driftsys/ridl#378) replaced the
+  `CatalogHash([0u8; 32])` placeholder the emitter wrote before it. Since
+  driftsys/ridl#381 the generated `Bind::new` and `serve` compare the port's
+  catalog with `CATALOG`, name and hash (see "The catalog check" below).
 - `PayloadInfo.max_size` (`EncodedSizes { proto3, flatbuffers, repr_c }`) is
   filled one column at a time. Since driftsys/ridl#380 the `flatbuffers` column
   is the codegen model's `Payload.flatbuffers_max_size`, the bound
@@ -716,9 +715,13 @@ Each interface module carries a private `check_catalog(found: &CatalogRef)`,
 which compares `found` with the interface's `CATALOG`
 (`<super::Iface as ridl_rt::contract::Interface>::CATALOG`) as a whole
 `CatalogRef`, name and hash, and calls `::core::panic!` when they differ, so it
-compiles under `no_std`. The panic message names the interface, the catalog the
-face was generated from and the catalog the port is attached to, each by
-`CatalogRef`'s `Debug`.
+compiles under `no_std`. The name is the name of the unit that declares the
+interface, and the hash is the hash of that unit's catalog, so the interfaces of
+every source package of one unit carry the same `CATALOG`
+([ADR-0002](../decisions/ADR-0002-module-system.md) §1). `NUMBER` is the
+interface's number in the unit. The panic message names the interface, the
+catalog the face was generated from and the catalog the port is attached to,
+each by `CatalogRef`'s `Debug`.
 
 Three places call it, each once, through `ridl_rt::port::Attached::catalog`'s
 path so that a member named `catalog` cannot capture the call:
@@ -749,7 +752,7 @@ records why a mismatch panics rather than returning an error.
 
 `tests/interaction_face.rs` binds a `Client`, a blocking `Client`, a
 `Publisher`, `serve` and `blocking::serve` over a runtime attached to a catalog
-whose hash differs from the face's, and a `Client` over one whose package name
+whose hash differs from the face's, and a `Client` over one whose unit name
 differs, and each panics with that message; every other round trip runs over a
 runtime attached to the face's own `CATALOG`. `tests/face_generation.rs` pins
 the comparison in the emitted `Bind::new` and `serve`, and its order before
