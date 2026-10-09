@@ -187,6 +187,24 @@ fn unsupported_source_file_takes_its_level_from_the_lints_table() {
     }
 }
 
+/// RIDL-417 in single-file mode: `ridl check` on a bare `.rxdl` file, with
+/// no `ridl.toml` above it, reports the warning once on the file, does not
+/// compile the file (so no typl diagnostic appears), and exits 0.
+#[test]
+fn a_bare_rxdl_file_is_reported_and_not_compiled() {
+    let dir = TempDir::new("bare-rxdl");
+    let path = dir.write("hmi.rxdl", "package veh.hmi\ntype B: m\n");
+
+    let (code, _, stderr) = ridl(&["check".as_ref(), path.as_os_str()]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_eq!(
+        stderr.matches("warning[RIDL-417]").count(),
+        1,
+        "stderr:\n{stderr}"
+    );
+    assert!(!stderr.contains("TYPL-"), "stderr:\n{stderr}");
+}
+
 /// A workspace with one member whose interface declares one `command`, with
 /// the timing annotation `timing` (empty for none), under
 /// `missing-response-bound = "deny"`. Returns the workspace root.

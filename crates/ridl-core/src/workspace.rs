@@ -7,14 +7,17 @@
 //!
 //! [`load_workspace`] walks from an entry path — a source file, a package
 //! directory, or a workspace root — reads the `ridl.toml` manifests, loads
-//! every source file (`.typl` and `.ridl` alike — a package may mix both)
-//! into [`InputFile`] inputs, and enforces the package↔directory law (typl
-//! reference §3.1): every file in a package directory must declare that
+//! every source file (`.typl`, `.ridl` and `.rsdl` alike — a package may mix
+//! them) into [`InputFile`] inputs, and enforces the package↔directory law
+//! (typl reference §3.1): every file in a package directory must declare that
 //! directory's package name (TYPL-002), and more than one `package`
-//! declaration in a file is TYPL-001. A bare `.typl` or `.ridl` file with no
-//! manifest anywhere up the tree loads in **single-file mode**: one synthetic
-//! package named from the file's declared package, exempt from TYPL-002 (the
-//! task 20 CLI contract). A unit's manifest directory is read for an
+//! declaration in a file is TYPL-001. A `.rxdl` file is not loaded: the rxdl
+//! profile has no implementation, so each one draws the warning RIDL-417 on
+//! the file itself. A bare `.typl`, `.ridl` or `.rsdl` file with no manifest
+//! anywhere up the tree loads in **single-file mode**: one synthetic package
+//! named from the file's declared package, exempt from TYPL-002 (the
+//! task 20 CLI contract); a bare `.rxdl` file draws RIDL-417 and loads no
+//! package. A unit's manifest directory is read for an
 //! `interfaces.lock`, which rides on every [`Package`] of the unit as its
 //! [`PackageLock`]; the bare file's directory is read the same way. A lock in
 //! any other directory is not read (RIDL-416), and a malformed one is
@@ -741,20 +744,7 @@ impl Loader {
         source_files.sort();
         unsupported_files.sort();
         for path in &unsupported_files {
-            let text = match self.take_overlay(path) {
-                Some(text) => text,
-                None => fs::read_to_string(path).unwrap_or_default(),
-            };
-            let file_id = self.sources.file_id(&path_string(path), &text);
-            self.diagnostics.push(warning(
-                DiagCode::RIDL_417,
-                file_id,
-                byte_range(0, 0),
-                format!(
-                    "`{}` is a `.rxdl` file; the rxdl profile is not supported yet, so this file is not compiled",
-                    path.display()
-                ),
-            ));
+            self.report_unsupported_file(path);
         }
         subdirs.sort();
 
@@ -856,6 +846,12 @@ impl Loader {
     /// `parse_file(..).errors()`, like every parse error — loader diagnostics
     /// carry only the manifest and law findings.
     fn load_single_file(&mut self, db: &mut RidlDatabase, path: &Path) -> io::Result<()> {
+        if path.extension().is_some_and(|ext| ext == "rxdl") {
+            // A bare `.rxdl` entry is reported as in a package directory, and
+            // no synthetic package is built from it.
+            self.report_unsupported_file(path);
+            return Ok(());
+        }
         let Some((input, decls)) = self.load_file(db, path, None)? else {
             // A non-UTF8 file: the diagnostic is recorded, nothing loads.
             return Ok(());
@@ -889,6 +885,25 @@ impl Loader {
             self.units.insert(name, dir.to_path_buf());
         }
         Ok(())
+    }
+
+    /// Reports the `.rxdl` file at `path` as RIDL-417 on the file itself,
+    /// consuming any overlay keyed to it. The file is not compiled.
+    fn report_unsupported_file(&mut self, path: &Path) {
+        let text = match self.take_overlay(path) {
+            Some(text) => text,
+            None => fs::read_to_string(path).unwrap_or_default(),
+        };
+        let file_id = self.sources.file_id(&path_string(path), &text);
+        self.diagnostics.push(warning(
+            DiagCode::RIDL_417,
+            file_id,
+            byte_range(0, 0),
+            format!(
+                "`{}` is a `.rxdl` file; the rxdl profile is not supported yet, so this file is not compiled",
+                path.display()
+            ),
+        ));
     }
 
     /// Reads `dir/interfaces.lock` for the unit whose manifest directory is
@@ -2675,11 +2690,15 @@ service:veh.common.climate 2
         );
         dir.write("hmi.ridl", "package veh.hmi\ntype A: m\n");
         let top = dir.write("hmi.rxdl", "package veh.hmi\ntype B: m\n");
+        let beside = dir.write("menu.rxdl", "package veh.hmi\ntype C: m\n");
         let nested = dir.write("cluster/speed.rxdl", "package veh.hmi.cluster\n");
 
         let mut db = RidlDatabase::default();
         let loaded = load_workspace(&mut db, dir.path()).expect("the tree loads");
-        assert_eq!(codes(&loaded.diagnostics), vec!["RIDL-417", "RIDL-417"]);
+        assert_eq!(
+            codes(&loaded.diagnostics),
+            vec!["RIDL-417", "RIDL-417", "RIDL-417"]
+        );
         let mut anchored: Vec<_> = loaded
             .diagnostics
             .iter()
@@ -2690,7 +2709,11 @@ service:veh.common.climate 2
             })
             .collect();
         anchored.sort();
-        let mut expected = vec![Some(path_string(&nested)), Some(path_string(&top))];
+        let mut expected = vec![
+            Some(path_string(&nested)),
+            Some(path_string(&top)),
+            Some(path_string(&beside)),
+        ];
         expected.sort();
         assert_eq!(anchored, expected);
         assert_eq!(
@@ -2732,6 +2755,48 @@ service:veh.common.climate 2
             vec![Some(path_string(&on_disk)), Some(path_string(&added))]
         );
         assert_eq!(compiled_paths(&db, &loaded), vec![path_string(&typl)]);
+    }
+
+    /// A bare `.rxdl` entry in single-file mode draws RIDL-417 on the file
+    /// and is not compiled: no synthetic package is built from it.
+    #[test]
+    fn a_single_rxdl_file_is_reported_and_not_compiled() {
+        let dir = TempDir::new("rxdl-single");
+        let path = dir.write("hmi.rxdl", "package veh.hmi\ntype B: m\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, &path).expect("single-file mode loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["RIDL-417"]);
+        let diag = &loaded.diagnostics[0];
+        assert_eq!(diag.severity, Severity::Warning);
+        assert_eq!(diag.primary.range, byte_range(0, 0));
+        assert_eq!(
+            loaded.sources.path(diag.primary.file),
+            Some(path_string(&path).as_str())
+        );
+        assert_eq!(compiled_paths(&db, &loaded), Vec::<String>::new());
+    }
+
+    /// An overlay of a bare `.rxdl` entry is consumed by the entry, draws
+    /// RIDL-417 once and is not compiled.
+    #[test]
+    fn a_single_rxdl_overlay_is_reported_and_not_compiled() {
+        let dir = TempDir::new("rxdl-single-overlay");
+        let path = dir.write("hmi.rxdl", "package veh.hmi\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace_with(
+            &mut db,
+            &path,
+            &[overlay(path.clone(), "package veh.hmi\ntype B: m\n")],
+        )
+        .expect("the overlay is accepted");
+        assert_eq!(codes(&loaded.diagnostics), vec!["RIDL-417"]);
+        assert_eq!(
+            loaded.sources.path(loaded.diagnostics[0].primary.file),
+            Some(path_string(&path).as_str())
+        );
+        assert_eq!(compiled_paths(&db, &loaded), Vec::<String>::new());
     }
 
     // Root discovery from a member (ADR-0002 §4, issue #529).

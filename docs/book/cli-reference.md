@@ -131,7 +131,8 @@ The loader compiles the `.typl`, `.ridl` and `.rsdl` files of a package
 directory. A `.rxdl` file there is not compiled, because the rxdl profile has
 no implementation (driftsys/ridl#68): each one draws the warning RIDL-417
 (`unsupported-source-file`) on the file itself, and its declarations are not in
-the build.
+the build. A bare `.rxdl` file given as the entry with no `ridl.toml` at or
+above it draws the same warning and is not compiled either.
 
 **It writes `~/.ridl/cache` and `ridl.lock`, but only when the manifest
 declares `[imports]`.** `ridl check` loads, resolves, and checks the
