@@ -1491,9 +1491,10 @@ pub struct LineCol {
 /// of the text, or inside a multi-byte character, is moved back to the nearest
 /// character boundary at or before it.
 ///
-/// A line ends at an LF, a CRLF pair or a lone CR, as in the language server's
-/// line index; a CRLF pair is one line break, and its CR is the last character
-/// of the line it ends.
+/// A line ends at an LF, a CRLF pair or a lone CR, the line-break rule of the
+/// language server's line index. A CRLF pair is one line break, and its CR is
+/// counted as a column of the line it ends, so the column of the LF in a CRLF
+/// pair is one past the position the language server reports for it.
 pub fn line_col(text: &str, offset: TextSize) -> LineCol {
     let mut offset = usize::from(offset).min(text.len());
     while !text.is_char_boundary(offset) {
@@ -2648,6 +2649,14 @@ mod json_tests {
         assert_eq!(
             line_col(text, TextSize::from(6)),
             LineCol { line: 3, column: 1 }
+        );
+    }
+
+    #[test]
+    fn line_col_counts_a_final_lone_cr_as_a_line_break() {
+        assert_eq!(
+            line_col("ab\r", TextSize::from(3)),
+            LineCol { line: 2, column: 1 }
         );
     }
 

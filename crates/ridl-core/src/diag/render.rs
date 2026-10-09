@@ -255,9 +255,9 @@ mod tests {
     #[test]
     fn location_counts_a_lone_cr_and_a_crlf_pair_as_one_line_break_each() {
         for (text, expected) in [
-            ("package p\rtype Speed: km/h\r", "demo.typl:2:6"),
-            ("package p\r\ntype Speed: km/h\r\n", "demo.typl:2:6"),
-            ("package p\r\r\ntype Speed: km/h\r\n", "demo.typl:3:6"),
+            ("package p\rtype Speed: km/h\rx", "demo.typl:2:6"),
+            ("package p\r\ntype Speed: km/h\r\nx", "demo.typl:2:6"),
+            ("package p\r\r\ntype Speed: km/h\r\nx", "demo.typl:3:6"),
         ] {
             let mut map = SourceMap::new();
             let start = text.find("Speed").unwrap() as u32;
@@ -274,6 +274,12 @@ mod tests {
             assert!(
                 rendered.contains(expected),
                 "expected `{expected}` in:\n{rendered}",
+            );
+            // The printed source line stops at the line break, so the next
+            // line's text is not part of the snippet.
+            assert!(
+                !rendered.contains('x'),
+                "snippet ran past the line:\n{rendered}"
             );
         }
     }

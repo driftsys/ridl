@@ -929,6 +929,17 @@ mod tests {
     }
 
     #[test]
+    fn a_lone_cr_at_the_end_of_input_ends_a_line_comment() {
+        assert_eq!(
+            pairs("// a\r"),
+            vec![
+                (SyntaxKind::LineComment, "// a"),
+                (SyntaxKind::Whitespace, "\r"),
+            ],
+        );
+    }
+
+    #[test]
     fn a_lone_cr_ends_a_doc_comment_line() {
         assert_eq!(
             pairs("/// a\rx"),
