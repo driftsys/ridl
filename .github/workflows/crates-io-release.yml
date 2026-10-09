@@ -150,6 +150,11 @@ jobs:
             return 1
           }
 
+          # `xtask/tests/release_publish_list.rs` (part of `just test`) checks
+          # this list: it must name exactly the publishable workspace members,
+          # and each crate must follow every workspace crate it depends on
+          # through a normal or build dependency.
+          #
           # Dependency order: a crate publishes only once crates.io already
           # has every crate it depends on. ridl-syntax, ridl-ir and ridl-rt
           # have no internal dependency and lead; ridl-rt-conformance depends
