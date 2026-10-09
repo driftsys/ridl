@@ -232,10 +232,11 @@ E10 value objects, E10.10 last ────────────────�
 
 E14.1 · E10, the typl debt ─→ Rust codegen finalized
       ─→ E11.7 FlatBuffers ─→ E4.5a IR stability ─→ E4.5b plugin protocol
-                                                 ─→ E11.8 proto3 · E11.12 repr(C)
+                                                 ─→ #801 on-request encodings
+                                                       ─→ E11.8 proto3 · E11.9 · E11.12 repr(C)
 
 E6 rsdl finalized and lowered to the IR — beside the lock; E6.17 last, landed
-E11.0 ridl-rt, landed ─┬─→ E11.1 frame spec ─→ E11.9 ridl-transport-ws
+E11.0 ridl-rt, landed ─┬─→ E11.1 frame spec ─→ (#801) ─→ E11.9 ridl-transport-ws
                        └─→ E11.15 ridl-loopback — no frame, no socket
 E11.13 interaction face MVP — deliberately out of sequence, before E11.1 and E11.9
       ─→ E11.14 the face and a codec reach ridl build — after E11.15 and one codec
@@ -245,7 +246,11 @@ E3.1–E3.3 · E9.10 · E9.12 · E8 — a thread beside all of it
 **The on-request encodings change runs first among the three codec and transport
 stories (2026-10-09).** A new step, the manifest naming the encodings a build
 emits (driftsys/ridl#801), now sits before E11.8, E11.9 and E11.12. After it,
-those three are independent of each other. E11.9 lands over FlatBuffers. See
+those three are independent of each other. E11.9 lands over FlatBuffers, and
+`frame-specification.md` section 11.1 (the WebSocket fixed to proto3, encoding
+tag 2) is amended when E11.9 lands; the specification is unchanged until then.
+E11.8's conformance oracle is `prost` through `protox` instead of `protoc`
+(steering note decision D). E11.12 starts with its projection record. See
 [`2026-10-06-ws-and-payload-formats-steering.md`](wip/2026-10-06-ws-and-payload-formats-steering.md)
 sections 2 and 4.
 
@@ -753,11 +758,11 @@ decision 4 places them in a projection record of the shape of ADR-0017 and
 ADR-0019, written when the backend is — not in that record and not in the
 ADR-0018 amendments.
 
-| ID     | Story                                                                                                                                                                                                                                                                                               | Done when                                                                                                                                                                                                                   | Size |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| E11.7  | The FlatBuffers payload codec                                                                                                                                                                                                                                                                       | a payload round-trips through the library                                                                                                                                                                                   | L    |
-| E11.8  | The proto3 payload codec plus byte-level conformance against a `protoc`-generated implementation; it reads an absent non-optional scalar as its default, 0, as the FlatBuffers codec does (driftsys/ridl#472, ADR-0019 decision 9)                                                                  | our bytes parse there and its bytes parse here                                                                                                                                                                              | L    |
-| E11.12 | The `repr(C)` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type; also removes `#[repr(C)]` from the generated domain structs, which ADR-0020 decision 3 retires | a payload round-trips through the layout struct, the emitted header compiles as C, and no generated domain struct carries `#[repr(C)]` (a scalar newtype keeps `#[repr(transparent)]`, which ADR-0020 decision 3 preserves) | L    |
+| ID     | Story                                                                                                                                                                                                                                                                                                                                                                               | Done when                                                                                                                                                                                                                   | Size |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E11.7  | The FlatBuffers payload codec                                                                                                                                                                                                                                                                                                                                                       | a payload round-trips through the library                                                                                                                                                                                   | L    |
+| E11.8  | The proto3 payload codec plus byte-level conformance against a `prost`-generated implementation through `protox` (steering note decision D, [`2026-10-06-ws-and-payload-formats-steering.md`](wip/2026-10-06-ws-and-payload-formats-steering.md)); it reads an absent non-optional scalar as its default, 0, as the FlatBuffers codec does (driftsys/ridl#472, ADR-0019 decision 9) | our bytes parse there and its bytes parse here                                                                                                                                                                              | L    |
+| E11.12 | The `repr(C)` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type; also removes `#[repr(C)]` from the generated domain structs, which ADR-0020 decision 3 retires                                                                                 | a payload round-trips through the layout struct, the emitted header compiles as C, and no generated domain struct carries `#[repr(C)]` (a scalar newtype keeps `#[repr(transparent)]`, which ADR-0020 decision 3 preserves) | L    |
 
 **E11.7's `Done when` is met, and every decision of its design note is built.**
 A payload round-trips through the library, and the conformance obligation the

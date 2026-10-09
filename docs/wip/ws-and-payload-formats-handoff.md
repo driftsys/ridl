@@ -1,5 +1,12 @@
 # Session prompt: the WebSocket transport and the payload formats — recap, then steer
 
+Status: spent. This is the session prompt of 2026-10-06 that produced
+`docs/wip/2026-10-06-ws-and-payload-formats-steering.md`. It records what was
+known and leaned toward on that date. The steering note supersedes it: where the
+two differ, the note holds (for example, the default is types only, not
+FlatBuffers, by decision A1; #265, #264 and #317 are now in the E11 milestone;
+#350 has seventeen questions).
+
 Paste this into a fresh session at the root of `driftsys/ridl`. This session
 does not implement anything. It produces a recap of where two topics stand, and
 then a steering discussion with Sebastien. The discussion ends in decisions he
@@ -14,7 +21,7 @@ approves, which are recorded in a dated note under `docs/wip/`.
    encoding has a codec, a projection record and a size state.
 
 The two topics are coupled. A WebSocket carries a framed payload, and the frame
-specification defines one binding per encoding.
+specification defines one binding per transport.
 
 ## What is known at handoff (2026-10-06)
 
@@ -99,10 +106,10 @@ The steering settles these questions under the decision:
    each payload carries one combined row in the generated member table,
    `PayloadInfo.max_size: EncodedSizes { proto3, flatbuffers, repr_c }`.
    `Encoding::max_size` picks a column, and `Member::reservation::<E>()` reads
-   it (`crates/ridl-rt/src/encoding.rs`, `contract.rs:190`). Each codec also
-   emits `<T as Payload<E>>::MAX_SIZE`, which is the value the face uses. So
-   sizes live in two places, and the row carries `None` for encodings that were
-   never emitted.
+   it (`crates/ridl-rt/src/encoding.rs`, `crates/ridl-rt/src/contract.rs:192`).
+   Each codec also emits `<T as Payload<E>>::MAX_SIZE`, which is the value the
+   face uses. So sizes live in two places, and the row carries `None` for
+   encodings that were never emitted.
 
    The proposal: each emitted codec also emits its own size table per interface,
    for example `impl Sizes<FlatBuffers> for Cabin`, and the reservation and the
