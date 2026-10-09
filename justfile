@@ -488,8 +488,8 @@ demo:
     # and keep this green while a fresh clone failed.
     rm -rf examples/cabin/generated examples/cabin/generated-corpus
     "$target/debug/ridl" build examples/cabin --emit rust --out-dir examples/cabin/generated
-    # Only for the `no_std` check below: cabin's schema has no string, bytes,
-    # array, map or pattern, and this workspace has each of them.
+    # For the `no_std` check and the clippy run below: cabin's schema has no
+    # string, bytes, array, map or pattern, and this workspace has each of them.
     "$target/debug/ridl" build crates/ridlc/tests/corpus/veh-cluster --emit rust \
         --out-dir examples/cabin/generated-corpus
     # This line is the only one that runs the generated crate's planus check,
@@ -536,8 +536,8 @@ demo:
         --no-default-features --features validate-pattern
     # The corpus crate is linted as well, under no allowance for the emitter.
     # `dead_code` is allowed for this one run: the corpus declares items that
-    # nothing uses, and the 13 `dead_code` warnings come from the corpus itself,
-    # not from the emitter. Every other lint fails the run.
+    # nothing uses, and the `dead_code` warnings come from the corpus's
+    # `internal` structs, not from the emitter. Every other lint fails the run.
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked --no-deps \
         -- -D warnings -A dead_code
     cargo fmt --manifest-path examples/cabin/consumer/Cargo.toml --check

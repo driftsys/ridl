@@ -1213,11 +1213,13 @@ fn constraint_checks_with_precision(
         } else {
             // The language value is i64. The widened difference cannot
             // overflow even when the origin and value are opposite extremes.
+            // The step and the origin are integer literals, typed by their
+            // bindings, so they need no cast.
             quote! {
                 {
-                    let __step: ::core::primitive::i128 = #step as ::core::primitive::i128;
-                    __step <= 0 || ((#value as ::core::primitive::i128) - (#origin as ::core::primitive::i128))
-                        % __step != 0
+                    let __step: ::core::primitive::i128 = #step;
+                    let __origin: ::core::primitive::i128 = #origin;
+                    __step <= 0 || ((#value as ::core::primitive::i128) - __origin) % __step != 0
                 }
             }
         };
