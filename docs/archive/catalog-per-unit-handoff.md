@@ -76,14 +76,27 @@ reduced package, is the input of the catalog hash.
   reported as one removal and is not refused.
 - Two new manifest errors: MANI-013 (a `ridl.toml` inside a unit's tree) and
   MANI-014 (a source package declared by two units).
-- Baseline snapshots written before this release carry no `unit`. Each is
-  treated as its own unit until the project publishes a new baseline.
+- Baseline snapshots written before this release carry no `unit`. `ridl diff`
+  treats each as its own unit until the project publishes a new baseline; the
+  publication gate of `ridl baseline` compares such a snapshot in the unit of
+  the fresh package of the same name, so the migration below passes it.
+- In single-file mode the catalog is `<package>.catalog.binfb`, named after the
+  file's package as the unit, while the other emits keep the file stem.
 
-Migration, in three steps:
+Migration, for every unit that has an interface in a subpackage (a unit whose
+interfaces are all in its root package keeps its lock and its numbers, and only
+runs step 3):
 
-1. Delete the per-package `interfaces.lock` files.
-2. Run `ridl lock` to number the unit.
-3. Publish a new baseline with `ridl baseline`.
+1. Delete the per-package `interfaces.lock` files, the root's included.
+2. Run `ridl lock` to number the unit: the keys are qualified relative to the
+   unit (`cluster.Speed`) and the numbers run over the unit in key byte order.
+3. Publish a new baseline with `ridl baseline`. When it refuses with RIDL-412, a
+   legacy lock held retired entries, so a live number is above the count of the
+   unit's interfaces and the new numbering does not reach it; `ridl
+   baseline`
+   has no flag that overrides the gate, so remove `.ridl/baseline/` and run
+   `ridl baseline` again, as a first publication, which the gate does not
+   compare against a published number.
 
 The `evals/corpus/vss` corpus was re-cut into flat members, and the book harness
 stages one flat member per package, so neither nests a `ridl.toml`.
@@ -115,4 +128,5 @@ Archive to `docs/archive/`:
 - `docs/wip/2026-10-08-catalog-per-unit-design.md` (the spec)
 - `docs/wip/2026-10-08-catalog-per-unit-plan.md` (the plan)
 - `docs/wip/2026-10-08-catalog-per-unit-handoff.md` (the execution handoff)
-- this file, after the issue is posted and the release is cut
+- this file, already archived with the spec and the plan; the driver posts the
+  issue and runs the release from the archived copy
