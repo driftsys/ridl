@@ -439,9 +439,12 @@ compat-check: toolchain-check
 # emitter, and a listed lint that no longer fires fails through
 # `unfulfilled_lint_expectations`, so the list cannot go stale.
 #
-# The crate emitted for the veh-cluster corpus is linted too, with no allowance
-# except `dead_code`, because the corpus declares items that nothing uses. It
-# draws no other lint, so any other warning is a defect in the emitter.
+# The crate emitted for the veh-cluster corpus is linted too, with no
+# command-line allowance except `dead_code`, because the corpus declares items
+# that nothing uses; the lints the emitted `lib.rs` allows stay allowed. Unlike
+# the run above, this one keeps `allow`: `clippy::module_inception` does not
+# fire on the corpus crate, so a stale entry there does not fail. Any other
+# warning is a defect in the emitter.
 #
 # The binary is reached through `CARGO_TARGET_DIR` where it is set, the way
 # `compat-check` reads it, rather than through a hardcoded `./target`: a
