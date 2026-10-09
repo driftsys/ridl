@@ -1,5 +1,152 @@
 # Changelog
 
+## [0.7.0] (2026-10-09)
+
+### Features
+
+- **ridl-diff:** match interface numbers within a unit ([fa332aa])
+- **ridl-sem:** key the system regions on the unit ([25d80b7])
+- **ridl-descriptor:** lower one catalog per unit with qualified interface names
+  ([2c06099])
+- **ridl-ir:** hash the reduced unit and name the catalog after the unit
+  ([36062f6])
+- **ridl:** write one interfaces.lock per unit with ridl lock ([36500e8])
+- **ridl-sem:** number interfaces once per unit ([618e479])
+- **ridl-ir:** record the unit of a package in the IR ([90813aa])
+- **ridl-core:** read one interfaces.lock per unit ([839d017])
+- **ridl-core:** refuse a source package claimed by two units (MANI-014)
+  ([26b31fb])
+- **ridl-core:** refuse a manifest inside a unit's tree (MANI-013) ([bbdd43c])
+- **ridl-core:** accept a dotted relative name as an interface lock key
+  ([83f504d])
+- **ridl-core:** record the unit of every loaded package ([455d49f])
+- **ridl-descriptor:** add a std feature, off for a no_std reader ([041dc61])
+- **ridl-rt-conformance:** publish the port contract suite ([6572d4f])
+
+### Documentation
+
+- **repo:** say unit in the comments the per-unit lock made false ([d48d6ae])
+- **docs:** say unit where the catalog is per unit ([eab32cd])
+- **docs:** archive the catalog-per-unit spec and plan ([35f9684])
+- **docs:** state the gate mechanism in the release note ([d8d5ed9])
+- **docs:** draft the Kotlin heads-up and the release note for one catalog per
+  unit ([d80bd7e])
+- **docs:** qualify the baseline gate's deleted-package refusal ([5d4d44c])
+- **docs:** describe one catalog per unit in the book ([7f6689f])
+- **ridl:** scope the hash sentence and the number key to the unit ([cd68c1b])
+- **adr:** scope the ADR-0015 interface number to the unit ([6e58bad])
+- **ridl:** state the unit in the language references and design records
+  ([72c1886])
+- **adr:** record one catalog per unit in the decision records ([5541663])
+- **ridl:** add the catalog-per-unit implementation handoff ([54b6a95])
+- **ridl:** apply the plan review ([6475c8c])
+- **ridl:** record the author's answers in the catalog-per-unit plan ([24d9ca0])
+- **ridl:** plan one catalog per unit ([090539f])
+- **ridl:** state that a types-only unit still gets generated types ([2dfacf3])
+- **ridl:** note that a future .rxdl file fits a unit ([604aa26])
+- **ridl:** fold the design review into the catalog-per-unit spec ([4c04bb5])
+- **ridl:** settle baselines, plugins and the empty root package ([95e9ac6])
+- **ridl:** design one catalog per unit ([726c1f0])
+- **repo:** name the bare-metal target where the pin is quoted ([f8c65c1])
+- **adr:** name the decision of the ridl-rt-conformance amendments ([307a9ac])
+- **adr:** record that ridl-rt-conformance is published ([827a8c1])
+- **docs:** wrap two long lines in the editor setup section ([5bd02f9])
+- **docs:** correct install and agent setup details in the book ([d984947])
+- **docs:** document installation and editor and agent setup in the book
+  ([1cf820d])
+- **docs:** correct the Timeout and illustration wording in the book ([e8e015c])
+- **docs:** correct the generated-code and catalog-descriptor chapters
+  ([ae09bbf])
+- **docs:** add book chapters on the generated Rust code and the catalog
+  descriptor ([22e70f5])
+
+### Bug Fixes
+
+- **ridl-ir:** keep the full name of a package outside its unit ([fed5f9c])
+- **ridl:** compare a legacy baseline snapshot in the unit of its package
+  ([04f8dd8])
+- **ridl-core:** report MANI-014 for two members with one package name
+  ([a84625e])
+- **xtask:** count the descriptor round-trip test's three interface reads
+  ([b75ba3b])
+- **ridl-sem:** spell every retired entry as its lock key in the IR ([9ed0b8a])
+- **ridl:** keep a number that moves to another package of its unit ([fe145b9])
+- **ridl-descriptor:** pin the no_std surface and name the new checks
+  ([b009792])
+- **ridl-rt-conformance:** build on the minimum Rust of ridl-rt ([53488c4])
+- **repo:** pin both halves of the book-check anchor test with fixtures
+  ([e305f35])
+- **repo:** make book-check fail on an include anchor that does not resolve
+  ([254e5be])
+- **repo:** let book-check resolve includes of examples/ sources ([b394dc6])
+
+### BREAKING CHANGES
+
+- ridl diff groups baseline snapshots by unit and matches interface numbers within the unit; a move between sibling packages is InterfaceRenamed.
+- a region of the system artifact is one unit; region interface names are catalog names (cluster.Speed), and a plugin finds its region by Catalog.package.
+- ridl build --emit catalog writes <unit>.catalog.binfb, one file per unit; interface names in the descriptor are qualified by the source package path relative to the unit.
+- the IR's retired entries carry their lock key (catalog name), not the short name.
+- every catalog hash changes; the reduced package is now the reduced unit and CATALOG.name is the unit name.
+- ridl lock writes one interfaces.lock per unit, in the manifest directory, with catalog-name keys (cluster.Speed); it no longer writes a lock per source package directory.
+- interface numbers are one space per unit and a declared interface's lock key is its source package path relative to the unit plus its name (cluster.Speed). Delete the per-package interfaces.lock files, run ridl lock, and publish a new baseline.
+- an interfaces.lock in a subdirectory of a unit is no longer read; the unit's lock is the one beside its ridl.toml.
+
+[0.7.0]: https://github.com/driftsys/ridl/compare/v0.6.0...v0.7.0
+[fa332aa]: https://github.com/driftsys/ridl/commit/fa332aa
+[25d80b7]: https://github.com/driftsys/ridl/commit/25d80b7
+[2c06099]: https://github.com/driftsys/ridl/commit/2c06099
+[36062f6]: https://github.com/driftsys/ridl/commit/36062f6
+[36500e8]: https://github.com/driftsys/ridl/commit/36500e8
+[618e479]: https://github.com/driftsys/ridl/commit/618e479
+[90813aa]: https://github.com/driftsys/ridl/commit/90813aa
+[839d017]: https://github.com/driftsys/ridl/commit/839d017
+[26b31fb]: https://github.com/driftsys/ridl/commit/26b31fb
+[bbdd43c]: https://github.com/driftsys/ridl/commit/bbdd43c
+[83f504d]: https://github.com/driftsys/ridl/commit/83f504d
+[455d49f]: https://github.com/driftsys/ridl/commit/455d49f
+[041dc61]: https://github.com/driftsys/ridl/commit/041dc61
+[6572d4f]: https://github.com/driftsys/ridl/commit/6572d4f
+[d48d6ae]: https://github.com/driftsys/ridl/commit/d48d6ae
+[eab32cd]: https://github.com/driftsys/ridl/commit/eab32cd
+[35f9684]: https://github.com/driftsys/ridl/commit/35f9684
+[d8d5ed9]: https://github.com/driftsys/ridl/commit/d8d5ed9
+[d80bd7e]: https://github.com/driftsys/ridl/commit/d80bd7e
+[5d4d44c]: https://github.com/driftsys/ridl/commit/5d4d44c
+[7f6689f]: https://github.com/driftsys/ridl/commit/7f6689f
+[cd68c1b]: https://github.com/driftsys/ridl/commit/cd68c1b
+[6e58bad]: https://github.com/driftsys/ridl/commit/6e58bad
+[72c1886]: https://github.com/driftsys/ridl/commit/72c1886
+[5541663]: https://github.com/driftsys/ridl/commit/5541663
+[54b6a95]: https://github.com/driftsys/ridl/commit/54b6a95
+[6475c8c]: https://github.com/driftsys/ridl/commit/6475c8c
+[24d9ca0]: https://github.com/driftsys/ridl/commit/24d9ca0
+[090539f]: https://github.com/driftsys/ridl/commit/090539f
+[2dfacf3]: https://github.com/driftsys/ridl/commit/2dfacf3
+[604aa26]: https://github.com/driftsys/ridl/commit/604aa26
+[4c04bb5]: https://github.com/driftsys/ridl/commit/4c04bb5
+[95e9ac6]: https://github.com/driftsys/ridl/commit/95e9ac6
+[726c1f0]: https://github.com/driftsys/ridl/commit/726c1f0
+[f8c65c1]: https://github.com/driftsys/ridl/commit/f8c65c1
+[307a9ac]: https://github.com/driftsys/ridl/commit/307a9ac
+[827a8c1]: https://github.com/driftsys/ridl/commit/827a8c1
+[5bd02f9]: https://github.com/driftsys/ridl/commit/5bd02f9
+[d984947]: https://github.com/driftsys/ridl/commit/d984947
+[1cf820d]: https://github.com/driftsys/ridl/commit/1cf820d
+[e8e015c]: https://github.com/driftsys/ridl/commit/e8e015c
+[ae09bbf]: https://github.com/driftsys/ridl/commit/ae09bbf
+[22e70f5]: https://github.com/driftsys/ridl/commit/22e70f5
+[fed5f9c]: https://github.com/driftsys/ridl/commit/fed5f9c
+[04f8dd8]: https://github.com/driftsys/ridl/commit/04f8dd8
+[a84625e]: https://github.com/driftsys/ridl/commit/a84625e
+[b75ba3b]: https://github.com/driftsys/ridl/commit/b75ba3b
+[9ed0b8a]: https://github.com/driftsys/ridl/commit/9ed0b8a
+[fe145b9]: https://github.com/driftsys/ridl/commit/fe145b9
+[b009792]: https://github.com/driftsys/ridl/commit/b009792
+[53488c4]: https://github.com/driftsys/ridl/commit/53488c4
+[e305f35]: https://github.com/driftsys/ridl/commit/e305f35
+[254e5be]: https://github.com/driftsys/ridl/commit/254e5be
+[b394dc6]: https://github.com/driftsys/ridl/commit/b394dc6
+
 ## [0.6.0] (2026-10-07)
 
 ### Refactoring
