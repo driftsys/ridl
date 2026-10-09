@@ -679,7 +679,8 @@ impl Loader {
     /// of the tree carries `lock`, the unit's `interfaces.lock` read from the
     /// manifest directory; a lock in any other directory is not read and is
     /// RIDL-416. A member listed twice in `[workspace] members` reaches this
-    /// function once: the `members` loop skips its later listings.
+    /// function once: the `members` loop skips its later listings, so a
+    /// claim already recorded for a name always belongs to another unit.
     fn load_package_tree(
         &mut self,
         db: &mut RidlDatabase,
@@ -732,7 +733,9 @@ impl Loader {
         let mut claimed_elsewhere = false;
         if !source_files.is_empty() {
             match self.claims.get(name) {
-                Some((first, first_dir)) if normalize(first_dir) != normalize(unit_dir) => {
+                // Each unit's tree is walked once, so an existing claim is
+                // always another unit's.
+                Some((first, first_dir)) => {
                     claimed_elsewhere = true;
                     // Every unit whose tree is loaded has its entry,
                     // inserted beside its entry in `units`.
@@ -3032,8 +3035,24 @@ service:veh.common.climate 2
     /// Loads a workspace whose `members` is `members`, every listing of which
     /// names the directory `a` (the directory `b` exists so that `b/../a`
     /// resolves on the filesystem). The member is one unit: no MANI-014, its
-    /// own MANI-005 raised once, no diagnostic twice, one package `x`.
+    /// own MANI-005 raised once, no diagnostic twice, one package `x`. The
+    /// repeated listing raises no diagnostic of its own: the code list equals
+    /// the list of the same fixture with `a` listed once.
     fn member_listed_twice_is_loaded_once(members: &str) {
+        let (codes, named_x) = load_member_a(members);
+        assert!(!codes.contains(&"MANI-014".to_string()), "{codes:?}");
+        let mani_005 = codes.iter().filter(|c| *c == "MANI-005").count();
+        assert_eq!(mani_005, 1, "{codes:?}");
+        assert_eq!(named_x, 1);
+        let (listed_once, _) = load_member_a("[\"a\"]");
+        assert_eq!(codes, listed_once);
+    }
+
+    /// The fixture of [`member_listed_twice_is_loaded_once`] with `members`
+    /// as the `[workspace] members` list: the diagnostic codes, in order, and
+    /// the number of packages named `x`. Asserts that no diagnostic appears
+    /// twice.
+    fn load_member_a(members: &str) -> (Vec<String>, usize) {
         let dir = TempDir::new("member-twice");
         std::fs::create_dir_all(dir.path().join("b")).expect("create `b`");
         dir.write("ridl.toml", &format!("[workspace]\nmembers = {members}\n"));
@@ -3044,10 +3063,6 @@ service:veh.common.climate 2
         dir.write("a/x.ridl", "package x\n\ninterface A {}\n");
         let mut db = RidlDatabase::default();
         let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
-        let codes = codes(&loaded.diagnostics);
-        assert!(!codes.contains(&"MANI-014"), "{codes:?}");
-        let mani_005 = codes.iter().filter(|c| **c == "MANI-005").count();
-        assert_eq!(mani_005, 1, "{codes:?}");
         for (i, diag) in loaded.diagnostics.iter().enumerate() {
             assert!(
                 !loaded.diagnostics[..i].contains(diag),
@@ -3057,7 +3072,11 @@ service:veh.common.climate 2
         }
         let packages = loaded.workspace.packages(&db);
         let named_x = packages.iter().filter(|p| p.name(&db) == "x").count();
-        assert_eq!(named_x, 1);
+        let codes = codes(&loaded.diagnostics)
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        (codes, named_x)
     }
 
     #[test]

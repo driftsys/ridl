@@ -163,6 +163,21 @@ mod tests {
         );
     }
 
+    /// Two zero-numbered shapes, declared `Z` then `Y`: the error names `Y`,
+    /// the first in the (number, name) order of `unit_shapes`.
+    #[test]
+    fn a_zero_number_error_names_the_first_zero_shape() {
+        let package = package(vec![
+            interface("A", 1, false),
+            interface("Z", 0, true),
+            interface("Y", 0, true),
+        ]);
+        assert_eq!(
+            numbered_shapes("p", &[&package]),
+            Err(ZeroNumber("Y".to_owned()))
+        );
+    }
+
     #[test]
     fn a_package_without_interfaces_numbers_nothing() {
         assert!(

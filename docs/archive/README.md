@@ -516,7 +516,7 @@ provenance. Nothing here is normative — the current references live in
   workspace member listed twice is loaded once (recorded in
   [ADR-0002](../decisions/ADR-0002-module-system.md) section 1); the RIDL-409
   rename hint appears for a unit whose root declares no package, and for a
-  payload written bare in one package and qualified in another; and the corpus
-  codegen snapshots are lowered over the scope `ridl build` uses. Two items of
-  the issue were left open on the issue by decision. Its other decisions are
-  implementation choices.
+  payload written bare in one package and qualified in another. It also changes
+  a test harness: the corpus codegen snapshots are lowered over the scope
+  `ridl build` uses. Two items of the issue were left open on the issue by
+  decision. Its other decisions are implementation choices.
