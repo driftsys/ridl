@@ -477,3 +477,28 @@ fn executable_dump_rejects_hard_linked_files_before_build_or_publication() {
         assert!(String::from_utf8_lossy(&output.stderr).contains("hard link"));
     }
 }
+
+#[test]
+fn derive_over_the_real_records_matches_what_is_committed() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    let fixture = Fixture::new();
+    // Derivation reads the labels and the recall join under evals/calibration/
+    // and the corpus workspaces the labels cite, so the copy takes all of evals/.
+    let copied = Command::new("cp")
+        .arg("-R")
+        .arg(root.join("evals"))
+        .arg(fixture.0.join("evals"))
+        .status()
+        .unwrap();
+    assert!(copied.success());
+    let committed = fs::read(root.join("evals/calibration/summary.md")).unwrap();
+    let written = fixture.0.join("evals/calibration/summary.md");
+    fs::remove_file(&written).unwrap();
+    let output = fixture.command(&["calibrate", "derive", "--write"]);
+    success(&output);
+    assert_eq!(
+        String::from_utf8_lossy(&fs::read(&written).unwrap()),
+        String::from_utf8_lossy(&committed),
+        "evals/calibration/summary.md is stale; run `cargo xtask calibrate derive --write`"
+    );
+}
