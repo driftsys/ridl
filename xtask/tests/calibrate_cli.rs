@@ -99,8 +99,21 @@ fn main() {
     assert_eq!(root,env::current_dir().unwrap());
     assert!(root.parent().unwrap().file_name().unwrap().to_str().unwrap().starts_with(".calibrate-work-"));
     let manifest=fs::read_to_string(root.join("ridl.toml")).unwrap();
-    for check in ["inconsistent-unit","inconsistent-abbreviation","duplicate-shape","low-cohesion-interface","package-fan-out"] {
+    let dropped=["inconsistent-abbreviation","package-fan-out"];
+    if !root.join("mode.txt").exists() {
+        // The lint probe: report every dropped lint as unknown, like the real binary.
+        let mut report=Vec::new();
+        for name in dropped {
+            report.push(format!("{{\"code\":\"MANI-010\",\"severity\":\"warning\",\"lint\":\"unknown-lint\",\"message\":\"unknown lint `{name}` in `[lints]`\"}}"));
+        }
+        println!("[{}]",report.join(","));
+        return;
+    }
+    for check in ["inconsistent-unit","duplicate-shape","low-cohesion-interface"] {
         assert!(manifest.contains(&format!("{check} = \"warn\"")));
+    }
+    for name in dropped {
+        assert!(!manifest.contains(name), "manifest names the dropped lint {name}");
     }
     fs::write(root.join("copy-only.marker"),"checked copy").unwrap();
     let mode=fs::read_to_string(root.join("mode.txt")).unwrap();

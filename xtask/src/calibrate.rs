@@ -621,6 +621,45 @@ fn check_dump_tree(path: &Path, directory: bool) -> Result<()> {
     Ok(())
 }
 
+/// The checks in `CHECKS` that the built binary registers as lints. The binary
+/// answers by drawing MANI-010 (unknown lint) for every `[lints]` key it does
+/// not ship, so the answer comes from the binary and not from a second list.
+fn shipped_checks(binary: &Path, scratch: &Path) -> Result<Vec<&'static str>> {
+    #[derive(Deserialize)]
+    struct Probe {
+        code: Option<String>,
+        message: String,
+    }
+    let probe = scratch.join("lint-probe");
+    std::fs::create_dir(&probe)?;
+    let mut manifest =
+        String::from("[package]\nname = \"probe\"\nversion = \"0.1.0\"\n\n[lints]\n");
+    for check in CHECKS {
+        manifest.push_str(&format!("{check} = \"warn\"\n"));
+    }
+    std::fs::write(probe.join("ridl.toml"), manifest)?;
+    let output = std::process::Command::new(binary)
+        .current_dir(&probe)
+        .args(["check", "--format", "json"])
+        .arg(&probe)
+        .output()?;
+    let diagnostics: Vec<Probe> = serde_json::from_slice(&output.stdout).map_err(|e| {
+        format!(
+            "lint probe printed no JSON report ({e}):\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+    })?;
+    let unknown: BTreeSet<&str> = diagnostics
+        .iter()
+        .filter(|d| d.code.as_deref() == Some("MANI-010"))
+        .filter_map(|d| d.message.strip_prefix("unknown lint `")?.split('`').next())
+        .collect();
+    Ok(CHECKS
+        .into_iter()
+        .filter(|check| !unknown.contains(check))
+        .collect())
+}
+
 fn dump(root: &Path, out: &Path) -> Result<()> {
     let out = checked_dump_destination(root, out)?;
     check_dump_tree(&out.join(".calibrate-target"), true)?;
@@ -647,6 +686,7 @@ fn dump(root: &Path, out: &Path) -> Result<()> {
     let binary = target
         .join("debug")
         .join(format!("ridl{}", std::env::consts::EXE_SUFFIX));
+    let shipped = shipped_checks(&binary, &scratch.0)?;
     let mut all: BTreeMap<String, Vec<Finding>> =
         CHECKS.iter().map(|c| (c.to_string(), Vec::new())).collect();
     let workspaces = sorted_entries(&root.join("evals/corpus"))?;
@@ -673,7 +713,7 @@ fn dump(root: &Path, out: &Path) -> Result<()> {
             return Err("corpus already has a lints table; refusing to overwrite it".into());
         }
         text.push_str("\n[lints]\n");
-        for check in CHECKS {
+        for check in &shipped {
             text.push_str(&format!("{check} = \"warn\"\n"));
         }
         std::fs::write(manifest, text)?;
