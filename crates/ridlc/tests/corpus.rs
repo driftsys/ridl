@@ -98,7 +98,7 @@ struct Compiled {
     /// per package), or a one-line note when the entry has error diagnostics.
     /// Each package is lowered over the scope `ridl build` passes it: every
     /// checked package of the entry, then `ridl.std` when a package of the
-    /// entry names it (`catalog_scope` in `ridlc`). So each section is the
+    /// entry names it (`ridlc::catalog_scope`). So each section is the
     /// model `ridl build --emit codegen-model` writes for that package: its
     /// cross-package references resolve, and the `catalog` of a package in a
     /// multi-package unit carries the unit's hash. The Rust and TypeScript
@@ -231,6 +231,9 @@ fn compile_entry(entry: &Path) -> Compiled {
     let has_errors = diagnostics
         .iter()
         .any(|diagnostic| diagnostic.severity == Severity::Error);
+    // The lowered `ridl.std`, checked once for a clean entry: the codegen
+    // scope and the lowered system below both read it.
+    let std_ir = (!has_errors).then(|| check_package(&db, workspace, std, std).ir);
     let (ir_json, rust, typescript, codegen) = if has_errors {
         let note = "(entry has error diagnostics; IR and generated code are omitted \
                     — see the diagnostics snapshot)\n"
@@ -266,16 +269,10 @@ fn compile_entry(entry: &Path) -> Compiled {
             })
             .collect::<Vec<_>>()
             .join("\n\n");
-        // The scope `ridl build` lowers each package over (`catalog_scope` in
-        // `ridlc`): every checked package of the entry, the package itself
-        // included, then `ridl.std` when a package of the entry names it.
+        // The scope `ridl build` lowers each package over, from the function
+        // the build calls.
         let irs: Vec<&ridl_ir::v2::Package> = checked_irs.iter().map(|(_, ir)| ir).collect();
-        let references_std = irs
-            .iter()
-            .any(|ir| ridl_ir::v2::referenced_packages(ir).contains("ridl.std"));
-        let std_ir = references_std.then(|| check_package(&db, workspace, std, std).ir);
-        let scope: Vec<&ridl_ir::v2::Package> =
-            irs.iter().copied().chain(std_ir.as_ref()).collect();
+        let scope = ridlc::catalog_scope(&irs, std_ir.as_ref());
         let codegen = checked_irs
             .iter()
             .map(|(name, ir)| {
@@ -294,16 +291,13 @@ fn compile_entry(entry: &Path) -> Compiled {
     // IR the pipeline built (rsdl reference §13, `ridlc::run_build`). An entry
     // with an error diagnostic gets none, for the reason the IR and code
     // artifacts above get none.
-    let system_json = if has_errors {
-        None
-    } else {
+    let system_json = std_ir.as_ref().and_then(|std_ir| {
         let irs: Vec<&ridl_ir::v2::Package> = checked_irs.iter().map(|(_, ir)| ir).collect();
-        let std_ir = check_package(&db, workspace, std, std).ir;
-        ridlc::lower_workspace_system(&system, &irs, &std_ir).map(|lowered| {
+        ridlc::lower_workspace_system(&system, &irs, std_ir).map(|lowered| {
             ridl_ir::v2::system_to_json_pretty(&lowered)
                 .expect("a clean entry's system serializes as IR JSON")
         })
-    };
+    });
 
     // Source order: by file, then by span start, then end, then code — a stable
     // total order independent of how the passes were evaluated. `FileId` is not

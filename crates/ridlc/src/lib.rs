@@ -1447,7 +1447,7 @@ pub fn lower_workspace_system(
     std_ir: &ridl_ir::v2::Package,
 ) -> Option<ridl_ir::v2::System> {
     let mut lowered = lower_system(system, packages)?;
-    let others = catalog_scope(packages, references_std(packages).then_some(std_ir));
+    let others = catalog_scope(packages, Some(std_ir));
     embed_catalog_hashes(&mut lowered, packages, &others);
     Some(lowered)
 }
@@ -1496,15 +1496,21 @@ fn references_std(packages: &[&ridl_ir::v2::Package]) -> bool {
 }
 
 /// The packages a package of the build is resolved against when the build
-/// writes it: every checked package of the workspace, then `ridl.std` when
-/// it is given. A backend and the catalog descriptor read it as `others`, and
-/// the catalog hash is computed over it. The descriptor's hash and a region's
-/// hash are computed over the same set of packages. The order of the list does
-/// not change the hash, which keys every declaration by its qualified name.
-fn catalog_scope<'a>(
+/// writes it: every checked package of the workspace in `packages`, then
+/// `std_ir` (the lowered `ridl.std`) when it is given and a package of
+/// `packages` names a declaration of `ridl.std`. A backend, the codegen model
+/// and the catalog descriptor read it as `others`, and the catalog hash is
+/// computed over it. The descriptor's hash and a region's hash are computed
+/// over the same set of packages. The order of the list does not change the
+/// hash, which keys every declaration by its qualified name.
+///
+/// [`run_build`] calls it, and the corpus harness calls it so that its
+/// codegen snapshots are lowered over the same scope as a build.
+pub fn catalog_scope<'a>(
     packages: &[&'a ridl_ir::v2::Package],
     std_ir: Option<&'a ridl_ir::v2::Package>,
 ) -> Vec<&'a ridl_ir::v2::Package> {
+    let std_ir = std_ir.filter(|_| references_std(packages));
     packages.iter().copied().chain(std_ir).collect()
 }
 
