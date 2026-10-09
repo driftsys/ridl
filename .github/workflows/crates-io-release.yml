@@ -153,7 +153,8 @@ jobs:
           # `xtask/tests/release_publish_list.rs` (part of `just test`) checks
           # this list: it must name exactly the publishable workspace members,
           # and each crate must follow every workspace crate it depends on
-          # through a normal or build dependency.
+          # through a normal or build dependency, or a dev-dependency that
+          # carries a version.
           #
           # Dependency order: a crate publishes only once crates.io already
           # has every crate it depends on. ridl-syntax, ridl-ir and ridl-rt
@@ -163,8 +164,7 @@ jobs:
           # not on each other, so their relative order does not matter);
           # ridl-cli — the `ridl` binary — depends on both of them plus
           # ridlc, so it is last of all. ridl-descriptor depends on ridl-ir, so
-          # it publishes after ridl-ir, and before ridlc so that ridlc can come
-          # to depend on it.
+          # it publishes after ridl-ir, and before ridlc, which depends on it.
           publish ridl-syntax
           publish ridl-ir
           publish ridl-descriptor
