@@ -2025,11 +2025,12 @@ mod v2_round_trip {
         assert_eq!(v2::relative_name("u.cluster", "u", "Session"), "u.Session");
     }
 
-    /// A package named twice in the slice contributes its retired entries
-    /// once.
+    /// A package named twice in the slice contributes the retired entries
+    /// of its first occurrence only: two distinct values with the same name
+    /// are not merged, and the later one is not read.
     #[test]
     fn unit_retired_reads_a_package_named_twice_once() {
-        let package = v2::Package {
+        let first = v2::Package {
             name: "u.cluster".to_string(),
             unit: "u".to_string(),
             retired: vec![v2::RetiredInterface {
@@ -2038,9 +2039,18 @@ mod v2_round_trip {
             }],
             ..Default::default()
         };
-        let once = v2::unit_retired("u", &[&package]);
-        assert_eq!(once.len(), 1);
-        assert_eq!(v2::unit_retired("u", &[&package, &package]), once);
+        let second = v2::Package {
+            retired: vec![v2::RetiredInterface {
+                name: "cluster.Older".to_string(),
+                number: 4,
+            }],
+            ..first.clone()
+        };
+        assert_eq!(
+            v2::unit_retired("u", &[&first, &second]),
+            first.retired,
+            "the first package of a name is the one read"
+        );
     }
 
     #[test]

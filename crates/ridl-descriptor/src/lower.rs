@@ -4,6 +4,7 @@
 //! (`docs/design/catalog-descriptor.md`, the section "What a catalog
 //! contains").
 
+use std::collections::BTreeMap;
 use std::fmt;
 
 use ridl_ir::projection::size::{self, Ctx, PayloadShape, SizeState, size_state};
@@ -13,7 +14,7 @@ use ridl_ir::v2::{
 };
 
 use crate::hash::catalog_hash;
-use crate::number::{ZeroNumber, numbered_shapes, unit_shapes};
+use crate::number::{ZeroNumber, first_zero, unit_shapes};
 use crate::{
     Catalog, Encoding, Interface, Kind, MaxSize, Member, Payload, RetiredInterface, SCHEMA_VERSION,
     SizeStateTag, Timing, TimingMode, UnboundedCause,
@@ -59,16 +60,25 @@ impl From<ZeroNumber> for LowerError {
 /// catalog name, in (number, name) order; its `retired` list is the unit's
 /// (`ridl_ir::v2::unit_retired`).
 pub fn lower(unit: &str, packages: &[&Package]) -> Result<Vec<u8>, LowerError> {
+    let shapes = unit_shapes(unit, packages);
     // Validates every number before any member is lowered.
-    numbered_shapes(unit, packages)?;
+    first_zero(&shapes)?;
     let hash = catalog_hash(unit, packages);
 
-    let interfaces = unit_shapes(unit, packages)
+    // One sizing context per package. A shape is sized against its own
+    // package's context, so a bare type name resolves where the shape was
+    // written.
+    let mut contexts: BTreeMap<&str, Ctx<'_>> = BTreeMap::new();
+    for (package, _, _) in &shapes {
+        contexts
+            .entry(package.name.as_str())
+            .or_insert_with(|| Ctx::new(package, packages));
+    }
+
+    let interfaces = shapes
         .into_iter()
         .map(|(package, shape, name)| {
-            // Sized against the shape's own package, so a bare type name
-            // resolves where the shape was written.
-            let ctx = Ctx::new(package, packages);
+            let ctx = &contexts[package.name.as_str()];
             Interface {
                 name,
                 number: shape.interface.number,
@@ -77,7 +87,7 @@ pub fn lower(unit: &str, packages: &[&Package]) -> Result<Vec<u8>, LowerError> {
                     .interface
                     .interactions
                     .iter()
-                    .filter_map(|decl| member_of(decl, &ctx))
+                    .filter_map(|decl| member_of(decl, ctx))
                     .collect(),
                 reserved_ordinals: shape
                     .interface

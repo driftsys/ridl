@@ -42,23 +42,34 @@ pub(crate) fn unit_shapes<'a>(
     shapes
 }
 
+/// The zero-number rule: `Err` naming the first shape of `shapes` whose IR
+/// number is 0, `Ok` when every shape is numbered.
+pub(crate) fn first_zero(
+    shapes: &[(&Package, InterfaceShape<'_>, String)],
+) -> Result<(), ZeroNumber> {
+    match shapes
+        .iter()
+        .find(|(_, shape, _)| shape.interface.number == 0)
+    {
+        Some((_, _, name)) => Err(ZeroNumber(name.clone())),
+        None => Ok(()),
+    }
+}
+
 /// Every interface shape of the packages of `unit` under its catalog name, in
 /// (number, name) order, with the number and the provisional flag the IR
 /// carries.
 pub fn numbered_shapes(unit: &str, packages: &[&Package]) -> Result<Vec<Numbered>, ZeroNumber> {
-    unit_shapes(unit, packages)
+    let shapes = unit_shapes(unit, packages);
+    first_zero(&shapes)?;
+    Ok(shapes
         .into_iter()
-        .map(|(_, shape, name)| {
-            if shape.interface.number == 0 {
-                return Err(ZeroNumber(name));
-            }
-            Ok(Numbered {
-                name,
-                number: shape.interface.number,
-                provisional: shape.interface.provisional,
-            })
+        .map(|(_, shape, name)| Numbered {
+            name,
+            number: shape.interface.number,
+            provisional: shape.interface.provisional,
         })
-        .collect()
+        .collect())
 }
 
 #[cfg(test)]
@@ -149,6 +160,21 @@ mod tests {
         assert_eq!(
             numbered_shapes("p", &[&package]),
             Err(ZeroNumber("Z".to_owned()))
+        );
+    }
+
+    /// Two zero-numbered shapes, declared `Z` then `Y`: the error names `Y`,
+    /// the first in the (number, name) order of `unit_shapes`.
+    #[test]
+    fn a_zero_number_error_names_the_first_zero_shape() {
+        let package = package(vec![
+            interface("A", 1, false),
+            interface("Z", 0, true),
+            interface("Y", 0, true),
+        ]);
+        assert_eq!(
+            numbered_shapes("p", &[&package]),
+            Err(ZeroNumber("Y".to_owned()))
         );
     }
 

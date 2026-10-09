@@ -1370,6 +1370,7 @@ fn the_migration_to_one_lock_per_unit_republishes_a_legacy_baseline() {
         SESSION,
         "next 2\nSession 1\n",
         &[
+            // Replacing a text by itself only strips the snapshot's `unit`.
             ("veh.hmi.ir.json", "\"number\": 1", "\"number\": 1"),
             ("veh.hmi.cluster.ir.json", "\"number\": 2", "\"number\": 1"),
         ],
@@ -1423,6 +1424,194 @@ fn a_legacy_number_the_new_numbering_does_not_reach_is_republished_from_an_empty
     std::fs::remove_dir_all(root.join(".ridl/baseline")).expect("remove the published baseline");
     let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
     assert_eq!(code, 0, "a first publication is not gated:\n{stderr}");
+}
+
+/// A legacy subpackage snapshot holds `Speed` under number 5, which the
+/// unit's new numbering (`Session` 1, `cluster.Speed` 2) does not reach. The
+/// refusal (RIDL-412) names the interface by its key in the unit the gate
+/// compared it in, `cluster.Speed` in `veh.hmi`, not by the bare name the
+/// package-level spelling of a snapshot without `unit` would give.
+#[test]
+fn a_lost_subpackage_number_of_a_legacy_snapshot_is_named_relative_to_the_unit() {
+    let dir = TempDir::new("gate-migration-subpackage-key");
+    let root = legacy_per_package_baseline(
+        &dir,
+        SESSION,
+        "next 2\nSession 1\n",
+        &[
+            // Replacing a text by itself only strips the snapshot's `unit`.
+            ("veh.hmi.ir.json", "\"number\": 1", "\"number\": 1"),
+            ("veh.hmi.cluster.ir.json", "\"number\": 2", "\"number\": 5"),
+        ],
+    );
+
+    let (lock, code, stderr) = migrate(&root);
+    assert!(
+        lock.contains("Session 1\n") && lock.contains("cluster.Speed 2\n"),
+        "the unit's numbering:\n{lock}"
+    );
+    assert_eq!(
+        code, 1,
+        "the number 5 of `cluster.Speed` is lost:\n{stderr}"
+    );
+    assert!(
+        stderr.contains(
+            "`cluster.Speed` holds interface number 5 in the baseline being replaced, in unit \
+             `veh.hmi`"
+        ),
+        "stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("Restore the line `cluster.Speed 5`"),
+        "stderr:\n{stderr}"
+    );
+}
+
+/// A legacy root snapshot holds the inline `service zone` under number 7,
+/// which the unit's new numbering (`Session` 1, `cluster.Speed` 2,
+/// `service:zone` 3) does not reach. The refusal (RIDL-412) names the shape
+/// by its lock key, `service:zone`.
+#[test]
+fn a_lost_inline_service_number_of_a_legacy_snapshot_keeps_its_service_key() {
+    let dir = TempDir::new("gate-migration-service-key");
+    let root = legacy_per_package_baseline(
+        &dir,
+        &format!("{SESSION}service zone {{ signal z : Level @[100ms..1s] }}\n"),
+        "next 3\nSession 1\nservice:zone 2\n",
+        &[
+            ("veh.hmi.ir.json", "\"number\": 3", "\"number\": 7"),
+            ("veh.hmi.cluster.ir.json", "\"number\": 2", "\"number\": 1"),
+        ],
+    );
+
+    let (lock, code, stderr) = migrate(&root);
+    assert!(
+        lock.contains("Session 1\n")
+            && lock.contains("cluster.Speed 2\n")
+            && lock.contains("service:zone 3\n"),
+        "the unit's numbering:\n{lock}"
+    );
+    assert_eq!(code, 1, "the number 7 of `service:zone` is lost:\n{stderr}");
+    assert!(
+        stderr.contains("`service:zone` holds interface number"),
+        "stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("Restore the line `service:zone 7`"),
+        "stderr:\n{stderr}"
+    );
+}
+
+/// The published snapshots record unit `veh.hmi`, where `cluster.Speed`
+/// holds number 2. The fresh workspace promotes `veh.hmi.cluster` to a unit
+/// of its own, where `Speed` is numbered 2 again, while unit `veh.hmi` now
+/// holds only `Session` 1. A snapshot that records its unit is compared in
+/// that unit, not in the unit of the fresh package of the same name, so
+/// number 2 is lost from `veh.hmi` and the gate refuses (RIDL-412).
+/// `hmi/interfaces.lock` is written by hand without the `cluster.Speed`
+/// line, so that `ridl lock` does not stop on that line as an orphan entry
+/// (RIDL-409) and the baseline gate is what sees number 2 lost.
+#[test]
+fn a_package_moved_to_another_unit_is_compared_in_the_unit_the_baseline_recorded() {
+    let dir = TempDir::new("gate-unit-moved");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"hmi\"]\n");
+    dir.write(
+        "hmi/ridl.toml",
+        "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("hmi/hmi.ridl", SESSION);
+    dir.write(
+        "hmi/cluster/speed.ridl",
+        "package veh.hmi.cluster\nimport veh.hmi.Level\ninterface Speed { signal v : Level @[100ms..1s] }\n",
+    );
+    let root = dir.path().to_path_buf();
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the unit's lock is allocated: {stderr}");
+    let lock = std::fs::read_to_string(root.join("hmi/interfaces.lock")).expect("the unit's lock");
+    assert!(
+        lock.contains("Session 1\n") && lock.contains("cluster.Speed 2\n"),
+        "the unit's numbering:\n{lock}"
+    );
+    publish(&root);
+    let published = std::fs::read_to_string(root.join(".ridl/baseline/veh.hmi.cluster.ir.json"))
+        .expect("the published subpackage snapshot");
+    assert!(
+        published.contains("\"unit\": \"veh.hmi\"") && published.contains("\"number\": 2"),
+        "the snapshot records unit `veh.hmi` and number 2:\n{published}"
+    );
+
+    std::fs::remove_dir_all(root.join("hmi/cluster")).expect("remove the subpackage");
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"hmi\", \"cluster\"]\n",
+    );
+    dir.write(
+        "hmi/interfaces.lock",
+        &format!("{LOCK_HEADER}next 3\nSession 1\n"),
+    );
+    dir.write(
+        "cluster/ridl.toml",
+        "[package]\nname = \"veh.hmi.cluster\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "cluster/speed.ridl",
+        "package veh.hmi.cluster\ntype Rate: integer [0..9]\ninterface Alpha { signal a : Rate @[100ms..1s] }\ninterface Speed { signal v : Rate @[100ms..1s] }\n",
+    );
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the new unit's lock is allocated: {stderr}");
+    let lock =
+        std::fs::read_to_string(root.join("cluster/interfaces.lock")).expect("the new unit's lock");
+    assert!(
+        lock.contains("Alpha 1\n") && lock.contains("Speed 2\n"),
+        "the new unit's numbering:\n{lock}"
+    );
+
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 1, "number 2 is lost from unit `veh.hmi`:\n{stderr}");
+    assert!(
+        stderr.contains("RIDL-412") && stderr.contains("in unit `veh.hmi`"),
+        "stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("`cluster.Speed` holds interface number 2"),
+        "the lost shape and number are named:\n{stderr}"
+    );
+}
+
+/// Only the subpackage snapshot is legacy (no `unit`, `Speed` under the
+/// per-package number 1); the root snapshot already records unit `veh.hmi`.
+/// Each snapshot is read in its own unit — the recorded one for the root,
+/// the fresh package's for the subpackage — so the migration publishes and
+/// the republished subpackage snapshot records `veh.hmi`.
+#[test]
+fn a_migration_of_a_mixed_baseline_reads_each_snapshot_in_its_own_unit() {
+    let dir = TempDir::new("gate-migration-mixed");
+    let root = legacy_per_package_baseline(
+        &dir,
+        SESSION,
+        "next 2\nSession 1\n",
+        &[("veh.hmi.cluster.ir.json", "\"number\": 2", "\"number\": 1")],
+    );
+    let root_snapshot = std::fs::read_to_string(root.join(".ridl/baseline/veh.hmi.ir.json"))
+        .expect("the published root snapshot");
+    assert!(
+        root_snapshot.contains("\"unit\": \"veh.hmi\""),
+        "the root snapshot records its unit:\n{root_snapshot}"
+    );
+
+    let (lock, code, stderr) = migrate(&root);
+    assert!(
+        lock.contains("Session 1\n") && lock.contains("cluster.Speed 2\n"),
+        "the unit's numbering:\n{lock}"
+    );
+    assert_eq!(code, 0, "the migration publishes:\n{stderr}");
+    assert!(!stderr.contains("RIDL-412"), "stderr:\n{stderr}");
+    let text = std::fs::read_to_string(root.join(".ridl/baseline/veh.hmi.cluster.ir.json"))
+        .expect("the republished snapshot");
+    assert!(
+        text.contains("\"unit\": \"veh.hmi\"") && text.contains("\"number\": 2"),
+        "the snapshot now carries the unit and the unit's number:\n{text}"
+    );
 }
 
 // --- The published side the gate cannot resolve (driftsys/ridl#339) --------

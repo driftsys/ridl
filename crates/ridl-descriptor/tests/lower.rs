@@ -932,25 +932,47 @@ fn a_structural_type_name_is_spelled_in_the_typl_syntax_over_the_canonical_value
     assert_eq!(spelled, expected);
 }
 
-/// A subpackage interface's payload is sized in the subpackage: `Point` is
-/// declared in `u.cluster` beside `Speed`, which names it bare, and the root
-/// package `u` declares no `Point`. The rows are the ones a one-package build
-/// of the same declarations gives.
+/// The payload of each shape of a unit is sized in the shape's own package:
+/// the root package `u` and its subpackage `u.cluster` each declare a
+/// `Point`, with different members, and `Session` in `u` and `Speed` in
+/// `u.cluster` each name `Point` bare. The root rows are the root `Point`'s
+/// and the subpackage rows are the subpackage `Point`'s, so sizing every
+/// shape in one of the two packages fails one of the two assertions.
 #[test]
 fn a_subpackage_payload_is_sized_in_its_own_package() {
+    let point_signal = || {
+        vec![interaction(
+            "position",
+            1,
+            decl::Kind::SignalDef(SignalDef {
+                payload: "Point".to_owned(),
+                ..Default::default()
+            }),
+        )]
+    };
     let root = Package {
         name: "u".to_owned(),
+        decls: vec![Decl {
+            name: "Point".to_owned(),
+            kind: Some(decl::Kind::StructDef(StructDef {
+                members: vec![StructMember {
+                    member: Some(struct_member::Member::Field(Box::new(Field {
+                        name: "x".to_owned(),
+                        ordinal: 1,
+                        r#type: Some(ty(field_type::Kind::Primitive(
+                            PrimitiveType::Integer as i32,
+                        ))),
+                        ..Default::default()
+                    }))),
+                }],
+                fixed_layout: false,
+            })),
+            ..Default::default()
+        }],
         interfaces: vec![Interface {
             name: "Session".to_owned(),
             number: 1,
-            interactions: vec![interaction(
-                "s",
-                1,
-                decl::Kind::SignalDef(SignalDef {
-                    payload: "integer".to_owned(),
-                    ..Default::default()
-                }),
-            )],
+            interactions: point_signal(),
             ..Default::default()
         }],
         ..Default::default()
@@ -962,36 +984,52 @@ fn a_subpackage_payload_is_sized_in_its_own_package() {
         interfaces: vec![Interface {
             name: "Speed".to_owned(),
             number: 2,
-            interactions: vec![interaction(
-                "position",
-                1,
-                decl::Kind::SignalDef(SignalDef {
-                    payload: "Point".to_owned(),
-                    ..Default::default()
-                }),
-            )],
+            interactions: point_signal(),
             ..Default::default()
         }],
         ..Default::default()
     };
     let bytes = lower("u", &[&root, &cluster]).unwrap();
     let catalog = verify(&bytes).unwrap();
-    let speed = catalog.interfaces().unwrap().get(1).unwrap().unwrap();
-    assert_eq!(speed.name().unwrap(), "cluster.Speed");
-    let payload = speed
-        .members()
-        .unwrap()
-        .get(0)
-        .unwrap()
-        .unwrap()
-        .payloads()
-        .unwrap()
-        .get(0)
-        .unwrap()
-        .unwrap();
-    assert_eq!(payload.type_name().unwrap(), "Point");
+    let payload_of = |index: usize, name: &str| {
+        let interface = catalog.interfaces().unwrap().get(index).unwrap().unwrap();
+        assert_eq!(interface.name().unwrap(), name);
+        let payload = interface
+            .members()
+            .unwrap()
+            .get(0)
+            .unwrap()
+            .unwrap()
+            .payloads()
+            .unwrap()
+            .get(0)
+            .unwrap()
+            .unwrap();
+        assert_eq!(payload.type_name().unwrap(), "Point");
+        rows(payload)
+    };
+    let root_rows = payload_of(0, "Session");
+    let cluster_rows = payload_of(1, "cluster.Speed");
     assert_eq!(
-        rows(payload),
+        root_rows,
+        vec![
+            (
+                Encoding::Proto3,
+                SizeStateTag::Bounded,
+                11,
+                UnboundedCause::Unspecified
+            ),
+            (
+                Encoding::FlatBuffers,
+                SizeStateTag::Bounded,
+                point_fb_bound(&root),
+                UnboundedCause::Unspecified
+            ),
+        ],
+        "the root row is sized in `u`"
+    );
+    assert_eq!(
+        cluster_rows,
         vec![
             (
                 Encoding::Proto3,
@@ -1005,7 +1043,8 @@ fn a_subpackage_payload_is_sized_in_its_own_package() {
                 point_fb_bound(&cluster),
                 UnboundedCause::Unspecified
             ),
-        ]
+        ],
+        "the subpackage row is sized in `u.cluster`"
     );
 }
 

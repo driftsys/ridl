@@ -16,7 +16,12 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   },
   "scope": {
     "package": "veh.adas",
-    "others": []
+    "others": [
+      "veh.adas",
+      "veh.common",
+      "veh.diag",
+      "veh.topology"
+    ]
   },
   "declarations": [],
   "tuples": [],
@@ -53,29 +58,28 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "unsized": "engaged.payload: veh.common.Engaged"
               },
               "flatbuffers": {
-                "unsized": "engaged.payload: veh.common.Engaged"
+                "bytes": "43"
               }
             },
             "signal": {
               "payload": {
                 "type": {
                   "reference": "veh.common.Engaged",
-                  "resolved": false,
-                  "package": "",
+                  "resolved": true,
+                  "package": "veh.common",
                   "foreign": true,
                   "index": 0,
-                  "kind": "DECL_KIND_UNSPECIFIED"
+                  "kind": "DECL_KIND_SCALAR"
                 },
+                "flatbuffersMaxSize": 43,
                 "sizes": {
                   "proto3": {
                     "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
                     }
                   },
                   "flatbuffers": {
-                    "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
-                    }
+                    "bounded": 43
                   }
                 }
               },
@@ -113,29 +117,28 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "unsized": "target.payload: veh.common.Speed"
               },
               "flatbuffers": {
-                "unsized": "target.payload: veh.common.Speed"
+                "bytes": "46"
               }
             },
             "signal": {
               "payload": {
                 "type": {
                   "reference": "veh.common.Speed",
-                  "resolved": false,
-                  "package": "",
+                  "resolved": true,
+                  "package": "veh.common",
                   "foreign": true,
-                  "index": 0,
-                  "kind": "DECL_KIND_UNSPECIFIED"
+                  "index": 1,
+                  "kind": "DECL_KIND_SCALAR"
                 },
+                "flatbuffersMaxSize": 46,
                 "sizes": {
                   "proto3": {
                     "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
                     }
                   },
                   "flatbuffers": {
-                    "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
-                    }
+                    "bounded": 46
                   }
                 }
               },
@@ -172,7 +175,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "unsized": "setLever.request: veh.common.LeverCmd"
               },
               "flatbuffers": {
-                "unsized": "setLever.request: veh.common.LeverCmd"
+                "bytes": "50"
               }
             },
             "command": {
@@ -189,11 +192,11 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                     "optional": false,
                     "named": {
                       "reference": "veh.common.LeverCmd",
-                      "resolved": false,
-                      "package": "",
+                      "resolved": true,
+                      "package": "veh.common",
                       "foreign": true,
-                      "index": 0,
-                      "kind": "DECL_KIND_UNSPECIFIED"
+                      "index": 2,
+                      "kind": "DECL_KIND_ENUM"
                     }
                   }
                 }
@@ -201,22 +204,21 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               "request": {
                 "type": {
                   "reference": "veh.common.LeverCmd",
-                  "resolved": false,
-                  "package": "",
+                  "resolved": true,
+                  "package": "veh.common",
                   "foreign": true,
-                  "index": 0,
-                  "kind": "DECL_KIND_UNSPECIFIED"
+                  "index": 2,
+                  "kind": "DECL_KIND_ENUM"
                 },
+                "flatbuffersMaxSize": 50,
                 "sizes": {
                   "proto3": {
                     "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
                     }
                   },
                   "flatbuffers": {
-                    "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
-                    }
+                    "bounded": 50
                   }
                 }
               },
@@ -224,13 +226,11 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               "requestSizes": {
                 "proto3": {
                   "absent": {
-                    "cause": "ABSENT_CAUSE_UNRESOLVED"
+                    "cause": "ABSENT_CAUSE_NO_MESSAGE"
                   }
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_UNRESOLVED"
-                  }
+                  "bounded": 50
                 }
               }
             }
@@ -242,7 +242,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "unsized": "engaged"
         },
         "flatbuffers": {
-          "unsized": "engaged"
+          "bytes": "139"
         }
       },
       "declared": {
@@ -285,29 +285,28 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "unsized": "active.payload: veh.common.Engaged"
               },
               "flatbuffers": {
-                "unsized": "active.payload: veh.common.Engaged"
+                "bytes": "43"
               }
             },
             "signal": {
               "payload": {
                 "type": {
                   "reference": "veh.common.Engaged",
-                  "resolved": false,
-                  "package": "",
+                  "resolved": true,
+                  "package": "veh.common",
                   "foreign": true,
                   "index": 0,
-                  "kind": "DECL_KIND_UNSPECIFIED"
+                  "kind": "DECL_KIND_SCALAR"
                 },
+                "flatbuffersMaxSize": 43,
                 "sizes": {
                   "proto3": {
                     "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
+                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
                     }
                   },
                   "flatbuffers": {
-                    "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
-                    }
+                    "bounded": 43
                   }
                 }
               },
@@ -326,7 +325,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "unsized": "active"
         },
         "flatbuffers": {
-          "unsized": "active"
+          "bytes": "43"
         }
       },
       "declared": {
@@ -378,14 +377,161 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   ],
   "catalog": {
     "package": "veh",
-    "hash": "Dgya2GZdt1v293F3DhGXLZ9982nwMA/1x53tdnvRaxU=",
+    "hash": "lJ/A1xcXiHvJmhNNG8aqjkDJe21IyYJgZFy7xHoNpNo=",
     "retired": []
   },
   "flatbuffers": {
     "roots": [],
     "tables": []
   },
-  "foreign": [],
+  "foreign": [
+    {
+      "package": "veh.common",
+      "declaration": {
+        "name": {
+          "declared": "Engaged",
+          "snake": "engaged",
+          "camel": "Engaged",
+          "screaming": "ENGAGED",
+          "pascal": "Engaged"
+        },
+        "visibility": "VISIBILITY_PUBLIC",
+        "isError": false,
+        "doc": "",
+        "labels": [],
+        "closure": {
+          "reachesFloat": false,
+          "reachesTextOrBytes": false,
+          "reachesCollection": false,
+          "reachesForeign": false,
+          "reachesUnresolved": false,
+          "reachesCycle": false,
+          "reachesStreamOrUnspecified": false
+        },
+        "init": {
+          "derivable": true,
+          "value": "false",
+          "source": "INIT_SOURCE_DERIVED",
+          "oneLevel": true
+        },
+        "scalar": {
+          "class": "SCALAR_CLASS_BOOLEAN",
+          "vacuous": true
+        }
+      }
+    },
+    {
+      "package": "veh.common",
+      "declaration": {
+        "name": {
+          "declared": "Speed",
+          "snake": "speed",
+          "camel": "Speed",
+          "screaming": "SPEED",
+          "pascal": "Speed"
+        },
+        "visibility": "VISIBILITY_PUBLIC",
+        "isError": false,
+        "doc": "",
+        "labels": [],
+        "closure": {
+          "reachesFloat": true,
+          "reachesTextOrBytes": false,
+          "reachesCollection": false,
+          "reachesForeign": false,
+          "reachesUnresolved": false,
+          "reachesCycle": false,
+          "reachesStreamOrUnspecified": false
+        },
+        "init": {
+          "derivable": true,
+          "value": "0",
+          "source": "INIT_SOURCE_DERIVED",
+          "oneLevel": true
+        },
+        "scalar": {
+          "class": "SCALAR_CLASS_FLOAT",
+          "unit": "km/h",
+          "constraint": {
+            "min": "0",
+            "max": "250",
+            "step": "0.5"
+          },
+          "vacuous": false,
+          "floatWidth": "FLOAT_WIDTH_F32"
+        }
+      }
+    },
+    {
+      "package": "veh.common",
+      "declaration": {
+        "name": {
+          "declared": "LeverCmd",
+          "snake": "lever_cmd",
+          "camel": "LeverCmd",
+          "screaming": "LEVER_CMD",
+          "pascal": "LeverCmd"
+        },
+        "visibility": "VISIBILITY_PUBLIC",
+        "isError": false,
+        "doc": "",
+        "labels": [],
+        "closure": {
+          "reachesFloat": false,
+          "reachesTextOrBytes": false,
+          "reachesCollection": false,
+          "reachesForeign": false,
+          "reachesUnresolved": false,
+          "reachesCycle": false,
+          "reachesStreamOrUnspecified": false
+        },
+        "init": {
+          "derivable": true,
+          "source": "INIT_SOURCE_DERIVED",
+          "oneLevel": false
+        },
+        "enum": {
+          "values": [
+            {
+              "name": {
+                "declared": "SET",
+                "snake": "set",
+                "camel": "SET",
+                "screaming": "SET",
+                "pascal": "Set"
+              },
+              "value": "1",
+              "doc": ""
+            },
+            {
+              "name": {
+                "declared": "CANCEL",
+                "snake": "cancel",
+                "camel": "CANCEL",
+                "screaming": "CANCEL",
+                "pascal": "Cancel"
+              },
+              "value": "2",
+              "doc": ""
+            },
+            {
+              "name": {
+                "declared": "RESUME",
+                "snake": "resume",
+                "camel": "RESUME",
+                "screaming": "RESUME",
+                "pascal": "Resume"
+              },
+              "value": "3",
+              "doc": ""
+            }
+          ],
+          "retired": [],
+          "initMember": 0
+        }
+      }
+    }
+  ],
   "tupleCollisions": []
 }
 
@@ -402,7 +548,12 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   },
   "scope": {
     "package": "veh.common",
-    "others": []
+    "others": [
+      "veh.adas",
+      "veh.common",
+      "veh.diag",
+      "veh.topology"
+    ]
   },
   "declarations": [
     {
@@ -612,7 +763,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   "services": [],
   "catalog": {
     "package": "veh",
-    "hash": "sv4W1tEUP5a9/iB7mGmpSyXngnI7pQ2LK+Kcdw/kqbg=",
+    "hash": "lJ/A1xcXiHvJmhNNG8aqjkDJe21IyYJgZFy7xHoNpNo=",
     "retired": []
   },
   "flatbuffers": {
@@ -737,7 +888,12 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   },
   "scope": {
     "package": "veh.diag",
-    "others": []
+    "others": [
+      "veh.adas",
+      "veh.common",
+      "veh.diag",
+      "veh.topology"
+    ]
   },
   "declarations": [],
   "tuples": [],
@@ -783,33 +939,30 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                   "optional": false,
                   "named": {
                     "reference": "veh.common.FaultReport",
-                    "resolved": false,
-                    "package": "",
+                    "resolved": true,
+                    "package": "veh.common",
                     "foreign": true,
                     "index": 0,
-                    "kind": "DECL_KIND_UNSPECIFIED"
+                    "kind": "DECL_KIND_STRUCT"
                   }
                 }
               },
               "replyPayload": {
                 "type": {
                   "reference": "veh.common.FaultReport",
-                  "resolved": false,
-                  "package": "",
+                  "resolved": true,
+                  "package": "veh.common",
                   "foreign": true,
                   "index": 0,
-                  "kind": "DECL_KIND_UNSPECIFIED"
+                  "kind": "DECL_KIND_STRUCT"
                 },
+                "flatbuffersMaxSize": 43,
                 "sizes": {
                   "proto3": {
-                    "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
-                    }
+                    "bounded": 6
                   },
                   "flatbuffers": {
-                    "absent": {
-                      "cause": "ABSENT_CAUSE_UNRESOLVED"
-                    }
+                    "bounded": 43
                   }
                 }
               },
@@ -828,14 +981,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               },
               "replySizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_UNRESOLVED"
-                  }
+                  "bounded": 6
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_UNRESOLVED"
-                  }
+                  "bounded": 43
                 }
               }
             }
@@ -884,14 +1033,82 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   ],
   "catalog": {
     "package": "veh",
-    "hash": "Z97CJIqPYHvAIBmeFuxjtkkHHKkPl7YZrfWKQvlPi9Y=",
+    "hash": "lJ/A1xcXiHvJmhNNG8aqjkDJe21IyYJgZFy7xHoNpNo=",
     "retired": []
   },
   "flatbuffers": {
     "roots": [],
     "tables": []
   },
-  "foreign": [],
+  "foreign": [
+    {
+      "package": "veh.common",
+      "declaration": {
+        "name": {
+          "declared": "FaultReport",
+          "snake": "fault_report",
+          "camel": "FaultReport",
+          "screaming": "FAULT_REPORT",
+          "pascal": "FaultReport"
+        },
+        "visibility": "VISIBILITY_PUBLIC",
+        "isError": false,
+        "doc": "",
+        "labels": [],
+        "closure": {
+          "reachesFloat": false,
+          "reachesTextOrBytes": false,
+          "reachesCollection": false,
+          "reachesForeign": false,
+          "reachesUnresolved": false,
+          "reachesCycle": false,
+          "reachesStreamOrUnspecified": false
+        },
+        "init": {
+          "derivable": true,
+          "source": "INIT_SOURCE_DERIVED",
+          "oneLevel": false
+        },
+        "struct": {
+          "slots": [
+            {
+              "ordinal": 1,
+              "field": {
+                "name": {
+                  "declared": "count",
+                  "snake": "count",
+                  "camel": "Count",
+                  "screaming": "COUNT",
+                  "pascal": "Count"
+                },
+                "type": {
+                  "optional": false,
+                  "inline": {
+                    "class": "SCALAR_CLASS_INTEGER",
+                    "constraint": {
+                      "min": "0",
+                      "max": "255"
+                    },
+                    "vacuous": false,
+                    "intWidth": "INT_WIDTH_U8"
+                  }
+                },
+                "init": {
+                  "derivable": true,
+                  "value": "0",
+                  "source": "INIT_SOURCE_DERIVED",
+                  "oneLevel": true
+                },
+                "doc": "",
+                "labels": []
+              }
+            }
+          ],
+          "fixedLayout": true
+        }
+      }
+    }
+  ],
   "tupleCollisions": []
 }
 
@@ -908,7 +1125,12 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   },
   "scope": {
     "package": "veh.topology",
-    "others": []
+    "others": [
+      "veh.adas",
+      "veh.common",
+      "veh.diag",
+      "veh.topology"
+    ]
   },
   "declarations": [],
   "tuples": [],
@@ -916,7 +1138,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   "services": [],
   "catalog": {
     "package": "veh",
-    "hash": "sv4W1tEUP5a9/iB7mGmpSyXngnI7pQ2LK+Kcdw/kqbg=",
+    "hash": "lJ/A1xcXiHvJmhNNG8aqjkDJe21IyYJgZFy7xHoNpNo=",
     "retired": []
   },
   "flatbuffers": {

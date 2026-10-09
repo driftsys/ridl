@@ -104,7 +104,13 @@ impl TimingDefaults {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ManifestKind {
     /// A standalone package distributed as a unit.
-    Package { name: String, version: String },
+    Package {
+        name: String,
+        /// The byte range of the quoted `name` value, quotes included, or
+        /// of the `[package]` table when `name` is absent.
+        name_span: Range<usize>,
+        version: String,
+    },
     /// A coordinated set of packages developed together.
     Workspace { members: Vec<String> },
 }
@@ -199,7 +205,7 @@ pub fn parse_manifest(file_id: FileId, text: &str) -> (Option<Manifest>, Vec<Dia
             diags.push(error(
                 DiagCode::MANI_006,
                 file_id,
-                name_span,
+                name_span.clone(),
                 format!(
                     "invalid package name `{name}`; expected lowercase dot-separated segments (e.g. `veh.common`)"
                 ),
@@ -207,6 +213,7 @@ pub fn parse_manifest(file_id: FileId, text: &str) -> (Option<Manifest>, Vec<Dia
         }
         ManifestKind::Package {
             name,
+            name_span,
             version: raw_pkg.version,
         }
     } else if let Some(ws) = raw.workspace {
@@ -532,6 +539,7 @@ members = [\"veh-common\", \"veh-cluster\", \"veh-adas\"]
             manifest.kind,
             ManifestKind::Package {
                 name: "veh.common".to_string(),
+                name_span: range_of(STANDALONE, "\"veh.common\""),
                 version: "1.2.0".to_string(),
             },
         );
@@ -663,6 +671,7 @@ description = \"not a known key\"
             manifest.kind,
             ManifestKind::Package {
                 name: "veh.common".to_string(),
+                name_span: range_of(text, "\"veh.common\""),
                 version: "1.0.0".to_string(),
             },
         );
@@ -876,6 +885,12 @@ version = \"1.0.0\"
     const PACKAGE_HEAD: &str = "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n\n";
     const WORKSPACE_HEAD: &str = "[workspace]\nmembers = [\"a\"]\n\n";
 
+    /// The byte range of the first occurrence of `needle` in `text`.
+    fn range_of(text: &str, needle: &str) -> Range<usize> {
+        let start = text.find(needle).expect("the needle occurs in the text");
+        start..start + needle.len()
+    }
+
     /// The text of `text` under the primary span of `diag`.
     fn spanned_text<'a>(text: &'a str, diag: &Diagnostic) -> &'a str {
         let range = diag.primary.range;
@@ -983,6 +998,7 @@ version = \"1.0.0\"
             manifest.kind,
             ManifestKind::Package {
                 name: "veh.common".to_string(),
+                name_span: range_of(&text, "\"veh.common\""),
                 version: "1.0.0".to_string(),
             },
         );

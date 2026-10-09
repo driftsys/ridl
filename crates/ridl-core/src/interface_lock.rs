@@ -2,7 +2,8 @@
 //! every interface of a unit its number.
 //!
 //! The file lives in the unit's manifest directory, beside its `ridl.toml`,
-//! one per unit, and only `ridl lock` writes it. Its form is a line table:
+//! one per unit, or, for a bare source file compiled without a manifest, in
+//! the file's directory. Only `ridl lock` writes it. Its form is a line table:
 //!
 //! ```text
 //! # interfaces.lock — written by ridl lock; do not edit by hand.
@@ -54,7 +55,8 @@ use std::path::Path;
 
 use rowan::{TextRange, TextSize};
 
-/// The file's name inside the unit's manifest directory.
+/// The file's name inside the unit's manifest directory, or inside the
+/// directory of a bare source file compiled without a manifest.
 pub const FILE_NAME: &str = "interfaces.lock";
 
 /// The first line of every written file. The reader ignores it like any other

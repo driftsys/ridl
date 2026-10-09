@@ -103,9 +103,12 @@ empty: the manifest directory can hold only `ridl.toml` and `interfaces.lock`. A
 source package belongs to exactly one unit. Across every unit that one build
 loads, a second unit that declares the same source package raises MANI-014
 (Error); this covers two unit names where one is a prefix of the other (`veh`
-and `veh.cluster`). In prose, "package" alone means a source package and "the
-package manifest" means the unit. A unit is the unit of distribution: it
-produces one catalog when it declares an interface shape (see
+and `veh.cluster`). A member that `members` lists twice is one unit: the loader
+skips the repeat before it reads the manifest, so the unit loads once; the
+repeated listing raises no diagnostic of its own and duplicates none, so the
+member's own diagnostics are raised once. In prose, "package" alone means a
+source package and "the package manifest" means the unit. A unit is the unit of
+distribution: it produces one catalog when it declares an interface shape (see
 [the catalog descriptor](../design/catalog-descriptor.md)), and one
 `interfaces.lock` beside its manifest (ridl language reference, §11).
 

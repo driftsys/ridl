@@ -501,8 +501,22 @@ provenance. Nothing here is normative — the current references live in
   — one catalog, one `interfaces.lock` and one interface-number space per unit,
   the unit being one `[package]` manifest and its directory tree
   (driftsys/ridl#777): the spec, the plan, the execution handoff, and the Kotlin
-  heads-up with the release note and its migration steps. All four are archived
-  verbatim. The as-built behaviour is in
+  heads-up with the release note and its migration steps. The design, the plan
+  and the execution handoff are archived verbatim; `catalog-per-unit-handoff.md`
+  was edited after archiving to add the release note's migration step. The
+  as-built behaviour is in
   [the catalog descriptor design record](../design/catalog-descriptor.md), the
   ridl reference section 11, and
   [ADR-0002](../decisions/ADR-0002-module-system.md) sections 1 and 4.
+- **2026-10-09-review-residuals-778-plan.md** — the follow-up to the
+  one-catalog-per-unit work: tests that pin the baseline gate, the lock protocol
+  and the descriptor lowering, the doc statements the branch review found false,
+  and small code follow-ups (driftsys/ridl#778). The plan is archived verbatim;
+  the issue is its spec. The behaviours it changes that a user can observe: a
+  workspace member listed twice is loaded once (recorded in
+  [ADR-0002](../decisions/ADR-0002-module-system.md) section 1); the RIDL-409
+  rename hint appears for a unit whose root declares no package, and for a
+  payload written bare in one package and qualified in another. It also changes
+  a test harness: the corpus codegen snapshots are lowered over the scope
+  `ridl build` uses. Two items of the issue were left open on the issue by
+  decision. Its other decisions are implementation choices.

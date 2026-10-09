@@ -16,7 +16,10 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
   },
   "scope": {
     "package": "veh.common",
-    "others": []
+    "others": [
+      "veh.common",
+      "veh.cluster"
+    ]
   },
   "declarations": [
     {
@@ -175,7 +178,10 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
   },
   "scope": {
     "package": "veh.cluster",
-    "others": []
+    "others": [
+      "veh.common",
+      "veh.cluster"
+    ]
   },
   "declarations": [
     {
@@ -191,11 +197,11 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
       "doc": "Instrument-cluster reading, carrying a speed from the common package.",
       "labels": [],
       "closure": {
-        "reachesFloat": false,
+        "reachesFloat": true,
         "reachesTextOrBytes": false,
         "reachesCollection": false,
         "reachesForeign": true,
-        "reachesUnresolved": true,
+        "reachesUnresolved": false,
         "reachesCycle": false,
         "reachesStreamOrUnspecified": false
       },
@@ -220,11 +226,11 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
                 "optional": false,
                 "named": {
                   "reference": "veh.common.Speed",
-                  "resolved": false,
-                  "package": "",
+                  "resolved": true,
+                  "package": "veh.common",
                   "foreign": true,
                   "index": 0,
-                  "kind": "DECL_KIND_UNSPECIFIED"
+                  "kind": "DECL_KIND_SCALAR"
                 }
               },
               "init": {
@@ -255,12 +261,7 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
       {
         "declaration": 0,
         "root": "FB_ROOT_KIND_OWN",
-        "unbounded": {
-          "cause": "FB_UNBOUNDED_CAUSE_EXEMPT",
-          "unjudgeableMembers": [
-            "speed"
-          ]
-        }
+        "maxSize": 46
       }
     ],
     "tables": [
@@ -269,6 +270,12 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
         "slots": [
           {
             "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
             "needsNullDefault": false,
             "field": 0
           }
@@ -278,6 +285,49 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
       }
     ]
   },
-  "foreign": [],
+  "foreign": [
+    {
+      "package": "veh.common",
+      "declaration": {
+        "name": {
+          "declared": "Speed",
+          "snake": "speed",
+          "camel": "Speed",
+          "screaming": "SPEED",
+          "pascal": "Speed"
+        },
+        "visibility": "VISIBILITY_PUBLIC",
+        "isError": false,
+        "doc": "Vehicle speed over ground",
+        "labels": [],
+        "closure": {
+          "reachesFloat": true,
+          "reachesTextOrBytes": false,
+          "reachesCollection": false,
+          "reachesForeign": false,
+          "reachesUnresolved": false,
+          "reachesCycle": false,
+          "reachesStreamOrUnspecified": false
+        },
+        "init": {
+          "derivable": true,
+          "value": "0",
+          "source": "INIT_SOURCE_DERIVED",
+          "oneLevel": true
+        },
+        "scalar": {
+          "class": "SCALAR_CLASS_FLOAT",
+          "unit": "km/h",
+          "constraint": {
+            "min": "0",
+            "max": "250",
+            "step": "0.5"
+          },
+          "vacuous": false,
+          "floatWidth": "FLOAT_WIDTH_F32"
+        }
+      }
+    }
+  ],
   "tupleCollisions": []
 }
