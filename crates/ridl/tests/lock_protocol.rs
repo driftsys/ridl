@@ -418,7 +418,10 @@ fn the_rename_hint_matches_a_qualified_payload_against_its_bare_spelling() {
 /// A workspace of two sibling members, `hmi` and `zzz`; the rename happens in
 /// `zzz`, the second member in path order. The unit is found from the lock's
 /// own directory, not from the first indexed file, so the label names `zzz`'s
-/// directory and keys.
+/// directory and keys. `hmi` also gains a provisional interface with the
+/// renamed one's members; candidates are searched in the orphan's unit only,
+/// so `hmi`'s interface is not a second candidate and the one label names
+/// `Velocity`.
 #[test]
 fn the_rename_hint_finds_the_unit_of_the_second_member() {
     let dir = TempDir::new("second-member");
@@ -451,6 +454,12 @@ fn the_rename_hint_finds_the_unit_of_the_second_member() {
         "package veh.zzz\ntype Level: integer [0..1]\n\
          interface Velocity { signal v : Level @[100ms..1s] }\n",
     );
+    dir.write(
+        "hmi/hmi.ridl",
+        "package veh.hmi\nimport veh.zzz.Level\ntype Mode: integer [0..3]\n\
+         interface Session { event m : Mode @[100ms..1s] }\n\
+         interface Gauge { signal v : Level @[100ms..1s] }\n",
+    );
 
     let (code, stderr) = check(&root);
     assert_eq!(code, 1, "stderr:\n{stderr}");
@@ -459,6 +468,12 @@ fn the_rename_hint_finds_the_unit_of_the_second_member() {
         stderr.contains(&hint(&root.join("zzz"), "Speed", "Velocity")),
         "the label names `zzz` and its keys: {stderr}"
     );
+    assert_eq!(
+        stderr.matches("same shape as").count(),
+        1,
+        "one label, for the one candidate in `zzz`: {stderr}"
+    );
+    assert!(!stderr.contains("Speed=Gauge"), "stderr:\n{stderr}");
 }
 
 /// The desk check itself runs with RIDL-409 as the only error: an ordinal
