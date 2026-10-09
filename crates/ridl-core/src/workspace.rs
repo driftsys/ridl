@@ -7,14 +7,18 @@
 //!
 //! [`load_workspace`] walks from an entry path — a source file, a package
 //! directory, or a workspace root — reads the `ridl.toml` manifests, loads
-//! every source file (`.typl` and `.ridl` alike — a package may mix both)
-//! into [`InputFile`] inputs, and enforces the package↔directory law (typl
-//! reference §3.1): every file in a package directory must declare that
+//! every source file (`.typl`, `.ridl` and `.rsdl` alike — a package may mix
+//! them) into [`InputFile`] inputs, and enforces the package↔directory law
+//! (typl reference §3.1): every file in a package directory must declare that
 //! directory's package name (TYPL-002), and more than one `package`
-//! declaration in a file is TYPL-001. A bare `.typl` or `.ridl` file with no
-//! manifest anywhere up the tree loads in **single-file mode**: one synthetic
-//! package named from the file's declared package, exempt from TYPL-002 (the
-//! task 20 CLI contract). A unit's manifest directory is read for an
+//! declaration in a file is TYPL-001. A `.rxdl` or `.rmdl` file in a package
+//! directory is not loaded: those profiles have no implementation, so each
+//! such file draws the warning RIDL-417 on the file itself. A bare `.typl`,
+//! `.ridl` or `.rsdl` file with no manifest anywhere up the tree loads in
+//! **single-file mode**: one synthetic package named from the file's
+//! declared package, exempt from TYPL-002. A bare `.rxdl` or `.rmdl` file is
+//! an [`io::ErrorKind::InvalidInput`] error that names the extension, because
+//! nothing in it can be compiled. A unit's manifest directory is read for an
 //! `interfaces.lock`, which rides on every [`Package`] of the unit as its
 //! [`PackageLock`]; the bare file's directory is read the same way. A lock in
 //! any other directory is not read (RIDL-416), and a malformed one is
@@ -23,7 +27,9 @@
 //! Problems in loaded content — manifest diagnostics, the law violations, a
 //! nested workspace (MANI-004), a broken member (MANI-008), a file that is
 //! not valid UTF-8 — are accumulated [`Diagnostic`]s, never an error return
-//! (ADR-0004 §5). `std::io::Error` is reserved for real filesystem failures.
+//! (ADR-0004 §5). `std::io::Error` is reserved for real filesystem failures
+//! and for an entry the loader cannot compile at all, the bare `.rxdl` or
+//! `.rmdl` file.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -83,6 +89,10 @@ pub struct Overlay {
 }
 
 /// A filesystem failure or an overlay that cannot belong to the workspace.
+///
+/// `Io` also carries the refusal of a lone `.rxdl` or `.rmdl` entry in
+/// single-file mode: an [`io::ErrorKind::InvalidInput`] error that names the
+/// extension (see [`load_workspace`]).
 #[derive(Debug)]
 pub enum LoadError {
     Io(io::Error),
@@ -99,7 +109,7 @@ impl std::fmt::Display for LoadError {
             Self::Io(e) => write!(f, "{e}"),
             Self::OverlayNotSource(p) => write!(
                 f,
-                "overlay `{}` is not a `.typl`, `.ridl` or `.rsdl` file",
+                "overlay `{}` is not a `.typl`, `.ridl`, `.rsdl`, `.rxdl` or `.rmdl` file",
                 p.display()
             ),
             Self::OverlayOutsideWorkspace {
@@ -137,6 +147,15 @@ impl From<io::Error> for LoadError {
     }
 }
 
+/// The extension of a file the loader recognises but does not compile,
+/// `rxdl` or `rmdl`: those profiles have no implementation. `None` for any
+/// other path.
+fn unsupported_extension(path: &Path) -> Option<&str> {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .filter(|ext| *ext == "rxdl" || *ext == "rmdl")
+}
+
 /// The comparison key for a path: its parent directory canonicalised, joined
 /// with its file name. `None` when the parent directory does not exist.
 fn overlay_key(path: &Path) -> Option<PathBuf> {
@@ -158,9 +177,12 @@ fn overlay_key(path: &Path) -> Option<PathBuf> {
 ///
 /// `entry` may be:
 ///
-/// - a `.typl` or `.ridl` file — [`find_root`] from the file's directory is
-///   the root; with no manifest anywhere up the tree the file loads in
-///   single-file mode;
+/// - a `.typl`, `.ridl` or `.rsdl` file — [`find_root`] from the file's
+///   directory is the root; with no manifest anywhere up the tree the file
+///   loads in single-file mode. A `.rxdl` or `.rmdl` entry in single-file
+///   mode is an [`io::ErrorKind::InvalidInput`] error that names the
+///   extension; inside a package directory it draws RIDL-417, as every
+///   such file in the directory does;
 /// - a package directory or workspace root — [`find_root`] from the
 ///   directory is the root; a `[package]` manifest loads that package's
 ///   directory tree, a `[workspace]` manifest loads every member.
@@ -192,10 +214,13 @@ pub fn load_workspace_with(
 ) -> Result<LoadedWorkspace, LoadError> {
     let mut loader = Loader::default();
     for overlay in overlays {
-        if !overlay
-            .path
-            .extension()
-            .is_some_and(|ext| ext == "typl" || ext == "ridl" || ext == "rsdl")
+        // A `.rxdl` or `.rmdl` overlay is accepted so that the loader reports
+        // it as RIDL-417, as it reports such a file on disk; it is not compiled.
+        if unsupported_extension(&overlay.path).is_none()
+            && !overlay
+                .path
+                .extension()
+                .is_some_and(|ext| ext == "typl" || ext == "ridl" || ext == "rsdl")
         {
             return Err(LoadError::OverlayNotSource(overlay.path.clone()));
         }
@@ -678,8 +703,10 @@ impl Loader {
     /// directory already claims is MANI-014 and is not loaded. Every package
     /// of the tree carries `lock`, the unit's `interfaces.lock` read from the
     /// manifest directory; a lock in any other directory is not read and is
-    /// RIDL-416. A member listed twice in `[workspace] members` reaches this
-    /// function once: the `members` loop skips its later listings. Two
+    /// RIDL-416. A `.rxdl` or `.rmdl` file, on disk or as an overlay, is not
+    /// compiled and is RIDL-417, once per file, in path order. A member
+    /// listed twice in `[workspace] members` reaches this function once: the
+    /// `members` loop skips its later listings. Two
     /// directories of one unit that give one package name (`a.b/` and
     /// `a/b/`) are not MANI-014: both are loaded.
     fn load_package_tree(
@@ -697,6 +724,7 @@ impl Loader {
             lock,
         } = *scope;
         let mut source_files = Vec::new();
+        let mut unsupported_files = Vec::new();
         let mut subdirs = Vec::new();
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
@@ -711,24 +739,33 @@ impl Loader {
                 .is_some_and(|ext| ext == "typl" || ext == "ridl" || ext == "rsdl")
             {
                 source_files.push(path);
+            } else if unsupported_extension(&path).is_some() {
+                unsupported_files.push(path);
             }
         }
         if !self.overlays.is_empty() {
             let directory_key = dir.canonicalize()?;
             for (key, _, _) in &self.overlays {
+                let files = if unsupported_extension(key).is_some() {
+                    &mut unsupported_files
+                } else {
+                    &mut source_files
+                };
                 if key.parent() == Some(directory_key.as_path())
-                    && !source_files
-                        .iter()
-                        .any(|p| overlay_key(p).as_ref() == Some(key))
+                    && !files.iter().any(|p| overlay_key(p).as_ref() == Some(key))
                 {
                     let added = dir.join(key.file_name().expect("overlay keys have a file name"));
-                    if !source_files.contains(&added) {
-                        source_files.push(added);
+                    if !files.contains(&added) {
+                        files.push(added);
                     }
                 }
             }
         }
         source_files.sort();
+        unsupported_files.sort();
+        for path in &unsupported_files {
+            self.report_unsupported_file(path);
+        }
         subdirs.sort();
 
         let mut claimed_elsewhere = false;
@@ -827,8 +864,21 @@ impl Loader {
     /// still applies). With no usable declaration the file stem names the
     /// package; the parser's FORM-104 for the missing declaration lives on
     /// `parse_file(..).errors()`, like every parse error — loader diagnostics
-    /// carry only the manifest and law findings.
+    /// carry only the manifest and law findings. A bare `.rxdl` or `.rmdl`
+    /// file is an [`io::ErrorKind::InvalidInput`] error that names the
+    /// extension, whether or not an overlay replaces its text: nothing in it
+    /// can be compiled, and a warning would let a command report success over
+    /// an empty build.
     fn load_single_file(&mut self, db: &mut RidlDatabase, path: &Path) -> io::Result<()> {
+        if let Some(extension) = unsupported_extension(path) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "`{}` is not compiled: `.{extension}` is not a supported source file extension (the {extension} profile has no implementation)",
+                    path.display()
+                ),
+            ));
+        }
         let Some((input, decls)) = self.load_file(db, path, None)? else {
             // A non-UTF8 file: the diagnostic is recorded, nothing loads.
             return Ok(());
@@ -862,6 +912,26 @@ impl Loader {
             self.units.insert(name, dir.to_path_buf());
         }
         Ok(())
+    }
+
+    /// Reports the `.rxdl` or `.rmdl` file at `path` as RIDL-417 on the file
+    /// itself, at the empty range 0..0, consuming any overlay keyed to it.
+    /// The file is not compiled. The span is interned with the overlay's text
+    /// when an overlay replaces the file, and with no text otherwise: an
+    /// empty range needs none, so the file on disk is not read.
+    fn report_unsupported_file(&mut self, path: &Path) {
+        let text = self.take_overlay(path).unwrap_or_default();
+        let file_id = self.sources.file_id(&path_string(path), &text);
+        let extension = unsupported_extension(path).expect("only unsupported files are reported");
+        self.diagnostics.push(warning(
+            DiagCode::RIDL_417,
+            file_id,
+            byte_range(0, 0),
+            format!(
+                "`{}` is a `.{extension}` file; the {extension} profile is not supported yet, so this file is not compiled",
+                path.display()
+            ),
+        ));
     }
 
     /// Reads `dir/interfaces.lock` for the unit whose manifest directory is
@@ -903,6 +973,20 @@ impl Loader {
         }
     }
 
+    /// The text of the last overlay keyed to `path`, marking every overlay
+    /// keyed to it consumed; `None` when no overlay is.
+    fn take_overlay(&mut self, path: &Path) -> Option<String> {
+        let path_key = overlay_key(path)?;
+        self.overlays
+            .iter_mut()
+            .filter(|(key, _, _)| *key == path_key)
+            .map(|(_, overlay, consumed)| {
+                *consumed = true;
+                overlay.text.clone()
+            })
+            .last()
+    }
+
     /// Reads one source file into an [`InputFile`], parses it through the
     /// salsa query, and enforces the package↔directory law: every `package`
     /// declaration after the first is TYPL-001; when `expected` is given and
@@ -917,15 +1001,7 @@ impl Loader {
         expected: Option<&str>,
     ) -> io::Result<Option<LoadedFile>> {
         let path_str = path_string(path);
-        let replacement = self
-            .overlays
-            .iter_mut()
-            .filter(|(key, _, _)| overlay_key(path).as_ref() == Some(key))
-            .map(|(_, overlay, consumed)| {
-                *consumed = true;
-                overlay.text.clone()
-            })
-            .last();
+        let replacement = self.take_overlay(path);
         let text = match replacement
             .map(Ok)
             .unwrap_or_else(|| fs::read_to_string(path))
@@ -2619,6 +2695,270 @@ service:veh.common.climate 2
         assert_eq!(packages.len(), 2);
         for package in &packages {
             assert_eq!(*package.lock(&db), None);
+        }
+    }
+
+    /// The paths of the files the loaded packages compile, as strings.
+    fn compiled_paths(db: &RidlDatabase, loaded: &LoadedWorkspace) -> Vec<String> {
+        loaded
+            .workspace
+            .packages(db)
+            .iter()
+            .flat_map(|package| package.files(db).iter().map(|file| file.path(db).clone()))
+            .collect()
+    }
+
+    /// A `.rxdl` file in a package directory draws one RIDL-417 warning per
+    /// file, anchored on the file, and is not compiled.
+    #[test]
+    fn a_rxdl_file_is_reported_and_not_compiled() {
+        let dir = TempDir::new("rxdl-on-disk");
+        dir.write(
+            "ridl.toml",
+            "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("hmi.ridl", "package veh.hmi\ntype A: m\n");
+        let top = dir.write("hmi.rxdl", "package veh.hmi\ntype B: m\n");
+        let beside = dir.write("menu.rxdl", "package veh.hmi\ntype C: m\n");
+        let nested = dir.write("cluster/speed.rxdl", "package veh.hmi.cluster\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the tree loads");
+        assert_eq!(
+            codes(&loaded.diagnostics),
+            vec!["RIDL-417", "RIDL-417", "RIDL-417"]
+        );
+        let mut anchored: Vec<_> = loaded
+            .diagnostics
+            .iter()
+            .map(|diag| {
+                assert_eq!(diag.severity, Severity::Warning);
+                assert_eq!(diag.primary.range, byte_range(0, 0));
+                loaded.sources.path(diag.primary.file).map(str::to_string)
+            })
+            .collect();
+        anchored.sort();
+        let mut expected = vec![
+            Some(path_string(&nested)),
+            Some(path_string(&top)),
+            Some(path_string(&beside)),
+        ];
+        expected.sort();
+        assert_eq!(anchored, expected);
+        assert_eq!(
+            compiled_paths(&db, &loaded),
+            vec![path_string(&dir.path().join("hmi.ridl"))]
+        );
+    }
+
+    /// An overlay keyed to a `.rxdl` path draws the same warning, once for
+    /// the file whether or not the file is on disk, and is not compiled.
+    #[test]
+    fn a_rxdl_overlay_is_reported_and_not_compiled() {
+        let (dir, typl) = overlay_fixture();
+        let on_disk = dir.write("p/b.rxdl", "package p\n");
+        let added = dir.path().join("p/c.rxdl");
+        let mut db = RidlDatabase::default();
+        let result = load_workspace_with(
+            &mut db,
+            &dir.path().join("p"),
+            &[
+                overlay(on_disk.clone(), "package p\n"),
+                overlay(added.clone(), "package p\n"),
+            ],
+        );
+        assert!(
+            result.is_ok(),
+            "a `.rxdl` overlay is accepted: {:?}",
+            result.err()
+        );
+        let loaded = result.unwrap();
+        assert_eq!(codes(&loaded.diagnostics), vec!["RIDL-417", "RIDL-417"]);
+        let anchored: Vec<_> = loaded
+            .diagnostics
+            .iter()
+            .map(|diag| loaded.sources.path(diag.primary.file).map(str::to_string))
+            .collect();
+        assert_eq!(
+            anchored,
+            vec![Some(path_string(&on_disk)), Some(path_string(&added))]
+        );
+        assert_eq!(compiled_paths(&db, &loaded), vec![path_string(&typl)]);
+    }
+
+    /// A `.rmdl` file in a package directory, on disk or as an overlay, draws
+    /// RIDL-417 on the file, as a `.rxdl` file does, and is not compiled.
+    #[test]
+    fn a_rmdl_file_is_reported_and_not_compiled() {
+        let (dir, typl) = overlay_fixture();
+        let on_disk = dir.write("p/b.rmdl", "package p\n");
+        let added = dir.path().join("p/c.rmdl");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace_with(
+            &mut db,
+            &dir.path().join("p"),
+            &[overlay(added.clone(), "package p\n")],
+        )
+        .expect("a `.rmdl` overlay is accepted");
+        assert_eq!(codes(&loaded.diagnostics), vec!["RIDL-417", "RIDL-417"]);
+        let anchored: Vec<_> = loaded
+            .diagnostics
+            .iter()
+            .map(|diag| {
+                assert_eq!(diag.severity, Severity::Warning);
+                assert!(
+                    diag.message.contains("is a `.rmdl` file; the rmdl profile"),
+                    "{}",
+                    diag.message
+                );
+                loaded.sources.path(diag.primary.file).map(str::to_string)
+            })
+            .collect();
+        assert_eq!(
+            anchored,
+            vec![Some(path_string(&on_disk)), Some(path_string(&added))]
+        );
+        assert_eq!(compiled_paths(&db, &loaded), vec![path_string(&typl)]);
+    }
+
+    /// The RIDL-417 span of a `.rxdl` overlay points into the overlay text,
+    /// not into the text on disk.
+    #[test]
+    fn a_rxdl_overlay_interns_the_overlay_text() {
+        let (dir, _) = overlay_fixture();
+        let on_disk = dir.write("p/b.rxdl", "package p\n");
+        let text = "package p\n// unsaved\n";
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace_with(
+            &mut db,
+            &dir.path().join("p"),
+            &[overlay(on_disk.clone(), text)],
+        )
+        .expect("the overlay is accepted");
+        assert_eq!(codes(&loaded.diagnostics), vec!["RIDL-417"]);
+        assert_eq!(
+            loaded.sources.text(loaded.diagnostics[0].primary.file),
+            Some(text)
+        );
+    }
+
+    /// Without an overlay the RIDL-417 span is interned with no text: the
+    /// span is empty, so the file on disk is not read.
+    #[test]
+    fn a_rxdl_file_on_disk_interns_no_text() {
+        let (dir, _) = overlay_fixture();
+        dir.write("p/b.rxdl", "package p\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, &dir.path().join("p")).expect("the tree loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["RIDL-417"]);
+        assert_eq!(
+            loaded.sources.text(loaded.diagnostics[0].primary.file),
+            Some("")
+        );
+    }
+
+    /// A `.rxdl` or `.rmdl` file given as the entry inside a package
+    /// directory is not a load error: the package loads, and the file draws
+    /// RIDL-417 as the other files of the directory do.
+    #[test]
+    fn a_rxdl_or_rmdl_entry_in_a_package_directory_is_a_warning() {
+        for extension in ["rxdl", "rmdl"] {
+            let (dir, typl) = overlay_fixture();
+            let entry = dir.write(&format!("p/b.{extension}"), "package p\n");
+            let mut db = RidlDatabase::default();
+            let loaded = load_workspace(&mut db, &entry).expect("the package loads");
+            assert_eq!(codes(&loaded.diagnostics), vec!["RIDL-417"]);
+            assert_eq!(
+                loaded.sources.path(loaded.diagnostics[0].primary.file),
+                Some(path_string(&entry).as_str())
+            );
+            assert_eq!(compiled_paths(&db, &loaded), vec![path_string(&typl)]);
+        }
+    }
+
+    /// RIDL-417 is reported in path order for the files of one directory,
+    /// whatever order the files are found in. The new files come from
+    /// overlays given in reverse name order, which the loader appends in the
+    /// order given, so the found order does not depend on the filesystem.
+    #[test]
+    fn ridl_417_is_reported_in_path_order() {
+        let (dir, _) = overlay_fixture();
+        let z = dir.write("p/z.rxdl", "package p\n");
+        let y = dir.write("p/y.rmdl", "package p\n");
+        let c = dir.path().join("p/c.rxdl");
+        let b = dir.path().join("p/b.rmdl");
+        let a = dir.path().join("p/a.rxdl");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace_with(
+            &mut db,
+            &dir.path().join("p"),
+            &[
+                overlay(c.clone(), "package p\n"),
+                overlay(b.clone(), "package p\n"),
+                overlay(a.clone(), "package p\n"),
+            ],
+        )
+        .expect("the overlays are accepted");
+        let anchored: Vec<_> = loaded
+            .diagnostics
+            .iter()
+            .map(|diag| loaded.sources.path(diag.primary.file).map(str::to_string))
+            .collect();
+        assert_eq!(
+            anchored,
+            [&a, &b, &c, &y, &z]
+                .map(|path| Some(path_string(path)))
+                .to_vec()
+        );
+    }
+
+    /// A lone `.rxdl` or `.rmdl` entry in single-file mode is a load error
+    /// that names the extension: the profile has no implementation, so there
+    /// is nothing to compile, and a warning would let a command report
+    /// success over an empty build.
+    #[test]
+    fn a_single_rxdl_or_rmdl_file_is_a_load_error() {
+        for extension in ["rxdl", "rmdl"] {
+            let dir = TempDir::new("unsupported-single");
+            let path = dir.write(&format!("hmi.{extension}"), "package veh.hmi\n");
+
+            let mut db = RidlDatabase::default();
+            let error = load_workspace(&mut db, &path)
+                .err()
+                .unwrap_or_else(|| panic!("a lone `.{extension}` entry is a load error"));
+            assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+            let message = error.to_string();
+            assert!(
+                message.contains(&format!("`.{extension}` is not a supported")),
+                "{message}"
+            );
+        }
+    }
+
+    /// An overlay of a lone `.rxdl` or `.rmdl` entry does not change that:
+    /// the entry is still a load error.
+    #[test]
+    fn a_single_rxdl_or_rmdl_overlay_is_a_load_error() {
+        for extension in ["rxdl", "rmdl"] {
+            let dir = TempDir::new("unsupported-single-overlay");
+            let path = dir.write(&format!("hmi.{extension}"), "package veh.hmi\n");
+
+            let mut db = RidlDatabase::default();
+            let result = load_workspace_with(
+                &mut db,
+                &path,
+                &[overlay(path.clone(), "package veh.hmi\ntype B: m\n")],
+            );
+            let Err(LoadError::Io(error)) = result else {
+                panic!("a lone `.{extension}` entry with an overlay is a load error");
+            };
+            assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+            assert!(
+                error
+                    .to_string()
+                    .contains(&format!("`.{extension}` is not a supported")),
+                "{error}"
+            );
         }
     }
 

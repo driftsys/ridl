@@ -1007,7 +1007,8 @@ impl Checker<'_> {
 
     /// Resolves a path silently in a given package view: a single segment is a
     /// bare name in that view; a longer path is a fully qualified
-    /// `pkg.Name` reference (typl §3.2 — no import needed).
+    /// `pkg.Name` reference (typl §3.2 — no import needed), which names an
+    /// `internal` declaration only when the viewing package owns it (§3.3).
     pub(crate) fn lookup_path_in(
         &self,
         resolution: &Resolution,
@@ -1025,8 +1026,10 @@ impl Checker<'_> {
         let package_path = segments.join(".");
         let target = self.package_handle(&package_path)?;
         let symbol = declared_symbols(self.db, target).get(&name).cloned()?;
-        // A foreign `internal` declaration is not visible (typl §3.3).
-        if symbol.internal && symbol.package != self.package_name {
+        // An `internal` declaration is visible only to its own package (typl
+        // §3.3). The path is interpreted in `resolution`'s view, so the owner
+        // that matters is the viewing package, not the checked package.
+        if symbol.internal && symbol.package != resolution.package {
             return None;
         }
         Some(symbol)
@@ -12951,6 +12954,93 @@ interface I {\n\
         );
     }
 
+    /// The two spellings of `veh.common`'s own internal type in the declared
+    /// type of its constant `MAX`: qualified and bare.
+    const HIDDEN_SPELLINGS: [&str; 2] = ["veh.common.Hidden", "Hidden"];
+
+    /// `veh.common`, with `MAX` declared with the type spelled `spelling`.
+    fn hidden_max_package(db: &RidlDatabase, spelling: &str) -> Package {
+        package(
+            db,
+            "veh.common",
+            &format!(
+                "package veh.common\ninternal type Hidden: integer [0..10]\nconst MAX: {spelling} = 5\n"
+            ),
+        )
+    }
+
+    /// A qualified path is interpreted in the view of the package that wrote
+    /// it, so the visibility guard asks whether that package owns the
+    /// `internal` declaration, not whether the checked package does. `MAX`
+    /// writes its type as `veh.common.Hidden` in `veh.common`, which owns
+    /// `Hidden`; checking `app` resolves that path in `veh.common`'s view and
+    /// finds `Hidden`, so `const USE: Visible = MAX` is TYPL-108 (§5.7) in
+    /// both spellings. The qualified spelling used to give no diagnostic,
+    /// because the guard compared with `app` and hid `Hidden`
+    /// (driftsys/ridl#643).
+    #[test]
+    fn typl_108_through_a_qualified_internal_type_in_the_defining_package_view() {
+        for spelling in HIDDEN_SPELLINGS {
+            let mut db = RidlDatabase::default();
+            let std = std_package(&mut db);
+            let veh = hidden_max_package(&db, spelling);
+            let app = package(
+                &db,
+                "app",
+                "package app\nimport veh.common.MAX\ntype Visible: integer [0..10]\nconst USE: Visible = MAX\n",
+            );
+            let ws = Workspace::new(&db, vec![app, veh], BTreeMap::new());
+            let checked = without_missing_docs(check_package(&db, ws, app, std));
+            assert_eq!(codes(&checked), vec!["TYPL-108"], "spelling `{spelling}`");
+            assert!(
+                checked.diagnostics[0].message.contains("Hidden"),
+                "spelling `{spelling}`: {}",
+                checked.diagnostics[0].message
+            );
+        }
+    }
+
+    /// Checking `veh.common` itself still sees that the public `MAX` exposes
+    /// the `internal` type `Hidden` (TYPL-005, typl §3.3), in both spellings.
+    #[test]
+    fn typl_005_on_a_public_const_of_its_own_internal_type_in_both_spellings() {
+        for spelling in HIDDEN_SPELLINGS {
+            let mut db = RidlDatabase::default();
+            let std = std_package(&mut db);
+            let veh = hidden_max_package(&db, spelling);
+            let ws = Workspace::new(&db, vec![veh], BTreeMap::new());
+            let checked = without_missing_docs(check_package(&db, ws, veh, std));
+            assert_eq!(codes(&checked), vec!["TYPL-005"], "spelling `{spelling}`");
+        }
+    }
+
+    /// The other direction of the guard in `lookup_path_in`: the checked
+    /// package owns the `internal` type, but the path is written in another
+    /// package's view. `app` declares `const MAX: veh.common.Hidden`, which
+    /// `app` cannot see (typl §3.3), so `MAX` has no named type. Checking
+    /// `veh.common`, which imports `app.MAX`, resolves that path in `app`'s
+    /// view and must not find `Hidden`, so `const USE: Visible = MAX` draws
+    /// no TYPL-108. A guard that also accepted the checked package as the
+    /// owner would find `Hidden` and report TYPL-108.
+    #[test]
+    fn no_typl_108_through_a_qualified_internal_type_written_in_a_foreign_view() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let app = package(
+            &db,
+            "app",
+            "package app\nconst MAX: veh.common.Hidden = 5\n",
+        );
+        let veh = package(
+            &db,
+            "veh.common",
+            "package veh.common\nimport app.MAX\ninternal type Hidden: integer [0..10]\ninternal type Visible: integer [0..10]\ninternal const USE: Visible = MAX\n",
+        );
+        let ws = Workspace::new(&db, vec![app, veh], BTreeMap::new());
+        let checked = without_missing_docs(check_package(&db, ws, veh, std));
+        assert_eq!(codes(&checked), Vec::<&str>::new());
+    }
+
     // The ridl §11 ordinal assignment over the Appendix A interface — 1-based,
     // declaration order, one sequence across all kinds, the reserved tombstone
     // counted at #6 — is asserted on the lowered IR by
@@ -13657,6 +13747,37 @@ interface VehicleStatus {
         assert!(timing.default_applied);
     }
 
+    /// An RPC annotation that keeps a readable minimum but did not parse
+    /// whole draws FORM-101 from the parser, and the checker draws no
+    /// RIDL-101 or RIDL-108 from the maximum the default supplied: under the
+    /// built-in defaults (`[..1s]` for a command, `[..3s]` for a query) each
+    /// minimum here is longer than or equal to that maximum. The minimum
+    /// stays written and the maximum is the default's.
+    #[test]
+    fn unreadable_rpc_range_draws_no_ridl_101_or_108_from_the_default_maximum() {
+        let source = format!(
+            "{PRELUDE}interface I {{\n  query q(): Speed @[5s 10s]\n  command c(p: Speed) @[5s..10xs]\n  command e(p: Speed) @[1s..10xs]\n}}\n"
+        );
+        let parse = ridl_syntax::parse(&source, ridl_syntax::Profile::Ridl);
+        let parse_codes: Vec<&str> = parse.errors().iter().map(|error| error.code).collect();
+        assert!(
+            !parse_codes.is_empty() && parse_codes.iter().all(|code| *code == "FORM-101"),
+            "{parse_codes:?}"
+        );
+        let checked = check_ridl("app", &source);
+        assert_eq!(codes(&checked), Vec::<&str>::new());
+        for (name, min, max) in [
+            ("q", "5000000", "3000000"),
+            ("c", "5000000", "1000000"),
+            ("e", "1000000", "1000000"),
+        ] {
+            let timing = rpc_timing(&checked, name).expect("the range lowers");
+            assert_eq!(timing.min_us.as_deref(), Some(min), "{name}: min");
+            assert_eq!(timing.max_us.as_deref(), Some(max), "{name}: max");
+            assert!(timing.default_applied, "{name}");
+        }
+    }
+
     /// A package `[defaults].command_timing` and `[defaults].query_timing`
     /// replace the built-ins for the untimed members of their kind.
     #[test]
@@ -14055,6 +14176,38 @@ interface VehicleStatus {
         );
         assert_eq!(codes(&checked), vec!["RIDL-304"]);
         assert_eq!(checked.diagnostics[0].severity, Severity::Warning);
+    }
+
+    /// A result union is recognised from its arms resolved in the union's own
+    /// package, not in the checked package. `veh.common.Outcome` writes its
+    /// error arm as `veh.common.Fault`, an `internal` error type that
+    /// `veh.common` owns, so `Outcome` is a result union and the parameter
+    /// in `app` draws RIDL-304. Resolving the arm with `app` as the owner
+    /// would hide `Fault` and draw nothing.
+    #[test]
+    fn foreign_result_union_with_a_qualified_internal_error_arm_draws_ridl_304() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let veh = package(
+            &db,
+            "veh.common",
+            "package veh.common\nstruct Report {\n  count : integer [0..64]\n}\ninternal error enum Fault {\n  BROKEN = 0\n}\nunion Outcome {\n  ok : Report\n  err : veh.common.Fault\n}\n",
+        );
+        let app = ridl_package(
+            &db,
+            "app",
+            "package app\nimport veh.common.Outcome\ninterface I {\n  command c(o: Outcome) @[..50ms]\n}\n",
+        );
+        let ws = Workspace::new(&db, vec![app, veh], BTreeMap::new());
+        let checked = without_missing_docs(check_package(&db, ws, app, std));
+        assert_eq!(codes(&checked), vec!["RIDL-304"]);
+        assert!(
+            checked.diagnostics[0]
+                .message
+                .contains("result-union type `Outcome`"),
+            "{}",
+            checked.diagnostics[0].message
+        );
     }
 
     #[test]

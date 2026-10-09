@@ -40,6 +40,13 @@ lints): a ninth tool, `ridl_metrics`, is added under decision 9, and the package
 dependency edges that decision 8 counts are now computed in `ridlc::deps`, which
 `ridl_metrics` reads. `ridl_dependencies` still reports the complete graph.
 
+Amended 2026-10-09 (driftsys/ridl#770): decision 7 accepts an overlay path that
+ends in `.rxdl` or `.rmdl`. In a package directory the loader reports such an
+overlay with the warning RIDL-417 (`unsupported-source-file`), as it reports the
+same file on disk, and does not compile it. A lone `.rxdl` or `.rmdl` file in
+single-file mode, with or without an overlay of it, is a load error that names
+the extension, and reaches the agent as a tool error.
+
 ## Context
 
 Before this work `ridl mcp` exposed one tool, `ridl_check(source, profile)`. It
@@ -107,9 +114,14 @@ pasted-source form.
    package-and-directory law (TYPL-001, TYPL-002, TYPL-010) and interns each
    file's text for diagnostic spans while it reads the file, so an overlay
    applied afterwards would skip those checks and leave spans pointing at the
-   text on disk. An overlay path must end in `.typl`, `.ridl` or `.rsdl`, and
-   its directory must be a package directory of the loaded workspace; a new file
-   joins the package of its directory as the same file saved to disk would.
+   text on disk. An overlay path must end in `.typl`, `.ridl`, `.rsdl`, `.rxdl`
+   or `.rmdl`, and its directory must be a package directory of the loaded
+   workspace; a new file joins the package of its directory as the same file
+   saved to disk would. A `.rxdl` or `.rmdl` overlay is accepted so that the
+   loader treats it as it treats the same file on disk: in a package directory
+   it draws the warning RIDL-417 (`unsupported-source-file`) and is not
+   compiled. A lone `.rxdl` or `.rmdl` file in single-file mode is a load error
+   that names the extension, whether or not an overlay replaces its text.
    Anything else is a `LoadError` and reaches the agent as a tool error.
 8. **`ridl_references` and `ridl_dependencies` count rsdl component uses**
    (design §4.4, approved 2026-10-03). Components exist only in the lowered

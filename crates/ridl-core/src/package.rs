@@ -74,8 +74,9 @@ pub struct Package {
     #[returns(ref)]
     pub imports: BTreeMap<String, String>,
     /// The raw `[defaults]` timing strings that govern this package: `timing`,
-    /// `command_timing` and `query_timing` (ADR-0002 §5 precedence: package
-    /// `[defaults]` shadows workspace `[defaults]`, merged per key at load).
+    /// `command_timing` and `query_timing` (ridl §9.1 precedence: package
+    /// `[defaults]` shadows workspace `[defaults]`, merged per key at load;
+    /// ADR-0002 §4 applies the workspace root's `[defaults]` to a member).
     /// A key no manifest sets is `None`; the checker then applies the built-in
     /// default (ridl §9.1). Stored unparsed: `ridl-core` cannot depend on
     /// `ridl-sem`.

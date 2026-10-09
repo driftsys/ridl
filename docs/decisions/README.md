@@ -376,7 +376,10 @@ other entry below is Accepted.
   by `tools.json`. Amends ADR-0005 §3 and §7 in place. The as-built description
   is [the MCP workspace tools design record](../design/mcp-workspace-tools.md).
   Amended 2026-10-06 by ADR-0027: a ninth tool, `ridl_metrics`, and the
-  dependency edges computed once in `ridlc`.
+  dependency edges computed once in `ridlc`. Amended 2026-10-09
+  (driftsys/ridl#770): a `.rxdl` or `.rmdl` overlay in a package directory is
+  accepted, reported with RIDL-417 and not compiled; a lone `.rxdl` or `.rmdl`
+  file in single-file mode is a load error.
 
 - **ADR-0026 — Doc comments.** Ten decisions: six agreed in the brainstorming
   session of spec 2a (design D-1 to D-6), the lint table of the reviewed design,

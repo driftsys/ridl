@@ -1042,6 +1042,16 @@ expression: log
               }
             },
             {
+              "id": "RIDL-417",
+              "name": "unsupported-source-file",
+              "shortDescription": {
+                "text": "`.rxdl` or `.rmdl` file is not compiled: its profile is not supported"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
               "id": "RSDL-305",
               "shortDescription": {
                 "text": "`instances` is not a parenthesised list of one or more camelCase names"
@@ -1609,7 +1619,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 161,
+          "ruleIndex": 162,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

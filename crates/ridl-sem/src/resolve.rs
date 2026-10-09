@@ -81,6 +81,9 @@ pub struct Symbol {
 /// same order.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Resolution {
+    /// The package whose view this is. A qualified path resolved in this view
+    /// may name this package's own `internal` declarations (typl §3.3).
+    pub package: String,
     pub symbols: HashMap<String, Symbol>,
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -157,6 +160,7 @@ pub fn resolve_package(
     }
 
     Resolution {
+        package: package_name,
         symbols,
         diagnostics,
     }

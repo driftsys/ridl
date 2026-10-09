@@ -626,7 +626,11 @@ diag_codes! {
             "`signal` or `event` without a timing annotation", lint = "missing-timing";
 
         /// A range annotation `@[X..Y]` whose lower bound exceeds its upper bound
-        /// (ridl §9.2, §16.1). Emitted by the checker.
+        /// (ridl §9.2, §16.1). It also fires on a `command` or a `query`
+        /// written `@[X..]` whose call throttle is longer than the default
+        /// response bound the member takes (ridl §9.3), unless the range did
+        /// not parse whole: such a range draws FORM-101 and no RIDL-101 from
+        /// the default maximum. Emitted by the checker.
         RIDL_101 = "RIDL-101", Error,
             "timing range `@[X..Y]` with `X > Y`";
 
@@ -684,10 +688,16 @@ diag_codes! {
             "type declaration inside an `interface` or `service` body";
 
         /// A range annotation `@[X..X]` whose bounds are equal — a degenerate
-        /// range, the rate floor equal to its staleness bound, on a `signal` and an
-        /// `event` alike (ridl §9.2, §16.1; ADR-0008 decision 17). Not a spelling
-        /// of the strict-periodic `@Xms`, which is a separate `TimingMode`.
-        /// Warning. Emitted by the checker.
+        /// range, on every kind that admits the range: on a `signal` and an
+        /// `event` the rate floor equals its staleness bound, and on a
+        /// `command` and a `query` the call throttle equals the response bound
+        /// (ridl §9.2, §16.1; ADR-0008 decision 17). It also fires on a
+        /// `command` or a `query` written `@[X..]` whose call throttle equals
+        /// the default response bound the member takes (ridl §9.3), unless
+        /// the range did not parse whole: such a range draws FORM-101 and no
+        /// RIDL-108 from the default maximum. Not a
+        /// spelling of the strict-periodic `@Xms`, which is a separate
+        /// `TimingMode`. Warning. Emitted by the checker.
         RIDL_108 = "RIDL-108", Warning,
             "degenerate timing range `@[X..X]`", lint = "degenerate-timing-range";
 
@@ -1023,6 +1033,20 @@ diag_codes! {
         /// with `ridl lock`, then delete the file.
         RIDL_416 = "RIDL-416", Warning,
             "`interfaces.lock` in a subdirectory of a unit is not read", lint = "lock-in-subdirectory";
+
+        /// A `.rxdl` or `.rmdl` file sits in a package directory, on disk or as
+        /// an overlay. Warning. Emitted by the loader on the file itself, at
+        /// the empty range 0..0, once per file and in path order within a
+        /// directory: the loader compiles `.typl`, `.ridl` and `.rsdl` files,
+        /// and the rxdl and rmdl profiles have no implementation
+        /// (driftsys/ridl#68), so the file's declarations are not in the
+        /// build. A lone `.rxdl` or `.rmdl` file given as the entry, with no
+        /// manifest at or above it, does not draw this warning: the load fails
+        /// with an error that names the extension. The fix is to move the
+        /// declarations into a supported file, or to accept that the file is
+        /// not compiled.
+        RIDL_417 = "RIDL-417", Warning,
+            "`.rxdl` or `.rmdl` file is not compiled: its profile is not supported", lint = "unsupported-source-file";
     }
 
     /// The rsdl catalogue: every `RSDL-` code declared in this module, with the
@@ -2105,6 +2129,7 @@ mod tests {
             ("RIDL-407", "ordinal-changed"),
             ("RIDL-414", "low-cohesion-interface"),
             ("RIDL-416", "lock-in-subdirectory"),
+            ("RIDL-417", "unsupported-source-file"),
             ("RSDL-409", "redundant-provider-set"),
             ("RSDL-804", "unclaimed-backend-key"),
             ("RSDL-805", "depth-below-bound"),

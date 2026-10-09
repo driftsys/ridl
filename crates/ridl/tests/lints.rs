@@ -154,6 +154,116 @@ fn lock_in_subdirectory_takes_its_level_from_the_lints_table() {
     }
 }
 
+/// RIDL-417 (`unsupported-source-file`): `ridl check` on a package directory
+/// reports one warning per `.rxdl` file and exits 0; the level comes from
+/// `[lints]`, so at `deny` the warning is an error and `ridl check` exits 1,
+/// and at `allow` it is not reported.
+#[test]
+fn unsupported_source_file_takes_its_level_from_the_lints_table() {
+    for (lints, expected_code, rendered) in [
+        ("", 0, Some("warning[RIDL-417]")),
+        (
+            "\n[lints]\nunsupported-source-file = \"deny\"\n",
+            1,
+            Some("error[RIDL-417]"),
+        ),
+        ("\n[lints]\nunsupported-source-file = \"allow\"\n", 0, None),
+    ] {
+        let dir = TempDir::new("unsupported-source-file");
+        let root = member_workspace(&dir, lints);
+        dir.write("sensor/extra.rxdl", "package demo\n");
+        dir.write("sensor/sub/more.rxdl", "package demo.sub\n");
+
+        let (code, _, stderr) = ridl(&["check".as_ref(), root.join("sensor").as_os_str()]);
+        assert_eq!(code, expected_code, "{lints}stderr:\n{stderr}");
+        match rendered {
+            Some(header) => assert_eq!(
+                stderr.matches(header).count(),
+                2,
+                "{lints}stderr:\n{stderr}"
+            ),
+            None => assert!(!stderr.contains("RIDL-417"), "{lints}stderr:\n{stderr}"),
+        }
+    }
+}
+
+/// A lone `.rxdl` or `.rmdl` file, with no `ridl.toml` above it, is a load
+/// error in every command that loads source: `ridl check`, `ridl build`,
+/// `ridl diff`, `ridl lock`, `ridl test` and `ridl baseline` exit 2 with an
+/// error that names the extension as unsupported and report no RIDL-417. For
+/// `ridl lock` the exit code and the message are what the test pins; `ridl
+/// build` and `ridl baseline` are also checked to write nothing. With a
+/// warning instead, `ridl diff` printed
+/// `identical` over two different files and `ridl build` wrote nothing and
+/// exited 0.
+#[test]
+fn a_bare_rxdl_or_rmdl_file_is_refused_by_every_command() {
+    for extension in ["rxdl", "rmdl"] {
+        let dir = TempDir::new("bare-unsupported");
+        let old = dir.write(
+            &format!("old/hmi.{extension}"),
+            "package veh.hmi\ntype B: m\n",
+        );
+        let new = dir.write(
+            &format!("new/hmi.{extension}"),
+            "package veh.hmi\ntype C: m\n",
+        );
+        let out = dir.path().join("out");
+        let baseline_out = dir.path().join("baseline-out");
+        let commands: [Vec<&OsStr>; 6] = [
+            vec!["check".as_ref(), old.as_os_str()],
+            vec![
+                "build".as_ref(),
+                old.as_os_str(),
+                "--out-dir".as_ref(),
+                out.as_os_str(),
+            ],
+            vec!["diff".as_ref(), old.as_os_str(), new.as_os_str()],
+            vec!["lock".as_ref(), old.as_os_str()],
+            vec!["test".as_ref(), old.as_os_str()],
+            vec![
+                "baseline".as_ref(),
+                old.as_os_str(),
+                "--out".as_ref(),
+                baseline_out.as_os_str(),
+            ],
+        ];
+        for args in commands {
+            let (code, stdout, stderr) = ridl(&args);
+            let context = format!("{args:?}\nstdout:\n{stdout}\nstderr:\n{stderr}");
+            assert_eq!(code, 2, "{context}");
+            assert!(
+                stderr.contains(&format!(
+                    "`.{extension}` is not a supported source file extension"
+                )),
+                "{context}"
+            );
+            assert!(!stderr.contains("RIDL-417"), "{context}");
+            assert!(!stdout.contains("identical"), "{context}");
+        }
+        assert!(!out.exists(), "`ridl build` wrote {}", out.display());
+        assert!(
+            !baseline_out.exists(),
+            "`ridl baseline` wrote {}",
+            baseline_out.display()
+        );
+
+        // A supported old side does not hide an unsupported new side.
+        let supported = dir.write("supported/hmi.ridl", "package veh.hmi\ntype B: m\n");
+        let (code, stdout, stderr) =
+            ridl(&["diff".as_ref(), supported.as_os_str(), new.as_os_str()]);
+        let context = format!("stdout:\n{stdout}\nstderr:\n{stderr}");
+        assert_eq!(code, 2, "{context}");
+        assert!(
+            stderr.contains(&format!(
+                "`.{extension}` is not a supported source file extension"
+            )),
+            "{context}"
+        );
+        assert!(!stdout.contains("identical"), "{context}");
+    }
+}
+
 /// A workspace with one member whose interface declares one `command`, with
 /// the timing annotation `timing` (empty for none), under
 /// `missing-response-bound = "deny"`. Returns the workspace root.
@@ -192,6 +302,34 @@ fn missing_response_bound_deny_exits_1_until_the_bound_is_written() {
     let root = response_bound_workspace(&dir, " @[..1s]");
     let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
     assert_eq!(code, 0, "a written response bound exits 0:\n{stderr}");
+    assert!(!stderr.contains("RIDL-112"), "no RIDL-112:\n{stderr}");
+}
+
+/// An RPC annotation that keeps a readable minimum but did not parse whole is
+/// reported by the parser's FORM-101 alone: the maximum the default supplies
+/// draws no RIDL-101 or RIDL-108, although each minimum is longer than the
+/// built-in default response bound (`1s` for a command, `3s` for a query).
+#[test]
+fn unreadable_rpc_range_draws_form_101_and_no_ridl_101_or_108() {
+    let dir = TempDir::new("unreadable-rpc-range");
+    dir.write(
+        "demo/ridl.toml",
+        "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "demo/actuator.ridl",
+        "package demo\n\ntype Speed: integer [0..300]\n\ninterface Actuator {\n  \
+         query getSpeed(): Speed @[5s 10s]\n  command setTarget(speed: Speed) @[5s..10xs]\n}\n",
+    );
+    let (code, _, stderr) = ridl(&["check".as_ref(), dir.path().join("demo").as_os_str()]);
+    assert_eq!(code, 1, "FORM-101 is an error:\n{stderr}");
+    assert_eq!(
+        stderr.matches("error[FORM-101]").count(),
+        2,
+        "one FORM-101 for each annotation:\n{stderr}"
+    );
+    assert!(!stderr.contains("RIDL-101"), "no RIDL-101:\n{stderr}");
+    assert!(!stderr.contains("RIDL-108"), "no RIDL-108:\n{stderr}");
     assert!(!stderr.contains("RIDL-112"), "no RIDL-112:\n{stderr}");
 }
 
