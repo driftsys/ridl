@@ -142,9 +142,13 @@ member; rsdl is the apex.
                          backlog, the ADRs, the rest of the specifications,
                          docs/archive/ and docs/wip/ may hold ids
     just compile         compile the Rust workspace (--locked)
-    just test            run the Rust workspace test suite (--locked)
+    just test            run the Rust workspace test suite (--locked), and
+                         ridl-descriptor's tests with its std feature off
     just lint            cargo clippy --workspace --all-targets -- -D warnings
-    just wasm-check      cargo check for wasm32 with --no-default-features
+    just wasm-check      cargo check for wasm32 with --no-default-features,
+                         and ridl-descriptor with its std feature off for a
+                         target with no standard library, and with its
+                         features on for wasm32
     just compat-check    build and test the packaged ridl-rt and
                          ridl-rt-conformance crates as edition
                          2021 with the rust-version in crates/ridl-rt/Cargo.toml

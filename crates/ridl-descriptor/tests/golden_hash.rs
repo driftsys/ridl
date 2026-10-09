@@ -1,3 +1,7 @@
+// This test uses the half of the crate that builds a descriptor, which the
+// `std` feature carries.
+#![cfg(feature = "std")]
+
 //! The catalog hash of the corpus package is pinned (driver §4 answer 4).
 //! A different value here means the reduced package or the binary encoding
 //! changed; ADR-0014 decision 15 says when the pin may move.

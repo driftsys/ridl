@@ -106,6 +106,9 @@ test:
     set -euo pipefail
     if [ -f Cargo.toml ]; then
         cargo test --workspace --locked
+        # `ridl-descriptor` with its `std` feature off: the tests of the
+        # reader half, in the configuration an engine builds.
+        cargo test --locked -p ridl-descriptor --no-default-features
         # The workspace build resolves `ridl-rt` with default features, so the
         # encoding features gate code it never compiles: the helpers a
         # generated codec calls, and their tests. `just compat-check` builds
@@ -119,7 +122,9 @@ test:
     fi
 
 # Check the compiler crates build for wasm32-unknown-unknown with fs/fetch
-# off (ADR-0007 decision 5) — the E4.4 browser playground guard. The backend
+# off (ADR-0007 decision 5) — the E4.4 browser playground guard — and that
+# `ridl-descriptor` builds with its `std` feature off for a target with no
+# standard library, and with its features on for wasm32. The backend
 # crates are included so this recipe actually exercises them: previously it
 # checked a fixed non-backend list, so it never built ridl-backend-proto or
 # ridl-backend-flatbuffers and could not have caught a change to either.
@@ -154,7 +159,7 @@ wasm-check:
     set -euo pipefail
     if [ -f Cargo.toml ]; then
         if ! command -v rustup >/dev/null 2>&1; then
-            echo "wasm-check: rustup is required to add the wasm32 target." >&2
+            echo "wasm-check: rustup is required to add the wasm32 and thumbv7em targets." >&2
             echo "wasm-check: install it, or install the target another way." >&2
             exit 1
         fi
@@ -165,6 +170,17 @@ wasm-check:
             -p ridl-backend-rust -p ridl-backend-ts \
             -p ridl-rt -p ridl-fmt \
             --no-default-features
+        # wasm32-unknown-unknown has a standard library, so the check above
+        # cannot show that a crate builds without one. `ridl-descriptor` with
+        # its `std` feature off is the reader an engine links, and a target
+        # with no standard library is the proof that it links none.
+        rustup target add thumbv7em-none-eabihf
+        cargo check --target thumbv7em-none-eabihf -p ridl-descriptor --no-default-features
+        # `ridl-descriptor` with its `std` feature on, so that the half of it
+        # that builds a descriptor (`lower`, `describe`) is still checked for
+        # the browser target, which the first check no longer does now that
+        # `std` is a default feature of that crate.
+        cargo check --target wasm32-unknown-unknown -p ridl-descriptor --all-features
         # And once more with the encoding features on. ADR-0020 decision 2
         # makes the generated Rust compiled to wasm32 the codec a TypeScript
         # consumer loads, so the helpers that codec calls must build for

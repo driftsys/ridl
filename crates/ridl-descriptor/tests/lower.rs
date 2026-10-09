@@ -1,3 +1,7 @@
+// This test uses the half of the crate that builds a descriptor, which the
+// `std` feature carries.
+#![cfg(feature = "std")]
+
 //! Spec D-4: what the catalog descriptor contains, checked through `verify`.
 
 use ridl_descriptor::lower::LowerError;

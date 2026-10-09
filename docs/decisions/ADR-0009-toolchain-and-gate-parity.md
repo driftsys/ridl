@@ -76,7 +76,8 @@ prediction.
 
 1. **The Rust toolchain is pinned to an exact version in
    `rust-toolchain.toml`.** `channel = "1.95.0"`,
-   `components = ["rustfmt", "clippy"]`, `targets = ["wasm32-unknown-unknown"]`,
+   `components = ["rustfmt", "clippy"]`,
+   `targets = ["wasm32-unknown-unknown", "thumbv7em-none-eabihf"]`,
    `profile = "minimal"`. An exact version, not a channel alias: `stable` is a
    moving target and pinning it would leave the gap this decision exists to
    close. The workspace was verified clean under 1.95.0 — build, test,

@@ -145,10 +145,11 @@ here. This list is not a standing count of every crate the workspace holds — s
   types they reach (ADR-0014 decision 15). It is in this crate because three
   artifacts carry the hash — the codegen model's `Catalog.hash`, which the Rust
   backend writes into every generated `Interface::CATALOG`; the catalog
-  descriptor, whose crate `ridl-descriptor` depends on `ridl-ir`, re-exports the
-  hash as `ridl_descriptor::hash`, and copies the interface numbers from the IR
-  in `ridl_descriptor::number`; and each `Region` of the lowered rsdl system,
-  where `ridlc` embeds it (`embed_catalog_hashes`). `ridl_ir::codegen` holds the
+  descriptor, whose crate `ridl-descriptor` depends on `ridl-ir` when its own
+  `std` feature is on (the default), re-exports the hash as
+  `ridl_descriptor::hash`, and copies the interface numbers from the IR in
+  `ridl_descriptor::number`; and each `Region` of the lowered rsdl system, where
+  `ridlc` embeds it (`embed_catalog_hashes`). `ridl_ir::codegen` holds the
   codegen request's deployment section: `lower_deployment` in
   `codegen/deployment.rs` is an emitter over the lowered system IR, and
   `codegen/bindings.rs` holds the table of transport binding overheads, which
