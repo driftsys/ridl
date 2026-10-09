@@ -529,9 +529,16 @@ impl Loader {
                 for member in &members {
                     // A member listed twice in `[workspace] members` is
                     // loaded once: its later listings are skipped before
-                    // its manifest is read, with no diagnostic.
+                    // its manifest is read, with no diagnostic. Two
+                    // spellings of one directory (`a`, `b/../a`) are one
+                    // listing: the paths are compared lexically normalized.
                     let member_dir = root.join(member);
-                    if self.member_dirs.contains(&member_dir) {
+                    let normalized = normalize(&member_dir);
+                    if self
+                        .member_dirs
+                        .iter()
+                        .any(|dir| normalize(dir) == normalized)
+                    {
                         continue;
                     }
                     self.member_dirs.push(member_dir);
@@ -660,8 +667,10 @@ impl Loader {
     /// unit name `unit` (the manifest's `name`, whose directory is
     /// `unit_dir`), then every subdirectory as its own package named by its
     /// path — the package↔directory law's "the name mirrors the directory
-    /// path relative to the manifest root" (ADR-0002 §1). Every package in
-    /// the tree carries `imports`, the governing manifest's `[imports]`.
+    /// path relative to the manifest root" (ADR-0002 §1). `unit`, `unit_dir`,
+    /// `imports`, `defaults` and `lock` come from `scope`, which is the same
+    /// for every package of the tree. Every package in the tree carries
+    /// `imports`, the governing manifest's `[imports]`.
     /// Directories are visited in name order; hidden directories and
     /// symlinked directories (following them could revisit the tree in a
     /// cycle) are skipped, and a directory with its own `ridl.toml` is
@@ -723,7 +732,7 @@ impl Loader {
         let mut claimed_elsewhere = false;
         if !source_files.is_empty() {
             match self.claims.get(name) {
-                Some((first, first_dir)) if first_dir != unit_dir => {
+                Some((first, first_dir)) if normalize(first_dir) != normalize(unit_dir) => {
                     claimed_elsewhere = true;
                     // Every unit whose tree is loaded has its entry,
                     // inserted beside its entry in `units`.
@@ -3010,8 +3019,24 @@ service:veh.common.climate 2
 
     #[test]
     fn a_member_listed_twice_is_loaded_once() {
+        member_listed_twice_is_loaded_once("[\"a\", \"a\"]");
+    }
+
+    /// The second listing spells the same directory through `..`; the two
+    /// paths are equal once lexically normalized.
+    #[test]
+    fn a_member_listed_twice_through_a_parent_step_is_loaded_once() {
+        member_listed_twice_is_loaded_once("[\"a\", \"b/../a\"]");
+    }
+
+    /// Loads a workspace whose `members` is `members`, every listing of which
+    /// names the directory `a` (the directory `b` exists so that `b/../a`
+    /// resolves on the filesystem). The member is one unit: no MANI-014, its
+    /// own MANI-005 raised once, no diagnostic twice, one package `x`.
+    fn member_listed_twice_is_loaded_once(members: &str) {
         let dir = TempDir::new("member-twice");
-        dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"a\"]\n");
+        std::fs::create_dir_all(dir.path().join("b")).expect("create `b`");
+        dir.write("ridl.toml", &format!("[workspace]\nmembers = {members}\n"));
         dir.write(
             "a/ridl.toml",
             "[package]\nname = \"x\"\nversion = \"1.0.0\"\nunknown = 1\n",

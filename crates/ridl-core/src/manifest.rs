@@ -885,13 +885,13 @@ version = \"1.0.0\"
     const PACKAGE_HEAD: &str = "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n\n";
     const WORKSPACE_HEAD: &str = "[workspace]\nmembers = [\"a\"]\n\n";
 
-    /// The text of `text` under the primary span of `diag`.
     /// The byte range of the first occurrence of `needle` in `text`.
     fn range_of(text: &str, needle: &str) -> Range<usize> {
         let start = text.find(needle).expect("the needle occurs in the text");
         start..start + needle.len()
     }
 
+    /// The text of `text` under the primary span of `diag`.
     fn spanned_text<'a>(text: &'a str, diag: &Diagnostic) -> &'a str {
         let range = diag.primary.range;
         &text[usize::from(range.start())..usize::from(range.end())]
