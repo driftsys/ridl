@@ -188,9 +188,10 @@ fn unsupported_source_file_takes_its_level_from_the_lints_table() {
 }
 
 /// A lone `.rxdl` or `.rmdl` file, with no `ridl.toml` above it, is a load
-/// error in every command: `ridl check`, `ridl build` and `ridl diff` exit 2
-/// with an error that names the extension as unsupported, compile nothing,
-/// and report no RIDL-417. With a warning instead, `ridl diff` printed
+/// error in every command that loads source: `ridl check`, `ridl build`,
+/// `ridl diff`, `ridl lock`, `ridl test` and `ridl baseline` exit 2 with an
+/// error that names the extension as unsupported, compile nothing, write
+/// nothing, and report no RIDL-417. With a warning instead, `ridl diff` printed
 /// `identical` over two different files and `ridl build` wrote nothing and
 /// exited 0.
 #[test]
@@ -206,7 +207,8 @@ fn a_bare_rxdl_or_rmdl_file_is_refused_by_every_command() {
             "package veh.hmi\ntype C: m\n",
         );
         let out = dir.path().join("out");
-        let commands: [Vec<&OsStr>; 3] = [
+        let baseline_out = dir.path().join("baseline-out");
+        let commands: [Vec<&OsStr>; 6] = [
             vec!["check".as_ref(), old.as_os_str()],
             vec![
                 "build".as_ref(),
@@ -215,6 +217,14 @@ fn a_bare_rxdl_or_rmdl_file_is_refused_by_every_command() {
                 out.as_os_str(),
             ],
             vec!["diff".as_ref(), old.as_os_str(), new.as_os_str()],
+            vec!["lock".as_ref(), old.as_os_str()],
+            vec!["test".as_ref(), old.as_os_str()],
+            vec![
+                "baseline".as_ref(),
+                old.as_os_str(),
+                "--out".as_ref(),
+                baseline_out.as_os_str(),
+            ],
         ];
         for args in commands {
             let (code, stdout, stderr) = ridl(&args);
@@ -230,6 +240,15 @@ fn a_bare_rxdl_or_rmdl_file_is_refused_by_every_command() {
             assert!(!stdout.contains("identical"), "{context}");
         }
         assert!(!out.exists(), "`ridl build` wrote {}", out.display());
+        assert!(
+            !baseline_out.exists(),
+            "`ridl baseline` wrote {}",
+            baseline_out.display()
+        );
+        assert!(
+            !dir.path().join("old/interfaces.lock").exists(),
+            "`ridl lock` wrote an `interfaces.lock`"
+        );
 
         // A supported old side does not hide an unsupported new side.
         let supported = dir.write("supported/hmi.ridl", "package veh.hmi\ntype B: m\n");

@@ -89,6 +89,10 @@ pub struct Overlay {
 }
 
 /// A filesystem failure or an overlay that cannot belong to the workspace.
+///
+/// `Io` also carries the refusal of a lone `.rxdl` or `.rmdl` entry in
+/// single-file mode: an [`io::ErrorKind::InvalidInput`] error that names the
+/// extension (see [`load_workspace`]).
 #[derive(Debug)]
 pub enum LoadError {
     Io(io::Error),
