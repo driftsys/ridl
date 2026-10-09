@@ -30,7 +30,7 @@ use types::{OverlayInput, WorkspaceStatus};
 // `.ridl` or `.rsdl` as typl, so a profile name this enum did not reject
 // would be checked as typl rather than refused.
 /// Which language a source text is parsed as. These are the three profiles the
-/// compiler has; the `.rxdl` form does not exist yet. An rsdl text
+/// compiler has; there is no rxdl profile yet. An rsdl text
 /// is checked as a workspace of one file, so the rsdl system checks run over
 /// it as `ridl check` runs them over the same text in a file. The checks of
 /// files beside a file on disk (an `interfaces.lock`, a `.ridl/baseline/`
