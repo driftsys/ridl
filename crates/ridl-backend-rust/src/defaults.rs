@@ -76,7 +76,10 @@ fn scalar_default_value(backing: ScalarBacking, value: Option<&str>) -> Option<T
         ScalarBacking::Integer => Some(numeric_tokens(value?, false)),
         ScalarBacking::Boolean => Some(bool_tokens(value.unwrap_or("false"))),
         ScalarBacking::String => match value {
-            Some(text) if !text.is_empty() => Some(quote! { #text.to_string() }),
+            // A path rather than `.to_string()`: `ToString` is not in the
+            // prelude of a `no_std` crate, and the generated crate is one
+            // with its `std` feature off.
+            Some(text) if !text.is_empty() => Some(quote! { ::std::string::String::from(#text) }),
             _ => Some(quote! { ::std::string::String::new() }),
         },
         ScalarBacking::Bytes => match value {

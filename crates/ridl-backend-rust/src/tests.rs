@@ -3365,7 +3365,7 @@ fn declared_string_init_becomes_the_default() {
         "a declared-init string type gets a Default, got:\n{source}"
     );
     assert!(
-        source.contains("\"AA-000-AA\"") && source.contains("to_string"),
+        source.contains("::std::string::String::from(\"AA-000-AA\")"),
         "the Default must be the declared init, not an empty string, got:\n{source}"
     );
     assert!(
