@@ -1310,17 +1310,16 @@ fn rename_labels(
         else {
             continue;
         };
+        let published_members = shape_members((published_package, published.interface));
         let candidates: Vec<(&ridl_ir::v2::Package, ridl_ir::v2::InterfaceShape<'_>)> =
             ridl_ir::v2::packages_of_unit(unit, current)
                 .flat_map(|fresh| {
+                    let published_members = &published_members;
                     fresh
                         .shapes()
-                        .filter(|shape| {
+                        .filter(move |shape| {
                             shape.interface.provisional
-                                && same_shape(
-                                    (published_package, published.interface),
-                                    (fresh, shape.interface),
-                                )
+                                && same_shape(published_members, (fresh, shape.interface))
                         })
                         .map(move |shape| (fresh, shape))
                 })
@@ -1362,32 +1361,38 @@ fn orphan_entry(sources: &SourceMap, diagnostic: &Diagnostic) -> Option<(LockKey
 /// — are not members and are not compared: the baseline's interface is frozen
 /// and the candidate is provisional, so whole values would never match.
 ///
-/// Each interface comes with the package that declares it, because the two
-/// may sit in different packages of the unit: a type reference is compared in
-/// its canonical `pkg.Name` form ([`ridl_ir::catalog_hash::canonicalize_refs`]),
-/// so a payload written bare in its own package matches the same type written
-/// qualified in another.
+/// The published side comes prepared by [`shape_members`], once per orphan
+/// entry; the candidate comes with the package that declares it, because the
+/// two may sit in different packages of the unit.
 fn same_shape(
-    old: (&ridl_ir::v2::Package, &ridl_ir::v2::Interface),
+    published: &[ridl_ir::v2::Decl],
     new: (&ridl_ir::v2::Package, &ridl_ir::v2::Interface),
 ) -> bool {
-    fn members(
-        (package, interface): (&ridl_ir::v2::Package, &ridl_ir::v2::Interface),
-    ) -> Vec<ridl_ir::v2::Decl> {
-        interface
-            .interactions
-            .iter()
-            .cloned()
-            .map(|mut decl| {
-                decl.doc = String::new();
-                decl.labels = Vec::new();
-                decl.deprecated = None;
-                ridl_ir::catalog_hash::canonicalize_refs(&mut decl, package);
-                decl
-            })
-            .collect()
-    }
-    members(old) == members(new)
+    shape_members(new) == published
+}
+
+/// An interface's members in the form [`same_shape`] compares: each
+/// interaction with its `doc`, `labels` and `deprecated` blanked and each
+/// type reference in its canonical `pkg.Name` form
+/// ([`ridl_ir::catalog_hash::canonicalize_refs`]), resolved against
+/// `package`, the package that declares the interface. So a payload written
+/// bare in its own package matches the same type written qualified in
+/// another.
+fn shape_members(
+    (package, interface): (&ridl_ir::v2::Package, &ridl_ir::v2::Interface),
+) -> Vec<ridl_ir::v2::Decl> {
+    interface
+        .interactions
+        .iter()
+        .cloned()
+        .map(|mut decl| {
+            decl.doc = String::new();
+            decl.labels = Vec::new();
+            decl.deprecated = None;
+            ridl_ir::catalog_hash::canonicalize_refs(&mut decl, package);
+            decl
+        })
+        .collect()
 }
 
 /// The directory a file path sits in, as a string: its parent, or `.` when
@@ -2427,15 +2432,15 @@ impl DeclIndex {
     }
 
     /// The unit whose manifest directory is `dir` — the parent of a lock
-    /// file's path — read from `packages`, the fresh set: the unit of a
+    /// file's path — read from `fresh`, the fresh package set: the unit of a
     /// package declared in `dir` or in a directory under it. A unit's tree
     /// holds no other manifest (MANI-013), so every such package belongs to
     /// the one unit. `None` when no indexed file of the fresh set sits there.
-    fn unit_of_dir<'a>(&self, dir: &str, packages: &'a [ridl_ir::v2::Package]) -> Option<&'a str> {
+    fn unit_of_dir<'a>(&self, dir: &str, fresh: &'a [ridl_ir::v2::Package]) -> Option<&'a str> {
         self.packages
             .iter()
             .filter(|(path, _)| Path::new(path).starts_with(dir))
-            .find_map(|(_, name)| packages.iter().find(|package| package.name == *name))
+            .find_map(|(_, name)| fresh.iter().find(|package| package.name == *name))
             .map(ridl_ir::v2::unit_of)
     }
 
