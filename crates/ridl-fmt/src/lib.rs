@@ -285,7 +285,7 @@ fn collect_container(elements: &[SyntaxElement]) -> Vec<ContainerBlock> {
     for element in elements {
         match element {
             NodeOrToken::Token(token) if token.kind() == SyntaxKind::Whitespace => {
-                nl_run += token.text().matches('\n').count();
+                nl_run += line_breaks(token.text());
             }
             NodeOrToken::Token(token) if is_comment(token.kind()) => {
                 let text = token.text().trim_end().to_string();
@@ -660,7 +660,7 @@ fn split_brace_line_comment(elements: &[SyntaxElement]) -> (Option<String>, &[Sy
     while let Some(element) = elements.get(i) {
         match element {
             NodeOrToken::Token(t) if t.kind() == SyntaxKind::Whitespace => {
-                if t.text().contains('\n') {
+                if line_breaks(t.text()) > 0 {
                     break;
                 }
                 i += 1;
@@ -831,13 +831,13 @@ fn has_only_inline_annotation_comments(node: &SyntaxNode) -> bool {
             }
             NodeOrToken::Token(token) if is_comment(token.kind()) => {
                 if !inline
-                    || token.text().contains('\n')
+                    || line_breaks(token.text()) > 0
                     || !matches!(owner, Some(SyntaxKind::Timing | SyntaxKind::AttrBlock))
                 {
                     return false;
                 }
             }
-            NodeOrToken::Token(token) if token.text().contains('\n') => inline = false,
+            NodeOrToken::Token(token) if line_breaks(token.text()) > 0 => inline = false,
             _ => {}
         }
     }
@@ -1486,6 +1486,19 @@ fn indent_str(level: usize) -> String {
     "  ".repeat(level)
 }
 
+/// The number of line breaks in source `text`: each LF, and each CR that is
+/// not followed by an LF. A CRLF pair is one line break.
+fn line_breaks(text: &str) -> usize {
+    let bytes = text.as_bytes();
+    (0..bytes.len())
+        .filter(|&at| match bytes[at] {
+            b'\n' => true,
+            b'\r' => bytes.get(at + 1) != Some(&b'\n'),
+            _ => false,
+        })
+        .count()
+}
+
 fn is_comment(kind: SyntaxKind) -> bool {
     matches!(
         kind,
@@ -1653,6 +1666,54 @@ mod tests {
                     },
                 );
             }
+        }
+    }
+
+    /// A lone CR is one line break, as an LF is, and a CRLF pair is one line
+    /// break: a file with either line ending formats to the same text as the
+    /// same file with LF line endings. The output uses LF.
+    #[test]
+    fn a_lone_cr_and_a_crlf_pair_each_format_as_one_line_break() {
+        let lf = "// Copyright Acme\n\npackage p\n\n\n// lead\nstruct S { // brace\n  a : A   // note\n  // own line\n  b : B\n\n\n  c : C\n}\n/// doc\nstruct T {\n  a : A\n}\nstruct U {\n  // first\n  a : A\n}\n";
+        let expected = format(lf, Profile::Typl, &FormatOptions::default());
+        let FormatOutcome::Formatted(text) = &expected else {
+            panic!("the LF source must format: {expected:?}");
+        };
+        assert!(text.contains("  a: A // note\n  // own line\n  b: B\n\n  c: C\n"));
+        assert!(text.contains("struct U {\n  // first\n  a: A\n}\n"));
+        for ending in ["\r", "\r\n"] {
+            let source = lf.replace('\n', ending);
+            assert_eq!(
+                format(&source, Profile::Typl, &FormatOptions::default()),
+                expected,
+                "line ending {ending:?}",
+            );
+        }
+    }
+
+    /// A comment on its own line between a member's annotations, or a block
+    /// comment that spans lines there, sends the member down the verbatim
+    /// path when the line break is a lone CR, as it does for an LF. The verbatim member keeps its
+    /// source line breaks.
+    #[test]
+    fn a_lone_cr_before_an_annotation_comment_keeps_the_member_verbatim() {
+        for (member, ending) in [
+            "query  q():T [persist] // a\n  // b\n  @ 10ms",
+            "query  q():T [persist] /* a\nb */ @ 10ms",
+        ]
+        .into_iter()
+        .flat_map(|member| ["\n", "\r", "\r\n"].map(|ending| (member, ending)))
+        {
+            let member = member.replace('\n', ending);
+            assert_eq!(
+                format(
+                    &format!("package p\ninterface I {{\n  {member}\n}}\n"),
+                    Profile::Ridl,
+                    &FormatOptions::default(),
+                ),
+                FormatOutcome::Formatted(format!("package p\n\ninterface I {{\n  {member}\n}}\n")),
+                "line ending {ending:?}",
+            );
         }
     }
 
