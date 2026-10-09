@@ -1986,7 +1986,7 @@ gate-parity:
     # and a member removed from that line would only shrink what is checked.
     expected="toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check compile test lint wasm-check compat-check demo check"
     removed="$(comm -23 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort) | paste -sd' ' -)"
-    added="$(comm -13 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort) | paste -sd' ' -)"
+    added="$(comm -13 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort -u) | paste -sd' ' -)"
     duplicated="$(printf '%s\n' $members | sort | uniq -d | paste -sd' ' -)"
     if [ -n "$removed" ] || [ -n "$added" ] || [ -n "$duplicated" ]; then
         [ -z "$removed" ] || echo "gate-parity: removed from 'build': $removed" >&2

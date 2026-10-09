@@ -2,7 +2,8 @@
 //! and the path that failed (driftsys/ridl#196). The exit code stays 2.
 //!
 //! Unix only: the fixtures use `chmod 000`, which does not bind the root user,
-//! so every test returns early when it runs as root.
+//! so every test that uses it returns early when it runs as root. The test of
+//! a manifest that links to itself needs no permission change and always runs.
 
 #![cfg(unix)]
 
@@ -222,6 +223,10 @@ fn a_manifest_that_links_to_itself_in_an_ancestor_is_named() {
         assert!(
             stderr.contains(&format!("cannot read `{}`", manifest.display())),
             "ridl {args:?} names the ancestor manifest: {stderr}"
+        );
+        assert!(
+            stderr.contains("Too many levels of symbolic links"),
+            "ridl {args:?} names the cause: {stderr}"
         );
     }
 }
