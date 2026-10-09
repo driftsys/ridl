@@ -122,7 +122,7 @@ pub fn catalog_hash(unit: &str, packages: &[&Package]) -> [u8; 32] {
 /// to its canonical `pkg.Name`: a bare name that `package` declares gains the
 /// package's name, as [`reduced_unit`] spells it. A qualified name, and a
 /// bare name `package` does not declare, stay as written. The references
-/// rewritten are the ones [`visit_refs`] lists.
+/// rewritten are the ones the private `visit_refs` lists.
 pub fn canonicalize_refs(decl: &mut Decl, package: &Package) {
     visit_refs(decl, &mut |name| {
         if package.decls.iter().any(|declared| declared.name == *name) {
@@ -679,6 +679,24 @@ mod tests {
             }],
             ..Default::default()
         }
+    }
+
+    /// `canonicalize_refs` qualifies a bare name its package declares and
+    /// leaves the rest as written: a bare name the package does not declare
+    /// (a primitive written as a name) and a name already qualified.
+    #[test]
+    fn canonicalize_refs_qualifies_only_a_declared_bare_name() {
+        let package = Package {
+            name: "veh.hmi".to_owned(),
+            decls: vec![scalar_decl("Level")],
+            ..Default::default()
+        };
+        let mut decl = struct_decl("S", &["Level", "string", "veh.common.Unit"]);
+        canonicalize_refs(&mut decl, &package);
+        assert_eq!(
+            decl,
+            struct_decl("S", &["veh.hmi.Level", "string", "veh.common.Unit"])
+        );
     }
 
     /// `p`: interface `I` (number 1, provisional) with a signal of `Point`;
