@@ -272,7 +272,7 @@ fn publish_unit(dir: &TempDir, files: &[(&str, &str)]) -> PathBuf {
 /// declared in the directory the lock sits in. The unit is still found from
 /// that directory, and the renamed subpackage interface draws the label.
 #[test]
-fn the_rename_hint_appears_when_the_unit_root_declares_no_interface() {
+fn the_rename_hint_appears_when_the_unit_root_declares_no_package() {
     let dir = TempDir::new("root-without-source");
     let root = publish_unit(
         &dir,
@@ -377,6 +377,87 @@ fn the_rename_hint_matches_a_bare_payload_against_its_qualified_spelling() {
     assert!(
         stderr.contains(&hint(&root, "Speed", "cluster.Velocity")),
         "the label names the one rename: {stderr}"
+    );
+}
+
+/// The mirror of the case above: the baseline's interface, in a subpackage,
+/// names its payload qualified (`veh.hmi.Level`, through an import); the
+/// renamed interface, in the root package, names the same type bare. Each
+/// side is canonicalized against the package that declares it, so the shapes
+/// match.
+#[test]
+fn the_rename_hint_matches_a_qualified_payload_against_its_bare_spelling() {
+    let dir = TempDir::new("qualified-against-bare");
+    let root = publish_unit(
+        &dir,
+        &[
+            ("hmi.ridl", "package veh.hmi\ntype Level: integer [0..1]\n"),
+            (
+                "cluster/cluster.ridl",
+                "package veh.hmi.cluster\nimport veh.hmi.Level\n\
+                 interface Speed { signal v : Level @[100ms..1s] }\n",
+            ),
+        ],
+    );
+    dir.write(
+        "hmi.ridl",
+        "package veh.hmi\ntype Level: integer [0..1]\n\
+         interface Velocity { signal v : Level @[100ms..1s] }\n",
+    );
+    dir.write("cluster/cluster.ridl", "package veh.hmi.cluster\n");
+
+    let (code, stderr) = check(&root);
+    assert_eq!(code, 1, "stderr:\n{stderr}");
+    assert!(stderr.contains("error[RIDL-409]"), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains(&hint(&root, "cluster.Speed", "Velocity")),
+        "the label names the one rename: {stderr}"
+    );
+}
+
+/// A workspace of two sibling members, `hmi` and `zzz`; the rename happens in
+/// `zzz`, the second member in path order. The unit is found from the lock's
+/// own directory, not from the first indexed file, so the label names `zzz`'s
+/// directory and keys.
+#[test]
+fn the_rename_hint_finds_the_unit_of_the_second_member() {
+    let dir = TempDir::new("second-member");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"hmi\", \"zzz\"]\n");
+    dir.write(
+        "hmi/ridl.toml",
+        "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "hmi/hmi.ridl",
+        "package veh.hmi\ntype Mode: integer [0..3]\n\
+         interface Session { event m : Mode @[100ms..1s] }\n",
+    );
+    dir.write(
+        "zzz/ridl.toml",
+        "[package]\nname = \"veh.zzz\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "zzz/zzz.ridl",
+        "package veh.zzz\ntype Level: integer [0..1]\n\
+         interface Speed { signal v : Level @[100ms..1s] }\n",
+    );
+    let root = dir.path().to_path_buf();
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the locks are allocated: {stderr}");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is published: {stderr}");
+    dir.write(
+        "zzz/zzz.ridl",
+        "package veh.zzz\ntype Level: integer [0..1]\n\
+         interface Velocity { signal v : Level @[100ms..1s] }\n",
+    );
+
+    let (code, stderr) = check(&root);
+    assert_eq!(code, 1, "stderr:\n{stderr}");
+    assert!(stderr.contains("error[RIDL-409]"), "stderr:\n{stderr}");
+    assert!(
+        stderr.contains(&hint(&root.join("zzz"), "Speed", "Velocity")),
+        "the label names `zzz` and its keys: {stderr}"
     );
 }
 

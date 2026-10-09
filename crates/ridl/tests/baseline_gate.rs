@@ -1370,6 +1370,7 @@ fn the_migration_to_one_lock_per_unit_republishes_a_legacy_baseline() {
         SESSION,
         "next 2\nSession 1\n",
         &[
+            // Replacing a text by itself only strips the snapshot's `unit`.
             ("veh.hmi.ir.json", "\"number\": 1", "\"number\": 1"),
             ("veh.hmi.cluster.ir.json", "\"number\": 2", "\"number\": 1"),
         ],
@@ -1438,6 +1439,7 @@ fn a_lost_subpackage_number_of_a_legacy_snapshot_is_named_relative_to_the_unit()
         SESSION,
         "next 2\nSession 1\n",
         &[
+            // Replacing a text by itself only strips the snapshot's `unit`.
             ("veh.hmi.ir.json", "\"number\": 1", "\"number\": 1"),
             ("veh.hmi.cluster.ir.json", "\"number\": 2", "\"number\": 5"),
         ],
@@ -1506,6 +1508,9 @@ fn a_lost_inline_service_number_of_a_legacy_snapshot_keeps_its_service_key() {
 /// holds only `Session` 1. A snapshot that records its unit is compared in
 /// that unit, not in the unit of the fresh package of the same name, so
 /// number 2 is lost from `veh.hmi` and the gate refuses (RIDL-412).
+/// `hmi/interfaces.lock` is written by hand without the `cluster.Speed`
+/// line, so that `ridl lock` does not stop on that line as an orphan entry
+/// (RIDL-409) and the baseline gate is what sees number 2 lost.
 #[test]
 fn a_package_moved_to_another_unit_is_compared_in_the_unit_the_baseline_recorded() {
     let dir = TempDir::new("gate-unit-moved");
@@ -1566,6 +1571,10 @@ fn a_package_moved_to_another_unit_is_compared_in_the_unit_the_baseline_recorded
     assert!(
         stderr.contains("RIDL-412") && stderr.contains("in unit `veh.hmi`"),
         "stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("`cluster.Speed` holds interface number 2"),
+        "the lost shape and number are named:\n{stderr}"
     );
 }
 
