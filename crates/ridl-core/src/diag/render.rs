@@ -13,11 +13,13 @@
 //! next declaration's keyword) renders as a multi-line underline rather than
 //! panicking.
 
+use std::ops::Range;
+
 use codespan_reporting::diagnostic as cs;
-use codespan_reporting::files::SimpleFiles;
+use codespan_reporting::files::{Error as FilesError, Files};
 use codespan_reporting::term::{self, Config};
 
-use super::{Diagnostic, Severity, SourceMap, Span};
+use super::{Diagnostic, Severity, SourceMap, Span, ends_line};
 use crate::lint;
 
 /// Renders `diags` against `sources` to a plain (uncoloured) terminal string.
@@ -28,12 +30,13 @@ use crate::lint;
 /// Rendering into a `String` produces plain text with no ANSI colour codes, so
 /// the output is stable for snapshots and clean when piped.
 pub fn render(diags: &[Diagnostic], sources: &SourceMap) -> String {
-    let mut files = SimpleFiles::new();
-    let mut file_count = 0usize;
-    for (path, text) in sources.iter_files() {
-        files.add(path, text);
-        file_count += 1;
-    }
+    let files = LineFiles(
+        sources
+            .iter_files()
+            .map(|(path, text)| LineFile::new(path, text))
+            .collect(),
+    );
+    let file_count = files.0.len();
 
     let config = Config::default();
     let mut out = String::new();
@@ -43,6 +46,84 @@ pub fn render(diags: &[Diagnostic], sources: &SourceMap) -> String {
             .expect("rendering to an in-memory string cannot fail");
     }
     out
+}
+
+/// One file of the `codespan-reporting` file table: its path, its text, and the
+/// byte offset at which each of its lines starts.
+struct LineFile<'a> {
+    path: &'a str,
+    text: &'a str,
+    line_starts: Vec<usize>,
+}
+
+impl<'a> LineFile<'a> {
+    /// Indexes `text`. A line ends at an LF, a CRLF pair or a lone CR, the same
+    /// rule [`line_col`](super::line_col) follows, so the rendered locations
+    /// and the JSON positions agree. `codespan-reporting`'s own `SimpleFiles`
+    /// ends a line at an LF only.
+    fn new(path: &'a str, text: &'a str) -> Self {
+        let bytes = text.as_bytes();
+        let line_starts = std::iter::once(0)
+            .chain(
+                (0..bytes.len())
+                    .filter(|&at| ends_line(bytes, at))
+                    .map(|at| at + 1),
+            )
+            .collect();
+        LineFile {
+            path,
+            text,
+            line_starts,
+        }
+    }
+}
+
+/// The `codespan-reporting` file table, indexed by [`FileId`](super::FileId).
+struct LineFiles<'a>(Vec<LineFile<'a>>);
+
+impl LineFiles<'_> {
+    fn file(&self, id: usize) -> Result<&LineFile<'_>, FilesError> {
+        self.0.get(id).ok_or(FilesError::FileMissing)
+    }
+}
+
+impl<'a> Files<'a> for LineFiles<'a> {
+    type FileId = usize;
+    type Name = &'a str;
+    type Source = &'a str;
+
+    fn name(&'a self, id: usize) -> Result<&'a str, FilesError> {
+        Ok(self.file(id)?.path)
+    }
+
+    fn source(&'a self, id: usize) -> Result<&'a str, FilesError> {
+        Ok(self.file(id)?.text)
+    }
+
+    fn line_index(&'a self, id: usize, byte_index: usize) -> Result<usize, FilesError> {
+        Ok(self
+            .file(id)?
+            .line_starts
+            .partition_point(|start| *start <= byte_index)
+            - 1)
+    }
+
+    fn line_range(&'a self, id: usize, line_index: usize) -> Result<Range<usize>, FilesError> {
+        let file = self.file(id)?;
+        let start = *file
+            .line_starts
+            .get(line_index)
+            .ok_or(FilesError::LineTooLarge {
+                given: line_index,
+                max: file.line_starts.len() - 1,
+            })?;
+        let end = file
+            .line_starts
+            .get(line_index + 1)
+            .copied()
+            .unwrap_or(file.text.len());
+        Ok(start..end)
+    }
 }
 
 /// Maps one homegrown [`Diagnostic`] to a `codespan-reporting` diagnostic.
@@ -171,6 +252,34 @@ mod tests {
 
     /// A fix-it-carrying diagnostic spells its suggested replacement out under
     /// the diagnostic.
+    /// The location header counts a lone CR as a line break, as `line_col` and
+    /// the language server do, and a CRLF pair as one line break.
+    #[test]
+    fn location_counts_a_lone_cr_and_a_crlf_pair_as_one_line_break_each() {
+        for (text, expected) in [
+            ("package p\rtype Speed: km/h\r", "demo.typl:2:6"),
+            ("package p\r\ntype Speed: km/h\r\n", "demo.typl:2:6"),
+            ("package p\r\r\ntype Speed: km/h\r\n", "demo.typl:3:6"),
+        ] {
+            let mut map = SourceMap::new();
+            let start = text.find("Speed").unwrap() as u32;
+            let at_name = span(&mut map, "demo.typl", text, start, start + 5);
+            let diags = vec![Diagnostic {
+                code: DiagCode::NONE,
+                severity: Severity::Warning,
+                message: "type name should be capitalised".to_string(),
+                primary: at_name,
+                labels: Vec::new(),
+                fixits: Vec::new(),
+            }];
+            let rendered = super::render(&diags, &map);
+            assert!(
+                rendered.contains(expected),
+                "expected `{expected}` in:\n{rendered}",
+            );
+        }
+    }
+
     #[test]
     fn fixit_renders_its_suggestion() {
         let text = "package p\ntype Speed: km/h\n";
