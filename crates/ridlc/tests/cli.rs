@@ -789,13 +789,55 @@ fn build_system(entry: &Path, system: &str, emits: &str) -> (ridl_ir::v2::System
     (system, out)
 }
 
-/// The catalog hash in the catalog descriptor `<catalog>.catalog.binfb` that
-/// a build wrote into `out`.
+/// The catalog hash in the descriptor of the unit of the package `catalog`:
+/// the unit is read from the `<catalog>.ir.json` the same build wrote, and the
+/// descriptor is `<unit>.catalog.binfb`.
 fn descriptor_hash(out: &Path, catalog: &str) -> Vec<u8> {
-    let bytes = std::fs::read(out.join(format!("{catalog}{}", ridl_descriptor::FILE_SUFFIX)))
+    let json = std::fs::read_to_string(out.join(format!("{catalog}.ir.json")))
+        .expect("the package IR is written");
+    let package = ridl_ir::v2::from_json(&json).expect("the IR parses");
+    let unit = ridl_ir::v2::unit_of(&package);
+    let bytes = std::fs::read(out.join(format!("{unit}{}", ridl_descriptor::FILE_SUFFIX)))
         .expect("the catalog descriptor is written");
     let descriptor = ridl_descriptor::verify(&bytes).expect("the descriptor verifies");
     descriptor.hash().expect("the hash reads").to_vec()
+}
+
+/// `--emit catalog` writes one descriptor for each unit with an interface
+/// shape: the corpus is the one unit `veh`, whose three shapes sit in two
+/// source packages.
+#[test]
+fn emit_catalog_writes_one_file_per_unit() {
+    let out = TempDir::new("catalog-per-unit");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        Path::new("tests/corpus/rsdl-appendix-a").as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "catalog".as_ref(),
+    ]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    let mut files: Vec<String> = std::fs::read_dir(out.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|name| name.ends_with(ridl_descriptor::FILE_SUFFIX))
+        .collect();
+    files.sort();
+    assert_eq!(files, ["veh.catalog.binfb"]);
+    let bytes = std::fs::read(out.path().join("veh.catalog.binfb")).unwrap();
+    let catalog = ridl_descriptor::verify(&bytes).unwrap();
+    assert_eq!(catalog.name().unwrap(), "veh");
+    let names: Vec<&str> = catalog
+        .interfaces()
+        .unwrap()
+        .iter()
+        .map(|i| i.unwrap().name().unwrap())
+        .collect();
+    assert_eq!(
+        names,
+        ["adas.CruiseControl", "adas.LaneAssist", "veh.diag.access"]
+    );
 }
 
 /// rsdl reference §13 (driftsys/ridl#367): each region of

@@ -72,6 +72,8 @@ table Member {
 }
 
 table Interface {
+  // The catalog name: the source package path relative to the unit plus the
+  // interface name, or the service's full dotted name for an inline shape.
   name: string (required);
   // The interface number, copied from the IR's Interface.number, which
   // ridl-sem folds from interfaces.lock (rsdl note D-7). Never 0.
@@ -94,7 +96,7 @@ table RetiredInterface {
 table Catalog {
   // The schema version of this file; a reader rejects one it does not know.
   version: uint32;
-  // The package name (vocabulary note V-16).
+  // The unit name (vocabulary note V-16): the root source package of the unit.
   name: string (required);
   // SHA-256 over the interfaces, their numbers and the types they reach
   // (rsdl note D-8); 32 bytes.

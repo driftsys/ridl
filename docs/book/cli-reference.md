@@ -558,7 +558,7 @@ Options:
           - proto:         The proto3 schema, written to `<base>.proto`
           - flatbuffers:   The FlatBuffers schema, written to `<base>.fbs`
           - codegen-model: The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
-          - catalog:       The catalog descriptor an engine reads, written to `<base>.catalog.binfb` when the package declares an interface or a service with an inline body: a FlatBuffers file of the package's interfaces, their members and their catalog hash
+          - catalog:       The catalog descriptor an engine reads, written to `<unit>.catalog.binfb` for every unit that declares an interface or a service with an inline body: a FlatBuffers file of the unit's interfaces, their members and their catalog hash
           
           [default: rust]
 
@@ -1935,7 +1935,7 @@ Options:
           - proto:         The proto3 schema, written to `<base>.proto`
           - flatbuffers:   The FlatBuffers schema, written to `<base>.fbs`
           - codegen-model: The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
-          - catalog:       The catalog descriptor an engine reads, written to `<base>.catalog.binfb` when the package declares an interface or a service with an inline body: a FlatBuffers file of the package's interfaces, their members and their catalog hash
+          - catalog:       The catalog descriptor an engine reads, written to `<unit>.catalog.binfb` for every unit that declares an interface or a service with an inline body: a FlatBuffers file of the unit's interfaces, their members and their catalog hash
           
           [default: rust]
 

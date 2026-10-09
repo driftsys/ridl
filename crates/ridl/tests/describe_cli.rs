@@ -215,8 +215,8 @@ fn build_writes_no_descriptor_for_a_package_without_an_interface_shape() {
     assert!(written.is_empty(), "no catalog descriptor: {written:?}");
 }
 
-/// The descriptor is named `<base>.catalog.binfb` with the base the IR dumps
-/// use, the package name: `corpus.baseline.ir.binpb` beside it.
+/// The descriptor is named `<unit>.catalog.binfb`; for a root package the unit
+/// is the package name the IR dumps use: `corpus.baseline.ir.binpb` beside it.
 #[test]
 fn the_descriptor_takes_the_ir_dumps_base_name() {
     let out = TempDir::new("base");
@@ -311,11 +311,11 @@ interface Clock {\n\
 
     assert_eq!(
         catalogs_in(alone.path()),
-        ["clock.catalog.binfb"],
+        ["veh.clock.catalog.binfb"],
         "`--emit catalog` writes no catalog for ridl.std"
     );
 
-    let name = "clock.catalog.binfb";
+    let name = "veh.clock.catalog.binfb";
     let alone_bytes = std::fs::read(alone.path().join(name)).unwrap();
     let face_bytes = std::fs::read(with_face.path().join(name)).unwrap();
     assert_eq!(
@@ -331,8 +331,8 @@ interface Clock {\n\
 
 /// A package whose one interface shape is a service's inline body still has
 /// a catalog: the descriptor is written and names the interface after the
-/// service's dotted name. A single-file build takes the file stem as the
-/// base, for the descriptor as for the IR dump.
+/// service's dotted name. The descriptor is named after the unit, while a
+/// single-file build names the IR dump after the file stem.
 #[test]
 fn a_service_inline_body_alone_gets_a_descriptor() {
     let src = TempDir::new("service-src");
@@ -350,9 +350,9 @@ service veh.hvac.cabin {\n\
     assert!(out.path().join("hvac.ir.binpb").is_file());
     assert_eq!(
         catalogs_in(out.path()),
-        vec!["hvac.catalog.binfb".to_owned()]
+        vec!["veh.hvac.catalog.binfb".to_owned()]
     );
-    let bytes = std::fs::read(out.path().join("hvac.catalog.binfb")).unwrap();
+    let bytes = std::fs::read(out.path().join("veh.hvac.catalog.binfb")).unwrap();
     let catalog = ridl_descriptor::verify(&bytes).expect("the descriptor verifies");
     let names: Vec<&str> = catalog
         .interfaces()
@@ -482,7 +482,7 @@ fn describe_exits_2_when_the_stdout_reader_has_gone() {
     let file = src.write("wide.ridl", &source);
     let out = TempDir::new("closed-pipe-out");
     build_from(&file, out.path(), "catalog");
-    let catalog = out.path().join("wide.catalog.binfb");
+    let catalog = out.path().join("veh.wide.catalog.binfb");
 
     let mut child = Command::new(env!("CARGO_BIN_EXE_ridl"))
         .args(["describe".as_ref(), catalog.as_os_str()])

@@ -15,8 +15,13 @@ use ridl_ir::v2::{
     IntWidth, Interface, MapType, Package, Param, PrimitiveType, QueryDef, Reserved,
     RetiredInterface, ReturnType, Service, ServiceShape, SignalDef, StreamType, StructDef,
     StructMember, Timing, TimingMode, TupleField, TupleType, TypeDef, backing, decl, field_type,
-    return_type, service_shape, stream_type, struct_member, type_def,
+    return_type, service_shape, stream_type, struct_member, type_def, unit_of,
 };
+
+/// Lowers the unit of `package` when `package` is its only member.
+fn lower_one(package: &Package) -> Result<Vec<u8>, LowerError> {
+    lower(unit_of(package), &[package])
+}
 
 fn i16_def() -> TypeDef {
     TypeDef {
@@ -234,7 +239,7 @@ fn point_fb_bound(package: &Package) -> u32 {
 
 #[test]
 fn the_descriptor_carries_every_member_of_every_kind() {
-    let bytes = lower(&package(), &[]).unwrap();
+    let bytes = lower_one(&package()).unwrap();
     let catalog = verify(&bytes).expect("the lowering writes a valid descriptor");
     assert_eq!(catalog.version().unwrap(), SCHEMA_VERSION);
     assert_eq!(catalog.name().unwrap(), "veh.cluster");
@@ -357,7 +362,7 @@ fn rows(
 #[test]
 fn a_named_type_payload_has_a_row_per_sized_encoding_and_no_repr_c() {
     let package = package();
-    let bytes = lower(&package, &[]).unwrap();
+    let bytes = lower_one(&package).unwrap();
     let catalog = verify(&bytes).unwrap();
     let position = vehicle(catalog).members().unwrap().get(0).unwrap().unwrap();
     let payload = position.payloads().unwrap().get(0).unwrap().unwrap();
@@ -385,7 +390,7 @@ fn a_named_type_payload_has_a_row_per_sized_encoding_and_no_repr_c() {
 #[test]
 fn a_request_of_one_named_parameter_is_sized_and_of_several_is_absent() {
     let package = package();
-    let bytes = lower(&package, &[]).unwrap();
+    let bytes = lower_one(&package).unwrap();
     let catalog = verify(&bytes).unwrap();
     let members = vehicle(catalog).members().unwrap();
     let move_to = members
@@ -435,7 +440,7 @@ fn a_request_of_one_named_parameter_is_sized_and_of_several_is_absent() {
 
 #[test]
 fn a_fallible_reply_is_absent() {
-    let bytes = lower(&package(), &[]).unwrap();
+    let bytes = lower_one(&package()).unwrap();
     let catalog = verify(&bytes).unwrap();
     let members = vehicle(catalog).members().unwrap();
     let reply = members
@@ -503,7 +508,7 @@ fn an_unbounded_payload_lowers_to_one_unbounded_flatbuffers_row() {
     // wrote `Bounded`, the unspecified cause, or any byte count other than 0
     // fails here. proto3 refuses a member no leaf bounds, so its state is
     // absent and writes no row at all.
-    let bytes = lower(&unbounded_payload_package(), &[]).unwrap();
+    let bytes = lower_one(&unbounded_payload_package()).unwrap();
     let catalog = verify(&bytes).unwrap();
     let payload = payload_at(catalog, 0, 0);
     assert_eq!(payload.type_name().unwrap(), "Open");
@@ -535,7 +540,7 @@ fn timing_of(
 #[test]
 fn timing_is_carried_when_declared_and_absent_otherwise() {
     use ridl_descriptor::TimingMode::{Range, StrictPeriodic};
-    let bytes = lower(&package(), &[]).unwrap();
+    let bytes = lower_one(&package()).unwrap();
     let catalog = verify(&bytes).unwrap();
     let members = vehicle(catalog).members().unwrap();
     let us = |v: &str| Some(v.to_owned());
@@ -574,7 +579,7 @@ fn timing_is_carried_when_declared_and_absent_otherwise() {
 #[test]
 fn a_stream_response_has_absent_sizes_and_a_spelled_type_name() {
     // Driver §4 answer 10: no `stream` flag, no per-element bound yet (#336).
-    let bytes = lower(&package(), &[]).unwrap();
+    let bytes = lower_one(&package()).unwrap();
     let catalog = verify(&bytes).unwrap();
     let trace = vehicle(catalog).members().unwrap().get(5).unwrap().unwrap();
     let response = trace.payloads().unwrap().get(1).unwrap().unwrap();
@@ -604,7 +609,7 @@ fn an_inline_service_shape_is_an_interface_under_the_service_name() {
         }],
         ..Default::default()
     });
-    let catalog_bytes = lower(&package, &[]).unwrap();
+    let catalog_bytes = lower_one(&package).unwrap();
     let catalog = verify(&catalog_bytes).expect("the lowering writes a valid descriptor");
     let interfaces = catalog.interfaces().unwrap();
     assert_eq!(interfaces.len(), 2);
@@ -622,7 +627,7 @@ fn the_retired_list_is_copied_from_the_ir() {
         name: "LaneAssist".to_owned(),
         number: 9,
     });
-    let bytes = lower(&package, &[]).unwrap();
+    let bytes = lower_one(&package).unwrap();
     let catalog = verify(&bytes).unwrap();
     let retired = catalog.retired().unwrap().get(0).unwrap().unwrap();
     assert_eq!(retired.name().unwrap(), "LaneAssist");
@@ -634,7 +639,7 @@ fn a_zero_number_is_an_internal_error() {
     let mut package = package();
     package.interfaces[0].number = 0;
     assert_eq!(
-        lower(&package, &[]),
+        lower_one(&package),
         Err(LowerError::ZeroNumber("Vehicle".to_owned()))
     );
 }
@@ -642,8 +647,8 @@ fn a_zero_number_is_an_internal_error() {
 #[test]
 fn the_bytes_are_stable_across_runs() {
     assert_eq!(
-        lower(&package(), &[]).unwrap(),
-        lower(&package(), &[]).unwrap()
+        lower_one(&package()).unwrap(),
+        lower_one(&package()).unwrap()
     );
 }
 
@@ -669,7 +674,7 @@ fn payload_at(
 #[test]
 fn a_query_response_of_one_named_type_is_sized() {
     let package = package();
-    let bytes = lower(&package, &[]).unwrap();
+    let bytes = lower_one(&package).unwrap();
     let catalog = verify(&bytes).unwrap();
     let response = payload_at(catalog, 3, 1);
     assert_eq!(response.role().unwrap(), "response");
@@ -695,7 +700,7 @@ fn a_query_response_of_one_named_type_is_sized() {
 
 #[test]
 fn the_event_and_the_fixed_payloads_name_their_types() {
-    let bytes = lower(&package(), &[]).unwrap();
+    let bytes = lower_one(&package()).unwrap();
     let catalog = verify(&bytes).unwrap();
     assert_eq!(payload_at(catalog, 1, 0).type_name().unwrap(), "Point");
     assert_eq!(payload_at(catalog, 4, 0).type_name().unwrap(), "Coord");
@@ -733,8 +738,8 @@ fn importing_and_imported() -> (Package, Package) {
 #[test]
 fn a_payload_from_another_package_is_sized_and_hashed_through_others() {
     let (cluster, geo) = importing_and_imported();
-    let with = lower(&cluster, &[&geo]).unwrap();
-    let without = lower(&cluster, &[]).unwrap();
+    let with = lower("veh.cluster", &[&cluster, &geo]).unwrap();
+    let without = lower_one(&cluster).unwrap();
 
     let catalog = verify(&with).unwrap();
     let payload = payload_at(catalog, 0, 0);
@@ -913,7 +918,7 @@ fn a_structural_type_name_is_spelled_in_the_typl_syntax_over_the_canonical_value
         }],
         ..Default::default()
     };
-    let bytes = lower(&package, &[]).unwrap();
+    let bytes = lower_one(&package).unwrap();
     let catalog = verify(&bytes).unwrap();
     let spelled: Vec<String> = (0..cases.len())
         .map(|index| {
@@ -925,4 +930,62 @@ fn a_structural_type_name_is_spelled_in_the_typl_syntax_over_the_canonical_value
         .collect();
     let expected: Vec<&str> = cases.iter().map(|(_, spelling)| *spelling).collect();
     assert_eq!(spelled, expected);
+}
+
+/// Unit `u` has the root package `u` (interface `Session`, number 2) and the
+/// package `u.cluster` (interface `Speed`, number 1, retired `Old` 3, spelled
+/// as its lock key).
+#[test]
+fn a_unit_of_two_packages_lowers_to_one_descriptor_with_qualified_names() {
+    let interface = |name: &str, number: u32| Interface {
+        name: name.to_owned(),
+        number,
+        interactions: vec![interaction(
+            "v",
+            1,
+            decl::Kind::SignalDef(SignalDef {
+                payload: "integer".to_owned(),
+                ..Default::default()
+            }),
+        )],
+        ..Default::default()
+    };
+    let root = Package {
+        name: "u".to_owned(),
+        interfaces: vec![interface("Session", 2)],
+        ..Default::default()
+    };
+    let cluster = Package {
+        name: "u.cluster".to_owned(),
+        unit: "u".to_owned(),
+        interfaces: vec![interface("Speed", 1)],
+        retired: vec![RetiredInterface {
+            name: "cluster.Old".to_owned(),
+            number: 3,
+        }],
+        ..Default::default()
+    };
+    let bytes = lower("u", &[&root, &cluster]).unwrap();
+    let catalog = verify(&bytes).unwrap();
+    assert_eq!(catalog.name().unwrap(), "u");
+    let interfaces = catalog.interfaces().unwrap();
+    let names: Vec<&str> = interfaces
+        .iter()
+        .map(|i| i.unwrap().name().unwrap())
+        .collect();
+    assert_eq!(names, ["cluster.Speed", "Session"]);
+    let retired = catalog.retired().unwrap();
+    assert_eq!(retired.len(), 1);
+    let old = retired.get(0).unwrap().unwrap();
+    assert_eq!(
+        (old.name().unwrap(), old.number().unwrap()),
+        ("cluster.Old", 3)
+    );
+    // A package of another unit is not part of the descriptor.
+    let other = Package {
+        name: "w".to_owned(),
+        interfaces: vec![interface("Other", 1)],
+        ..Default::default()
+    };
+    assert_eq!(lower("u", &[&root, &cluster, &other]).unwrap(), bytes);
 }

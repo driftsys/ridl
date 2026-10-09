@@ -176,8 +176,8 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-descriptor/tests/lower.rs",
-        lines: 3,
-        why: "the `vehicle()` helper and a test, each reading the catalog \
+        lines: 4,
+        why: "the `vehicle()` helper and two tests, each reading the catalog \
               descriptor's own `Catalog.interfaces` field back out of a \
               buffer, and a test that zeroes the number of the one interface \
               its package declares; the lowering itself walks `shapes()`",
@@ -288,6 +288,12 @@ const ALLOWED: &[Allowed] = &[
         lines: 1,
         why: "the read is of the deployment region's interface list \
               (`Region::interfaces`), not of `Package::interfaces`",
+    },
+    Allowed {
+        path: "crates/ridlc/tests/cli.rs",
+        lines: 1,
+        why: "the read is of the catalog descriptor's own `Catalog.interfaces` \
+              field, read back from the file `--emit catalog` wrote",
     },
     Allowed {
         path: "crates/ridlc/tests/codegen_model.rs",
