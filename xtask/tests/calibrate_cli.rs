@@ -107,7 +107,7 @@ fn main() {
         let all=["inconsistent-unit","inconsistent-abbreviation","duplicate-shape","low-cohesion-interface","package-fan-out"];
         let probe=env::var("PROBE_MODE").unwrap_or_default();
         if probe=="garbage" { println!("not json"); return; }
-        if probe=="exit" { eprintln!("synthetic probe failure"); std::process::exit(1); }
+        if probe=="exit" { println!("[]"); eprintln!("synthetic probe failure"); std::process::exit(1); }
         let mut report=Vec::new();
         for (index,name) in all.iter().enumerate() {
             if probe!="all" && !dropped.contains(name) { continue; }
@@ -310,7 +310,7 @@ fn executable_dump_isolates_copies_target_and_cleans_up_after_success() {
 fn executable_dump_fails_when_the_lint_probe_cannot_answer() {
     for (probe, reason) in [
         ("garbage", "lint probe printed no JSON report"),
-        ("exit", "synthetic probe failure"),
+        ("exit", "lint probe failed"),
         ("all", "lint probe reports every check as unknown"),
     ] {
         let fixture = Fixture::dump();
