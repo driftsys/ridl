@@ -505,7 +505,14 @@ impl Loader {
                 self.workspace_defaults = defaults;
                 self.workspace_lints = root_lints;
                 for member in &members {
-                    self.member_dirs.push(root.join(member));
+                    // A member listed twice in `[workspace] members` is
+                    // loaded once: its later listings are skipped before
+                    // its manifest is read, with no diagnostic.
+                    let member_dir = root.join(member);
+                    if self.member_dirs.contains(&member_dir) {
+                        continue;
+                    }
+                    self.member_dirs.push(member_dir);
                     self.load_member(db, root, member, file_id, &text)?;
                 }
             }
@@ -592,14 +599,11 @@ impl Loader {
                 // claim the same source package: MANI-014 on the second
                 // manifest in load order, whose tree is not loaded, so the
                 // first unit keeps its directory in `units`. A member listed
-                // twice in `[workspace] members` finds its own directory
-                // there: it is already loaded, so it is skipped with no
-                // diagnostic.
+                // twice never reaches this point twice: the `members` loop
+                // skips its later listings, so `first_dir` is always another
+                // directory.
                 let name_range = byte_range(name_span.start, name_span.end);
                 if let Some(first_dir) = self.units.get(&name) {
-                    if *first_dir == member_dir {
-                        return Ok(());
-                    }
                     let first_dir = first_dir.clone();
                     self.diagnostics.push(error(
                         DiagCode::MANI_014,
@@ -646,8 +650,7 @@ impl Loader {
     /// of the tree carries `lock`, the unit's `interfaces.lock` read from the
     /// manifest directory; a lock in any other directory is not read and is
     /// RIDL-416. A member listed twice in `[workspace] members` reaches this
-    /// function once: its second listing finds its directory in `units` and
-    /// is skipped.
+    /// function once: the `members` loop skips its later listings.
     #[allow(clippy::too_many_arguments)]
     fn load_package_tree(
         &mut self,
@@ -2998,13 +3001,15 @@ service:veh.common.climate 2
         dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"a\"]\n");
         dir.write(
             "a/ridl.toml",
-            "[package]\nname = \"x\"\nversion = \"1.0.0\"\n",
+            "[package]\nname = \"x\"\nversion = \"1.0.0\"\nunknown = 1\n",
         );
         dir.write("a/x.ridl", "package x\n\ninterface A {}\n");
         let mut db = RidlDatabase::default();
         let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
         let codes = codes(&loaded.diagnostics);
         assert!(!codes.contains(&"MANI-014"), "{codes:?}");
+        let mani_005 = codes.iter().filter(|c| **c == "MANI-005").count();
+        assert_eq!(mani_005, 1, "{codes:?}");
         for (i, diag) in loaded.diagnostics.iter().enumerate() {
             assert!(
                 !loaded.diagnostics[..i].contains(diag),
