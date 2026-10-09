@@ -15379,6 +15379,29 @@ interface cabin { signal i : State @[100ms..1s] }
         );
     }
 
+    /// The order is the byte order of the keys, not the package order then
+    /// the name: `service:zone` sorts after `cluster.Speed`, so the root's
+    /// inline shape is numbered after the subpackage's interface.
+    #[test]
+    fn provisional_numbers_follow_key_byte_order_not_package_order() {
+        let unit = UnitFixture::new(
+            "u",
+            None,
+            &[
+                (
+                    "u",
+                    "package u\ntype Level: integer [0..1]\nservice zone { signal z : Level @[100ms..1s] }\n",
+                ),
+                ("u.cluster", "package u.cluster\ninterface Speed {}\n"),
+            ],
+        );
+        assert_eq!(
+            unit.numbers("u.cluster"),
+            [("cluster.Speed".to_string(), 1, true)]
+        );
+        assert_eq!(unit.numbers("u"), [("service:zone".to_string(), 2, true)]);
+    }
+
     /// A subpackage's shape is frozen by the entry under its relative key,
     /// not under its short name.
     #[test]
