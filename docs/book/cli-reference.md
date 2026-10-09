@@ -127,6 +127,12 @@ same input. It now carries this description word for word under `ridl` too —
 before [ADR-0010][adr-0010], `ridl check --help` rendered it with a blank line
 where the description belongs.
 
+The loader compiles the `.typl`, `.ridl` and `.rsdl` files of a package
+directory. A `.rxdl` file there is not compiled, because the rxdl profile has
+no implementation (driftsys/ridl#68): each one draws the warning RIDL-417
+(`unsupported-source-file`) on the file itself, and its declarations are not in
+the build.
+
 **It writes `~/.ridl/cache` and `ridl.lock`, but only when the manifest
 declares `[imports]`.** `ridl check` loads, resolves, and checks the
 workspace, then — non-frozen, and only when the checked-out manifest (or a

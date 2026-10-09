@@ -1023,6 +1023,15 @@ diag_codes! {
         /// with `ridl lock`, then delete the file.
         RIDL_416 = "RIDL-416", Warning,
             "`interfaces.lock` in a subdirectory of a unit is not read", lint = "lock-in-subdirectory";
+
+        /// A `.rxdl` file sits in a package directory. Warning. Emitted by the
+        /// loader on the file itself, once per file: the loader compiles
+        /// `.typl`, `.ridl` and `.rsdl` files, and the rxdl profile has no
+        /// implementation (driftsys/ridl#68), so the file's declarations are
+        /// not in the build. The fix is to move the declarations into a
+        /// supported file, or to accept that the file is not compiled.
+        RIDL_417 = "RIDL-417", Warning,
+            "`.rxdl` file is not compiled: the rxdl profile is not supported", lint = "unsupported-source-file";
     }
 
     /// The rsdl catalogue: every `RSDL-` code declared in this module, with the
@@ -2105,6 +2114,7 @@ mod tests {
             ("RIDL-407", "ordinal-changed"),
             ("RIDL-414", "low-cohesion-interface"),
             ("RIDL-416", "lock-in-subdirectory"),
+            ("RIDL-417", "unsupported-source-file"),
             ("RSDL-409", "redundant-provider-set"),
             ("RSDL-804", "unclaimed-backend-key"),
             ("RSDL-805", "depth-below-bound"),

@@ -152,6 +152,7 @@ MANI-010 is itself a lint, so the table can set its level.
 | `ordinal-changed` | RIDL-407 | warn | interaction, struct field, or union arm ordinal changed against the published baseline |
 | `low-cohesion-interface` | RIDL-414 | info | interface members form disconnected type-sharing groups |
 | `lock-in-subdirectory` | RIDL-416 | warn | `interfaces.lock` in a subdirectory of a unit is not read |
+| `unsupported-source-file` | RIDL-417 | warn | `.rxdl` file is not compiled: the rxdl profile is not supported |
 | `redundant-provider-set` | RSDL-409 | warn | a `requires` resolves to a redundant provider set |
 | `unclaimed-backend-key` | RSDL-804 | warn | a backend key whose namespace no configured backend claims |
 | `depth-below-bound` | RSDL-805 | warn | a declared `depth` is below `ceil(max / min)` for an event a covered link consumes |

@@ -154,6 +154,39 @@ fn lock_in_subdirectory_takes_its_level_from_the_lints_table() {
     }
 }
 
+/// RIDL-417 (`unsupported-source-file`): `ridl check` on a package directory
+/// reports one warning per `.rxdl` file and exits 0; the level comes from
+/// `[lints]`, so at `deny` the warning is an error and `ridl check` exits 1,
+/// and at `allow` it is not reported.
+#[test]
+fn unsupported_source_file_takes_its_level_from_the_lints_table() {
+    for (lints, expected_code, rendered) in [
+        ("", 0, Some("warning[RIDL-417]")),
+        (
+            "\n[lints]\nunsupported-source-file = \"deny\"\n",
+            1,
+            Some("error[RIDL-417]"),
+        ),
+        ("\n[lints]\nunsupported-source-file = \"allow\"\n", 0, None),
+    ] {
+        let dir = TempDir::new("unsupported-source-file");
+        let root = member_workspace(&dir, lints);
+        dir.write("sensor/extra.rxdl", "package demo\n");
+        dir.write("sensor/sub/more.rxdl", "package demo.sub\n");
+
+        let (code, _, stderr) = ridl(&["check".as_ref(), root.join("sensor").as_os_str()]);
+        assert_eq!(code, expected_code, "{lints}stderr:\n{stderr}");
+        match rendered {
+            Some(header) => assert_eq!(
+                stderr.matches(header).count(),
+                2,
+                "{lints}stderr:\n{stderr}"
+            ),
+            None => assert!(!stderr.contains("RIDL-417"), "{lints}stderr:\n{stderr}"),
+        }
+    }
+}
+
 /// A workspace with one member whose interface declares one `command`, with
 /// the timing annotation `timing` (empty for none), under
 /// `missing-response-bound = "deny"`. Returns the workspace root.

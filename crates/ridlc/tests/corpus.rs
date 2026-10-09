@@ -598,6 +598,16 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
                      in `crates/ridl-core/src/workspace.rs`",
         },
     ),
+    (
+        "RIDL-417",
+        Elsewhere {
+            fixture: "crates/ridl-core/src/workspace.rs",
+            reason: "the loader reads the unit's directory tree, outside `ridlc`'s \
+                     source-to-IR function, so it is never a compile diagnostic of a \
+                     source string. Provoked by `a_rxdl_file_is_reported_and_not_compiled` \
+                     in `crates/ridl-core/src/workspace.rs`",
+        },
+    ),
     // The shared codes E2 added or folded into the ridl profile.
     ("TYPL-005", Showcase),
     ("FORM-106", Showcase),
