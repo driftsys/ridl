@@ -639,6 +639,44 @@ mod tests {
         assert_eq!(resolve(path).await, with_line_doc);
     }
 
+    // A `.rxdl` overlay is accepted (ADR-0025 decision 7): the loader reports
+    // it as the warning RIDL-417 on the overlay's path and does not compile it,
+    // so the check is not a tool error and the overlay's text draws no
+    // diagnostic. The text names an unknown type, which would draw TYPL-011
+    // if the overlay were compiled.
+    #[tokio::test]
+    async fn path_mode_check_reports_a_rxdl_overlay_as_ridl_417() {
+        let path = snapshot::tests::fixture("ws");
+        let overlay = format!("{path}/a/new.rxdl");
+        let params = serde_json::from_value(json!({
+            "path": path,
+            "overlays": [{"path": overlay, "source": "package fx.a\ntype Bad: Missing\n"}]
+        }))
+        .unwrap();
+        let result = RidlMcp::new().ridl_check(Parameters(params)).await.unwrap();
+        assert_ne!(result.is_error, Some(true), "{:?}", result.content);
+        let value = result.structured_content.unwrap();
+        let ridl_417 = value["diagnostics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|d| d["code"] == "RIDL-417")
+            .collect::<Vec<_>>();
+        assert_eq!(ridl_417.len(), 1, "{value:?}");
+        assert_eq!(ridl_417[0]["severity"], "warning");
+        assert_eq!(ridl_417[0]["lint"], "unsupported-source-file");
+        assert_eq!(ridl_417[0]["span"]["path"], overlay);
+        assert_eq!(value["workspace"]["errors"], 0);
+        assert!(
+            value["diagnostics"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|d| d["code"] != "TYPL-011"),
+            "{value:?}"
+        );
+    }
+
     // Path mode applies the project's `[lints]` levels (ADR-0024 decisions 6
     // and 8): the fixture's root manifest sets `missing-timing = "deny"`, so
     // the member's RIDL-100 is reported as an error and counted as one.

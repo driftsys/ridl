@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct OverlayInput {
-    /// The .typl, .ridl or .rsdl file path whose parent directory exists, relative to the server's working directory unless absolute.
+    /// The .typl, .ridl, .rsdl or .rxdl file path whose parent directory exists, relative to the server's working directory unless absolute. A .rxdl overlay draws the warning RIDL-417 and is not compiled.
     pub path: String,
     /// The full unsaved text of the source file.
     pub source: String,
