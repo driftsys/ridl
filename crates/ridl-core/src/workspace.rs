@@ -679,8 +679,9 @@ impl Loader {
     /// of the tree carries `lock`, the unit's `interfaces.lock` read from the
     /// manifest directory; a lock in any other directory is not read and is
     /// RIDL-416. A member listed twice in `[workspace] members` reaches this
-    /// function once: the `members` loop skips its later listings, so a
-    /// claim already recorded for a name always belongs to another unit.
+    /// function once: the `members` loop skips its later listings. Two
+    /// directories of one unit that give one package name (`a.b/` and
+    /// `a/b/`) are not MANI-014: both are loaded.
     fn load_package_tree(
         &mut self,
         db: &mut RidlDatabase,
@@ -733,9 +734,10 @@ impl Loader {
         let mut claimed_elsewhere = false;
         if !source_files.is_empty() {
             match self.claims.get(name) {
-                // Each unit's tree is walked once, so an existing claim is
-                // always another unit's.
-                Some((first, first_dir)) => {
+                // The directory comparison keeps a same-unit collision out of
+                // MANI-014: two directories of one unit can give one package
+                // name (`a.b/` and `a/b/`), and both are loaded, as today.
+                Some((first, first_dir)) if normalize(first_dir) != normalize(unit_dir) => {
                     claimed_elsewhere = true;
                     // Every unit whose tree is loaded has its entry,
                     // inserted beside its entry in `units`.
@@ -3018,6 +3020,26 @@ service:veh.common.climate 2
     #[test]
     fn two_members_with_one_name_are_mani_014_on_the_second_in_reverse_order() {
         two_members_with_one_name("[\"b\", \"a\"]", "b", "a");
+    }
+
+    /// Two directories of one unit, `a.b/` and `a/b/`, both give the package
+    /// name `x.a.b`. The claim is the unit's own, so it is not MANI-014. The
+    /// current behaviour loads both directories silently; no diagnostic is
+    /// dedicated to this collision yet.
+    #[test]
+    fn two_directories_of_one_unit_naming_one_package_are_not_mani_014() {
+        let dir = TempDir::new("one-unit-one-name");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"x\"]\n");
+        dir.write(
+            "x/ridl.toml",
+            "[package]\nname = \"x\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("x/a.b/p.ridl", "package x.a.b\n\ninterface P {}\n");
+        dir.write("x/a/b/q.ridl", "package x.a.b\n\ninterface Q {}\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let codes = codes(&loaded.diagnostics);
+        assert!(!codes.contains(&"MANI-014"), "{codes:?}");
     }
 
     #[test]

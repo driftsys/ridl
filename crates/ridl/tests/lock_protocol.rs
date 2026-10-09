@@ -415,34 +415,40 @@ fn the_rename_hint_matches_a_qualified_payload_against_its_bare_spelling() {
     );
 }
 
-/// A workspace of two sibling members, `hmi` and `zzz`; the rename happens in
-/// `zzz`, the second member in path order. The unit is found from the lock's
-/// own directory, not from the first indexed file, so the label names `zzz`'s
-/// directory and keys. `hmi` also gains a provisional interface with the
-/// renamed one's members; candidates are searched in the orphan's unit only,
-/// so `hmi`'s interface is not a second candidate and the one label names
-/// `Velocity`.
+/// A workspace of three sibling members, `hmi`, `spd` and `zzz`; the rename
+/// happens in `spd`, the second member in path order. The unit is found from
+/// the lock's own directory, not from the first indexed file, so the label
+/// names `spd`'s directory and keys. `zzz`, which sorts after `spd`, gains a
+/// provisional interface with the renamed one's members; candidates are
+/// searched in the orphan's unit only, so `zzz`'s interface is not a second
+/// candidate and the one label names `Velocity`.
 #[test]
 fn the_rename_hint_finds_the_unit_of_the_second_member() {
     let dir = TempDir::new("second-member");
-    dir.write("ridl.toml", "[workspace]\nmembers = [\"hmi\", \"zzz\"]\n");
     dir.write(
-        "hmi/ridl.toml",
-        "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+        "ridl.toml",
+        "[workspace]\nmembers = [\"hmi\", \"spd\", \"zzz\"]\n",
     );
+    for member in ["hmi", "spd", "zzz"] {
+        dir.write(
+            &format!("{member}/ridl.toml"),
+            &format!("[package]\nname = \"veh.{member}\"\nversion = \"1.0.0\"\n"),
+        );
+    }
     dir.write(
         "hmi/hmi.ridl",
         "package veh.hmi\ntype Mode: integer [0..3]\n\
          interface Session { event m : Mode @[100ms..1s] }\n",
     );
     dir.write(
-        "zzz/ridl.toml",
-        "[package]\nname = \"veh.zzz\"\nversion = \"1.0.0\"\n",
+        "spd/spd.ridl",
+        "package veh.spd\ntype Level: integer [0..1]\n\
+         interface Speed { signal v : Level @[100ms..1s] }\n",
     );
     dir.write(
         "zzz/zzz.ridl",
-        "package veh.zzz\ntype Level: integer [0..1]\n\
-         interface Speed { signal v : Level @[100ms..1s] }\n",
+        "package veh.zzz\ntype Mode: integer [0..3]\n\
+         interface Status { event m : Mode @[100ms..1s] }\n",
     );
     let root = dir.path().to_path_buf();
     let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
@@ -450,14 +456,14 @@ fn the_rename_hint_finds_the_unit_of_the_second_member() {
     let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
     assert_eq!(code, 0, "the baseline is published: {stderr}");
     dir.write(
-        "zzz/zzz.ridl",
-        "package veh.zzz\ntype Level: integer [0..1]\n\
+        "spd/spd.ridl",
+        "package veh.spd\ntype Level: integer [0..1]\n\
          interface Velocity { signal v : Level @[100ms..1s] }\n",
     );
     dir.write(
-        "hmi/hmi.ridl",
-        "package veh.hmi\nimport veh.zzz.Level\ntype Mode: integer [0..3]\n\
-         interface Session { event m : Mode @[100ms..1s] }\n\
+        "zzz/zzz.ridl",
+        "package veh.zzz\nimport veh.spd.Level\ntype Mode: integer [0..3]\n\
+         interface Status { event m : Mode @[100ms..1s] }\n\
          interface Gauge { signal v : Level @[100ms..1s] }\n",
     );
 
@@ -465,13 +471,13 @@ fn the_rename_hint_finds_the_unit_of_the_second_member() {
     assert_eq!(code, 1, "stderr:\n{stderr}");
     assert!(stderr.contains("error[RIDL-409]"), "stderr:\n{stderr}");
     assert!(
-        stderr.contains(&hint(&root.join("zzz"), "Speed", "Velocity")),
-        "the label names `zzz` and its keys: {stderr}"
+        stderr.contains(&hint(&root.join("spd"), "Speed", "Velocity")),
+        "the label names `spd` and its keys: {stderr}"
     );
     assert_eq!(
         stderr.matches("same shape as").count(),
         1,
-        "one label, for the one candidate in `zzz`: {stderr}"
+        "one label, for the one candidate in `spd`: {stderr}"
     );
     assert!(!stderr.contains("Speed=Gauge"), "stderr:\n{stderr}");
 }
