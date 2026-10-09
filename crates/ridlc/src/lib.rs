@@ -1287,10 +1287,12 @@ fn refuse_overwrite(
 /// The `std` feature, on by default, forwards to `ridl-rt/std`: the generated
 /// face's `blocking` module is under it and is `block_on` over the async
 /// face, and `block_on` is what `ridl-rt`'s `std`
-/// feature gates. A build with default features off has no `blocking` module
-/// and is `no_std`, as is the `ridl-rt` it links (see [`render_lib_rs`]).
-/// `validate-pattern` turns `std` on: `regex` needs the standard library, and
-/// the pattern check holds its `Regex` in a `std::sync::LazyLock`.
+/// feature gates. A build with default features off has no `blocking` module,
+/// links `ridl-rt` as `no_std`, and is itself `no_std` (the crate root
+/// [`render_lib_rs`] writes declares it). `validate-pattern` does not turn
+/// `std` on, so it adds no `blocking` module and leaves `ridl-rt` `no_std`;
+/// the crate root links the standard library while it is on, because the
+/// pattern check holds its `Regex` in a `std::sync::LazyLock`.
 ///
 /// The `regex = "1.13"` requirement is the major and minor version of the
 /// `regex` crate the checker compiles every `match` pattern with (TYPL-220).
@@ -1313,11 +1315,10 @@ edition = "2024"
 
 [features]
 default = ["validate-pattern", "std"]
-# Enforce `match` patterns in generated constructors. It turns `std` on,
-# because `regex` needs the standard library. Disable on a target that
-# cannot carry the regex dependency; range and length checks are
-# unaffected.
-validate-pattern = ["dep:regex", "std"]
+# Enforce `match` patterns in generated constructors. The crate links the
+# standard library while it is on. Disable on a target that cannot carry the
+# regex dependency; range and length checks are unaffected.
+validate-pattern = ["dep:regex"]
 std = ["ridl-rt/std"]
 
 [dependencies]
@@ -1329,6 +1330,10 @@ path = "lib.rs"
 "#
     )
 }
+
+/// The `cfg` predicate under which the generated crate is `no_std`: neither
+/// of the two features that need the standard library is on.
+const NO_STD: &str = r#"not(any(feature = "std", feature = "validate-pattern"))"#;
 
 /// Builds the module tree that makes the flat emitted files reachable at the
 /// `crate::…` paths generated code already uses.
@@ -1427,25 +1432,24 @@ fn render_lib_rs(package_names: &[String], preamble: &str) -> String {
         }
     }
 
-    // The `std` feature of the generated manifest is the switch for `no_std`:
-    // without the first line the crate links the standard library whatever
-    // its features are, and fails to build for a target that has none.
+    // The crate is `no_std` when neither feature that needs the standard
+    // library is on: `std`, for the `blocking` module, and `validate-pattern`,
+    // for the pattern check's `::std::sync::LazyLock`. Without the first line
+    // the crate links the standard library whatever its features are, and
+    // fails to build for a target that has none.
     //
     // The generated package files name `::std::string::String` and
     // `::std::vec::Vec`, and call `<[u8]>::to_vec`, all of which `alloc`
-    // provides. With `std` off, `alloc` is linked under the name `std`, so
-    // those paths resolve to the same types in `alloc` and the package files
-    // stay the same in both modes and in single-file mode. The alias exists so
-    // that a single-file consumer with `std` keeps compiling without an
-    // `extern crate alloc;` of its own, which `::alloc::` paths in the package
-    // files would require of it. What only `std`
-    // has is gated: the `blocking` module by the `std` feature, and the
-    // `match` pattern check (`::std::sync::LazyLock`) by `validate-pattern`,
-    // which turns `std` on.
+    // provides. In a `no_std` build, `alloc` is linked under the name `std`,
+    // so those paths resolve to the same types in `alloc`, and the package
+    // files stay the same in both modes and in single-file mode. The alias
+    // exists so that a single-file consumer with the standard library keeps
+    // compiling without an `extern crate alloc;` of its own, which
+    // `::alloc::` paths in the package files would require of it.
     let mut out = format!(
-        "{preamble}#![cfg_attr(not(feature = \"std\"), no_std)]\n\
+        "{preamble}#![cfg_attr({NO_STD}, no_std)]\n\
          #![allow(clippy::derivable_impls, clippy::module_inception)]\n\n\
-         #[cfg(not(feature = \"std\"))]\n\
+         #[cfg({NO_STD})]\n\
          extern crate alloc as std;\n\n"
     );
     render(&root, 0, &mut out);
@@ -2304,6 +2308,78 @@ mod render_lib_rs_tests {
         assert!(
             status.success(),
             "a reference to the prefix package must resolve at crate::veh, lib.rs was:\n{lib}"
+        );
+    }
+
+    /// Compiles `lib.rs` as a crate root over one package file that names the
+    /// `String` and `Vec` paths the backend emits, with `cfgs` passed to
+    /// `rustc`, and returns whether it compiled.
+    fn compiles_with(lib: &str, cfgs: &[&str]) -> bool {
+        let dir = tempfile::tempdir().expect("a temp dir is created");
+        std::fs::write(
+            dir.path().join("veh.rs"),
+            "pub struct Label(pub ::std::string::String, pub ::std::vec::Vec<u8>);\n\
+             pub fn label() -> Label {\n\
+                 Label(::std::string::String::from(\"a\"), b\"a\".to_vec())\n\
+             }\n",
+        )
+        .expect("the package is written");
+        std::fs::write(dir.path().join("lib.rs"), lib).expect("the crate root is written");
+        let mut command = std::process::Command::new("rustc");
+        command.args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+        ]);
+        for cfg in cfgs {
+            command.args(["--cfg", cfg]);
+        }
+        command
+            .arg("-o")
+            .arg(dir.path().join("root.rmeta"))
+            .arg(dir.path().join("lib.rs"))
+            .status()
+            .expect("rustc must be installed and runnable for this test to be meaningful")
+            .success()
+    }
+
+    /// With neither `std` nor `validate-pattern` on, the crate root is
+    /// `no_std` and still resolves the `::std::string::String` and
+    /// `::std::vec::Vec` paths, which it reaches through `alloc`; with either
+    /// feature on it links the standard library and resolves them there.
+    /// A `no_std` without the alias fails the first compile on the missing
+    /// `std`, and the alias without `no_std` fails it on the name `std`
+    /// being defined twice.
+    #[test]
+    fn the_crate_root_resolves_std_paths_with_and_without_the_standard_library() {
+        let lib = render_lib_rs(&["veh".to_string()], "");
+        assert!(
+            compiles_with(&lib, &[]),
+            "no feature on: lib.rs was:\n{lib}"
+        );
+        assert!(
+            compiles_with(&lib, &[r#"feature="std""#]),
+            "`std` on: lib.rs was:\n{lib}"
+        );
+        assert!(
+            compiles_with(&lib, &[r#"feature="validate-pattern""#]),
+            "`validate-pattern` on: lib.rs was:\n{lib}"
+        );
+        // The compiles cannot tell `not(feature = "std")` from the predicate
+        // that also names `validate-pattern`, because this package has no
+        // pattern check to need the standard library. This line pins that
+        // predicate.
+        let no_std = lib
+            .lines()
+            .find(|line| line.starts_with("#![cfg_attr(") && line.ends_with(", no_std)]"))
+            .expect("lib.rs declares no_std under a cfg_attr");
+        assert_eq!(
+            no_std,
+            format!("#![cfg_attr({}, no_std)]", super::NO_STD),
+            "lib.rs was:\n{lib}"
         );
     }
 }
