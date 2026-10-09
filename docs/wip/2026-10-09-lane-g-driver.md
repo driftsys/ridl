@@ -323,3 +323,16 @@ Each ruling: what was decided — why — what it costs if wrong.
   published crate — the changelog is what a crate consumer reads before an
   upgrade — if wrong, one more breaking entry in a release that is already
   breaking.
+- **R-29** replaces R-21: a `.rxdl` file given alone (single-file mode, as an
+  entry or as the overlay of the entry) is refused as a load error that names
+  the extension as unsupported (exit 2 from every command), not compiled and not
+  reported as a warning — pass 1 of #800 showed that a load with no package and
+  only a warning lets `ridl diff` print `identical` and exit 0 and lets
+  `ridl build` exit 0 having written nothing, so a gate passes on nothing;
+  RIDL-417 stays the warning for a `.rxdl` file inside a package directory,
+  where the other files still load — if wrong, a user running `ridl check` on
+  one `.rxdl` file gets an error where a warning would do.
+- **R-30** RIDL-417 also covers a `.rmdl` file in a package directory (rmdl is a
+  family member with a reference and no implementation, like rxdl), and R-29
+  covers a lone `.rmdl` entry — the lint name was chosen to be shared — if
+  wrong, a `.rmdl` file draws a warning that names a profile not built yet.
