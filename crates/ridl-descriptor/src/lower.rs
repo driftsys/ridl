@@ -14,7 +14,7 @@ use ridl_ir::v2::{
 };
 
 use crate::hash::catalog_hash;
-use crate::number::{ZeroNumber, unit_shapes};
+use crate::number::{ZeroNumber, first_zero, unit_shapes};
 use crate::{
     Catalog, Encoding, Interface, Kind, MaxSize, Member, Payload, RetiredInterface, SCHEMA_VERSION,
     SizeStateTag, Timing, TimingMode, UnboundedCause,
@@ -62,12 +62,7 @@ impl From<ZeroNumber> for LowerError {
 pub fn lower(unit: &str, packages: &[&Package]) -> Result<Vec<u8>, LowerError> {
     let shapes = unit_shapes(unit, packages);
     // Validates every number before any member is lowered.
-    if let Some((_, _, name)) = shapes
-        .iter()
-        .find(|(_, shape, _)| shape.interface.number == 0)
-    {
-        return Err(LowerError::ZeroNumber(name.clone()));
-    }
+    first_zero(&shapes)?;
     let hash = catalog_hash(unit, packages);
 
     // One sizing context per package. A shape is sized against its own

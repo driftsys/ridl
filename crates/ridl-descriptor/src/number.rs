@@ -42,23 +42,34 @@ pub(crate) fn unit_shapes<'a>(
     shapes
 }
 
+/// The zero-number rule: `Err` naming the first shape of `shapes` whose IR
+/// number is 0, `Ok` when every shape is numbered.
+pub(crate) fn first_zero(
+    shapes: &[(&Package, InterfaceShape<'_>, String)],
+) -> Result<(), ZeroNumber> {
+    match shapes
+        .iter()
+        .find(|(_, shape, _)| shape.interface.number == 0)
+    {
+        Some((_, _, name)) => Err(ZeroNumber(name.clone())),
+        None => Ok(()),
+    }
+}
+
 /// Every interface shape of the packages of `unit` under its catalog name, in
 /// (number, name) order, with the number and the provisional flag the IR
 /// carries.
 pub fn numbered_shapes(unit: &str, packages: &[&Package]) -> Result<Vec<Numbered>, ZeroNumber> {
-    unit_shapes(unit, packages)
+    let shapes = unit_shapes(unit, packages);
+    first_zero(&shapes)?;
+    Ok(shapes
         .into_iter()
-        .map(|(_, shape, name)| {
-            if shape.interface.number == 0 {
-                return Err(ZeroNumber(name));
-            }
-            Ok(Numbered {
-                name,
-                number: shape.interface.number,
-                provisional: shape.interface.provisional,
-            })
+        .map(|(_, shape, name)| Numbered {
+            name,
+            number: shape.interface.number,
+            provisional: shape.interface.provisional,
         })
-        .collect()
+        .collect())
 }
 
 #[cfg(test)]
