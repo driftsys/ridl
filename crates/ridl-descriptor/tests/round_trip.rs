@@ -142,3 +142,24 @@ fn planus_writes_the_identifier_before_the_root_offset() {
     assert_eq!(&bytes[0..4], &FILE_IDENTIFIER);
     assert!(CatalogRef::read_as_root(&bytes).is_err());
 }
+
+/// The builder's string cache (planus's `string-cache` feature, named in
+/// `Cargo.toml` because the workspace leaves planus's defaults off) writes a
+/// repeated string once. Fails when that feature is dropped, which would
+/// change the bytes of every descriptor.
+#[test]
+fn a_repeated_string_is_written_once() {
+    let mut catalog = sample();
+    let mut second = catalog.interfaces[0].clone();
+    second.name = "Doors".to_owned();
+    second.number = 3;
+    catalog.interfaces.push(second);
+    let bytes = finish(&catalog);
+    // A FlatBuffers string: its length as a little-endian u32, the bytes, a NUL.
+    let needle = [&5u32.to_le_bytes()[..], b"value", &[0]].concat();
+    let count = bytes
+        .windows(needle.len())
+        .filter(|w| *w == needle.as_slice())
+        .count();
+    assert_eq!(count, 1, "the role `value` is written once");
+}

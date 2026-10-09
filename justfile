@@ -106,6 +106,9 @@ test:
     set -euo pipefail
     if [ -f Cargo.toml ]; then
         cargo test --workspace --locked
+        # `ridl-descriptor` with its `std` feature off: the tests of the
+        # reader half, in the configuration an engine builds.
+        cargo test --locked -p ridl-descriptor --no-default-features
         # The workspace build resolves `ridl-rt` with default features, so the
         # encoding features gate code it never compiles: the helpers a
         # generated codec calls, and their tests. `just compat-check` builds
