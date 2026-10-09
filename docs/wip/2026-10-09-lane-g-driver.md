@@ -308,3 +308,11 @@ Each ruling: what was decided — why — what it costs if wrong.
   breaking one (#792, #793), and a `Default` resolution with an empty package
   hides every internal declaration reached through a qualified path, the strict
   side — if wrong, a parameter replaces the field in a later change.
+- **R-27** #729: the flake did not reproduce under load (slowest case about 4 s
+  against the 10 s bound), so the fix (a 120 s bound for the five tests that do
+  not test the timeout, pinned at or above the 60 s default) is applied on the
+  issue's evidence, and the pull request says `Refs #729`, not `Closes` — the
+  issue stays open with a comment saying what changed and that it closes on
+  2026-11-09 if no further timing failure of those tests is seen in CI — if
+  wrong, a different cause hides behind the longer bound and the issue stays
+  open one month.
