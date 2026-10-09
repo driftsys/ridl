@@ -380,7 +380,8 @@ root when the manifest declares `[imports]` (`ridl baseline` builds through
 `ridlc build`, non-frozen, so the same materialization step runs). Publishing
 the snapshots is wholesale: the target directory ends up holding exactly the
 snapshots the workspace declares now, and nothing else in that directory is
-touched. The workspace's interface numbers must be recorded first: a
+touched. The snapshots stay one per source package; `ridl diff` groups them by
+unit when it compares them. The workspace's interface numbers must be recorded first: a
 provisional number is refused (RIDL-411, under the publication gate below), so
 a package with interfaces runs plain [`ridl lock`](#ridl-lock) before its
 first publication. A two-member workspace with no `[imports]`, its locks
@@ -407,12 +408,13 @@ than the one the interaction held; the baseline already retired the
 interaction with a `reserved` line and the source has dropped that line; or
 the source declares a live interaction under a name the baseline retires.
 The interface level of the gate is the lock's: an interface whose number is
-provisional — a declaration with no entry in the package's `interfaces.lock`
+provisional — a declaration with no entry in the unit's `interfaces.lock`
 — is refused (RIDL-411, exit 1, nothing published), on a first publication as
 on a replacement, until plain `ridl lock` records the number; and a number the
 published baseline holds that the fresh snapshot neither carries nor retires
 is refused too (RIDL-412) — a lock line deleted by hand, since a live entry
-with no declaration already fails the build with RIDL-409. A whole service
+with no declaration already fails the build with RIDL-409, or a package deleted
+without retiring its numbers. A whole service
 removed from the source is reported by `ridl diff` as breaking but is not
 refused here (ridl §17.14), and a named-form service's list is a set the gate
 does not read. Deleting `doorClosed` outright, with `doorOpened` and `doorLocked`
@@ -662,7 +664,9 @@ is an error when the file cannot be read, when it is not UTF-8, and when it
 contains a control character, which means a C0, DEL or C1 character (U+0085
 included), U+2028 or U+2029, other than a tab and a line break; `ridl check`
 reports it too. MANI-012 is an error when the manifest of a workspace member
-sets the key: only the root sets it.
+sets the key: only the root sets it. MANI-013 is an error when a `ridl.toml`
+sits inside the tree of a unit, and MANI-014 is an error when two units declare
+the same source package.
 
 A build overwrites a `lib.rs` or `Cargo.toml` in the output directory only when
 the file begins with this marker, or with the marker an earlier release wrote
@@ -1260,7 +1264,7 @@ breaking
 A named-form service's list is a set of interfaces: an interface joining it
 is `service_interface_added`, one leaving it `service_interface_removed`, a
 reorder no change, and both are compatible, because an interface's number
-comes from its package's `interfaces.lock` and the routing key does not
+comes from its unit's `interfaces.lock` and the routing key does not
 contain the service. A removal is still visible in source — the
 `service.member` addresses of that interface stop resolving under the service
 — so the text report lists it under a heading of its own, printed once as a
@@ -1279,9 +1283,9 @@ compatible on the wire, visible in source:
   [compatible] service_interface_removed veh.cluster/veh.cluster.dash/J: J -> (removed)
 ```
 
-An interface is matched by its number from the package's `interfaces.lock`,
-not by its name — a declared `interface` and a service's inline shape alike. A
-rename that keeps its number, recorded with `ridl lock <pkg> --rename Old=New`,
+An interface is matched by its number from the unit's `interfaces.lock`,
+within the unit, not by its name — a declared `interface` and a service's inline shape alike. A
+rename that keeps its number, recorded with `ridl lock <unit dir> --rename Old=New`,
 is `interface_renamed`: compatible on the wire, because the number is the
 routing identity, and visible in source, because the generated identity-table
 names change, so it shares the heading above; the path carries the new name,
@@ -1292,7 +1296,10 @@ entry carries a provisional number, which is no identity: it is always
 `decl_added`, and it is never matched to an old interface, so a rename the lock
 does not record is `decl_removed` plus `decl_added`. Two sides with no lock
 file — two bare source trees, or a snapshot published before the lock existed —
-are matched by name. With `J` renamed to `Jay` on its number, the lock beside
+are matched by name. Interfaces are matched within the unit, and the names on
+both sides of a change are catalog names, so an interface moved between two
+sibling packages of one unit keeps its number and is reported as
+`interface_renamed`, from the old catalog name to the new one. With `J` renamed to `Jay` on its number, the lock beside
 each file recording it, and `Jay` no longer listed in
 `service veh.cluster.dash : I, J`:
 
@@ -1527,7 +1534,11 @@ run with RIDL-409 present:
   when nothing declares `NAME` any more. Printed as `retired Name N`.
 
 Both are repeatable, neither allocates, and `PATH` must resolve to exactly one
-unit. A rename keeps the number because the number, not the name, is the
+unit. `OLD`, `NEW` and `NAME` are dotted names relative to the unit, such as
+`cluster.Old`, so a rename across sibling packages is
+`ridl lock <unit dir> --rename cluster.Old=cluster.New`. An `interfaces.lock` in
+a subdirectory of a unit is not read and draws the warning RIDL-416
+(`lock-in-subdirectory`). A rename keeps the number because the number, not the name, is the
 interface's wire identity; the old name is then free for a later, unrelated
 interface. Starting from the file above with `interface Zone` renamed to
 `interface Lane` in the source:

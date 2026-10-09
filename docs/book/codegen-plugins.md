@@ -313,7 +313,7 @@ generated from one contract then refuses a port of another contract when it
 binds, instead of exchanging bytes that one side reads wrongly.
 
 **A provisional interface number.** An interface that has no entry in its
-package's `interfaces.lock` has a provisional number, and the model marks it
+unit's `interfaces.lock` has a provisional number, and the model marks it
 `provisional`. A provisional number can change: adding an interface before it
 in the source can move it, and recording it with
 [`ridl lock`](cli-reference.md#ridl-lock) changes the catalog hash, because the
@@ -326,10 +326,13 @@ built separately; run `ridl lock` and commit `interfaces.lock` first.
 ## The catalog descriptor
 
 `ridl build --emit catalog` writes `<base>.catalog.binfb`, a FlatBuffers file
-of a package's interfaces, their members, their payload size bounds and the
-catalog hash. It is for a run-time engine that is not compiled against the
-package and reads the file when a party attaches; no such engine is in this
-repository.
+of a unit's interfaces, their members, their payload size bounds and the
+catalog hash. The unit is the set of source packages that one `ridl.toml`
+declares, and the hash is computed over that unit. One file is written per unit
+that declares an interface or a service with an inline body; a unit that
+declares only types writes none. It is for a run-time engine that is not
+compiled against the unit and reads the file when a party attaches; no such
+engine is in this repository.
 [`ridl describe`](cli-reference.md#ridl-describe) prints it as JSON.
 
 A plugin does not read the catalog descriptor: the model carries the same
