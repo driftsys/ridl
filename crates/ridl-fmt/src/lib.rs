@@ -831,7 +831,7 @@ fn has_only_inline_annotation_comments(node: &SyntaxNode) -> bool {
             }
             NodeOrToken::Token(token) if is_comment(token.kind()) => {
                 if !inline
-                    || line_breaks(token.text()) > 0
+                    || comment_breaks_line(token.text())
                     || !matches!(owner, Some(SyntaxKind::Timing | SyntaxKind::AttrBlock))
                 {
                     return false;
@@ -1499,6 +1499,13 @@ fn line_breaks(text: &str) -> usize {
         .count()
 }
 
+/// Whether a comment token spans a line break. A line comment ends before its
+/// LF, so the CR of a CRLF pair is the last character of its text; that CR
+/// belongs to the break that follows the token, not to the comment.
+fn comment_breaks_line(text: &str) -> bool {
+    line_breaks(text.strip_suffix('\r').unwrap_or(text)) > 0
+}
+
 fn is_comment(kind: SyntaxKind) -> bool {
     matches!(
         kind,
@@ -1671,16 +1678,18 @@ mod tests {
 
     /// A lone CR is one line break, as an LF is, and a CRLF pair is one line
     /// break: a file with either line ending formats to the same text as the
-    /// same file with LF line endings. The output uses LF.
+    /// same file with LF line endings. Output the formatter lays out itself uses LF; a member kept verbatim keeps
+    /// the line endings it had.
     #[test]
     fn a_lone_cr_and_a_crlf_pair_each_format_as_one_line_break() {
-        let lf = "// Copyright Acme\n\npackage p\n\n\n// lead\nstruct S { // brace\n  a : A   // note\n  // own line\n  b : B\n\n\n  c : C\n}\n/// doc\nstruct T {\n  a : A\n}\nstruct U {\n  // first\n  a : A\n}\n";
+        let lf = "// Copyright Acme\n\npackage p\n\n\n// lead\nstruct S { // brace\n  a : A   // note\n  // own line\n  b : B\n\n\n  c : C\n}\n/// doc\nstruct T {\n  a : A\n}\nstruct U {\n  // first\n  a : A\n}\nstruct V {\n  a : A\n  b : B\n}\n";
         let expected = format(lf, Profile::Typl, &FormatOptions::default());
         let FormatOutcome::Formatted(text) = &expected else {
             panic!("the LF source must format: {expected:?}");
         };
         assert!(text.contains("  a: A // note\n  // own line\n  b: B\n\n  c: C\n"));
         assert!(text.contains("struct U {\n  // first\n  a: A\n}\n"));
+        assert!(text.contains("struct V {\n  a: A\n  b: B\n}\n"));
         for ending in ["\r", "\r\n"] {
             let source = lf.replace('\n', ending);
             assert_eq!(
@@ -1691,10 +1700,38 @@ mod tests {
         }
     }
 
+    /// A member with an inline annotation comment formats the same with an LF,
+    /// a lone CR or a CRLF pair as its line ending. The CR of a CRLF pair is
+    /// the last character of a line comment's text and is not a line break of
+    /// its own.
+    #[test]
+    fn an_inline_annotation_comment_formats_the_same_with_any_line_ending() {
+        let lf = "package p\ninterface I {\n  query  q():T [persist] // a\n  @ 10ms\n}\n";
+        let expected = format(lf, Profile::Ridl, &FormatOptions::default());
+        assert_eq!(
+            expected,
+            FormatOutcome::Formatted(
+                "package p\n\ninterface I {\n  query q(): T @10ms [ persist ] // a\n}\n"
+                    .to_string()
+            )
+        );
+        for ending in ["\r", "\r\n"] {
+            assert_eq!(
+                format(
+                    &lf.replace('\n', ending),
+                    Profile::Ridl,
+                    &FormatOptions::default()
+                ),
+                expected,
+                "line ending {ending:?}",
+            );
+        }
+    }
+
     /// A comment on its own line between a member's annotations, or a block
     /// comment that spans lines there, sends the member down the verbatim
-    /// path when the line break is a lone CR, as it does for an LF. The verbatim member keeps its
-    /// source line breaks.
+    /// path when the line break is a lone CR, as it does for an LF. The
+    /// verbatim member keeps its source line breaks.
     #[test]
     fn a_lone_cr_before_an_annotation_comment_keeps_the_member_verbatim() {
         for (member, ending) in [

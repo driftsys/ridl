@@ -519,9 +519,9 @@ positions.
 
 - A comment or doc comment before a declaration or a member leads it, at the
   member's indent; a blank line before the comment is kept (the container pass).
-- An inline trailing comment stays on its line, one space after the member; a
-  comment on the opening-brace line stays on that line
-  (`split_brace_line_comment`).
+- An inline trailing comment stays on its line, one space after the member,
+  except after a `machine` block's `}` (see the end of this section); a comment
+  on the opening-brace line stays on that line (`split_brace_line_comment`).
 - A comment that is a direct token of the header region of a block (between the
   keyword and `{`, outside any child node — for example between the name and
   `[`, or between `for` and the system's reference) emits the header verbatim,
@@ -551,11 +551,12 @@ positions.
   end of the body (`BlockKind::CommentOnly`).
 
 Nothing in this note moves a comment to a different member, and no rule drops
-one; §9 states the test. The one comment that changes line is a comment written
-after a `machine` block's `}`, with or without a separator comma: it is a
-between-member comment of the deployment body, so it is laid out on its own
-line, in source order, after that machine (before the next machine, or at the
-end of the body when it follows the last machine).
+one; §9 states the test. Two comments change line without changing member: a
+comment that follows a separator comma which is on a line of its own, and a
+comment written after a `machine` block's `}`, with or without a separator
+comma. Each is a between-member comment of its body, laid out on its own line,
+in source order, before the next member (or at the end of the body when no
+member follows).
 
 ## 6. Line width and line breaking
 
