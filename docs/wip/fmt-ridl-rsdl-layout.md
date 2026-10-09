@@ -554,7 +554,8 @@ Nothing in this note moves a comment to a different member, and no rule drops
 one; §9 states the test. The one comment that changes line is a comment written
 after a `machine` block's `}`, with or without a separator comma: it is a
 between-member comment of the deployment body, so it is laid out on its own
-line, in source order, between that machine and the next.
+line, in source order, after that machine (before the next machine, or at the
+end of the body when it follows the last machine).
 
 ## 6. Line width and line breaking
 
