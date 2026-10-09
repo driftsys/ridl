@@ -422,11 +422,11 @@ the per-package lock files, run `ridl lock`, run `ridl baseline` — passes
 RIDL-412 when the unit's new numbering reaches every published number. When
 it does not, because a legacy lock held retired entries, remove
 `.ridl/baseline/` and run `ridl baseline` again: a first publication is not
-compared against a published number, and no flag overrides the gate. A whole service
-removed from the source is reported by `ridl diff` as breaking but is not
-refused here (ridl §17.14), and a named-form service's list is a set the gate
-does not read. Deleting `doorClosed` outright, with `doorOpened` and `doorLocked`
-still declared:
+compared against a published number, and no flag overrides the gate. A whole
+service removed from the source is reported by `ridl diff` as breaking but is
+not refused here (ridl §17.14), and a named-form service's list is a set the
+gate does not read. Deleting `doorClosed` outright, with `doorOpened` and
+`doorLocked` still declared:
 
 ```sh
 ridl baseline
@@ -650,7 +650,7 @@ the first 5 lines of a file. It carries no version and no timestamp, so a
 regeneration with the same inputs gives the same bytes. The TypeScript file has
 `/* eslint-disable */` after the comment block. The IR dumps (JSON,
 prototext and binary), the `<base>.codegen.json` file and the
-`<base>.catalog.binfb` file carry no marker.
+`<unit>.catalog.binfb` file carry no marker.
 
 **A licence header goes after the marker.** `[codegen] header-file` in the
 workspace root's `ridl.toml` (or in the `ridl.toml` of a standalone package)
@@ -807,11 +807,13 @@ author.
 **It writes** one file per package per `--emit` target, under `--out-dir`
 (`out` by default), and — exactly like [`ridl check`](#ridl-check) —
 `ridl.lock` at the workspace root when the manifest declares `[imports]`,
-non-frozen. The exception is `catalog`, which writes no file for a package
-that declares no interface and no service with an inline body. `<base>` in the
-`--emit` list above is the package name when
-`PATH` is a package directory or a workspace root, and the input file's stem
-in single-file mode.
+non-frozen. The exception is `catalog`, which writes one file per unit, named
+`<unit>.catalog.binfb` after the unit's manifest `name`, when any source
+package of the unit declares an interface or a service with an inline body,
+and no file for a unit that declares neither. `<base>` in the `--emit` list
+above is the package name when `PATH` is a package directory or a workspace
+root, and the input file's stem in single-file mode; the catalog of a single
+file is named after the file's package, which is its own unit.
 
 When a package names a type from `ridl.std`, the standard package is written
 beside your own as one more file per `--emit` target — `ridl.std.rs`,
@@ -1747,7 +1749,7 @@ Print a catalog descriptor as strict JSON, after verifying it
 Usage: ridl describe <PATH>
 
 Arguments:
-  <PATH>  The `<base>.catalog.binfb` file `ridl build --emit catalog` wrote
+  <PATH>  The `<unit>.catalog.binfb` file `ridl build --emit catalog` wrote
 
 Options:
   -h, --help  Print help
@@ -1760,7 +1762,7 @@ whole with exit code 2.
 The transcript below is abridged: it is the output for the test corpus in
 `crates/ridl/tests/baseline-corpus`, with each `...` line standing for lines
 that were removed. The keys print in alphabetical order. The 32 bytes of the
-catalog hash come first, then one entry per interface, then the package name,
+catalog hash come first, then one entry per interface, then the unit name,
 the retired numbers, the toolchain version that wrote the file, and the
 descriptor's schema version.
 

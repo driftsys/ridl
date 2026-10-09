@@ -493,7 +493,7 @@ a buffer and one that frames it.
 | Field           | Domain                                                  |
 | --------------- | ------------------------------------------------------- |
 | `frame_version` | `u32`: the version of this document's frame; **1** here |
-| `catalog`       | `CatalogRef`: the package name and the 32-byte hash     |
+| `catalog`       | `CatalogRef`: the unit name and the 32-byte hash        |
 | `encoding`      | the encoding tag (§3)                                   |
 
 `attached` answers with an `outcome`:

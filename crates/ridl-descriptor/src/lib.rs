@@ -1,4 +1,4 @@
-//! The catalog descriptor: the FlatBuffers file per package that an engine
+//! The catalog descriptor: the FlatBuffers file per unit that an engine
 //! reads without decoding (`docs/design/catalog-descriptor.md`).
 //!
 //! `schema/catalog.fbs` is the schema; `generated.rs` holds the accessors
@@ -49,7 +49,7 @@ pub const SCHEMA_VERSION: u32 = 1;
 /// The FlatBuffers file identifier, at bytes 4..8 of every catalog descriptor.
 pub const FILE_IDENTIFIER: [u8; 4] = *b"RDLC";
 
-/// The artifact suffix: `<base>.catalog.binfb` (ADR-0014 decision 4's
+/// The artifact suffix: `<unit>.catalog.binfb` (ADR-0014 decision 4's
 /// convention — a plain-English flag value, an encoding-bearing extension).
 pub const FILE_SUFFIX: &str = ".catalog.binfb";
 

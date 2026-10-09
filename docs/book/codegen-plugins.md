@@ -299,10 +299,13 @@ those values, and it is empty today (see below).
 
 ## The catalog hash
 
-The model's `catalog` holds the package name and the catalog hash, a 32-byte
-SHA-256 over the package's interfaces and every declaration they reach
-([ADR-0014][adr-0014] decision 15). In the JSON, the hash is base64. Each region
-of the deployment section carries the same hash for its catalog.
+The model's `catalog` holds the unit name, in the field `package`, and the
+catalog hash, a 32-byte SHA-256 over the interfaces of every source package of
+the unit and every declaration they reach ([ADR-0014][adr-0014] decision 15).
+The field keeps its name `package` for the generated accessors of every
+plugin; its value is the unit's name, which is `CatalogRef.name`. In the JSON,
+the hash is base64. Each region of the deployment section carries the same
+hash for its catalog.
 
 Embed the name and the hash in the generated code, and check them when the
 generated code binds to a port. The Rust face does this: each generated
@@ -325,7 +328,7 @@ built separately; run `ridl lock` and commit `interfaces.lock` first.
 
 ## The catalog descriptor
 
-`ridl build --emit catalog` writes `<base>.catalog.binfb`, a FlatBuffers file
+`ridl build --emit catalog` writes `<unit>.catalog.binfb`, a FlatBuffers file
 of a unit's interfaces, their members, their payload size bounds and the
 catalog hash. The unit is the set of source packages that one `ridl.toml`
 declares, and the hash is computed over that unit. One file is written per unit

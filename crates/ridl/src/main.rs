@@ -219,7 +219,7 @@ enum Command {
     Mcp,
     /// Print a catalog descriptor as strict JSON, after verifying it.
     Describe {
-        /// The `<base>.catalog.binfb` file `ridl build --emit catalog` wrote.
+        /// The `<unit>.catalog.binfb` file `ridl build --emit catalog` wrote.
         path: PathBuf,
     },
 }

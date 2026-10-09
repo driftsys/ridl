@@ -77,7 +77,7 @@ lowers, so nothing would reuse a memoized result.
 
 It reads the lowered package IR as its second argument, because rsdl §13's
 inputs from outside rsdl live there: each interface's number and provisional
-flag (`Interface.number`, `Interface.provisional`, from the package's lock) and
+flag (`Interface.number`, `Interface.provisional`, from the unit's lock) and
 each member's ordinal (`Decl.ordinal`, ridl §11). An interface is found by
 identity through `Package::shapes()`, the walk that sees an inline shape;
 `Package.interfaces` alone misses one.
