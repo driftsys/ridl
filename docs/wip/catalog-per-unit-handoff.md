@@ -69,7 +69,11 @@ reduced package, is the input of the catalog hash.
   model lists the entries of the unit under catalog names.
 - The baseline gate refuses with RIDL-412 a package deleted, without retiring
   its numbers, from a unit that still has other packages. Before this release
-  that case passed without a diagnostic.
+  the baseline gate did not see the interfaces of a deleted package, because
+  `ridl diff` reported the package as one removal. It now reads the package
+  declaration by declaration when its unit still has other packages, so an
+  unretired number is refused. A package whose whole unit is deleted is still
+  reported as one removal and is not refused.
 - Two new manifest errors: MANI-013 (a `ridl.toml` inside a unit's tree) and
   MANI-014 (a source package declared by two units).
 - Baseline snapshots written before this release carry no `unit`. Each is
@@ -103,7 +107,8 @@ them.
 - Technotes: `docs/technotes/rsdl-implementation.md`,
   `docs/technotes/walking-skeleton-architecture.md`.
 - Book: `rsdl.md`, `getting-started.md`, `codegen-plugins.md` and
-  `cli-reference.md` under `docs/book/`.
+  `cli-reference.md` and `lints.md` (the RIDL-416 `lock-in-subdirectory` row)
+  under `docs/book/`.
 
 Archive to `docs/archive/`:
 
