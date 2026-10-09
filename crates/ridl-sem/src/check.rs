@@ -1007,7 +1007,8 @@ impl Checker<'_> {
 
     /// Resolves a path silently in a given package view: a single segment is a
     /// bare name in that view; a longer path is a fully qualified
-    /// `pkg.Name` reference (typl §3.2 — no import needed).
+    /// `pkg.Name` reference (typl §3.2 — no import needed), which names an
+    /// `internal` declaration only when the viewing package owns it (§3.3).
     pub(crate) fn lookup_path_in(
         &self,
         resolution: &Resolution,
@@ -1025,8 +1026,10 @@ impl Checker<'_> {
         let package_path = segments.join(".");
         let target = self.package_handle(&package_path)?;
         let symbol = declared_symbols(self.db, target).get(&name).cloned()?;
-        // A foreign `internal` declaration is not visible (typl §3.3).
-        if symbol.internal && symbol.package != self.package_name {
+        // An `internal` declaration is visible only to its own package (typl
+        // §3.3). The path is interpreted in `resolution`'s view, so the owner
+        // that matters is the viewing package, not the checked package.
+        if symbol.internal && symbol.package != resolution.package {
             return None;
         }
         Some(symbol)
@@ -12949,6 +12952,66 @@ interface I {\n\
             "got: {:?}",
             checked.diagnostics
         );
+    }
+
+    /// The two spellings of `veh.common`'s own internal type in the declared
+    /// type of its constant `MAX`: qualified and bare.
+    const HIDDEN_SPELLINGS: [&str; 2] = ["veh.common.Hidden", "Hidden"];
+
+    /// `veh.common`, with `MAX` declared with the type spelled `spelling`.
+    fn hidden_max_package(db: &RidlDatabase, spelling: &str) -> Package {
+        package(
+            db,
+            "veh.common",
+            &format!(
+                "package veh.common\ninternal type Hidden: integer [0..10]\nconst MAX: {spelling} = 5\n"
+            ),
+        )
+    }
+
+    /// A qualified path is interpreted in the view of the package that wrote
+    /// it, so the visibility guard asks whether that package owns the
+    /// `internal` declaration, not whether the checked package does. `MAX`
+    /// writes its type as `veh.common.Hidden` in `veh.common`, which owns
+    /// `Hidden`; checking `app` resolves that path in `veh.common`'s view and
+    /// finds `Hidden`, so `const USE: Visible = MAX` is TYPL-108 (§5.7) in
+    /// both spellings. The qualified spelling used to give no diagnostic,
+    /// because the guard compared with `app` and hid `Hidden`
+    /// (driftsys/ridl#643).
+    #[test]
+    fn typl_108_through_a_qualified_internal_type_in_the_defining_package_view() {
+        for spelling in HIDDEN_SPELLINGS {
+            let mut db = RidlDatabase::default();
+            let std = std_package(&mut db);
+            let veh = hidden_max_package(&db, spelling);
+            let app = package(
+                &db,
+                "app",
+                "package app\nimport veh.common.MAX\ntype Visible: integer [0..10]\nconst USE: Visible = MAX\n",
+            );
+            let ws = Workspace::new(&db, vec![app, veh], BTreeMap::new());
+            let checked = without_missing_docs(check_package(&db, ws, app, std));
+            assert_eq!(codes(&checked), vec!["TYPL-108"], "spelling `{spelling}`");
+            assert!(
+                checked.diagnostics[0].message.contains("Hidden"),
+                "spelling `{spelling}`: {}",
+                checked.diagnostics[0].message
+            );
+        }
+    }
+
+    /// Checking `veh.common` itself still sees that the public `MAX` exposes
+    /// the `internal` type `Hidden` (TYPL-005, typl §3.3), in both spellings.
+    #[test]
+    fn typl_005_on_a_public_const_of_its_own_internal_type_in_both_spellings() {
+        for spelling in HIDDEN_SPELLINGS {
+            let mut db = RidlDatabase::default();
+            let std = std_package(&mut db);
+            let veh = hidden_max_package(&db, spelling);
+            let ws = Workspace::new(&db, vec![veh], BTreeMap::new());
+            let checked = without_missing_docs(check_package(&db, ws, veh, std));
+            assert_eq!(codes(&checked), vec!["TYPL-005"], "spelling `{spelling}`");
+        }
     }
 
     // The ridl §11 ordinal assignment over the Appendix A interface — 1-based,

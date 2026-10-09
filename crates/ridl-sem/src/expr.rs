@@ -1072,6 +1072,7 @@ mod tests {
             );
         }
         Resolution {
+            package: "veh.common".to_string(),
             symbols,
             diagnostics: Vec::new(),
         }
