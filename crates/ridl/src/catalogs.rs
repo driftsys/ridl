@@ -23,8 +23,9 @@ use crate::{default_baseline_dir, report_diff_side_error};
 /// ([`default_baseline_dir`]). With no such directory, or one holding no
 /// `.ir.json` snapshot, there is no baseline and no unit has a list, as
 /// `ridl check` treats it. Otherwise the published snapshots are compared
-/// with the workspace, and each unit with an interface shape and a published
-/// `<unit>.catalogs` file gets the file's hashes less the unit's current
+/// with the workspace, and each unit with an interface shape, a published
+/// snapshot and a published `<unit>.catalogs` file gets the file's hashes
+/// less the unit's current
 /// catalog hash when the unit's verdict is compatible or identical, and an
 /// empty list when it is breaking. The hashes are read from the file and
 /// never recomputed from a snapshot; a file that cannot be read is an error
@@ -63,6 +64,11 @@ pub(crate) fn compatible_catalogs(
     let current_refs: Vec<&Package> = current.iter().collect();
     let scope = ridlc::catalog_scope(&current_refs, Some(&std));
     for unit in shaped_units(&current) {
+        // A unit with no published snapshot has no earlier baseline, so a
+        // history file left under its name is not read, whatever the verdict.
+        if !old.iter().any(|package| unit_of(package) == unit) {
+            continue;
+        }
         let Some(history) = read_history_if_present(&published, unit)? else {
             continue;
         };

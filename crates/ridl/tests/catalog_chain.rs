@@ -628,3 +628,184 @@ fn an_ir_dump_build_reads_no_baseline() {
     let (code, stderr) = build(&root, out.path(), "ir-json");
     assert_eq!(code, 0, "stderr:\n{stderr}");
 }
+
+/// `APPENDED` with a second event appended: a compatible change on top of a
+/// compatible change.
+const APPENDED_TWICE: &str = "package veh.cluster
+type Speed: km/h [0.0..250.0 step 0.5]
+type DoorState: integer [0..1]
+interface VehicleStatus {
+  signal currentSpeed: Speed @10ms
+  event doorOpened: DoorState @[100ms..1s]
+  event doorClosed: DoorState @[100ms..1s]
+  event doorLocked: DoorState @[100ms..1s]
+}
+";
+
+/// Runs `ridl lock` on `root` and asserts that it allocates.
+fn lock(root: &Path) {
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the lock is allocated: {stderr}");
+}
+
+/// A history file for a unit the baseline holds no snapshot of is not read
+/// at build time either: the baseline holds other units, so it is a
+/// baseline, and the stray file still names no earlier baseline of this unit.
+#[test]
+fn a_stray_history_for_a_unit_with_no_snapshot_is_not_listed() {
+    let dir = TempDir::new("build-stray-history");
+    let out = TempDir::new("build-stray-history-out");
+    dir.write(
+        "common/ridl.toml",
+        "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "common/common.typl",
+        "package veh.common\ntype Speed: km/h [0.0..250.0 step 0.5]\n",
+    );
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"common\"]\n");
+    let root = dir.path().to_path_buf();
+    publish(&root);
+    std::fs::write(
+        baseline_dir(&root).join(format!("{UNIT}.catalogs")),
+        format!("{}\n", "ab".repeat(32)),
+    )
+    .expect("write the stray history");
+
+    // The unit is added: every change is an addition, a compatible verdict.
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"common\", \"cluster\"]\n",
+    );
+    dir.write("cluster/ridl.toml", MANIFEST);
+    dir.write("cluster/cluster.ridl", BASE);
+    lock(&root);
+    build_catalog(&root, out.path());
+    assert_eq!(compatible_of(out.path(), UNIT), Vec::<String>::new());
+}
+
+/// The list is keyed by unit, not by package: a sub-package of the unit gets
+/// the unit's list in its codegen model, and another shaped unit with no
+/// history gets an empty list in its descriptor and its model.
+#[test]
+fn the_list_is_keyed_by_unit() {
+    let dir = TempDir::new("build-keyed-by-unit");
+    let before = TempDir::new("build-keyed-by-unit-before");
+    let out = TempDir::new("build-keyed-by-unit-out");
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"cluster\", \"body\"]\n",
+    );
+    dir.write("cluster/ridl.toml", MANIFEST);
+    dir.write("cluster/cluster.ridl", BASE);
+    dir.write(
+        "cluster/doors/doors.ridl",
+        "package veh.cluster.doors
+type Count: integer [0..4]
+interface Doors {
+  signal open: Count @100ms
+}
+",
+    );
+    dir.write(
+        "body/ridl.toml",
+        "[package]\nname = \"veh.body\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "body/body.ridl",
+        "package veh.body
+type Level: integer [0..100]
+interface Lights {
+  signal level: Level @10ms
+}
+",
+    );
+    let root = dir.path().to_path_buf();
+    lock(&root);
+    publish(&root);
+    let cluster_hash = describe_hash(&root, before.path(), UNIT);
+    // The second unit keeps its snapshot and loses its history.
+    std::fs::remove_file(baseline_dir(&root).join("veh.body.catalogs"))
+        .expect("remove the second unit's history");
+
+    dir.write("cluster/cluster.ridl", APPENDED);
+    let (code, stderr) = build(&root, out.path(), "catalog,codegen-model");
+    assert_eq!(code, 0, "the build succeeds: {stderr}");
+    assert_eq!(
+        compatible_of(out.path(), UNIT),
+        vec![cluster_hash.clone()],
+        "the unit's descriptor"
+    );
+    assert_eq!(
+        compatible_of(out.path(), "veh.body"),
+        Vec::<String>::new(),
+        "the other unit's descriptor"
+    );
+    assert_eq!(
+        model_compatible_of(out.path(), UNIT),
+        vec![cluster_hash.clone()],
+        "the unit's package"
+    );
+    assert_eq!(
+        model_compatible_of(out.path(), "veh.cluster.doors"),
+        vec![cluster_hash],
+        "the unit's sub-package"
+    );
+    assert_eq!(
+        model_compatible_of(out.path(), "veh.body"),
+        Vec::<String>::new(),
+        "the other unit's package"
+    );
+}
+
+/// A chain of three lists the two earlier hashes newest first, the order of
+/// the history file.
+#[test]
+fn a_list_of_several_hashes_is_newest_first() {
+    let dir = TempDir::new("build-chain-of-three");
+    let first = TempDir::new("build-chain-of-three-first");
+    let second = TempDir::new("build-chain-of-three-second");
+    let out = TempDir::new("build-chain-of-three-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    let first_hash = describe_hash(&root, first.path(), UNIT);
+    set_source(&dir, APPENDED);
+    publish(&root);
+    let second_hash = describe_hash(&root, second.path(), UNIT);
+    set_source(&dir, APPENDED_TWICE);
+    publish(&root);
+    build_catalog(&root, out.path());
+    assert_eq!(
+        compatible_of(out.path(), UNIT),
+        vec![second_hash, first_hash]
+    );
+}
+
+/// A plugin generates code, so a build with a plugin and an IR dump alone
+/// carries the list and reads the baseline: a damaged one fails that build
+/// with exit 2 before the plugin is resolved, where a build with no plugin
+/// does not read it.
+#[test]
+fn a_build_with_a_plugin_reads_the_baseline() {
+    let dir = TempDir::new("build-plugin-gate");
+    let out = TempDir::new("build-plugin-gate-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    let snapshot = baseline_dir(&root).join(format!("{UNIT}.ir.json"));
+    std::fs::write(&snapshot, "{").expect("damage the snapshot");
+    let (code, _, stderr) = ridl(&[
+        "build".as_ref(),
+        root.as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "ir-json".as_ref(),
+        "--plugin".as_ref(),
+        "no-such-language-for-this-test".as_ref(),
+    ]);
+    assert_eq!(code, 2, "stderr:\n{stderr}");
+    assert!(
+        stderr.contains(&snapshot.display().to_string()),
+        "stderr names the snapshot:\n{stderr}"
+    );
+}
