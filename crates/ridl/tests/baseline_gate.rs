@@ -2059,6 +2059,16 @@ fn two_unit_workspace(dir: &TempDir) -> PathBuf {
         "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n",
     );
     dir.write("cluster/cluster.ridl", THREE);
+    // A second interface in the root package and one in a subpackage, so that
+    // the gone unit holds several shapes in several packages.
+    dir.write(
+        "cluster/extra.ridl",
+        "package veh.cluster\ninterface Extra { signal e : DoorState @[100ms..1s] }\n",
+    );
+    dir.write(
+        "cluster/sub/speed.ridl",
+        "package veh.cluster.sub\nimport veh.cluster.DoorState\ninterface Speed { signal v : DoorState @[100ms..1s] }\n",
+    );
     let root = dir.path().to_path_buf();
     let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
     assert_eq!(code, 0, "the fixture's locks are allocated: {stderr}");
@@ -2082,13 +2092,15 @@ fn a_whole_unit_gone_from_the_fresh_set_is_refused() {
     assert_eq!(code, 1, "the lost unit is refused:\n{stderr}");
     assert_eq!(
         stderr.matches("RIDL-412").count(),
-        1,
-        "one refusal for the one number the unit held:\n{stderr}",
+        3,
+        "one refusal for each of the three numbers the unit held:\n{stderr}",
     );
     assert!(
-        stderr.contains("`VehicleStatus` holds interface number 1 in the baseline being replaced")
+        stderr.contains("`VehicleStatus` holds interface number")
+            && stderr.contains("`Extra` holds interface number")
+            && stderr.contains("`sub.Speed` holds interface number")
             && stderr.contains("in unit `veh.cluster`"),
-        "the message names the shape, the number and the unit:\n{stderr}",
+        "the messages name every shape, in every package, and the unit:\n{stderr}",
     );
     assert!(
         stderr.contains("delete the snapshots of unit `veh.cluster` from `.ridl/baseline/`"),
@@ -2112,6 +2124,8 @@ fn deleting_the_snapshots_of_a_gone_unit_lets_the_publication_through() {
     std::fs::remove_dir_all(root.join("cluster")).expect("remove the unit");
     dir.write("ridl.toml", "[workspace]\nmembers = [\"hmi\"]\n");
     std::fs::remove_file(snapshot(&root)).expect("delete the unit's snapshot");
+    std::fs::remove_file(root.join(".ridl/baseline/veh.cluster.sub.ir.json"))
+        .expect("delete the unit's subpackage snapshot");
     let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
 
     assert_eq!(code, 0, "the override publishes:\n{stderr}");
@@ -2223,9 +2237,37 @@ fn a_legacy_interface_removed_with_its_number_retired_in_the_unit_is_not_refused
     assert!(!stderr.contains("RIDL-412"), "stderr:\n{stderr}");
 }
 
-/// The provisional order puts an interface before an inline shape of the same
-/// name (language reference, the lock section). `ridl lock` allocates in that
-/// order.
+/// A legacy subpackage snapshot (no `unit`) whose package is deleted whole is
+/// compared in the unit named after the package, which the fresh set does not
+/// have, so the gate refuses even though the real unit's lock retires the
+/// number. The override is to delete the unit's snapshots.
+#[test]
+fn a_legacy_package_deleted_whole_is_refused_as_a_unit_gone() {
+    let dir = TempDir::new("gate-legacy-gone");
+    let root = legacy_per_package_baseline(
+        &dir,
+        SESSION,
+        "next 2\nSession 1\n",
+        &[("veh.hmi.cluster.ir.json", "\"number\": 2", "\"number\": 7")],
+    );
+    std::fs::remove_dir_all(root.join("cluster")).expect("remove the package");
+    dir.write(
+        "interfaces.lock",
+        &format!("{LOCK_HEADER}next 8\nSession 1\ncluster.Speed 7 retired\n"),
+    );
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 1, "the legacy snapshot is refused:\n{stderr}");
+    assert!(
+        stderr.contains("RIDL-412") && stderr.contains("in unit `veh.hmi.cluster`"),
+        "stderr:\n{stderr}",
+    );
+}
+
+/// `ridl lock` numbers an interface before an inline shape of the same name
+/// (language reference, the lock section). This pins the observable order; the
+/// kind in the sort key (`provisional_order`) is not observable here, because
+/// the shapes of a package are listed interfaces first.
 #[test]
 fn an_interface_is_numbered_before_an_inline_shape_of_the_same_name() {
     let dir = TempDir::new("gate-tie-break");

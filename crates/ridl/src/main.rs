@@ -918,9 +918,12 @@ fn published_ordinal(published: &[ridl_ir::v2::Package], path: &str) -> Option<u
 /// reads the same `diff_sets` report the RIDL-408 gate walks, keeping the
 /// interface-level `DeclRemoved` changes: `ridl_diff` matches interfaces by
 /// number, so such a change is a number the fresh side carries under no name
-/// and does not list as retired. A published `number` 0 predates the lock and
-/// was matched by name, so its removal is not refused (plan decision PD-9). In
-/// practice RIDL-412 is a lock line deleted by hand: a live entry with no
+/// and does not list as retired, and the package-level `DeclRemoved` of a
+/// package whose whole unit is gone from the fresh set, which loses every
+/// shape the package held ([`dropped_numbers`]). A published `number` 0
+/// predates the lock and was matched by name, so its removal is not refused
+/// (plan decision PD-9). RIDL-412 is a lock line deleted by hand, or a package
+/// or unit removed without retiring its numbers: a live entry with no
 /// declaration fails the build with RIDL-409 before publication.
 ///
 /// The published snapshots are read flat from `out_dir` through
