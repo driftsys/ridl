@@ -1288,7 +1288,9 @@ fn refuse_overwrite(
 /// face's `blocking` module is under it and is `block_on` over the async
 /// face, and `block_on` is what `ridl-rt`'s `std`
 /// feature gates. A build with default features off has no `blocking` module
-/// and links `ridl-rt` as `no_std`.
+/// and is `no_std`, as is the `ridl-rt` it links (see [`render_lib_rs`]).
+/// `validate-pattern` turns `std` on: `regex` needs the standard library, and
+/// the pattern check holds its `Regex` in a `std::sync::LazyLock`.
 ///
 /// The `regex = "1.13"` requirement is the major and minor version of the
 /// `regex` crate the checker compiles every `match` pattern with (TYPL-220).
@@ -1311,10 +1313,11 @@ edition = "2024"
 
 [features]
 default = ["validate-pattern", "std"]
-# Enforce `match` patterns in generated constructors. Disable on a target
-# that cannot carry the regex dependency; range and length checks are
+# Enforce `match` patterns in generated constructors. It turns `std` on,
+# because `regex` needs the standard library. Disable on a target that
+# cannot carry the regex dependency; range and length checks are
 # unaffected.
-validate-pattern = ["dep:regex"]
+validate-pattern = ["dep:regex", "std"]
 std = ["ridl-rt/std"]
 
 [dependencies]
@@ -1424,8 +1427,24 @@ fn render_lib_rs(package_names: &[String], preamble: &str) -> String {
         }
     }
 
-    let mut out =
-        format!("{preamble}#![allow(clippy::derivable_impls, clippy::module_inception)]\n\n");
+    // The `std` feature of the generated manifest is the switch for `no_std`:
+    // without the first line the crate links the standard library whatever
+    // its features are, and fails to build for a target that has none.
+    //
+    // The generated package files name `::std::string::String` and
+    // `::std::vec::Vec`, and call `<[u8]>::to_vec`, all of which `alloc`
+    // provides. With `std` off, `alloc` is linked under the name `std`, so
+    // those paths resolve to the same types in `alloc` and the package files
+    // stay the same in both modes and in single-file mode. What only `std`
+    // has is gated: the `blocking` module by the `std` feature, and the
+    // `match` pattern check (`::std::sync::LazyLock`) by `validate-pattern`,
+    // which turns `std` on.
+    let mut out = format!(
+        "{preamble}#![cfg_attr(not(feature = \"std\"), no_std)]\n\
+         #![allow(clippy::derivable_impls, clippy::module_inception)]\n\n\
+         #[cfg(not(feature = \"std\"))]\n\
+         extern crate alloc as std;\n\n"
+    );
     render(&root, 0, &mut out);
     out
 }
