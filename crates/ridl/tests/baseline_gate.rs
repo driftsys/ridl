@@ -2140,6 +2140,7 @@ fn a_whole_unit_gone_from_the_fresh_set_is_refused() {
 fn a_renamed_unit_is_refused_as_a_unit_gone() {
     let dir = TempDir::new("gate-unit-renamed");
     let root = two_unit_workspace(&dir);
+    let before = baseline_files(&root);
 
     dir.write(
         "cluster/ridl.toml",
@@ -2162,9 +2163,17 @@ fn a_renamed_unit_is_refused_as_a_unit_gone() {
     assert_eq!(code, 1, "the renamed unit is refused:\n{stderr}");
     assert!(
         stderr.contains("RIDL-412")
-            && stderr.contains("in unit `veh.cluster`")
-            && stderr.contains("delete the snapshots of unit `veh.cluster`"),
+            && stderr.contains("`VehicleStatus` holds interface number")
+            && stderr.contains("`Extra` holds interface number")
+            && stderr.contains("`sub.Speed` holds interface number")
+            && stderr.contains("delete the snapshots of unit `veh.cluster`")
+            && !stderr.contains("Restore the line"),
         "stderr:\n{stderr}",
+    );
+    assert_eq!(
+        before,
+        baseline_files(&root),
+        "a refused publication rewrites nothing"
     );
 }
 
