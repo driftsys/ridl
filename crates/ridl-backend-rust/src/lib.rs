@@ -1221,12 +1221,18 @@ fn constraint_checks_with_precision(
                 }
             }
         };
+        // The verdict is bound before the `if`: a block as the condition
+        // draws `clippy::blocks_in_conditions` in the consumer's build. The
+        // outer block keeps the binding out of the scope of the other checks.
         checks.push(quote! {
-            if #invalid {
-                return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: #type_name,
-                    rule: ::ridl_rt::payload::Rule::Step,
-                });
+            {
+                let __step_invalid: ::core::primitive::bool = #invalid;
+                if __step_invalid {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                        type_name: #type_name,
+                        rule: ::ridl_rt::payload::Rule::Step,
+                    });
+                }
             }
         });
     }
@@ -1304,7 +1310,7 @@ fn constraint_checks_with_precision(
                     ::std::sync::LazyLock::new(|| {
                         ::regex::Regex::new(#source).expect("ridlc emitted an invalid pattern")
                     });
-                if !PATTERN.is_match(&#value) {
+                if !PATTERN.is_match(#value) {
                     return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                         type_name: #type_name,
                         rule: ::ridl_rt::payload::Rule::Pattern,

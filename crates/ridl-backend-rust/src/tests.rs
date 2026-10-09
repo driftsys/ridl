@@ -510,6 +510,56 @@ fn step_only_scalar_has_a_fallible_constructor_and_check() {
     assert!(!source.contains("Quantization (`step`) is not checked"));
 }
 
+/// The float step check binds its verdict with a `let` and tests the binding.
+/// An `if { ... } {` condition draws `clippy::blocks_in_conditions` in the
+/// consumer's build.
+#[test]
+fn the_float_step_check_binds_its_verdict_before_the_condition() {
+    let source = rust_for(vec![speed_decl()]);
+    assert!(
+        source.contains("::ridl_rt::payload::Rule::Step"),
+        "the fixture must emit a step check, got:\n{source}"
+    );
+    assert!(
+        !source.contains("if {"),
+        "no `if` condition may be a block, got:\n{source}"
+    );
+    assert!(
+        source.contains("let __step_invalid: ::core::primitive::bool = {"),
+        "the verdict must be bound by a `let`, got:\n{source}"
+    );
+    assert!(
+        source.contains("if __step_invalid {"),
+        "the `if` must test the binding, got:\n{source}"
+    );
+}
+
+/// The codec passes the text or bytes of a named field without taking a
+/// reference to the result of `get`, `as_str` or `as_slice`, which already
+/// returns one. A leading `&` draws `clippy::needless_borrow` in the
+/// consumer's build.
+#[test]
+fn the_codec_borrows_nothing_twice() {
+    let source = rust_for(vec![
+        public_decl("Label", bounded_string_type(init_value(false, None))),
+        struct_with_field("Holder", "name", "Label"),
+        bytes_pattern_decl(),
+        struct_with_field("Frame", "sig", "Sig"),
+    ]);
+    assert!(
+        source.contains("builder.push_string(value.name.get())?"),
+        "a named string field is passed as the `&str` that `get` returns, got:\n{source}"
+    );
+    assert!(
+        source.contains("builder.push_vector(value.sig.get(), 1usize)?"),
+        "a named bytes field is passed as the slice that `get` returns, got:\n{source}"
+    );
+    assert!(
+        !source.contains("push_string(&") && !source.contains("push_vector(&value"),
+        "no codec argument may borrow a reference, got:\n{source}"
+    );
+}
+
 #[test]
 fn constant_of_a_constrained_type_uses_new_unchecked() {
     let decls = vec![
@@ -958,6 +1008,22 @@ fn pattern_check_compiles_under_validate_pattern_against_a_regex_stand_in() {
     assert!(
         status.success(),
         "the validate-pattern block must compile against the regex stand-in, source:\n{source}"
+    );
+}
+
+/// The pattern check passes `check`'s `&str` parameter as it is. A leading
+/// `&` makes a `&&str`, which draws `clippy::needless_borrow` in the
+/// consumer's build.
+#[test]
+fn the_pattern_check_does_not_borrow_a_reference() {
+    let source = rust_for(vec![literal_pattern_decl()]);
+    assert!(
+        source.contains("PATTERN.is_match(value)"),
+        "the pattern is matched against the `&str` parameter, got:\n{source}"
+    );
+    assert!(
+        !source.contains("is_match(&"),
+        "the pattern argument must not be borrowed again, got:\n{source}"
     );
 }
 
