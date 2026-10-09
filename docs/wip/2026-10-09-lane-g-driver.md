@@ -253,3 +253,9 @@ Each ruling: what was decided — why — what it costs if wrong.
   if wrong, one test covers a path that ends when legacy snapshots do. The
   legacy-only wording imprecision ("the workspace no longer has that unit" for a
   legacy subpackage) is accepted, as it predates this change.
+- **R-19** #623 left-overs: `crates/ridl/src/lock.rs` `line_of` stays LF-only
+  (TOML does not treat a lone CR as a line break); the doc-comment code in
+  `crates/ridl-sem` (`doc_lint.rs`, `docs.rs`) that splits on `\n` only goes to
+  one follow-up `debt` issue filed by G4, not into G4's pull request, because G3
+  changes `ridl-sem` at the same time; the `ridl-mcp` test helper stays — if
+  wrong, a lone-CR file misses the detached-doc lint until that issue lands.
