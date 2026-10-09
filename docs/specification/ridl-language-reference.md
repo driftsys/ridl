@@ -1240,7 +1240,9 @@ per unit, and is the interface's routing identity; a rename keeps it, and an
 entry is never removed or renumbered — a retired interface keeps its line with
 the word `retired`, and its number is never allocated again. A declaration with
 no entry compiles with a **provisional** number, taken from `next` upward in
-byte order of the lock key, which carries no identity until plain `ridl lock`
+byte order of the name — the lock key without the `service:` prefix of an inline
+shape, with an interface before an inline shape of the same name — over the
+whole unit. A provisional number carries no identity until plain `ridl lock`
 allocates and records it. The compiler reads the file as a unit input and
 refuses the departures it cannot resolve: a live entry with no declaration is
 **RIDL-409**, fixed on the branch that made the change with

@@ -415,7 +415,10 @@ published baseline holds that the fresh snapshot neither carries nor retires
 is refused too (RIDL-412). That covers a lock line deleted by hand, since a
 live entry with no declaration already fails the build with RIDL-409. It also
 covers a package deleted, without retiring its numbers, from a unit that still
-has other packages. A published snapshot written before the IR recorded the
+has other packages, and a whole unit deleted from the workspace. The
+message then names the deliberate override: delete the snapshots of that unit
+from `.ridl/baseline/`, so that the next publication holds no number to lose.
+A published snapshot written before the IR recorded the
 unit carries no `unit`; the gate compares it in the unit of the fresh package
 of the same name, so the migration to one `interfaces.lock` per unit — delete
 the per-package lock files, run `ridl lock`, run `ridl baseline` — passes

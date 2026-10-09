@@ -960,21 +960,22 @@ fn interface_refusals(
         if !published.is_empty() {
             let report = ridl_diff::diff_sets(&published, &fresh);
             for change in &report.changes {
-                let Some((package, shape)) = dropped_number(change, &published, &fresh) else {
-                    continue;
-                };
-                refusals.push(Diagnostic {
-                    code: DiagCode::RIDL_412,
-                    severity: Severity::Error,
-                    message: dropped_number_message(
-                        package,
-                        &shape,
-                        published_unit(package, &fresh),
-                    ),
-                    primary: detached_span(),
-                    labels: Vec::new(),
-                    fixits: Vec::new(),
-                });
+                for (package, shape) in dropped_numbers(change, &published, &fresh) {
+                    let gone = !fresh.iter().any(|current| current.name == package.name);
+                    refusals.push(Diagnostic {
+                        code: DiagCode::RIDL_412,
+                        severity: Severity::Error,
+                        message: dropped_number_message(
+                            package,
+                            &shape,
+                            published_unit(package, &fresh),
+                            gone,
+                        ),
+                        primary: detached_span(),
+                        labels: Vec::new(),
+                        fixits: Vec::new(),
+                    });
+                }
             }
         }
     }
@@ -1020,31 +1021,58 @@ fn published_unit<'a>(
     ridl_ir::v2::unit_of(package)
 }
 
-/// The published shape an interface-level `DeclRemoved` names, when the
-/// number it held is one the lock allocated (not 0) and no package of its
-/// unit ([`published_unit`]) in the fresh set declares or retires — the
-/// RIDL-412 shape. An interface-level change has a two-segment path and the
-/// walk's `interface` marker as its `before`; a service's own `DeclRemoved`
-/// carries `service` there, and a package's has one segment.
-fn dropped_number<'a>(
+/// The published shapes a `DeclRemoved` change loses, when the number each
+/// held is one the lock allocated (not 0) and no package of its unit
+/// ([`published_unit`]) in the fresh set declares or retires — the RIDL-412
+/// shape.
+///
+/// An interface-level change has a two-segment path and the walk's `interface`
+/// marker as its `before`; it loses that one shape. A service's own
+/// `DeclRemoved` carries `service` there and loses nothing. A package-level
+/// change has one segment and `package <name>` as its `before`: the whole
+/// package is gone while its unit has no package in the fresh set (the walk
+/// reports each shape of a package whose unit stays on its own line), so it
+/// loses every shape the published package holds.
+fn dropped_numbers<'a>(
     change: &ridl_diff::Change,
     published: &'a [ridl_ir::v2::Package],
     fresh: &[ridl_ir::v2::Package],
-) -> Option<(&'a ridl_ir::v2::Package, ridl_ir::v2::InterfaceShape<'a>)> {
-    if change.category != ridl_diff::Category::DeclRemoved
-        || change.before.as_deref() != Some("interface")
-    {
-        return None;
+) -> Vec<(&'a ridl_ir::v2::Package, ridl_ir::v2::InterfaceShape<'a>)> {
+    if change.category != ridl_diff::Category::DeclRemoved {
+        return Vec::new();
     }
     let mut parts = change.path.split('/');
-    let (Some(pkg), Some(name), None) = (parts.next(), parts.next(), parts.next()) else {
-        return None;
+    let (Some(pkg), name, None) = (parts.next(), parts.next(), parts.next()) else {
+        return Vec::new();
     };
-    let package = published.iter().find(|package| package.name == pkg)?;
-    let shape = package.shapes().find(|shape| shape.name == name)?;
+    let Some(package) = published.iter().find(|package| package.name == pkg) else {
+        return Vec::new();
+    };
+    let lost: Vec<_> = match (name, change.before.as_deref()) {
+        (Some(name), Some("interface")) => package
+            .shapes()
+            .filter(|shape| shape.name == name)
+            .take(1)
+            .collect(),
+        (None, Some(before)) if before.starts_with("package ") => package.shapes().collect(),
+        _ => return Vec::new(),
+    };
+    lost.into_iter()
+        .filter(|shape| number_is_lost(package, shape, fresh))
+        .map(|shape| (package, shape))
+        .collect()
+}
+
+/// Whether the number a published shape holds is one the lock allocated and
+/// no package of its unit in the fresh set declares or retires.
+fn number_is_lost(
+    package: &ridl_ir::v2::Package,
+    shape: &ridl_ir::v2::InterfaceShape<'_>,
+    fresh: &[ridl_ir::v2::Package],
+) -> bool {
     let number = shape.interface.number;
     if number == 0 {
-        return None;
+        return false;
     }
     // The number is kept when any package of the unit declares it — a
     // rename across packages of one unit keeps it, and so does the
@@ -1056,7 +1084,7 @@ fn dropped_number<'a>(
                 .shapes()
                 .any(|shape| !shape.interface.provisional && shape.interface.number == number)
     });
-    (!kept).then_some((package, shape))
+    !kept
 }
 
 /// The RIDL-412 message: the name and number the baseline holds, the unit
@@ -1065,6 +1093,7 @@ fn dropped_number_message(
     package: &ridl_ir::v2::Package,
     shape: &ridl_ir::v2::InterfaceShape<'_>,
     unit: &str,
+    package_gone: bool,
 ) -> String {
     // The key is spelled relative to `unit`, which for a legacy snapshot is
     // not the unit the package itself names.
@@ -1074,13 +1103,21 @@ fn dropped_number_message(
         LockKey::Interface(ridl_ir::v2::relative_name(unit, &package.name, shape.name))
     };
     let number = shape.interface.number;
+    let override_hint = if package_gone {
+        format!(
+            " When the package is gone on purpose, delete the snapshots of unit `{unit}` from \
+             `.ridl/baseline/`: a first publication holds no number to lose."
+        )
+    } else {
+        String::new()
+    };
     format!(
         "`{key}` holds interface number {number} in the baseline being replaced, in unit \
          `{unit}`, but the fresh snapshot neither declares that number nor retires it. \
          Publishing would lose the only record that the number was allocated, and `next` could \
          hand it to a later interface. Restore the line `{key} {number}` in the unit's \
          `interfaces.lock` from version control — `{key} {number} retired` when the interface is \
-         gone."
+         gone.{override_hint}"
     )
 }
 

@@ -454,6 +454,13 @@ fn a_failed_publication_keeps_the_stale_snapshot() {
     let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
     assert_eq!(code, 0, "the first baseline is written: {stderr}");
     let published = root.join(".ridl").join("baseline");
+    // The package is renamed below, which leaves its unit. The snapshot is
+    // rewritten as a pre-lock one (number 0), so that the gate lets the
+    // replacement reach the publication step this test is about.
+    let stale = published.join("veh.cluster.ir.json");
+    let text = std::fs::read_to_string(&stale).expect("the published snapshot is readable");
+    std::fs::write(&stale, text.replace("\"number\": 1", "\"number\": 0"))
+        .expect("rewrite the snapshot as a pre-lock one");
 
     dir.write("ridl.toml", RENAMED_MANIFEST);
     dir.write("cluster.ridl", RENAMED_THREE);
@@ -2031,4 +2038,115 @@ fn a_symlink_to_a_readable_snapshot_is_read_as_that_snapshot() {
     );
     let after = std::fs::read(&real).expect("the snapshot behind the link survives");
     assert_eq!(before, after, "a refused publication rewrites nothing");
+}
+
+// --- A package or a whole unit gone from the fresh set ---------------------
+
+/// Two units in one workspace, each with one interface, locked and published.
+/// Returns the workspace root.
+fn two_unit_workspace(dir: &TempDir) -> PathBuf {
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"hmi\", \"cluster\"]\n",
+    );
+    dir.write(
+        "hmi/ridl.toml",
+        "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("hmi/hmi.ridl", SESSION);
+    dir.write(
+        "cluster/ridl.toml",
+        "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("cluster/cluster.ridl", THREE);
+    let root = dir.path().to_path_buf();
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the fixture's locks are allocated: {stderr}");
+    publish(&root);
+    root
+}
+
+/// Removing a whole unit from the workspace, with its lock, loses every
+/// number the baseline holds for it. The gate refuses with the message of a
+/// lost interface and names the deliberate override.
+#[test]
+fn a_whole_unit_gone_from_the_fresh_set_is_refused() {
+    let dir = TempDir::new("gate-unit-gone");
+    let root = two_unit_workspace(&dir);
+    let before = std::fs::read(snapshot(&root)).expect("the published snapshot is readable");
+
+    std::fs::remove_dir_all(root.join("cluster")).expect("remove the unit");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"hmi\"]\n");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 1, "the lost unit is refused:\n{stderr}");
+    assert_eq!(
+        stderr.matches("RIDL-412").count(),
+        1,
+        "one refusal for the one number the unit held:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("`VehicleStatus` holds interface number 1 in the baseline being replaced")
+            && stderr.contains("in unit `veh.cluster`"),
+        "the message names the shape, the number and the unit:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("delete the snapshots of unit `veh.cluster` from `.ridl/baseline/`"),
+        "the message names the deliberate override:\n{stderr}",
+    );
+    let after = std::fs::read(snapshot(&root)).expect("the published snapshot survives");
+    assert_eq!(before, after, "a refused publication rewrites nothing");
+}
+
+/// The deliberate override: with the unit's snapshots deleted, the
+/// publication has nothing to hold the unit's numbers to.
+#[test]
+fn deleting_the_snapshots_of_a_gone_unit_lets_the_publication_through() {
+    let dir = TempDir::new("gate-unit-gone-override");
+    let root = two_unit_workspace(&dir);
+
+    std::fs::remove_dir_all(root.join("cluster")).expect("remove the unit");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"hmi\"]\n");
+    std::fs::remove_file(snapshot(&root)).expect("delete the unit's snapshot");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 0, "the override publishes:\n{stderr}");
+    assert!(!stderr.contains("RIDL-412"), "stderr:\n{stderr}");
+}
+
+/// A package deleted from a unit that still has other packages, without
+/// retiring its numbers, is refused too.
+#[test]
+fn a_package_gone_from_a_unit_that_remains_is_refused() {
+    let dir = TempDir::new("gate-package-gone");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("hmi.ridl", SESSION);
+    dir.write(
+        "cluster/speed.ridl",
+        "package veh.hmi.cluster\nimport veh.hmi.Level\ninterface Speed { signal v : Level @[100ms..1s] }\n",
+    );
+    let root = dir.path().to_path_buf();
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the fixture's lock is allocated: {stderr}");
+    publish(&root);
+
+    std::fs::remove_dir_all(root.join("cluster")).expect("remove the package");
+    dir.write(
+        "interfaces.lock",
+        &format!("{LOCK_HEADER}next 3\nSession 1\n"),
+    );
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 1, "the lost package is refused:\n{stderr}");
+    assert!(
+        stderr.contains("RIDL-412") && stderr.contains("`cluster.Speed` holds interface number 2"),
+        "stderr:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("delete the snapshots of unit `veh.hmi` from `.ridl/baseline/`"),
+        "the message names the deliberate override:\n{stderr}",
+    );
 }

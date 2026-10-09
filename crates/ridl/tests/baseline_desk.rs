@@ -2219,6 +2219,14 @@ fn baseline_drops_a_snapshot_whose_package_is_gone() {
         "the first baseline is published",
     );
 
+    // The rename below leaves the package's unit, which the gate refuses for
+    // a number the lock allocated (RIDL-412). The snapshot is rewritten as a
+    // pre-lock one (number 0), which the gate does not hold to a number.
+    let stale = root.join(".ridl/baseline/veh.cluster.ir.json");
+    let text = std::fs::read_to_string(&stale).expect("read the published snapshot");
+    std::fs::write(&stale, text.replace("\"number\": 1", "\"number\": 0"))
+        .expect("rewrite the snapshot as a pre-lock one");
+
     // Rename the package: the manifest and the source move together.
     dir.write(
         "ridl.toml",
