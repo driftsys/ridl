@@ -68,12 +68,13 @@ enum RawToken {
     Str,
 
     // Doc comments (typl reference §14): `///` line form and `/** ... */` block
-    // form. The line form outranks the ordinary `//` line comment.
-    #[regex(r"///[^\n]*", priority = 5, allow_greedy = true)]
+    // form. The line form is the longer token, so it outranks the ordinary `//`
+    // line comment. The callback scans to the end of the line.
+    #[token("///", lex_line_comment)]
     DocCommentLine,
 
     // Line comment `//` to end of line (typl reference §13).
-    #[regex(r"//[^\n]*", priority = 4, allow_greedy = true)]
+    #[token("//", lex_line_comment)]
     LineComment,
 
     // Block comment `/* ... */`, non-nesting (typl reference §13). The callback
@@ -292,13 +293,13 @@ fn scan_regex(input: &str, start: usize) -> (SyntaxKind, usize) {
                 if i + 1 >= bytes.len() {
                     return (SyntaxKind::Error, bytes.len());
                 }
-                if bytes[i + 1] == b'\n' {
+                if is_line_break(bytes, i + 1) {
                     return (SyntaxKind::Error, i + 1);
                 }
                 i += 2;
             }
             b'/' => return (SyntaxKind::Regex, i + 1),
-            b'\n' => return (SyntaxKind::Error, i),
+            _ if is_line_break(bytes, i) => return (SyntaxKind::Error, i),
             _ => i += 1,
         }
     }
@@ -360,12 +361,12 @@ fn lex_string(lex: &mut logos::Lexer<RawToken>) -> Result<(), ()> {
     let mut i = 0;
     while i < bytes.len() {
         match bytes[i] {
-            b'\n' => {
+            _ if is_line_break(bytes, i) => {
                 lex.bump(i);
                 return Err(());
             }
             b'\\' => {
-                if i + 1 >= bytes.len() || bytes[i + 1] == b'\n' {
+                if i + 1 >= bytes.len() || is_line_break(bytes, i + 1) {
                     // Dangling backslash at end of line or input: unterminated.
                     lex.bump(i + 1);
                     return Err(());
@@ -381,6 +382,28 @@ fn lex_string(lex: &mut logos::Lexer<RawToken>) -> Result<(), ()> {
     }
     lex.bump(bytes.len());
     Err(())
+}
+
+/// Whether the byte at `i` ends a line (typl reference §2.2): an LF, or a CR
+/// that is not followed by an LF. In a CRLF pair the LF ends the line, so the
+/// CR stays part of the text before it.
+fn is_line_break(bytes: &[u8], i: usize) -> bool {
+    match bytes[i] {
+        b'\n' => true,
+        b'\r' => bytes.get(i + 1) != Some(&b'\n'),
+        _ => false,
+    }
+}
+
+/// Scans a line comment or a doc comment line after its opening slashes
+/// (typl reference §13, §14) to the end of the line, which it does not
+/// include.
+fn lex_line_comment(lex: &mut logos::Lexer<RawToken>) {
+    let bytes = lex.remainder().as_bytes();
+    let end = (0..bytes.len())
+        .find(|&i| is_line_break(bytes, i))
+        .unwrap_or(bytes.len());
+    lex.bump(end);
 }
 
 /// Scans a block comment after the opening `/*` (typl reference §13). Non-
@@ -879,6 +902,124 @@ mod tests {
                 SyntaxKind::Pipe,
                 SyntaxKind::Percent,
             ]
+        );
+    }
+
+    /// The kinds and texts of every token, trivia included.
+    fn pairs(input: &str) -> Vec<(SyntaxKind, &str)> {
+        lex(input, Profile::Typl)
+            .iter()
+            .map(|t| (t.kind, t.text))
+            .collect()
+    }
+
+    // A lone CR is a line break (typl reference §2.2), so a line comment, a
+    // doc comment line, an unterminated string and an unterminated regex all
+    // end before it, as they do before an LF.
+    #[test]
+    fn a_lone_cr_ends_a_line_comment() {
+        assert_eq!(
+            pairs("// a\rx"),
+            vec![
+                (SyntaxKind::LineComment, "// a"),
+                (SyntaxKind::Whitespace, "\r"),
+                (SyntaxKind::Ident, "x"),
+            ],
+        );
+    }
+
+    #[test]
+    fn a_lone_cr_ends_a_doc_comment_line() {
+        assert_eq!(
+            pairs("/// a\rx"),
+            vec![
+                (SyntaxKind::DocComment, "/// a"),
+                (SyntaxKind::Whitespace, "\r"),
+                (SyntaxKind::Ident, "x"),
+            ],
+        );
+    }
+
+    #[test]
+    fn a_lone_cr_ends_an_unterminated_string() {
+        assert_eq!(
+            pairs("\"abc\rx"),
+            vec![
+                (SyntaxKind::Error, "\"abc"),
+                (SyntaxKind::Whitespace, "\r"),
+                (SyntaxKind::Ident, "x"),
+            ],
+        );
+        // A backslash before a lone CR does not escape the line break.
+        assert_eq!(
+            pairs("\"a\\\rx"),
+            vec![
+                (SyntaxKind::Error, "\"a\\"),
+                (SyntaxKind::Whitespace, "\r"),
+                (SyntaxKind::Ident, "x"),
+            ],
+        );
+    }
+
+    #[test]
+    fn a_lone_cr_ends_an_unterminated_regex() {
+        let tokens = pairs("const V = /abc\rx");
+        assert_eq!(
+            tokens[tokens.len() - 3..],
+            [
+                (SyntaxKind::Error, "/abc"),
+                (SyntaxKind::Whitespace, "\r"),
+                (SyntaxKind::Ident, "x"),
+            ],
+        );
+        let tokens = pairs("const V = /a\\\rx");
+        assert_eq!(
+            tokens[tokens.len() - 3..],
+            [
+                (SyntaxKind::Error, "/a\\"),
+                (SyntaxKind::Whitespace, "\r"),
+                (SyntaxKind::Ident, "x"),
+            ],
+        );
+    }
+
+    // A CRLF pair is one line break, and the tokens around it are the same as
+    // before a lone CR became a line break: the CR stays inside the token that
+    // precedes the LF.
+    #[test]
+    fn a_crlf_pair_still_ends_a_line_at_its_lf() {
+        assert_eq!(
+            pairs("// a\r\nx"),
+            vec![
+                (SyntaxKind::LineComment, "// a\r"),
+                (SyntaxKind::Whitespace, "\n"),
+                (SyntaxKind::Ident, "x"),
+            ],
+        );
+        assert_eq!(
+            pairs("/// a\r\nx"),
+            vec![
+                (SyntaxKind::DocComment, "/// a\r"),
+                (SyntaxKind::Whitespace, "\n"),
+                (SyntaxKind::Ident, "x"),
+            ],
+        );
+        assert_eq!(
+            pairs("\"abc\r\nx"),
+            vec![
+                (SyntaxKind::Error, "\"abc\r"),
+                (SyntaxKind::Whitespace, "\n"),
+                (SyntaxKind::Ident, "x"),
+            ],
+        );
+        let tokens = pairs("const V = /abc\r\nx");
+        assert_eq!(
+            tokens[tokens.len() - 3..],
+            [
+                (SyntaxKind::Error, "/abc\r"),
+                (SyntaxKind::Whitespace, "\n"),
+                (SyntaxKind::Ident, "x"),
+            ],
         );
     }
 }
