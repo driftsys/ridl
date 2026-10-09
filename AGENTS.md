@@ -165,7 +165,8 @@ member; rsdl is the apex.
                          generated crate, and one generated from the
                          veh-cluster corpus, check with their default features off
                          for thumbv7em-none-eabihf, a target with no standard
-                         library. examples/cabin is its own
+                         library; the corpus crate also draws no clippy warning
+                         except dead_code. examples/cabin is its own
                          cargo workspace, outside this one, and carries the fmt
                          and clippy checks for its consumer, which --all over
                          this workspace cannot reach
