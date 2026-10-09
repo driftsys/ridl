@@ -232,8 +232,8 @@ E10 value objects, E10.10 last ────────────────�
 
 E14.1 · E10, the typl debt ─→ Rust codegen finalized
       ─→ E11.7 FlatBuffers ─→ E4.5a IR stability ─→ E4.5b plugin protocol
-                                                 ─→ #801 on-request encodings
-                                                       ─→ E11.8 proto3 · E11.9 · E11.12 repr(C)
+                                                 ─→ E11.8 proto3 · E11.12 repr(C), after #801
+#801 on-request encodings — depends on nothing ─→ E11.8 · E11.9 · E11.12
 
 E6 rsdl finalized and lowered to the IR — beside the lock; E6.17 last, landed
 E11.0 ridl-rt, landed ─┬─→ E11.1 frame spec ─→ (#801) ─→ E11.9 ridl-transport-ws
