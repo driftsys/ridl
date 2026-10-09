@@ -343,7 +343,10 @@ pub fn find_root(dir: &Path) -> Option<PathBuf> {
 /// The error of the first `ridl.toml` at or above `dir` that cannot be
 /// inspected for a reason other than being absent, naming the manifest.
 /// `find_root` treats such a manifest as missing, so the caller uses this to
-/// report the real cause.
+/// report the real cause. The walk up the ancestors matters for the errors that
+/// can hit an ancestor's manifest while the entry itself is reachable, such as
+/// a symbolic link loop; a directory that cannot be searched also hides the
+/// entry below it.
 fn unreadable_manifest(dir: &Path) -> Option<io::Error> {
     dir.ancestors().find_map(|candidate| {
         let manifest = candidate.join("ridl.toml");
@@ -752,7 +755,7 @@ impl Loader {
         for entry in fs::read_dir(dir).map_err(named)? {
             let entry = entry.map_err(named)?;
             let path = entry.path();
-            let is_symlink = entry.file_type()?.is_symlink();
+            let is_symlink = entry.file_type().map_err(named)?.is_symlink();
             if path.is_dir() {
                 if !is_symlink {
                     subdirs.push(path);
