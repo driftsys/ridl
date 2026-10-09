@@ -186,7 +186,8 @@ const ALLOWED: &[Allowed] = &[
         path: "crates/ridl-descriptor/tests/round_trip.rs",
         lines: 3,
         why: "a test reading the catalog descriptor's own `Catalog.interfaces` \
-              field back out of a buffer, not a read of `Package::interfaces`",
+              field, once back out of a buffer and twice on the owned builder \
+              it mutates, not a read of `Package::interfaces`",
     },
     Allowed {
         path: "crates/ridl-descriptor/tests/verify.rs",
