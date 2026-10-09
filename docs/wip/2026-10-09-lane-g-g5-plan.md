@@ -113,3 +113,18 @@ The three share one table reader and one comparison, so they are one task:
 Red tests: the issue mutations as unit tests over the comparison function with
 in-memory rows (RIDL-408 lost clause, TYPL-107 renamed to TYPL-170, an RSDL
 summary altered), so the check does not need to mutate the files.
+
+## Pre-flight read
+
+- Task 2: a red test that sleeps 11 seconds on every run costs 11 seconds
+  forever. Replace it with a test that pins the bound: the tests that do not
+  test the timeout take their timeout from one constant, and one test asserts
+  the constant is at least 60 seconds (the default `--plugin-timeout`). The
+  reviewer proves it by restoring 10.
+- Task 5: `find_root` returns `Option` and `is_file()` reports an unreadable
+  directory as "not a file", so the cause is lost before `load_workspace_with`
+  builds its message. The fix has to probe `ridl.toml` with `metadata` and keep
+  the error kind, not only reword the message.
+- Task 6: the rsdl §16.1 table has four columns (code, rule, severity, section);
+  `reference_diagnostic_rows` expects five cells, so the rsdl table needs its
+  own cell pattern.
