@@ -7,6 +7,12 @@ coherence rule, and the composition of interfaces into a service. It is not
 epic-scoped: it binds the language surface until superseded, in the way ADR-0011
 and ADR-0012 do.
 
+**Amended 2026-10-09 — the lock amendments of 2026-09-15: the lock is per
+unit.** Every place in them that read "its package's `interfaces.lock`" now
+reads "its unit's `interfaces.lock`" and an interface number is scoped to the
+unit. A unit is a manifest and the source packages in its tree
+([ADR-0002](ADR-0002-module-system.md) §1); the lock model is in ridl §11.
+
 Supersedes nothing. It answers ridl §17.5 open question 5 (QoS), closes ridl
 §17.3 open question 3 (the grouping construct), and supplies a better answer to
 ridl §17.2 (interaction-set reuse) than the candidate recorded there.
@@ -43,7 +49,7 @@ decisions fixed rather than pending.
 **Amendment (2026-09-15) — the interface lock.** The lock design
 ([`docs/archive/2026-09-13-lock-design.md`](../archive/2026-09-13-lock-design.md)
 §7, §9 and §10, which applies rsdl decision D-7) gives every interface a number
-from its package's `interfaces.lock` and retires the slot model of a service's
+from its unit's `interfaces.lock` and retires the slot model of a service's
 list. Decisions 12, 15, 17, 18, 19, 20 and 24 changed with it; each change is
 written into its decision below, dated, and "Documents to amend" and open item 1
 carry the same date. Decisions 10, 13, 14 and 16 are unchanged by the lock. Two
@@ -265,18 +271,18 @@ indistinguishable, so no claim about any of the three can be exercised.
    **Amendment (2026-09-16) — the group's identity is the interface number.**
    The last sentence of the quoted rule is the one the lock changes, and the
    ridl §17 disposition pass (story driftsys/ridl#319) changed it in the
-   reference. Decision 17 as amended keys a binding on (package, interface
-   number), and ridl §11 keeps that number across a rename, so identifying the
-   coherence group by the interface **name** would make a rename move the group
-   while the wire key held. The group is the **provided interface**, identified
-   by its number in the package's `interfaces.lock` — an inline shape included,
-   under its `service:` entry — and the interface's name, or the service's
-   dotted name for an inline shape, is how the group is written rather than what
-   identifies it. Nothing else in this decision changes: the rule is still about
-   production, still implicit, and still conditional on the binding for what a
-   consumer observes. rsdl §3.2's citation of "ridl §14.5, group identity" for
-   an inline-shape service's dotted name stands, because that name is still how
-   the group is written.
+   reference. Decision 17 as amended keys a binding on (unit, interface number),
+   and ridl §11 keeps that number across a rename, so identifying the coherence
+   group by the interface **name** would make a rename move the group while the
+   wire key held. The group is the **provided interface**, identified by its
+   number in the unit's `interfaces.lock` — an inline shape included, under its
+   `service:` entry — and the interface's name, or the service's dotted name for
+   an inline shape, is how the group is written rather than what identifies it.
+   Nothing else in this decision changes: the rule is still about production,
+   still implicit, and still conditional on the binding for what a consumer
+   observes. rsdl §3.2's citation of "ridl §14.5, group identity" for an
+   inline-shape service's dotted name stands, because that name is still how the
+   group is written.
 
    It is **implicit, not declared.** Three rules the family already states
    produce it: §4.2 gives every flow exactly one owning provider; a provider
@@ -368,7 +374,7 @@ indistinguishable, so no claim about any of the three can be exercised.
 
     **Amendment (2026-09-15) — a service's list holds no `reserved` entry.** The
     lock design §9 retires the service-level tombstone with the slot model (rsdl
-    decision D-7): a removed interface is retired in the package's
+    decision D-7): a removed interface is retired in the unit's
     `interfaces.lock`, never in the list, so `reserved` in a service's list is a
     parse error and the `ServiceShape` alternation is gone from the grammar:
 
@@ -414,17 +420,17 @@ indistinguishable, so no claim about any of the three can be exercised.
     not be taken as a side effect of this one.
 
     **Amendment (2026-09-15) — the slot model is retired.** An interface's
-    number comes from its package's `interfaces.lock` (lock design §2 and §3;
-    rsdl decision D-7), not from its place in a service's list: 1-based per
-    package, allocated by plain `ridl lock` alone, kept across a rename, and
-    retired in the lock with the word `retired` — never by a tombstone in the
-    list, which holds no slot. A declaration with no entry compiles with a
-    provisional number, which carries no identity until `ridl lock` records it.
-    The inline shape keeps a number of its own under the service's name, as the
-    entry `service:` followed by the service's dotted name; it is no longer
-    "slot 1". The extraction paragraph stands: it rests on ADR-0008 decision 4,
-    and `ridl lock <pkg> --rename service:veh.hvac.cabin=Cabin` carries the
-    number across the refactor without making it compatible.
+    number comes from its unit's `interfaces.lock` (lock design §2 and §3; rsdl
+    decision D-7), not from its place in a service's list: 1-based per unit,
+    allocated by plain `ridl lock` alone, kept across a rename, and retired in
+    the lock with the word `retired` — never by a tombstone in the list, which
+    holds no slot. A declaration with no entry compiles with a provisional
+    number, which carries no identity until `ridl lock` records it. The inline
+    shape keeps a number of its own under the service's name, as the entry
+    `service:` followed by the service's dotted name; it is no longer "slot 1".
+    The extraction paragraph stands: it rests on ADR-0008 decision 4, and
+    `ridl lock <pkg> --rename service:veh.hvac.cabin=Cabin` carries the number
+    across the refactor without making it compatible.
 
 16. **Addressing stays flat.** Members remain `service.member`, and a member
     name duplicated across a service's interfaces is a compile error. This keeps
@@ -443,16 +449,33 @@ indistinguishable, so no claim about any of the three can be exercised.
     logical name. Keying on the interface **name** rather than its list position
     also makes reordering the list invisible to transport identity.
 
-    **Amendment (2026-09-15) — the key is (package, interface number).** A
-    binding keys each per-interface ordinal space on the package and the
-    interface's `interfaces.lock` number, not on the interface name (lock design
-    §7; rsdl decision D-7): a rename that keeps its number is then compatible on
-    the wire — `interface_renamed` in `ridl diff`, under the heading "compatible
-    on the wire, visible in source", since the generated identity-table names
-    change. Appendix B's SOME/IP row, "eventgroup = interface", is keyed on the
-    number with it; a transport whose eventgroup id is narrower than `u32`
-    checks the bound in its backend (lock design §1). Reordering the list stays
-    invisible to transport identity, now because the list is a set.
+    **Amendment (2026-09-15) — the key is (unit, interface number).** A binding
+    keys each per-interface ordinal space on the unit and the interface's
+    `interfaces.lock` number, not on the interface name (lock design §7; rsdl
+    decision D-7): a rename that keeps its number is then compatible on the wire
+    — `interface_renamed` in `ridl diff`, under the heading "compatible on the
+    wire, visible in source", since the generated identity-table names change.
+    Appendix B's SOME/IP row, "eventgroup = interface", is keyed on the number
+    with it; a transport whose eventgroup id is narrower than `u32` checks the
+    bound in its backend (lock design §1). Reordering the list stays invisible
+    to transport identity, now because the list is a set.
+
+    **Amendment (2026-10-09) — `ridl diff` matches numbers within a unit.**
+    `ridl diff` groups the baseline snapshots by `Package.unit` (a snapshot with
+    no `unit` is its own unit) and matches a number within its unit. An
+    interface that moves to a sibling source package of its unit with its number
+    is `InterfaceRenamed`, with catalog names on both sides. A source package
+    gone from a living unit is diffed per declaration: its shapes are
+    `InterfaceRenamed` or `InterfaceRetired` when the unit accounts for their
+    numbers, and `DeclRemoved` otherwise, which `ridl baseline` refuses with
+    RIDL-412. A source package whose whole unit vanished is one package-level
+    `DeclRemoved`, as before. `ridl baseline` still writes one snapshot per
+    source package, because the IR stays per source package; a snapshot per unit
+    was rejected because it needs a new IR shape and gives no other benefit. A
+    retired entry in the unit's lock carries its qualified name, so it maps back
+    to its source package. Merging existing per-package locks without
+    renumbering was rejected: a re-baseline is simpler and no published catalog
+    needs to keep its numbers.
 
 18. **Diagnostics: three codes minted, two existing codes become per-element.**
     The service codes occupy 140 to 143 and RIDL-112 is minted by decision 6, so
@@ -507,10 +530,10 @@ indistinguishable, so no claim about any of the three can be exercised.
     ADR-0012 decision 9 argument as decision 8.
 
     **Amendment (2026-09-15) — a service's list is a set.** The lock design (§7
-    and §9) retires the slot model: an interface's number comes from its
-    package's `interfaces.lock`, not from its place in a service's list, so the
-    list is a set of interface references and its order carries nothing. The
-    five categories above are replaced by two, both compatible:
+    and §9) retires the slot model: an interface's number comes from its unit's
+    `interfaces.lock`, not from its place in a service's list, so the list is a
+    set of interface references and its order carries nothing. The five
+    categories above are replaced by two, both compatible:
 
     | Category                  | Verdict                                                                                                                                                                                                                                                                                              |
     | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -646,10 +669,10 @@ indistinguishable, so no claim about any of the three can be exercised.
     shape list the walk is unable to key.
 
     **Amendment (2026-09-15) — RIDL-147 and RIDL-148 retired with their rules.**
-    A binding keys on (package, interface number) (decision 17 as amended), so
-    two interfaces whose names collide are told apart by their numbers and
-    RIDL-147 has no rule left; a service's list holds no tombstone (decision 12
-    as amended), so RIDL-148 has nothing to spell. Both are retired by the lock
+    A binding keys on (unit, interface number) (decision 17 as amended), so two
+    interfaces whose names collide are told apart by their numbers and RIDL-147
+    has no rule left; a service's list holds no tombstone (decision 12 as
+    amended), so RIDL-148 has nothing to spell. Both are retired by the lock
     (ridl §16.4 keeps their rows, marked retired; the numbers are never reused).
     A retargeted slot no longer exists: a changed reference is
     `service_interface_removed` plus `service_interface_added`, both compatible
@@ -711,24 +734,24 @@ indistinguishable, so no claim about any of the three can be exercised.
 
 ## Documents to amend
 
-| Document                       | Change                                                                                                                                                   |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ridl §9                        | the per-kind bound table gains its RPC column; a subsection fixes the response bound and its per-kind derivation                                         |
-| ridl §9.2                      | "Timing belongs to `signal` and `event`" widens to admit `command`/`query` in the range form; `fixed` still carries none                                 |
-| ridl §11                       | interface ids within a service (decision 15)                                                                                                             |
-| ridl §14                       | the coherence rule as normative prose; the shape list, flat addressing, and the composition rules                                                        |
-| ridl §16.1                     | RIDL-106 narrows; RIDL-103 widens; RIDL-112 minted                                                                                                       |
-| ridl §16.4                     | RIDL-144 to RIDL-146 minted beside RIDL-140 to RIDL-143, where the service codes already sit; RIDL-141 and RIDL-143 become per-element                   |
-| ridl §17.2, §17.3 q3, §17.5 q5 | answered or closed, with the reasoning                                                                                                                   |
-| ridl Appendix B                | rows for the response bound and for coherence per transport                                                                                              |
-| ridl Appendix F                | the gRPC-deadline row moves from "≈ relocated" to in-contract, with the per-call override staying Stratum 3                                              |
-| general form R5                | the postfix order contradicts the shipped grammar — recorded as roadmap story E9.12, outside the scope of E9.4 to E9.6                                   |
-| ridl §11 (2026-09-15)          | the one-level-up paragraph replaced by the lock model: numbers from the package's `interfaces.lock`, provisional until `ridl lock`, RIDL-409 to RIDL-412 |
-| ridl §14.5 (2026-09-15)        | the list is a set; the ids, append-only and tombstone paragraphs replaced; the ordinal spaces keyed on (package, interface number)                       |
-| ridl §16.4 (2026-09-15)        | RIDL-146 to RIDL-148 marked retired by the lock; RIDL-409 to RIDL-412 added                                                                              |
-| `ir.proto` (2026-09-15)        | `ServiceShape` reserves fields 1 and 12; `Interface.number`, `Interface.provisional`, `Package.retired` (decision 20 as amended)                         |
-| ADR-0016 (2026-09-15)          | its two RIDL-147 mentions (decision 3, References) cite the retirement                                                                                   |
-| ridl §14.5 (2026-09-16)        | the coherence group is identified by the interface's lock number, not by its name (decision 9 as amended)                                                |
+| Document                       | Change                                                                                                                                                |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ridl §9                        | the per-kind bound table gains its RPC column; a subsection fixes the response bound and its per-kind derivation                                      |
+| ridl §9.2                      | "Timing belongs to `signal` and `event`" widens to admit `command`/`query` in the range form; `fixed` still carries none                              |
+| ridl §11                       | interface ids within a service (decision 15)                                                                                                          |
+| ridl §14                       | the coherence rule as normative prose; the shape list, flat addressing, and the composition rules                                                     |
+| ridl §16.1                     | RIDL-106 narrows; RIDL-103 widens; RIDL-112 minted                                                                                                    |
+| ridl §16.4                     | RIDL-144 to RIDL-146 minted beside RIDL-140 to RIDL-143, where the service codes already sit; RIDL-141 and RIDL-143 become per-element                |
+| ridl §17.2, §17.3 q3, §17.5 q5 | answered or closed, with the reasoning                                                                                                                |
+| ridl Appendix B                | rows for the response bound and for coherence per transport                                                                                           |
+| ridl Appendix F                | the gRPC-deadline row moves from "≈ relocated" to in-contract, with the per-call override staying Stratum 3                                           |
+| general form R5                | the postfix order contradicts the shipped grammar — recorded as roadmap story E9.12, outside the scope of E9.4 to E9.6                                |
+| ridl §11 (2026-09-15)          | the one-level-up paragraph replaced by the lock model: numbers from the unit's `interfaces.lock`, provisional until `ridl lock`, RIDL-409 to RIDL-412 |
+| ridl §14.5 (2026-09-15)        | the list is a set; the ids, append-only and tombstone paragraphs replaced; the ordinal spaces keyed on (unit, interface number)                       |
+| ridl §16.4 (2026-09-15)        | RIDL-146 to RIDL-148 marked retired by the lock; RIDL-409 to RIDL-412 added                                                                           |
+| `ir.proto` (2026-09-15)        | `ServiceShape` reserves fields 1 and 12; `Interface.number`, `Interface.provisional`, `Package.retired` (decision 20 as amended)                      |
+| ADR-0016 (2026-09-15)          | its two RIDL-147 mentions (decision 3, References) cite the retirement                                                                                |
+| ridl §14.5 (2026-09-16)        | the coherence group is identified by the interface's lock number, not by its name (decision 9 as amended)                                             |
 
 ## Open
 

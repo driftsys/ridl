@@ -26,13 +26,14 @@ pub struct InterfaceNo(pub u32);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CatalogHash(pub [u8; 32]);
 
-/// A catalog: one package's interfaces.
+/// A catalog: the interfaces of one unit — one package manifest and the
+/// source packages in its directory tree.
 ///
 /// Two `CatalogRef`s are equal only when both the names and the hashes are
-/// equal, because two packages with the same contents can have the same hash.
+/// equal, because two units with the same contents can have the same hash.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CatalogRef {
-    /// The package name.
+    /// The unit name.
     pub name: &'static str,
     /// The catalog hash.
     pub hash: CatalogHash,

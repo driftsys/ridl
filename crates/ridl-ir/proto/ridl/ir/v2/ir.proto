@@ -47,7 +47,9 @@ message Package {
   // E2 (earmarked 3–15): interfaces and services, source order.
   repeated Interface interfaces = 3;
   repeated Service services = 4;
-  // The retired entries of the package's `interfaces.lock`, in number
+  // The retired entries of the unit's `interfaces.lock` that this package
+  // carries — those whose key names a shape of this package, or every
+  // root-owned entry when this package is the unit's anchor — in number
   // order: each one holds an interface number that was allocated, then
   // retired, and is never allocated again (lock design §2, §9). `ridl diff`
   // reads the list to tell a retired interface from a removed one, and
@@ -55,14 +57,21 @@ message Package {
   // listed here (lock design §7, §8). Empty until the compiler folds the
   // lock in.
   repeated RetiredInterface retired = 5;
-  // 6–15 remain open for later profiles.
+  // The unit this package belongs to: the `name` of the `[package]` manifest
+  // whose tree holds the package. Equal to `name` for a root source package
+  // and for a single file. Empty in a snapshot written before the field
+  // existed.
+  string unit = 6;
+  // 7–15 remain open for later profiles.
 }
 
 // One retired entry of a package's `interfaces.lock` (lock design §2, §9).
 message RetiredInterface {
-  // The lock key as the file spells it: the interface's CamelCase name, or
-  // `service:` followed by the dotted name of the service whose inline
-  // shape the entry numbered (lock design §3).
+  // The lock key as the file spells it, which is the entry's catalog name:
+  // the interface's name relative to the unit (`cluster.Old`; `Old` for an
+  // interface of the root package), or `service:` followed by the dotted
+  // name of the service whose inline shape the entry numbered (lock design
+  // §3).
   string name = 1;
   // The number the entry holds forever; 1-based, never 0 (lock design §1).
   uint32 number = 2;
@@ -469,9 +478,9 @@ message Interface {
   // Interactions and reserved tombstones, declaration order; every
   // member's Decl.kind is one of members 16–21 above.
   repeated Decl interactions = 6;
-  // The interface number from the package's `interfaces.lock`, the
+  // The interface number from the unit's `interfaces.lock`, the
   // routing identity of this shape — an inline shape included (lock design
-  // §1, §3). 1-based, per package. 0 is never allocated: it marks a
+  // §1, §3). 1-based, one space per unit. 0 is never allocated: it marks a
   // snapshot written before the lock existed, the one case `ridl diff`
   // matches by name (lock design §7). 0 until the compiler folds the lock
   // in.

@@ -5,7 +5,7 @@
 //! reads the checked model and the lowered IR of the workspace's packages,
 //! which carries the inputs rsdl does not own (rsdl §13): each interface's
 //! number and provisional flag (`Interface.number`, `Interface.provisional`,
-//! from the package's lock) and each member's ordinal (`Decl.ordinal`, ridl
+//! from the unit's lock) and each member's ordinal (`Decl.ordinal`, ridl
 //! §11).
 //!
 //! **Gating (rsdl §13).** An error in the closure blocks lowering for every
@@ -77,33 +77,52 @@ impl<'a> Lowering<'a> {
         }
     }
 
-    /// An interface by identity (rsdl §11): the catalog is the package that
-    /// declares the interface, or the package that declares the service for an
-    /// inline shape.
+    /// An interface by identity (rsdl §11): the catalog is the unit of the
+    /// package that declares the interface, or of the package that declares
+    /// the service for an inline shape. The name is the one the shape carries
+    /// in that catalog.
     fn interface_ref(&self, interface: &InterfaceId) -> v2::InterfaceRef {
         match interface {
-            InterfaceId::Declared { package, name } => v2::InterfaceRef {
-                catalog: package.clone(),
-                name: name.clone(),
-                inline: false,
-            },
-            InterfaceId::Inline { service } => v2::InterfaceRef {
-                catalog: self.closure.services[service].package.clone(),
-                name: service.clone(),
-                inline: true,
-            },
+            InterfaceId::Declared { package, name } => {
+                let declaring = self.package_named(package);
+                let unit = v2::unit_of(declaring);
+                v2::InterfaceRef {
+                    catalog: unit.to_owned(),
+                    name: v2::relative_name(unit, package, name),
+                    inline: false,
+                }
+            }
+            InterfaceId::Inline { service } => {
+                let declaring = self.package_named(&self.closure.services[service].package);
+                v2::InterfaceRef {
+                    catalog: v2::unit_of(declaring).to_owned(),
+                    name: service.clone(),
+                    inline: true,
+                }
+            }
         }
     }
 
-    /// The lowered IR of the interface `interface` names: the shape of that
-    /// name, declared or inline, in the package of its catalog.
-    fn interface_ir(&self, interface: &v2::InterfaceRef) -> &'a v2::Interface {
+    /// The lowered package named `name`.
+    fn package_named(&self, name: &str) -> &'a v2::Package {
         self.packages
             .iter()
-            .filter(|package| package.name == interface.catalog)
-            .flat_map(|package| package.shapes())
-            .find(|shape| shape.name == interface.name && shape.is_inline() == interface.inline)
-            .map(|shape| shape.interface)
+            .copied()
+            .find(|package| package.name == name)
+            .expect("a closure interface is declared by a package the lowering reads")
+    }
+
+    /// The lowered IR of the interface `interface` names: the shape of that
+    /// catalog name, declared or inline, in the packages of its unit.
+    fn interface_ir(&self, interface: &v2::InterfaceRef) -> &'a v2::Interface {
+        v2::members_of_unit(&interface.catalog, self.packages)
+            .flat_map(|package| {
+                package
+                    .shapes()
+                    .map(move |shape| (package.catalog_name(&shape), shape))
+            })
+            .find(|(name, shape)| *name == interface.name && shape.is_inline() == interface.inline)
+            .map(|(_, shape)| shape.interface)
             .expect("a closure interface is declared by a package the lowering reads")
     }
 
@@ -607,6 +626,7 @@ mod tests {
     use ridl_core::diag::{DiagCode, Diagnostic, Severity};
     use ridl_core::package::Workspace;
     use ridl_core::std_package;
+    use salsa::Setter;
 
     use super::*;
     use crate::check_package;
@@ -617,14 +637,32 @@ mod tests {
     /// `topology`, the files of the package `veh.topology`. Returns the
     /// checked model with the lowering.
     fn lower_topology(topology: &[(&str, &str)]) -> (CheckedSystem, Option<v2::System>) {
+        lower_topology_in(None, topology)
+    }
+
+    /// [`lower_topology`] with every package in the unit `unit`, or each in
+    /// its own unit when `unit` is `None`.
+    fn lower_topology_in(
+        unit: Option<&str>,
+        topology: &[(&str, &str)],
+    ) -> (CheckedSystem, Option<v2::System>) {
         let mut db = RidlDatabase::default();
         let std = std_package(&mut db);
-        let packages = vec![
-            package(&db, "veh.common", &[("veh/common/common.typl", COMMON)]),
-            package(&db, "veh.adas", &[("veh/adas/adas.ridl", ADAS)]),
-            package(&db, "veh.diag", &[("veh/diag/diag.ridl", DIAG)]),
-            package(&db, "veh.topology", topology),
-        ];
+        let packages: Vec<_> = [
+            ("veh.common", &[("veh/common/common.typl", COMMON)][..]),
+            ("veh.adas", &[("veh/adas/adas.ridl", ADAS)][..]),
+            ("veh.diag", &[("veh/diag/diag.ridl", DIAG)][..]),
+            ("veh.topology", topology),
+        ]
+        .into_iter()
+        .map(|(name, files)| {
+            let package = package(&db, name, files);
+            if let Some(unit) = unit {
+                package.set_unit(&mut db).to(unit.to_string());
+            }
+            package
+        })
+        .collect();
         let ws = Workspace::new(&db, packages.clone(), BTreeMap::new());
         let mut checked = check_system(&db, ws, std);
         // TYPL-406 (`missing-docs`) is left out: most fixtures have no docs.
@@ -1433,6 +1471,48 @@ mod tests {
         );
     }
 
+    /// rsdl §11: a region is a unit. Packages that share a unit share one
+    /// region, whose interface names are catalog names relative to the unit,
+    /// and the routes and grants name that unit.
+    #[test]
+    fn two_source_packages_of_one_unit_share_one_region() {
+        let (checked, lowered) = lower_topology_in(
+            Some("veh"),
+            &[
+                ("veh/topology/system.rsdl", SYSTEM),
+                ("veh/topology/production.rsdl", PRODUCTION),
+                ("veh/topology/bench.rsdl", BENCH),
+            ],
+        );
+        assert!(!checked.closure_has_errors, "{:?}", checked.diagnostics);
+        let system = lowered.expect("the closure lowers");
+        assert_eq!(
+            region_rows(&system),
+            [
+                (
+                    "veh",
+                    "adas.CruiseControl",
+                    false,
+                    1,
+                    true,
+                    "veh.adas.cruise"
+                ),
+                ("veh", "adas.LaneAssist", false, 2, true, "veh.adas.lane"),
+                ("veh", "veh.diag.access", true, 3, true, "veh.diag.access"),
+            ]
+        );
+        assert!(
+            system.deployments[0]
+                .routes
+                .iter()
+                .all(|route| route.catalog == "veh")
+        );
+        assert_eq!(
+            grant_rows(&system)[3],
+            ("veh.topology.Backend", true, vec!["veh"])
+        );
+    }
+
     /// rsdl §11: the region an interface reaches is the catalog of the package
     /// that declares the interface, whichever package declares the owning
     /// service; the region map holds only the interfaces closure services list;
@@ -1618,6 +1698,7 @@ mod tests {
             .collect();
         let locked = ridl_core::package::Package::new(
             &db,
+            "veh.topology".to_string(),
             "veh.topology".to_string(),
             inputs,
             ridl_core::package::PackageOrigin::WorkspaceMember,

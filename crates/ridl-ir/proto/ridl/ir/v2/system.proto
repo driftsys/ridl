@@ -38,13 +38,13 @@ syntax = "proto3";
 // of a lone service (rsdl §6) — and `Component::qualified_name` in `lib.rs`
 // is the one derivation. A distribution and a system are qualified the same
 // way. A machine name is scoped to its deployment (rsdl §3.5) and is written
-// bare. An interface is referred to by its catalog (the package that
-// declares it, vocabulary V-16), its name — the interface's own name, or the
-// owning service's dotted name for an inline shape (ridl §14.5) — and
-// whether it is inline, because the two names may be spelled the same. None
+// bare. An interface is referred to by its catalog (the unit of the
+// package that declares it, vocabulary V-16), its name — the interface's name
+// in that catalog, or the owning service's dotted name for an inline shape
+// (ridl §14.5) — and whether it is inline, because the two names may be spelled the same. None
 // of these names is a wire identity (rsdl §1.3): the routing key is
 // (catalog, interface number, member ordinal), and the interface numbers
-// come from each package's lock through `Interface.number` in `ir.proto`.
+// come from each unit's lock through `Interface.number` in `ir.proto`.
 //
 // Field numbering follows `ir.proto`: data fields start at 1; oneof members
 // start at 10.
@@ -188,10 +188,10 @@ message Require {
 // An interface by identity (rsdl §11, vocabulary V-16): the catalog that
 // numbers it and its name in that catalog.
 message InterfaceRef {
-  // The package that declares the interface — for an inline shape, the
-  // package that declares the service.
+  // The unit of the package that declares the interface — for an inline
+  // shape, of the package that declares the service.
   string catalog = 1;
-  // The interface's name, or the owning service's dotted name for an
+  // The interface's catalog name, or the owning service's dotted name for an
   // inline shape (ridl §14.5).
   string name = 2;
   // True for the inline shape of a service.
@@ -225,9 +225,10 @@ message Grant {
   repeated string regions = 3;
 }
 
-// One region of the region map (rsdl §13): a catalog the closure reaches.
+// One region of the region map (rsdl §13): a catalog (a unit) the closure
+// reaches.
 message Region {
-  // The catalog's name — its package name (vocabulary V-16).
+  // The catalog's name — the unit name (vocabulary V-16).
   string catalog = 1;
   // The interfaces of this catalog that closure services list, in interface
   // number order.
@@ -241,12 +242,12 @@ message Region {
 
 // One interface of a region, with the identity the routing key uses.
 message RegionInterface {
-  // The interface's name in the catalog, or the owning service's dotted name
-  // for an inline shape.
+  // The interface's catalog name (`cluster.Speed`, `Speed` for a package that
+  // is the unit), or the owning service's dotted name for an inline shape.
   string name = 1;
   // True for the inline shape of a service.
   bool inline = 2;
-  // The interface number from the package's lock (`Interface.number`).
+  // The interface number from the unit's lock (`Interface.number`).
   uint32 number = 3;
   // True when the number has no lock entry yet (`Interface.provisional`).
   bool provisional = 4;

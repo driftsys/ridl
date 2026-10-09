@@ -1238,6 +1238,193 @@ fn a_whole_interface_removed_is_refused_by_the_lock_not_the_tombstone_gate() {
     assert_eq!(before, after, "a failed compile rewrites nothing");
 }
 
+/// A rename across packages of one unit keeps the number, so the unit still
+/// declares it and the gate does not refuse the replacement (RIDL-412).
+#[test]
+fn an_interface_moved_to_another_package_of_the_unit_is_not_refused() {
+    let dir = TempDir::new("gate-cross-package-move");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "hmi.ridl",
+        "package veh.hmi\ntype Level: integer [0..9]\ninterface Session { signal s : Level @[100ms..1s] }\n",
+    );
+    let speed = |package: &str| {
+        format!(
+            "package {package}\nimport veh.hmi.Level\ninterface Speed {{ signal v : Level @[100ms..1s] }}\n"
+        )
+    };
+    dir.write("cluster/speed.ridl", &speed("veh.hmi.cluster"));
+    // The package keeps another interface, so it is still in the fresh set.
+    dir.write(
+        "cluster/gauge.ridl",
+        "package veh.hmi.cluster\nimport veh.hmi.Level\ninterface Gauge { signal g : Level @[100ms..1s] }\n",
+    );
+    let root = dir.path().to_path_buf();
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the fixture's lock is allocated: {stderr}");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the first publication: {stderr}");
+
+    std::fs::remove_file(root.join("cluster/speed.ridl")).expect("remove the old source");
+    dir.write("climate/speed.ridl", &speed("veh.hmi.climate"));
+    let (code, _, stderr) = ridl(&[
+        "lock".as_ref(),
+        root.as_os_str(),
+        "--rename".as_ref(),
+        "cluster.Speed=climate.Speed".as_ref(),
+    ]);
+    assert_eq!(code, 0, "the rename is recorded: {stderr}");
+
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the unit still declares the number:\n{stderr}");
+    assert!(!stderr.contains("RIDL-412"), "stderr:\n{stderr}");
+}
+
+// --- The migration from one lock per package to one lock per unit ----------
+
+/// `text`, a published snapshot of a package of unit `veh.hmi`, as a snapshot
+/// written before the IR carried `unit`: the field, the last one of the
+/// package, is removed with the comma that precedes it.
+fn without_unit(text: &str) -> String {
+    let field = "\"unit\": \"veh.hmi\"";
+    let at = text.find(field).expect("the snapshot carries the unit");
+    let before = text[..at].trim_end();
+    let before = before
+        .strip_suffix(',')
+        .expect("the unit follows another field");
+    format!("{before}{}", &text[at + field.len()..])
+}
+
+/// `Session` in the root package of unit `veh.hmi`.
+const SESSION: &str = "package veh.hmi\ntype Level: integer [0..9]\ninterface Session { signal s : Level @[100ms..1s] }\n";
+
+/// A unit with `root_source` in its root package and `Speed` in the
+/// subpackage `cluster`, with the baseline a release before the unit field
+/// published: no `unit` in the snapshots, and each package's numbers
+/// allocated by its own lock. The snapshots are the ones `ridl baseline`
+/// writes now, edited back to that state by `rewrites` (snapshot file, the
+/// number line as published, the number line the legacy lock gave), and the
+/// legacy locks — `root_lock` in the root, `Speed 1` in `cluster` — are
+/// written beside them. Returns the root.
+fn legacy_per_package_baseline(
+    dir: &TempDir,
+    root_source: &str,
+    root_lock: &str,
+    rewrites: &[(&str, &str, &str)],
+) -> PathBuf {
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("hmi.ridl", root_source);
+    dir.write(
+        "cluster/speed.ridl",
+        "package veh.hmi.cluster\nimport veh.hmi.Level\ninterface Speed { signal v : Level @[100ms..1s] }\n",
+    );
+    let root = dir.path().to_path_buf();
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the unit's lock is allocated: {stderr}");
+    publish(&root);
+    let baseline = root.join(".ridl").join("baseline");
+    for (file, before, after) in rewrites {
+        let path = baseline.join(file);
+        let text = std::fs::read_to_string(&path).expect("the published snapshot is readable");
+        assert!(text.contains(before), "{file} carries the number:\n{text}");
+        std::fs::write(&path, without_unit(&text).replace(before, after))
+            .expect("rewrite the snapshot as a legacy one");
+    }
+    dir.write("interfaces.lock", &format!("{LOCK_HEADER}{root_lock}"));
+    dir.write(
+        "cluster/interfaces.lock",
+        &format!("{LOCK_HEADER}next 2\nSpeed 1\n"),
+    );
+    root
+}
+
+/// Runs the documented migration at `root`: delete the per-package locks,
+/// `ridl lock` to number the unit, then `ridl baseline`. Returns the unit's
+/// new lock and `ridl baseline`'s exit code and stderr.
+fn migrate(root: &Path) -> (String, i32, String) {
+    std::fs::remove_file(root.join("interfaces.lock")).expect("remove the root lock");
+    std::fs::remove_file(root.join("cluster/interfaces.lock")).expect("remove the subpackage lock");
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the unit is numbered: {stderr}");
+    let lock = std::fs::read_to_string(root.join("interfaces.lock")).expect("the unit's lock");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    (lock, code, stderr)
+}
+
+/// The legacy subpackage snapshot holds `Speed` under number 1 with no unit,
+/// and the unit's new numbering gives `Session` 1 and `cluster.Speed` 2; the
+/// gate compares the legacy snapshot in the unit of the fresh package of the
+/// same name, where number 1 is still declared, so the publication goes
+/// through.
+#[test]
+fn the_migration_to_one_lock_per_unit_republishes_a_legacy_baseline() {
+    let dir = TempDir::new("gate-migration");
+    let root = legacy_per_package_baseline(
+        &dir,
+        SESSION,
+        "next 2\nSession 1\n",
+        &[
+            ("veh.hmi.ir.json", "\"number\": 1", "\"number\": 1"),
+            ("veh.hmi.cluster.ir.json", "\"number\": 2", "\"number\": 1"),
+        ],
+    );
+
+    let (lock, code, stderr) = migrate(&root);
+    assert!(
+        lock.contains("Session 1\n") && lock.contains("cluster.Speed 2\n"),
+        "the unit's numbering:\n{lock}"
+    );
+    assert_eq!(code, 0, "the migration publishes:\n{stderr}");
+    assert!(!stderr.contains("RIDL-412"), "stderr:\n{stderr}");
+    let text = std::fs::read_to_string(root.join(".ridl/baseline/veh.hmi.cluster.ir.json"))
+        .expect("the republished snapshot");
+    assert!(
+        text.contains("\"unit\": \"veh.hmi\"") && text.contains("\"number\": 2"),
+        "the snapshot now carries the unit and the unit's number:\n{text}"
+    );
+}
+
+/// A legacy lock with retired entries holds a live number above the count
+/// of the unit's interfaces, so the unit's new numbering never reaches it:
+/// `Zeta` held 4 behind two retired numbers, and the unit now runs 1 to 3.
+/// Such a baseline is refused (RIDL-412) and is republished after
+/// `.ridl/baseline/` is removed: a first publication is not gated on a
+/// published number.
+#[test]
+fn a_legacy_number_the_new_numbering_does_not_reach_is_republished_from_an_empty_baseline() {
+    let dir = TempDir::new("gate-migration-reassigned");
+    let root = legacy_per_package_baseline(
+        &dir,
+        &format!("{SESSION}interface Zeta {{ signal z : Level @[100ms..1s] }}\n"),
+        "next 5\nSession 1\nOld 2 retired\nGone 3 retired\nZeta 4\n",
+        &[
+            ("veh.hmi.ir.json", "\"number\": 2", "\"number\": 4"),
+            ("veh.hmi.cluster.ir.json", "\"number\": 3", "\"number\": 1"),
+        ],
+    );
+
+    let (lock, code, stderr) = migrate(&root);
+    assert!(
+        lock.contains("Zeta 2\n") && lock.contains("cluster.Speed 3\n"),
+        "the unit's numbering:\n{lock}"
+    );
+    assert_eq!(code, 1, "the number 4 of `Zeta` is lost:\n{stderr}");
+    assert!(
+        stderr.contains("RIDL-412") && stderr.contains("`Zeta` holds interface number 4"),
+        "stderr:\n{stderr}"
+    );
+
+    std::fs::remove_dir_all(root.join(".ridl/baseline")).expect("remove the published baseline");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "a first publication is not gated:\n{stderr}");
+}
+
 // --- The published side the gate cannot resolve (driftsys/ridl#339) --------
 
 /// A declared `interface doors` beside an inline-form `service doors`: the

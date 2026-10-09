@@ -287,7 +287,7 @@ pub(crate) fn emit(
 }
 
 /// Whether an interface carries an identity: a frozen, non-zero number from
-/// its package's `interfaces.lock` (lock design §7). A provisional number is
+/// its unit's `interfaces.lock` (lock design §7). A provisional number is
 /// no identity, and `number` 0 — never allocated — marks a snapshot published
 /// before the lock existed. The walk matches by number only when both sides
 /// have one, and the classifier re-finds the old side the same way.
@@ -298,8 +298,23 @@ pub(crate) fn frozen(interface: &ridl_ir::v2::Interface) -> bool {
 /// Settles the verdict of every change the walk of one package pair produced.
 /// `scope` is every package a reference to another package's declaration
 /// resolves against ([`classify::classify_in`]).
+///
+/// A change's new side is in `new`, except for an interface whose number
+/// moved to another package of the unit: the walk puts that package first in
+/// the change's path, and the classifier reads the new side from it, so the
+/// package is taken from `scope`, which holds every package of the new set.
 fn classify_all(changes: &mut [Change], old: &Package, new: &Package, scope: &[&Package]) {
     for change in changes {
+        let held_by = change.path.split('/').next().unwrap_or_default();
+        let new = if held_by == new.name {
+            new
+        } else {
+            scope
+                .iter()
+                .copied()
+                .find(|package| package.name == held_by)
+                .unwrap_or(new)
+        };
         change.verdict = classify::classify_in(change, old, new, scope);
     }
 }
@@ -327,15 +342,22 @@ pub(crate) fn report(changes: Vec<Change>) -> DiffReport {
 /// appended with such a type classifies breaking (driftsys/ridl#598).
 /// [`diff_sets_in`] resolves it.
 pub fn diff_packages(old: &Package, new: &Package) -> DiffReport {
+    let matching = walk::Matching::new(std::slice::from_ref(old), std::slice::from_ref(new));
     let mut changes = Vec::new();
-    walk::walk_packages(old, new, &mut changes);
+    walk::walk_packages(old, new, &matching, &mut changes);
     classify_all(&mut changes, old, new, &[]);
     report(changes)
 }
 
-/// Compares two sets of resolved packages, matching by package name. A package
-/// present only on one side is a [`Category::DeclRemoved`] or
-/// [`Category::DeclAdded`]; matched packages are walked pairwise.
+/// Compares two sets of resolved packages, matching by package name, and
+/// interface numbers within each unit ([`walk::Matching`]). A package present
+/// only on the new side is a [`Category::DeclAdded`]; matched packages are
+/// walked pairwise. A package present only on the old side is a
+/// [`Category::DeclRemoved`] when its whole unit is gone from the new side,
+/// and is walked declaration by declaration when the unit is still there, so
+/// that an interface whose number moved to another package of the unit is
+/// [`Category::InterfaceRenamed`] and one the unit retired is
+/// [`Category::InterfaceRetired`].
 ///
 /// [`diff_sets_in`] with no context: a type from a package outside `new`, such
 /// as `ridl.std`, which no snapshot carries, does not resolve, and a type the
@@ -351,7 +373,10 @@ pub fn diff_sets(old: &[Package], new: &[Package]) -> DiffReport {
 pub fn diff_sets_in(old: &[Package], new: &[Package], context: &[Package]) -> DiffReport {
     use std::collections::BTreeMap;
 
+    use ridl_ir::v2::{packages_of_unit, unit_of};
+
     let scope: Vec<&Package> = new.iter().chain(context).collect();
+    let matching = walk::Matching::new(old, new);
 
     let old_by: BTreeMap<&str, &Package> = old.iter().map(|pkg| (pkg.name.as_str(), pkg)).collect();
     let new_by: BTreeMap<&str, &Package> = new.iter().map(|pkg| (pkg.name.as_str(), pkg)).collect();
@@ -364,8 +389,23 @@ pub fn diff_sets_in(old: &[Package], new: &[Package], context: &[Package]) -> Di
         match new_by.get(name) {
             Some(new_pkg) => {
                 let mut pair = Vec::new();
-                walk::walk_packages(old_pkg, new_pkg, &mut pair);
+                walk::walk_packages(old_pkg, new_pkg, &matching, &mut pair);
                 classify_all(&mut pair, old_pkg, new_pkg, &scope);
+                changes.append(&mut pair);
+            }
+            // A package gone while its unit stays: walked against a package
+            // with nothing in it, so that each shape is matched in the unit,
+            // retired by the unit, or removed, and each other declaration is
+            // removed on its own line.
+            None if packages_of_unit(unit_of(old_pkg), new).next().is_some() => {
+                let gone = Package {
+                    name: old_pkg.name.clone(),
+                    unit: old_pkg.unit.clone(),
+                    ..Default::default()
+                };
+                let mut pair = Vec::new();
+                walk::walk_packages(old_pkg, &gone, &matching, &mut pair);
+                classify_all(&mut pair, old_pkg, &gone, &scope);
                 changes.append(&mut pair);
             }
             // A package present on one side only: the change classifies on its

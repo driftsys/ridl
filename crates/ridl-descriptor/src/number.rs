@@ -4,7 +4,7 @@
 //! descriptor reads them and computes no numbering of its own. A number of
 //! 0 never reaches a checked package: here it is an internal error, not data.
 
-use ridl_ir::v2::Package;
+use ridl_ir::v2::{InterfaceShape, Package, members_of_unit};
 
 /// One interface's number and whether a lock froze it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,17 +18,42 @@ pub struct Numbered {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZeroNumber(pub String);
 
-/// Every interface shape of `package` in [`Package::shapes`] order, with the
-/// number and the provisional flag the IR carries.
-pub fn numbered_shapes(package: &Package) -> Result<Vec<Numbered>, ZeroNumber> {
-    package
-        .shapes()
-        .map(|shape| {
+/// Every interface shape of the packages of `unit`, each with its package
+/// and its catalog name, in (number, catalog name) order. The packages are
+/// selected by [`ridl_ir::v2::unit_of`], and a package named twice is read
+/// once.
+pub(crate) fn unit_shapes<'a>(
+    unit: &str,
+    packages: &[&'a Package],
+) -> Vec<(&'a Package, InterfaceShape<'a>, String)> {
+    let mut seen: Vec<&str> = Vec::new();
+    let mut shapes: Vec<(&Package, InterfaceShape<'_>, String)> = Vec::new();
+    for package in members_of_unit(unit, packages) {
+        if seen.contains(&package.name.as_str()) {
+            continue;
+        }
+        seen.push(&package.name);
+        shapes.extend(package.shapes().map(|shape| {
+            let name = package.catalog_name(&shape);
+            (package, shape, name)
+        }));
+    }
+    shapes.sort_by(|a, b| (a.1.interface.number, &a.2).cmp(&(b.1.interface.number, &b.2)));
+    shapes
+}
+
+/// Every interface shape of the packages of `unit` under its catalog name, in
+/// (number, name) order, with the number and the provisional flag the IR
+/// carries.
+pub fn numbered_shapes(unit: &str, packages: &[&Package]) -> Result<Vec<Numbered>, ZeroNumber> {
+    unit_shapes(unit, packages)
+        .into_iter()
+        .map(|(_, shape, name)| {
             if shape.interface.number == 0 {
-                return Err(ZeroNumber(shape.name.to_owned()));
+                return Err(ZeroNumber(name));
             }
             Ok(Numbered {
-                name: shape.name.to_owned(),
+                name,
                 number: shape.interface.number,
                 provisional: shape.interface.provisional,
             })
@@ -71,24 +96,27 @@ mod tests {
     }
 
     #[test]
-    fn numbers_and_flags_are_copied_in_shape_order() {
-        let numbered = numbered_shapes(&package(vec![
-            interface("B", 7, false),
-            interface("A", 2, true),
-        ]))
+    fn numbers_and_flags_are_copied_in_number_order() {
+        let numbered = numbered_shapes(
+            "p",
+            &[&package(vec![
+                interface("B", 7, false),
+                interface("A", 2, true),
+            ])],
+        )
         .unwrap();
         assert_eq!(
             numbered,
             vec![
                 Numbered {
-                    name: "B".to_owned(),
-                    number: 7,
-                    provisional: false
-                },
-                Numbered {
                     name: "A".to_owned(),
                     number: 2,
                     provisional: true
+                },
+                Numbered {
+                    name: "B".to_owned(),
+                    number: 7,
+                    provisional: false
                 },
             ]
         );
@@ -99,7 +127,7 @@ mod tests {
         let mut package = package(vec![interface("A", 1, false)]);
         package.services.push(inline_service("p.hvac", 3));
         assert_eq!(
-            numbered_shapes(&package).unwrap(),
+            numbered_shapes("p", &[&package]).unwrap(),
             vec![
                 Numbered {
                     name: "A".to_owned(),
@@ -118,11 +146,40 @@ mod tests {
     #[test]
     fn a_zero_number_is_an_internal_error() {
         let package = package(vec![interface("A", 1, false), interface("Z", 0, true)]);
-        assert_eq!(numbered_shapes(&package), Err(ZeroNumber("Z".to_owned())));
+        assert_eq!(
+            numbered_shapes("p", &[&package]),
+            Err(ZeroNumber("Z".to_owned()))
+        );
     }
 
     #[test]
     fn a_package_without_interfaces_numbers_nothing() {
-        assert!(numbered_shapes(&package(vec![])).unwrap().is_empty());
+        assert!(
+            numbered_shapes("p", &[&package(vec![])])
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_unit_of_two_packages_is_qualified_and_sorted_by_number_then_name() {
+        let mut cluster = package(vec![interface("Speed", 1, false)]);
+        cluster.name = "u.cluster".to_owned();
+        cluster.unit = "u".to_owned();
+        let mut root = package(vec![interface("Session", 2, true)]);
+        root.name = "u".to_owned();
+        root.services.push(inline_service("veh.x", 3));
+        let mut other = package(vec![interface("Other", 1, false)]);
+        other.name = "w".to_owned();
+        // Its name extends the unit's, but it is the root of its own unit.
+        let mut sibling = package(vec![interface("Sib", 4, false)]);
+        sibling.name = "u.sib".to_owned();
+        sibling.unit = "u.sib".to_owned();
+        let names: Vec<String> = numbered_shapes("u", &[&root, &cluster, &other, &sibling, &root])
+            .unwrap()
+            .into_iter()
+            .map(|n| n.name)
+            .collect();
+        assert_eq!(names, ["cluster.Speed", "Session", "veh.x"]);
     }
 }

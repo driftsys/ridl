@@ -427,6 +427,7 @@ mod tests {
         let pkg = Package::new(
             &db,
             "app".to_string(),
+            "app".to_string(),
             inputs,
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),

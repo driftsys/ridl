@@ -177,6 +177,7 @@ mod tests {
         let package = Package::new(
             &db,
             "a".to_string(),
+            "a".to_string(),
             vec![z, a],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),

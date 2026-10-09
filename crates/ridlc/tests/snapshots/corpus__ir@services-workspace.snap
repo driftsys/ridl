@@ -421,7 +421,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
     }
   ],
   "services": [],
-  "retired": []
+  "retired": [],
+  "unit": "fleet.contracts"
 }
 
 // ===== package fleet.legacy =====
@@ -463,7 +464,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
   ],
   "interfaces": [],
   "services": [],
-  "retired": []
+  "retired": [],
+  "unit": "fleet.legacy"
 }
 
 // ===== package fleet.vehicle =====
@@ -764,5 +766,6 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       ]
     }
   ],
-  "retired": []
+  "retired": [],
+  "unit": "fleet.vehicle"
 }

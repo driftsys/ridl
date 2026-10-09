@@ -1,16 +1,19 @@
 # The catalog descriptor
 
-The catalog descriptor is a small binary file, one per package, that lists what
-a runtime needs to route and check the traffic of that package's interfaces:
-the interface numbers, the members and their ordinals, the maximum encoded size
-of each payload, the timing bounds, and the retired interfaces. A program reads
-it without the compiler and without decoding the IR.
+The catalog descriptor is a small binary file, one per unit, that lists what a
+runtime needs to route and check the traffic of that unit's interfaces: the
+interface numbers, the members and their ordinals, the maximum encoded size of
+each payload, the timing bounds, and the retired interfaces. A program reads it
+without the compiler and without decoding the IR. A unit is one `ridl.toml`
+with a `[package]` table and every source package in its directory tree; the
+unit's name is the manifest's `name`, which is also the name of its root source
+package ([the design record][design]).
 
 ## What it is for
 
 A process that carries interactions between other processes — a gateway, a
 broker, a bridge between two transports, or the engine of a runtime — does not
-link the generated crate of every package it carries. It still has to answer
+link the generated crate of every unit it carries. It still has to answer
 questions such as:
 
 - Which interface does the number in this frame name, and is that interface
@@ -22,9 +25,9 @@ questions such as:
   counts the payload alone, without the envelope and the framing a transport
   adds.
 - What timing bound does this member declare?
-- Do both peers speak the same version of the package?
+- Do both peers speak the same version of the unit?
 
-The catalog descriptor answers each of these from one file per package, read at
+The catalog descriptor answers each of these from one file per unit, read at
 startup.
 
 **What is built.** The compiler writes the descriptor, the `ridl-descriptor`
@@ -38,16 +41,18 @@ read it; the codegen model carries the same facts (see
 
 ## Producing it
 
-`--emit catalog` writes one `<package>.catalog.binfb` file per package that
-declares at least one interface, or a service with an inline body:
+`--emit catalog` writes one `<unit>.catalog.binfb` file per unit that declares
+at least one interface, or a service with an inline body, in any of its source
+packages:
 
 ```sh
 ridl build examples/cabin --emit catalog --out-dir out
 # writes out/veh.cabin.catalog.binfb
 ```
 
-A package with no interface gets no file. The flag combines with the others, so
-one build can write the Rust crate and the descriptor together.
+A unit with no interface gets no file. The flag combines with the others, so
+one build can write the Rust crate and the descriptor together. The other emit
+targets stay one file per source package; only the catalog is per unit.
 
 ## Reading it
 
@@ -115,17 +120,22 @@ does not read, makes `ridl describe` exit with code 2. The
 
 ## What it contains
 
-- **The catalog**: the package `name`; the `hash`, which identifies this
-  version of the package (see below); `toolchain`, the version of `ridl` that
-  wrote the file; the schema `version`; the `interfaces`; and the `retired`
-  interfaces, each with its name and number, so a reader can refuse a peer that
-  still uses one.
-- **Each interface**: its `name`, its `number`, and `provisional`, which is
-  true while the number is not yet recorded in the package's `interfaces.lock`.
-  `Cabin` above is provisional because `examples/cabin` has no lock file; a
-  number becomes permanent when [`ridl lock`](cli-reference.md#ridl-lock)
-  records it. `reserved_ordinals` lists the ordinals that `reserved` tombstones
-  hold.
+- **The catalog**: the unit `name`; the `hash`, which identifies this version
+  of the unit (see below); `toolchain`, the version of `ridl` that wrote the
+  file; the schema `version`; the `interfaces`; and the `retired` interfaces,
+  each with its name and number, so a reader can refuse a peer that still uses
+  one.
+- **Each interface**: its `name`, qualified relative to the unit (`Cabin` for
+  an interface of the root source package, `cluster.Speed` for one of the
+  source package `cluster` below it); its `number`, which is one space per
+  unit; and `provisional`, which is true while the number is not yet recorded
+  in the unit's `interfaces.lock`, the one lock file beside the unit's
+  `ridl.toml`. `Cabin` above is provisional because `examples/cabin` has no
+  lock file; a number becomes permanent when
+  [`ridl lock`](cli-reference.md#ridl-lock) records it. `reserved_ordinals`
+  lists the ordinals that `reserved` tombstones hold. The ridl reference,
+  [section 11](reference/ridl.md#11-interaction-identity-and-evolution), is
+  the rule for the names and the numbers.
 - **Each member**: its `name`, its `ordinal` (its position in the interface
   body), its `kind`, its `payloads`, and its `timing` when the member declares
   one.
@@ -149,16 +159,18 @@ emits.
 
 ## The catalog and the face
 
-The catalog hash is a SHA-256 hash over the package's interfaces, their
-numbers, and every declaration they reach. Doc comments, labels and
-`deprecated` do not change it; any other change to an interface or to a type it
-uses does.
+The catalog hash is a SHA-256 hash over the unit's interfaces, from every
+source package of the unit, their numbers, and every declaration they reach, in
+the unit or in another one. Doc comments, labels and `deprecated` do not change
+it; any other change to an interface or to a type it uses does, so a change in
+any source package of the unit that an interface reaches changes the one hash.
+The design record's [hash section][hash] has the exact input.
 
-The generated Rust face carries the same package name and hash as its
-`CATALOG`. When a face binds to a port, it compares its `CATALOG` with the
-catalog of that port, and panics when they differ. So a face generated from a
-different version of the package than the one its runtime serves fails at bind
-time, instead of misreading payloads. The face compares itself with its own
+The generated Rust face carries the same unit name and hash as its `CATALOG`.
+When a face binds to a port, it compares its `CATALOG` with the catalog of
+that port, and panics when they differ. So a face generated from a different
+version of the unit than the one its runtime serves fails at bind time,
+instead of misreading payloads. The face compares itself with its own
 port only; it does not compare catalogs with the party at the other end. The
 [failures section](generated-code.md#failures) of the previous chapter shows
 what that check does.
@@ -190,4 +202,5 @@ built; the
   input, the size states, and the verifier.
 
 [design]: https://github.com/driftsys/ridl/blob/main/docs/design/catalog-descriptor.md
+[hash]: https://github.com/driftsys/ridl/blob/main/docs/design/catalog-descriptor.md#the-catalog-hash
 [not-built]: https://github.com/driftsys/ridl/blob/main/docs/design/catalog-descriptor.md#not-built

@@ -62,7 +62,7 @@ boundary.
 
 rsdl records nothing of its own. The contracts are ridl's: a `service`, its
 interfaces and their members are declared in `.ridl` files, and the numbers that
-identify an interface on the wire come from a per-package lock file, an input to
+identify an interface on the wire come from a per-unit lock file, an input to
 the lowering (§13). Behaviour is rmdl's and is not referenced in this release
 (§12). What rsdl adds is structure — which parts exist, how they relate, and
 where they run — and every fact it lowers is derived from that structure.
@@ -94,7 +94,7 @@ The nouns, each answering one question:
 | service      | what is addressed on the wire                               | ridl  |
 | interface    | what is contracted                                          | ridl  |
 | member       | one typed interaction                                       | ridl  |
-| catalog      | a package's interfaces, their numbers, one hash             | ridl  |
+| catalog      | a unit's interfaces, their numbers, one hash                | ridl  |
 
 **Only what is addressed has identity on the wire.** A service's dotted name and
 a catalog do; distribution, machine, component and instance names never travel.
@@ -621,9 +621,9 @@ machines its endpoints are placed on in the deployment:
 A grant is derived per component, never written. The lowering resolves every
 `requires` line through its one owning service (§8); the grant is **the set of
 catalog regions its requirements reach** (vocabulary §6, D-9). The region an
-interface reaches is the catalog that numbers it — the catalog of the package
-that declares the interface (vocabulary V-16, V-17), whichever package declares
-the owning service.
+interface reaches is the catalog that numbers it — the catalog of the unit that
+declares the interface (vocabulary V-16, V-17), whichever unit declares the
+owning service.
 
 - A consumer names interfaces, so it is granted only the regions of the
   interfaces it names — least privilege — and a service that gains or splits
@@ -691,13 +691,13 @@ only if a member kind ever has to exist without a declaration.
 The lowering runs over the closure once and then once per deployment. It
 produces **facts**, stated here as facts and not as a schema; a runtime's
 descriptor is an emitter over them and is specified with the runtime. Inputs
-from outside rsdl, cited once: the interface numbers, read from each package's
+from outside rsdl, cited once: the interface numbers, read from each unit's
 generated lock file; the member ordinals, from position (ridl §11); and the
 **catalog hash** per catalog, computed by ridl over the interfaces, their
 numbers and every type they reach (D-8) — embedded here as an input, never
-computed by rsdl. The lock file is `interfaces.lock`, one per package, written
-by `ridl lock` alone (ridl §11); an inline shape is numbered from it too, under
-the key `service:` and the service's dotted name (ridl §14.5).
+computed by rsdl. The lock file is `interfaces.lock`, one per unit, written by
+`ridl lock` alone (ridl §11); an inline shape is numbered from it too, under the
+key `service:` and the service's dotted name (ridl §14.5).
 
 Per deployment:
 
@@ -724,8 +724,10 @@ Per deployment:
   kind on the link; the surface set is the boundary read from the consumer's
   side.
 - **The region map** — one region per catalog the closure reaches: the catalog's
-  name (its package name, V-16), its hash, and the interfaces of that catalog
-  that closure services list.
+  name (its unit name, V-16), its hash, and the interfaces of that catalog that
+  closure services list, each under its catalog name (ridl §11). A unit is one
+  `ridl.toml` and the source packages in its tree (ADR-0002 §1), so the
+  interfaces of several source packages share one region.
 - **The attribute map per node** — every backend key, as declared, on every node
   that has an attribute site: a declaration (`system`, `deployment`, `machine`,
   `component`, `distribution`), a member line of a `system` or a `distribution`,
@@ -946,9 +948,11 @@ version adds.
 
 ## Appendix A — Full Example
 
-A small vehicle: two ridl packages carry the contracts, one rsdl package carries
-the closure, two distributions and two deployments. Every rule of §3 to §13
-holds over these files.
+A small vehicle in one unit, `veh` (ADR-0002 §1): a `ridl.toml` whose
+`[package]` name is `veh` and which holds no source, and four source packages in
+its tree. Two ridl packages carry the contracts, one rsdl package carries the
+closure, two distributions and two deployments. Every rule of §3 to §13 holds
+over these files.
 
 **Contracts** — `veh/common/common.typl` and `veh/adas/adas.ridl`, shown
 briefly:
@@ -1077,10 +1081,14 @@ What the lowering derives, and what it reports:
   CruiseControl` — `Cruise` is a redundant provider set. RSDL-804
   for `linux.cpuset` when no `linux` backend is configured; the key is carried
   on `Panel`'s placement line in `Cockpit` either way.
-- **Grants** (§11): `Cruise` reaches the `veh.adas` region (for `LaneAssist`);
-  `Panel` reaches `veh.adas`; `Backend` reaches `veh.adas` and `veh.diag`,
-  lowered with the `external` flag. `Lane` requires nothing and holds no
-  consumer grant; its write side is read from the producers fact.
+- **Regions** (§13): one, `veh`, because the three interfaces belong to one
+  unit. Its interfaces are `adas.CruiseControl` and `adas.LaneAssist`, named
+  relative to the unit, and the inline shape `veh.diag.access`, which keeps its
+  full dotted name.
+- **Grants** (§11): `Cruise` reaches the `veh` region (for `LaneAssist`);
+  `Panel` reaches `veh`; `Backend` reaches `veh`, lowered with the `external`
+  flag. `Lane` requires nothing and holds no consumer grant; its write side is
+  read from the producers fact.
 - **Distributions** (§3.3, §13): `Hmi` depends on `Adas` (`Panel` requires
   interfaces `Cruise` and `Lane` offer); `Adas` depends on nothing. No tier
   inversion. `Backend`, external, is in no distribution. In `Production`, `Adas`

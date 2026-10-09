@@ -485,6 +485,7 @@ fn shared_pass_reads_inline_scalar_backing_in_the_current_render_map() {
     let package = Package::new(
         &db,
         "a".to_string(),
+        "a".to_string(),
         vec![input],
         PackageOrigin::WorkspaceMember,
         BTreeMap::new(),
@@ -619,6 +620,7 @@ fn shared_pass_excludes_standard_package_sites_from_unit_counts() {
         Package::new(
             &db,
             name.to_string(),
+            name.to_string(),
             vec![input],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
@@ -690,6 +692,7 @@ fn design_source_set_with(
             let input = InputFile::new(&db, format!("{name}/source.ridl"), source.to_string());
             Package::new(
                 &db,
+                name.to_string(),
                 name.to_string(),
                 vec![input],
                 PackageOrigin::WorkspaceMember,

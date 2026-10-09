@@ -204,6 +204,7 @@ fn pkg(interactions: Vec<v2::Decl>) -> v2::Package {
         interfaces: vec![interface("I", interactions)],
         services: Vec::new(),
         retired: Vec::new(),
+        unit: String::new(),
     }
 }
 
@@ -215,6 +216,7 @@ fn decl_pkg(decls: Vec<v2::Decl>) -> v2::Package {
         interfaces: Vec::new(),
         services: Vec::new(),
         retired: Vec::new(),
+        unit: String::new(),
     }
 }
 
@@ -1435,6 +1437,7 @@ fn service_pkg(services: Vec<v2::Service>) -> v2::Package {
         interfaces: Vec::new(),
         services,
         retired: Vec::new(),
+        unit: String::new(),
     }
 }
 
@@ -1757,6 +1760,7 @@ fn an_interface_removed_is_breaking() {
         interfaces: Vec::new(),
         services: Vec::new(),
         retired: Vec::new(),
+        unit: String::new(),
     };
     assert_row(&old, &new, Category::DeclRemoved, Verdict::Breaking);
 }
@@ -1769,6 +1773,7 @@ fn an_interface_appended_is_compatible() {
         interfaces: Vec::new(),
         services: Vec::new(),
         retired: Vec::new(),
+        unit: String::new(),
     };
     let new = pkg(vec![signal("a", 1, "T")]);
     assert_row(&old, &new, Category::DeclAdded, Verdict::Compatible);
@@ -2292,6 +2297,7 @@ fn an_appended_field_typed_from_another_package_is_judged_by_its_declaration() {
         interfaces: Vec::new(),
         services: Vec::new(),
         retired: Vec::new(),
+        unit: String::new(),
     };
     let body = |appended: &str| -> v2::Package {
         let mut members = vec![field("a", 1, "veh.units.Count")];
@@ -2418,6 +2424,7 @@ fn diff_sets_resolves_a_foreign_field_type_against_the_new_snapshot() {
         interfaces: Vec::new(),
         services: Vec::new(),
         retired: Vec::new(),
+        unit: String::new(),
     };
     let body = |appended: bool| -> v2::Package {
         let mut members = vec![field("a", 1, "veh.units.Count")];
@@ -2869,6 +2876,7 @@ fn a_context_package_resolves_an_appended_field_type() {
         interfaces: Vec::new(),
         services: Vec::new(),
         retired: Vec::new(),
+        unit: String::new(),
     };
     let body = |appended: Option<&str>| -> v2::Package {
         let mut members = vec![field("a", 1, "ridl.std.Timestamp")];

@@ -20,6 +20,11 @@ Amended 2026-10-06 by the generated-file marker and header (driftsys/ridl#746):
 §4 gains the `[codegen]` table, with the `header-file` key, and the codes
 MANI-011 and MANI-012.
 
+Amended 2026-10-09 by the catalog-per-unit design: §1 gains the unit, the tree
+of source packages below one `[package]` manifest, and the rule that a source
+package belongs to one unit (MANI-014); §4 refuses a `ridl.toml` inside a unit's
+tree (MANI-013).
+
 ## Context
 
 RIDL is an interface description language whose source files declare contracts
@@ -87,6 +92,37 @@ the file, where the codegen targets (Proto package, Kotlin package, ARXML
 The strict directory-name correspondence is a deliberate Go-ism. It removes an
 entire class of confusion — there is exactly one place a package can live, and
 exactly one name it can have, given its location.
+
+**The unit** (amended 2026-10-09). A **unit** is one `ridl.toml` with a
+`[package]` table plus every source package in its directory tree. A workspace
+member is a unit, and so is a standalone manifest. The `name` of the `[package]`
+table is the unit name. The manifest's directory is the source package `name`,
+and each subdirectory is the source package `name.<path>`, so every source
+package of a unit starts with the unit name. The root source package can be
+empty: the manifest directory can hold only `ridl.toml` and `interfaces.lock`. A
+source package belongs to exactly one unit. Across every unit that one build
+loads, a second unit that declares the same source package raises MANI-014
+(Error); this covers two unit names where one is a prefix of the other (`veh`
+and `veh.cluster`). In prose, "package" alone means a source package and "the
+package manifest" means the unit. A unit is the unit of distribution: it
+produces one catalog when it declares an interface shape (see
+[the catalog descriptor](../design/catalog-descriptor.md)), and one
+`interfaces.lock` beside its manifest (ridl language reference, §11).
+
+**Alternatives rejected for the unit.** An engine that loads every catalog whose
+name starts with a prefix keeps N catalogs and N ports, which is the cost the
+unit removes. A wildcard import only brings names into scope and does not move
+an interface into another catalog. A separate `[module]` table would keep
+"package" to one meaning, but `[package]` already names the unit, as the
+`package` attribute of an Android manifest does. A free unit name with a `root`
+field is not needed, because the unit name as the root of every source package
+makes a clash between two units impossible inside one workspace. The Kotlin rule
+(the `package` line decides, the directory is a convention) gives up "one place
+a package can live" and lets two units claim one source package. Exclusive unit
+kinds were rejected because one unit can hold both contracts and a system, as
+`examples/cabin` does. A workspace member nested inside another member's tree is
+an error, because `vehicle.cabin.hvac.station` would then belong to two units;
+`evals/corpus/vss` is laid out with top-level members for that reason.
 
 ### 2. Imports
 
@@ -251,6 +287,12 @@ on logical package names instead means imports in `.ridl` files look identical
 whether the package is local, a workspace sibling, or a remote URL — only the
 manifest changes. This is also what makes air-gapping work as a pure manifest
 rewrite.
+
+**No manifest inside a unit** (amended 2026-10-09). A `ridl.toml` in a
+subdirectory of a unit's tree raises MANI-013 (Error), and the loader does not
+treat that directory as a separate package root. A workspace member's directory
+may not sit inside another unit's tree; where it sits otherwise is the
+workspace's choice.
 
 **Rationale — workspace nesting forbidden.** Cargo permits nested workspaces;
 the feature is rarely used correctly and creates ambiguity when tools try to

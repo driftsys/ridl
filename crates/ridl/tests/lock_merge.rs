@@ -118,6 +118,18 @@ fn both_add_one_number_renumbers_theirs() {
     assert_eq!(written, lock(5, "A 1\nB 2\nD 3\nC 4\n"));
 }
 
+/// A dotted interface key survives the merge: ours adds an entry, theirs is
+/// unchanged, and OURS holds both lines.
+#[test]
+fn merge_keeps_a_dotted_key() {
+    let base = lock(2, "cluster.Speed 1\n");
+    let ours = lock(3, "cluster.Speed 1\nclimate.Climate 2\n");
+
+    let (code, written, stderr) = merge(&base, &ours, &base);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_eq!(written, ours);
+}
+
 /// §6 row 2, both directions: each entry changed on one side only, so both
 /// changes are taken.
 #[test]

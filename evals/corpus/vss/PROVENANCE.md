@@ -108,25 +108,32 @@ three expanded station leaves; HVAC owns exactly the seven root leaves.
 Package segments are lowercased because the existing manifest validator rejects
 capitalized segments with MANI-006. This is the lexical case transformation
 permitted by rule 1; the full original branch remains explicit below and in the
-output directory path. There is no merged or split package boundary. Interface
+output directory name. There is no merged or split package boundary. Interface
 and signal names remain exactly as upstream; no other lexical rename is needed.
 
 | Upstream branch path                        | Package declaration and manifest name       | Interface   | Output directory (contains `contract.ridl` and `ridl.toml`) |
 | ------------------------------------------- | ------------------------------------------- | ----------- | ----------------------------------------------------------- |
-| `Vehicle.Cabin.HVAC`                        | `vehicle.cabin.hvac`                        | `HVAC`      | `Vehicle/Cabin/HVAC`                                        |
-| `Vehicle.Cabin.HVAC.Station`                | `vehicle.cabin.hvac.station`                | `Station`   | `Vehicle/Cabin/HVAC/Station`                                |
-| `Vehicle.Cabin.HVAC.Station.Row1`           | `vehicle.cabin.hvac.station.row1`           | `Row1`      | `Vehicle/Cabin/HVAC/Station/Row1`                           |
-| `Vehicle.Cabin.HVAC.Station.Row2`           | `vehicle.cabin.hvac.station.row2`           | `Row2`      | `Vehicle/Cabin/HVAC/Station/Row2`                           |
-| `Vehicle.Cabin.HVAC.Station.Row3`           | `vehicle.cabin.hvac.station.row3`           | `Row3`      | `Vehicle/Cabin/HVAC/Station/Row3`                           |
-| `Vehicle.Cabin.HVAC.Station.Row4`           | `vehicle.cabin.hvac.station.row4`           | `Row4`      | `Vehicle/Cabin/HVAC/Station/Row4`                           |
-| `Vehicle.Cabin.HVAC.Station.Row1.Driver`    | `vehicle.cabin.hvac.station.row1.driver`    | `Driver`    | `Vehicle/Cabin/HVAC/Station/Row1/Driver`                    |
-| `Vehicle.Cabin.HVAC.Station.Row1.Passenger` | `vehicle.cabin.hvac.station.row1.passenger` | `Passenger` | `Vehicle/Cabin/HVAC/Station/Row1/Passenger`                 |
-| `Vehicle.Cabin.HVAC.Station.Row2.Driver`    | `vehicle.cabin.hvac.station.row2.driver`    | `Driver`    | `Vehicle/Cabin/HVAC/Station/Row2/Driver`                    |
-| `Vehicle.Cabin.HVAC.Station.Row2.Passenger` | `vehicle.cabin.hvac.station.row2.passenger` | `Passenger` | `Vehicle/Cabin/HVAC/Station/Row2/Passenger`                 |
-| `Vehicle.Cabin.HVAC.Station.Row3.Driver`    | `vehicle.cabin.hvac.station.row3.driver`    | `Driver`    | `Vehicle/Cabin/HVAC/Station/Row3/Driver`                    |
-| `Vehicle.Cabin.HVAC.Station.Row3.Passenger` | `vehicle.cabin.hvac.station.row3.passenger` | `Passenger` | `Vehicle/Cabin/HVAC/Station/Row3/Passenger`                 |
-| `Vehicle.Cabin.HVAC.Station.Row4.Driver`    | `vehicle.cabin.hvac.station.row4.driver`    | `Driver`    | `Vehicle/Cabin/HVAC/Station/Row4/Driver`                    |
-| `Vehicle.Cabin.HVAC.Station.Row4.Passenger` | `vehicle.cabin.hvac.station.row4.passenger` | `Passenger` | `Vehicle/Cabin/HVAC/Station/Row4/Passenger`                 |
+| `Vehicle.Cabin.HVAC`                        | `vehicle.cabin.hvac`                        | `HVAC`      | `vehicle.cabin.hvac`                                        |
+| `Vehicle.Cabin.HVAC.Station`                | `vehicle.cabin.hvac.station`                | `Station`   | `vehicle.cabin.hvac.station`                                |
+| `Vehicle.Cabin.HVAC.Station.Row1`           | `vehicle.cabin.hvac.station.row1`           | `Row1`      | `vehicle.cabin.hvac.station.row1`                           |
+| `Vehicle.Cabin.HVAC.Station.Row2`           | `vehicle.cabin.hvac.station.row2`           | `Row2`      | `vehicle.cabin.hvac.station.row2`                           |
+| `Vehicle.Cabin.HVAC.Station.Row3`           | `vehicle.cabin.hvac.station.row3`           | `Row3`      | `vehicle.cabin.hvac.station.row3`                           |
+| `Vehicle.Cabin.HVAC.Station.Row4`           | `vehicle.cabin.hvac.station.row4`           | `Row4`      | `vehicle.cabin.hvac.station.row4`                           |
+| `Vehicle.Cabin.HVAC.Station.Row1.Driver`    | `vehicle.cabin.hvac.station.row1.driver`    | `Driver`    | `vehicle.cabin.hvac.station.row1.driver`                    |
+| `Vehicle.Cabin.HVAC.Station.Row1.Passenger` | `vehicle.cabin.hvac.station.row1.passenger` | `Passenger` | `vehicle.cabin.hvac.station.row1.passenger`                 |
+| `Vehicle.Cabin.HVAC.Station.Row2.Driver`    | `vehicle.cabin.hvac.station.row2.driver`    | `Driver`    | `vehicle.cabin.hvac.station.row2.driver`                    |
+| `Vehicle.Cabin.HVAC.Station.Row2.Passenger` | `vehicle.cabin.hvac.station.row2.passenger` | `Passenger` | `vehicle.cabin.hvac.station.row2.passenger`                 |
+| `Vehicle.Cabin.HVAC.Station.Row3.Driver`    | `vehicle.cabin.hvac.station.row3.driver`    | `Driver`    | `vehicle.cabin.hvac.station.row3.driver`                    |
+| `Vehicle.Cabin.HVAC.Station.Row3.Passenger` | `vehicle.cabin.hvac.station.row3.passenger` | `Passenger` | `vehicle.cabin.hvac.station.row3.passenger`                 |
+| `Vehicle.Cabin.HVAC.Station.Row4.Driver`    | `vehicle.cabin.hvac.station.row4.driver`    | `Driver`    | `vehicle.cabin.hvac.station.row4.driver`                    |
+| `Vehicle.Cabin.HVAC.Station.Row4.Passenger` | `vehicle.cabin.hvac.station.row4.passenger` | `Passenger` | `vehicle.cabin.hvac.station.row4.passenger`                 |
+
+## Layout
+
+Each translated VSS branch is one workspace member, in a directory named after
+its package and outside every other member's tree, because a unit's tree holds
+no second manifest: a `ridl.toml` inside another member's directory tree is an
+error (MANI-013).
 
 ## Instance and source-comment preservation
 

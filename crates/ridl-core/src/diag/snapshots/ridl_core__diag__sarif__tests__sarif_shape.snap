@@ -1032,6 +1032,16 @@ expression: log
               }
             },
             {
+              "id": "RIDL-416",
+              "name": "lock-in-subdirectory",
+              "shortDescription": {
+                "text": "`interfaces.lock` in a subdirectory of a unit is not read"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
               "id": "RSDL-305",
               "shortDescription": {
                 "text": "`instances` is not a parenthesised list of one or more camelCase names"
@@ -1470,6 +1480,24 @@ expression: log
               }
             },
             {
+              "id": "MANI-013",
+              "shortDescription": {
+                "text": "nested manifest — a `ridl.toml` inside a unit's directory tree"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-014",
+              "shortDescription": {
+                "text": "a source package is declared by two units"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
               "id": "MANI-101",
               "shortDescription": {
                 "text": "remote import fetch failed"
@@ -1581,7 +1609,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 158,
+          "ruleIndex": 161,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

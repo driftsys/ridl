@@ -127,6 +127,33 @@ fn json_carries_lint_field_and_deny_exits_1() {
     );
 }
 
+/// RIDL-416 (`lock-in-subdirectory`) takes its level from `[lints]`: at
+/// `deny` the ignored lock is an error and `ridl check` exits 1; at `allow`
+/// it is not reported.
+#[test]
+fn lock_in_subdirectory_takes_its_level_from_the_lints_table() {
+    for (lints, expected_code, reported) in [
+        ("\n[lints]\nlock-in-subdirectory = \"deny\"\n", 1, true),
+        ("\n[lints]\nlock-in-subdirectory = \"allow\"\n", 0, false),
+    ] {
+        let dir = TempDir::new("lock-in-subdirectory");
+        let root = member_workspace(&dir, lints);
+        dir.write("sensor/sub/interfaces.lock", "next 1\n");
+
+        let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+        assert_eq!(code, expected_code, "{lints}stderr:\n{stderr}");
+        assert_eq!(
+            stderr.contains("error[RIDL-416]"),
+            reported,
+            "{lints}stderr:\n{stderr}"
+        );
+        assert!(
+            reported || !stderr.contains("RIDL-416"),
+            "{lints}stderr:\n{stderr}"
+        );
+    }
+}
+
 /// A workspace with one member whose interface declares one `command`, with
 /// the timing annotation `timing` (empty for none), under
 /// `missing-response-bound = "deny"`. Returns the workspace root.

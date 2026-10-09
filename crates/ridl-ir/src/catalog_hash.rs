@@ -1,8 +1,14 @@
-//! The catalog hash (rsdl note D-8): SHA-256 over the interfaces, their
-//! numbers and every type they reach, transitively, wherever declared.
-//! Derived, never recorded. The input is the protobuf binary of the reduced
-//! package (ADR-0014 decision 15); see that decision for the determinism
-//! rule and for why the canonical JSON is not the input.
+//! The catalog hash (rsdl note D-8): SHA-256 over the interfaces of one
+//! unit, their numbers and every type they reach, transitively, wherever
+//! declared. Derived, never recorded. The input is the protobuf binary of
+//! the reduced unit (ADR-0014 decision 15); see that decision for the
+//! determinism rule and for why the canonical JSON is not the input.
+//!
+//! A unit is one package manifest and the source packages in its directory
+//! tree (`Package.unit`). Every function here takes the unit name and every
+//! package of the build, and selects the unit's packages by
+//! [`crate::v2::unit_of`], never by a name prefix: a unit named `u.x` is
+//! not part of the unit `u`.
 //!
 //! The hash lives in this crate, not in `ridl-descriptor`, because three
 //! artifacts carry it: the codegen model's `Catalog.hash`, lowered in
@@ -15,17 +21,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use sha2::{Digest, Sha256};
 
 use crate::v2::{
-    Decl, DocLink, FieldType, Package, Param, TypeDef, decl, field_type, return_type, stream_type,
-    struct_member,
+    Decl, DocLink, FieldType, Package, Param, TypeDef, decl, field_type, members_of_unit,
+    return_type, stream_type, struct_member,
 };
 
-/// Every declaration an interface of `package` reaches, keyed by canonical
-/// name: bare for this package, `pkg.Name` for another.
-pub fn reachable_decls<'a>(
-    package: &'a Package,
-    others: &[&'a Package],
-) -> BTreeMap<String, &'a Decl> {
-    let index = Index::new(package, others);
+/// Every declaration an interface shape of `unit` reaches, in any package
+/// of `packages`, keyed by canonical name (`pkg.Name`).
+pub fn reachable_decls<'a>(unit: &str, packages: &[&'a Package]) -> BTreeMap<String, &'a Decl> {
+    let index = Index::new(unit, packages);
     index
         .closure()
         .into_iter()
@@ -33,20 +36,28 @@ pub fn reachable_decls<'a>(
         .collect()
 }
 
-/// The exact input of the hash: the package name; every interface shape
-/// under its identity name, with the owning service's visibility for an
-/// inline shape, the IR's `number` and `provisional`, and its interactions,
-/// in (number, name) order because the lock makes the number the identity;
-/// the reached declarations under canonical names, in canonical-name order,
-/// every type reference inside them rewritten to the canonical name of the
-/// declaration it resolves to, and every expression string left as written;
-/// doc strings, doc links and doc tags (`labels`, `deprecated`, `see`,
-/// `since`) blanked, a parameter's included; no services and no retired
-/// entries.
-pub fn reduced_package(package: &Package, others: &[&Package]) -> Package {
-    let index = Index::new(package, others);
+/// The exact input of the hash, one IR package named after the unit: every
+/// interface shape of every package of the unit under its catalog name
+/// (`Package::catalog_name`: the declared name relative to the unit, or the
+/// owning service's dotted global name for an inline shape), with the
+/// owning service's visibility for an inline shape, the IR's `number` and
+/// `provisional`, and its interactions, in (number, name) order because the
+/// lock makes the number the identity; the reached declarations under their
+/// full canonical names (`pkg.Name`, for the unit's own packages too, since
+/// two packages of one unit can declare the same short name), in
+/// canonical-name order, every type reference inside them rewritten to the
+/// canonical name of the declaration it resolves to, and every expression
+/// string left as written; doc strings, doc links and doc tags (`labels`,
+/// `deprecated`, `see`, `since`) blanked, a parameter's included; no
+/// services and no retired entries.
+///
+/// `packages` is every package of the build; a package named twice is read
+/// once (see [`Index`]).
+pub fn reduced_unit(unit: &str, packages: &[&Package]) -> Package {
+    let index = Index::new(unit, packages);
     let mut reduced = Package {
-        name: package.name.clone(),
+        name: unit.to_owned(),
+        unit: unit.to_owned(),
         decls: index
             .closure()
             .into_iter()
@@ -58,19 +69,25 @@ pub fn reduced_package(package: &Package, others: &[&Package]) -> Package {
                 decl
             })
             .collect(),
-        interfaces: package
-            .shapes()
-            .map(|shape| {
-                let mut interface = shape.interface.clone();
-                interface.name = shape.name.to_owned();
-                interface.visibility = shape.visibility();
-                interface
-            })
-            .collect(),
+        interfaces: vec![],
         services: vec![],
         retired: vec![],
     };
-    for interface in &mut reduced.interfaces {
+    // Each shape's interaction references are read in the package that
+    // declares the shape, so the owner travels with the interface until the
+    // references are rewritten.
+    let mut interfaces: Vec<(usize, _)> = index
+        .members()
+        .flat_map(|(owner, package)| {
+            package.shapes().map(move |shape| {
+                let mut interface = shape.interface.clone();
+                interface.name = package.catalog_name(&shape);
+                interface.visibility = shape.visibility();
+                (owner, interface)
+            })
+        })
+        .collect();
+    for (owner, interface) in &mut interfaces {
         interface.doc.clear();
         interface.labels.clear();
         interface.deprecated = None;
@@ -78,28 +95,28 @@ pub fn reduced_package(package: &Package, others: &[&Package]) -> Package {
         interface.see.clear();
         interface.since.clear();
         for interaction in &mut interface.interactions {
-            visit_refs(interaction, &mut |name| index.canonicalize(name, ROOT));
+            visit_refs(interaction, &mut |name| index.canonicalize(name, *owner));
             blank_docs(interaction);
         }
     }
-    reduced
-        .interfaces
-        .sort_by(|a, b| (a.number, &a.name).cmp(&(b.number, &b.name)));
+    interfaces.sort_by(|(_, a), (_, b)| (a.number, &a.name).cmp(&(b.number, &b.name)));
+    reduced.interfaces = interfaces
+        .into_iter()
+        .map(|(_, interface)| interface)
+        .collect();
     reduced
 }
 
-/// SHA-256 over the protobuf binary of [`reduced_package`]. The numbers are
+/// SHA-256 over the protobuf binary of [`reduced_unit`]. The numbers are
 /// inside: each reduced interface carries the IR's `number` and
-/// `provisional`. An entry of `others` named like `package` is ignored, so
-/// the hash is the same whether or not the caller includes `package` there.
-pub fn catalog_hash(package: &Package, others: &[&Package]) -> [u8; 32] {
+/// `provisional`. A package named twice in `packages` is read once, so the
+/// hash is the same whether or not the caller lists a package of the unit
+/// twice.
+pub fn catalog_hash(unit: &str, packages: &[&Package]) -> [u8; 32] {
     let mut hasher = Sha256::new();
-    hasher.update(crate::v2::to_binary(&reduced_package(package, others)));
+    hasher.update(crate::v2::to_binary(&reduced_unit(unit, packages)));
     hasher.finalize().into()
 }
-
-/// The position of the hashed package in [`Index::packages`].
-const ROOT: usize = 0;
 
 /// The declarations of every package of the build, for name resolution.
 ///
@@ -107,12 +124,18 @@ const ROOT: usize = 0;
 /// declaration is in the same package as the referencing one, and as the
 /// fully qualified `pkg.Name` otherwise (`ir.proto` header). A bare name is
 /// therefore resolved in the package that holds the declaration it was read
-/// from, never in the hashed package. Package names contain dots, so a
+/// from, never in the unit's root package. Package names contain dots, so a
 /// qualified name is resolved by lookup, not by splitting it.
 struct Index<'a> {
-    /// The hashed package at [`ROOT`], then `others` in the order given,
-    /// without an entry named like the hashed package.
+    /// The unit's packages first, then every other package, each in the
+    /// order given, with one entry per package name. `ridlc`'s
+    /// `catalog_scope` holds every package of the build, so a caller that
+    /// also passes the unit's own package names it twice; the first entry
+    /// with a name is kept, and a second copy would otherwise overwrite its
+    /// `pkg.Name` entries and list its shapes twice.
     packages: Vec<&'a Package>,
+    /// How many leading entries of `packages` belong to the unit.
+    member_count: usize,
     /// Per package, its declarations by bare name.
     bare: Vec<BTreeMap<&'a str, &'a Decl>>,
     /// Every declaration of every package by `pkg.Name`, with the index of
@@ -121,19 +144,15 @@ struct Index<'a> {
 }
 
 impl<'a> Index<'a> {
-    fn new(package: &'a Package, others: &[&'a Package]) -> Self {
-        // `ridlc build` passes every package of the build as `others`, the
-        // hashed package included. A second copy of the hashed package would
-        // overwrite its `pkg.Name` entries below, and a declaration reached
-        // through both names would be keyed twice, so that copy is skipped.
-        let packages: Vec<&'a Package> = std::iter::once(package)
-            .chain(
-                others
-                    .iter()
-                    .copied()
-                    .filter(|other| other.name != package.name),
-            )
-            .collect();
+    fn new(unit: &str, all: &[&'a Package]) -> Self {
+        let mut packages: Vec<&'a Package> = Vec::new();
+        for package in members_of_unit(unit, all) {
+            push_once(&mut packages, package);
+        }
+        let member_count = packages.len();
+        for package in all {
+            push_once(&mut packages, package);
+        }
         let bare = packages
             .iter()
             .map(|p| p.decls.iter().map(|d| (d.name.as_str(), d)).collect())
@@ -146,9 +165,18 @@ impl<'a> Index<'a> {
         }
         Self {
             packages,
+            member_count,
             bare,
             qualified,
         }
+    }
+
+    /// The unit's packages, each with its position in [`Self::packages`].
+    fn members(&self) -> impl Iterator<Item = (usize, &'a Package)> + '_ {
+        self.packages[..self.member_count]
+            .iter()
+            .copied()
+            .enumerate()
     }
 
     /// The declaration `name` means when read inside a declaration of
@@ -162,14 +190,10 @@ impl<'a> Index<'a> {
         Some((self.canonical(*owner, &decl.name), *owner, decl))
     }
 
-    /// The canonical name of declaration `bare` of package `owner`: bare for
-    /// the hashed package, `pkg.Name` for another.
+    /// The canonical name of declaration `bare` of package `owner`:
+    /// `pkg.Name`, for a package of the unit too.
     fn canonical(&self, owner: usize, bare: &str) -> String {
-        if owner == ROOT {
-            bare.to_owned()
-        } else {
-            format!("{}.{}", self.packages[owner].name, bare)
-        }
+        format!("{}.{}", self.packages[owner].name, bare)
     }
 
     /// Rewrites `name`, read in package `context`, to its canonical name. A
@@ -180,16 +204,18 @@ impl<'a> Index<'a> {
         }
     }
 
-    /// Every declaration the hashed package's interface shapes reach,
-    /// transitively, keyed by canonical name, with the index of the package
-    /// that declares it.
+    /// Every declaration the unit's interface shapes reach, transitively,
+    /// keyed by canonical name, with the index of the package that declares
+    /// it.
     fn closure(&self) -> BTreeMap<String, (usize, &'a Decl)> {
         // Each pending reference carries the package it was read in and
         // where it was read.
         let mut pending: Vec<Pending> = Vec::new();
-        for shape in self.packages[ROOT].shapes() {
-            for interaction in &shape.interface.interactions {
-                collect_refs(interaction, ROOT, &mut pending);
+        for (owner, package) in self.members() {
+            for shape in package.shapes() {
+                for interaction in &shape.interface.interactions {
+                    collect_refs(interaction, owner, &mut pending);
+                }
             }
         }
         let mut reached: BTreeMap<String, (usize, &'a Decl)> = BTreeMap::new();
@@ -241,6 +267,13 @@ impl<'a> Index<'a> {
     }
 }
 
+/// Appends `package` to `packages` unless a package of that name is there.
+fn push_once<'a>(packages: &mut Vec<&'a Package>, package: &'a Package) {
+    if !packages.iter().any(|known| known.name == package.name) {
+        packages.push(package);
+    }
+}
+
 /// A name waiting to be resolved: the name, the package it was read in, and
 /// where it was read.
 type Pending = (String, usize, Origin);
@@ -260,7 +293,7 @@ enum Origin {
 /// belongs to.
 fn collect_refs(decl: &Decl, context: usize, out: &mut Vec<Pending>) {
     // The visitor is written once, over `&mut`, so that the rewrite in
-    // `reduced_package` and this read share one exhaustive walk; the clone
+    // `reduced_unit` and this read share one exhaustive walk; the clone
     // is the price of not writing the walk twice.
     let mut copy = decl.clone();
     visit_refs(&mut copy, &mut |name| {
@@ -692,7 +725,7 @@ mod tests {
     }
 
     fn hash_of(p: &Package, fw: &Package) -> [u8; 32] {
-        catalog_hash(p, &[fw])
+        catalog_hash("p", &[p, fw])
     }
 
     fn field_type_names(decl: &Decl) -> Vec<String> {
@@ -714,8 +747,8 @@ mod tests {
     #[test]
     fn the_closure_reaches_local_and_foreign_types_and_nothing_else() {
         let (p, fw) = fixture();
-        let reached: Vec<String> = reachable_decls(&p, &[&fw]).into_keys().collect();
-        assert_eq!(reached, vec!["Coord", "Point", "fw.Unit"]);
+        let reached: Vec<String> = reachable_decls("p", &[&p, &fw]).into_keys().collect();
+        assert_eq!(reached, vec!["fw.Unit", "p.Coord", "p.Point"]);
     }
 
     /// `ridlc`'s `catalog_scope` relies on this: the order of `others` does
@@ -745,9 +778,12 @@ mod tests {
             decls: vec![scalar_decl("B")],
             ..Default::default()
         };
-        let reached: Vec<String> = reachable_decls(&p, &[&fa, &fb]).into_keys().collect();
-        assert_eq!(reached, vec!["Point", "fa.A", "fb.B"]);
-        assert_eq!(catalog_hash(&p, &[&fa, &fb]), catalog_hash(&p, &[&fb, &fa]));
+        let reached: Vec<String> = reachable_decls("p", &[&p, &fa, &fb]).into_keys().collect();
+        assert_eq!(reached, vec!["fa.A", "fb.B", "p.Point"]);
+        assert_eq!(
+            catalog_hash("p", &[&p, &fa, &fb]),
+            catalog_hash("p", &[&p, &fb, &fa])
+        );
     }
 
     #[test]
@@ -778,10 +814,10 @@ mod tests {
     #[test]
     fn a_bare_name_in_a_foreign_declaration_resolves_in_its_own_package() {
         let (p, mut fw) = foreign_fixture();
-        let reached: Vec<String> = reachable_decls(&p, &[&fw]).into_keys().collect();
-        assert_eq!(reached, vec!["Point", "fw.Coord", "fw.Unit"]);
+        let reached: Vec<String> = reachable_decls("p", &[&p, &fw]).into_keys().collect();
+        assert_eq!(reached, vec!["fw.Coord", "fw.Unit", "p.Point"]);
 
-        let reduced = reduced_package(&p, &[&fw]);
+        let reduced = reduced_unit("p", &[&p, &fw]);
         let unit = reduced.decls.iter().find(|d| d.name == "fw.Unit").unwrap();
         assert_eq!(field_type_names(unit), vec!["fw.Coord"]);
 
@@ -790,17 +826,16 @@ mod tests {
         assert_ne!(hash_of(&p, &fw), before);
     }
 
-    /// The hashed package's own `Coord` is not what `fw.Unit`'s bare `Coord`
-    /// means, so it stays unreached and a change to it does not move the
-    /// hash.
+    /// The unit's own `Coord` is not what `fw.Unit`'s bare `Coord` means, so
+    /// it stays unreached and a change to it does not move the hash.
     #[test]
-    fn a_bare_name_in_a_foreign_declaration_does_not_pick_the_root_packages_homonym() {
+    fn a_bare_name_in_a_foreign_declaration_does_not_pick_the_units_homonym() {
         let (mut p, fw) = foreign_fixture();
         p.decls.push(scalar_decl("Coord"));
-        let reached: Vec<String> = reachable_decls(&p, &[&fw]).into_keys().collect();
-        assert_eq!(reached, vec!["Point", "fw.Coord", "fw.Unit"]);
+        let reached: Vec<String> = reachable_decls("p", &[&p, &fw]).into_keys().collect();
+        assert_eq!(reached, vec!["fw.Coord", "fw.Unit", "p.Point"]);
 
-        let reduced = reduced_package(&p, &[&fw]);
+        let reduced = reduced_unit("p", &[&p, &fw]);
         let unit = reduced.decls.iter().find(|d| d.name == "fw.Unit").unwrap();
         assert_eq!(field_type_names(unit), vec!["fw.Coord"]);
 
@@ -809,25 +844,26 @@ mod tests {
         assert_eq!(hash_of(&p, &fw), before);
     }
 
-    /// A qualified reference back into the hashed package, from a foreign
-    /// declaration or from the package's own interaction, is canonical as
-    /// the bare name.
+    /// A reference into a package of the unit, qualified from a foreign
+    /// declaration or bare from the package's own interaction, is canonical
+    /// as the qualified name: the unit's own declarations carry `pkg.Name`
+    /// like every other.
     #[test]
-    fn a_qualified_reference_to_the_root_package_is_canonical_as_bare() {
+    fn a_reference_to_a_package_of_the_unit_is_canonical_as_qualified() {
         let (mut p, mut fw) = foreign_fixture();
         p.decls.push(scalar_decl("X"));
         p.interfaces[0].interactions.push(signal("x", "p.X"));
         fw.decls[0] = struct_decl("Unit", &["p.X"]);
-        let reached: Vec<String> = reachable_decls(&p, &[&fw]).into_keys().collect();
-        assert_eq!(reached, vec!["Point", "X", "fw.Unit"]);
+        let reached: Vec<String> = reachable_decls("p", &[&p, &fw]).into_keys().collect();
+        assert_eq!(reached, vec!["fw.Unit", "p.Point", "p.X"]);
 
-        let reduced = reduced_package(&p, &[&fw]);
+        let reduced = reduced_unit("p", &[&p, &fw]);
         let unit = reduced.decls.iter().find(|d| d.name == "fw.Unit").unwrap();
-        assert_eq!(field_type_names(unit), vec!["X"]);
+        assert_eq!(field_type_names(unit), vec!["p.X"]);
         let Some(decl::Kind::SignalDef(def)) = &reduced.interfaces[0].interactions[1].kind else {
             panic!("not a signal");
         };
-        assert_eq!(def.payload, "X");
+        assert_eq!(def.payload, "p.X");
     }
 
     /// A name that resolves to nothing — a primitive spelled as a name, or a
@@ -836,9 +872,9 @@ mod tests {
     fn an_unresolved_name_stays_as_written() {
         let (mut p, fw) = fixture();
         p.decls[0] = struct_decl("Point", &["u32", "nowhere.Missing"]);
-        let reached: Vec<String> = reachable_decls(&p, &[&fw]).into_keys().collect();
-        assert_eq!(reached, vec!["Point"]);
-        let reduced = reduced_package(&p, &[&fw]);
+        let reached: Vec<String> = reachable_decls("p", &[&p, &fw]).into_keys().collect();
+        assert_eq!(reached, vec!["p.Point"]);
+        let reduced = reduced_unit("p", &[&p, &fw]);
         assert_eq!(
             field_type_names(&reduced.decls[0]),
             vec!["u32", "nowhere.Missing"]
@@ -939,7 +975,7 @@ mod tests {
             number: 9,
         });
         assert_eq!(hash_of(&p, &fw), before);
-        assert!(reduced_package(&p, &[&fw]).retired.is_empty());
+        assert!(reduced_unit("p", &[&p, &fw]).retired.is_empty());
     }
 
     #[test]
@@ -949,8 +985,8 @@ mod tests {
         let before = hash_of(&p, &fw);
         p.services
             .push(inline_service("p.hvac", vec![signal("temp", "Point")]));
-        let reached: Vec<String> = reachable_decls(&p, &[&fw]).into_keys().collect();
-        assert_eq!(reached, vec!["Coord", "Point", "fw.Unit"]);
+        let reached: Vec<String> = reachable_decls("p", &[&p, &fw]).into_keys().collect();
+        assert_eq!(reached, vec!["fw.Unit", "p.Coord", "p.Point"]);
         assert_ne!(hash_of(&p, &fw), before);
     }
 
@@ -966,7 +1002,7 @@ mod tests {
         let before = hash_of(&p, &fw);
         p.services[0].visibility = Visibility::Internal as i32;
         assert_ne!(hash_of(&p, &fw), before);
-        let reduced = reduced_package(&p, &[&fw]);
+        let reduced = reduced_unit("p", &[&p, &fw]);
         assert_eq!(reduced.interfaces[0].name, "p.hvac");
         assert_eq!(
             reduced.interfaces[0].visibility,
@@ -975,7 +1011,7 @@ mod tests {
     }
 
     /// Two packages built separately with the same declarations and the same
-    /// numbering hash alike: the reduced package orders declarations by
+    /// numbering hash alike: the reduced unit orders declarations by
     /// canonical name and interfaces by (number, name), so the source order
     /// of neither enters the hash (ADR-0014 decision 15).
     #[test]
@@ -995,22 +1031,22 @@ mod tests {
         assert_ne!(reordered.decls, p.decls);
         assert_ne!(reordered.interfaces, p.interfaces);
         assert_eq!(
-            catalog_hash(&reordered, &[&fw_reordered]),
-            catalog_hash(&p, &[&fw])
+            catalog_hash("p", &[&reordered, &fw_reordered]),
+            catalog_hash("p", &[&p, &fw])
         );
         assert_eq!(
-            reduced_package(&reordered, &[&fw_reordered]),
-            reduced_package(&p, &[&fw])
+            reduced_unit("p", &[&reordered, &fw_reordered]),
+            reduced_unit("p", &[&p, &fw])
         );
     }
 
-    /// `ridlc build` passes every package of the build as `others`, so the
-    /// hashed package is among its own `others`. That copy is skipped: a
-    /// reference back to the hashed package written `p.Coord` (from inside
-    /// `fw`) still resolves to the bare canonical name `Coord`, so `Coord`
-    /// is reached once and the hash equals the hash without the copy.
+    /// `ridlc build` passes every package of the build, and the codegen
+    /// lowering lists the package before that scope, so a package of the
+    /// unit can be named twice. The second copy is skipped: its shapes are
+    /// listed once, `p.Coord` is reached once, and the hash equals the hash
+    /// without the copy.
     #[test]
-    fn the_hashed_package_among_others_is_skipped() {
+    fn a_package_named_twice_is_read_once() {
         let p = Package {
             name: "p".to_owned(),
             decls: vec![
@@ -1030,10 +1066,16 @@ mod tests {
             decls: vec![struct_decl("Unit", &["p.Coord"])],
             ..Default::default()
         };
-        let reached: Vec<String> = reachable_decls(&p, &[&p, &fw]).into_keys().collect();
-        assert_eq!(reached, ["Coord", "Point", "fw.Unit"]);
-        assert_eq!(reduced_package(&p, &[&p, &fw]), reduced_package(&p, &[&fw]));
-        assert_eq!(catalog_hash(&p, &[&p, &fw]), catalog_hash(&p, &[&fw]));
+        let reached: Vec<String> = reachable_decls("p", &[&p, &p, &fw]).into_keys().collect();
+        assert_eq!(reached, ["fw.Unit", "p.Coord", "p.Point"]);
+        assert_eq!(
+            reduced_unit("p", &[&p, &p, &fw]),
+            reduced_unit("p", &[&p, &fw])
+        );
+        assert_eq!(
+            catalog_hash("p", &[&p, &p, &fw]),
+            catalog_hash("p", &[&p, &fw])
+        );
     }
 
     fn const_decl(name: &str, type_ref: &str, value: &str) -> Decl {
@@ -1102,11 +1144,11 @@ mod tests {
     #[test]
     fn a_constant_named_in_a_contract_clause_is_reached() {
         let mut p = guarded_fixture("level < MAX");
-        let reached: Vec<String> = reachable_decls(&p, &[]).into_keys().collect();
-        assert_eq!(reached, vec!["Level", "MAX"]);
-        let before = catalog_hash(&p, &[]);
+        let reached: Vec<String> = reachable_decls("p", &[&p]).into_keys().collect();
+        assert_eq!(reached, vec!["p.Level", "p.MAX"]);
+        let before = catalog_hash("p", &[&p]);
         set_const_value(&mut p, "MAX", "200");
-        assert_ne!(catalog_hash(&p, &[]), before);
+        assert_ne!(catalog_hash("p", &[&p]), before);
     }
 
     /// A constant whose `value` is the name of another constant reaches it.
@@ -1118,11 +1160,11 @@ mod tests {
     fn a_constant_named_in_a_constant_value_is_reached() {
         let mut p = guarded_fixture("level < LIMIT");
         p.decls.push(const_decl("LIMIT", "Level", "MAX"));
-        let reached: Vec<String> = reachable_decls(&p, &[]).into_keys().collect();
-        assert_eq!(reached, vec!["LIMIT", "Level", "MAX"]);
-        let before = catalog_hash(&p, &[]);
+        let reached: Vec<String> = reachable_decls("p", &[&p]).into_keys().collect();
+        assert_eq!(reached, vec!["p.LIMIT", "p.Level", "p.MAX"]);
+        let before = catalog_hash("p", &[&p]);
         set_const_value(&mut p, "MAX", "200");
-        assert_ne!(catalog_hash(&p, &[]), before);
+        assert_ne!(catalog_hash("p", &[&p]), before);
     }
 
     fn enum_decl(name: &str) -> Decl {
@@ -1146,8 +1188,8 @@ mod tests {
             decls: vec![enum_decl("Gear")],
             ..Default::default()
         };
-        let reached: Vec<String> = reachable_decls(&p, &[&fw]).into_keys().collect();
-        assert_eq!(reached, vec!["Level", "Mode", "fw.Gear"]);
+        let reached: Vec<String> = reachable_decls("p", &[&p, &fw]).into_keys().collect();
+        assert_eq!(reached, vec!["fw.Gear", "p.Level", "p.Mode"]);
     }
 
     /// A contract names a constant of another package by the name its
@@ -1162,8 +1204,8 @@ mod tests {
             decls: vec![const_decl("LIMIT", "Level", "130.0")],
             ..Default::default()
         };
-        let reached: Vec<String> = reachable_decls(&p, &[&fw]).into_keys().collect();
-        assert_eq!(reached, vec!["Level", "fw.LIMIT"]);
+        let reached: Vec<String> = reachable_decls("p", &[&p, &fw]).into_keys().collect();
+        assert_eq!(reached, vec!["fw.LIMIT", "p.Level"]);
         let before = hash_of(&p, &fw);
         set_const_value(&mut fw, "LIMIT", "140.0");
         assert_ne!(hash_of(&p, &fw), before);
@@ -1171,7 +1213,7 @@ mod tests {
 
     /// A name inside an expression string is resolved in the package that
     /// declares the string. `fw.LIMIT`'s value `MAX` means `fw.MAX`, not
-    /// the hashed package's own `MAX`: a bare name that the declaring
+    /// the unit's own `MAX`: a bare name that the declaring
     /// package holds resolves there before any other package is searched.
     #[test]
     fn a_name_in_a_foreign_constant_value_resolves_in_its_own_package() {
@@ -1184,8 +1226,8 @@ mod tests {
             ],
             ..Default::default()
         };
-        let reached: Vec<String> = reachable_decls(&p, &[&fw]).into_keys().collect();
-        assert_eq!(reached, vec!["Level", "fw.LIMIT", "fw.MAX"]);
+        let reached: Vec<String> = reachable_decls("p", &[&p, &fw]).into_keys().collect();
+        assert_eq!(reached, vec!["fw.LIMIT", "fw.MAX", "p.Level"]);
     }
 
     /// A query `get(level: Level) -> Level` with one `require` clause.
@@ -1212,11 +1254,11 @@ mod tests {
     fn a_constant_named_in_a_query_contract_is_reached() {
         let mut p = guarded_fixture("");
         p.interfaces[0].interactions = vec![guarded_query("p < MAX")];
-        let reached: Vec<String> = reachable_decls(&p, &[]).into_keys().collect();
-        assert_eq!(reached, vec!["Level", "MAX"]);
-        let before = catalog_hash(&p, &[]);
+        let reached: Vec<String> = reachable_decls("p", &[&p]).into_keys().collect();
+        assert_eq!(reached, vec!["p.Level", "p.MAX"]);
+        let before = catalog_hash("p", &[&p]);
         set_const_value(&mut p, "MAX", "200");
-        assert_ne!(catalog_hash(&p, &[]), before);
+        assert_ne!(catalog_hash("p", &[&p]), before);
     }
 
     /// A name inside a string literal of an expression is not a reference,
@@ -1225,30 +1267,30 @@ mod tests {
     fn a_name_in_a_string_literal_or_a_number_is_not_followed() {
         let mut p = guarded_fixture(r#"label != "say \"MAX\"" && level > 1e3 && level < 10MAX"#);
         p.decls.push(const_decl("e3", "Level", "1"));
-        let reached: Vec<String> = reachable_decls(&p, &[]).into_keys().collect();
-        assert_eq!(reached, vec!["Level"]);
+        let reached: Vec<String> = reachable_decls("p", &[&p]).into_keys().collect();
+        assert_eq!(reached, vec!["p.Level"]);
     }
 
     /// Expression strings are hashed as written: following a name does not
-    /// rewrite it. Each string here is exactly one qualified name that
-    /// resolves to a declaration of the hashed package, whose canonical name
-    /// is bare, so a rewrite would be visible as `LIMIT` or `FLAG`.
+    /// rewrite it. Each string here is exactly one bare name that resolves
+    /// to a declaration of the unit's package, whose canonical name is
+    /// qualified, so a rewrite would be visible as `p.LIMIT` or `p.FLAG`.
     #[test]
     fn an_expression_string_is_hashed_as_written() {
-        let mut p = guarded_fixture("p.LIMIT");
-        p.decls.push(const_decl("LIMIT", "Level", "p.FLAG"));
+        let mut p = guarded_fixture("LIMIT");
+        p.decls.push(const_decl("LIMIT", "Level", "FLAG"));
         p.decls.push(const_decl("FLAG", "Level", "1"));
-        let reduced = reduced_package(&p, &[]);
-        assert!(reduced.decls.iter().any(|d| d.name == "FLAG"));
+        let reduced = reduced_unit("p", &[&p]);
+        assert!(reduced.decls.iter().any(|d| d.name == "p.FLAG"));
         let Some(decl::Kind::CommandDef(def)) = &reduced.interfaces[0].interactions[0].kind else {
             panic!("not a command");
         };
-        assert_eq!(def.contracts[0].source, "p.LIMIT");
-        let limit = reduced.decls.iter().find(|d| d.name == "LIMIT").unwrap();
+        assert_eq!(def.contracts[0].source, "LIMIT");
+        let limit = reduced.decls.iter().find(|d| d.name == "p.LIMIT").unwrap();
         let Some(decl::Kind::ConstDef(def)) = &limit.kind else {
             panic!("not a constant");
         };
-        assert_eq!(def.value, "p.FLAG");
+        assert_eq!(def.value, "FLAG");
     }
 
     fn field_of(kind: field_type::Kind) -> FieldType {
@@ -1509,10 +1551,10 @@ mod tests {
                 ..Default::default()
             };
             assert!(
-                reachable_decls(&p, &[]).contains_key("T"),
+                reachable_decls("p", &[&p]).contains_key("p.T"),
                 "{kind}: the closure must reach `T`",
             );
-            let before = catalog_hash(&p, &[]);
+            let before = catalog_hash("p", &[&p]);
             let target = p.decls.iter_mut().find(|d| d.name == "T").unwrap();
             target.kind = Some(decl::Kind::TypeDef(TypeDef {
                 constraint: Some(Constraint {
@@ -1522,7 +1564,7 @@ mod tests {
                 ..Default::default()
             }));
             assert_ne!(
-                catalog_hash(&p, &[]),
+                catalog_hash("p", &[&p]),
                 before,
                 "{kind}: a change to `T` must move the hash",
             );
@@ -1544,7 +1586,7 @@ mod tests {
     }
 
     /// The lock makes the number an interface's identity, so the reduced
-    /// package lists interfaces by (number, name), and the order in which
+    /// unit lists interfaces by (number, name), and the order in which
     /// the source declares them does not enter the hash.
     #[test]
     fn reordering_two_interfaces_does_not_move_the_hash() {
@@ -1552,7 +1594,7 @@ mod tests {
         let before = hash_of(&p, &fw);
         p.interfaces.reverse();
         assert_eq!(hash_of(&p, &fw), before);
-        let names: Vec<String> = reduced_package(&p, &[&fw])
+        let names: Vec<String> = reduced_unit("p", &[&p, &fw])
             .interfaces
             .into_iter()
             .map(|i| i.name)
@@ -1561,7 +1603,7 @@ mod tests {
     }
 
     fn reduced_interface_names(p: &Package, fw: &Package) -> Vec<String> {
-        reduced_package(p, &[fw])
+        reduced_unit("p", &[p, fw])
             .interfaces
             .into_iter()
             .map(|i| i.name)
@@ -1822,9 +1864,9 @@ mod tests {
     #[test]
     fn catalog_hash_ignores_every_doc_field() {
         let p = every_carrier_fixture();
-        let reached: Vec<String> = reachable_decls(&p, &[]).into_keys().collect();
-        assert_eq!(reached, vec!["C", "E", "F", "S", "T", "U"]);
-        let before = catalog_hash(&p, &[]);
+        let reached: Vec<String> = reachable_decls("p", &[&p]).into_keys().collect();
+        assert_eq!(reached, vec!["p.C", "p.E", "p.F", "p.S", "p.T", "p.U"]);
+        let before = catalog_hash("p", &[&p]);
 
         let labels = vec!["tagged".to_owned()];
         let deprecated = Some("use another".to_owned());
@@ -1921,7 +1963,198 @@ mod tests {
             let mut documented = p.clone();
             set_docs(&mut documented);
             assert_ne!(documented, p, "{carrier}: the case must change the IR");
-            assert_eq!(catalog_hash(&documented, &[]), before, "{carrier}");
+            assert_eq!(catalog_hash("p", &[&documented]), before, "{carrier}");
         }
+    }
+
+    /// A package of unit `unit` with `decls` and one declared interface
+    /// `name`, numbered `number`, whose interactions are `interactions`.
+    fn unit_package(
+        name: &str,
+        unit: &str,
+        decls: Vec<Decl>,
+        interface: (&str, u32, Vec<Decl>),
+    ) -> Package {
+        let (interface_name, number, interactions) = interface;
+        Package {
+            name: name.to_owned(),
+            unit: unit.to_owned(),
+            decls,
+            interfaces: vec![Interface {
+                name: interface_name.to_owned(),
+                interactions,
+                number,
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
+
+    /// Unit `u`: the root package `u` with `Session` (1, reaches nothing)
+    /// and `u.cluster` with `Speed` (2, reaches the struct `Pos`); unit `v`:
+    /// the package `v` with `V` (1, reaches the struct `Q`).
+    fn two_unit_fixture() -> (Package, Package, Package) {
+        let u = unit_package("u", "u", vec![], ("Session", 1, vec![]));
+        let cluster = unit_package(
+            "u.cluster",
+            "u",
+            vec![struct_decl("Pos", &[])],
+            ("Speed", 2, vec![signal("pos", "Pos")]),
+        );
+        let v = unit_package(
+            "v",
+            "v",
+            vec![struct_decl("Q", &[])],
+            ("V", 1, vec![signal("q", "Q")]),
+        );
+        (u, cluster, v)
+    }
+
+    fn names(interfaces: &[Interface]) -> Vec<&str> {
+        interfaces.iter().map(|i| i.name.as_str()).collect()
+    }
+
+    fn decl_names(package: &Package) -> Vec<&str> {
+        package.decls.iter().map(|d| d.name.as_str()).collect()
+    }
+
+    #[test]
+    fn the_reduced_unit_holds_every_package_of_the_unit_under_catalog_names() {
+        let (u, cluster, v) = two_unit_fixture();
+        let reduced = reduced_unit("u", &[&u, &cluster, &v]);
+        assert_eq!(reduced.name, "u");
+        assert_eq!(reduced.unit, "u");
+        assert_eq!(names(&reduced.interfaces), ["Session", "cluster.Speed"]);
+        assert_eq!(decl_names(&reduced), ["u.cluster.Pos"]);
+    }
+
+    /// A bare reference is resolved in the package that declares the shape:
+    /// `Pos` in `u.cluster`'s `Speed` is `u.cluster.Pos` although the root
+    /// package declares a `Pos` too, and a `Speed` that names the root's
+    /// `u.Pos` hashes differently.
+    #[test]
+    fn a_bare_reference_in_a_subpackage_resolves_to_its_own_homonym() {
+        let (mut u, cluster, v) = two_unit_fixture();
+        u.decls.push(struct_decl("Pos", &["u32"]));
+        let reduced = reduced_unit("u", &[&u, &cluster, &v]);
+        assert_eq!(decl_names(&reduced), ["u.cluster.Pos"]);
+        let speed = reduced
+            .interfaces
+            .iter()
+            .find(|interface| interface.name == "cluster.Speed")
+            .expect("the subpackage interface");
+        let Some(decl::Kind::SignalDef(signal)) = &speed.interactions[0].kind else {
+            panic!("the interaction is a signal");
+        };
+        assert_eq!(signal.payload, "u.cluster.Pos");
+
+        let mut root_pos = cluster.clone();
+        root_pos.interfaces[0].interactions[0] = self::signal("pos", "u.Pos");
+        let reduced = reduced_unit("u", &[&u, &root_pos, &v]);
+        assert_eq!(decl_names(&reduced), ["u.Pos"]);
+        assert_ne!(
+            catalog_hash("u", &[&u, &cluster, &v]),
+            catalog_hash("u", &[&u, &root_pos, &v])
+        );
+    }
+
+    #[test]
+    fn a_change_in_one_package_moves_the_hash_of_the_unit() {
+        let (u, mut cluster, v) = two_unit_fixture();
+        let before = catalog_hash("u", &[&u, &cluster, &v]);
+        cluster.decls[0] = struct_decl("Pos", &["u32"]);
+        assert_ne!(catalog_hash("u", &[&u, &cluster, &v]), before);
+    }
+
+    /// Unit selection is by the recorded unit, never by a name prefix: the
+    /// unit `u.x` is not part of unit `u`.
+    #[test]
+    fn a_sibling_unit_with_a_prefix_name_is_not_in_the_hash() {
+        let (u, cluster, _) = two_unit_fixture();
+        let ux = unit_package(
+            "u.x",
+            "u.x",
+            vec![struct_decl("W", &[])],
+            ("X", 1, vec![signal("w", "W")]),
+        );
+        assert_eq!(
+            catalog_hash("u", &[&u, &cluster, &ux]),
+            catalog_hash("u", &[&u, &cluster])
+        );
+        assert_eq!(
+            names(&reduced_unit("u", &[&u, &cluster, &ux]).interfaces),
+            ["Session", "cluster.Speed"]
+        );
+    }
+
+    #[test]
+    fn the_same_short_name_in_two_packages_gives_two_reduced_declarations() {
+        let a = unit_package(
+            "u.a",
+            "u",
+            vec![struct_decl("Foo", &[])],
+            ("A", 1, vec![signal("foo", "Foo")]),
+        );
+        let b = unit_package(
+            "u.b",
+            "u",
+            vec![struct_decl("Foo", &["u32"])],
+            ("B", 2, vec![signal("foo", "Foo")]),
+        );
+        let reduced = reduced_unit("u", &[&a, &b]);
+        assert_eq!(decl_names(&reduced), ["u.a.Foo", "u.b.Foo"]);
+        let reached: Vec<String> = reachable_decls("u", &[&a, &b]).into_keys().collect();
+        assert_eq!(reached, ["u.a.Foo", "u.b.Foo"]);
+    }
+
+    /// The checker spells every retired entry as its lock key, so the unit's
+    /// list concatenates the packages' entries as they are, in number order.
+    #[test]
+    fn unit_retired_keeps_every_entry_as_spelled() {
+        let (mut u, mut cluster, mut v) = two_unit_fixture();
+        cluster.retired.push(RetiredInterface {
+            name: "cluster.Old".to_owned(),
+            number: 3,
+        });
+        u.retired.push(RetiredInterface {
+            name: "service:veh.x".to_owned(),
+            number: 4,
+        });
+        v.retired.push(RetiredInterface {
+            name: "Gone".to_owned(),
+            number: 5,
+        });
+        let retired: Vec<(String, u32)> = crate::v2::unit_retired("u", &[&u, &cluster, &v])
+            .into_iter()
+            .map(|entry| (entry.name, entry.number))
+            .collect();
+        assert_eq!(
+            retired,
+            [
+                ("cluster.Old".to_owned(), 3),
+                ("service:veh.x".to_owned(), 4)
+            ]
+        );
+    }
+
+    /// A unit with an empty root: the anchor `u.a` carries the root's
+    /// retired `Old` beside its own `a.Gone`, both as the lock spells them.
+    /// No entry is re-qualified by the package that carries it.
+    #[test]
+    fn unit_retired_does_not_qualify_a_root_entry_by_its_anchor() {
+        let mut a = unit_package("u.a", "u", vec![], ("A", 1, vec![]));
+        a.retired.push(RetiredInterface {
+            name: "Old".to_owned(),
+            number: 3,
+        });
+        a.retired.push(RetiredInterface {
+            name: "a.Gone".to_owned(),
+            number: 5,
+        });
+        let retired: Vec<(String, u32)> = crate::v2::unit_retired("u", &[&a])
+            .into_iter()
+            .map(|entry| (entry.name, entry.number))
+            .collect();
+        assert_eq!(retired, [("Old".to_owned(), 3), ("a.Gone".to_owned(), 5)]);
     }
 }

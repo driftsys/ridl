@@ -926,7 +926,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
   "services": [],
   "catalog": {
     "package": "fleet.contracts",
-    "hash": "sCvg88HNVvCxzN9SYS6O1WmgPzPi3dF2D9eYpXcESUY=",
+    "hash": "EkQt2RwqUU+ZYD4jM7XHePzrCuIJPH7X491XAOnU6+s=",
     "retired": []
   },
   "flatbuffers": {
@@ -1187,7 +1187,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
   "services": [],
   "catalog": {
     "package": "fleet.legacy",
-    "hash": "2qg5v84GR+MmOtxUTxDqGO5HFFhbn+tPAwxJnJgndWo=",
+    "hash": "wJONK8RPR5yFl4rUzOAkpvwZzSIpvvJVi/NktiMFw6c=",
     "retired": []
   },
   "flatbuffers": {
@@ -1976,7 +1976,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
   ],
   "catalog": {
     "package": "fleet.vehicle",
-    "hash": "s3YMaFfacW8+g2C9aazXsiiZlCqRCIryi+N+Ad8Wijs=",
+    "hash": "zmiZOiJQTnglpoooTuc6qGAvhV/T22lnJzKtauI6IR0=",
     "retired": []
   },
   "flatbuffers": {

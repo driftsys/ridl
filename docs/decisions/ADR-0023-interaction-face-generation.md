@@ -614,7 +614,7 @@ argument for it in the command case.
      `mismatch_message` in `crates/ridl-backend-rust/tests/interaction_face.rs`
      pins it: each mismatch test runs it, and it asserts that the panic's file
      is the test file.
-   - **The comparison.** `CatalogRef` equality: the package name and the catalog
+   - **The comparison.** `CatalogRef` equality: the unit name and the catalog
      hash ([ADR-0014](ADR-0014-ir-encodings.md) decision 15) must both be equal.
    - **A mismatch panics.** The panic message names the interface, the catalog
      the face was generated from and the catalog the port is attached to. A

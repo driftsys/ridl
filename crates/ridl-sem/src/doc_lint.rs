@@ -543,6 +543,7 @@ mod tests {
         let pkg = Package::new(
             &db,
             "demo".to_string(),
+            "demo".to_string(),
             vec![file],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),

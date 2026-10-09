@@ -1084,19 +1084,23 @@ impl<'a> Lowering<'a> {
             .collect()
     }
 
+    /// The catalog of the unit the package belongs to: the unit name, the
+    /// unit's hash (ADR-0014 decision 15) over the same scope the model is
+    /// lowered over, and the unit's retired entries. The package is listed
+    /// before the scope's others, which may hold it too; the hash and the
+    /// retired list read a package named twice once.
     fn catalog(&mut self) -> v1::Catalog {
+        let unit = v2::unit_of(self.scope.package);
+        let packages: Vec<&v2::Package> = std::iter::once(self.scope.package)
+            .chain(self.scope.others.iter().copied())
+            .collect();
         v1::Catalog {
-            package: self.scope.package.name.clone(),
-            // The catalog hash of ADR-0014 decision 15, over the same scope
-            // the model is lowered over.
-            hash: crate::catalog_hash::catalog_hash(self.scope.package, self.scope.others).to_vec(),
-            retired: self
-                .scope
-                .package
-                .retired
-                .iter()
+            package: unit.to_owned(),
+            hash: crate::catalog_hash::catalog_hash(unit, &packages).to_vec(),
+            retired: v2::unit_retired(unit, &packages)
+                .into_iter()
                 .map(|entry| v1::RetiredInterface {
-                    name: entry.name.clone(),
+                    name: entry.name,
                     number: entry.number,
                 })
                 .collect(),

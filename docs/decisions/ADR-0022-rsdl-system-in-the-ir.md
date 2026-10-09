@@ -26,6 +26,12 @@ Amended 2026-10-04 by story E6.17 (driftsys/ridl#367): the work decision 7
 deferred has landed. `Region` carries `bytes hash = 3`, and `ridlc` embeds the
 catalog hash in each region (see the second note under decision 7).
 
+Amended 2026-10-09 by the catalog-per-unit design: decisions 6 and 7 name the
+unit, not the source package, as the owner of a catalog. A region is keyed on
+the `unit` of the interface's IR package, and its interface names are catalog
+names (`cluster.SpeedDisplay`), so a unit with several source packages has one
+region.
+
 It does not restate the rsdl language reference: §13 lists the facts the
 lowering produces and §14 states the two headings and that they carry no
 verdict. This record fixes the engineering choices those sections leave open.
@@ -122,20 +128,23 @@ nothing.
    The number and the provisional flag are read from the lowered package IR
    (`Interface.number`, `Interface.provisional`), never recomputed by rsdl.
 
-6. **The region of an interface is the catalog of the package that declares
-   it,** not the package of the owning service (rsdl §11). A region lists its
+6. **The region of an interface is the catalog of the unit that declares it,**
+   not the unit of the owning service (rsdl §11). A unit is a manifest and the
+   source packages in its tree ([ADR-0002](ADR-0002-module-system.md) §1), so
+   the region is named after the unit and holds the interfaces of every source
+   package of the unit, each under its catalog name. A region lists its
    interfaces in interface-number order and the regions are in catalog-name
    order. A grant is listed for **every** closure component, with an empty
    region list for a component that requires nothing, so the permission list is
    total over the closure rather than over the consumers.
 
 7. **The region carries no catalog hash yet.** rsdl §13 makes the hash an input,
-   computed by ridl over a catalog and embedded here; the function that computes
-   it (`ridl_descriptor::hash::catalog_hash`, driftsys/ridl#324) does not exist
-   yet, so `Region` has **no hash field** and story E6.17 stays open. When it
-   lands, the driver embeds the hash — `ridl_sem::rsdl::lower_system` must not
-   depend on `ridl-descriptor` — and `Region` gains `bytes hash = 3`. The
-   archived plan's Part B4 Task 9 is the record of that deferred work.
+   computed by ridl over a catalog (a unit) and embedded here; the function that
+   computes it (`ridl_descriptor::hash::catalog_hash`, driftsys/ridl#324) does
+   not exist yet, so `Region` has **no hash field** and story E6.17 stays open.
+   When it lands, the driver embeds the hash — `ridl_sem::rsdl::lower_system`
+   must not depend on `ridl-descriptor` — and `Region` gains `bytes hash = 3`.
+   The archived plan's Part B4 Task 9 is the record of that deferred work.
 
    **Note (2026-10-04, story E16.2, driftsys/ridl#378).** The function now
    exists: `ridl_ir::catalog_hash::catalog_hash`, re-exported as

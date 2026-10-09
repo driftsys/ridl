@@ -316,6 +316,25 @@ fn generate_face_emits_the_interface_and_interaction_descriptors() {
     assert!(d.contains("name:\"setLevel\""), "member source name");
 }
 
+/// `CATALOG` carries the unit's name, the model's `Catalog.package`, not the
+/// source package's: `face.demo` as a subpackage of unit `face` is generated
+/// with `name: "face"`.
+#[test]
+fn the_catalog_name_is_the_unit_not_the_source_package() {
+    let mut package = ir::compile_fixture("interaction_face.ridl");
+    package.unit = "face".to_owned();
+    let face = generate_face(&package).expect("generate_face").rust_source;
+    let d = dense(&face);
+    assert!(
+        d.contains("name:\"face\""),
+        "the catalog name is the unit:\n{face}"
+    );
+    assert!(
+        !d.contains("name:\"face.demo\""),
+        "the source package is not the catalog name:\n{face}"
+    );
+}
+
 #[test]
 fn generate_face_emits_the_contract_clause_bodies() {
     let package = ir::compile_fixture("interaction_face.ridl");

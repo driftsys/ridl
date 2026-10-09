@@ -266,9 +266,9 @@ port fails while a call is read. The calls it settled before a failure stay
 settled.
 
 **A catalog mismatch panics.** Binding a `Client` or a `Publisher`, and starting
-`serve`, compare the port's catalog — the package name and the catalog hash —
+`serve`, compare the port's catalog — the unit name and the catalog hash —
 with the `CATALOG` the face was generated from. When they differ, the face was
-generated from a different version of the package than the one the runtime
+generated from a different version of the unit than the one the runtime
 serves, and the bind panics with a message that names the interface and both
 catalogs. A program that must not panic compares the two itself before it
 binds. This snippet is an illustration and is not compiled; `port` stands for

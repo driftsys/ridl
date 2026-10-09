@@ -32,9 +32,9 @@
 //! to their library and only wire the transport here, so one installed binary
 //! serves the editor, the agent, and the command line.
 //!
-//! `ridl lock` writes a package's `interfaces.lock` (lock design §5): plain, it
+//! `ridl lock` writes a unit's `interfaces.lock` (lock design §5): plain, it
 //! allocates a number to every interface that has none; with `--rename` or
-//! `--retire`, it rewrites one package's entries in place. It lives here
+//! `--retire`, it rewrites one unit's entries in place. It lives here
 //! beside `ridl baseline` because it reads and writes a file in the workspace
 //! that is not a source (`ridlc` gains no `lock` subcommand); the compile it
 //! runs first is `ridlc`'s own.
@@ -179,13 +179,13 @@ enum Command {
         explain: Option<String>,
     },
     /// Allocate a number to every interface that has none and write each
-    /// package's `interfaces.lock`; with `--rename` or `--retire`, rewrite one
-    /// package's entries in place instead. Exit 0 when the file is written or
+    /// unit's `interfaces.lock`; with `--rename` or `--retire`, rewrite one
+    /// unit's entries in place instead. Exit 0 when the file is written or
     /// nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or
     /// I/O failure. `ridl lock merge` is the git merge driver for the file.
     #[command(args_conflicts_with_subcommands = true)]
     Lock {
-        /// A package directory, a workspace root, or a file. A directory
+        /// A unit directory, a workspace root, or a file. A directory
         /// named `merge` is spelled `./merge`, since the bare word is the
         /// subcommand.
         #[arg(default_value = ".")]
@@ -219,7 +219,7 @@ enum Command {
     Mcp,
     /// Print a catalog descriptor as strict JSON, after verifying it.
     Describe {
-        /// The `<base>.catalog.binfb` file `ridl build --emit catalog` wrote.
+        /// The `<unit>.catalog.binfb` file `ridl build --emit catalog` wrote.
         path: PathBuf,
     },
 }
@@ -947,7 +947,7 @@ fn interface_refusals(
             refusals.push(Diagnostic {
                 code: DiagCode::RIDL_411,
                 severity: Severity::Error,
-                message: provisional_number_message(&package.name, &shape, entry),
+                message: provisional_number_message(package, &shape, entry),
                 primary: index.shape_span(&package.name, shape.name, &mut run.sources),
                 labels: Vec::new(),
                 fixits: Vec::new(),
@@ -966,7 +966,11 @@ fn interface_refusals(
                 refusals.push(Diagnostic {
                     code: DiagCode::RIDL_412,
                     severity: Severity::Error,
-                    message: dropped_number_message(&package.name, &shape),
+                    message: dropped_number_message(
+                        package,
+                        &shape,
+                        published_unit(package, &fresh),
+                    ),
                     primary: detached_span(),
                     labels: Vec::new(),
                     fixits: Vec::new(),
@@ -983,26 +987,45 @@ fn interface_refusals(
 /// The RIDL-411 message: the lock key the entry would carry, the provisional
 /// number the checker showed, and the command that records it.
 fn provisional_number_message(
-    package: &str,
+    package: &ridl_ir::v2::Package,
     shape: &ridl_ir::v2::InterfaceShape<'_>,
     entry: &Path,
 ) -> String {
-    let key = lock::shape_key(shape);
+    let key = lock::shape_key(package, shape);
     format!(
-        "`{key}` has a provisional interface number ({}) in package `{package}`: no entry in \
+        "`{key}` has a provisional interface number ({}) in unit `{}`: no entry in \
          `interfaces.lock` records it, and a provisional number is no identity. Run `ridl lock \
          {}` to allocate and record the number, then publish.",
         shape.interface.number,
+        ridl_ir::v2::unit_of(package),
         entry.display()
     )
 }
 
+/// The unit a published package is compared in. A snapshot written before
+/// the IR carried `unit` has an empty field, and its own name is not a unit
+/// of the fresh set when the package is a subpackage: the migration to one
+/// lock per unit re-publishes such a baseline, so the legacy snapshot is read
+/// in the unit of the fresh package of the same name. A package the fresh
+/// set no longer declares keeps [`ridl_ir::v2::unit_of`].
+fn published_unit<'a>(
+    package: &'a ridl_ir::v2::Package,
+    fresh: &'a [ridl_ir::v2::Package],
+) -> &'a str {
+    if package.unit.is_empty()
+        && let Some(current) = fresh.iter().find(|current| current.name == package.name)
+    {
+        return ridl_ir::v2::unit_of(current);
+    }
+    ridl_ir::v2::unit_of(package)
+}
+
 /// The published shape an interface-level `DeclRemoved` names, when the
-/// number it held is one the lock allocated (not 0) and the fresh package
-/// does not retire — the RIDL-412 shape. An interface-level change has a
-/// two-segment path and the walk's `interface` marker as its `before`; a
-/// service's own `DeclRemoved` carries `service` there, and a package's has
-/// one segment.
+/// number it held is one the lock allocated (not 0) and no package of its
+/// unit ([`published_unit`]) in the fresh set declares or retires — the
+/// RIDL-412 shape. An interface-level change has a two-segment path and the
+/// walk's `interface` marker as its `before`; a service's own `DeclRemoved`
+/// carries `service` there, and a package's has one segment.
 fn dropped_number<'a>(
     change: &ridl_diff::Change,
     published: &'a [ridl_ir::v2::Package],
@@ -1023,23 +1046,39 @@ fn dropped_number<'a>(
     if number == 0 {
         return None;
     }
-    let retired = fresh
-        .iter()
-        .find(|package| package.name == pkg)
-        .is_some_and(|package| package.retired.iter().any(|entry| entry.number == number));
-    (!retired).then_some((package, shape))
+    // The number is kept when any package of the unit declares it — a
+    // rename across packages of one unit keeps it, and so does the
+    // re-numbering of a legacy baseline whose numbers ran per package — or
+    // retires it.
+    let kept = ridl_ir::v2::packages_of_unit(published_unit(package, fresh), fresh).any(|member| {
+        member.retired.iter().any(|entry| entry.number == number)
+            || member
+                .shapes()
+                .any(|shape| !shape.interface.provisional && shape.interface.number == number)
+    });
+    (!kept).then_some((package, shape))
 }
 
-/// The RIDL-412 message: the name and number the baseline holds, and the
-/// line that restores the record.
-fn dropped_number_message(package: &str, shape: &ridl_ir::v2::InterfaceShape<'_>) -> String {
-    let key = lock::shape_key(shape);
+/// The RIDL-412 message: the name and number the baseline holds, the unit
+/// the gate compared it in, and the line that restores the record.
+fn dropped_number_message(
+    package: &ridl_ir::v2::Package,
+    shape: &ridl_ir::v2::InterfaceShape<'_>,
+    unit: &str,
+) -> String {
+    // The key is spelled relative to `unit`, which for a legacy snapshot is
+    // not the unit the package itself names.
+    let key = if shape.is_inline() {
+        lock::shape_key(package, shape)
+    } else {
+        LockKey::Interface(ridl_ir::v2::relative_name(unit, &package.name, shape.name))
+    };
     let number = shape.interface.number;
     format!(
-        "`{key}` holds interface number {number} in the baseline being replaced, in package \
-         `{package}`, but the fresh snapshot neither declares that number nor retires it. \
+        "`{key}` holds interface number {number} in the baseline being replaced, in unit \
+         `{unit}`, but the fresh snapshot neither declares that number nor retires it. \
          Publishing would lose the only record that the number was allocated, and `next` could \
-         hand it to a later interface. Restore the line `{key} {number}` in the package's \
+         hand it to a later interface. Restore the line `{key} {number}` in the unit's \
          `interfaces.lock` from version control — `{key} {number} retired` when the interface is \
          gone."
     )
@@ -1231,13 +1270,13 @@ fn desk_check(
 
 /// The rename hint (lock design §4; plan decision PD-5). For every RIDL-409
 /// the compile produced, when exactly one declaration without an entry in
-/// the same package has the orphan entry's shape in the published baseline,
+/// the same unit has the orphan entry's shape in the published baseline,
 /// a secondary label goes on that diagnostic, at the candidate's declaration,
-/// naming the one `ridl lock <pkg> --rename Old=New`. Nothing otherwise — no
+/// naming the one `ridl lock <unit> --rename Old=New`. Nothing otherwise — no
 /// baseline package, no candidate of that shape, or several — and never a
 /// second diagnostic. The orphan's key is read from the lock line the
 /// diagnostic points at (its span is the entry's line, plan decision PD-3),
-/// and its package from the lock file's directory through the index.
+/// and its unit from the lock file's directory through the index.
 fn rename_labels(
     baseline: &[ridl_ir::v2::Package],
     current: &[ridl_ir::v2::Package],
@@ -1255,38 +1294,43 @@ fn rename_labels(
         })
         .collect();
     for (position, old, dir) in orphans {
+        // The lock sits in the unit's manifest directory, so the package the
+        // index finds there is a package of the unit; the unit holds the
+        // orphan entry's shape under its catalog name.
         let Some(package) = index.package_of_dir(&dir) else {
             continue;
         };
-        let Some(published) = baseline
+        let Some(unit) = baseline
             .iter()
             .find(|candidate| candidate.name == package)
-            .and_then(|published| {
-                published
-                    .shapes()
-                    .find(|shape| lock::shape_key(shape) == old)
-            })
+            .map(ridl_ir::v2::unit_of)
         else {
             continue;
         };
-        let candidates: Vec<ridl_ir::v2::InterfaceShape<'_>> = current
-            .iter()
-            .find(|candidate| candidate.name == package)
-            .map(|fresh| {
-                fresh
-                    .shapes()
-                    .filter(|shape| {
-                        shape.interface.provisional
-                            && same_shape(published.interface, shape.interface)
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        let [candidate] = candidates.as_slice() else {
+        let Some(published) = ridl_ir::v2::packages_of_unit(unit, baseline).find_map(|member| {
+            member
+                .shapes()
+                .find(|shape| lock::shape_key(member, shape) == old)
+        }) else {
             continue;
         };
-        let new = lock::shape_key(candidate);
-        let span = index.shape_span(package, candidate.name, &mut run.sources);
+        let candidates: Vec<(&ridl_ir::v2::Package, ridl_ir::v2::InterfaceShape<'_>)> =
+            ridl_ir::v2::packages_of_unit(unit, current)
+                .flat_map(|fresh| {
+                    fresh
+                        .shapes()
+                        .filter(|shape| {
+                            shape.interface.provisional
+                                && same_shape(published.interface, shape.interface)
+                        })
+                        .map(move |shape| (fresh, shape))
+                })
+                .collect();
+        let [(candidate_package, candidate)] = candidates.as_slice() else {
+            continue;
+        };
+        let new = lock::shape_key(candidate_package, candidate);
+        let span = index.shape_span(&candidate_package.name, candidate.name, &mut run.sources);
         run.diagnostics[position].labels.push(Label {
             span,
             message: format!(
@@ -1298,8 +1342,9 @@ fn rename_labels(
 }
 
 /// The orphan entry a RIDL-409 points at: its key, read from the first field
-/// of the lock line under the diagnostic's span, and the package directory —
-/// the lock file's parent — as the message names it (plan decision PD-4).
+/// of the lock line under the diagnostic's span, and the unit's manifest
+/// directory — the lock file's parent — as the message names it (plan
+/// decision PD-4).
 fn orphan_entry(sources: &SourceMap, diagnostic: &Diagnostic) -> Option<(LockKey, String)> {
     let path = sources.path(diagnostic.primary.file)?;
     let text = sources.text(diagnostic.primary.file)?;
@@ -1335,8 +1380,8 @@ fn same_shape(old: &ridl_ir::v2::Interface, new: &ridl_ir::v2::Interface) -> boo
 }
 
 /// The directory a file path sits in, as a string: its parent, or `.` when
-/// the path has none — the form the loader records a package directory in and
-/// the RIDL-409 message names it in.
+/// the path has none — the form the loader records a unit's manifest
+/// directory in and the RIDL-409 message names it in.
 fn directory_of(path: &str) -> String {
     match Path::new(path).parent() {
         Some(dir) if !dir.as_os_str().is_empty() => dir.to_string_lossy().into_owned(),
@@ -2136,9 +2181,10 @@ struct DeclIndex {
     /// keyed by its dotted name, exactly as its diff paths are.
     shapes: BTreeMap<(String, String), (String, TextRange)>,
     /// The package each indexed directory declares, by the directory's path
-    /// as [`directory_of`] spells it. A package's `interfaces.lock` sits in
-    /// the package directory, so the lock file's parent names the package a
-    /// RIDL-409 belongs to.
+    /// as [`directory_of`] spells it. A unit's `interfaces.lock` sits in the
+    /// unit's manifest directory, which is its root package's directory, so
+    /// the lock file's parent names a package of the unit a RIDL-409 belongs
+    /// to.
     packages: BTreeMap<String, String>,
 }
 

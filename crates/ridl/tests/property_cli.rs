@@ -1253,23 +1253,15 @@ fn a_duration_parameter_is_drawn_in_the_duration_domain() {
 }
 
 #[test]
-fn two_members_declaring_one_package_name_keep_their_own_declarations() {
-    // A workspace name is NOT a key. Two members may declare the same
-    // `[package] name` and the toolchain accepts it with no diagnostic at all —
-    // asserted below, because that silence is why this has to be handled here
-    // rather than assumed away upstream.
-    //
-    // Resolving a package's own declarations through a name-keyed index gives
-    // every member the FIRST member's types, so only the LATER member's verdict
-    // moves — the earlier member comes out right by accident. Which range is
-    // declared first therefore decides which direction of error this fixture
-    // can observe at all.
-    //
-    // The wide range goes first deliberately. Under the bug the later member's
-    // `[0..7]` clause is sampled against `[1000..2000]` and reports `ok` with
-    // 260 satisfying draws for a precondition nothing can satisfy: the
-    // direction that HIDES. Ordered the other way the same mix-up calls a
-    // satisfiable clause `suspect`, which is loud and would be noticed anyway.
+fn two_members_declaring_one_package_name_are_refused_before_any_run() {
+    // Two members that declare the same `[package] name` are two units that
+    // claim one source package: MANI-014 on the second manifest in member
+    // order, whose tree is not loaded. Before that rule the toolchain
+    // accepted the layout silently, and a name-keyed index then resolved the
+    // second member's clauses against the first member's types, so a
+    // precondition nothing could satisfy reported `ok`. The layout is now an
+    // error, so `ridl check` exits 1 and `ridl test` runs nothing and exits
+    // 2, both naming the second manifest.
     let dir = TempDir::new("duplicate-package-name");
     dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
     for member in ["a", "b"] {
@@ -1292,48 +1284,21 @@ interface Second {\n  command narrow(l: Level) [ require l > 7 ] @[..50ms]\n}\n"
     );
 
     let path = dir.path().to_str().expect("utf-8 path");
+    let second_manifest = dir.path().join("b").join("ridl.toml");
     let (check, _, check_err) = ridl(&["check", path]);
-    assert_eq!(
-        check, 0,
-        "two members may share a package name today, silently: {check_err}"
+    assert_eq!(check, 1, "two units claim `dup.pkg`: {check_err}");
+    assert!(
+        check_err.contains("error[MANI-014]")
+            && check_err.contains(&second_manifest.display().to_string()),
+        "MANI-014 on the second manifest: {check_err}"
     );
 
-    let (code, stdout, _) = ridl(&["test", path, "--format", "json"]);
-    assert_eq!(code, 0, "{stdout}");
-    let report: serde_json::Value = serde_json::from_str(&stdout).expect("the report is JSON");
-    // Both packages report under one name, so the clauses are found by observer
-    // id across the whole report rather than by package.
-    let status_of = |id: &str| -> String {
-        report
-            .as_array()
-            .expect("the report is an array")
-            .iter()
-            .flat_map(|package| {
-                package["contracts"]
-                    .as_array()
-                    .expect("contracts is an array")
-            })
-            .find(|contract| contract["id"] == id)
-            .unwrap_or_else(|| panic!("`{id}` is reported: {stdout}"))["status"]
-            .as_str()
-            .expect("a status")
-            .to_string()
-    };
-    assert_eq!(
-        status_of("First.wide.require[0]"),
-        "ok",
-        "every value of the first member's `Level [1000..2000]` exceeds 7: \
-         {stdout}"
-    );
-    // The load-bearing one. `suspect` is the truth here; `ok` means the member
-    // was sampled against its namesake's `[1000..2000]` and is claiming 260
-    // satisfying inputs that its own type admits none of.
-    assert_eq!(
-        status_of("Second.narrow.require[0]"),
-        "suspect",
-        "nothing in the second member's `Level [0..7]` exceeds 7 — reporting \
-         `ok` here means the member was resolved against its namesake's \
-         declarations, and a run that tested nothing real would pass: {stdout}"
+    let (code, stdout, stderr) = ridl(&["test", path, "--format", "json"]);
+    assert_eq!(code, 2, "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert!(stderr.contains("error[MANI-014]"), "stderr:\n{stderr}");
+    assert!(
+        !stdout.contains("Second.narrow"),
+        "no clause of the refused member is run: {stdout}"
     );
 }
 

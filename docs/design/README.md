@@ -32,7 +32,7 @@ choices, see [`../decisions/`](../decisions/).
   [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) and
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decisions 2, 5, 6 and 7.
-- **catalog-descriptor.md** — the FlatBuffers catalog descriptor per package as
+- **catalog-descriptor.md** — the FlatBuffers catalog descriptor per unit as
   built: the `RDLC` file `--emit catalog` writes, the append-only schema and its
   generated planus accessors, what a catalog contains, the catalog hash and the
   three artifacts that carry it, the size state per payload and encoding,

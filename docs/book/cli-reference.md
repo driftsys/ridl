@@ -67,7 +67,7 @@ Commands:
   test      Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a compile error
   fmt       Reformat `.typl`, `.ridl` and `.rsdl` files in place (defaults to the current directory)
   diff      Compare two IR snapshots or source trees and classify the change: exit 0 compatible or identical, 1 breaking, 2 error
-  lock      Allocate a number to every interface that has none and write each package's `interfaces.lock`; with `--rename` or `--retire`, rewrite one package's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for the file
+  lock      Allocate a number to every interface that has none and write each unit's `interfaces.lock`; with `--rename` or `--retire`, rewrite one unit's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for the file
   lsp       Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this. Stdio is the only transport
   mcp       Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
   describe  Print a catalog descriptor as strict JSON, after verifying it
@@ -380,7 +380,8 @@ root when the manifest declares `[imports]` (`ridl baseline` builds through
 `ridlc build`, non-frozen, so the same materialization step runs). Publishing
 the snapshots is wholesale: the target directory ends up holding exactly the
 snapshots the workspace declares now, and nothing else in that directory is
-touched. The workspace's interface numbers must be recorded first: a
+touched. The snapshots stay one per source package; `ridl diff` groups them by
+unit when it compares them. The workspace's interface numbers must be recorded first: a
 provisional number is refused (RIDL-411, under the publication gate below), so
 a package with interfaces runs plain [`ridl lock`](#ridl-lock) before its
 first publication. A two-member workspace with no `[imports]`, its locks
@@ -407,16 +408,25 @@ than the one the interaction held; the baseline already retired the
 interaction with a `reserved` line and the source has dropped that line; or
 the source declares a live interaction under a name the baseline retires.
 The interface level of the gate is the lock's: an interface whose number is
-provisional — a declaration with no entry in the package's `interfaces.lock`
+provisional — a declaration with no entry in the unit's `interfaces.lock`
 — is refused (RIDL-411, exit 1, nothing published), on a first publication as
 on a replacement, until plain `ridl lock` records the number; and a number the
 published baseline holds that the fresh snapshot neither carries nor retires
-is refused too (RIDL-412) — a lock line deleted by hand, since a live entry
-with no declaration already fails the build with RIDL-409. A whole service
-removed from the source is reported by `ridl diff` as breaking but is not
-refused here (ridl §17.14), and a named-form service's list is a set the gate
-does not read. Deleting `doorClosed` outright, with `doorOpened` and `doorLocked`
-still declared:
+is refused too (RIDL-412). That covers a lock line deleted by hand, since a
+live entry with no declaration already fails the build with RIDL-409. It also
+covers a package deleted, without retiring its numbers, from a unit that still
+has other packages. A published snapshot written before the IR recorded the
+unit carries no `unit`; the gate compares it in the unit of the fresh package
+of the same name, so the migration to one `interfaces.lock` per unit — delete
+the per-package lock files, run `ridl lock`, run `ridl baseline` — passes
+RIDL-412 when the unit's new numbering reaches every published number. When
+it does not, because a legacy lock held retired entries, remove
+`.ridl/baseline/` and run `ridl baseline` again: a first publication is not
+compared against a published number, and no flag overrides the gate. A whole
+service removed from the source is reported by `ridl diff` as breaking but is
+not refused here (ridl §17.14), and a named-form service's list is a set the
+gate does not read. Deleting `doorClosed` outright, with `doorOpened` and
+`doorLocked` still declared:
 
 ```sh
 ridl baseline
@@ -558,7 +568,7 @@ Options:
           - proto:         The proto3 schema, written to `<base>.proto`
           - flatbuffers:   The FlatBuffers schema, written to `<base>.fbs`
           - codegen-model: The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
-          - catalog:       The catalog descriptor an engine reads, written to `<base>.catalog.binfb` when the package declares an interface or a service with an inline body: a FlatBuffers file of the package's interfaces, their members and their catalog hash
+          - catalog:       The catalog descriptor an engine reads, written to `<unit>.catalog.binfb` for every unit that declares an interface or a service with an inline body: a FlatBuffers file of the unit's interfaces, their members and their catalog hash
           
           [default: rust]
 
@@ -640,7 +650,7 @@ the first 5 lines of a file. It carries no version and no timestamp, so a
 regeneration with the same inputs gives the same bytes. The TypeScript file has
 `/* eslint-disable */` after the comment block. The IR dumps (JSON,
 prototext and binary), the `<base>.codegen.json` file and the
-`<base>.catalog.binfb` file carry no marker.
+`<unit>.catalog.binfb` file carry no marker.
 
 **A licence header goes after the marker.** `[codegen] header-file` in the
 workspace root's `ridl.toml` (or in the `ridl.toml` of a standalone package)
@@ -662,7 +672,9 @@ is an error when the file cannot be read, when it is not UTF-8, and when it
 contains a control character, which means a C0, DEL or C1 character (U+0085
 included), U+2028 or U+2029, other than a tab and a line break; `ridl check`
 reports it too. MANI-012 is an error when the manifest of a workspace member
-sets the key: only the root sets it.
+sets the key: only the root sets it. MANI-013 is an error when a `ridl.toml`
+sits inside the tree of a unit, and MANI-014 is an error when two units declare
+the same source package.
 
 A build overwrites a `lib.rs` or `Cargo.toml` in the output directory only when
 the file begins with this marker, or with the marker an earlier release wrote
@@ -795,11 +807,13 @@ author.
 **It writes** one file per package per `--emit` target, under `--out-dir`
 (`out` by default), and — exactly like [`ridl check`](#ridl-check) —
 `ridl.lock` at the workspace root when the manifest declares `[imports]`,
-non-frozen. The exception is `catalog`, which writes no file for a package
-that declares no interface and no service with an inline body. `<base>` in the
-`--emit` list above is the package name when
-`PATH` is a package directory or a workspace root, and the input file's stem
-in single-file mode.
+non-frozen. The exception is `catalog`, which writes one file per unit, named
+`<unit>.catalog.binfb` after the unit's manifest `name`, when any source
+package of the unit declares an interface or a service with an inline body,
+and no file for a unit that declares neither. `<base>` in the `--emit` list
+above is the package name when `PATH` is a package directory or a workspace
+root, and the input file's stem in single-file mode; the catalog of a single
+file is named after the file's package, which is its own unit.
 
 When a package names a type from `ridl.std`, the standard package is written
 beside your own as one more file per `--emit` target — `ridl.std.rs`,
@@ -1260,7 +1274,7 @@ breaking
 A named-form service's list is a set of interfaces: an interface joining it
 is `service_interface_added`, one leaving it `service_interface_removed`, a
 reorder no change, and both are compatible, because an interface's number
-comes from its package's `interfaces.lock` and the routing key does not
+comes from its unit's `interfaces.lock` and the routing key does not
 contain the service. A removal is still visible in source — the
 `service.member` addresses of that interface stop resolving under the service
 — so the text report lists it under a heading of its own, printed once as a
@@ -1279,9 +1293,10 @@ compatible on the wire, visible in source:
   [compatible] service_interface_removed veh.cluster/veh.cluster.dash/J: J -> (removed)
 ```
 
-An interface is matched by its number from the package's `interfaces.lock`,
-not by its name — a declared `interface` and a service's inline shape alike. A
-rename that keeps its number, recorded with `ridl lock <pkg> --rename Old=New`,
+An interface is matched by its number from the unit's `interfaces.lock`,
+within the unit, not by its name — a declared `interface` and a service's
+inline shape alike. A
+rename that keeps its number, recorded with `ridl lock <unit dir> --rename Old=New`,
 is `interface_renamed`: compatible on the wire, because the number is the
 routing identity, and visible in source, because the generated identity-table
 names change, so it shares the heading above; the path carries the new name,
@@ -1292,7 +1307,10 @@ entry carries a provisional number, which is no identity: it is always
 `decl_added`, and it is never matched to an old interface, so a rename the lock
 does not record is `decl_removed` plus `decl_added`. Two sides with no lock
 file — two bare source trees, or a snapshot published before the lock existed —
-are matched by name. With `J` renamed to `Jay` on its number, the lock beside
+are matched by name. Interfaces are matched within the unit, and the names on
+both sides of a change are catalog names, so an interface moved between two
+sibling packages of one unit keeps its number and is reported as
+`interface_renamed`, from the old catalog name to the new one. With `J` renamed to `Jay` on its number, the lock beside
 each file recording it, and `Jay` no longer listed in
 `service veh.cluster.dash : I, J`:
 
@@ -1457,7 +1475,7 @@ ridl lock --help
 ```
 
 ```text
-Allocate a number to every interface that has none and write each package's `interfaces.lock`; with `--rename` or `--retire`, rewrite one package's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for the file
+Allocate a number to every interface that has none and write each unit's `interfaces.lock`; with `--rename` or `--retire`, rewrite one unit's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for the file
 
 Usage: ridl lock [OPTIONS] [PATH]
        ridl lock <COMMAND>
@@ -1467,7 +1485,7 @@ Commands:
   help   Print this message or the help of the given subcommand(s)
 
 Arguments:
-  [PATH]  A package directory, a workspace root, or a file. A directory named `merge` is spelled `./merge`, since the bare word is the subcommand [default: .]
+  [PATH]  A unit directory, a workspace root, or a file. A directory named `merge` is spelled `./merge`, since the bare word is the subcommand [default: .]
 
 Options:
       --rename <OLD=NEW>  Rewrite the live entry OLD to hold the key NEW, keeping its number (repeatable). NEW must be a declaration without an entry
@@ -1475,18 +1493,19 @@ Options:
   -h, --help              Print help
 ```
 
-**It writes** `interfaces.lock` in the package directory, beside the `.ridl`
-sources — the line table that gives every interface of the package its
-number (ridl §11): a `#` header, `next N`, then one entry per interface,
-`Name N`, with the word `retired` after the number when the interface is
-gone. A service's inline shape is an interface too and is keyed `service:`
-followed by the service's dotted name. Only `ridl lock` writes the file: the
+**It writes** one `interfaces.lock` per unit, in the directory of the unit's
+`ridl.toml` — the line table that gives every interface of the unit its number
+(ridl §11): a `#` header, `next N`, then one entry per interface, `Name N`,
+with the word `retired` after the number when the interface is gone. An
+interface of a subpackage is keyed by its name relative to the unit, such as
+`cluster.Speed`. A service's inline shape is an interface too and is keyed
+`service:` followed by the service's full dotted name. Only `ridl lock` writes the file: the
 compiler reads it beside the sources, and `ridl fmt` never touches it.
 
 Plain `ridl lock` is the only form that allocates. Every declared interface
 whose name has no live entry gets the next free number, in byte order of the
 name, and the file is written; a declaration that already has its entry is
-left as it is. Over a package holding `interface Zone` and `interface Cabin`
+left as it is. Over a unit holding `interface Zone` and `interface Cabin`
 and no lock file yet:
 
 ```sh
@@ -1507,8 +1526,8 @@ Zone 2
 ```
 
 Run again with nothing to allocate, it prints nothing, writes nothing and
-exits 0. Over a workspace it writes each package's own file, and each output
-line is prefixed with the package directory relative to `PATH` and a colon:
+exits 0. Over a workspace it writes each unit's own file, and each output
+line is prefixed with the unit directory relative to `PATH` and a colon:
 `hvac: allocated Cabin 1`. A `PATH` inside a workspace member compiles the
 whole workspace and allocates in, edits and reports on that member only.
 Until `ridl lock` has run, a declaration with no entry compiles with a
@@ -1526,7 +1545,11 @@ run with RIDL-409 present:
   when nothing declares `NAME` any more. Printed as `retired Name N`.
 
 Both are repeatable, neither allocates, and `PATH` must resolve to exactly one
-package. A rename keeps the number because the number, not the name, is the
+unit. `OLD`, `NEW` and `NAME` are dotted names relative to the unit, such as
+`cluster.Old`, so a rename across sibling packages is
+`ridl lock <unit dir> --rename cluster.Old=cluster.New`. An `interfaces.lock` in
+a subdirectory of a unit is not read and draws the warning RIDL-416
+(`lock-in-subdirectory`). A rename keeps the number because the number, not the name, is the
 interface's wire identity; the old name is then free for a later, unrelated
 interface. Starting from the file above with `interface Zone` renamed to
 `interface Lane` in the source:
@@ -1536,7 +1559,7 @@ ridl check . ; echo "exit: $?"
 ```
 
 ```text
-error[RIDL-409]: `Zone` is a live entry of `interfaces.lock` with no declaration in the package: run `ridl lock . --rename Zone=New` when a declaration without an entry, `New`, is this interface under a new name, or `ridl lock . --retire Zone` when the interface is gone
+error[RIDL-409]: `Zone` is a live entry of `interfaces.lock` with no declaration in the unit: run `ridl lock . --rename Zone=New` when a declaration without an entry, `New`, is this interface under a new name, or `ridl lock . --retire Zone` when the interface is gone
   ┌─ ./interfaces.lock:4:1
   │
 4 │ Zone 2
@@ -1726,7 +1749,7 @@ Print a catalog descriptor as strict JSON, after verifying it
 Usage: ridl describe <PATH>
 
 Arguments:
-  <PATH>  The `<base>.catalog.binfb` file `ridl build --emit catalog` wrote
+  <PATH>  The `<unit>.catalog.binfb` file `ridl build --emit catalog` wrote
 
 Options:
   -h, --help  Print help
@@ -1739,7 +1762,7 @@ whole with exit code 2.
 The transcript below is abridged: it is the output for the test corpus in
 `crates/ridl/tests/baseline-corpus`, with each `...` line standing for lines
 that were removed. The keys print in alphabetical order. The 32 bytes of the
-catalog hash come first, then one entry per interface, then the package name,
+catalog hash come first, then one entry per interface, then the unit name,
 the retired numbers, the toolchain version that wrote the file, and the
 descriptor's schema version.
 
@@ -1934,7 +1957,7 @@ Options:
           - proto:         The proto3 schema, written to `<base>.proto`
           - flatbuffers:   The FlatBuffers schema, written to `<base>.fbs`
           - codegen-model: The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
-          - catalog:       The catalog descriptor an engine reads, written to `<base>.catalog.binfb` when the package declares an interface or a service with an inline body: a FlatBuffers file of the package's interfaces, their members and their catalog hash
+          - catalog:       The catalog descriptor an engine reads, written to `<unit>.catalog.binfb` for every unit that declares an interface or a service with an inline body: a FlatBuffers file of the unit's interfaces, their members and their catalog hash
           
           [default: rust]
 

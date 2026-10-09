@@ -76,3 +76,31 @@ fn json_format_prints_an_empty_array_for_a_clean_file() {
     assert_eq!(output.status.code(), Some(0), "{output:?}");
     assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "[]");
 }
+
+#[test]
+fn json_format_reports_a_manifest_inside_a_unit_tree() {
+    let dir = TempDir::new("nested-manifest");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("hmi.ridl", "package veh.hmi\n");
+    dir.write(
+        "cluster/ridl.toml",
+        "[package]\nname = \"veh.hmi.cluster\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("cluster/x.ridl", "package veh.hmi.cluster\n");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_ridl"))
+        .args(["check", "--format", "json"])
+        .arg(&dir.0)
+        .output()
+        .expect("run ridl check");
+
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let stdout = String::from_utf8(output.stdout).expect("utf-8 stdout");
+    let diagnostics: serde_json::Value = serde_json::from_str(&stdout).expect("stdout is JSON");
+    let diagnostics = diagnostics.as_array().expect("a JSON array");
+    assert_eq!(diagnostics.len(), 1, "{stdout}");
+    assert_eq!(diagnostics[0]["code"], "MANI-013");
+}

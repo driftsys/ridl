@@ -333,6 +333,7 @@ impl ServerState {
             sources,
             lints,
             report_scope: _,
+            units: _,
             codegen_header: _,
         } = load_workspace(&mut self.db, dir)?;
         if workspace.packages(&self.db).is_empty()
@@ -579,9 +580,11 @@ impl ServerState {
             self.set_text(path, input, text);
         } else {
             let input = InputFile::new(&self.db, path.clone(), text);
+            let package_name = overlay_package_name(&self.db, input, &path);
             let package = Package::new(
                 &self.db,
-                overlay_package_name(&self.db, input, &path),
+                package_name.clone(),
+                package_name,
                 vec![input],
                 PackageOrigin::WorkspaceMember,
                 BTreeMap::new(),

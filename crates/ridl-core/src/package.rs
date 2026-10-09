@@ -36,13 +36,13 @@ pub enum PackageOrigin {
     Std,
 }
 
-/// The package's `interfaces.lock` as the loader read it (lock design §2): the
+/// The unit's `interfaces.lock` as the loader read it (lock design §2): the
 /// file's path and text, kept so a checker diagnostic can point into the file
 /// (RIDL-409 is reported on an entry's line), and the parsed table.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PackageLock {
     /// The file's path, in the loader's path form; its parent directory is
-    /// the package directory `ridl lock` names.
+    /// the manifest directory `ridl lock` names.
     pub path: String,
     /// The file's text, byte for byte.
     pub text: String,
@@ -62,6 +62,12 @@ pub struct PackageLock {
 #[salsa::input(debug)]
 pub struct Package {
     pub name: String,
+    /// The unit this package belongs to: the `name` of the `[package]`
+    /// manifest whose directory tree holds it. Every package of one tree
+    /// shares it. A single-file package and the overlay package of the
+    /// language server carry their own name; `ridl.std` carries `ridl.std`.
+    #[returns(ref)]
+    pub unit: String,
     #[returns(ref)]
     pub files: Vec<InputFile>,
     pub origin: PackageOrigin,
@@ -75,8 +81,9 @@ pub struct Package {
     /// `ridl-sem`.
     #[returns(ref)]
     pub defaults: TimingDefaults,
-    /// The package's `interfaces.lock`, read by the loader from the package
-    /// directory (lock design §2), or `None` when the directory has no such
+    /// The unit's `interfaces.lock`, read by the loader from the manifest
+    /// directory (lock design §2) and shared by every package of the unit,
+    /// or `None` when the directory has no such
     /// file, when the file is malformed (the loader reports RIDL-410 and
     /// drops it), or when the package was not loaded from a directory (a
     /// source string, `ridl.std`). The checker reads it to give every
@@ -389,6 +396,7 @@ mod tests {
         let common = Package::new(
             &db,
             "veh.common".to_string(),
+            "veh.common".to_string(),
             vec![file(&db, "veh-common/a.typl", "package veh.common")],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
@@ -397,6 +405,7 @@ mod tests {
         );
         let cluster = Package::new(
             &db,
+            "veh.cluster".to_string(),
             "veh.cluster".to_string(),
             vec![file(&db, "veh-cluster/b.typl", "package veh.cluster")],
             PackageOrigin::WorkspaceMember,
@@ -434,6 +443,7 @@ mod tests {
     fn ridl_package(db: &RidlDatabase, name: &str, text: &str) -> Package {
         Package::new(
             db,
+            name.to_string(),
             name.to_string(),
             vec![file(db, &format!("{}.ridl", name.replace('.', "/")), text)],
             PackageOrigin::WorkspaceMember,

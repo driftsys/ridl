@@ -546,7 +546,7 @@ note[RIDL-405]: error type `SharedFault` is the failure arm of queries in 3 inte
    │
    = lint: `shared-error-type` (set its level in `[lints]` in ridl.toml)
 
-error[RIDL-409]: `Legacy` is a live entry of `interfaces.lock` with no declaration in the package: run `ridl lock tests/corpus/ridl-diag-showcase/main --rename Legacy=New` when a declaration without an entry, `New`, is this interface under a new name, or `ridl lock tests/corpus/ridl-diag-showcase/main --retire Legacy` when the interface is gone
+error[RIDL-409]: `Legacy` is a live entry of `interfaces.lock` with no declaration in the unit: run `ridl lock tests/corpus/ridl-diag-showcase/main --rename Legacy=New` when a declaration without an entry, `New`, is this interface under a new name, or `ridl lock tests/corpus/ridl-diag-showcase/main --retire Legacy` when the interface is gone
   ┌─ tests/corpus/ridl-diag-showcase/main/interfaces.lock:4:1
   │
 4 │ Legacy 2

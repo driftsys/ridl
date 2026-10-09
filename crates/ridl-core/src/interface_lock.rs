@@ -1,8 +1,8 @@
-//! The per-package `interfaces.lock` (lock design §2): the line table that
-//! gives every interface of a package its number.
+//! The unit's `interfaces.lock` (lock design §2): the line table that gives
+//! every interface of a unit its number.
 //!
-//! The file lives in the package directory beside the `.ridl` sources, one
-//! per package, and only `ridl lock` writes it. Its form is a line table:
+//! The file lives in the unit's manifest directory, beside its `ridl.toml`,
+//! one per unit, and only `ridl lock` writes it. Its form is a line table:
 //!
 //! ```text
 //! # interfaces.lock — written by ridl lock; do not edit by hand.
@@ -24,9 +24,12 @@
 //!   after the number for a retired entry. Fields are separated by one space.
 //!   An entry's number never changes and no entry is ever removed (lock
 //!   design §4): a rename rewrites the key in place, a retire adds the word.
-//! - The key is a declared interface's name, or `service:` followed by the
-//!   dotted name of the service whose inline shape the entry numbers (lock
-//!   design §3). The prefix is needed because `interface cabin` and
+//! - The key is a declared interface's catalog name, or `service:` followed by
+//!   the dotted name of the service whose inline shape the entry numbers (lock
+//!   design §3). A catalog name is the interface's source package path
+//!   relative to the unit, then its name, joined by `.` (`cluster.Speed`); an
+//!   interface of the unit's root source package keeps its short name. The
+//!   `service:` prefix is needed because `interface cabin` and
 //!   `service cabin` check clean together in one package.
 //!
 //! The reader ([`parse`]) skips an empty line and every line whose first
@@ -51,7 +54,7 @@ use std::path::Path;
 
 use rowan::{TextRange, TextSize};
 
-/// The file's name inside the package directory.
+/// The file's name inside the unit's manifest directory.
 pub const FILE_NAME: &str = "interfaces.lock";
 
 /// The first line of every written file. The reader ignores it like any other
@@ -96,9 +99,10 @@ impl std::error::Error for InvalidLockKey {}
 impl FromStr for LockKey {
     type Err = InvalidLockKey;
 
-    /// Accepts one identifier (`[A-Za-z][A-Za-z0-9_]*`, the lexer's rule) for
-    /// an interface, or `service:` followed by identifiers joined by `.` for
-    /// an inline shape. No word is reserved: `next` is not a keyword of the
+    /// Accepts one or more identifiers (`[A-Za-z][A-Za-z0-9_]*`, the lexer's
+    /// rule) joined by `.` for an interface, or `service:` followed by
+    /// identifiers joined by `.` for an inline shape. No word is reserved:
+    /// `next` is not a keyword of the
     /// language, so an interface may be named `next`, and [`parse`] finds the
     /// `next N` line by position rather than by its first word (plan decision
     /// PD-19).
@@ -111,11 +115,11 @@ impl FromStr for LockKey {
                     "`{text}` is not a lock key: a service key is `service:` followed by a dotted name"
                 )))
             }
-        } else if is_ident(text) {
+        } else if text.split('.').all(is_ident) {
             Ok(LockKey::Interface(text.to_string()))
         } else {
             Err(InvalidLockKey(format!(
-                "`{text}` is not a lock key: an interface key is one identifier"
+                "`{text}` is not a lock key: an interface key is a dotted name of identifiers"
             )))
         }
     }
@@ -680,6 +684,29 @@ DoorControl 4
 service:veh.hvac.cabin 5
 ";
 
+    #[test]
+    fn an_interface_key_is_a_dotted_relative_name() {
+        assert_eq!(
+            key("cluster.SpeedDisplay"),
+            LockKey::Interface("cluster.SpeedDisplay".into())
+        );
+        assert_eq!(key("Session"), LockKey::Interface("Session".into()));
+        for bad in ["cluster..Speed", ".Speed", "cluster.", "a-b.Speed"] {
+            assert!(bad.parse::<LockKey>().is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_dotted_key_round_trips_through_parse_and_render() {
+        let lock = parse("next 3\ncluster.Speed 1\nSession 2\n").unwrap();
+        let text = lock.render();
+        assert!(
+            text.ends_with("next 3\ncluster.Speed 1\nSession 2\n"),
+            "{text}"
+        );
+        assert_eq!(parse(&text).unwrap().render(), text);
+    }
+
     fn key(text: &str) -> LockKey {
         text.parse().expect("a valid lock key")
     }
@@ -878,7 +905,6 @@ service:veh.hvac.cabin 5
             " A 1",
             "A  1",
             "A-B 1",
-            "a.b 1",
             "9A 1",
             "service: 1",
             "service:a..b 1",
@@ -972,7 +998,6 @@ C 3
             "",
             "service:",
             "a b",
-            "a.b",
             "service:a..b",
             "9x",
             "-",

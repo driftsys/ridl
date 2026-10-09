@@ -89,6 +89,7 @@ mod tests {
         let package = Package::new(
             &db,
             "p".to_string(),
+            "p".to_string(),
             files,
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),

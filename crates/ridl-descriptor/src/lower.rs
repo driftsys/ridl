@@ -9,11 +9,11 @@ use std::fmt;
 use ridl_ir::projection::size::{self, Ctx, PayloadShape, SizeState, size_state};
 use ridl_ir::v2::{
     Constraint, Decl, FieldType, Package, Param, PrimitiveType, ReturnType, StreamType, decl,
-    field_type, return_type, stream_type,
+    field_type, return_type, stream_type, unit_retired,
 };
 
 use crate::hash::catalog_hash;
-use crate::number::{ZeroNumber, numbered_shapes};
+use crate::number::{ZeroNumber, numbered_shapes, unit_shapes};
 use crate::{
     Catalog, Encoding, Interface, Kind, MaxSize, Member, Payload, RetiredInterface, SCHEMA_VERSION,
     SizeStateTag, Timing, TimingMode, UnboundedCause,
@@ -50,51 +50,56 @@ impl From<ZeroNumber> for LowerError {
     }
 }
 
-/// Lowers `package` to the finished descriptor bytes. `others` is every
-/// checked package of the build that `ridlc` passes, which can include
-/// `package` itself, plus `ridl.std` when a package references it; name
-/// resolution and the hash closure search it. An entry named like `package` is
-/// skipped by the hash (`ridl_ir::catalog_hash`), so the hash is the same
-/// whether or not `others` holds it.
-pub fn lower(package: &Package, others: &[&Package]) -> Result<Vec<u8>, LowerError> {
-    let numbered = numbered_shapes(package)?;
-    let hash = catalog_hash(package, others);
-    let ctx = Ctx::new(package, others);
+/// Lowers the catalog of `unit` to the finished descriptor bytes.
+/// `packages` is every checked package of the build, plus `ridl.std` when a
+/// package references it; name resolution and the hash closure search it. The
+/// unit's own packages are those with `unit_of(package) == unit`, and a
+/// package named twice is read once. The descriptor is named `unit`; its
+/// interfaces are every shape of the unit's packages under the shape's
+/// catalog name, in (number, name) order; its `retired` list is the unit's
+/// (`ridl_ir::v2::unit_retired`).
+pub fn lower(unit: &str, packages: &[&Package]) -> Result<Vec<u8>, LowerError> {
+    // Validates every number before any member is lowered.
+    numbered_shapes(unit, packages)?;
+    let hash = catalog_hash(unit, packages);
 
-    let interfaces = package
-        .shapes()
-        .zip(&numbered)
-        .map(|(shape, numbered)| Interface {
-            name: shape.name.to_owned(),
-            number: numbered.number,
-            provisional: numbered.provisional,
-            members: shape
-                .interface
-                .interactions
-                .iter()
-                .filter_map(|decl| member_of(decl, &ctx))
-                .collect(),
-            reserved_ordinals: shape
-                .interface
-                .interactions
-                .iter()
-                .filter(|decl| matches!(decl.kind, Some(decl::Kind::ReservedSlot(_))))
-                .map(|decl| decl.ordinal)
-                .collect(),
+    let interfaces = unit_shapes(unit, packages)
+        .into_iter()
+        .map(|(package, shape, name)| {
+            // Sized against the shape's own package, so a bare type name
+            // resolves where the shape was written.
+            let ctx = Ctx::new(package, packages);
+            Interface {
+                name,
+                number: shape.interface.number,
+                provisional: shape.interface.provisional,
+                members: shape
+                    .interface
+                    .interactions
+                    .iter()
+                    .filter_map(|decl| member_of(decl, &ctx))
+                    .collect(),
+                reserved_ordinals: shape
+                    .interface
+                    .interactions
+                    .iter()
+                    .filter(|decl| matches!(decl.kind, Some(decl::Kind::ReservedSlot(_))))
+                    .map(|decl| decl.ordinal)
+                    .collect(),
+            }
         })
         .collect();
 
     let catalog = Catalog {
         version: SCHEMA_VERSION,
-        name: package.name.clone(),
+        name: unit.to_owned(),
         hash: hash.to_vec(),
         toolchain: env!("CARGO_PKG_VERSION").to_owned(),
         interfaces,
-        retired: package
-            .retired
-            .iter()
+        retired: unit_retired(unit, packages)
+            .into_iter()
             .map(|entry| RetiredInterface {
-                name: entry.name.clone(),
+                name: entry.name,
                 number: entry.number,
             })
             .collect(),

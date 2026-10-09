@@ -176,17 +176,18 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-descriptor/tests/lower.rs",
-        lines: 3,
-        why: "the `vehicle()` helper and a test, each reading the catalog \
+        lines: 5,
+        why: "the `vehicle()` helper and three tests, each reading the catalog \
               descriptor's own `Catalog.interfaces` field back out of a \
               buffer, and a test that zeroes the number of the one interface \
               its package declares; the lowering itself walks `shapes()`",
     },
     Allowed {
         path: "crates/ridl-descriptor/tests/round_trip.rs",
-        lines: 1,
+        lines: 3,
         why: "a test reading the catalog descriptor's own `Catalog.interfaces` \
-              field back out of a buffer, not a read of `Package::interfaces`",
+              field, once back out of a buffer and twice on the owned builder \
+              it mutates, not a read of `Package::interfaces`",
     },
     Allowed {
         path: "crates/ridl-descriptor/tests/verify.rs",
@@ -203,11 +204,12 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-ir/src/catalog_hash.rs",
-        lines: 36,
-        why: "the reduced package's own `interfaces` field, which the hash \
-              fills from a `shapes()` walk, sorts and blanks; the rest are \
-              test fixtures that build or edit a package's named \
-              interfaces",
+        lines: 39,
+        why: "the reduced unit's own `interfaces` field, which the hash \
+              fills from a `shapes()` walk over every package of the unit, \
+              sorts and blanks; the rest are test fixtures that build or \
+              edit a package's named interfaces, or read the reduced unit's \
+              field back",
     },
     Allowed {
         path: "crates/ridl-ir/src/codegen/deployment.rs",
@@ -246,14 +248,17 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-sem/src/check.rs",
-        lines: 11,
+        lines: 12,
         why: "the lowering that PRODUCES `Package.interfaces` (a service's \
               inline shape is produced by `lower_service_inline` into its \
-              `Service.shapes` slot); `interface_member_names`, which walks \
-              `SourceFile::interfaces()` to find one interface a resolved \
-              symbol already points at — an inline shape has no symbol, so \
-              the RIDL-144 walk cannot need `shapes()`; plus nine test \
-              assertions over the named store",
+              `Service.shapes` slot); the numbering fold of `check_package`, \
+              which writes each shape's number through `&mut` access \
+              `shapes()` cannot yield and walks the inline shapes of \
+              `Service.shapes` beside it; `interface_member_names`, which \
+              walks `SourceFile::interfaces()` to find one interface a \
+              resolved symbol already points at — an inline shape has no \
+              symbol, so the RIDL-144 walk cannot need `shapes()`; plus nine \
+              test assertions over the named store",
     },
     Allowed {
         path: "crates/ridl-sem/src/rsdl/lower.rs",
@@ -284,6 +289,12 @@ const ALLOWED: &[Allowed] = &[
         lines: 1,
         why: "the read is of the deployment region's interface list \
               (`Region::interfaces`), not of `Package::interfaces`",
+    },
+    Allowed {
+        path: "crates/ridlc/tests/cli.rs",
+        lines: 1,
+        why: "the read is of the catalog descriptor's own `Catalog.interfaces` \
+              field, read back from the file `--emit catalog` wrote",
     },
     Allowed {
         path: "crates/ridlc/tests/codegen_model.rs",

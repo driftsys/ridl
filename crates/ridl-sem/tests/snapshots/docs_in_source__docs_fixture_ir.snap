@@ -367,7 +367,8 @@ expression: json
   ],
   "interfaces": [],
   "services": [],
-  "retired": []
+  "retired": [],
+  "unit": "veh.common"
 }
 {
   "name": "veh.adas",
@@ -656,14 +657,16 @@ expression: json
       ]
     }
   ],
-  "retired": []
+  "retired": [],
+  "unit": "veh.adas"
 }
 {
   "name": "veh.topology",
   "decls": [],
   "interfaces": [],
   "services": [],
-  "retired": []
+  "retired": [],
+  "unit": "veh.topology"
 }
 {
   "name": "Vehicle",

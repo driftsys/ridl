@@ -36,7 +36,7 @@ their instances on machines — rsdl never stands alone.
 | Document                       | Version   | Status              | Owns                                                                                                                                                                                                                                                              |
 | ------------------------------ | --------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Concept note — the RIDL family | draft     | direction-setting   | motivation, cores, profiles, platform/repo/IR model, naming ledger                                                                                                                                                                                                |
-| ADR-0002 — module system       | accepted  | normative           | `package`/`import`/`as`/`internal`, manifest, lockfile, resolver                                                                                                                                                                                                  |
+| ADR-0002 — module system       | accepted  | normative           | `package`/`import`/`as`/`internal`, the unit (a manifest and its tree of source packages), manifest, lockfile, resolver                                                                                                                                           |
 | ADR-0026 — doc comments        | accepted  | normative           | doc comment carriers, doc links and their resolution, the four doc tags, the doc lints (typl §14, §16.5)                                                                                                                                                          |
 | **typl Language Reference**    | 0.1 draft | normative           | vocabulary layer + family lexicon, keyword registry (§1.4), evolution model (§7.4)                                                                                                                                                                                |
 | **ridl Language Reference**    | 0.2 draft | normative           | interaction layer + interact-core semantics: envelope, timing, init/invalid channels, errors, streams                                                                                                                                                             |
@@ -191,6 +191,12 @@ zero when absent, and uses a bounded floating-point representation allowance
 without normalizing the input (typl §4.3, driftsys/ridl#469). A map rejects
 duplicate keys (typl §12.2).
 
+**2026-10-09 unit decision:** a unit, which is one `ridl.toml` with a
+`[package]` table and the source packages in its directory tree, owns one
+catalog, one `interfaces.lock` and one interface-number space. A source package
+belongs to one unit, and a manifest inside a unit's tree is an error (ADR-0002
+§1 and §4, MANI-013 and MANI-014; ridl §11).
+
 ## 6. Open Questions — Consolidated Index
 
 By home; see each reference for full statements.
@@ -333,6 +339,8 @@ are `1xx`.
 | MANI-010 | `[lints]` entry names no lint, or its value is not a level          | warning  |
 | MANI-011 | `[codegen] header-file` cannot be read or holds a control character | error    |
 | MANI-012 | `[codegen] header-file` is set in a workspace member                | error    |
+| MANI-013 | nested manifest — a `ridl.toml` inside a unit's directory tree      | error    |
+| MANI-014 | a source package is declared by two units                           | error    |
 | MANI-101 | remote import fetch failed                                          | error    |
 | MANI-102 | fetched content hash does not match the lockfile                    | error    |
 | MANI-103 | `--frozen`: no lockfile entry for a remote import                   | error    |

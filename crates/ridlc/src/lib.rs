@@ -116,6 +116,7 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
     let package_name = declared_package_name(&ast).unwrap_or_else(|| module_name_from_path(path));
     let pkg = Package::new(
         &db,
+        package_name.clone(),
         package_name,
         vec![input],
         PackageOrigin::WorkspaceMember,
@@ -138,6 +139,8 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
             // No manifest: no header file.
             codegen_header: None,
             report_scope: None,
+            // A source text has no directory, so no unit is recorded.
+            units: BTreeMap::new(),
         },
     );
     // The callers, `check_source` and `compile`, report their diagnostics, so
@@ -542,8 +545,8 @@ pub enum Emit {
     /// only `.ir.json` artifacts.
     CodegenModel,
     /// The catalog descriptor an engine reads, written to
-    /// `<base>.catalog.binfb` when the package declares an interface or a
-    /// service with an inline body: a FlatBuffers file of the package's
+    /// `<unit>.catalog.binfb` for every unit that declares an interface or a
+    /// service with an inline body: a FlatBuffers file of the unit's
     /// interfaces, their members and their catalog hash.
     Catalog,
 }
@@ -1051,6 +1054,10 @@ pub fn run_build_with(
             )?;
         }
 
+        if emits.contains(&Emit::Catalog) {
+            write_catalogs(out_dir, &packages, &others)?;
+        }
+
         if let Some(std_ir) = &std_ir {
             write_emits(
                 out_dir,
@@ -1461,19 +1468,22 @@ fn declared_deployments(system: &CheckedSystem) -> Vec<String> {
         .collect()
 }
 
-/// Sets each region's hash of `lowered` to the catalog hash of its package,
-/// computed over `others`, which [`catalog_scope`] builds.
+/// Sets each region's hash of `lowered` to the catalog hash of its unit
+/// (a region's catalog is the unit's name), computed over `others`, which
+/// [`catalog_scope`] builds and which holds every package of the unit.
 fn embed_catalog_hashes(
     lowered: &mut ridl_ir::v2::System,
     packages: &[&ridl_ir::v2::Package],
     others: &[&ridl_ir::v2::Package],
 ) {
     for region in &mut lowered.regions {
-        let package = packages
-            .iter()
-            .find(|package| package.name == region.catalog)
-            .expect("a region's catalog is a package of the workspace");
-        region.hash = ridl_ir::catalog_hash::catalog_hash(package, others).to_vec();
+        assert!(
+            ridl_ir::v2::members_of_unit(&region.catalog, packages)
+                .next()
+                .is_some(),
+            "a region's catalog is a unit of the workspace"
+        );
+        region.hash = ridl_ir::catalog_hash::catalog_hash(&region.catalog, others).to_vec();
     }
 }
 
@@ -1570,6 +1580,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         lints,
         codegen_header,
         report_scope,
+        units: _,
     } = loaded;
 
     let packages = workspace.packages(db).clone();
@@ -1941,6 +1952,35 @@ fn write_response(
     Ok(())
 }
 
+/// Writes the catalog descriptor of every unit of the build that has at least
+/// one interface shape, to `<unit>.catalog.binfb` in `out_dir`, in unit name
+/// order; a unit with no interface shape gets no file. `packages` are the
+/// build's checked packages, which name the units through
+/// `ridl_ir::v2::unit_of`; `others` is the scope the catalogs are lowered
+/// over ([`catalog_scope`]). A lowering failure is an internal error, not a
+/// diagnostic: it is returned as an I/O error, which stops the build and
+/// which the command reports with exit code 2 (ADR-0010 decision 1).
+fn write_catalogs(
+    out_dir: &Path,
+    packages: &[&ridl_ir::v2::Package],
+    others: &[&ridl_ir::v2::Package],
+) -> std::io::Result<()> {
+    let units: BTreeSet<&str> = packages
+        .iter()
+        .filter(|package| package.shapes().next().is_some())
+        .map(|package| ridl_ir::v2::unit_of(package))
+        .collect();
+    for unit in units {
+        let bytes = ridl_descriptor::lower(unit, others)
+            .map_err(|err| std::io::Error::other(err.to_string()))?;
+        std::fs::write(
+            out_dir.join(format!("{unit}{}", ridl_descriptor::FILE_SUFFIX)),
+            bytes,
+        )?;
+    }
+    Ok(())
+}
+
 /// Writes the selected `emits`, then the `plugins`, for one package's IR
 /// into `out_dir`.
 ///
@@ -1963,12 +2003,9 @@ fn write_response(
 /// package answers with an error diagnostic and no file, and only its own
 /// artifact is skipped.
 ///
-/// [`Emit::Catalog`] calls no backend: it writes the bytes
-/// `ridl_descriptor::lower` returns to `<base>.catalog.binfb`, and writes
-/// nothing for a package with no interface shape. A lowering failure is an
-/// internal error, not a diagnostic: it is returned as an I/O error, which
-/// stops the build and which the command reports with exit code 2
-/// (ADR-0010 decision 1).
+/// [`Emit::Catalog`] calls no backend and writes nothing here: the catalogs
+/// are per unit, not per package, and [`write_catalogs`] writes them once
+/// after every package.
 ///
 /// The `ir-json`, `ir-text` and `ir-binary` emits are direct IR dumps, not
 /// backends: they need no request. When the package cannot be rendered in
@@ -2019,22 +2056,8 @@ fn write_emits(
             Emit::Proto => Box::new(ridl_backend_proto::Backend::new(raw)),
             Emit::Flatbuffers => Box::new(ridl_backend_flatbuffers::Backend::new(raw)),
             Emit::CodegenModel => Box::new(codegen::ModelBackend),
-            // A package with no interface shape has no catalog, so no file is
-            // written. `ridl-sem` numbers every shape of a checked package, so
-            // a lowering failure is an internal error: it is returned as an
-            // I/O error, which the command reports with exit code 2
-            // (ADR-0010 decision 1).
-            Emit::Catalog => {
-                if ir.shapes().next().is_some() {
-                    let bytes = ridl_descriptor::lower(ir, others)
-                        .map_err(|err| std::io::Error::other(err.to_string()))?;
-                    std::fs::write(
-                        out_dir.join(format!("{base}{}", ridl_descriptor::FILE_SUFFIX)),
-                        bytes,
-                    )?;
-                }
-                continue;
-            }
+            // Written once per build by `write_catalogs`, not per package.
+            Emit::Catalog => continue,
             Emit::IrJson => match ridl_ir::v2::to_json_pretty(ir) {
                 Ok(json) => {
                     std::fs::write(ir_dump_path(out_dir, base, *emit), json)?;

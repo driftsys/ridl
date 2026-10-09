@@ -3,7 +3,7 @@
 #![cfg(feature = "std")]
 
 //! The catalog hash of the corpus package is pinned (driver §4 answer 4).
-//! A different value here means the reduced package or the binary encoding
+//! A different value here means the reduced unit or the binary encoding
 //! changed; ADR-0014 decision 15 says when the pin may move.
 //!
 //! driftsys/ridl#275's criterion, that the hash does not depend on which
@@ -16,7 +16,7 @@ use std::path::Path;
 use ridl_descriptor::hash::catalog_hash;
 
 /// Pinned on the first run; see ADR-0014 decision 15 for the rule on moving it.
-const CORPUS_HASH: &str = "ff876b7ac7f4ba17e20be3863c31956059f26f17bf905ceea67af0aab4d49bb2";
+const CORPUS_HASH: &str = "56125edbeccc92f72cf0a7beaee18d4c9340b1db0a6a8bc45c826df3ef29a71b";
 
 /// The corpus snapshot was published before shapes carried a number (`"number"`
 /// does not occur in the file). The pin must cover the numbers, so the test
@@ -49,7 +49,7 @@ fn numbered_corpus() -> ridl_ir::v2::Package {
 fn the_corpus_hash_is_pinned() {
     let package = numbered_corpus();
     assert!(package.shapes().all(|shape| shape.interface.number != 0));
-    let hash = catalog_hash(&package, &[]);
+    let hash = catalog_hash(ridl_ir::v2::unit_of(&package), &[&package]);
     let hex: String = hash.iter().map(|b| format!("{b:02x}")).collect();
     assert_eq!(hex, CORPUS_HASH);
 }

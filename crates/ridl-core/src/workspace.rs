@@ -14,10 +14,11 @@
 //! declaration in a file is TYPL-001. A bare `.typl` or `.ridl` file with no
 //! manifest anywhere up the tree loads in **single-file mode**: one synthetic
 //! package named from the file's declared package, exempt from TYPL-002 (the
-//! task 20 CLI contract). Every package directory — the bare file's directory
-//! included — is also read for an `interfaces.lock`, which rides on the
-//! [`Package`] as its [`PackageLock`]; a malformed one is RIDL-410 on the
-//! file's own line (lock design §2, §8).
+//! task 20 CLI contract). A unit's manifest directory is read for an
+//! `interfaces.lock`, which rides on every [`Package`] of the unit as its
+//! [`PackageLock`]; the bare file's directory is read the same way. A lock in
+//! any other directory is not read (RIDL-416), and a malformed one is
+//! RIDL-410 on the file's own line (lock design §2, §8).
 //!
 //! Problems in loaded content — manifest diagnostics, the law violations, a
 //! nested workspace (MANI-004), a broken member (MANI-008), a file that is
@@ -67,6 +68,11 @@ pub struct LoadedWorkspace {
     /// (ADR-0024 decision 9). The path is in the same form as the file paths
     /// in `sources`.
     pub report_scope: Option<PathBuf>,
+    /// The loaded units: each `[package]` manifest's `name` mapped to its
+    /// directory, in the path form of the file paths in `sources`. A
+    /// workspace root is not a unit; its members are. In single-file mode the
+    /// one unit is the file's package, mapped to the file's directory.
+    pub units: BTreeMap<String, PathBuf>,
 }
 
 /// Unsaved source text for a file in a loaded package directory.
@@ -245,6 +251,7 @@ pub fn load_workspace_with(
         lints: loader.lints,
         codegen_header: loader.codegen_header,
         report_scope,
+        units: loader.units,
     })
 }
 
@@ -378,6 +385,9 @@ type LoadedFile = (InputFile, Vec<(String, TextRange)>);
 /// The accumulating state of one [`load_workspace`] run.
 #[derive(Default)]
 struct Loader {
+    /// Source package name to the unit that claimed it and that unit's
+    /// manifest directory.
+    claims: BTreeMap<String, (String, PathBuf)>,
     overlays: Vec<(PathBuf, Overlay, bool)>,
     sources: SourceMap,
     diagnostics: Vec<Diagnostic>,
@@ -405,6 +415,8 @@ struct Loader {
     /// Every member directory of a loaded workspace, in the path form of the
     /// files recorded under it. Empty outside workspace mode.
     member_dirs: Vec<PathBuf>,
+    /// Unit name to manifest directory, for [`LoadedWorkspace::units`].
+    units: BTreeMap<String, PathBuf>,
 }
 
 impl Loader {
@@ -472,7 +484,9 @@ impl Loader {
                 // A standalone package: the manifest's `[imports]` and
                 // `[defaults]` ride on its packages; the workspace maps
                 // stay empty.
-                self.load_package_tree(db, root, &name, &imports, &defaults)?;
+                self.units.insert(name.clone(), root.to_path_buf());
+                let lock = self.read_lock(root)?;
+                self.load_package_tree(db, root, root, &name, &name, &imports, &defaults, &lock)?;
             }
             ManifestKind::Workspace { members } => {
                 // ADR-0002 §5 step 3: the workspace root's `[imports]` and
@@ -562,33 +576,69 @@ impl Loader {
                 // `[defaults]` shadow the workspace defaults per key (ridl §9.1);
                 // a key the member leaves unset takes the workspace value.
                 let member_defaults = defaults.or(&self.workspace_defaults);
+                let member_dir = workspace_root.join(member);
+                // Two members with one `[package] name` are two units that
+                // claim the same source package: MANI-014 on the second
+                // manifest in load order, whose tree is not loaded, so the
+                // first unit keeps its directory in `units`.
+                if let Some(first_dir) = self.units.get(&name)
+                    && *first_dir != member_dir
+                {
+                    let first_dir = first_dir.clone();
+                    self.diagnostics.push(error(
+                        DiagCode::MANI_014,
+                        file_id,
+                        package_name_range(&text),
+                        format!(
+                            "source package `{name}` is already declared by the unit in `{}`; the unit in `{}` declares it too. A source package belongs to one unit",
+                            first_dir.display(),
+                            member_dir.display()
+                        ),
+                    ));
+                    return Ok(());
+                }
+                self.units.insert(name.clone(), member_dir.clone());
+                let lock = self.read_lock(&member_dir)?;
                 self.load_package_tree(
                     db,
-                    &workspace_root.join(member),
+                    &member_dir,
+                    &member_dir,
+                    &name,
                     &name,
                     &imports,
                     &member_defaults,
+                    &lock,
                 )?;
             }
         }
         Ok(())
     }
 
-    /// Loads the package rooted at `dir` under the package name `name`, then
-    /// every subdirectory as its own package named by its path — the
-    /// package↔directory law's "the name mirrors the directory path relative
-    /// to the manifest root" (ADR-0002 §1). Every package in the tree carries
-    /// `imports`, the governing manifest's `[imports]`. Directories are
-    /// visited in name order; hidden directories, symlinked directories
-    /// (following them could revisit the tree in a cycle), and directories
-    /// with their own `ridl.toml` (separate package roots) are skipped.
+    /// Loads the package rooted at `dir` under the package name `name` and the
+    /// unit name `unit` (the manifest's `name`, whose directory is
+    /// `unit_dir`), then every subdirectory as its own package named by its
+    /// path — the package↔directory law's "the name mirrors the directory
+    /// path relative to the manifest root" (ADR-0002 §1). Every package in
+    /// the tree carries `imports`, the governing manifest's `[imports]`.
+    /// Directories are visited in name order; hidden directories and
+    /// symlinked directories (following them could revisit the tree in a
+    /// cycle) are skipped, and a directory with its own `ridl.toml` is
+    /// MANI-013 and is not entered. A source package that another unit's
+    /// directory already claims is MANI-014 and is not loaded. Every package
+    /// of the tree carries `lock`, the unit's `interfaces.lock` read from the
+    /// manifest directory; a lock in any other directory is not read and is
+    /// RIDL-416.
+    #[allow(clippy::too_many_arguments)]
     fn load_package_tree(
         &mut self,
         db: &mut RidlDatabase,
         dir: &Path,
+        unit_dir: &Path,
+        unit: &str,
         name: &str,
         imports: &BTreeMap<String, String>,
         defaults: &TimingDefaults,
+        lock: &Option<PackageLock>,
     ) -> io::Result<()> {
         let mut source_files = Vec::new();
         let mut subdirs = Vec::new();
@@ -625,22 +675,47 @@ impl Loader {
         source_files.sort();
         subdirs.sort();
 
+        let mut claimed_elsewhere = false;
         if !source_files.is_empty() {
+            match self.claims.get(name) {
+                Some((first, first_dir)) if first_dir != unit_dir => {
+                    claimed_elsewhere = true;
+                    let manifest = unit_dir.join("ridl.toml");
+                    let text = fs::read_to_string(&manifest)?;
+                    let file = self.sources.file_id(&path_string(&manifest), &text);
+                    self.diagnostics.push(error(
+                        DiagCode::MANI_014,
+                        file,
+                        package_name_range(&text),
+                        format!(
+                            "source package `{name}` is already declared by unit `{first}` (`{}`); unit `{unit}` declares it too, in `{}`. A source package belongs to one unit",
+                            first_dir.display(),
+                            unit_dir.display()
+                        ),
+                    ));
+                }
+                _ => {
+                    self.claims
+                        .insert(name.to_string(), (unit.to_string(), unit_dir.to_path_buf()));
+                }
+            }
+        }
+        if !source_files.is_empty() && !claimed_elsewhere {
             let mut files = Vec::new();
             for path in &source_files {
                 if let Some((input, _)) = self.load_file(db, path, Some(name))? {
                     files.push(input);
                 }
             }
-            let lock = self.read_lock(dir)?;
             self.packages.push(Package::new(
                 &*db,
                 name.to_string(),
+                unit.to_string(),
                 files,
                 PackageOrigin::WorkspaceMember,
                 imports.clone(),
                 defaults.clone(),
-                lock,
+                lock.clone(),
             ));
         }
 
@@ -649,15 +724,49 @@ impl Loader {
             else {
                 continue;
             };
-            if dir_name.starts_with('.') || subdir.join("ridl.toml").is_file() {
+            if dir_name.starts_with('.') {
                 continue;
+            }
+            let nested_manifest = subdir.join("ridl.toml");
+            if nested_manifest.is_file() {
+                let nested_text = fs::read_to_string(&nested_manifest)?;
+                let nested_id = self
+                    .sources
+                    .file_id(&path_string(&nested_manifest), &nested_text);
+                self.diagnostics.push(error(
+                    DiagCode::MANI_013,
+                    nested_id,
+                    byte_range(0, 0),
+                    format!(
+                        "`{}` is a `ridl.toml` inside the tree of unit `{unit}`; a unit holds one manifest. Move the directory beside the unit, or delete the manifest",
+                        nested_manifest.display()
+                    ),
+                ));
+                continue;
+            }
+            let ignored = subdir.join(interface_lock::FILE_NAME);
+            if ignored.is_file() {
+                let ignored_text = fs::read_to_string(&ignored).unwrap_or_default();
+                let ignored_id = self.sources.file_id(&path_string(&ignored), &ignored_text);
+                self.diagnostics.push(warning(
+                    DiagCode::RIDL_416,
+                    ignored_id,
+                    byte_range(0, 0),
+                    format!(
+                        "`{}` is an `interfaces.lock` inside the tree of unit `{unit}`; only the `interfaces.lock` beside the unit's `ridl.toml` is read, so this file is ignored",
+                        ignored.display()
+                    ),
+                ));
             }
             self.load_package_tree(
                 db,
                 &subdir,
+                unit_dir,
+                unit,
                 &format!("{name}.{dir_name}"),
                 imports,
                 defaults,
+                lock,
             )?;
         }
         Ok(())
@@ -691,18 +800,23 @@ impl Loader {
         };
         self.packages.push(Package::new(
             &*db,
-            name,
+            name.clone(),
+            name.clone(),
             vec![input],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
             TimingDefaults::default(),
             lock,
         ));
+        if let Some(dir) = path.parent() {
+            self.units.insert(name, dir.to_path_buf());
+        }
         Ok(())
     }
 
-    /// Reads `dir/interfaces.lock` for the package rooted at `dir` (lock
-    /// design §2). An absent file is `None`. A malformed file — one that is
+    /// Reads `dir/interfaces.lock` for the unit whose manifest directory is
+    /// `dir`, or for the directory of a bare source file (lock design §2). An
+    /// absent file is `None`. A malformed file — one that is
     /// not valid UTF-8 included — is RIDL-410 on the offending line of the
     /// lock file itself, through this loader's source map, at the empty range
     /// 0..0 when there is no line to point at (plan decision PD-3); the
@@ -866,6 +980,28 @@ fn member_entry_range(text: &str, member: &str) -> TextRange {
     }
 }
 
+/// The byte range of the quoted `name` value of a manifest's `[package]`
+/// table, or the whole file as a fallback.
+fn package_name_range(text: &str) -> TextRange {
+    let mut offset = 0;
+    for line in text.split_inclusive('\n') {
+        let value = line
+            .trim_start()
+            .strip_prefix("name")
+            .and_then(|rest| rest.trim_start().strip_prefix('='))
+            .map(str::trim_start)
+            .and_then(|value| value.strip_prefix('"').map(|inner| (value, inner)));
+        if let Some((value, inner)) = value
+            && let Some(len) = inner.find('"')
+        {
+            let start = offset + (line.len() - value.len());
+            return byte_range(start, start + len + 2);
+        }
+        offset += line.len();
+    }
+    byte_range(0, text.len())
+}
+
 /// The byte range of the `[workspace]` section header inside a manifest's
 /// text, or the whole file as a fallback.
 fn workspace_section_range(text: &str) -> TextRange {
@@ -891,6 +1027,13 @@ fn error(code: DiagCode, file: FileId, range: TextRange, message: String) -> Dia
         primary: Span { file, range },
         labels: Vec::new(),
         fixits: Vec::new(),
+    }
+}
+
+fn warning(code: DiagCode, file: FileId, range: TextRange, message: String) -> Diagnostic {
+    Diagnostic {
+        severity: Severity::Warning,
+        ..error(code, file, range, message)
     }
 }
 
@@ -2061,6 +2204,84 @@ mod tests {
         );
     }
 
+    #[test]
+    fn every_package_of_a_tree_carries_the_manifest_name_as_its_unit() {
+        let dir = TempDir::new("unit-tree");
+        dir.write(
+            "ridl.toml",
+            "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("hmi.ridl", "package veh.hmi\ntype A: m\n");
+        dir.write("cluster/speed.ridl", "package veh.hmi.cluster\ntype S: m\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package tree loads");
+        assert_eq!(loaded.diagnostics, Vec::new());
+
+        let packages = loaded.workspace.packages(&db).clone();
+        assert_eq!(packages.len(), 2);
+        for package in &packages {
+            assert_eq!(package.unit(&db).as_str(), "veh.hmi");
+        }
+        assert_eq!(
+            loaded.units,
+            BTreeMap::from([("veh.hmi".to_string(), dir.path().to_path_buf())]),
+        );
+    }
+
+    #[test]
+    fn a_workspace_member_is_a_unit_and_the_root_is_not() {
+        let dir = TempDir::new("unit-members");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
+        dir.write(
+            "a/ridl.toml",
+            "[package]\nname = \"x.a\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("a/a.ridl", "package x.a\ntype A: m\n");
+        dir.write(
+            "b/ridl.toml",
+            "[package]\nname = \"x.b\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("b/b.ridl", "package x.b\ntype B: m\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert_eq!(loaded.diagnostics, Vec::new());
+
+        assert_eq!(
+            loaded.units,
+            BTreeMap::from([
+                ("x.a".to_string(), dir.path().join("a")),
+                ("x.b".to_string(), dir.path().join("b")),
+            ]),
+        );
+        let units: Vec<String> = loaded
+            .workspace
+            .packages(&db)
+            .iter()
+            .map(|p| p.unit(&db).clone())
+            .collect();
+        assert_eq!(units, vec!["x.a", "x.b"]);
+    }
+
+    #[test]
+    fn a_single_file_is_its_own_unit() {
+        let dir = TempDir::new("unit-single");
+        let path = dir.write("p.ridl", "package p\ntype A: m\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, &path).expect("single-file mode loads");
+        assert_eq!(loaded.diagnostics, Vec::new());
+
+        let packages = loaded.workspace.packages(&db).clone();
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].unit(&db).as_str(), "p");
+        assert_eq!(
+            loaded.units,
+            BTreeMap::from([("p".to_string(), dir.path().to_path_buf())]),
+        );
+    }
+
     /// A symlinked directory is not followed by the tree walk — following it
     /// could revisit the tree in a cycle and duplicate packages endlessly.
     #[cfg(unix)]
@@ -2315,30 +2536,62 @@ service:veh.common.climate 2
         assert_eq!(lock.lock.next, 3);
     }
 
-    /// The file is per package (lock design §2): a subdirectory package reads
-    /// its own directory's lock, not its parent's.
+    /// The file is per unit: every package of the unit carries the lock of the
+    /// manifest directory.
     #[test]
-    fn a_subdirectory_package_reads_its_own_lock() {
-        let dir = TempDir::new("subdir-lock");
-        dir.write("ridl.toml", PACKAGE_MANIFEST);
-        dir.write("a.ridl", "package veh.common\ntype A: m\n");
-        dir.write("interfaces.lock", LOCK_TEXT);
-        dir.write("sub/b.ridl", "package veh.common.sub\ntype B: m\n");
+    fn every_package_of_a_unit_carries_the_lock_of_the_manifest_directory() {
+        let dir = TempDir::new("unit-lock");
+        dir.write(
+            "ridl.toml",
+            "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("hmi.ridl", "package veh.hmi\ntype A: m\n");
+        let lock_path = dir.write("interfaces.lock", "next 1\n");
+        dir.write("cluster/speed.ridl", "package veh.hmi.cluster\ntype B: m\n");
 
         let mut db = RidlDatabase::default();
         let loaded = load_workspace(&mut db, dir.path()).expect("the tree loads");
         assert_eq!(loaded.diagnostics, Vec::new());
         let packages = loaded.workspace.packages(&db).clone();
         assert_eq!(packages.len(), 2);
-        assert!(
-            packages[0].lock(&db).is_some(),
-            "the root package has a lock"
+        for package in &packages {
+            let lock = package
+                .lock(&db)
+                .as_ref()
+                .unwrap_or_else(|| panic!("`{}` has the unit's lock", package.name(&db)));
+            assert_eq!(lock.path, path_string(&lock_path));
+        }
+    }
+
+    /// Only the lock beside the manifest is read: a lock in a subdirectory is
+    /// ignored, even a malformed one, and reported as a warning.
+    #[test]
+    fn a_lock_in_a_subdirectory_is_not_read() {
+        let dir = TempDir::new("subdir-lock-ignored");
+        dir.write(
+            "ridl.toml",
+            "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
         );
+        dir.write("hmi.ridl", "package veh.hmi\ntype A: m\n");
+        dir.write("cluster/speed.ridl", "package veh.hmi.cluster\ntype B: m\n");
+        let ignored = dir.write("cluster/interfaces.lock", "x");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the tree loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["RIDL-416"]);
+        let diag = &loaded.diagnostics[0];
+        assert_eq!(diag.severity, Severity::Warning);
         assert_eq!(
-            *packages[1].lock(&db),
-            None,
-            "the subdirectory package has none"
+            loaded.sources.path(diag.primary.file),
+            Some(path_string(&ignored).as_str())
         );
+        assert_eq!(diag.primary.range, byte_range(0, 0));
+        assert!(diag.message.contains("unit `veh.hmi`"), "{}", diag.message);
+        let packages = loaded.workspace.packages(&db).clone();
+        assert_eq!(packages.len(), 2);
+        for package in &packages {
+            assert_eq!(*package.lock(&db), None);
+        }
     }
 
     // Root discovery from a member (ADR-0002 §4, issue #529).
@@ -2592,5 +2845,184 @@ service:veh.common.climate 2
         let end = usize::from(diag.primary.range.end());
         assert_eq!(&member[start..end], "\"M.txt\"");
         assert_eq!(loaded.codegen_header.as_deref(), Some("root header"));
+    }
+
+    #[test]
+    fn a_manifest_below_a_unit_is_mani_013_and_its_tree_is_not_loaded() {
+        let dir = TempDir::new("nested-manifest");
+        dir.write(
+            "ridl.toml",
+            "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("hmi.ridl", "package veh.hmi\n");
+        let nested = dir.write(
+            "cluster/ridl.toml",
+            "[package]\nname = \"veh.hmi.cluster\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("cluster/x.ridl", "package veh.hmi.cluster\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the unit loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["MANI-013"]);
+        let diag = &loaded.diagnostics[0];
+        assert_eq!(
+            loaded.sources.path(diag.primary.file),
+            Some(path_string(&nested).as_str())
+        );
+        assert_eq!(diag.primary.range, byte_range(0, 0));
+        assert!(diag.message.contains("unit `veh.hmi`"), "{}", diag.message);
+        let packages = loaded.workspace.packages(&db);
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].name(&db), "veh.hmi");
+    }
+
+    #[test]
+    fn a_member_whose_tree_holds_another_member_is_mani_013() {
+        let dir = TempDir::new("nested-member");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"a/b\"]\n");
+        dir.write(
+            "a/ridl.toml",
+            "[package]\nname = \"a\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("a/a.typl", "package a\n");
+        dir.write(
+            "a/b/ridl.toml",
+            "[package]\nname = \"b\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("a/b/b.typl", "package b\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let count = codes(&loaded.diagnostics)
+            .iter()
+            .filter(|c| **c == "MANI-013")
+            .count();
+        assert_eq!(count, 1, "{:?}", codes(&loaded.diagnostics));
+    }
+
+    #[test]
+    fn a_root_package_already_claimed_by_a_sibling_tree_is_mani_014() {
+        let dir = TempDir::new("claimed-twice");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"base\", \"hmi\"]\n");
+        dir.write(
+            "base/ridl.toml",
+            "[package]\nname = \"com.example\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("base/hmi/x.ridl", "package com.example.hmi\n");
+        let second = "[package]\nname = \"com.example.hmi\"\nversion = \"1.0.0\"\n";
+        let second_path = dir.write("hmi/ridl.toml", second);
+        dir.write("hmi/y.ridl", "package com.example.hmi\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["MANI-014"]);
+        let diag = &loaded.diagnostics[0];
+        assert_eq!(
+            loaded.sources.path(diag.primary.file),
+            Some(path_string(&second_path).as_str())
+        );
+        let start = usize::from(diag.primary.range.start());
+        let end = usize::from(diag.primary.range.end());
+        assert_eq!(&second[start..end], "\"com.example.hmi\"");
+        assert!(
+            diag.message.contains("unit `com.example`")
+                && diag.message.contains("unit `com.example.hmi`"),
+            "{}",
+            diag.message
+        );
+        let packages = loaded.workspace.packages(&db);
+        let claimed: Vec<_> = packages
+            .iter()
+            .filter(|p| p.name(&db) == "com.example.hmi")
+            .collect();
+        assert_eq!(claimed.len(), 1);
+        assert_eq!(claimed[0].unit(&db), "com.example");
+    }
+
+    /// Two members whose manifests carry one `[package] name`, in the member
+    /// order `members`: MANI-014 on the manifest of `second`, whose tree is
+    /// not loaded, while `first` keeps its directory in `units` and its
+    /// interface in the package.
+    fn two_members_with_one_name(members: &str, first: &str, second: &str) {
+        let dir = TempDir::new("one-name-twice");
+        dir.write("ridl.toml", &format!("[workspace]\nmembers = {members}\n"));
+        let manifest = "[package]\nname = \"x\"\nversion = \"1.0.0\"\n";
+        dir.write(&format!("{first}/ridl.toml"), manifest);
+        dir.write(
+            &format!("{first}/x.ridl"),
+            &format!("package x\n\ninterface {}A {{}}\n", first.to_uppercase()),
+        );
+        let second_path = dir.write(&format!("{second}/ridl.toml"), manifest);
+        dir.write(
+            &format!("{second}/x.ridl"),
+            &format!("package x\n\ninterface {}A {{}}\n", second.to_uppercase()),
+        );
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["MANI-014"]);
+        let diag = &loaded.diagnostics[0];
+        assert_eq!(
+            loaded.sources.path(diag.primary.file),
+            Some(path_string(&second_path).as_str())
+        );
+        let start = usize::from(diag.primary.range.start());
+        let end = usize::from(diag.primary.range.end());
+        assert_eq!(&manifest[start..end], "\"x\"");
+        assert!(
+            diag.message.contains("source package `x`"),
+            "{}",
+            diag.message
+        );
+        assert_eq!(loaded.units.get("x"), Some(&dir.path().join(first)));
+        let packages = loaded.workspace.packages(&db);
+        assert_eq!(packages.len(), 1);
+        let files = packages[0].files(&db);
+        assert_eq!(files.len(), 1);
+        assert!(
+            files[0]
+                .text(&db)
+                .contains(&format!("{}A", first.to_uppercase())),
+            "the package holds `{first}`'s file"
+        );
+    }
+
+    #[test]
+    fn two_members_with_one_name_are_mani_014_on_the_second() {
+        two_members_with_one_name("[\"a\", \"b\"]", "a", "b");
+    }
+
+    #[test]
+    fn two_members_with_one_name_are_mani_014_on_the_second_in_reverse_order() {
+        two_members_with_one_name("[\"b\", \"a\"]", "b", "a");
+    }
+
+    #[test]
+    fn two_units_with_a_shared_prefix_and_no_overlap_both_load() {
+        let dir = TempDir::new("shared-prefix");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"base\", \"hmi\"]\n");
+        dir.write(
+            "base/ridl.toml",
+            "[package]\nname = \"com.example\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("base/ids.typl", "package com.example\n");
+        dir.write(
+            "hmi/ridl.toml",
+            "[package]\nname = \"com.example.hmi\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("hmi/y.ridl", "package com.example.hmi\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert!(
+            loaded.diagnostics.is_empty(),
+            "{:?}",
+            codes(&loaded.diagnostics)
+        );
+        let units: std::collections::BTreeSet<String> = loaded
+            .workspace
+            .packages(&db)
+            .iter()
+            .map(|p| p.unit(&db).to_string())
+            .collect();
+        assert_eq!(
+            units,
+            ["com.example", "com.example.hmi"].map(String::from).into()
+        );
     }
 }

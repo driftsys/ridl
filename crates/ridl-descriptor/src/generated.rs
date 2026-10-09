@@ -2931,7 +2931,7 @@ mod root {
             /// The table `RetiredInterface` in the namespace `ridl.descriptor`
             ///
             /// Generated from these locations:
-            /// * Table `RetiredInterface` in the file `crates/ridl-descriptor/schema/catalog.fbs:89`
+            /// * Table `RetiredInterface` in the file `crates/ridl-descriptor/schema/catalog.fbs:91`
             #[derive(
                 Clone,
                 Debug,
@@ -3252,7 +3252,7 @@ mod root {
             /// The table `Catalog` in the namespace `ridl.descriptor`
             ///
             /// Generated from these locations:
-            /// * Table `Catalog` in the file `crates/ridl-descriptor/schema/catalog.fbs:94`
+            /// * Table `Catalog` in the file `crates/ridl-descriptor/schema/catalog.fbs:96`
             #[derive(
                 Clone,
                 Debug,

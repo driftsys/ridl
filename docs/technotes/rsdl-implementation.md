@@ -77,7 +77,7 @@ lowers, so nothing would reuse a memoized result.
 
 It reads the lowered package IR as its second argument, because rsdl §13's
 inputs from outside rsdl live there: each interface's number and provisional
-flag (`Interface.number`, `Interface.provisional`, from the package's lock) and
+flag (`Interface.number`, `Interface.provisional`, from the unit's lock) and
 each member's ordinal (`Decl.ordinal`, ridl §11). An interface is found by
 identity through `Package::shapes()`, the walk that sees an inline shape;
 `Package.interfaces` alone misses one.
@@ -124,7 +124,7 @@ system at all — for a code emit, for a plugin, for `--deployment`, or for a
 system dump. It reuses the `ridl.std` IR when a code emit already checked it,
 and checks `ridl.std` itself when a package references it and no code emit ran.
 Every lowered system the toolchain returns or writes therefore carries its
-hashes. The hash is computed over the region's package and the same package list
+hashes. The hash is computed over the region's unit and the same package list
 `ridl build --emit catalog` gives `ridl_descriptor::lower`, built by one helper,
 `catalog_scope`: every checked package of the workspace, then `ridl.std` when a
 package of the workspace references it. A region's hash therefore equals the
@@ -141,7 +141,9 @@ alone lets every artifact be written and still exits 1
 
 The corpus entry `rsdl-appendix-a` carries the reviewed snapshot of a lowered
 system, `corpus__system@rsdl-appendix-a.snap`; it is the only entry that gets
-one, because it is the only clean entry that declares a `system`.
+one, because it is the only clean entry that declares a `system`. The entry is
+one unit, `veh`, so its system has one region, named `veh`, whose interfaces are
+`adas.CruiseControl`, `adas.LaneAssist` and the inline shape `veh.diag.access`.
 
 ## `ridl diff` at the system
 

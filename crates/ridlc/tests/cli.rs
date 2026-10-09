@@ -789,13 +789,89 @@ fn build_system(entry: &Path, system: &str, emits: &str) -> (ridl_ir::v2::System
     (system, out)
 }
 
-/// The catalog hash in the catalog descriptor `<catalog>.catalog.binfb` that
-/// a build wrote into `out`.
-fn descriptor_hash(out: &Path, catalog: &str) -> Vec<u8> {
-    let bytes = std::fs::read(out.join(format!("{catalog}{}", ridl_descriptor::FILE_SUFFIX)))
+/// The catalog hash in the descriptor of `unit`, `<unit>.catalog.binfb`,
+/// that the build wrote to `out`.
+fn descriptor_hash(out: &Path, unit: &str) -> Vec<u8> {
+    let bytes = std::fs::read(out.join(format!("{unit}{}", ridl_descriptor::FILE_SUFFIX)))
         .expect("the catalog descriptor is written");
     let descriptor = ridl_descriptor::verify(&bytes).expect("the descriptor verifies");
     descriptor.hash().expect("the hash reads").to_vec()
+}
+
+/// `--emit catalog` writes one descriptor for each unit with an interface
+/// shape: the corpus is the one unit `veh`, whose three shapes sit in two
+/// source packages.
+#[test]
+fn emit_catalog_writes_one_file_per_unit() {
+    let out = TempDir::new("catalog-per-unit");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        Path::new("tests/corpus/rsdl-appendix-a").as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "catalog".as_ref(),
+    ]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    let mut files: Vec<String> = std::fs::read_dir(out.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|name| name.ends_with(ridl_descriptor::FILE_SUFFIX))
+        .collect();
+    files.sort();
+    assert_eq!(files, ["veh.catalog.binfb"]);
+    let bytes = std::fs::read(out.path().join("veh.catalog.binfb")).unwrap();
+    let catalog = ridl_descriptor::verify(&bytes).unwrap();
+    assert_eq!(catalog.name().unwrap(), "veh");
+    let names: Vec<&str> = catalog
+        .interfaces()
+        .unwrap()
+        .iter()
+        .map(|i| i.unwrap().name().unwrap())
+        .collect();
+    assert_eq!(
+        names,
+        ["adas.CruiseControl", "adas.LaneAssist", "veh.diag.access"]
+    );
+}
+
+/// A unit with only types has no catalog: of a workspace with the unit
+/// `veh.a` (an interface) and the unit `veh.b` (a type), only `veh.a` gets a
+/// file.
+#[test]
+fn emit_catalog_writes_nothing_for_a_unit_without_an_interface() {
+    let dir = TempDir::new("catalog-type-only");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
+    dir.write(
+        "a/ridl.toml",
+        "[package]\nname = \"veh.a\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "a/a.ridl",
+        "package veh.a\ntype Level: integer [0..100]\ninterface Panel {\n  signal level: Level @10ms\n}\n",
+    );
+    dir.write(
+        "b/ridl.toml",
+        "[package]\nname = \"veh.b\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("b/b.typl", "package veh.b\ntype B: s\n");
+    let out = TempDir::new("catalog-type-only-out");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        dir.path().as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "catalog".as_ref(),
+    ]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    let mut files: Vec<String> = std::fs::read_dir(out.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|name| name.ends_with(ridl_descriptor::FILE_SUFFIX))
+        .collect();
+    files.sort();
+    assert_eq!(files, ["veh.a.catalog.binfb"]);
 }
 
 /// rsdl reference §13 (driftsys/ridl#367): each region of
@@ -811,7 +887,7 @@ fn each_region_carries_its_catalog_hash() {
         .iter()
         .map(|region| region.catalog.as_str())
         .collect();
-    assert_eq!(catalogs, ["veh.adas", "veh.diag"]);
+    assert_eq!(catalogs, ["veh"]);
     for region in &written.regions {
         assert_eq!(region.hash.len(), 32, "`{}`", region.catalog);
         assert_eq!(
@@ -821,7 +897,6 @@ fn each_region_carries_its_catalog_hash() {
             region.catalog
         );
     }
-    assert_ne!(written.regions[0].hash, written.regions[1].hash);
 
     let mut db = ridl_core::RidlDatabase::default();
     let output = ridlc::compile_workspace(&mut db, entry).expect("the corpus entry loads");
@@ -872,7 +947,7 @@ fn a_region_hash_covers_the_standard_types_its_catalog_reaches() {
     let package = &output.checked[0].ir;
     assert_ne!(
         region.hash,
-        ridl_ir::catalog_hash::catalog_hash(package, &[]).to_vec(),
+        ridl_ir::catalog_hash::catalog_hash("veh.demo", &[package]).to_vec(),
         "LaneAssist reaches ridl.std.Uuid"
     );
 }
@@ -1339,7 +1414,7 @@ fn version_flag_exits_zero() {
 
 /// A live `interfaces.lock` entry with no declaration is RIDL-409, exit 1,
 /// reported on the entry's own line of the lock file and naming `ridl lock`
-/// with the package directory (lock design §4, §8; plan decisions PD-3, PD-4).
+/// with the unit directory (lock design §4, §8; plan decisions PD-3, PD-4).
 #[test]
 fn check_orphan_lock_entry_exits_one_with_ridl_409() {
     let dir = TempDir::new("check-orphan");
@@ -1362,7 +1437,7 @@ fn check_orphan_lock_entry_exits_one_with_ridl_409() {
     );
     let expected = format!(
         "error[RIDL-409]: `Legacy` is a live entry of `interfaces.lock` with no declaration in \
-         the package: run `ridl lock {} --retire Legacy` to record that the interface is gone",
+         the unit: run `ridl lock {} --retire Legacy` to record that the interface is gone",
         dir.path().display()
     );
     assert!(stderr.contains(&expected), "stderr:\n{stderr}");
@@ -1507,19 +1582,18 @@ fn build_writes_the_catalog_hash_over_the_other_packages_of_the_build() {
         .map(|checked| &checked.ir)
         .find(|ir| ir.name == "veh.cluster")
         .expect("the entry declares veh.cluster");
-    let others: Vec<&ridl_ir::v2::Package> = output
+    let scope: Vec<&ridl_ir::v2::Package> = output
         .checked
         .iter()
         .map(|checked| &checked.ir)
-        .filter(|ir| ir.name != "veh.cluster")
         .chain(std::iter::once(&output.std_ir))
         .collect();
-    let expected = ridl_ir::catalog_hash::catalog_hash(cluster, &others);
+    let expected = ridl_ir::catalog_hash::catalog_hash("veh.cluster", &scope);
     assert_eq!(written, expected.to_vec());
     // The interfaces reach `veh.common`, so the scope is part of the hash.
     assert_ne!(
         expected,
-        ridl_ir::catalog_hash::catalog_hash(cluster, &[]),
+        ridl_ir::catalog_hash::catalog_hash("veh.cluster", &[cluster]),
         "veh.cluster's interfaces reach a declaration of veh.common"
     );
 }

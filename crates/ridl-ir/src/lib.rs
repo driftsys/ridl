@@ -817,6 +817,99 @@ pub mod v2 {
         }
     }
 
+    /// The unit of `package`: its `unit` field when set, else its `name`.
+    ///
+    /// A snapshot written before the field existed carries an empty `unit`;
+    /// for such a package the package name is the unit.
+    pub fn unit_of(package: &Package) -> &str {
+        if package.unit.is_empty() {
+            &package.name
+        } else {
+            &package.unit
+        }
+    }
+
+    /// The packages of `packages` that belong to `unit`, in their order.
+    pub fn packages_of_unit<'a>(
+        unit: &str,
+        packages: &'a [Package],
+    ) -> impl Iterator<Item = &'a Package> {
+        select_unit(unit, packages.iter())
+    }
+
+    /// [`packages_of_unit`] over borrowed packages, the form the catalog
+    /// hash and the codegen lowering hold.
+    pub fn members_of_unit<'a>(
+        unit: &str,
+        packages: &[&'a Package],
+    ) -> impl Iterator<Item = &'a Package> {
+        select_unit(unit, packages.iter().copied())
+    }
+
+    /// The one selection behind [`packages_of_unit`] and
+    /// [`members_of_unit`]: by [`unit_of`], never by a name prefix.
+    fn select_unit<'a>(
+        unit: &str,
+        packages: impl Iterator<Item = &'a Package>,
+    ) -> impl Iterator<Item = &'a Package> {
+        let unit = unit.to_owned();
+        packages.filter(move |p| unit_of(p) == unit)
+    }
+
+    /// The name of a declaration relative to its unit: `name` for a package
+    /// that is the unit itself, else the package's path below the unit
+    /// followed by `name`, joined with `.`.
+    pub fn relative_name(unit: &str, package: &str, name: &str) -> String {
+        if package == unit {
+            return name.to_owned();
+        }
+        // A package outside the unit — a corrupt or hand-edited snapshot
+        // read by `ridl diff` — keeps its full name, so no name is wrong and
+        // nothing panics in a release build.
+        match package
+            .strip_prefix(unit)
+            .and_then(|rest| rest.strip_prefix('.'))
+        {
+            Some(below) => format!("{below}.{name}"),
+            None => format!("{package}.{name}"),
+        }
+    }
+
+    impl Package {
+        /// The name `shape` carries in the catalog of its unit: the global
+        /// name for an inline shape, else the declared name relative to the
+        /// unit (see [`relative_name`]).
+        pub fn catalog_name(&self, shape: &InterfaceShape<'_>) -> String {
+            if shape.is_inline() {
+                shape.name.to_owned()
+            } else {
+                relative_name(unit_of(self), &self.name, shape.name)
+            }
+        }
+    }
+
+    /// The retired entries of the catalog of `unit`: every `retired` entry
+    /// of every package of the unit (a package named twice is read once),
+    /// as spelled, in number order. The checker spells each entry as its
+    /// lock key, which is its catalog name (`cluster.Old`, `Old` for the
+    /// root, `service:veh.x`), on the package the key names or on the
+    /// unit's anchor package, so no entry is qualified here.
+    pub fn unit_retired(unit: &str, packages: &[&Package]) -> Vec<RetiredInterface> {
+        let mut seen: Vec<&str> = Vec::new();
+        let mut retired: Vec<RetiredInterface> = members_of_unit(unit, packages)
+            .filter(|package| {
+                let first = !seen.contains(&package.name.as_str());
+                if first {
+                    seen.push(&package.name);
+                }
+                first
+            })
+            .flat_map(|package| package.retired.iter().cloned())
+            .collect();
+        retired.sort_by_key(|entry| entry.number);
+        retired
+    }
+
     /// Every package named by a type reference in `package`.
     ///
     /// A resolved type-reference string is the fully qualified `pkg.Name` for
@@ -1280,6 +1373,7 @@ mod v2_round_trip {
             interfaces: vec![vehicle_status],
             services: vec![status_service, logs_service],
             retired: Vec::new(),
+            unit: "veh.adas".to_string(),
         }
     }
 
@@ -1553,6 +1647,7 @@ mod v2_round_trip {
             interfaces: Vec::new(),
             services: Vec::new(),
             retired: Vec::new(),
+            unit: String::new(),
         }
     }
 
@@ -1903,6 +1998,115 @@ mod v2_round_trip {
                 .any(|shape| shape.name == "veh.adas.status"),
             "a service naming an interface contributes no shape of its own",
         );
+    }
+
+    #[test]
+    fn relative_name_strips_the_unit_prefix() {
+        assert_eq!(v2::relative_name("u", "u", "Session"), "Session");
+        assert_eq!(
+            v2::relative_name("u", "u.cluster", "Speed"),
+            "cluster.Speed"
+        );
+        assert_eq!(
+            v2::relative_name("com.example.hmi", "com.example.hmi.cluster.front", "A"),
+            "cluster.front.A"
+        );
+    }
+
+    /// A package that is not inside the unit keeps its full name: no slice
+    /// past the unit's length, whatever the snapshot says.
+    #[test]
+    fn relative_name_keeps_the_full_name_of_a_package_outside_the_unit() {
+        assert_eq!(
+            v2::relative_name("u", "w.cluster", "Speed"),
+            "w.cluster.Speed"
+        );
+        assert_eq!(v2::relative_name("u", "ux", "A"), "ux.A");
+        assert_eq!(v2::relative_name("u.cluster", "u", "Session"), "u.Session");
+    }
+
+    /// A package named twice in the slice contributes its retired entries
+    /// once.
+    #[test]
+    fn unit_retired_reads_a_package_named_twice_once() {
+        let package = v2::Package {
+            name: "u.cluster".to_string(),
+            unit: "u".to_string(),
+            retired: vec![v2::RetiredInterface {
+                name: "cluster.Old".to_string(),
+                number: 3,
+            }],
+            ..Default::default()
+        };
+        let once = v2::unit_retired("u", &[&package]);
+        assert_eq!(once.len(), 1);
+        assert_eq!(v2::unit_retired("u", &[&package, &package]), once);
+    }
+
+    #[test]
+    fn an_inline_shape_keeps_its_global_name() {
+        let mut package = fixture();
+        package.name = "u.cluster".to_string();
+        package.unit = "u".to_string();
+        let inline = package
+            .shapes()
+            .find(|shape| shape.is_inline())
+            .expect("the fixture has an inline shape");
+        assert_eq!(package.catalog_name(&inline), "veh.adas.logs");
+        let named = package
+            .shapes()
+            .find(|shape| !shape.is_inline())
+            .expect("the fixture has a declared interface");
+        assert_eq!(package.catalog_name(&named), "cluster.VehicleStatus");
+    }
+
+    #[test]
+    fn catalog_name_treats_an_empty_unit_as_the_package_name() {
+        let mut package = fixture();
+        package.unit = String::new();
+        let named = package
+            .shapes()
+            .find(|shape| !shape.is_inline())
+            .expect("the fixture has a declared interface");
+        assert_eq!(package.catalog_name(&named), "VehicleStatus");
+    }
+
+    #[test]
+    fn unit_of_falls_back_to_the_name() {
+        let bare = v2::Package {
+            name: "p".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(v2::unit_of(&bare), "p");
+        let member = v2::Package {
+            name: "u.a".to_string(),
+            unit: "u".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(v2::unit_of(&member), "u");
+    }
+
+    #[test]
+    fn packages_of_unit_selects_by_unit_of() {
+        let package = |name: &str, unit: &str| v2::Package {
+            name: name.to_string(),
+            unit: unit.to_string(),
+            ..Default::default()
+        };
+        let packages = [
+            package("u", "u"),
+            package("u.a", "u"),
+            package("w", ""),
+            package("other.b", "other"),
+        ];
+        let names: Vec<&str> = v2::packages_of_unit("u", &packages)
+            .map(|p| p.name.as_str())
+            .collect();
+        assert_eq!(names, ["u", "u.a"]);
+        let legacy: Vec<&str> = v2::packages_of_unit("w", &packages)
+            .map(|p| p.name.as_str())
+            .collect();
+        assert_eq!(legacy, ["w"]);
     }
 
     /// The owning service is carried because `Service.visibility` is the

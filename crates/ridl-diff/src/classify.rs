@@ -1297,7 +1297,7 @@ pub fn explain(category: Category) -> &'static str {
         Category::ServiceInterfaceAdded => concat!(
             "An interface joined a service's set of interfaces.\n",
             "  compatible  always — nothing that existed moved: an interface's number\n",
-            "              comes from its package's interfaces.lock, not from its place\n",
+            "              comes from its unit's interfaces.lock, not from its place\n",
             "              in the list, and the routing key does not contain the service\n",
             "              (ADR-0015 d19, as amended 2026-09-15)"
         ),

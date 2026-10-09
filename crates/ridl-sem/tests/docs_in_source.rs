@@ -59,6 +59,7 @@ fn compile(files: &[(&str, &str, String)]) -> Compiled {
             Package::new(
                 &db,
                 name.to_string(),
+                name.to_string(),
                 vec![InputFile::new(&db, path.to_string(), text.clone())],
                 PackageOrigin::WorkspaceMember,
                 BTreeMap::new(),
@@ -173,20 +174,14 @@ fn deleting_every_doc_comment_keeps_every_catalog_hash() {
         );
     }
 
+    let all_with: Vec<&v2::Package> = documented.packages.iter().collect();
+    let all_without: Vec<&v2::Package> = bare.packages.iter().collect();
     for (with, without) in documented.packages.iter().zip(&bare.packages) {
         assert_eq!(with.name, without.name);
-        let others = |compiled: &'_ Compiled| -> Vec<v2::Package> {
-            compiled
-                .packages
-                .iter()
-                .filter(|package| package.name != with.name)
-                .cloned()
-                .collect()
-        };
-        let (others_with, others_without) = (others(&documented), others(&bare));
+        let unit = v2::unit_of(with);
         assert_eq!(
-            catalog_hash(with, &others_with.iter().collect::<Vec<_>>()),
-            catalog_hash(without, &others_without.iter().collect::<Vec<_>>()),
+            catalog_hash(unit, &all_with),
+            catalog_hash(unit, &all_without),
             "the catalog hash of `{}` changed when its docs were deleted",
             with.name
         );

@@ -32,6 +32,7 @@ fn package(name: &str, decls: Vec<v2::Decl>) -> v2::Package {
         interfaces: Vec::new(),
         services: Vec::new(),
         retired: Vec::new(),
+        unit: String::new(),
     }
 }
 

@@ -73,8 +73,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "requires": [
         {
           "interface": {
-            "catalog": "veh.adas",
-            "name": "LaneAssist",
+            "catalog": "veh",
+            "name": "adas.LaneAssist",
             "inline": false
           },
           "service": "veh.adas.lane",
@@ -133,8 +133,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "requires": [
         {
           "interface": {
-            "catalog": "veh.adas",
-            "name": "CruiseControl",
+            "catalog": "veh",
+            "name": "adas.CruiseControl",
             "inline": false
           },
           "service": "veh.adas.cruise",
@@ -147,8 +147,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         {
           "interface": {
-            "catalog": "veh.adas",
-            "name": "LaneAssist",
+            "catalog": "veh",
+            "name": "adas.LaneAssist",
             "inline": false
           },
           "service": "veh.adas.lane",
@@ -179,8 +179,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "requires": [
         {
           "interface": {
-            "catalog": "veh.adas",
-            "name": "CruiseControl",
+            "catalog": "veh",
+            "name": "adas.CruiseControl",
             "inline": false
           },
           "service": "veh.adas.cruise",
@@ -193,7 +193,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         {
           "interface": {
-            "catalog": "veh.diag",
+            "catalog": "veh",
             "name": "veh.diag.access",
             "inline": true
           },
@@ -272,7 +272,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "component": "veh.topology.Cruise",
       "external": false,
       "regions": [
-        "veh.adas"
+        "veh"
       ]
     },
     {
@@ -284,15 +284,14 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "component": "veh.topology.Panel",
       "external": false,
       "regions": [
-        "veh.adas"
+        "veh"
       ]
     },
     {
       "component": "veh.topology.Backend",
       "external": true,
       "regions": [
-        "veh.adas",
-        "veh.diag"
+        "veh"
       ]
     },
     {
@@ -303,37 +302,31 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   ],
   "regions": [
     {
-      "catalog": "veh.adas",
+      "catalog": "veh",
       "interfaces": [
         {
-          "name": "CruiseControl",
+          "name": "adas.CruiseControl",
           "inline": false,
           "number": 1,
           "provisional": true,
           "service": "veh.adas.cruise"
         },
         {
-          "name": "LaneAssist",
+          "name": "adas.LaneAssist",
           "inline": false,
           "number": 2,
           "provisional": true,
           "service": "veh.adas.lane"
-        }
-      ],
-      "hash": "OIyPkzvltFVj6jqhxoEqSC1G6ggESmnRJKawgwBoeFU="
-    },
-    {
-      "catalog": "veh.diag",
-      "interfaces": [
+        },
         {
           "name": "veh.diag.access",
           "inline": true,
-          "number": 1,
+          "number": 3,
           "provisional": true,
           "service": "veh.diag.access"
         }
       ],
-      "hash": "SFm0HawHfJ+vAUAccZTPTZzjqu+OzHwsezXib4litgg="
+      "hash": "lJ/A1xcXiHvJmhNNG8aqjkDJe21IyYJgZFy7xHoNpNo="
     }
   ],
   "distributions": [
@@ -457,8 +450,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "links": [
         {
           "interface": {
-            "catalog": "veh.adas",
-            "name": "LaneAssist",
+            "catalog": "veh",
+            "name": "adas.LaneAssist",
             "inline": false
           },
           "service": "veh.adas.lane",
@@ -476,8 +469,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         {
           "interface": {
-            "catalog": "veh.adas",
-            "name": "LaneAssist",
+            "catalog": "veh",
+            "name": "adas.LaneAssist",
             "inline": false
           },
           "service": "veh.adas.lane",
@@ -495,8 +488,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         {
           "interface": {
-            "catalog": "veh.adas",
-            "name": "CruiseControl",
+            "catalog": "veh",
+            "name": "adas.CruiseControl",
             "inline": false
           },
           "service": "veh.adas.cruise",
@@ -514,8 +507,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         {
           "interface": {
-            "catalog": "veh.adas",
-            "name": "CruiseControl",
+            "catalog": "veh",
+            "name": "adas.CruiseControl",
             "inline": false
           },
           "service": "veh.adas.cruise",
@@ -533,8 +526,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         {
           "interface": {
-            "catalog": "veh.adas",
-            "name": "LaneAssist",
+            "catalog": "veh",
+            "name": "adas.LaneAssist",
             "inline": false
           },
           "service": "veh.adas.lane",
@@ -552,8 +545,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         {
           "interface": {
-            "catalog": "veh.adas",
-            "name": "CruiseControl",
+            "catalog": "veh",
+            "name": "adas.CruiseControl",
             "inline": false
           },
           "service": "veh.adas.cruise",
@@ -571,8 +564,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         {
           "interface": {
-            "catalog": "veh.adas",
-            "name": "CruiseControl",
+            "catalog": "veh",
+            "name": "adas.CruiseControl",
             "inline": false
           },
           "service": "veh.adas.cruise",
@@ -590,7 +583,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         {
           "interface": {
-            "catalog": "veh.diag",
+            "catalog": "veh",
             "name": "veh.diag.access",
             "inline": true
           },
@@ -610,10 +603,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       ],
       "routes": [
         {
-          "catalog": "veh.adas",
+          "catalog": "veh",
           "interfaceNumber": 1,
           "memberOrdinal": 1,
-          "interface": "CruiseControl",
+          "interface": "adas.CruiseControl",
           "member": "engaged",
           "service": "veh.adas.cruise",
           "producers": [
@@ -630,10 +623,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           ]
         },
         {
-          "catalog": "veh.adas",
+          "catalog": "veh",
           "interfaceNumber": 1,
           "memberOrdinal": 2,
-          "interface": "CruiseControl",
+          "interface": "adas.CruiseControl",
           "member": "target",
           "service": "veh.adas.cruise",
           "producers": [
@@ -650,10 +643,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           ]
         },
         {
-          "catalog": "veh.adas",
+          "catalog": "veh",
           "interfaceNumber": 1,
           "memberOrdinal": 3,
-          "interface": "CruiseControl",
+          "interface": "adas.CruiseControl",
           "member": "setLever",
           "service": "veh.adas.cruise",
           "producers": [
@@ -670,10 +663,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           ]
         },
         {
-          "catalog": "veh.adas",
+          "catalog": "veh",
           "interfaceNumber": 2,
           "memberOrdinal": 1,
-          "interface": "LaneAssist",
+          "interface": "adas.LaneAssist",
           "member": "active",
           "service": "veh.adas.lane",
           "producers": [
@@ -685,8 +678,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           ]
         },
         {
-          "catalog": "veh.diag",
-          "interfaceNumber": 1,
+          "catalog": "veh",
+          "interfaceNumber": 3,
           "memberOrdinal": 1,
           "interface": "veh.diag.access",
           "member": "readFaults",
@@ -704,8 +697,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         {
           "link": {
             "interface": {
-              "catalog": "veh.adas",
-              "name": "CruiseControl",
+              "catalog": "veh",
+              "name": "adas.CruiseControl",
               "inline": false
             },
             "service": "veh.adas.cruise",
@@ -726,8 +719,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         {
           "link": {
             "interface": {
-              "catalog": "veh.adas",
-              "name": "CruiseControl",
+              "catalog": "veh",
+              "name": "adas.CruiseControl",
               "inline": false
             },
             "service": "veh.adas.cruise",
@@ -748,7 +741,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         {
           "link": {
             "interface": {
-              "catalog": "veh.diag",
+              "catalog": "veh",
               "name": "veh.diag.access",
               "inline": true
             },
@@ -884,8 +877,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "links": [
         {
           "interface": {
-            "catalog": "veh.adas",
-            "name": "LaneAssist",
+            "catalog": "veh",
+            "name": "adas.LaneAssist",
             "inline": false
           },
           "service": "veh.adas.lane",
@@ -903,8 +896,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         {
           "interface": {
-            "catalog": "veh.adas",
-            "name": "LaneAssist",
+            "catalog": "veh",
+            "name": "adas.LaneAssist",
             "inline": false
           },
           "service": "veh.adas.lane",
@@ -922,8 +915,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         {
           "interface": {
-            "catalog": "veh.adas",
-            "name": "CruiseControl",
+            "catalog": "veh",
+            "name": "adas.CruiseControl",
             "inline": false
           },
           "service": "veh.adas.cruise",
@@ -941,8 +934,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         {
           "interface": {
-            "catalog": "veh.adas",
-            "name": "CruiseControl",
+            "catalog": "veh",
+            "name": "adas.CruiseControl",
             "inline": false
           },
           "service": "veh.adas.cruise",
@@ -960,8 +953,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         {
           "interface": {
-            "catalog": "veh.adas",
-            "name": "LaneAssist",
+            "catalog": "veh",
+            "name": "adas.LaneAssist",
             "inline": false
           },
           "service": "veh.adas.lane",
@@ -979,8 +972,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         {
           "interface": {
-            "catalog": "veh.adas",
-            "name": "CruiseControl",
+            "catalog": "veh",
+            "name": "adas.CruiseControl",
             "inline": false
           },
           "service": "veh.adas.cruise",
@@ -998,8 +991,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         {
           "interface": {
-            "catalog": "veh.adas",
-            "name": "CruiseControl",
+            "catalog": "veh",
+            "name": "adas.CruiseControl",
             "inline": false
           },
           "service": "veh.adas.cruise",
@@ -1017,7 +1010,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         {
           "interface": {
-            "catalog": "veh.diag",
+            "catalog": "veh",
             "name": "veh.diag.access",
             "inline": true
           },
@@ -1037,10 +1030,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       ],
       "routes": [
         {
-          "catalog": "veh.adas",
+          "catalog": "veh",
           "interfaceNumber": 1,
           "memberOrdinal": 1,
-          "interface": "CruiseControl",
+          "interface": "adas.CruiseControl",
           "member": "engaged",
           "service": "veh.adas.cruise",
           "producers": [
@@ -1057,10 +1050,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           ]
         },
         {
-          "catalog": "veh.adas",
+          "catalog": "veh",
           "interfaceNumber": 1,
           "memberOrdinal": 2,
-          "interface": "CruiseControl",
+          "interface": "adas.CruiseControl",
           "member": "target",
           "service": "veh.adas.cruise",
           "producers": [
@@ -1077,10 +1070,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           ]
         },
         {
-          "catalog": "veh.adas",
+          "catalog": "veh",
           "interfaceNumber": 1,
           "memberOrdinal": 3,
-          "interface": "CruiseControl",
+          "interface": "adas.CruiseControl",
           "member": "setLever",
           "service": "veh.adas.cruise",
           "producers": [
@@ -1097,10 +1090,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           ]
         },
         {
-          "catalog": "veh.adas",
+          "catalog": "veh",
           "interfaceNumber": 2,
           "memberOrdinal": 1,
-          "interface": "LaneAssist",
+          "interface": "adas.LaneAssist",
           "member": "active",
           "service": "veh.adas.lane",
           "producers": [
@@ -1112,8 +1105,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           ]
         },
         {
-          "catalog": "veh.diag",
-          "interfaceNumber": 1,
+          "catalog": "veh",
+          "interfaceNumber": 3,
           "memberOrdinal": 1,
           "interface": "veh.diag.access",
           "member": "readFaults",
@@ -1131,8 +1124,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         {
           "link": {
             "interface": {
-              "catalog": "veh.adas",
-              "name": "CruiseControl",
+              "catalog": "veh",
+              "name": "adas.CruiseControl",
               "inline": false
             },
             "service": "veh.adas.cruise",
@@ -1153,8 +1146,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         {
           "link": {
             "interface": {
-              "catalog": "veh.adas",
-              "name": "CruiseControl",
+              "catalog": "veh",
+              "name": "adas.CruiseControl",
               "inline": false
             },
             "service": "veh.adas.cruise",
@@ -1175,7 +1168,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         {
           "link": {
             "interface": {
-              "catalog": "veh.diag",
+              "catalog": "veh",
               "name": "veh.diag.access",
               "inline": true
             },
