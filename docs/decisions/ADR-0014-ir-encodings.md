@@ -35,6 +35,13 @@ test that pins it. Sebastien took the choice of input on 2026-10-03 (answer 4 of
 §4); the rest of decision 15 is written from stage D3 of that lane. Decisions 1
 to 14 are unchanged.
 
+**Amended 2026-10-09 — decision 15, the reduced unit.** The catalog hash is
+taken over the interfaces of one unit (a manifest and the source packages in its
+directory tree, [ADR-0002](ADR-0002-module-system.md) §1), not over one source
+package. The input is one IR package named after the unit, `reduced_unit`
+replaces `reduced_package`, interfaces carry their catalog names, and reached
+declarations carry their full canonical names. Decisions 1 to 14 are unchanged.
+
 The reasoning trail is
 [`docs/archive/2026-08-03-ir-protobuf-encodings-design.md`](../archive/2026-08-03-ir-protobuf-encodings-design.md),
 which carries the measurements and the API confirmations this record summarises.
@@ -459,25 +466,33 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     stays behind prototext, dropping its `serde` feature. Decision 13 is
     unchanged on both sides.
 
-15. **Amendment (2026-10-04) — the catalog hash is SHA-256 over the protobuf
-    binary of a reduced package.** The catalog hash is the identity of a
-    package's interfaces, their numbers and the types they reach (the rsdl
-    rewrite decisions note, D-7 and D-8). It is derived on every build and never
+15. **Amendment (2026-10-04, 2026-10-09) — the catalog hash is SHA-256 over the
+    protobuf binary of a reduced unit.** The catalog hash is the identity of a
+    unit's interfaces, their numbers and the types they reach (the rsdl rewrite
+    decisions note, D-7 and D-8). It is derived on every build and never
     recorded. There is one such identity: the schema hash over the IR that
     driftsys/ridl#275 asked for is this hash, so it does not depend on which
     wire schema a build emits — proto3, FlatBuffers or both.
 
     **What is hashed.** `ridl_ir::v2::to_binary` of the package that
-    `ridl_ir::catalog_hash::reduced_package` returns, which holds:
-    - the package name;
-    - every interface shape, in (number, name) order, because the lock makes the
-      number an interface's identity, under its identity name (a declared
-      interface's own name, or the owning service's dotted global name for an
-      inline shape), with `InterfaceShape::visibility()`, the IR's `number` and
+    `ridl_ir::catalog_hash::reduced_unit` returns. A unit is selected by the
+    `unit` field of each IR package (`ridl_ir::v2::unit_of`), never by a name
+    prefix, because a unit named `veh.cluster` is not part of a unit named
+    `veh`. The reduced unit is one IR package, and it holds:
+    - the unit name, as the package `name` and as its `unit`; the two are equal,
+      so the `unit` field adds no information to the bytes and no choice to the
+      writer;
+    - every interface shape of every source package of the unit, in (number,
+      catalog name) order, because the lock makes the number an interface's
+      identity, under its catalog name (a declared interface's name relative to
+      the unit, `cluster.SpeedDisplay`, or the short name in the root source
+      package; the owning service's full dotted global name for an inline
+      shape), with `InterfaceShape::visibility()`, the IR's `number` and
       `provisional`, and its interactions;
-    - every declaration those interfaces reach, transitively and in any package
-      of the build, under its canonical name (bare in this package, `pkg.Name`
-      in another), in canonical-name order. A bare reference inside a
+    - every declaration those interfaces reach, transitively and in any unit of
+      the build, under its full canonical name (`pkg.Name`, for the unit's own
+      source packages too, because two source packages of one unit can declare
+      the same short name), in canonical-name order. A bare reference inside a
       declaration of another package names that package's declaration, and every
       type reference inside a reduced declaration is rewritten to its canonical
       name, so the bytes show which declaration each reference means;
@@ -489,26 +504,30 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
       `ridl check` accepts) or an unknown name. Each chain of identifiers joined
       by `.` in such a string, and each dotted prefix of the chain, is followed;
       a string literal and a number inside the expression are skipped. A name
-      resolves first in the package that declares the string, then as a
-      qualified `pkg.Name`. A bare name that package does not hold is the name
-      an import binds — the contract checker accepts only that form for a
+      resolves first in the source package that declares the string, then as a
+      qualified `pkg.Name`. A bare name that source package does not hold is the
+      name an import binds — the contract checker accepts only that form for a
       declaration of another package — and the IR records no imports, so it is
-      looked up in every other package of the build and every match is reached.
-      A name that matches a declaration it does not mean, such as a parameter
-      named like a type or a bare name two packages declare, also reaches that
-      declaration, which widens what the hash covers. A declaration named
-      through an import alias (typl §3.2) is not reached, because the alias is
-      no declaration's name. The strings themselves are hashed as written, while
-      type references are rewritten to canonical names: a type reference is a
-      field that holds one name, so it can be replaced whole, but an expression
-      string is source text, and rewriting the names inside it would need the
-      expression parser, which `ridl-ir` does not depend on. The IR's other
-      value strings — declared and resolved inits, range bounds and steps,
-      timing bounds — hold resolved values, so a change to a constant they were
-      written with already changes them;
+      looked up in every other source package of the build and every match is
+      reached. A name that matches a declaration it does not mean, such as a
+      parameter named like a type or a bare name two packages declare, also
+      reaches that declaration, which widens what the hash covers. A declaration
+      named through an import alias (typl §3.2) is not reached, because the
+      alias is no declaration's name. The strings themselves are hashed as
+      written, while type references are rewritten to canonical names: a type
+      reference is a field that holds one name, so it can be replaced whole, but
+      an expression string is source text, and rewriting the names inside it
+      would need the expression parser, which `ridl-ir` does not depend on. The
+      IR's other value strings — declared and resolved inits, range bounds and
+      steps, timing bounds — hold resolved values, so a change to a constant
+      they were written with already changes them;
     - every doc string blank, the doc tags `@labels` and `@deprecated` (the
       `labels` and `deprecated` fields) blank, and `services` and `retired`
       empty.
+
+    A change to any source package of a unit that an interface of the unit
+    reaches changes the unit's hash, and a change to a unit never changes the
+    hash of another unit that does not reach it.
 
     **What is not covered, and why.** `Package.retired`: the hash identifies
     what a peer can call, and the retired list is carried beside it, in the
@@ -517,7 +536,7 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     not change what crosses a boundary. A declaration no interface reaches: it
     does not cross a boundary either.
 
-    **The determinism rule for the binary.** The same reduced package always
+    **The determinism rule for the binary.** The same reduced unit always
     encodes to the same bytes because:
     - fields are written in field-number order. `prost-derive` 0.14 sorts a
       message's fields by their lowest tag, so a `oneof` is written at the
@@ -526,16 +545,16 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
       same today; a field added inside such a range would make them differ, and
       must not be added;
     - list elements are written in the order the writer holds them, which
-      `reduced_package` fixes as stated above;
+      `reduced_unit` fixes as stated above;
     - no field is a `map<>`, whose entry order protobuf does not fix. The IR
       schema has none, and a `map<>` added later must not enter the reduced
-      package;
+      unit;
     - a field at its default is omitted, which proto3 binary does for every
       non-`optional` field.
 
     **Why the derived encoding, not the canonical one.** Canonical protobuf JSON
     writes every non-`optional` field at its default (decision 2). An IR field
-    added later would then appear in every reduced package, at its default, and
+    added later would then appear in every reduced unit, at its default, and
     change every catalog hash at a toolchain upgrade, although no source
     changed. The binary omits it. The bound that moved the canonical label to
     JSON (decision 9's 2026-09-22 amendment: `from_binary` refuses more than 100
@@ -552,7 +571,7 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     **The golden-hash test.** `crates/ridl-descriptor/tests/golden_hash.rs`
     hashes the corpus package's checked-in IR snapshot, read with `from_json`,
     its shapes numbered 1.. by the test because the snapshot predates the lock,
-    and `just test` runs it in the gate. It fails when `reduced_package`, the
+    and `just test` runs it in the gate. It fails when `reduced_unit`, the
     closure for the corpus package's shapes, or the binary encoding changes. The
     following of names inside expression strings is guarded by the unit tests in
     `crates/ridl-ir/src/catalog_hash.rs` and by the codegen-model corpus

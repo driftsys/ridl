@@ -215,6 +215,11 @@ through the module that package `veh`'s own file is loaded as,
 `#[doc(hidden)] pub` so that a consumer can name the type the same way. The type
 stays unreachable as `veh::common`, which names the module.
 
+Amended 2026-10-09: the interface lock that this record cites is per unit, not
+per source package. A unit is a manifest and the source packages in its tree
+([ADR-0002](ADR-0002-module-system.md) §1), and an interface number is scoped to
+the unit.
+
 ## Context
 
 The note answers two questions the store-and-dispatcher work raised: what
@@ -394,8 +399,8 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
    interface and a member, and no service, so a tag-based transport that needs a
    service number reads it from its own backend key (rsdl §5). The
    allocation-and-record mechanism landed one scope down, for the interface
-   number: a per-package `interfaces.lock`, written by `ridl lock` alone (the
-   lock design, applying rsdl decision D-7).
+   number: a per-unit `interfaces.lock`, written by `ridl lock` alone (the lock
+   design, applying rsdl decision D-7).
 
 9. **Ratified — note §7.3, a `fixed` interaction gets a real field in the store
    table, not a placeholder.** A `fixed` is a value a consumer reads, and a

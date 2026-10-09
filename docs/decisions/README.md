@@ -8,7 +8,10 @@ other entry below is Accepted.
   design (ADR-0024): §4 gains the `[lints]` table, which both manifest kinds
   accept, and its resolution order. Amended 2026-10-04 by the doc comments
   record (ADR-0026): §4 gains root discovery, so an entry inside a workspace
-  member loads the member's workspace.
+  member loads the member's workspace. Amended 2026-10-09 by the
+  catalog-per-unit design: §1 gains the unit, a manifest and the tree of source
+  packages below it, and a source package belongs to one unit (MANI-014); §4
+  refuses a `ridl.toml` inside a unit's tree (MANI-013).
 - **ADR-0004 — Implementation sequencing and stack.** _Proposed._ The build
   order and technology choices (companion to the roadmap). Amended 2026-08-03:
   uxdl retires as an epic (ADR-0012), rsdl runs ahead of rmdl's runtime, rmdl
@@ -113,9 +116,11 @@ other entry below is Accepted.
   impls so the interchange artifact carries no recursion ceiling. Decision 14 is
   further corrected 2026-09-22, in place, on two facts it stated wrongly. The
   descriptor pool now serves prototext alone. Decision 15 (amended 2026-10-04)
-  takes the catalog hash over the protobuf binary of a reduced package, not over
+  takes the catalog hash over the protobuf binary of a reduced unit, not over
   the canonical JSON, states the determinism rule for that binary, and pins the
-  corpus package's hash with a golden test in the gate.
+  corpus package's hash with a golden test in the gate; the 2026-10-09 amendment
+  makes the hashed input one unit, with interfaces under catalog names and
+  reached declarations under full canonical names.
 
 - **ADR-0015 — QoS absorption, RPC bounds, and the interface as the unit.** ridl
   expresses QoS as semantic obligation, never as a transport knob, so it
@@ -133,16 +138,16 @@ other entry below is Accepted.
   return, and decision 24 here requires an interface name to be unique across a
   service's shapes, live or retired, and makes a retargeted slot breaking.
   Amended in place on 2026-09-15 by the lock design (rsdl decision D-7): an
-  interface's number comes from its package's `interfaces.lock`, the list is a
-  set with no tombstone, the ordinal spaces are keyed on (package, interface
-  number), RIDL-146 to RIDL-148 are retired, and the five slot categories are
-  replaced by `ServiceInterfaceAdded` and `ServiceInterfaceRemoved` (decisions
-  12, 15, 17, 18, 19, 20 and 24, each dated); decisions 9 and 10 each gain a
-  further dated paragraph following this record's citations into the rsdl
-  reference v0.2.0 (rewritten 2026-09-13), which renumbered the sections they
-  name and reserved two of the codes. Amended again 2026-09-16: decision 9's
-  coherence group is corrected to be the provided interface, identified by its
-  number in the package's `interfaces.lock` rather than by the interface name.
+  interface's number comes from its unit's `interfaces.lock`, the list is a set
+  with no tombstone, the ordinal spaces are keyed on (unit, interface number),
+  RIDL-146 to RIDL-148 are retired, and the five slot categories are replaced by
+  `ServiceInterfaceAdded` and `ServiceInterfaceRemoved` (decisions 12, 15, 17,
+  18, 19, 20 and 24, each dated); decisions 9 and 10 each gain a further dated
+  paragraph following this record's citations into the rsdl reference v0.2.0
+  (rewritten 2026-09-13), which renumbered the sections they name and reserved
+  two of the codes. Amended again 2026-09-16: decision 9's coherence group is
+  corrected to be the provided interface, identified by its number in the unit's
+  `interfaces.lock` rather than by the interface name.
 
 - **ADR-0016 — Schema projection and the pinned name transform.** The four
   properties every projection from IR identity to a target's namespace must
@@ -282,8 +287,10 @@ other entry below is Accepted.
   hash is embedded by the driver, never computed by the lowering, since story
   E6.17), that `ridl build` writes every artifact when the only errors are
   RSDL-7xx and still exits 1, and that `ridl diff` lists system changes under
-  two headings with no verdict and only when both sides are source trees. Binds
-  the IR every later consumer reads, the `ridl build` contract, and `ridl diff`.
+  two headings with no verdict and only when both sides are source trees. A
+  region is the catalog of a unit, not of a source package (amended 2026-10-09).
+  Binds the IR every later consumer reads, the `ridl build` contract, and
+  `ridl diff`.
 
 - **ADR-0023 — The generated interaction face: entry point, clause translator,
   and call signatures.** Six decisions: four taken while implementing story
