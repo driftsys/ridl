@@ -243,3 +243,13 @@ Each ruling: what was decided — why — what it costs if wrong.
   body, with no new test — it occurs only during the migration to per-unit
   locks, and refusing is the gate's purpose — if wrong, a user mid-migration
   retires or restores the number by hand.
+- **R-18** G2: the gate's `member.retired` check is reachable only from a legacy
+  per-package snapshot of a subpackage (for every other case `ridl diff` already
+  classifies a retired removal as `InterfaceRetired`). Keep the check and pin it
+  with a test built on the legacy per-package baseline, the subpackage's number
+  retired in the fresh lock, expecting no RIDL-412; the test that claimed to pin
+  it is kept as a pin of the diff's own retire rule and renamed to say so —
+  removing the check would refuse a retired number during the lock migration —
+  if wrong, one test covers a path that ends when legacy snapshots do. The
+  legacy-only wording imprecision ("the workspace no longer has that unit" for a
+  legacy subpackage) is accepted, as it predates this change.
