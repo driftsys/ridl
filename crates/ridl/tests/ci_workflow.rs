@@ -121,6 +121,9 @@ fn git(dir: &Path, args: &[&str]) {
         .env_remove("GIT_WORK_TREE")
         .args(["-c", "user.name=test", "-c", "user.email=test@example.com"])
         .args(["-c", "commit.gpgsign=false"])
+        // No host hook runs on the temporary repository, and a rename is
+        // detected unless the script under test asks for it not to be.
+        .args(["-c", "core.hooksPath=/dev/null", "-c", "diff.renames=true"])
         .args(args)
         .output()
         .expect("git runs");
@@ -268,9 +271,11 @@ fn the_eval_corpus_runs_rust() {
 
 #[test]
 fn a_list_over_64_kib_is_read_whole() {
-    // 400 skipped paths of about 200 characters each make a list of about
-    // 80 KiB, past the pipe buffer that a `printf | grep -q` pipeline breaks on.
-    let names: Vec<String> = (0..400)
+    // 4000 skipped paths of about 200 characters each make a list of about
+    // 800 KiB. A `printf | grep -q` pipeline breaks once the list is past the
+    // 64 KiB pipe buffer, but with only a little more than 64 KiB the break
+    // depends on timing; a list this long makes it certain.
+    let names: Vec<String> = (0..4000)
         .map(|i| format!("docs/wip/{}-{i}.md", "n".repeat(190)))
         .collect();
     let mut paths: Vec<&str> = names.iter().map(String::as_str).collect();
