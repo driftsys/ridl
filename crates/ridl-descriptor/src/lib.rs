@@ -7,12 +7,31 @@
 //! a buffer before the first read of it. This crate does no I/O: a caller
 //! writes the bytes [`finish`] returns and passes the bytes it read to
 //! [`verify`].
+//!
+//! The `std` feature, on by default, carries the half of the crate that
+//! builds a descriptor: the modules `lower`, `number`, `hash` and `describe`,
+//! with their `ridl-ir` and `serde_json` dependencies. With the feature off
+//! the crate is `no_std` with `alloc` and keeps what an engine that reads a
+//! descriptor needs: the generated accessors, [`verify`], [`finish`],
+//! [`VerifyError`] and the constants.
 
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
+#[cfg(feature = "std")]
 pub mod describe;
 pub mod generated;
+#[cfg(feature = "std")]
 pub mod hash;
+#[cfg(feature = "std")]
 pub mod lower;
+#[cfg(feature = "std")]
 pub mod number;
+
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::fmt;
 
 use planus::ReadAsRoot;
 
@@ -21,6 +40,7 @@ pub use generated::ridl::descriptor::{
     MemberRef, Payload, PayloadRef, RetiredInterface, RetiredInterfaceRef,
     SizeState as SizeStateTag, Timing, TimingMode, TimingRef, UnboundedCause,
 };
+#[cfg(feature = "std")]
 pub use lower::lower;
 
 /// The schema version this toolchain writes and accepts.
@@ -71,8 +91,8 @@ pub enum VerifyError {
     Invalid(planus::Error),
 }
 
-impl std::fmt::Display for VerifyError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for VerifyError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::TooShort(len) => {
                 write!(f, "{len} bytes is shorter than a catalog descriptor header")
@@ -92,7 +112,7 @@ impl std::fmt::Display for VerifyError {
     }
 }
 
-impl std::error::Error for VerifyError {}
+impl core::error::Error for VerifyError {}
 
 /// Checks the identifier and the version, then walks every table, vector
 /// and string once through the checked accessors so that a later read of

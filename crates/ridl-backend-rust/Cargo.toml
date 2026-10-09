@@ -89,7 +89,9 @@ ridl-backend-flatbuffers = { path = "../ridl-backend-flatbuffers" }
 # (driftsys/ridl#598) runs the crate that owns that verdict. A dev-dependency
 # only, as it is for `ridl-backend-flatbuffers`'s stability property.
 ridl-diff = { path = "../ridl-diff" }
-planus.workspace = true
+# The workspace entry leaves planus's default features off for
+# `ridl-descriptor`'s sake; this test binary runs with the standard library.
+planus = { workspace = true, features = ["std"] }
 planus-codegen.workspace = true
 planus-translation.workspace = true
 # The propagation hook spike. The design of generated observation gives

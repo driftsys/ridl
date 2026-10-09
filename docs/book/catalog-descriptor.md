@@ -173,7 +173,10 @@ now 1; a reader refuses a version other than the one it was built for.
 
 A Rust program reads the file with the `ridl-descriptor` crate, published on
 crates.io. Its `verify` function checks the whole buffer before it returns a
-view, so a later read cannot fail on a malformed offset.
+view, so a later read cannot fail on a malformed offset. With its default
+features off the crate is `no_std` with `alloc` and keeps `verify`, the
+accessors and `finish`; the parts that build a descriptor from the IR need the
+standard library and come with the `std` feature.
 
 ## Not built yet
 
