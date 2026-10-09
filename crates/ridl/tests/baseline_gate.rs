@@ -2076,6 +2076,22 @@ fn two_unit_workspace(dir: &TempDir) -> PathBuf {
     root
 }
 
+/// Every file of `.ridl/baseline/` with its bytes, in name order.
+fn baseline_files(root: &Path) -> Vec<(std::ffi::OsString, Vec<u8>)> {
+    let mut files: Vec<_> = std::fs::read_dir(root.join(".ridl/baseline"))
+        .expect("the baseline directory is readable")
+        .map(|entry| {
+            let path = entry.expect("a directory entry").path();
+            (
+                path.file_name().expect("a file name").to_os_string(),
+                std::fs::read(&path).expect("the snapshot is readable"),
+            )
+        })
+        .collect();
+    files.sort();
+    files
+}
+
 /// Removing a whole unit from the workspace, with its lock, loses every
 /// number the baseline holds for it. The gate refuses with the message of a
 /// lost interface and names the deliberate override.
@@ -2083,7 +2099,7 @@ fn two_unit_workspace(dir: &TempDir) -> PathBuf {
 fn a_whole_unit_gone_from_the_fresh_set_is_refused() {
     let dir = TempDir::new("gate-unit-gone");
     let root = two_unit_workspace(&dir);
-    let before = std::fs::read(snapshot(&root)).expect("the published snapshot is readable");
+    let before = baseline_files(&root);
 
     std::fs::remove_dir_all(root.join("cluster")).expect("remove the unit");
     dir.write("ridl.toml", "[workspace]\nmembers = [\"hmi\"]\n");
@@ -2110,8 +2126,46 @@ fn a_whole_unit_gone_from_the_fresh_set_is_refused() {
         !stderr.contains("Restore the line"),
         "the unit's lock is gone with it, so no line is offered to restore:\n{stderr}",
     );
-    let after = std::fs::read(snapshot(&root)).expect("the published snapshot survives");
-    assert_eq!(before, after, "a refused publication rewrites nothing");
+    assert_eq!(
+        before,
+        baseline_files(&root),
+        "a refused publication rewrites nothing"
+    );
+}
+
+/// Renaming a locked unit — a changed manifest name and package — leaves the
+/// old name's numbers without a record in the fresh set, so the gate refuses
+/// it (the accidental case the refusal exists for).
+#[test]
+fn a_renamed_unit_is_refused_as_a_unit_gone() {
+    let dir = TempDir::new("gate-unit-renamed");
+    let root = two_unit_workspace(&dir);
+
+    dir.write(
+        "cluster/ridl.toml",
+        "[package]\nname = \"veh.dash\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "cluster/cluster.ridl",
+        &THREE.replace("veh.cluster", "veh.dash"),
+    );
+    dir.write(
+        "cluster/extra.ridl",
+        "package veh.dash\ninterface Extra { signal e : DoorState @[100ms..1s] }\n",
+    );
+    dir.write(
+        "cluster/sub/speed.ridl",
+        "package veh.dash.sub\nimport veh.dash.DoorState\ninterface Speed { signal v : DoorState @[100ms..1s] }\n",
+    );
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 1, "the renamed unit is refused:\n{stderr}");
+    assert!(
+        stderr.contains("RIDL-412")
+            && stderr.contains("in unit `veh.cluster`")
+            && stderr.contains("delete the snapshots of unit `veh.cluster`"),
+        "stderr:\n{stderr}",
+    );
 }
 
 /// The deliberate override: with the unit's snapshots deleted, the
@@ -2259,15 +2313,18 @@ fn a_legacy_package_deleted_whole_is_refused_as_a_unit_gone() {
 
     assert_eq!(code, 1, "the legacy snapshot is refused:\n{stderr}");
     assert!(
-        stderr.contains("RIDL-412") && stderr.contains("in unit `veh.hmi.cluster`"),
-        "stderr:\n{stderr}",
+        stderr.contains("RIDL-412")
+            && stderr.contains("delete the snapshots of unit `veh.hmi.cluster`")
+            && !stderr.contains("Restore the line"),
+        "the unit-gone message stands:\n{stderr}",
     );
 }
 
 /// `ridl lock` numbers an interface before an inline shape of the same name
 /// (language reference, the lock section). This pins the observable order; the
-/// kind in the sort key (`provisional_order`) is not observable here, because
-/// the shapes of a package are listed interfaces first.
+/// kind in the sort key (`provisional_order`) is only partly observable here:
+/// the shapes of a package are listed interfaces first, so removing the kind
+/// leaves this test passing and only inverting it fails.
 #[test]
 fn an_interface_is_numbered_before_an_inline_shape_of_the_same_name() {
     let dir = TempDir::new("gate-tie-break");

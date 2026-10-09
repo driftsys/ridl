@@ -1184,7 +1184,8 @@ interface VehicleStatus {
   that would publish a baseline in which an ordinal's history is no longer
   written down anywhere. It is not a second compatibility gate — `ridl diff` and
   its exit-code contract are that one, and they report every breaking change,
-  including the three shapes publication lets through:
+  including the shapes publication lets through, and the one below it refuses at
+  the interface level only:
   - **An ordinal that moves.** An interaction inserted mid-body, a live
     interaction reordered, or an existing tombstone moved from the ordinal it
     held (§17.12) leaves the record complete: every name in the published
@@ -1193,19 +1194,20 @@ interface VehicleStatus {
     RIDL-407 at the desk. Publication does not refuse it.
   - **A whole package removed or renamed** (§17.13). The interaction level does
     not refuse it, and the snapshot goes with every tombstone it held. The
-    interface level does: every interface number the removed package's snapshot
+    interface level does: an interface number the removed package's snapshot
     holds is refused at publication (**RIDL-412**) unless the unit's
-    `interfaces.lock` retires it. This reverses the earlier position, which
-    rested on the language having no package-level retirement. That premise no
-    longer holds for a package removed from a unit that remains: the unit's lock
-    retires its numbers (`ridl lock --retire`), which is the remedy the author
-    writes. For a whole unit removed or renamed, the refusal catches the
-    accidental case — a moved directory or a changed manifest — that would
-    otherwise drop the unit's snapshots and lose the record without a sign. The
-    deliberate case costs one deletion, of that unit's snapshots from
-    `.ridl/baseline/`, which the message names. What would reopen the question
-    is a unit-level retirement construct. `ridl diff` reports the removal as
-    breaking.
+    `interfaces.lock` retires it or another package of the unit still declares
+    it; a number 0, published before the lock existed, is never refused. This
+    reverses the earlier position, which rested on the language having no
+    package-level retirement. That premise no longer holds for a package removed
+    from a unit that remains: the unit's lock retires its numbers
+    (`ridl lock --retire`), which is the remedy the author writes. For a whole
+    unit removed or renamed, the refusal catches the accidental case — a moved
+    directory or a changed manifest — that would otherwise drop the unit's
+    snapshots and lose the record without a sign. The deliberate case costs one
+    deletion, of that unit's snapshots from `.ridl/baseline/`, which the message
+    names. What would reopen the question is a unit-level retirement construct.
+    `ridl diff` reports the removal as breaking.
   - **A whole service removed, or a service whose form switches** between inline
     and named (§17.14). Neither moves an identity of its own: an interface is
     identified by its number, a named-form service carries no number, and its
@@ -2027,20 +2029,22 @@ sections it points at are.
     RIDL-407 at the desk. §11 now states the division of labour between the two.
 13. ~~**A whole package removed or renamed bypasses the publication gate**~~
     (§11). **Resolved — the interaction level does not refuse it, the interface
-    level does.** `ridl-diff` reports one `DeclRemoved` for a package present
-    only on the baseline side and does not descend into it, so the RIDL-408 gate
-    sees no refused change, and publication deletes the package's snapshot along
-    with every ordinal record it held. The interface numbers the package held
-    are refused at publication (RIDL-412) unless the unit's `interfaces.lock`
-    retires them. This reverses the earlier resolution, which rested on the
-    language having no package-level retirement: with one catalog per unit, the
-    unit's lock retires the numbers of a package removed from a unit that
-    remains. For a whole unit removed or renamed, the refusal catches the
-    accidental case (a moved directory, a changed manifest) that would otherwise
-    lose the record silently; the deliberate case costs one deletion of that
-    unit's snapshots from `.ridl/baseline/`, which the message names. What would
-    reopen the question is a unit-level retirement construct. `ridl diff`
-    reports the removal as breaking.
+    level does.** `ridl-diff` reports one `DeclRemoved` for a package whose
+    whole unit is present only on the baseline side and does not descend into
+    it; for a package removed from a unit that remains it reports each shape on
+    its own line. Either way the RIDL-408 gate sees no refused interaction, and
+    publication deletes the package's snapshot along with every ordinal record
+    it held. The interface numbers the package held are refused at publication
+    (RIDL-412) unless the unit's `interfaces.lock` retires them or another
+    package of the unit declares them. This reverses the earlier resolution,
+    which rested on the language having no package-level retirement: with one
+    catalog per unit, the unit's lock retires the numbers of a package removed
+    from a unit that remains. For a whole unit removed or renamed, the refusal
+    catches the accidental case (a moved directory, a changed manifest) that
+    would otherwise lose the record silently; the deliberate case costs one
+    deletion of that unit's snapshots from `.ridl/baseline/`, which the message
+    names. What would reopen the question is a unit-level retirement construct.
+    `ridl diff` reports the removal as breaking.
 14. ~~**A whole service removed, or a service whose form switches, bypasses the
     publication gate**~~ (§11). **Resolved — neither is refused, because neither
     moves an identity.** `ridl-diff` reports one `DeclRemoved` for a service

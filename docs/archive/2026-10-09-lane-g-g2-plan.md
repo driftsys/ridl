@@ -23,8 +23,8 @@ R-2, R-3.
 - File: `docs/specification/ridl-language-reference.md`.
 - Cites the tests in `crates/ridl-sem/src/check.rs`: byte order from next, whole
   unit, name not whole key, name not package order. The interface-before-inline
-  tie-break is pinned only by its observable order (the CLI test in Task 1's
-  file).
+  tie-break is pinned only partly, by its observable order (the CLI test in Task
+  1's file).
 
 ## Pre-flight
 
