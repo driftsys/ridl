@@ -24,8 +24,8 @@ use crate::report_diff_side_error;
 /// read as they are and never recomputed from a snapshot; a breaking verdict
 /// starts the chain again from the one new hash. A hash is listed once.
 ///
-/// With no snapshot in `published` there is nothing to compare against, so
-/// every unit starts a chain. A published history file that cannot be read
+/// A unit with no snapshot in `published` has nothing to compare against, so
+/// it starts a chain. A published history file that cannot be read
 /// is an error (exit 2), and the caller publishes nothing.
 pub(crate) fn write_catalog_histories(
     db: &mut RidlDatabase,
@@ -48,12 +48,16 @@ pub(crate) fn write_catalog_histories(
     let fresh_refs: Vec<&Package> = fresh.iter().collect();
     let scope = ridlc::catalog_scope(&fresh_refs, Some(&std));
     for unit in shaped_units(&fresh) {
-        let carried = report.as_ref().is_some_and(|report| {
-            matches!(
-                ridl_diff::unit_verdict(report, unit, &old, &fresh),
-                Verdict::Compatible | Verdict::Identical
-            )
-        });
+        // A unit with no published snapshot has no earlier baseline, so a
+        // history file left under its name is not carried, whatever the verdict.
+        let published_before = old.iter().any(|package| unit_of(package) == unit);
+        let carried = published_before
+            && report.as_ref().is_some_and(|report| {
+                matches!(
+                    ridl_diff::unit_verdict(report, unit, &old, &fresh),
+                    Verdict::Compatible | Verdict::Identical
+                )
+            });
         // The published file is read whatever the verdict, so a file that
         // cannot be read refuses the publication even when the chain restarts.
         let earlier = read_history(published, unit)?;

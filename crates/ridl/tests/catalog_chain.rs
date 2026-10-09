@@ -165,6 +165,20 @@ interface VehicleStatus {
 }
 ";
 
+/// `BASE` with the event's payload a struct that names the standard type
+/// `Timestamp`, so the catalog reaches a declaration of `ridl.std`.
+const NAMES_A_STANDARD_TYPE: &str = "package veh.cluster
+type Speed: km/h [0.0..250.0 step 0.5]
+struct DoorReport {
+  observedAt: Timestamp
+  open: boolean
+}
+interface VehicleStatus {
+  signal currentSpeed: Speed @10ms
+  event doorOpened: DoorReport @[100ms..1s]
+}
+";
+
 /// A package that declares types only, so its unit has no interface shape.
 const TYPES_ONLY: &str = "package veh.cluster
 type Speed: km/h [0.0..250.0 step 0.5]
@@ -312,4 +326,55 @@ fn an_unreadable_history_file_refuses_the_publication() {
         snapshot_before,
         "the snapshot is not replaced"
     );
+}
+
+#[test]
+fn a_catalog_that_names_a_standard_type_records_the_built_hash() {
+    let dir = TempDir::new("std");
+    let out = TempDir::new("std-out");
+    let root = set_source(&dir, NAMES_A_STANDARD_TYPE);
+    publish(&root);
+    assert_eq!(
+        history_lines(&root),
+        vec![describe_hash(&root, out.path(), UNIT)]
+    );
+}
+
+#[test]
+fn a_history_of_a_unit_with_no_published_snapshot_is_not_carried() {
+    let dir = TempDir::new("unpublished-unit");
+    let out = TempDir::new("unpublished-unit-out");
+    dir.write(
+        "common/ridl.toml",
+        "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "common/common.typl",
+        "package veh.common\ntype Speed: km/h [0.0..250.0 step 0.5]\n",
+    );
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"common\"]\n");
+    let root = dir.path().to_path_buf();
+    publish(&root);
+    // A history left under the name of a unit the published baseline does
+    // not hold.
+    let marker = "ab".repeat(32);
+    std::fs::write(
+        baseline_dir(&root).join(format!("{UNIT}.catalogs")),
+        format!("{marker}\n"),
+    )
+    .expect("write the leftover history");
+
+    // The unit is added: every change is an addition, a compatible verdict.
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"common\", \"cluster\"]\n",
+    );
+    dir.write("cluster/ridl.toml", MANIFEST);
+    dir.write("cluster/cluster.ridl", BASE);
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the added unit's lock is allocated: {stderr}");
+    publish(&root);
+
+    let hash = describe_hash(&root, out.path(), UNIT);
+    assert_eq!(history_lines(&root), vec![hash]);
 }

@@ -1149,22 +1149,37 @@ fn staging_dir(out_dir: &Path) -> PathBuf {
 
 /// Replaces the `.ir.json` set in `out_dir` with the freshly built one in
 /// `staging`, dropping any snapshot whose package the workspace no longer
-/// declares, and replaces the `.catalogs` set the same way, dropping the
-/// history of a unit that no longer has an interface shape. Only `.ir.json`
-/// and `.catalogs` files are touched: `out_dir` may be a directory a user
-/// pointed `--out` at, and nothing else in it is this command's to delete.
-/// The histories move in after the snapshots.
+/// declares, and replaces the `.catalogs` set with the staged one. Only
+/// `.ir.json` and `.catalogs` files are touched: `out_dir` may be a directory
+/// a user pointed `--out` at, and nothing else in it is this command's to
+/// delete.
 ///
-/// The fresh snapshots move in first, each rename replacing the stale file of
-/// the same name, and only then are the stale snapshots no fresh one replaced
-/// removed. A failure part-way — a rename refused, a disk that fills — leaves
+/// The steps run in this order:
+///
+/// 1. Every published `.catalogs` file is removed.
+/// 2. The fresh snapshots move in, each rename replacing the stale file of the
+///    same name.
+/// 3. The fresh `.catalogs` files move in.
+/// 4. The stale snapshots no fresh one replaced are removed.
+///
+/// A failure part-way — a rename refused, a disk that fills — leaves
 /// `out_dir` holding one snapshot per package, some fresh and some stale,
-/// which the next run compares against package by package. The other order,
-/// delete then move, left `out_dir` empty after the same failure, and an
-/// empty directory is a first publication to [`untombstoned_removals`]: the
-/// next run would have skipped the gate.
+/// which the next run compares against package by package. The other order
+/// for snapshots, delete then move, left `out_dir` empty after the same
+/// failure, and an empty directory is a first publication to
+/// [`untombstoned_removals`]: the next run would have skipped the gate.
+///
+/// The histories are removed first so that a failure never leaves a history
+/// beside a snapshot it does not describe. A history left from the replaced
+/// baseline beside a fresh snapshot lets the next run carry hashes past a
+/// breaking change; a fresh history beside a replaced snapshot lists a
+/// catalog that is not published. After a failure, a unit has its fresh
+/// history or none, and a unit with none starts its chain again.
 fn publish_baseline(staging: &Path, out_dir: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(out_dir)?;
+    for history in catalogs_files(out_dir)? {
+        std::fs::remove_file(history)?;
+    }
     let mut published = BTreeSet::new();
     for fresh in ir_json_files(staging)? {
         let name = fresh
@@ -1180,12 +1195,8 @@ fn publish_baseline(staging: &Path, out_dir: &Path) -> std::io::Result<()> {
             .expect("a listed history path has a file name")
             .to_os_string();
         std::fs::rename(&fresh, out_dir.join(&name))?;
-        published.insert(name);
     }
-    for stale in ir_json_files(out_dir)?
-        .into_iter()
-        .chain(catalogs_files(out_dir)?)
-    {
+    for stale in ir_json_files(out_dir)? {
         if stale
             .file_name()
             .is_some_and(|name| !published.contains(name))
@@ -2775,4 +2786,40 @@ fn collect_source_files(path: &Path) -> Result<Vec<PathBuf>, (PathBuf, std::io::
     }
     files.sort();
     Ok(files)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A history rename that fails after the snapshots moved in leaves no
+    /// history of the replaced baseline beside the fresh snapshots.
+    #[test]
+    fn an_interrupted_publication_leaves_no_replaced_history() {
+        let root =
+            std::env::temp_dir().join(format!("ridl-publish-interrupted-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let staging = root.join("staging");
+        let out_dir = root.join("out");
+        std::fs::create_dir_all(&staging).unwrap();
+        std::fs::create_dir_all(out_dir.join("a.catalogs").join("blocker")).unwrap();
+        for name in ["a.ir.json", "b.ir.json"] {
+            std::fs::write(staging.join(name), "{}").unwrap();
+        }
+        for name in ["a.catalogs", "b.catalogs"] {
+            std::fs::write(staging.join(name), "fresh\n").unwrap();
+        }
+        std::fs::write(out_dir.join("b.ir.json"), "{}").unwrap();
+        std::fs::write(out_dir.join("b.catalogs"), "marker\n").unwrap();
+
+        let result = publish_baseline(&staging, &out_dir);
+
+        let left = std::fs::read_to_string(out_dir.join("b.catalogs")).unwrap_or_default();
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(result.is_err(), "the history rename onto a directory fails");
+        assert!(
+            !left.contains("marker"),
+            "the replaced history is gone: {left:?}"
+        );
+    }
 }
