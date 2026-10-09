@@ -405,6 +405,25 @@ fn retire_of_a_still_declared_interface_exits_two() {
     assert_eq!(read_lock(&root), text, "byte-identical");
 }
 
+/// §5 exit 2 over a unit: `--retire cluster.Speed` while `Speed` is still
+/// declared in the subpackage `cluster`, not in the unit's root package.
+#[test]
+fn retire_of_a_still_declared_subpackage_interface_exits_two() {
+    let dir = TempDir::new("retire-declared-subpackage");
+    let root = unit_with_subpackage(&dir, HMI_SESSION, HMI_SPEED);
+    let text = format!("{HEADER}next 3\nSession 1\ncluster.Speed 2\n");
+    dir.write("interfaces.lock", &text);
+
+    let (code, stdout, stderr) = lock(&root, &["--retire", "cluster.Speed"]);
+    assert_eq!(code, 2, "stderr:\n{stderr}");
+    assert_eq!(stdout, "");
+    assert!(
+        stderr.contains("`cluster.Speed` is still declared"),
+        "stderr:\n{stderr}"
+    );
+    assert_eq!(read_lock(&root), text, "byte-identical");
+}
+
 /// §5 exit 2: either flag over more than one unit. `PATH` must resolve to
 /// exactly one unit; nothing is written.
 #[test]
@@ -651,6 +670,30 @@ fn plain_lock_writes_one_file_at_the_unit_root_with_relative_keys() {
 
     let (code, stderr) = check(&root);
     assert_eq!(code, 0, "stderr:\n{stderr}");
+}
+
+/// The allocation order is the byte order of the keys over the unit, not
+/// the package order: the root's inline service `zone` is keyed
+/// `service:zone`, which sorts after `cluster.Speed`.
+#[test]
+fn plain_lock_allocates_in_key_byte_order_over_the_unit() {
+    let dir = TempDir::new("unit-byte-order");
+    let root = unit_with_subpackage(
+        &dir,
+        "package veh.hmi\ntype Level: integer [0..9]\nservice zone { signal z : Level @[100ms..1s] }\n",
+        HMI_SPEED,
+    );
+
+    let (code, stdout, stderr) = lock(&root, &[]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_eq!(
+        stdout,
+        "allocated cluster.Speed 1\nallocated service:zone 2\n"
+    );
+    assert_eq!(
+        read_lock(&root),
+        format!("{HEADER}next 3\ncluster.Speed 1\nservice:zone 2\n")
+    );
 }
 
 /// Moving an interface to another package of the unit is a rename the lock
