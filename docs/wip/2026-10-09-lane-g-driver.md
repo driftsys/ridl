@@ -198,3 +198,24 @@ Each ruling: what was decided — why — what it costs if wrong.
   not tied to one extension so a later skipped kind reuses it — if wrong, the
   code is renamed before a release; a lint name is cheap to change before users
   configure it in `[lints]`.
+- **R-11** #657: keep the formatter's behaviour — a comment after an rsdl
+  machine's `}` is laid out on its own line between the machines, in source
+  order, as the crate docs and two pinned tests already say — and correct the
+  one contradicting sentence in `docs/wip/fmt-ridl-rsdl-layout.md` §5. Moving
+  the comment onto the machine's line would make it trail a separator that is
+  optional — if wrong, a user who wrote the comment on the `}` line sees it move
+  down one line.
+- **R-12** #623: a lone CR is a line break everywhere: the lexer ends a line
+  comment, a string and a regex at it, `line_col` counts it, a CRLF pair stays
+  one break, and the typl reference's line-ending sentence names LF, CRLF and a
+  lone CR — it matches `ridl-lsp`'s `LineIndex` (which follows the LSP
+  specification) and the `header-file` text, and needs no new diagnostic code.
+  Rejecting a bare CR would leave the CLI and the editor disagreeing on every
+  file still read — if wrong, a file that relied on a lone CR inside a comment
+  or a string now lexes differently, which only a file written with classic Mac
+  line endings meets.
+- **R-13** #728: closed as already fixed — `regions()` sorts by interface number
+  (`crates/ridl-sem/src/rsdl/lower.rs`), pinned by
+  `the_routing_table_is_sorted_by_interface_number_and_not_by_name`, which G4
+  saw fail under two mutations (sort by name, no sort) — if wrong, the issue is
+  reopened.
