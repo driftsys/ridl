@@ -316,3 +316,10 @@ Each ruling: what was decided — why — what it costs if wrong.
   2026-11-09 if no further timing failure of those tests is seen in CI — if
   wrong, a different cause hides behind the longer bound and the issue stays
   open one month.
+- **R-28** R-26 amended: `ridl-sem` is a published crate and `Resolution` has no
+  `#[non_exhaustive]`, so the new public field is a breaking API change; G3's
+  pull request title carries `!` and its body a `BREAKING CHANGE:` paragraph
+  naming `Resolution.package`. R-23 extends to a public API change of a
+  published crate — the changelog is what a crate consumer reads before an
+  upgrade — if wrong, one more breaking entry in a release that is already
+  breaking.
