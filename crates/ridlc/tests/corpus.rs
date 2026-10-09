@@ -96,10 +96,12 @@ struct Compiled {
     typescript: String,
     /// The lowered codegen model of every package in the entry (one section
     /// per package), or a one-line note when the entry has error diagnostics.
-    /// Each package is lowered over the scope `ridl build` passes it: every
-    /// checked package of the entry, then `ridl.std` when a package of the
-    /// entry names it (`ridlc::catalog_scope`). So each section is the
-    /// model `ridl build --emit codegen-model` writes for that package: its
+    /// Each package is lowered over the same scope `ridl build` uses, built
+    /// by the same function (`ridlc::catalog_scope`): every checked package
+    /// of the entry, then `ridl.std` when a package of the entry names it. No
+    /// test compares a section with the file the build writes. The build
+    /// also passes `ridl.std` only when it generates code, which a
+    /// `--emit codegen-model` build always does. In each section the
     /// cross-package references resolve, and the `catalog` of a package in a
     /// multi-package unit carries the unit's hash. The Rust and TypeScript
     /// sections above are generated one package at a time, with no sibling in
