@@ -43,6 +43,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+mod catalogs;
 mod lock;
 mod property;
 
@@ -692,6 +693,14 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
         return finish(Ok(run));
     }
 
+    // The histories are written into the staging directory only once both
+    // gates passed, so a refused run leaves every published history as it was.
+    let mut db = ridl_core::RidlDatabase::default();
+    if let Err(code) = catalogs::write_catalog_histories(&mut db, &staging, &out_dir) {
+        let _ = std::fs::remove_dir_all(&staging);
+        return code;
+    }
+
     if let Err(err) = publish_baseline(&staging, &out_dir) {
         let _ = std::fs::remove_dir_all(&staging);
         eprintln!(
@@ -1140,8 +1149,11 @@ fn staging_dir(out_dir: &Path) -> PathBuf {
 
 /// Replaces the `.ir.json` set in `out_dir` with the freshly built one in
 /// `staging`, dropping any snapshot whose package the workspace no longer
-/// declares. Only `.ir.json` files are touched: `out_dir` may be a directory a
-/// user pointed `--out` at, and nothing else in it is this command's to delete.
+/// declares, and replaces the `.catalogs` set the same way, dropping the
+/// history of a unit that no longer has an interface shape. Only `.ir.json`
+/// and `.catalogs` files are touched: `out_dir` may be a directory a user
+/// pointed `--out` at, and nothing else in it is this command's to delete.
+/// The histories move in after the snapshots.
 ///
 /// The fresh snapshots move in first, each rename replacing the stale file of
 /// the same name, and only then are the stale snapshots no fresh one replaced
@@ -1162,7 +1174,18 @@ fn publish_baseline(staging: &Path, out_dir: &Path) -> std::io::Result<()> {
         std::fs::rename(&fresh, out_dir.join(&name))?;
         published.insert(name);
     }
-    for stale in ir_json_files(out_dir)? {
+    for fresh in catalogs_files(staging)? {
+        let name = fresh
+            .file_name()
+            .expect("a listed history path has a file name")
+            .to_os_string();
+        std::fs::rename(&fresh, out_dir.join(&name))?;
+        published.insert(name);
+    }
+    for stale in ir_json_files(out_dir)?
+        .into_iter()
+        .chain(catalogs_files(out_dir)?)
+    {
         if stale
             .file_name()
             .is_some_and(|name| !published.contains(name))
@@ -1171,6 +1194,24 @@ fn publish_baseline(staging: &Path, out_dir: &Path) -> std::io::Result<()> {
         }
     }
     std::fs::remove_dir_all(staging)
+}
+
+/// Every `*.catalogs` file directly in `dir`.
+fn catalogs_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.is_file()
+            && path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.ends_with(ridl_core::catalog_history::FILE_SUFFIX))
+        {
+            files.push(path);
+        }
+    }
+    files.sort();
+    Ok(files)
 }
 
 /// Where to read the baseline from, if anywhere.
