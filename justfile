@@ -1978,6 +1978,19 @@ gate-parity:
         echo "gate-parity: could not read the dependencies of 'build' from the justfile." >&2
         exit 1
     fi
+    # The members `build` is expected to have. A member is stated here and on
+    # the `build:` line, so removing or adding one has to be done twice. Without
+    # this list the check would read its expectation from the line under test,
+    # and a member removed from that line would only shrink what is checked.
+    expected="toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check compile test lint wasm-check compat-check demo check"
+    removed="$(comm -23 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort) | tr '\n' ' ')"
+    added="$(comm -13 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort) | tr '\n' ' ')"
+    if [ -n "$removed" ] || [ -n "$added" ]; then
+        [ -z "$removed" ] || echo "gate-parity: removed from 'build': $removed" >&2
+        [ -z "$added" ] || echo "gate-parity: added to 'build': $added" >&2
+        echo "gate-parity: update the expected list in the gate-parity recipe to match 'build'." >&2
+        exit 1
+    fi
     steps="$(grep -vE '^[[:space:]]*#' "$workflow")"
     missing=""
     for member in $members; do
