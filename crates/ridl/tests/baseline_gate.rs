@@ -2157,9 +2157,11 @@ fn a_package_gone_from_a_unit_that_remains_is_refused() {
 }
 
 /// The sanctioned removal of a package from a unit that remains: its number
-/// is retired in the unit's lock, so the gate has nothing to refuse.
+/// is retired in the unit's lock. `ridl_diff` classifies this as a retired
+/// interface, not a removal, so the diff's own retire rule is what lets it
+/// through; the gate's retired-number check is pinned by the legacy test below.
 #[test]
-fn a_package_gone_with_its_number_retired_is_not_refused() {
+fn the_diffs_retire_rule_lets_a_package_gone_with_its_number_retired_through() {
     let dir = TempDir::new("gate-package-gone-retired");
     dir.write(
         "ridl.toml",
@@ -2183,6 +2185,36 @@ fn a_package_gone_with_its_number_retired_is_not_refused() {
         "cluster.Speed".as_ref(),
     ]);
     assert_eq!(code, 0, "the retirement is recorded: {stderr}");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 0, "a retired number publishes:\n{stderr}");
+    assert!(!stderr.contains("RIDL-412"), "stderr:\n{stderr}");
+}
+
+/// A legacy subpackage snapshot (no `unit`, `Speed` under number 7) loses
+/// `Speed`, and the unit's lock retires number 7. The diff reads the legacy
+/// snapshot in the unit named after the package, so it finds no retired entry
+/// and reports a removal; the gate compares it in the unit of the fresh
+/// package of the same name, finds number 7 retired there, and does not refuse.
+#[test]
+fn a_legacy_interface_removed_with_its_number_retired_in_the_unit_is_not_refused() {
+    let dir = TempDir::new("gate-legacy-retired");
+    let root = legacy_per_package_baseline(
+        &dir,
+        SESSION,
+        "next 2\nSession 1\n",
+        &[("veh.hmi.cluster.ir.json", "\"number\": 2", "\"number\": 7")],
+    );
+    std::fs::remove_file(root.join("cluster/speed.ridl")).expect("remove the interface");
+    dir.write(
+        "cluster/gauge.ridl",
+        "package veh.hmi.cluster\nimport veh.hmi.Level\ninterface Gauge { signal g : Level @[100ms..1s] }\n",
+    );
+    std::fs::remove_file(root.join("cluster/interfaces.lock")).expect("remove the legacy lock");
+    dir.write(
+        "interfaces.lock",
+        &format!("{LOCK_HEADER}next 9\nSession 1\ncluster.Gauge 8\ncluster.Speed 7 retired\n"),
+    );
     let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
 
     assert_eq!(code, 0, "a retired number publishes:\n{stderr}");

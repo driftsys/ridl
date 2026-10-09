@@ -966,12 +966,7 @@ fn interface_refusals(
                     refusals.push(Diagnostic {
                         code: DiagCode::RIDL_412,
                         severity: Severity::Error,
-                        message: dropped_number_message(
-                            package,
-                            &shape,
-                            published_unit(package, &fresh),
-                            gone,
-                        ),
+                        message: dropped_number_message(package, &shape, unit, gone),
                         primary: detached_span(),
                         labels: Vec::new(),
                         fixits: Vec::new(),
