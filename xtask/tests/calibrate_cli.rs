@@ -97,14 +97,22 @@ fn main() {
     assert_eq!(&args[..3], ["check","--format","json"]);
     let root=PathBuf::from(&args[3]);
     assert_eq!(root,env::current_dir().unwrap());
-    assert!(root.parent().unwrap().file_name().unwrap().to_str().unwrap().starts_with(".calibrate-work-"));
+    let scratch=if root.join("mode.txt").exists() { root.parent().unwrap() } else { &root };
+    assert!(scratch.file_name().unwrap().to_str().unwrap().starts_with(".calibrate-work-"));
     let manifest=fs::read_to_string(root.join("ridl.toml")).unwrap();
     let dropped=["inconsistent-abbreviation","package-fan-out"];
     if !root.join("mode.txt").exists() {
         // The lint probe: report every dropped lint as unknown, like the real binary.
+        // The report names the line of the entry in the probe manifest.
+        let all=["inconsistent-unit","inconsistent-abbreviation","duplicate-shape","low-cohesion-interface","package-fan-out"];
+        let probe=env::var("PROBE_MODE").unwrap_or_default();
+        if probe=="garbage" { println!("not json"); return; }
+        if probe=="exit" { eprintln!("synthetic probe failure"); std::process::exit(1); }
         let mut report=Vec::new();
-        for name in dropped {
-            report.push(format!("{{\"code\":\"MANI-010\",\"severity\":\"warning\",\"lint\":\"unknown-lint\",\"message\":\"unknown lint `{name}` in `[lints]`\"}}"));
+        for (index,name) in all.iter().enumerate() {
+            if probe!="all" && !dropped.contains(name) { continue; }
+            let line=6+index;
+            report.push(format!("{{\"code\":\"MANI-010\",\"severity\":\"warning\",\"lint\":\"unknown-lint\",\"message\":\"unknown lint `{name}` in `[lints]`\",\"span\":{{\"path\":\"ridl.toml\",\"start\":{{\"line\":{line},\"column\":1}},\"end\":{{\"line\":{line},\"column\":8}}}}}}"));
         }
         println!("[{}]",report.join(","));
         return;
@@ -118,6 +126,11 @@ fn main() {
     fs::write(root.join("copy-only.marker"),"checked copy").unwrap();
     let mode=fs::read_to_string(root.join("mode.txt")).unwrap();
     if mode=="failed" { eprintln!("synthetic check failure");std::process::exit(1); }
+    if mode=="mani" {
+        let path=root.join("ridl.toml").to_string_lossy().into_owned();
+        println!("[{{\"code\":\"MANI-010\",\"severity\":\"warning\",\"lint\":\"unknown-lint\",\"message\":\"unknown lint\",\"span\":{{\"path\":{path:?},\"start\":{{\"line\":1,\"column\":1}},\"end\":{{\"line\":1,\"column\":2}}}}}}]");
+        return;
+    }
     let (severity,lint,message)=match mode.as_str() {
         "malformed" => ("warning","low-cohesion-interface","interface `I` splits into 2 groups of members that share no type: a], [b]"),
         "error" => ("error","package-fan-out","package `p` depends on 4 workspace packages: a, b, c, d"),
@@ -293,6 +306,31 @@ fn executable_dump_isolates_copies_target_and_cleans_up_after_success() {
     }
 }
 
+#[test]
+fn executable_dump_fails_when_the_lint_probe_cannot_answer() {
+    for (probe, reason) in [
+        ("garbage", "lint probe printed no JSON report"),
+        ("exit", "synthetic probe failure"),
+        ("all", "lint probe reports every check as unknown"),
+    ] {
+        let fixture = Fixture::dump();
+        let mut command = Command::new(env!("CARGO_BIN_EXE_xtask"));
+        let output = command
+            .current_dir(&fixture.0)
+            .env("CARGO", env!("CARGO"))
+            .env("CARGO_NET_OFFLINE", "true")
+            .env("CARGO_TARGET_DIR", fixture.0.join("unselected-target"))
+            .env("PROBE_MODE", probe)
+            .args(["calibrate", "dump", "out"])
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2), "{probe}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains(reason), "{probe}: {stderr}");
+        no_copies(&fixture.0.join("out"));
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn executable_dump_replaces_existing_output_without_overwriting_the_old_file() {
@@ -371,6 +409,7 @@ fn executable_dump_refuses_existing_lints_and_delays_publication_on_failures() {
         ("malformed", "missing or malformed metric"),
         ("error", "corpus has an error"),
         ("failed", "synthetic check failure"),
+        ("mani", "corpus manifest draws MANI-010"),
     ] {
         fs::write(
             beta.join("mode.txt"),

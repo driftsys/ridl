@@ -362,6 +362,7 @@ struct JsonSpan {
 }
 #[derive(Deserialize)]
 struct JsonDiagnostic {
+    code: Option<String>,
     severity: String,
     lint: Option<String>,
     message: String,
@@ -423,6 +424,9 @@ fn records_from_json(
     for diagnostic in diagnostics {
         if diagnostic.severity == "error" {
             return Err(format!("corpus has an error: {}", diagnostic.message).into());
+        }
+        if diagnostic.code.as_deref() == Some("MANI-010") {
+            return Err(format!("corpus manifest draws MANI-010: {}", diagnostic.message).into());
         }
         let Some(check) = diagnostic.lint.filter(|l| CHECKS.contains(&l.as_str())) else {
             continue;
@@ -622,42 +626,58 @@ fn check_dump_tree(path: &Path, directory: bool) -> Result<()> {
 }
 
 /// The checks in `CHECKS` that the built binary registers as lints. The binary
-/// answers by drawing MANI-010 (unknown lint) for every `[lints]` key it does
-/// not ship, so the answer comes from the binary and not from a second list.
-fn shipped_checks(binary: &Path, scratch: &Path) -> Result<Vec<&'static str>> {
+/// answers by drawing MANI-010 (unknown lint) at the line of every `[lints]`
+/// entry it does not ship, so the answer comes from the binary and not from a
+/// second list. The probe fails when it cannot tell, and `records_from_json`
+/// fails on any MANI-010 in a corpus report, so a wrong answer cannot pass.
+fn shipped_checks(binary: &Path, out: &Path) -> Result<Vec<&'static str>> {
     #[derive(Deserialize)]
     struct Probe {
         code: Option<String>,
-        message: String,
+        span: JsonSpan,
     }
-    let probe = scratch.join("lint-probe");
-    std::fs::create_dir(&probe)?;
-    let mut manifest =
-        String::from("[package]\nname = \"probe\"\nversion = \"0.1.0\"\n\n[lints]\n");
+    // A directory of its own, so that no corpus workspace name can collide.
+    let scratch = Scratch::new(out)?;
+    let header = "[package]\nname = \"probe\"\nversion = \"0.1.0\"\n\n[lints]\n";
+    let first_entry_line = header.lines().count() + 1;
+    let mut manifest = String::from(header);
     for check in CHECKS {
         manifest.push_str(&format!("{check} = \"warn\"\n"));
     }
-    std::fs::write(probe.join("ridl.toml"), manifest)?;
+    std::fs::write(scratch.0.join("ridl.toml"), manifest)?;
     let output = std::process::Command::new(binary)
-        .current_dir(&probe)
+        .current_dir(&scratch.0)
         .args(["check", "--format", "json"])
-        .arg(&probe)
+        .arg(&scratch.0)
         .output()?;
-    let diagnostics: Vec<Probe> = serde_json::from_slice(&output.stdout).map_err(|e| {
-        format!(
-            "lint probe printed no JSON report ({e}):\n{}",
-            String::from_utf8_lossy(&output.stderr)
-        )
-    })?;
-    let unknown: BTreeSet<&str> = diagnostics
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        return Err(format!("lint probe failed ({}):\n{stderr}", output.status).into());
+    }
+    let diagnostics: Vec<Probe> = serde_json::from_slice(&output.stdout)
+        .map_err(|e| format!("lint probe printed no JSON report ({e}):\n{stderr}"))?;
+    let mut unknown = BTreeSet::new();
+    for diagnostic in diagnostics
         .iter()
         .filter(|d| d.code.as_deref() == Some("MANI-010"))
-        .filter_map(|d| d.message.strip_prefix("unknown lint `")?.split('`').next())
-        .collect();
-    Ok(CHECKS
+    {
+        let check = diagnostic
+            .span
+            .start
+            .line
+            .checked_sub(first_entry_line)
+            .and_then(|index| CHECKS.get(index))
+            .ok_or("lint probe reported an unknown lint at a line outside its entries")?;
+        unknown.insert(*check);
+    }
+    let shipped: Vec<&'static str> = CHECKS
         .into_iter()
         .filter(|check| !unknown.contains(check))
-        .collect())
+        .collect();
+    if shipped.is_empty() {
+        return Err("lint probe reports every check as unknown".into());
+    }
+    Ok(shipped)
 }
 
 fn dump(root: &Path, out: &Path) -> Result<()> {
@@ -686,7 +706,7 @@ fn dump(root: &Path, out: &Path) -> Result<()> {
     let binary = target
         .join("debug")
         .join(format!("ridl{}", std::env::consts::EXE_SUFFIX));
-    let shipped = shipped_checks(&binary, &scratch.0)?;
+    let shipped = shipped_checks(&binary, &out)?;
     let mut all: BTreeMap<String, Vec<Finding>> =
         CHECKS.iter().map(|c| (c.to_string(), Vec::new())).collect();
     let workspaces = sorted_entries(&root.join("evals/corpus"))?;
