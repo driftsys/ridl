@@ -301,3 +301,10 @@ Each ruling: what was decided — why — what it costs if wrong.
   `ridl-diff` report — the report that #700 and #397 change — so G1 starts after
   H3 merges and rebases its verdict tests over H3's — if wrong, G1 lands later
   than it could have.
+- **R-26** #643: the viewing package is a new public field of
+  `ridl_sem::Resolution`, not a parameter threaded through nine callers — a
+  struct literal outside this repository stops compiling, which the pull request
+  body states under an API note; the release that carries it is already a
+  breaking one (#792, #793), and a `Default` resolution with an empty package
+  hides every internal declaration reached through a qualified path, the strict
+  side — if wrong, a parameter replaces the field in a later change.
