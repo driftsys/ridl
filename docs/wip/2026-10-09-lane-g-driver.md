@@ -295,3 +295,9 @@ Each ruling: what was decided — why — what it costs if wrong.
   line comment was accepted text and now ends the comment, so the rest of that
   line is read as source — if wrong, one changelog entry is marked breaking that
   affects almost no file.
+- **R-25** R-4 applied: lane H's plan (merged in #785,
+  `docs/wip/2026-10-09-catalog-compat-plan.md` Task 1) adds
+  `crates/ridl-diff/src/unit_verdict.rs`, a per-unit verdict computed from the
+  `ridl-diff` report — the report that #700 and #397 change — so G1 starts after
+  H3 merges and rebases its verdict tests over H3's — if wrong, G1 lands later
+  than it could have.
