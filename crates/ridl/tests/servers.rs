@@ -427,6 +427,29 @@ async fn path_mode_check_equals_the_cli() {
     .await
     .expect("workspace check timeout");
 }
+/// A relative path is resolved against the server's current directory, and
+/// the root the tool reports keeps the relative form: from a member
+/// directory, a bare file name has the workspace root `..`.
+#[tokio::test]
+async fn path_mode_check_keeps_the_relative_root_of_a_bare_file_name() {
+    tokio::time::timeout(TIMEOUT, async {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_ridl"));
+        command
+            .arg("mcp")
+            .current_dir(workspace_fixture("ws").join("b"));
+        let transport = TokioChildProcess::new(command).expect("spawn ridl mcp");
+        let client = ().serve(transport).await.expect("MCP initialize handshake");
+        let result = call_workspace_tool(&client, "ridl_check", json!({"path":"b.ridl"})).await;
+        assert_ne!(result.is_error, Some(true), "{}", tool_text(&result));
+        assert_eq!(
+            result.structured_content.unwrap()["workspace"]["root"],
+            ".."
+        );
+        client.cancel().await.unwrap();
+    })
+    .await
+    .expect("relative path check timeout");
+}
 #[tokio::test]
 async fn an_unsaved_overlay_reports_diagnostics_without_changing_disk() {
     tokio::time::timeout(TIMEOUT, async {
