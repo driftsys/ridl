@@ -7,7 +7,7 @@
 //! `encodings` emits the domain types only, and that the pipeline `generate`
 //! stays clean of the face.
 
-use ridl_backend_rust::{WireEncoding, generate, generate_face_with};
+use ridl_backend_rust::{WireEncoding, generate, generate_face_with, generate_with};
 use ridl_ir::codegen::v1;
 
 /// The `encodings` request option of the backend contract, with `value`.
@@ -653,6 +653,35 @@ fn generate_emits_types_only() {
     );
 }
 
+/// `generate_with` is `generate` over the other packages of the build: the
+/// domain types only, with no codec, no descriptor and no face.
+#[test]
+fn generate_with_emits_types_only() {
+    let package = ir::compile_fixture("interaction_face.ridl");
+    let source = generate_with(&package, &[])
+        .expect("generate_with")
+        .rust_source;
+    assert!(
+        source.contains("pub struct Temperature("),
+        "the domain types are emitted, got:\n{source}"
+    );
+    let d = dense(&source);
+    for marker in CODEC_MARKERS {
+        assert!(
+            !d.contains(marker),
+            "`generate_with` must not emit `{marker}`, got:\n{source}"
+        );
+    }
+}
+
+/// The name `WireEncoding::name` spells is the one `parse` reads it from.
+#[test]
+fn wire_encoding_name_round_trips_through_parse() {
+    let encoding = WireEncoding::FlatBuffers;
+    assert_eq!(encoding.name(), "flatbuffers");
+    assert_eq!(WireEncoding::parse(encoding.name()), Some(encoding));
+}
+
 /// `Backend::generate` over the fixture's model with `options`: the one
 /// generated file's text, or the diagnostics when no file is written.
 fn backend_response(options: Vec<v1::BackendOption>) -> Result<String, Vec<String>> {
@@ -778,24 +807,57 @@ fn an_empty_element_is_refused() {
 /// codec: the descriptors are what read the catalog hash, and a types-only
 /// build emits none.
 fn refused_with(edit: impl FnOnce(&mut ridl_ir::codegen::v1::Model)) -> Vec<String> {
-    use ridl_ir::codegen::{Backend as _, v1};
-
-    let package = ir::compile_fixture("interaction_face.ridl");
-    let mut model = ridl_ir::codegen::lower(&package, &[]);
-    edit(&mut model);
-    let request = v1::CodegenRequest {
-        model: Some(model),
-        options: vec![encodings_option("flatbuffers")],
-        artifact_base: "face_demo".to_string(),
-        ..Default::default()
-    };
-    let response = ridl_backend_rust::Backend.generate(&request);
+    let response = response_over(edit, vec![encodings_option("flatbuffers")]);
     assert!(response.files.is_empty(), "no file for a malformed model");
     response
         .diagnostics
         .into_iter()
         .map(|diagnostic| diagnostic.message)
         .collect()
+}
+
+/// `Backend::generate` over the fixture's model after `edit`, with `options`.
+fn response_over(
+    edit: impl FnOnce(&mut ridl_ir::codegen::v1::Model),
+    options: Vec<v1::BackendOption>,
+) -> v1::CodegenResponse {
+    use ridl_ir::codegen::Backend as _;
+
+    let package = ir::compile_fixture("interaction_face.ridl");
+    let mut model = ridl_ir::codegen::lower(&package, &[]);
+    edit(&mut model);
+    let request = v1::CodegenRequest {
+        model: Some(model),
+        options,
+        artifact_base: "face_demo".to_string(),
+        ..Default::default()
+    };
+    ridl_backend_rust::Backend.generate(&request)
+}
+
+/// A types-only build reads no catalog hash, so a model whose `Catalog.hash`
+/// is malformed is still emitted when the request names no encoding: the
+/// hash is checked only on the path that emits a descriptor.
+#[test]
+fn a_types_only_build_does_not_read_the_catalog_hash() {
+    let response = response_over(
+        |model| model.catalog.as_mut().expect("a catalog").hash.truncate(31),
+        Vec::new(),
+    );
+    assert!(
+        response.diagnostics.is_empty(),
+        "no refusal for a types-only build, got: {:?}",
+        response.diagnostics
+    );
+    let text = response
+        .files
+        .iter()
+        .find_map(|file| match &file.content {
+            Some(v1::generated_file::Content::Text(text)) => Some(text.clone()),
+            _ => None,
+        })
+        .expect("a file is written");
+    assert!(text.contains("pub struct Temperature("), "got:\n{text}");
 }
 
 /// A model whose `Catalog.hash` is not 32 bytes is malformed: the backend
