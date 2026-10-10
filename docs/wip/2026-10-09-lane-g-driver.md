@@ -379,3 +379,14 @@ Each ruling: what was decided — why — what it costs if wrong.
   the compatible-hash list, a number change restarts it — if wrong, a freeze at
   the same number is reported compatible where a stricter reading would call any
   catalog-identity change breaking.
+- **R-38** #397 follow-up: the catalog hash covers the textual order of enum
+  values, enum-set bits and their `reserved` lists, so a reorder that moves no
+  number is reported, not dropped: a new category `enum_reordered`, compatible,
+  under the heading "compatible on the wire, changes the catalog hash" (the
+  `interface_frozen` heading), for a value, bit or `reserved` reorder alike —
+  the wire carries numbers, not order, and the #810 compatible-hash list then
+  keeps the old hash so a peer still attaches. The hash computation is not
+  changed in this lane (that would move every existing hash and amend ADR-0014
+  decision 15). A renumbered value or bit stays `member_reordered`, breaking,
+  with no second `constraint_changed` line on the container — if wrong, a later
+  change sorts the hash input and retires `enum_reordered`.
