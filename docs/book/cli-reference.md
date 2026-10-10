@@ -70,6 +70,8 @@ Commands:
   lock      Allocate a number to every interface that has none and write each unit's `interfaces.lock`; with `--rename` or `--retire`, rewrite one unit's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for the file
   lsp       Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this. Stdio is the only transport
   mcp       Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
+  init      Scaffold a new unit in a directory that exists (defaults to the current directory): a package, or with `--workspace` a workspace and one member. Writes `ridl.toml` and one source file, and exits 2 without writing anything when a target file exists, the name is not a legal package name, or an existing manifest above the directory would claim it
+  new       Create a directory, with its parents, and scaffold a new unit in it, as `ridl init` does. Exits 2 without writing anything when the path exists
   describe  Print a catalog descriptor as strict JSON, after verifying it
   help      Print this message or the help of the given subcommand(s)
 
@@ -1887,6 +1889,83 @@ against the built binary by `crates/ridl/tests/servers.rs`; a session-task
 failure cannot be provoked through the server, so its mapping is tested on its
 own in `crates/ridl-mcp`.
 
+### `ridl init`
+
+```sh
+ridl init --help
+```
+
+```text
+Scaffold a new unit in a directory that exists (defaults to the current directory): a package, or with `--workspace` a workspace and one member. Writes `ridl.toml` and one source file, and exits 2 without writing anything when a target file exists, the name is not a legal package name, or an existing manifest above the directory would claim it
+
+Usage: ridl init [OPTIONS] [PATH]
+
+Arguments:
+  [PATH]  The existing directory to scaffold into [default: .]
+
+Options:
+      --workspace    Scaffold a workspace root and one member instead of a package
+      --name <NAME>  The package name (the member name with `--workspace`); the directory name by default
+  -h, --help         Print help
+```
+
+Writes the files of a new unit into a directory that already exists, and
+nothing else. The default is one standalone package: a `ridl.toml` that holds a
+`[package]` table with the version `0.1.0`, and `<name>.ridl` in the same
+directory, which declares `package <name>`, one unit-carrying type and one
+interface with one signal. `ridl check` and `ridl fmt --check` draw nothing on
+it. On success the command prints `Created package <name>` to stdout.
+
+`--workspace` writes a root `ridl.toml` with `[workspace] members = ["<name>"]`,
+and the package above in the directory `<name>` under it. The command then
+prints `Created workspace <name>`, and `ridl check` passes from the root and
+from inside the member.
+
+The name is the directory's basename when that is already a legal package name
+(lowercase dot-separated segments, each a letter followed by letters or
+digits). The command never rewrites a name: a basename that is not legal exits 2
+with an error that asks for `--name`, and so does a `--name` value that is not
+legal. With `--workspace`, `--name` names the member and the root directory keeps
+its own name.
+
+**Exit codes.** 0 when the files are written. 2, with an `error:` line on
+stderr and nothing written, when a target file already exists, the path is not a
+directory, the name is not legal, or a `ridl.toml` at or above the directory
+would claim it: the directory sits inside another unit (MANI-013) or inside a
+workspace, and this command does not add a member to an existing workspace. The
+search upward stops after the first directory that holds `.git`. Every target is
+checked before any file is written. There is no exit 1. The cases are confirmed
+against the built binary by `crates/ridl/tests/scaffold_cli.rs`.
+
+### `ridl new`
+
+```sh
+ridl new --help
+```
+
+```text
+Create a directory, with its parents, and scaffold a new unit in it, as `ridl init` does. Exits 2 without writing anything when the path exists
+
+Usage: ridl new [OPTIONS] <PATH>
+
+Arguments:
+  <PATH>  The directory to create; it must not exist
+
+Options:
+      --workspace    Scaffold a workspace root and one member instead of a package
+      --name <NAME>  The package name (the member name with `--workspace`); the directory name by default
+  -h, --help         Print help
+```
+
+Creates the directory at `PATH`, with its parents, and scaffolds into it exactly
+as [`ridl init`](#ridl-init) does, with the same flags, the same output and the
+same refusals. A `PATH` that already exists exits 2 and leaves the file system
+as it was. The name defaults to the last component of `PATH`.
+
+```sh
+ridl new vehicle-demo --name demo
+```
+
 ### `ridl describe`
 
 ```sh
@@ -2182,6 +2261,7 @@ compiler directly and want its stable, default-free flags.
 | `ridl diff` | the change is compatible, or the two sides are identical | the change is breaking | a side fails to compile, an input is missing, or neither `--explain` nor both inputs were given |
 | `ridl lock` | the file is written, or there is nothing to change | a diagnostic error over the source, nothing written: a live entry with no declaration under plain `ridl lock` (RIDL-409), a malformed lock file (RIDL-410), or any other compile error | the path is missing or unreadable; a bad flag — `--rename` naming no live entry or a `NEW` that is not a declaration without an entry, `--retire` naming a still-declared interface, either flag over more than one package; an I/O failure writing |
 | `ridl lock merge` | the three sides merge clean, and the result is written to OURS | entries disagree: OURS is written with conflict markers around only the disagreeing entries, and is malformed (RIDL-410) until resolved | an input cannot be read or does not parse (OURS is left as it was), `MARKER_SIZE` is not a number from 1 up, or an I/O failure writing OURS |
+| `ridl init` / `ridl new` | the files are written | | a target file exists, `new` was given an existing path, the path is not a directory, the name is not a legal package name, or a `ridl.toml` at or above the directory would claim it; nothing is written |
 | `ridl describe` | the descriptor was printed |   | a missing or unreadable path; a file that is not a catalog descriptor; a version this toolchain does not read; a malformed buffer; an I/O failure writing to stdout |
 
 This table is this repository's own taxonomy, recorded in

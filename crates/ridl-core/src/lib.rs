@@ -39,7 +39,7 @@ pub use diag::{
 pub use fetch::{FetchError, Frozen, fetch, materialize_imports};
 #[cfg(feature = "fs")]
 pub use lock::{LockEntry, Lockfile, read_lockfile, write_lockfile};
-pub use manifest::{Manifest, ManifestKind, TimingDefaults, parse_manifest};
+pub use manifest::{Manifest, ManifestKind, TimingDefaults, is_valid_package_name, parse_manifest};
 pub use package::{
     CatalogEntry, Package, PackageOrigin, ServiceCatalog, Workspace, package_of, service_catalog,
 };

@@ -980,12 +980,12 @@ out-of-tree executable generates from the IR through the documented contract,
 and the in-tree Rust backend run through the process host produces
 byte-identical output to the in-process path.
 
-| ID    | Story                                                                                                                                         | Done when                                                                                           | Size |
-| ----- | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ---- |
-| E4.5a | IR stability policy and the canonical encoding — driftsys/ridl#231 is its first item                                                          | the policy names a canonical encoding that round-trips every IR the front end admits                | M    |
-| E4.5b | The lowering step, the backend contract (`generate(CodegenRequest) → CodegenResponse`), and the process host; the Rust backend ported onto it | **landed** — the Rust backend run through the process host is byte-identical to the in-process path | L    |
-| E4.6  | `ridl init`/`ridl new` scaffolding + `ridl vendor` (air-gap)                                                                                  | scaffolds a valid workspace; vendors deps                                                           | S    |
-| E4.7  | Governance CI: keyword-registry collision test, and the E3.1 attribute registry enforced in CI                                                | colliding key across profiles fails CI                                                              | S    |
+| ID    | Story                                                                                                                                                                       | Done when                                                                                           | Size |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ---- |
+| E4.5a | IR stability policy and the canonical encoding — driftsys/ridl#231 is its first item                                                                                        | the policy names a canonical encoding that round-trips every IR the front end admits                | M    |
+| E4.5b | The lowering step, the backend contract (`generate(CodegenRequest) → CodegenResponse`), and the process host; the Rust backend ported onto it                               | **landed** — the Rust backend run through the process host is byte-identical to the in-process path | L    |
+| E4.6  | `ridl init`/`ridl new` scaffolding + `ridl vendor` (air-gap) — scaffolding **landed** (driftsys/ridl#48 stays open for `ridl vendor`, which waits on an ADR-0002 amendment) | scaffolds a valid workspace; vendors deps                                                           | S    |
+| E4.7  | Governance CI: keyword-registry collision test, and the E3.1 attribute registry enforced in CI                                                                              | colliding key across profiles fails CI                                                              | S    |
 
 **E4.5a landed** (driftsys/ridl#321). The policy is
 [`docs/specification/ir-specification.md`](specification/ir-specification.md):

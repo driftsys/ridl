@@ -430,7 +430,7 @@ fn check_section_keys(
 /// A package name is one or more lowercase dot-separated segments, each an ASCII
 /// lowercase letter followed by ASCII lowercase letters or digits (ADR-0002 §1).
 /// The empty string (a missing name) is invalid.
-fn is_valid_package_name(name: &str) -> bool {
+pub fn is_valid_package_name(name: &str) -> bool {
     !name.is_empty() && name.split('.').all(is_valid_name_segment)
 }
 

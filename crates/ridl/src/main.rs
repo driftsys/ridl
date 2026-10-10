@@ -46,6 +46,7 @@ use std::process::ExitCode;
 mod catalogs;
 mod lock;
 mod property;
+mod scaffold;
 
 use clap::{Parser, Subcommand};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Label, Severity, SourceMap, Span, render};
@@ -219,6 +220,38 @@ enum Command {
     /// Run the MCP server over stdio for an agent host: exit 0 on a clean
     /// shutdown, 2 on a transport error. It takes no flag of its own.
     Mcp,
+    /// Scaffold a new unit in a directory that exists (defaults to the current
+    /// directory): a package, or with `--workspace` a workspace and one
+    /// member. Writes `ridl.toml` and one source file, and exits 2 without
+    /// writing anything when a target file exists, the name is not a legal
+    /// package name, or an existing manifest above the directory would claim
+    /// it.
+    Init {
+        /// The existing directory to scaffold into.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Scaffold a workspace root and one member instead of a package.
+        #[arg(long)]
+        workspace: bool,
+        /// The package name (the member name with `--workspace`); the
+        /// directory name by default.
+        #[arg(long, value_name = "NAME")]
+        name: Option<String>,
+    },
+    /// Create a directory, with its parents, and scaffold a new unit in it,
+    /// as `ridl init` does. Exits 2 without writing anything when the path
+    /// exists.
+    New {
+        /// The directory to create; it must not exist.
+        path: PathBuf,
+        /// Scaffold a workspace root and one member instead of a package.
+        #[arg(long)]
+        workspace: bool,
+        /// The package name (the member name with `--workspace`); the
+        /// directory name by default.
+        #[arg(long, value_name = "NAME")]
+        name: Option<String>,
+    },
     /// Print a catalog descriptor as strict JSON, after verifying it.
     Describe {
         /// The `<unit>.catalog.binfb` file `ridl build --emit catalog` wrote.
@@ -335,6 +368,26 @@ fn main() -> ExitCode {
         Command::Lsp { .. } => run_lsp(),
         Command::Mcp => run_mcp(),
         Command::Describe { path } => run_describe(&path),
+        Command::Init {
+            path,
+            workspace,
+            name,
+        } => scaffold::run(&scaffold::Request {
+            path: &path,
+            create: false,
+            workspace,
+            name: name.as_deref(),
+        }),
+        Command::New {
+            path,
+            workspace,
+            name,
+        } => scaffold::run(&scaffold::Request {
+            path: &path,
+            create: true,
+            workspace,
+            name: name.as_deref(),
+        }),
     }
 }
 
