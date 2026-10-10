@@ -223,7 +223,7 @@ pub fn rename(
 
 /// Drops repeated `(file, range)` edits — a declaration that is also
 /// self-imported could otherwise be edited twice.
-fn dedup(edits: Vec<Edit>) -> Vec<Edit> {
+pub(crate) fn dedup(edits: Vec<Edit>) -> Vec<Edit> {
     let mut unique: Vec<Edit> = Vec::new();
     for edit in edits {
         if !unique
@@ -280,7 +280,7 @@ fn check_case(target: &Symbol, new_name: &str) -> Result<(), RenameError> {
 
 /// Whether `name` is UpperCamelCase: a leading ASCII uppercase letter and only
 /// ASCII alphanumerics after (no underscores).
-fn is_camel_case(name: &str) -> bool {
+pub(crate) fn is_camel_case(name: &str) -> bool {
     name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
         && name.chars().all(|c| c.is_ascii_alphanumeric())
 }
@@ -295,7 +295,11 @@ fn is_screaming_snake(name: &str) -> bool {
 }
 
 /// The package in `packages` named `name`, if loaded.
-fn package_named(db: &dyn salsa::Database, packages: &[Package], name: &str) -> Option<Package> {
+pub(crate) fn package_named(
+    db: &dyn salsa::Database,
+    packages: &[Package],
+    name: &str,
+) -> Option<Package> {
     packages
         .iter()
         .copied()
@@ -303,7 +307,7 @@ fn package_named(db: &dyn salsa::Database, packages: &[Package], name: &str) -> 
 }
 
 /// Whether `package` has its own declaration named `name`.
-fn declares(
+pub(crate) fn declares(
     db: &dyn salsa::Database,
     ws: Workspace,
     std: Package,

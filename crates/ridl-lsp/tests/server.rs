@@ -3115,6 +3115,440 @@ fn hover_on_an_rsdl_reference_renders_the_named_declaration() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+/// The locations of a references result, sorted by file, then position, so a
+/// comparison does not depend on the order the server walks the model in.
+fn sorted_locations(locations: Vec<lt::Location>) -> Vec<(String, lt::Range)> {
+    let mut sorted: Vec<(String, lt::Range)> = locations
+        .into_iter()
+        .map(|location| (location.uri.as_str().to_string(), location.range))
+        .collect();
+    sorted.sort_by_key(|(uri, range)| (uri.clone(), range.start.line, range.start.character));
+    sorted
+}
+
+/// Find-references in an `.rsdl` file follows the rsdl references the checker
+/// binds: a component from a reference to it and from its own name, an
+/// instance, a service in each slot that names it, and an interface.
+#[test]
+fn find_references_follows_rsdl_references() {
+    let dir = TempDir::new("rsdl-references");
+    let (contracts, system) = write_rsdl_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+    let at = |uri: &lt::Uri, text: &str, needle: &str, occurrence: usize| {
+        (uri.as_str().to_string(), range_of(text, needle, occurrence))
+    };
+
+    // Every `Cruise` of the fixture: the declaration, the system and
+    // distribution member lines, and the component segment of both placement
+    // lines.
+    let cruise: Vec<_> = (0..5)
+        .map(|occurrence| at(&system, RSDL_SYSTEM, "Cruise", occurrence))
+        .collect();
+    // `primary`: the declared instance and the placement line naming it.
+    let primary = vec![
+        at(&system, RSDL_SYSTEM, "primary", 0),
+        at(&system, RSDL_SYSTEM, "primary", 1),
+    ];
+    // `veh.adas.access`: the declaration in the contracts, then the
+    // `requires` line of `Panel` and the three member lines.
+    let mut access = vec![at(&contracts, RSDL_CONTRACTS, "veh.adas.access", 0)];
+    access.extend((0..4).map(|occurrence| at(&system, RSDL_SYSTEM, "veh.adas.access", occurrence)));
+    // `LaneAssist`: the declaration and the service of the contracts, and
+    // both `requires` lines, a qualified one whole, as the ridl navigation
+    // reports a qualified reference.
+    let lane_assist = vec![
+        at(&contracts, RSDL_CONTRACTS, "LaneAssist", 0),
+        at(&contracts, RSDL_CONTRACTS, "LaneAssist", 1),
+        at(&system, RSDL_SYSTEM, "LaneAssist", 1),
+        at(&system, RSDL_SYSTEM, "veh.adas.LaneAssist", 1),
+    ];
+
+    // (what the cursor is on, cursor, the expected locations).
+    let cases = [
+        (
+            "a component in a system member line",
+            pos_in(RSDL_SYSTEM, "{ Cruise, Lane", 0, 3),
+            cruise.clone(),
+        ),
+        (
+            "the component segment of a placement line",
+            pos_in(RSDL_SYSTEM, "Cruise.backup", 0, 2),
+            cruise.clone(),
+        ),
+        (
+            "the name of a component declaration",
+            pos_in(RSDL_SYSTEM, "component Cruise", 0, 11),
+            cruise,
+        ),
+        (
+            "the instance segment of a placement line",
+            pos_in(RSDL_SYSTEM, "Cruise.primary", 0, 9),
+            primary.clone(),
+        ),
+        (
+            "a declared instance",
+            pos_in(RSDL_SYSTEM, "(primary", 0, 2),
+            primary,
+        ),
+        (
+            "a lone service in a placement line",
+            pos_in(RSDL_SYSTEM, "Lane, veh.adas.access }", 0, 8),
+            access,
+        ),
+        (
+            "a qualified interface on a `requires` line",
+            pos_in(RSDL_SYSTEM, "requires veh.adas.LaneAssist", 0, 20),
+            lane_assist,
+        ),
+    ];
+    for (id, (what, cursor, mut expected)) in (10..).zip(cases) {
+        let locations = references_at(&client, id, system.clone(), cursor, true)
+            .unwrap_or_else(|| panic!("{what}: a references result"));
+        expected.sort_by_key(|(uri, range)| (uri.clone(), range.start.line, range.start.character));
+        assert_eq!(sorted_locations(locations), expected, "{what}");
+    }
+
+    // Without the declaration, a component's references are its four
+    // reference sites.
+    let locations = references_at(
+        &client,
+        20,
+        system.clone(),
+        pos_in(RSDL_SYSTEM, "{ Cruise, Lane", 0, 3),
+        false,
+    )
+    .expect("a references result");
+    assert_eq!(locations.len(), 4, "{locations:?}");
+
+    shut_down(&client, 21);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// The rsdl completion fixture: the bodies hold an empty line or a trailing
+/// comma where a line is being written.
+const RSDL_COMPLETION: &str = "package veh.topology\n\
+\n\
+import veh.adas.LaneAssist\n\
+\n\
+component Cruise [ instances = (primary, backup) ] {\n\
+\x20 offers veh.adas.cruise\n\
+\x20 requires LaneAssist\n\
+\x20 \n\
+}\n\
+\n\
+component Lane { offers veh.adas.lane }\n\
+\n\
+system Vehicle { Cruise, Lane, veh.adas.access,  }\n\
+\n\
+deployment Production for Vehicle {\n\
+\x20 machine Hpc { Cruise.primary, Lane, veh.adas.access,  }\n\
+\x20 \n\
+}\n\
+\n";
+
+/// Completion in an `.rsdl` file offers what the slot under the cursor
+/// admits (rsdl reference §3, §4): the rsdl declaration keywords at the top
+/// level, the component line keywords in a component body, services after
+/// `offers`, interfaces and inline-shape services after `requires`, components
+/// and the services no component offers on a member line, instances too on a
+/// placement line, systems after `for`,
+/// and `machine` in a deployment body. No typl keyword is offered.
+#[test]
+fn completion_in_an_rsdl_file_offers_what_the_slot_admits() {
+    let dir = TempDir::new("rsdl-completion");
+    let (_contracts, system) = write_rsdl_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+    did_open(&client, &system, RSDL_COMPLETION);
+    let text = RSDL_COMPLETION;
+    let services = ["veh.adas.access", "veh.adas.cruise", "veh.adas.lane"];
+
+    // (what the cursor is on, cursor, offered labels, labels not offered).
+    let cases: [(&str, lt::Position, Vec<&str>, Vec<&str>); 8] = [
+        (
+            "the top level",
+            pos(18, 0),
+            vec!["component", "deployment", "distribution", "system"],
+            vec!["type", "struct", "interface"],
+        ),
+        (
+            "an empty line of a component body",
+            pos(7, 2),
+            vec!["offers", "requires"],
+            vec!["type", "Cruise"],
+        ),
+        (
+            "after `offers`",
+            pos_after(text, "{ offers ", 0),
+            services.to_vec(),
+            vec!["Cruise", "LaneAssist", "offers"],
+        ),
+        (
+            "after `requires`",
+            pos_after(text, "requires ", 0),
+            vec!["LaneAssist", "veh.adas.access"],
+            vec!["Cruise", "requires"],
+        ),
+        (
+            "a system member line",
+            pos_after(text, "veh.adas.access, ", 0),
+            vec!["Cruise", "Lane", "veh.adas.access"],
+            vec!["Cruise.primary", "Vehicle", "veh.adas.lane", "type"],
+        ),
+        (
+            "a placement line",
+            pos_after(text, "veh.adas.access, ", 1),
+            vec![
+                "Cruise",
+                "Cruise.primary",
+                "Cruise.backup",
+                "Lane",
+                "veh.adas.access",
+            ],
+            vec!["Vehicle", "type"],
+        ),
+        (
+            "after `for`",
+            pos_after(text, "for ", 0),
+            vec!["Vehicle"],
+            vec!["Cruise", "veh.adas.access"],
+        ),
+        (
+            "an empty line of a deployment body",
+            pos(16, 2),
+            vec!["machine"],
+            vec!["Cruise", "type"],
+        ),
+    ];
+    for (id, (what, cursor, offered, absent)) in (10..).zip(cases) {
+        let items = complete_at(&client, id, system.clone(), cursor);
+        let got = labels(&items);
+        for label in offered {
+            assert!(got.contains(&label), "{what}: `{label}` in {got:?}");
+        }
+        for label in absent {
+            assert!(!got.contains(&label), "{what}: no `{label}` in {got:?}");
+        }
+    }
+
+    // A partly written dotted reference is replaced whole: the item's edit
+    // starts where the reference does.
+    let partial = text.replace(
+        "veh.adas.access,  }\n\x20 \n",
+        "veh.adas.access, veh.adas.a }\n\x20 \n",
+    );
+    did_open(&client, &system, &partial);
+    let cursor = pos_after(&partial, "veh.adas.a ", 0);
+    let cursor = pos(cursor.line, cursor.character - 1);
+    let items = complete_at(&client, 30, system.clone(), cursor);
+    let item = items
+        .iter()
+        .find(|item| item.label == "veh.adas.access")
+        .unwrap_or_else(|| panic!("the service is offered: {:?}", labels(&items)));
+    let Some(lt::CompletionTextEdit::Edit(edit)) = &item.text_edit else {
+        panic!("the item carries a text edit: {item:?}");
+    };
+    let start = range_of(&partial, "veh.adas.a ", 0).start;
+    assert_eq!(edit.range, lt::Range::new(start, cursor));
+    assert_eq!(edit.new_text, "veh.adas.access");
+
+    shut_down(&client, 31);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// prepareRename in an `.rsdl` file answers the name segment of a component,
+/// an instance or a system under the cursor, and nothing on a service.
+#[test]
+fn prepare_rename_in_an_rsdl_file_answers_the_rsdl_name() {
+    let dir = TempDir::new("rsdl-prepare-rename");
+    let (_contracts, system) = write_rsdl_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    // (what the cursor is on, cursor, the name span, or none).
+    let cases = [
+        (
+            "a component in a system member line",
+            pos_in(RSDL_SYSTEM, "{ Cruise, Lane", 0, 3),
+            Some(range_of(RSDL_SYSTEM, "Cruise", 1)),
+        ),
+        (
+            "the component segment of a placement line",
+            pos_in(RSDL_SYSTEM, "Cruise.backup", 0, 2),
+            Some(range_of(RSDL_SYSTEM, "Cruise", 4)),
+        ),
+        (
+            "the instance segment of a placement line",
+            pos_in(RSDL_SYSTEM, "Cruise.primary", 0, 9),
+            Some(range_of(RSDL_SYSTEM, "primary", 1)),
+        ),
+        (
+            "the `for` reference",
+            pos_in(RSDL_SYSTEM, "for Vehicle", 0, 5),
+            Some(range_of(RSDL_SYSTEM, "Vehicle", 1)),
+        ),
+        (
+            "the name of a component declaration",
+            pos_in(RSDL_SYSTEM, "component Lane", 0, 11),
+            Some(lt::Range::new(
+                pos_in(RSDL_SYSTEM, "component Lane", 0, 10),
+                pos_in(RSDL_SYSTEM, "component Lane", 0, 14),
+            )),
+        ),
+        (
+            "a service on an `offers` line",
+            pos_in(RSDL_SYSTEM, "offers veh.adas.cruise", 0, 12),
+            None,
+        ),
+    ];
+    for (id, (what, cursor, expected)) in (10..).zip(cases) {
+        let response = prepare_rename_at(&client, id, system.clone(), cursor);
+        let range = response.map(|response| match response {
+            lt::PrepareRenameResponse::Range(range) => range,
+            other => panic!("{what}: expected a range, got {other:?}"),
+        });
+        assert_eq!(range, expected, "{what}");
+    }
+
+    shut_down(&client, 20);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Rename in an `.rsdl` file rewrites an rsdl declaration's name and the name
+/// segment of every reference the checker binds to it, and the import lines
+/// that bind it. A new name that breaks the case convention, that is
+/// reserved, or that a declaration of the package already holds is refused,
+/// and so is a service.
+#[test]
+fn rename_in_an_rsdl_file_rewrites_the_rsdl_references() {
+    let dir = TempDir::new("rsdl-rename");
+    let (_contracts, system) = write_rsdl_workspace(&dir);
+    // A third member imports the component and names it in a distribution.
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"adas\", \"topology\", \"extra\"]\n",
+    );
+    std::fs::create_dir_all(dir.path().join("extra")).expect("create the member directory");
+    dir.write(
+        "extra/ridl.toml",
+        "[package]\nname = \"veh.extra\"\nversion = \"1.0.0\"\n",
+    );
+    let extra_text = "package veh.extra\n\
+\n\
+import veh.topology.Cruise\n\
+\n\
+/// The distribution.\n\
+distribution Spare { Cruise, veh.topology.Lane }\n";
+    let extra = uri_of(&dir.write("extra/extra.rsdl", extra_text));
+    let (client, server) = start(uri_of(dir.path()));
+
+    let ranges = |edit: &lt::WorkspaceEdit, uri: &lt::Uri| -> Vec<lt::Range> {
+        edits_for(edit, uri)
+            .into_iter()
+            .map(|edit| edit.range)
+            .collect()
+    };
+
+    // A component, from a reference: its declaration and every reference.
+    let edit = rename_at(
+        &client,
+        10,
+        system.clone(),
+        pos_in(RSDL_SYSTEM, "{ Cruise, Lane", 0, 3),
+        "Cruiser",
+    );
+    let expected: Vec<lt::Range> = (0..5)
+        .map(|occurrence| range_of(RSDL_SYSTEM, "Cruise", occurrence))
+        .collect();
+    assert_eq!(
+        ranges(&edit, &system),
+        expected,
+        "the component in its file"
+    );
+    assert_eq!(
+        ranges(&edit, &extra),
+        vec![
+            range_of(extra_text, "Cruise", 0),
+            range_of(extra_text, "Cruise", 1)
+        ],
+        "the import line and the member line of the importing package"
+    );
+    assert!(
+        edits_for(&edit, &system)
+            .iter()
+            .all(|edit| edit.new_text == "Cruiser")
+    );
+
+    // A component named by a qualified reference: only its last segment.
+    let edit = rename_at(
+        &client,
+        11,
+        system.clone(),
+        pos_in(RSDL_SYSTEM, "component Lane", 0, 11),
+        "Lanes",
+    );
+    assert_eq!(
+        ranges(&edit, &extra),
+        vec![range_of(extra_text, "Lane", 0)],
+        "the last segment of `veh.topology.Lane`"
+    );
+
+    // An instance: its declaration and the placement line.
+    let edit = rename_at(
+        &client,
+        12,
+        system.clone(),
+        pos_in(RSDL_SYSTEM, "Cruise.primary", 0, 9),
+        "main",
+    );
+    assert_eq!(
+        ranges(&edit, &system),
+        vec![
+            range_of(RSDL_SYSTEM, "primary", 0),
+            range_of(RSDL_SYSTEM, "primary", 1),
+        ],
+    );
+
+    // Refusals: (what, cursor, new name).
+    let refused = [
+        (
+            "a component name that is not UpperCamelCase",
+            pos_in(RSDL_SYSTEM, "{ Cruise, Lane", 0, 3),
+            "cruise",
+        ),
+        (
+            "a component name another declaration of the package holds",
+            pos_in(RSDL_SYSTEM, "{ Cruise, Lane", 0, 3),
+            "Panel",
+        ),
+        (
+            "an instance name that is a reserved word",
+            pos_in(RSDL_SYSTEM, "Cruise.primary", 0, 9),
+            "signal",
+        ),
+        (
+            "an instance name that is not lowerCamelCase",
+            pos_in(RSDL_SYSTEM, "Cruise.primary", 0, 9),
+            "Main",
+        ),
+        (
+            "an instance name the component already declares",
+            pos_in(RSDL_SYSTEM, "Cruise.primary", 0, 9),
+            "backup",
+        ),
+        (
+            "a service",
+            pos_in(RSDL_SYSTEM, "offers veh.adas.cruise", 0, 12),
+            "veh.adas.speed",
+        ),
+    ];
+    for (id, (what, cursor, new_name)) in (20..).zip(refused) {
+        let response = rename_raw(&client, id, system.clone(), cursor, new_name);
+        assert!(response.response_result.is_err(), "{what}: {response:?}");
+    }
+
+    shut_down(&client, 30);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// RIDL-409 — a live `interfaces.lock` entry with no declaration — is
 /// published under the lock file's own URI, on the entry's line (plan
 /// decision PD-12): the checker stamps it with the index after the package's

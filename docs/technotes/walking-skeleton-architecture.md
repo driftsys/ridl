@@ -392,7 +392,11 @@ support, and inlay hints (field ordinals and unit expansion). E2 taught all of
 them `.ridl` — interaction hovers, resolved timing, and interaction ordinals in
 the inlay hints. Whole-document formatting runs the `ridl-fmt` engine on the
 open buffer: one edit that replaces the document, no edit when the buffer is
-already canonical, and a `null` result when it has parse errors.
+already canonical, and a `null` result when it has parse errors. In an `.rsdl`
+file, hover, goto-definition, find-references, prepare-rename and rename
+dispatch to `rsdl.rs`, which reads what a reference names from the checked
+system model rather than from a typl symbol lookup, and completion offers the
+rsdl slots.
 
 ## What E1 closed from the E0 note
 

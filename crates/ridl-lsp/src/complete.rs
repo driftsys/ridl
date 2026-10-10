@@ -26,20 +26,37 @@
 //! `documentation`, rendered as hover renders it but without the signature
 //! or the Contract list, to keep the item short (ADR-0026).
 //!
+//! In an `.rsdl` file the doc comment and `import` contexts are the same, and
+//! the other contexts are the rsdl slots (rsdl reference §3, §4), each offering
+//! what the checker would bind there:
+//!
+//! - at the top level → the four rsdl declaration keywords;
+//! - at the start of a component line → `offers` and `requires`; in a
+//!   deployment body → `machine`;
+//! - after `offers` → every service of the catalog; after `requires` → the
+//!   interfaces the package sees and the services with an inline shape;
+//! - on a member line of a `system` or a `distribution` → the components and
+//!   the services no component offers (RSDL-504); on the placement line of a
+//!   `machine`, the declared instances `Name.inst` too;
+//! - after `for` → the systems.
+//!
+//! A component or a system of the file's own package is offered by its bare
+//! name, one of another package by its qualified name.
+//!
 //! The context is decided from the token to the left of the cursor and the
 //! identifier the cursor is completing, not from a well-formed tree — the same
 //! discipline the resolver and navigation use.
 
 use lsp_types as lt;
 use ridl_core::db::InputFile;
-use ridl_core::package::{Package, Workspace};
+use ridl_core::package::{Package, Workspace, service_catalog};
 use ridl_sem::{
-    ConstValue, LinkTarget, SymbolKind, const_value, doc_link_members, resolve_doc_link,
-    resolve_package,
+    ConstValue, LinkTarget, SymbolKind, check_system, const_value, doc_link_members,
+    resolve_doc_link, resolve_package,
 };
 use ridl_syntax::ast::{AstNode, Import, SourceFile};
 use ridl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
-use rowan::{TextSize, TokenAtOffset};
+use rowan::{TextRange, TextSize, TokenAtOffset};
 
 use crate::doc;
 use crate::hover::SymbolDocs;
@@ -57,6 +74,16 @@ const DEFINITION_KEYWORDS: &[&str] = &[
 /// ridl kinds (ridl §4–§8) plus the `reserved` tombstone (ridl §11). Nothing
 /// else may appear in an interface body — a typl declaration there is RIDL-107.
 const INTERACTION_KEYWORDS: &[&str] = &["signal", "event", "command", "query", "fixed", "reserved"];
+
+/// The rsdl declaration keywords offered at the top level of an `.rsdl` file
+/// (rsdl reference §3).
+const RSDL_DEFINITION_KEYWORDS: &[&str] = &["system", "component", "distribution", "deployment"];
+
+/// The keywords that start a line of a component body (rsdl reference §3.2).
+const COMPONENT_LINE_KEYWORDS: &[&str] = &["offers", "requires"];
+
+/// The keyword that starts a line of a deployment body (rsdl reference §3.4).
+const DEPLOYMENT_LINE_KEYWORDS: &[&str] = &["machine"];
 
 /// The four doc tags offered after `@` at the start of a doc line
 /// (typl §14.2, ADR-0026).
@@ -77,14 +104,8 @@ pub fn completion(
     packages: &[Package],
 ) -> Vec<lt::CompletionItem> {
     let source = source_file(db, file);
-    if let Some(cursor) = doc::in_doc_comment(&source, offset) {
-        return if cursor.at_line_start_at {
-            sorted(keyword_completions(DOC_TAGS))
-        } else if let Some(prefix) = cursor.after_open_bracket {
-            doc_link_completions(db, ws, std, pkg, packages, &prefix)
-        } else {
-            Vec::new()
-        };
+    if let Some(items) = doc_completion(db, ws, std, pkg, packages, &source, offset) {
+        return items;
     }
     let Some(context) = context(source.syntax(), offset) else {
         return Vec::new();
@@ -95,6 +116,322 @@ pub fn completion(
         Context::Match => match_completions(db, ws, std, pkg),
         Context::DefinitionStart => keyword_completions(DEFINITION_KEYWORDS),
         Context::InteractionStart => keyword_completions(INTERACTION_KEYWORDS),
+    }
+}
+
+/// The items inside a doc comment, or `None` when the cursor is not in one.
+fn doc_completion(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    pkg: Package,
+    packages: &[Package],
+    source: &SourceFile,
+    offset: TextSize,
+) -> Option<Vec<lt::CompletionItem>> {
+    let cursor = doc::in_doc_comment(source, offset)?;
+    Some(if cursor.at_line_start_at {
+        sorted(keyword_completions(DOC_TAGS))
+    } else if let Some(prefix) = cursor.after_open_bracket {
+        doc_link_completions(db, ws, std, pkg, packages, &prefix)
+    } else {
+        Vec::new()
+    })
+}
+
+/// The completion items for the cursor at `offset` in `file`, an `.rsdl` file
+/// of `pkg`, and the range an item replaces: the part of a reference already
+/// written before the cursor, `None` outside a reference slot.
+pub fn rsdl_completion(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    pkg: Package,
+    file: InputFile,
+    offset: TextSize,
+    packages: &[Package],
+) -> (Vec<lt::CompletionItem>, Option<TextRange>) {
+    let source = source_file(db, file);
+    if let Some(items) = doc_completion(db, ws, std, pkg, packages, &source, offset) {
+        return (items, None);
+    }
+    let Some(cursor) = Cursor::at(source.syntax(), offset) else {
+        return (Vec::new(), None);
+    };
+    if cursor.in_import() {
+        return (
+            import_completions(db, ws, std, packages, &source, offset),
+            None,
+        );
+    }
+    let Some(slot) = rsdl_slot(&cursor, offset) else {
+        return (Vec::new(), None);
+    };
+    let keywords = |words| (keyword_completions(words), None);
+    let replaced = Some(TextRange::new(
+        reference_start(&cursor.left, offset),
+        offset,
+    ));
+    let items = match slot {
+        RsdlSlot::TopLevel => return keywords(RSDL_DEFINITION_KEYWORDS),
+        RsdlSlot::ComponentLine => return keywords(COMPONENT_LINE_KEYWORDS),
+        RsdlSlot::DeploymentLine => return keywords(DEPLOYMENT_LINE_KEYWORDS),
+        RsdlSlot::Offers => service_items(db, ws, std, |_, _| true),
+        RsdlSlot::Requires => {
+            let resolution = resolve_package(db, ws, pkg, std);
+            let mut items: Vec<lt::CompletionItem> = resolution
+                .symbols
+                .iter()
+                .filter(|(_, symbol)| symbol.kind == SymbolKind::Interface)
+                .map(|(name, symbol)| {
+                    item(
+                        name,
+                        lt::CompletionItemKind::INTERFACE,
+                        format!("{}.{}", symbol.package, symbol.name),
+                    )
+                })
+                .collect();
+            items.extend(service_items(db, ws, std, |_, entry| entry.inline));
+            items
+        }
+        RsdlSlot::For => {
+            let system = check_system(db, ws, std);
+            let own = pkg.name(db);
+            system
+                .systems
+                .iter()
+                .map(|decl| {
+                    let name = rsdl_name(own, &decl.package, &decl.name.name);
+                    item(
+                        &name,
+                        lt::CompletionItemKind::MODULE,
+                        format!("system {}.{}", decl.package, decl.name.name),
+                    )
+                })
+                .collect()
+        }
+        RsdlSlot::Member { placement } => {
+            let system = check_system(db, ws, std);
+            let own = pkg.name(db);
+            let mut items = Vec::new();
+            for decl in &system.components {
+                let name = rsdl_name(own, &decl.package, &decl.name.name);
+                let detail = format!("component {}.{}", decl.package, decl.name.name);
+                if placement {
+                    for instance in decl.instances.iter().flatten() {
+                        items.push(item(
+                            &format!("{name}.{}", instance.name),
+                            lt::CompletionItemKind::FIELD,
+                            format!("instance of {detail}"),
+                        ));
+                    }
+                }
+                items.push(item(&name, lt::CompletionItemKind::CLASS, detail));
+            }
+            // A service a declared component offers stands for no member
+            // (RSDL-504).
+            let offered = |name: &str| {
+                system
+                    .component_lines
+                    .iter()
+                    .any(|lines| lines.offers.iter().flatten().any(|service| service == name))
+            };
+            items.extend(service_items(db, ws, std, |name, _| !offered(name)));
+            items
+        }
+    };
+    (sorted(items), replaced)
+}
+
+/// The services of the workspace catalog that `keep` accepts.
+fn service_items(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    keep: impl Fn(&str, &ridl_core::package::CatalogEntry) -> bool,
+) -> Vec<lt::CompletionItem> {
+    service_catalog(db, ws, std)
+        .entries
+        .iter()
+        .filter(|(name, entry)| keep(name, entry))
+        .map(|(name, entry)| {
+            item(
+                name,
+                lt::CompletionItemKind::MODULE,
+                format!("service of {}", entry.package),
+            )
+        })
+        .collect()
+}
+
+/// An rsdl declaration as a reference written in the package `own` names it:
+/// bare in its own package, qualified in another.
+fn rsdl_name(own: &str, package: &str, name: &str) -> String {
+    if own == package {
+        name.to_string()
+    } else {
+        format!("{package}.{name}")
+    }
+}
+
+/// The start of the dotted reference the cursor is writing: the first of the
+/// name segments and dots that run, with no space, up to `offset`. `offset`
+/// itself when no segment is written yet.
+fn reference_start(left: &SyntaxToken, offset: TextSize) -> TextSize {
+    let mut start = offset;
+    let mut current = Some(left.clone());
+    while let Some(token) = current {
+        let range = token.text_range();
+        let segment = token.kind() == SyntaxKind::Dot
+            || token
+                .text()
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_');
+        if !segment || range.start() >= start || range.end() < start {
+            break;
+        }
+        start = range.start();
+        current = token.prev_token();
+    }
+    start
+}
+
+/// The rsdl slots completion recognises.
+enum RsdlSlot {
+    /// The top level of the file — a declaration keyword.
+    TopLevel,
+    /// The start of a component line — `offers` or `requires`.
+    ComponentLine,
+    /// The start of a deployment line — `machine`.
+    DeploymentLine,
+    /// The reference of an `offers` line — a service.
+    Offers,
+    /// The reference of a `requires` line — an interface, or a service with an
+    /// inline shape.
+    Requires,
+    /// The reference after `for` — a system.
+    For,
+    /// A member line; `placement` for the member line of a `machine`.
+    Member { placement: bool },
+}
+
+/// Decides the rsdl slot from the tree around `offset`, or `None` when the
+/// cursor is not in a position the server completes, such as the name of a
+/// declaration or an attribute block.
+fn rsdl_slot(cursor: &Cursor, offset: TextSize) -> Option<RsdlSlot> {
+    match cursor.anchor.as_ref().map(SyntaxToken::kind) {
+        Some(SyntaxKind::OffersKw) => return Some(RsdlSlot::Offers),
+        Some(SyntaxKind::RequiresKw) => return Some(RsdlSlot::Requires),
+        Some(SyntaxKind::ForKw) => return Some(RsdlSlot::For),
+        // Naming positions: the user is typing the declared name.
+        Some(
+            SyntaxKind::SystemKw
+            | SyntaxKind::ComponentKw
+            | SyntaxKind::DistributionKw
+            | SyntaxKind::DeploymentKw
+            | SyntaxKind::MachineKw
+            | SyntaxKind::PackageKw,
+        ) => return None,
+        _ => {}
+    }
+    let token = cursor.word.as_ref().unwrap_or(&cursor.left);
+    for node in token.parent_ancestors() {
+        match node.kind() {
+            SyntaxKind::ErrorNode | SyntaxKind::QualifiedName => {}
+            SyntaxKind::Reference => {
+                if node
+                    .parent()
+                    .is_some_and(|parent| parent.kind() == SyntaxKind::DeploymentDef)
+                {
+                    return Some(RsdlSlot::For);
+                }
+            }
+            SyntaxKind::ComponentLine => {
+                let keyword = node.first_token()?;
+                // On the keyword itself, the line's start is being written.
+                if keyword.text_range().contains_inclusive(offset) {
+                    return Some(RsdlSlot::ComponentLine);
+                }
+                return match keyword.kind() {
+                    SyntaxKind::OffersKw => Some(RsdlSlot::Offers),
+                    SyntaxKind::RequiresKw => Some(RsdlSlot::Requires),
+                    _ => None,
+                };
+            }
+            SyntaxKind::MemberLine => {
+                let placement = node
+                    .parent()
+                    .is_some_and(|parent| parent.kind() == SyntaxKind::MachineDef);
+                return Some(RsdlSlot::Member { placement });
+            }
+            SyntaxKind::SystemDef | SyntaxKind::DistributionDef => {
+                return in_body(&node, offset).then_some(RsdlSlot::Member { placement: false });
+            }
+            SyntaxKind::MachineDef => {
+                return in_body(&node, offset).then_some(RsdlSlot::Member { placement: true });
+            }
+            SyntaxKind::ComponentDef => {
+                return in_body(&node, offset).then_some(RsdlSlot::ComponentLine);
+            }
+            SyntaxKind::DeploymentDef => {
+                return in_body(&node, offset).then_some(RsdlSlot::DeploymentLine);
+            }
+            SyntaxKind::SourceFile => return Some(RsdlSlot::TopLevel),
+            _ => return None,
+        }
+    }
+    None
+}
+
+/// Whether `offset` is inside the braces of the container `node`: after its
+/// `{` and before its `}`, when it has one.
+fn in_body(node: &SyntaxNode, offset: TextSize) -> bool {
+    let tokens = || {
+        node.children_with_tokens()
+            .filter_map(|element| element.into_token())
+    };
+    let opened = tokens()
+        .any(|token| token.kind() == SyntaxKind::LBrace && token.text_range().end() <= offset);
+    let closed = tokens()
+        .any(|token| token.kind() == SyntaxKind::RBrace && token.text_range().start() < offset);
+    opened && !closed
+}
+
+/// The tokens around the cursor that completion reads its context from.
+struct Cursor {
+    /// The token to the left of the cursor.
+    left: SyntaxToken,
+    /// The identifier the cursor is completing, when the left token is a
+    /// partial word the cursor sits inside.
+    word: Option<SyntaxToken>,
+    /// The token that introduces this position: the significant token before
+    /// the partial word, or the significant token at or before the left token.
+    anchor: Option<SyntaxToken>,
+}
+
+impl Cursor {
+    fn at(root: &SyntaxNode, offset: TextSize) -> Option<Cursor> {
+        let left = left_token(root, offset)?;
+        let word = (left.kind() == SyntaxKind::Ident && left.text_range().start() < offset)
+            .then(|| left.clone());
+        let anchor = match &word {
+            Some(word) => word
+                .prev_token()
+                .and_then(|token| significant_at_or_before(&token)),
+            None => significant_at_or_before(&left),
+        };
+        Some(Cursor { left, word, anchor })
+    }
+
+    /// Whether the cursor is inside an `import` statement: the keyword, the
+    /// path, or the trailing whitespace the parser attaches to the `Import`
+    /// node.
+    fn in_import(&self) -> bool {
+        self.left.parent_ancestors().any(is_import)
+            || self
+                .anchor
+                .as_ref()
+                .is_some_and(|token| token.kind() == SyntaxKind::ImportKw)
     }
 }
 
@@ -116,29 +453,11 @@ enum Context {
 /// Decides the completion context from the tree around `offset`, or `None` when
 /// the cursor is not in a position the server completes.
 fn context(root: &SyntaxNode, offset: TextSize) -> Option<Context> {
-    let left = left_token(root, offset)?;
-    // The identifier the cursor is completing, if the left token is a partial
-    // word the cursor sits inside.
-    let word = (left.kind() == SyntaxKind::Ident && left.text_range().start() < offset)
-        .then(|| left.clone());
-    // The token that introduces this position: the significant token before the
-    // partial word, or the significant token at or before the left token.
-    let anchor = match &word {
-        Some(word) => word
-            .prev_token()
-            .and_then(|token| significant_at_or_before(&token)),
-        None => significant_at_or_before(&left),
-    };
-
-    // Import: anywhere inside an import statement (the keyword, the path, or the
-    // trailing whitespace the parser attaches to the `Import` node).
-    if left.parent_ancestors().any(is_import)
-        || anchor
-            .as_ref()
-            .is_some_and(|token| token.kind() == SyntaxKind::ImportKw)
-    {
+    let cursor = Cursor::at(root, offset)?;
+    if cursor.in_import() {
         return Some(Context::Import);
     }
+    let Cursor { left, word, anchor } = cursor;
 
     if let Some(anchor) = &anchor {
         match anchor.kind() {
