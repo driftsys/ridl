@@ -46,7 +46,11 @@ records. The catalog compatibility design and plan
 (`2026-10-09-catalog-compat-{design,plan}.md`) and the lane H driver were
 archived on 2026-10-10, once #810 landed; ADR-0014 decision 15 and
 [`../design/catalog-descriptor.md`](../design/catalog-descriptor.md) are their
-durable records.
+durable records. The on-request encodings design and plan
+(`2026-10-10-on-request-encodings-{design,plan}.md`) were archived on
+2026-10-10, when sub-stage 1a was complete; the 2026-10-10 amendments of
+ADR-0002, ADR-0018, ADR-0020, ADR-0021 and ADR-0023 are their durable records,
+and the unbuilt sub-stage 1b stays here (below).
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
@@ -227,6 +231,13 @@ durable records.
   documentation (doc lints, language server, rules in generated facade docs),
   split into four specs over a shared lint foundation. Scope only; each spec
   starts its own design session from it.
+- **2026-10-10-on-request-encodings-1b-design.md** — sub-stage 1b of the
+  on-request encodings design (driftsys/ridl#801): the generated face reads its
+  encoding from its port (`P: port::Encoded`, `P::Encoding`), and
+  `ridl-loopback` is typed by the encoding. The sections of the archived design
+  that describe it, copied verbatim, with what changed since it was written.
+  Forward-looking: not built. Its plan is written from this file; archive it
+  when 1b lands.
 
 ridl-boundary-model-review.md, superseded by ADR-0012, is archived too — see
 [`../archive/README.md`](../archive/README.md). So is

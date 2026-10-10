@@ -528,3 +528,27 @@ provenance. Nothing here is normative — the current references live in
   [the catalog descriptor design record](../design/catalog-descriptor.md),
   [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15, and the book
   chapter "Evolving an interface".
+- **2026-10-10-on-request-encodings-design.md** and
+  **2026-10-10-on-request-encodings-plan.md** — on-request payload encodings
+  (driftsys/ridl#801), stage 1 of the WebSocket and payload formats steering
+  note: the manifest's `[backend.<name>] encodings` list, a types-only build by
+  default, the per-encoding size table `Sizes<E>` and the payload buffers, the
+  lint RSDL-807, and the generic face. Both are archived verbatim. The plan
+  covers sub-stage 1a only, which landed; the design's sub-stage 1b (the face
+  reads its encoding from the port, section 7.1 and 7.2) is not built, and its
+  sections are copied to
+  [`../wip/2026-10-10-on-request-encodings-1b-design.md`](../wip/2026-10-10-on-request-encodings-1b-design.md).
+  Two facts differ from the design as written: the `ridl-rt` break ships in
+  0.9.0, not 0.8.0, because 0.8.0 was released before the work landed; and
+  RSDL-807 compares only the backends that can carry a codec, the Rust emit and
+  the plugins, not the schema emits (section 8 was amended to match). The
+  rationale of the 1a decisions is in the design's sections 14 and 15 (DD-S1-1
+  to DD-S1-22). The as-built behaviour is in the 2026-10-10 amendments of
+  [ADR-0002](../decisions/ADR-0002-module-system.md) section 4,
+  [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md),
+  [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md),
+  [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) and
+  [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md), and in
+  [the `ridl-rt` design record](../design/ridl-rt.md),
+  [the interaction-face design record](../design/interaction-face.md) and
+  [the codegen plugins design record](../design/codegen-plugins.md).
