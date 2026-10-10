@@ -1353,7 +1353,7 @@ reorder no change, and both are compatible, because an interface's number
 comes from its unit's `interfaces.lock` and the routing key does not
 contain the service. A removal is still visible in source — the
 `service.member` addresses of that interface stop resolving under the service
-— so the text report lists it under a heading of its own, printed once as a
+— so the text report lists it under a heading, shared with `interface_renamed`, printed once as a
 line ending in a colon, after every change that has no heading. The JSON
 report carries the category word and no heading field. With `interface K`
 added and `J` dropped from `service veh.cluster.dash : I, J`:
