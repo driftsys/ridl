@@ -3355,6 +3355,66 @@ fn completion_in_an_rsdl_file_offers_what_the_slot_admits() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+/// Completion in an `.rsdl` file never rewrites the keyword the cursor sits
+/// right after, and a partly written qualified reference to a declaration of
+/// the file's own package matches that declaration and keeps its qualifier.
+#[test]
+fn rsdl_completion_keeps_the_keyword_and_the_qualifier() {
+    let dir = TempDir::new("rsdl-completion-edits");
+    let (_contracts, system) = write_rsdl_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    // Right after `offers`, `requires` or `for`, with no space: no item
+    // replaces the keyword.
+    let text = RSDL_COMPLETION.replace(
+        "component Lane { offers veh.adas.lane }",
+        "component Lane { offers }",
+    );
+    did_open(&client, &system, &text);
+    let cursors = [
+        ("`offers`", pos_after(&text, "{ offers", 0)),
+        ("`requires`", pos_after(&text, "requires", 0)),
+        ("`for`", pos_after(&text, " for", 0)),
+    ];
+    for (id, (what, cursor)) in (10..).zip(cursors) {
+        let items = complete_at(&client, id, system.clone(), cursor);
+        for item in &items {
+            if let Some(lt::CompletionTextEdit::Edit(edit)) = &item.text_edit {
+                assert!(
+                    edit.range.start == cursor,
+                    "after {what}: `{}` replaces {:?}, before the cursor {cursor:?}",
+                    item.label,
+                    edit.range
+                );
+            }
+        }
+    }
+
+    // `veh.topology.Cr` on a placement line: the own-package component is
+    // offered, matched by its qualified name, and written qualified.
+    let text = RSDL_COMPLETION.replace(
+        "veh.adas.access,  }\n\x20 \n",
+        "veh.adas.access, veh.topology.Cr }\n\x20 \n",
+    );
+    did_open(&client, &system, &text);
+    let start = find_pos(&text, "veh.topology.Cr", 0);
+    let cursor = pos_after(&text, "veh.topology.Cr", 0);
+    let items = complete_at(&client, 20, system.clone(), cursor);
+    let item = items
+        .iter()
+        .find(|item| item.label == "Cruise")
+        .unwrap_or_else(|| panic!("the component is offered: {:?}", labels(&items)));
+    assert_eq!(item.filter_text.as_deref(), Some("veh.topology.Cruise"));
+    let Some(lt::CompletionTextEdit::Edit(edit)) = &item.text_edit else {
+        panic!("the item carries a text edit: {item:?}");
+    };
+    assert_eq!(edit.range, lt::Range::new(start, cursor));
+    assert_eq!(edit.new_text, "veh.topology.Cruise");
+
+    shut_down(&client, 21);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// prepareRename in an `.rsdl` file answers the name segment of a component,
 /// an instance or a system under the cursor, and nothing on a service.
 #[test]

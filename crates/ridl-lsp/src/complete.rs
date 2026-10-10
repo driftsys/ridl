@@ -141,7 +141,9 @@ fn doc_completion(
 
 /// The completion items for the cursor at `offset` in `file`, an `.rsdl` file
 /// of `pkg`, and the range an item replaces: the part of a reference already
-/// written before the cursor, `None` outside a reference slot.
+/// written before the cursor, `None` outside a reference slot. An item whose
+/// `filter_text` is set carries there the qualified name it is written with
+/// when the written part is qualified.
 pub fn rsdl_completion(
     db: &dyn salsa::Database,
     ws: Workspace,
@@ -201,9 +203,10 @@ pub fn rsdl_completion(
                 .systems
                 .iter()
                 .map(|decl| {
-                    let name = rsdl_name(own, &decl.package, &decl.name.name);
-                    item(
-                        &name,
+                    rsdl_item(
+                        own,
+                        &decl.package,
+                        &decl.name.name,
                         lt::CompletionItemKind::MODULE,
                         format!("system {}.{}", decl.package, decl.name.name),
                     )
@@ -215,18 +218,26 @@ pub fn rsdl_completion(
             let own = pkg.name(db);
             let mut items = Vec::new();
             for decl in &system.components {
-                let name = rsdl_name(own, &decl.package, &decl.name.name);
-                let detail = format!("component {}.{}", decl.package, decl.name.name);
+                let name = &decl.name.name;
+                let detail = format!("component {}.{name}", decl.package);
                 if placement {
                     for instance in decl.instances.iter().flatten() {
-                        items.push(item(
+                        items.push(rsdl_item(
+                            own,
+                            &decl.package,
                             &format!("{name}.{}", instance.name),
                             lt::CompletionItemKind::FIELD,
                             format!("instance of {detail}"),
                         ));
                     }
                 }
-                items.push(item(&name, lt::CompletionItemKind::CLASS, detail));
+                items.push(rsdl_item(
+                    own,
+                    &decl.package,
+                    name,
+                    lt::CompletionItemKind::CLASS,
+                    detail,
+                ));
             }
             // A service a declared component offers stands for no member
             // (RSDL-504).
@@ -264,33 +275,56 @@ fn service_items(
         .collect()
 }
 
-/// An rsdl declaration as a reference written in the package `own` names it:
-/// bare in its own package, qualified in another.
-fn rsdl_name(own: &str, package: &str, name: &str) -> String {
+/// The item for `name`, an rsdl declaration of `package`, as a reference
+/// written in the package `own` names it: bare in its own package, qualified
+/// in another. An item of the own package carries the qualified name as its
+/// `filter_text`, so a partly written qualified reference still matches it.
+fn rsdl_item(
+    own: &str,
+    package: &str,
+    name: &str,
+    kind: lt::CompletionItemKind,
+    detail: String,
+) -> lt::CompletionItem {
+    let qualified = format!("{package}.{name}");
     if own == package {
-        name.to_string()
+        lt::CompletionItem {
+            filter_text: Some(qualified),
+            ..item(name, kind, detail)
+        }
     } else {
-        format!("{package}.{name}")
+        item(&qualified, kind, detail)
     }
 }
 
 /// The start of the dotted reference the cursor is writing: the first of the
 /// name segments and dots that run, with no space, up to `offset`. `offset`
 /// itself when no segment is written yet.
+///
+/// A keyword is a segment only next to a dot (`veh.system.x`), so the
+/// `offers`, `requires` or `for` the cursor sits right after is never part of
+/// the reference.
 fn reference_start(left: &SyntaxToken, offset: TextSize) -> TextSize {
     let mut start = offset;
+    let mut after_dot = false;
     let mut current = Some(left.clone());
     while let Some(token) = current {
         let range = token.text_range();
-        let segment = token.kind() == SyntaxKind::Dot
-            || token
-                .text()
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '_');
+        let dot = token.kind() == SyntaxKind::Dot;
+        let word = token
+            .text()
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_');
+        let before_dot = token
+            .prev_token()
+            .is_some_and(|previous| previous.kind() == SyntaxKind::Dot);
+        let segment =
+            dot || (word && (token.kind() == SyntaxKind::Ident || after_dot || before_dot));
         if !segment || range.start() >= start || range.end() < start {
             break;
         }
         start = range.start();
+        after_dot = dot;
         current = token.prev_token();
     }
     start

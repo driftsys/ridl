@@ -2,9 +2,11 @@
 //! (rsdl reference §4).
 //!
 //! The cursor's reference and its target come from
-//! [`ridl_sem::rsdl::reference_at`], which reads both from the checked system
-//! model; this module only turns a target into a declaration site and into
-//! hover markdown. A component, an instance and the system are declared in
+//! [`ridl_sem::rsdl::reference_at`], and every bound reference with its target
+//! from [`ridl_sem::rsdl::references`]; both read the checked system model.
+//! This module does not resolve a name itself: it turns a target into a
+//! declaration site, into hover markdown, into the list of references to it,
+//! and into the edits that rename it. A component, an instance and the system are declared in
 //! `.rsdl` files and render from the model. An interface and a service are
 //! declared in ridl and render as a hover on the ridl declaration does.
 //!

@@ -1027,10 +1027,21 @@ impl ServerState {
             );
             if let Some(replaced) = replaced {
                 let range = index.range(replaced);
+                // A qualified reference being written stays qualified: an
+                // item of the file's own package is written with the
+                // qualified name its filter text holds.
+                let qualified = file
+                    .text(&self.db)
+                    .get(usize::from(replaced.start())..usize::from(replaced.end()))
+                    .is_some_and(|written| written.contains('.'));
                 for item in &mut items {
+                    let new_text = match &item.filter_text {
+                        Some(name) if qualified => name.clone(),
+                        _ => item.label.clone(),
+                    };
                     item.text_edit = Some(lt::CompletionTextEdit::Edit(lt::TextEdit {
                         range,
-                        new_text: item.label.clone(),
+                        new_text,
                     }));
                 }
             }
