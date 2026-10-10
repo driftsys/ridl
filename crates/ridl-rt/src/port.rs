@@ -7,7 +7,9 @@
 //! takes the current time; a runtime reads its own [`Clock`].
 //!
 //! A port is attached to one catalog ([`Attached`]), and the interface numbers
-//! and ordinals its methods take are scoped by that catalog.
+//! and ordinals its methods take are scoped by that catalog. A port type that
+//! a face is bound to also states the encoding of the bytes it carries
+//! ([`Encoded`]); a port that never meets a face need not.
 //!
 //! [`ScannableSignals`] and [`CoherentSignals`] are extensions. They describe
 //! mechanisms some runtimes have, not interaction semantics every runtime must
@@ -24,6 +26,7 @@
 use core::task::Waker;
 
 use crate::contract::{CatalogRef, InterfaceNo, Ordinal};
+use crate::encoding::Encoding;
 use crate::error::{CallError, Contract};
 use crate::sample::{Duration, Envelope, Freshness, Provenance, Timestamp};
 use crate::trace::TraceContext;
@@ -32,6 +35,25 @@ use crate::trace::TraceContext;
 pub trait Attached {
     /// The catalog this port serves.
     fn catalog(&self) -> &CatalogRef;
+}
+
+/// The payload encoding of the bytes a port carries.
+///
+/// One session has one encoding (the frame specification's rule); a
+/// transport that serves several encodings hands out one port type per
+/// session, each typed with its own. Each transport picks its default
+/// encoding from how coupled its two ends are, and the construction of the
+/// port can override it; this crate takes no position on the default.
+///
+/// A separate trait, not a supertrait of [`Attached`], so a port that never
+/// meets a face — a conformance fixture — is not forced to name an encoding.
+/// Every port type a program binds a face to implements it, and the face
+/// takes its encoding from the port type: a port whose encoding the package
+/// does not carry is a compile error at the binding, because the interface
+/// has no [`Sizes`](crate::contract::Sizes) table for it.
+pub trait Encoded {
+    /// The encoding of the bytes this port carries.
+    type Encoding: Encoding;
 }
 
 /// The clock envelopes are stamped from. A runtime has one.
@@ -686,6 +708,10 @@ impl<P: Attached + ?Sized> Attached for &mut P {
     fn catalog(&self) -> &CatalogRef {
         (**self).catalog()
     }
+}
+
+impl<P: Encoded + ?Sized> Encoded for &mut P {
+    type Encoding = P::Encoding;
 }
 
 impl<P: Clock + ?Sized> Clock for &P {

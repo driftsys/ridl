@@ -28,19 +28,19 @@ Nine modules, each public item living in exactly one (ADR-0020 decision 5;
 decision 19; `trace` by ADR-0021 decision 21), plus two that a cargo feature
 adds:
 
-| Module        | Contents                                                                                                                                                                                                                                                             |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `encoding`    | `Encoding` (sealed), `FlatBuffers`, `Proto3`, `ReprC`                                                                                                                                                                                                                |
-| `payload`     | `Payload<E>`, `Ref`, `View<'a>`, `Encoded`, `EncodeError`, `VerifyError`, `Malformed`, `Violation`, `Rule`                                                                                                                                                           |
-| `sample`      | `Timestamp`, `Duration`, `Envelope`, `Provenance`, `Cause`, `Detection`, `Freshness`, `Sample`, `Occurrence`, `EventSeqTracker`, `Continuity`, `TrackerFull`                                                                                                         |
-| `contract`    | `Ordinal`, `InterfaceNo`, `CatalogHash`, `CatalogRef`, `Kind`, `Interface`, `Interaction`, `Signal`, `Event`, `Command`, `Query`, `Fixed`, `Member`, `Timing`, `TimingMode`, `PayloadInfo`, `EncodedSizes`, `table_budget`, `Unsized`                                |
-| `port`        | `Attached`, `Clock`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors |
-| `correlate`   | since the call-table move: `Table`, `Settled`, `Forgotten`, `Waiters`                                                                                                                                                                                                |
-| `error`       | `Contract`, `Transport`, `CallError`, `ClientError`, `ProviderError`                                                                                                                                                                                                 |
-| `face`        | since 2026-09-28 (driftsys/ridl#580): `Bind`, `Events`, `Publish`; `Timeout` under the `std` feature — the traits a generated face implements, the section "The face traits" below                                                                                   |
-| `trace`       | `TraceContext`, the optional trace context a call or an event carries across a port (ADR-0021 decision 21); under the `std` feature, `Propagation`, `AlreadySet`, `set_propagation` and `propagation`, the application's hook (decision 22)                          |
-| `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with the Rust codec emitter             |
-| `task`        | under the `std` feature, since 2026-09-25: `block_on`, `noop_waker`; `flag_waker` and `WakeFlag` since 2026-09-28 (driftsys/ridl#568)                                                                                                                                |
+| Module        | Contents                                                                                                                                                                                                                                                                                               |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `encoding`    | `Encoding` (sealed), `FlatBuffers`, `Proto3`, `ReprC`                                                                                                                                                                                                                                                  |
+| `payload`     | `Payload<E>`, `Ref`, `View<'a>`, `Encoded`, `EncodeError`, `VerifyError`, `Malformed`, `Violation`, `Rule`                                                                                                                                                                                             |
+| `sample`      | `Timestamp`, `Duration`, `Envelope`, `Provenance`, `Cause`, `Detection`, `Freshness`, `Sample`, `Occurrence`, `EventSeqTracker`, `Continuity`, `TrackerFull`                                                                                                                                           |
+| `contract`    | `Ordinal`, `InterfaceNo`, `CatalogHash`, `CatalogRef`, `Kind`, `Interface`, `Interaction`, `Signal`, `Event`, `Command`, `Query`, `Fixed`, `Member`, `Timing`, `TimingMode`, `PayloadInfo`, `EncodedSizes`, `table_budget`, `Unsized`; since 2026-10-10: `Sizes<E>`, `reservation`, `interface_budget` |
+| `port`        | `Attached`, `Encoded`, `Clock`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors                        |
+| `correlate`   | since the call-table move: `Table`, `Settled`, `Forgotten`, `Waiters`                                                                                                                                                                                                                                  |
+| `error`       | `Contract`, `Transport`, `CallError`, `ClientError`, `ProviderError`                                                                                                                                                                                                                                   |
+| `face`        | since 2026-09-28 (driftsys/ridl#580): `Bind`, `Events`, `Publish`; `Timeout` under the `std` feature — the traits a generated face implements, the section "The face traits" below                                                                                                                     |
+| `trace`       | `TraceContext`, the optional trace context a call or an event carries across a port (ADR-0021 decision 21); under the `std` feature, `Propagation`, `AlreadySet`, `set_propagation` and `propagation`, the application's hook (decision 22)                                                            |
+| `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with the Rust codec emitter                                               |
+| `task`        | under the `std` feature, since 2026-09-25: `block_on`, `noop_waker`; `flag_waker` and `WakeFlag` since 2026-09-28 (driftsys/ridl#568)                                                                                                                                                                  |
 
 Generated code names every item by its full path and imports none, because
 several names here — `Duration`, `Handler`, `Kind` — are also names in `core` or
@@ -297,6 +297,18 @@ impl Member {
 pub fn table_budget<E: Encoding>(members: &[Member]) -> Result<u64, Unsized>;
 #[non_exhaustive]
 pub struct Unsized { pub ordinal: Ordinal, pub member: &'static str, pub type_name: &'static str }
+
+pub trait Sizes<E: Encoding>: Interface {
+    const RESERVATIONS: &'static [u64];           // one row per member of MEMBERS, in order
+    const MAX_BUFFER_SIZE: usize;                 // the largest call payload
+    const EVENT_SOURCE_BUFFER_SIZE: usize;        // the largest event payload
+    type ClaimBuffer: AsRef<[u8]> + AsMut<[u8]> + Copy;   // [u8; Self::MAX_BUFFER_SIZE]
+    type EventBuffer: AsRef<[u8]> + AsMut<[u8]> + Copy;   // [u8; Self::EVENT_SOURCE_BUFFER_SIZE]
+    const CLAIM_BUFFER: Self::ClaimBuffer;        // zeroed
+    const EVENT_BUFFER: Self::EventBuffer;        // zeroed
+}
+pub const fn reservation<I: Sizes<E>, E: Encoding>(row: usize) -> u64;
+pub const fn interface_budget<I: Sizes<E>, E: Encoding>() -> u64;
 ```
 
 - **Freshness** (ridl §4, §9;
@@ -329,6 +341,31 @@ pub struct Unsized { pub ordinal: Ordinal, pub member: &'static str, pub type_na
   the sizes are `u32`. The field of `EncodedSizes` an encoding reads is
   `Encoding::max_size`, a required item of the sealed trait, so an encoding
   added without naming its field does not compile.
+- **The size table** (since 2026-10-10): `Sizes<E>` is the size table of one
+  interface in one encoding, which generated code implements once per interface
+  per codec the package carries. Every item is a const expression over
+  `<T as Payload<E>>::MAX_SIZE`, never a number, so a table cannot drift from
+  its codec; an encoding the package does not carry has no table, so naming it
+  is a compile error at the call site (`Cabin: Sizes<Proto3>` is not satisfied)
+  rather than a run-time `Unsized`. `RESERVATIONS` is one row per member of
+  `Interface::MEMBERS`, in order: the sum of `MAX_SIZE` over the member's
+  payloads — the request then the reply for a query, none for a fixed.
+  `reservation` reads one row by its index, and `interface_budget` sums the
+  rows, saturating; both are `const fn`, so a runtime whose set of interfaces is
+  known statically sums `interface_budget::<I, E>()` terms in a `const` and
+  sizes a `static` table from it at compile time, with no allocator. A runtime
+  driven by data instead takes `<I as Sizes<E>>::RESERVATIONS` — a
+  `&'static [u64]` parallel to `I::MEMBERS` — at the one point where the
+  interface type is known, for example
+  `runtime.register(Cabin::MEMBERS, <Cabin as Sizes<FlatBuffers>>::RESERVATIONS)`,
+  and reaches a row by the member's position from then on. The two buffer types
+  are interface-wide because a face fills them before it knows the payload type:
+  a server reads a claim into `ClaimBuffer` and then matches the ordinal, and
+  `EventSource::next` fills `EventBuffer` and reports the ordinal afterwards;
+  each is an associated type because a generic array length is not expressible
+  on stable Rust. In this version the generated code does not yet implement
+  `Sizes<E>`; `Member::reservation` and `table_budget` over the descriptors
+  remain the budget it serves.
 
 `Continuity` is exhaustive, like `Freshness`: it is not an error enum, so
 ADR-0021 decision 9 does not cover it, and a caller is meant to handle every
@@ -496,6 +533,8 @@ takes an `InterfaceNo` and an `Ordinal`, plus bytes where it carries a payload.
 ```rust
 pub trait Clock { fn now(&self) -> Timestamp; }   // one per runtime; not Attached
 
+pub trait Encoded { type Encoding: Encoding; }    // the bytes' encoding; not a supertrait of Attached
+
 pub trait SignalReader: Attached {
     fn read(&self, iface: InterfaceNo, ord: Ordinal, out: &mut [u8]) -> Result<RawSample, ReadError>;
 }
@@ -571,6 +610,17 @@ pub trait Wakeable {
 }
 pub enum Interest { Outcome(Correlation), Slot, Event(InterfaceNo), Claim(InterfaceNo) }
 ```
+
+`Encoded` (since 2026-10-10) states the payload encoding of the bytes a port
+carries. One session has one encoding (the frame specification's rule), so a
+transport that serves several encodings hands out one port type per session,
+each typed with its own; each transport picks its own default encoding from how
+coupled its two ends are, and the construction of the port can override it — the
+library takes no position on the default. It is a separate trait, not a
+supertrait of `Attached`, so a port that never meets a face, such as a
+conformance fixture, is not forced to name an encoding; it is implemented for
+`&mut P` like every port trait. In this version no port type in this repository
+implements it, and the generated face does not yet require it.
 
 `Watermark`'s generation counter field is named `generation`, not `gen`: `gen`
 is a reserved keyword in the 2024 edition, so the field name the crate's earlier

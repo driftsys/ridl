@@ -7,6 +7,10 @@
 //! Two computations read the descriptors: a member's call deadline
 //! ([`Member::call_deadline`]) and the in-flight byte budget
 //! ([`Member::reservation`], [`table_budget`]).
+//!
+//! The size table of an interface in one encoding is [`Sizes`], which
+//! generated code implements once per interface per codec; [`reservation`]
+//! and [`interface_budget`] read it.
 
 use crate::encoding::Encoding;
 use crate::sample::Duration;
@@ -76,6 +80,85 @@ pub trait Interaction {
     type Iface: Interface;
     /// The interaction's row in `Iface::MEMBERS`.
     const MEMBER: &'static Member;
+}
+
+/// The size table of an interface in encoding `E`: what a face and a runtime
+/// need to hold one table of calls in flight, or one payload whose type is
+/// not known before it is read, in that encoding.
+///
+/// Generated code implements it once per interface per codec the package
+/// carries. Every number derives from
+/// [`Payload::MAX_SIZE`](crate::payload::Payload::MAX_SIZE), which is the one
+/// source of a payload's bound, so a table cannot drift from its codec. An
+/// encoding the package does not carry has no table, so naming it is a
+/// compile error at the call site (`Cabin: Sizes<Proto3>` is not satisfied),
+/// not a run-time error.
+///
+/// Two buffers are interface-wide because the face fills them before it
+/// knows the payload type: a server reads a claim into one buffer and then
+/// matches the ordinal, and
+/// [`EventSource::next`](crate::port::EventSource::next) writes one
+/// occurrence of any subscribed event into a buffer and reports its ordinal
+/// afterwards. Each has an associated type here, because a generic array
+/// length is not expressible on stable Rust and generic code must be able to
+/// name the buffer.
+pub trait Sizes<E: Encoding>: Interface {
+    /// Row `i` is the bytes one in-flight instance of `MEMBERS[i]` reserves:
+    /// the sum of `MAX_SIZE` over the member's payloads — one payload for most
+    /// kinds, the request and then the reply for a `query`, none for a
+    /// `fixed`. The rows are parallel to [`Interface::MEMBERS`].
+    const RESERVATIONS: &'static [u64];
+    /// The largest `MAX_SIZE` over the argument and reply payloads of the
+    /// interface's commands and queries; `0` when it has none.
+    const MAX_BUFFER_SIZE: usize;
+    /// The largest `MAX_SIZE` over the interface's event payloads; `0` when it
+    /// has none.
+    const EVENT_SOURCE_BUFFER_SIZE: usize;
+    /// `[u8; Self::MAX_BUFFER_SIZE]`: the server's claim buffer, which
+    /// receives a call before its member is known.
+    type ClaimBuffer: AsRef<[u8]> + AsMut<[u8]> + Copy;
+    /// `[u8; Self::EVENT_SOURCE_BUFFER_SIZE]`: the client's next-event
+    /// buffer, which `EventSource::next` fills before the event is known.
+    type EventBuffer: AsRef<[u8]> + AsMut<[u8]> + Copy;
+    /// A zeroed `ClaimBuffer`.
+    const CLAIM_BUFFER: Self::ClaimBuffer;
+    /// A zeroed `EventBuffer`.
+    const EVENT_BUFFER: Self::EventBuffer;
+}
+
+/// The bytes one in-flight instance of the member at `row` of interface `I`
+/// reserves in encoding `E`: that row of the interface's size table
+/// ([`Sizes::RESERVATIONS`]). `row` is the member's index in
+/// [`Interface::MEMBERS`].
+///
+/// Infallible: a row exists for every member, because a codec is emitted for
+/// every payload type of the package or the build fails. A `const fn`, so a
+/// runtime may size a static table from it.
+///
+/// # Panics
+///
+/// When `row` is not an index of the table; in a constant, that is a compile
+/// error.
+pub const fn reservation<I: Sizes<E>, E: Encoding>(row: usize) -> u64 {
+    I::RESERVATIONS[row]
+}
+
+/// The in-flight byte budget of interface `I`'s table in encoding `E`: the
+/// sum of its rows ([`Sizes::RESERVATIONS`]), saturating. A table serving
+/// several interfaces adds the budget of each.
+///
+/// Infallible, for the reason [`reservation`] gives. A `const fn`, so a
+/// runtime whose set of interfaces is known statically sizes a `static` table
+/// from it at compile time, with no allocator.
+pub const fn interface_budget<I: Sizes<E>, E: Encoding>() -> u64 {
+    let rows = I::RESERVATIONS;
+    let mut total: u64 = 0;
+    let mut i = 0;
+    while i < rows.len() {
+        total = total.saturating_add(rows[i]);
+        i += 1;
+    }
+    total
 }
 
 /// A `signal` (ridl §4).
