@@ -9433,10 +9433,11 @@ mod tests {
         verdicts.insert(pattern.to_string(), None);
         assert_eq!(verdicts.len(), REGEX_CRATE_VERDICTS_BOUND);
 
-        record_regex_crate_verdict(&mut verdicts, pattern, &None);
+        let replacement = Some("replacement".to_string());
+        record_regex_crate_verdict(&mut verdicts, pattern, &replacement);
 
         assert_eq!(verdicts.len(), REGEX_CRATE_VERDICTS_BOUND);
-        assert_eq!(verdicts.get(pattern), Some(&None));
+        assert_eq!(verdicts.get(pattern), Some(&replacement));
     }
 
     /// The checker compiles a pattern with the same `regex` configuration the

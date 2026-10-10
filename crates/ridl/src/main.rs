@@ -1367,10 +1367,7 @@ fn baseline_location(entry: &Path, flag: Option<&Path>) -> Result<Option<PathBuf
 /// (single-file mode).
 fn default_baseline_dir(entry: &Path) -> PathBuf {
     let start = if entry.is_file() {
-        match entry.parent() {
-            Some(dir) if !dir.as_os_str().is_empty() => dir.to_path_buf(),
-            _ => PathBuf::from("."),
-        }
+        entry.parent().unwrap_or(Path::new(".")).to_path_buf()
     } else {
         entry.to_path_buf()
     };
@@ -2664,14 +2661,7 @@ impl DeclIndex {
 /// with no manifest above it (single-file mode) is indexed alone.
 fn index_root(entry: &Path) -> PathBuf {
     let dir = if entry.is_file() {
-        // The parent of a bare file name is empty and stands for `.`.
-        entry.parent().map(|dir| {
-            if dir.as_os_str().is_empty() {
-                Path::new(".")
-            } else {
-                dir
-            }
-        })
+        entry.parent()
     } else {
         Some(entry)
     };
