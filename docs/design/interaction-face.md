@@ -134,8 +134,15 @@ the interface's payload types, and those types may be `pub(crate)` under an
 `internal` interface, so a public face could name private types (E0446). The
 emitter writes the interface's descriptors (see "The descriptors") with the same
 visibility, `pub(crate)` and `#[allow(dead_code)]`, because their trait impls
-name the same types; the catalog hash is unchanged. The rule is stated here
-once: the book's [generated code](../book/generated-code.md) chapter and
+name the same types. This emitter rule does not change how the catalog hash is
+computed. Making an interface `internal` does change the catalog hash, and so
+the `CATALOG` of every interface of the unit, because visibility is part of what
+is hashed ([ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15, the
+reduced unit in `crates/ridl-ir/src/catalog_hash.rs`); the other descriptor
+constants stay equal, as
+`making_an_interface_internal_changes_only_the_catalog_hash` in
+`tests/face_compile.rs` pins. The rule is stated here once: the book's
+[generated code](../book/generated-code.md) chapter and
 [the CLI reference](../book/cli-reference.md) link to it.
 
 `src/face.rs` emits, per named interface that is not `internal` and has at least

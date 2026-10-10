@@ -993,3 +993,79 @@ fn timeout_is_under_ridl_rt_s_std_feature() {
         }
     }
 }
+
+/// The top-level `impl` blocks of `source` that hold descriptor constants (the
+/// `Interface` impl, the buffer sizes and the per-member impls), with the
+/// catalog hash bytes cut out and returned on their own. Visibility is
+/// normalised to `pub`, so the internal and the public build compare.
+fn descriptor_constants(source: &str) -> (Vec<String>, Vec<String>) {
+    let mut blocks = Vec::new();
+    let mut current: Option<String> = None;
+    for line in source.lines() {
+        if let Some(block) = current.as_mut() {
+            block.push_str(line);
+            block.push('\n');
+            if line == "}" {
+                blocks.push(current.take().expect("open block"));
+            }
+        } else if !line.starts_with(char::is_whitespace) && line.ends_with('{') {
+            current = Some(format!("{line}\n"));
+        }
+    }
+    let mut hashes = Vec::new();
+    let constants = blocks
+        .into_iter()
+        .filter(|b| {
+            b.starts_with("impl ")
+                && ["const CATALOG", "MAX_BUFFER_SIZE", "const MEMBER:"]
+                    .iter()
+                    .any(|m| b.contains(m))
+        })
+        .map(|block| {
+            let block = block.replace("pub(crate) ", "pub ");
+            match block.find("CatalogHash([") {
+                Some(start) => {
+                    let end = start + block[start..].find("])").expect("hash end");
+                    hashes.push(block[start..end].split_whitespace().collect());
+                    format!("{}<hash>{}", &block[..start], &block[end..])
+                }
+                None => block,
+            }
+        })
+        .collect();
+    (constants, hashes)
+}
+
+/// Making one interface `internal` changes the catalog hash of the unit,
+/// because visibility is part of what is hashed (ADR-0014 decision 15, the
+/// visibility rule in `crates/ridl-ir/src/catalog_hash.rs`), and so the
+/// `CATALOG` of every interface of the unit, the public one beside it
+/// included. Every other descriptor constant is equal: the emitter rule
+/// (no face, crate-visible descriptors) touches visibility only.
+#[test]
+fn making_an_interface_internal_changes_only_the_catalog_hash() {
+    let public_source = INTERNAL_BESIDE_PUBLIC.replace("internal interface", "interface");
+    assert_ne!(public_source, INTERNAL_BESIDE_PUBLIC);
+    let emit = |name: &str, source: &str| {
+        let output = ridlc::compile(name, source);
+        generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+            .expect("generate_pipeline")
+            .rust_source
+    };
+    let (internal, internal_hashes) =
+        descriptor_constants(&emit("hidden_pipeline.ridl", INTERNAL_BESIDE_PUBLIC));
+    let (public, public_hashes) =
+        descriptor_constants(&emit("hidden_pipeline.ridl", &public_source));
+
+    assert_eq!(internal_hashes.len(), 2, "one CATALOG per interface");
+    assert_eq!(public_hashes.len(), 2, "one CATALOG per interface");
+    for hashes in [&internal_hashes, &public_hashes] {
+        assert_eq!(hashes[0], hashes[1], "one hash per unit");
+    }
+    assert_ne!(
+        internal_hashes[0], public_hashes[0],
+        "visibility is hashed, so making an interface internal changes the hash"
+    );
+    assert!(internal.len() > 2, "{internal:#?}");
+    assert_eq!(internal, public, "every other descriptor constant is equal");
+}
