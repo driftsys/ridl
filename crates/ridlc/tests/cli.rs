@@ -2332,6 +2332,42 @@ fn a_types_only_build_warns_for_every_link() {
     );
 }
 
+/// A deployment whose placement an RSDL-7xx error blocked draws no RSDL-807,
+/// although its links have placed endpoints: the types-only manifest would
+/// make each of them warn, and the placement error is what the build reports.
+#[test]
+fn a_deployment_with_a_placement_error_does_not_warn() {
+    let topology = "package veh.bench\n\n\
+                    component Lane { offers veh.bench.lane }\n\
+                    component Klaxon { offers veh.bench.horn }\n\
+                    component Panel { requires LaneAssist }\n\
+                    component Telemetry { requires Horn }\n\n\
+                    system Vehicle { Lane, Klaxon, Panel, Telemetry }\n\n\
+                    deployment Bench for Vehicle {\n\
+                    \x20 machine Head { Lane, Klaxon, Panel }\n\
+                    \x20 machine Body { Telemetry, Panel }\n\
+                    }\n";
+    let dir = link_encodings_workspace(
+        "link-encoding-placement-error",
+        LINK_ENCODINGS_TYPES_ONLY,
+        Some(topology),
+    );
+    let out = TempDir::new("link-encoding-placement-error-out");
+    let (code, stderr) = build_rust(dir.path(), out.path(), Some("Bench"));
+    assert_eq!(
+        code, 1,
+        "the placement error fails the build, stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("error[RSDL-706]"),
+        "`Panel` is placed twice, got:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("RSDL-807"),
+        "a blocked placement draws no RSDL-807, got:\n{stderr}"
+    );
+}
+
 /// The lint reads the table of each backend the build emits, not every table
 /// of the manifest: a `[backend.kotlin]` table that names `proto3` does not
 /// cover a Rust emit whose own table names only `flatbuffers`.
