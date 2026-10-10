@@ -3253,7 +3253,7 @@ mod system_round_trip {
 
 #[cfg(test)]
 mod load_ir_json {
-    use crate::v2::{self, LoadError, load_ir_json};
+    use crate::v2::{self, LoadError, MAX_JSON_NESTING, load_ir_json};
 
     /// A snapshot written by `to_json_pretty` loads back as the same package.
     #[test]
@@ -3284,14 +3284,41 @@ mod load_ir_json {
             format!("cannot read the IR snapshot: {io}")
         );
 
+        // The leading newline puts the error on line 2, so a loader that
+        // trimmed the text first would report a different position.
         let bad = dir.path().join("bad.ir.json");
-        std::fs::write(&bad, "{").unwrap();
-        let parse = v2::from_json("{").unwrap_err();
+        std::fs::write(&bad, "\n{").unwrap();
+        let parse = v2::from_json("\n{").unwrap_err();
         let error = load_ir_json(&bad).unwrap_err();
         assert!(matches!(error, LoadError::Parse(_)), "{error:?}");
         assert_eq!(
             error.to_string(),
             format!("the IR snapshot is not valid IR v2 JSON: {parse}")
+        );
+    }
+
+    /// The loader reads through `from_json`: input nested past its cap draws
+    /// the cap's own message, which a plain `serde_json` parse would not.
+    #[test]
+    fn input_past_the_nesting_cap_draws_from_json_s_refusal() {
+        let dir = tempfile::tempdir().unwrap();
+        let deep = format!(
+            "{}{}",
+            "[".repeat(MAX_JSON_NESTING + 1),
+            "]".repeat(MAX_JSON_NESTING + 1)
+        );
+        let path = dir.path().join("deep.ir.json");
+        std::fs::write(&path, &deep).unwrap();
+        let refusal = v2::from_json(&deep).unwrap_err().to_string();
+        assert!(
+            refusal.contains("the ceiling this reader enforces"),
+            "{refusal}"
+        );
+        let error = load_ir_json(&path).unwrap_err();
+        assert!(matches!(error, LoadError::Parse(_)), "{error:?}");
+        assert_eq!(
+            error.to_string(),
+            format!("the IR snapshot is not valid IR v2 JSON: {refusal}")
         );
     }
 }

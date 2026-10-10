@@ -11,10 +11,9 @@ use std::process::Command;
 
 /// Runs `cargo metadata --format-version 1 --locked` for the workspace whose
 /// root manifest is `manifest`, or for this workspace when it is `None`, and
-/// parses its stdout as JSON. `--locked` matches every other cargo invocation
-/// this workspace's gate makes (`justfile`): the lockfile is already the
-/// resolved graph, and a guard must read that graph, not silently re-resolve
-/// a different one. With `all_features`, every feature of every workspace
+/// parses its stdout as JSON. `--locked` makes the guard read the graph that
+/// `Cargo.lock` records, and fail when the lockfile is out of date, rather
+/// than silently re-resolve a different one. With `all_features`, every feature of every workspace
 /// member is on, so the resolved graph holds every optional dependency,
 /// including one that no feature in the workspace turns on.
 pub fn cargo_metadata(manifest: Option<&Path>, all_features: bool) -> serde_json::Value {

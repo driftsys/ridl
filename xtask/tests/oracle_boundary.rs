@@ -132,7 +132,8 @@ const PLANUS_CRATES: &[&str] = &["planus", "planus-codegen", "planus-translation
 const RUNTIME_PACKAGES: &[&str] = &["ridl-rt"];
 
 /// Every package reachable from `package` by NORMAL dependency edges only,
-/// each mapped to the edge that first reached it, so a failure can print the
+/// by package id, each mapped to the id of the package it was first reached
+/// from, so a failure can print the
 /// path rather than only the endpoint.
 ///
 /// **A normal edge is one whose `dep_kinds[].kind` is JSON null.** `"dev"`
@@ -180,8 +181,8 @@ fn normal_closure<'a>(metadata: &'a serde_json::Value, package: &str) -> HashMap
 }
 
 /// Every package reachable from `package` by any kind of dependency edge on
-/// the first step, then by normal and build edges only, each mapped to the
-/// edge that first reached it.
+/// the first step, then by normal and build edges only, by package id, each
+/// mapped to the id of the package it was first reached from.
 ///
 /// The first step takes every kind because [`RUNTIME_PACKAGES`] must not
 /// reach a planus crate as a dev-dependency either. The later steps leave out dev edges because
