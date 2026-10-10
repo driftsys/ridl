@@ -97,21 +97,21 @@ the descriptor has no inherent constant of either name.
   `CatalogHash([0u8; 32])` placeholder the emitter wrote before it. Since
   driftsys/ridl#381 the generated `Bind::new` and `serve` compare the port's
   catalog with `CATALOG`, name and hash (see "The catalog check" below).
-- `PayloadInfo.max_size` (`EncodedSizes { proto3, flatbuffers, repr_c }`) is
-  filled one column at a time. Since driftsys/ridl#380 the `flatbuffers` column
-  is the codegen model's `Payload.flatbuffers_max_size`, the bound
-  `ridl_ir::projection::flatbuffers::max_size` computed — the backend, like any
-  plugin, reads the model and recomputes nothing — and `None` only when the
-  projection has no bound. The `proto3` column is `None` because this backend
-  emits no proto3 codec, and the `repr_c` column is `None` until the
-  C-representable layout is defined (driftsys/ridl#317). `ridl-rt`'s reading of
-  `None` is the broad one — "no size is available here", never "this payload
-  cannot be encoded this way" (`crates/ridl-rt/src/contract.rs`) — and the doc
-  comment the emitter writes into every generated file
-  (`crates/ridl-backend-rust/src/descriptors.rs`) states the same three facts.
-  Nothing in the face reads these fields — it holds buffers from
-  `<T as Payload<::ridl_rt::encoding::FlatBuffers>>::BUFFER` and the interface's
-  size table directly — so the columns serve a catalog consumer, not the face.
+- **The sizes are a table per encoding, not a field of `PayloadInfo`.**
+  `PayloadInfo` holds the payload's `type_name` alone. The interface's
+  `Sizes<FlatBuffers>` implementation holds one `RESERVATIONS` row per member,
+  in member order, each a `u64` computed by a const-evaluable expression from
+  the payloads' `<T as Payload<FlatBuffers>>::MAX_SIZE`, which the codec emitter
+  writes from the codegen model's bound, so the table recomputes nothing. A
+  payload whose projection has no bound is a compile error in the table rather
+  than a missing value, so there is no `None` and no reading of one. A proto3 or
+  `repr(C)` table arrives as a `Sizes<E>` implementation when the backend emits
+  that codec; until then the interface has no such table (driftsys/ridl#264,
+  driftsys/ridl#317). The face reads buffers from
+  `<T as Payload<::ridl_rt::encoding::FlatBuffers>>::BUFFER` and the table's
+  `CLAIM_BUFFER` and `EVENT_BUFFER`; `reservation::<X, E>()` and
+  `table_budget::<I, E>()` in `ridl_rt::contract` serve a runtime that sizes a
+  store.
 
 ## The contract-clause translator
 
@@ -612,16 +612,23 @@ type parameter: a `Client<E: Encoding, ...>` would put `E` on every descriptor,
 every provider trait and every caller, and a `where` bound per payload type on
 every impl, for a choice made once per generated package.
 
-The encoding is stated by a backend option. `ridl_backend_rust::WireEncoding`
-defaults to `FlatBuffers` and reaches the entry points through
-`generate_face_with(package, wire)`, of which `generate_face(package)` is the
-defaulted form, and `generate_pipeline`. It has one variant, because this
-backend emits a `Payload` implementation for one encoding, and every emitter
-writes that encoding's path; `repr(C)` and proto3 join it when the Rust backend
-emits theirs, and the entry points check the option against the one variant so
-that a second one is a compile error there rather than a face over
-implementations that do not exist. A consumer names the encoding from
-`ridl_rt::encoding`.
+_Under the design in `docs/wip/2026-10-10-on-request-encodings-design.md`, which
+lands next, the face still gains no type parameter and reads its encoding from
+its port (`P::Encoding`, through `ridl_rt::port::Encoded`). The paragraph above
+describes the face as built._
+
+The codecs a package carries are listed in the manifest:
+`[backend.rust]
+encodings = [...]` (MANI-015), which `ridl build` sends the
+backend as the request option `encodings`. `ridl_backend_rust::WireEncoding` is
+the parsed element and has one variant, `FlatBuffers`, because this backend
+emits a `Payload` implementation for one encoding. The option reaches the entry
+points as a slice, `generate_face_with(package, encodings)` and
+`generate_pipeline`, and a slice that is empty emits the domain types alone,
+with no codec, no descriptor and no face. `repr(C)` and proto3 join the enum
+when the Rust backend emits their codecs; until then the backend refuses those
+names, so a second encoding cannot produce a face over implementations that do
+not exist. A consumer names the encoding from `ridl_rt::encoding`.
 
 `generate_face` appends the face to the items `generate` emits, the codec
 included. There is one codec emitter and one call to it, so the face compiles
@@ -833,14 +840,19 @@ rather than written as prose.
    story for it. A refusal neither owner claims, such as a `fixed` whose payload
    is not a named type, names no story rather than the nearest one.
 
-3. **No flag selects the encoding, yet.** `--emit rust` writes the FlatBuffers
-   codec because it is the only one built, and the emitted code names it by its
-   path, `::ridl_rt::encoding::FlatBuffers`, at each site (until 2026-09-29
-   through a `pub type Wire` alias; see "The encoding and the ports"). A
-   `--wire` flag belongs with the proto3 codec (driftsys/ridl#264), when a
-   second codec exists to choose between; ADR-0010 binds its spelling then.
-   Adding one now would be a CLI surface with one legal value, which the next
-   story would have to change rather than fill in.
+3. **The manifest selects the codecs, and the port selects the encoding a face
+   uses.** `[backend.rust] encodings` in the manifest names the codecs the
+   generated package carries, and `--emit rust` alone emits the domain types
+   only. The emitted code names the one built codec by its path,
+   `::ridl_rt::encoding::FlatBuffers`, at each site (until 2026-09-29 through a
+   `pub type Wire` alias; see "The encoding and the ports"). No flag selects an
+   encoding: a flag is one value for a whole build, but the codecs a package
+   carries are a property of the package and are set per backend in the manifest
+   beside the backend's other settings, and the encoding a face uses is a
+   property of the transport, which is the port. A `--wire` flag would also be a
+   CLI surface that a manifest key already covers. The schema emits stay on
+   `--emit`. ADR-0018 decisions 4 and 5 carry the amendment; the port rule
+   (`P::Encoding`) lands in the design named above and is not built.
 
 4. **A cross-package reference resolves, and the codec is no longer withheld for
    it** (driftsys/ridl#467). `Ctx` carries the other packages of the build and
@@ -928,12 +940,12 @@ archived as
 
 ## What is provisional
 
-| Placeholder                                                                                                                    | Replaced by                                  |
-| ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
-| The `None` `EncodedSizes.repr_c` column (`flatbuffers` is filled; `proto3` is `None` because this backend has no proto3 codec) | driftsys/ridl#317                            |
-| The narrow contract-clause translator (`src/clauses.rs`)                                                                       | driftsys/ridl#704                            |
-| One declared parameter per call, no induced argument struct                                                                    | a recorded follow-up story                   |
-| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion                                 | a test over `ridl-loopback`, not yet written |
+| Placeholder                                                                                            | Replaced by                                  |
+| ------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
+| The `repr(C)` and proto3 `Sizes<E>` tables (`flatbuffers` is built; this backend emits no other codec) | driftsys/ridl#317, driftsys/ridl#264         |
+| The narrow contract-clause translator (`src/clauses.rs`)                                               | driftsys/ridl#704                            |
+| One declared parameter per call, no induced argument struct                                            | a recorded follow-up story                   |
+| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion         | a test over `ridl-loopback`, not yet written |
 
 **The hand-written payload row was retired on 2026-09-21**, by design note D-11
 of [the FlatBuffers codec record](flatbuffers-codec.md). It read "the
@@ -979,10 +991,11 @@ ports" above.
   `ProviderError`, the `std` feature's `block_on`, and since 0.4.0 the `face`
   traits, ADR-0021 decision 19); the IR's provisional interface numbering (the
   lock design's L4, driftsys/ridl#391)
-- Replaced later by: driftsys/ridl#317 (the `repr_c` size column) and
+- Replaced later by: driftsys/ridl#317 (the `repr(C)` size table) and
   driftsys/ridl#704 (the clause translator). The payload stand-in, the test-only
-  ports, the zero catalog hash, the `None` `flatbuffers` size column and the
-  unemitted catalog check are already replaced
+  ports, the zero catalog hash, the `None` `flatbuffers` size column (now the
+  `Sizes<FlatBuffers>` table) and the unemitted catalog check are already
+  replaced
 - Reasoning trail (archived):
   [`2026-09-15-lane-m-driver.md`](../archive/2026-09-15-lane-m-driver.md),
   [`2026-09-16-interaction-face-v0-design.md`](../archive/2026-09-16-interaction-face-v0-design.md),

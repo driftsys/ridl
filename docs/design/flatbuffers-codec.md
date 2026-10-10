@@ -29,6 +29,12 @@ every declaration has a root table, and a named scalar, an enum and an enum set
 are rooted in a box. What the face does with this codec is
 [the interaction-face design record](interaction-face.md).
 
+**The codec is emitted on request.** `ridl build` emits it, with the descriptors
+and the face, only when the manifest's `[backend.rust] encodings` names
+`flatbuffers`; with no such name the backend emits the domain types alone. The
+size of each payload is `MAX_SIZE`, and each payload also carries its own zeroed
+buffer, `Payload<FlatBuffers>::BUFFER`.
+
 ## Where the code is
 
 | What                                                                 | Where                                                       |
@@ -40,7 +46,7 @@ are rooted in a box. What the face does with this codec is
 | The reader and builder the emitted code calls                        | `crates/ridl-rt/src/flatbuffers.rs`                         |
 | The round trip, run rather than compiled                             | `crates/ridl-backend-rust/tests/flatbuffers_roundtrip.rs`   |
 | Conformance against planus, and the `wasm32` check                   | `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs` |
-| The encoding option (`WireEncoding`) the entry points check          | `crates/ridl-backend-rust/src/lib.rs`                       |
+| The `encodings` list (`WireEncoding`) the entry points take          | `crates/ridl-backend-rust/src/lib.rs`                       |
 | The `View` trait every emitted view implements                       | `crates/ridl-rt/src/payload.rs`                             |
 | The face over this codec, run rather than compiled                   | `crates/ridl-backend-rust/tests/interaction_face.rs`        |
 
@@ -252,26 +258,27 @@ whole position probed once, so a count or a product of counts is still charged
 even where a foreign reference sits inside the same position; the stand-in can
 prove a position unbounded and never prove one bounded.
 
-## The face names this codec through one alias
+## The face names this codec through `Payload<FlatBuffers>` and `Sizes<FlatBuffers>`
 
-`generate` emits the codec, and `generate_face` appends the interaction face to
-exactly the items `generate` emits. There is one codec emitter and one call to
-it, so a face compiles over the same implementations a consumer of `generate`
-gets rather than over a second set written for it.
+`generate` emits the codec when its `encodings` list names `flatbuffers`, and
+`generate_face` appends the interaction face to exactly the items `generate`
+emits. There is one codec emitter and one call to it, so a face compiles over
+the same implementations a consumer of `generate` gets rather than over a second
+set written for it.
 
-The face names the encoding by its full path at each site: `MAX_BUFFER_SIZE`,
-`EVENT_SOURCE_BUFFER_SIZE`, every `Ref::encode` and `Ref::verify` the face
-builds name `::ridl_rt::encoding::FlatBuffers`, as the codec's own `Payload`
-implementations do. Until 2026-09-29 they named it through a per-package alias,
-`pub type Wire`, which a declaration or an interface named `Wire` collided with;
-the
+The face names the encoding by its full path at each site: every buffer is
+`<T as ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>>::BUFFER`
+or an item of `<Iface as ::ridl_rt::contract::Sizes<…FlatBuffers>>`, and every
+`Ref::encode` and `Ref::verify` the face builds names
+`::ridl_rt::encoding::FlatBuffers`, as the codec's own `Payload` implementations
+do. The alias is gone: until 2026-09-29 they named it through a per-package
+alias, `pub type Wire`, which a declaration or an interface named `Wire`
+collided with; the
 [generated-name collision design](../technotes/rust-backend-name-collisions.md)
-removed the alias (driftsys/ridl#588). The encoding is stated by
-`ridl_backend_rust::WireEncoding`, which defaults to `FlatBuffers` and reaches
-the entry points through `generate_face_with(package, wire)` and
-`generate_pipeline`; `generate_face(package)` is the defaulted form. The entry
-points check the option against the one variant, so `generate`'s output is
-unchanged by it. The reasoning, and why the face takes no `E: Encoding` type
+removed it (driftsys/ridl#588). The codecs a package carries come from the
+`encodings` list that `ridl_backend_rust::WireEncoding` parses, passed to
+`generate_face_with(package, encodings)` and `generate_pipeline`; an empty list
+emits no codec. The reasoning, and why the face takes no `E: Encoding` type
 parameter, is design note D-11 and
 [the interaction-face design record](interaction-face.md).
 

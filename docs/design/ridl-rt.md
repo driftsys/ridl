@@ -943,11 +943,13 @@ is a breaking change (ADR-0021 decision 10); streams have no story yet.
 
 ## Versioning
 
-`ridl-rt` carries its own version, independent of the workspace's, and its
-release mechanics — the tag, and that creating it and running `cargo publish`
-are maintainer acts — are [ADR-0007](../decisions/ADR-0007-e1-execution.md)
-decision 14. What counts as a breaking 0.x change, and the crate's still-open
-API questions, are
+`ridl-rt` shares the workspace's single version and travels on the same
+`v<version>` tag as every other published crate
+([ADR-0007](../decisions/ADR-0007-e1-execution.md) decision 14's 2026-09-21
+amendment, [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md)
+decision 10); the release mechanics, including that the tag is a maintainer act,
+are ADR-0007 decision 14. What counts as a breaking 0.x change, and the crate's
+still-open API questions, are
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 10.
 
 ## References

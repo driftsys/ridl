@@ -437,6 +437,11 @@ belongs to a backend and is carried uninterpreted.**
   contract and validates its own namespace; its findings are the backend's. A
   namespace no configured backend claims is RSDL-804, a warning: the lowering
   proceeds and the key is carried.
+
+  The manifest's `[backend.<name>]` table (ADR-0002 §4, MANI-015) is a separate
+  thing: it configures a backend for the whole build, for example
+  `encodings = ["flatbuffers"]`, and it is not an attribute and is not part of
+  this namespace.
 - `labels` on a declaration is carried per node beside the map, as the family's
   own fact; an rsdl-owned key is consumed into the fact it feeds and does not
   appear in the map.
