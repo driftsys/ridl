@@ -1331,9 +1331,9 @@ impl<'a> Parser<'a> {
     /// The shared `kw Name ':' payload InitValue? annotations` shape of the
     /// three value interactions — `SignalDef`, `EventDef`, and `FixedDef`.
     /// The bare `= value` init comes before the timing (ADR-0008 decision
-    /// 2). The reference allows the init on signals only and timing on
-    /// signals and events; here all three kinds accept an init, a timing,
-    /// and an attr block, and the checker narrows (RIDL-106/-301).
+    /// 2). All three kinds accept an init, a timing, and an attr block, as
+    /// the reference's Appendix C shows; the checker narrows them (FORM-102
+    /// for an init on an event or a fixed, RIDL-106/-301).
     fn value_interaction(&mut self, kind: SyntaxKind) {
         self.start(kind);
         self.bump(); // 'signal' | 'event' | 'fixed'
