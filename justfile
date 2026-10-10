@@ -449,12 +449,12 @@ compat-check: toolchain-check
 #
 # The crate emitted for the veh-cluster corpus is linted too, with its default
 # features and with them off, under `-D warnings` with no command-line
-# allowance. The only diagnostics that pass are `dead_code` for the nine items
-# the emitter writes for the corpus's `internal` types, which the recipe lists
-# by name; the lints the emitted `lib.rs` allows stay allowed. Unlike the run
+# allowance. No diagnostic passes, `dead_code` included: the emitter marks the
+# items it writes for an `internal` declaration with `#[allow(dead_code)]`; the
+# lints the emitted `lib.rs` allows stay allowed. Unlike the run
 # above, this one keeps `allow`: `clippy::module_inception` does not fire on
 # the corpus crate, so a stale entry there does not fail, but the run above
-# fires it and holds it. Any other warning is a defect in the emitter.
+# fires it and holds it. Any warning is a defect in the emitter.
 #
 # The binary is reached through `CARGO_TARGET_DIR` where it is set, the way
 # `compat-check` reads it, rather than through a hardcoded `./target`: a
@@ -474,9 +474,8 @@ compat-check: toolchain-check
 # drawing a clippy warning; the generated crate drawing a clippy warning that
 # its `lib.rs` does not allow, or an allow that no longer fires; a `lib.rs`
 # with no `#![allow(` line to rewrite; the crate emitted for the veh-cluster
-# corpus drawing a clippy diagnostic that is not `dead_code` for one of the
-# nine listed items, with default features or without them, or cargo finishing
-# no build there; a planus crate in the resolved graph of `examples/cabin`; the
+# corpus drawing a clippy diagnostic, with default features or without them, or
+# cargo finishing no build there; a planus crate in the resolved graph of `examples/cabin`; the
 # planus check running no test or more than one, which is what a renamed test
 # or a changed filter does.
 #
@@ -549,18 +548,12 @@ demo:
     # The corpus crate is linted as well, with its default features and with
     # them off for the target that has no standard library, so the code that
     # compiles only in the second case is linted too. One clippy run per
-    # configuration reports every diagnostic as JSON under `-D warnings`. The
-    # run fails on every error or warning except a `dead_code` diagnostic whose
-    # owner is one of the nine items below, which are the views and structs
-    # the emitter writes for the corpus's `internal` types and which nothing
-    # uses. The owner is the type in the header of the `impl` block for a
-    # method, and the backticked name otherwise, so a dead field or variant
-    # carries its own name and is rejected. Dead code that the emitter writes
-    # for any other owner fails the run. Dead code inside one of the nine
-    # owners that is a method passes, because the filter reads the owner of a
-    # method, not the method. The run also fails when cargo reports no
-    # `build-finished` line, so a cargo failure that prints no diagnostic
-    # cannot pass as an empty list.
+    # configuration reports every diagnostic as JSON under `-D warnings`, and
+    # the run fails on every error or warning, `dead_code` included: the
+    # emitter marks the items it writes for an `internal` declaration with a
+    # targeted `#[allow(dead_code)]`, so none is left to filter. The run also
+    # fails when cargo reports no `build-finished` line, so a cargo failure
+    # that prints no diagnostic cannot pass as an empty list.
     corpus_lint() {
         report="$(cargo clippy --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked --no-deps \
             --message-format=json "$@" -- -D warnings || true)"
@@ -570,17 +563,10 @@ demo:
         fi
         stray="$(printf '%s\n' "$report" | jq -r '
             select(.reason == "compiler-message" and (.message.level | IN("error", "warning")))
-            | .message
-            | (([.spans[].text[0].text | capture("^\\s*impl(<[^>]*>)? (?<n>[A-Za-z0-9_]+)")? | .n][0])
-                // (.message | capture("`(?<n>[^`]+)`")? | .n)) as $owner
-            | select(.code.code != "dead_code"
-                or ($owner | IN("RawTickCountFbView", "RawWheelFrame", "RawWheelFrameFbView",
-                    "RawWheelSpan", "RawWheelSpanBurstsElement", "RawWheelSpanBurstsElementFbView",
-                    "RawWheelSpanFbView", "RawWheelSpanSpan", "RawWheelSpanSpanFbView") | not))
-            | .rendered')"
+            | .message.rendered')"
         if [ -n "$stray" ]; then
             printf '%s\n' "$stray" >&2
-            echo "demo: the corpus crate draws a diagnostic that is not dead code of an internal item" >&2
+            echo "demo: the corpus crate draws a diagnostic" >&2
             exit 1
         fi
     }

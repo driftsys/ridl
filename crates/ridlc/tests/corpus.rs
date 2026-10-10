@@ -1444,8 +1444,9 @@ fn showcase_pins_every_severity() {
 /// (`ridl::std::…`).
 ///
 /// The assertion is on the rustc **exit status**, not on empty stderr: the
-/// generated code is valid but carries non-fatal lints (for example dead code
-/// on an unused internal type), which are warnings, not errors.
+/// generated code may carry non-fatal lints, which are warnings, not errors.
+/// `dead_code` is denied by name, because the items of an `internal`
+/// declaration carry an allowance for it (driftsys/ridl#819).
 #[test]
 fn veh_common_generated_rust_compiles_with_rustc() {
     let source = composed_source(Path::new("tests/corpus/veh-common"));
@@ -1482,6 +1483,11 @@ fn veh_common_generated_rust_compiles_with_rustc() {
             // spelling, which the backend's unit tests pin.
             "-D",
             "non_camel_case_types",
+            // The regression guard for issue #819: the items of an `internal`
+            // declaration are `pub(crate)`, nothing in this crate uses most of
+            // them, and each carries an allowance.
+            "-D",
+            "dead_code",
         ])
         .arg("-o")
         .arg(&meta_path)
@@ -1627,11 +1633,10 @@ fn workspace_two_members_composed_compiles_with_rustc() {
 
 /// Runs `rustc` over `source` as a library, returning whether it exited zero.
 /// The assertion is on the **exit status**, not on empty stderr: the generated
-/// code is valid but carries non-fatal lints (dead code on an unused internal
-/// type), which are warnings, not errors. Four lints are denied by name, so
-/// that they do fail the run: `private-interfaces` and `private-bounds`
-/// (issue #161) and `non_snake_case` (issue #243) and `non_camel_case_types`
-/// (issue #506).
+/// code may carry non-fatal lints, which are warnings, not errors. Five lints
+/// are denied by name, so that they do fail the run: `private-interfaces` and
+/// `private-bounds` (issue #161), `non_snake_case` (issue #243),
+/// `non_camel_case_types` (issue #506) and `dead_code` (issue #819).
 fn rustc_accepts(label: &str, source: &str) -> bool {
     let dir = std::env::temp_dir().join(format!(
         "ridlc_corpus_{label}_{}_{}",
@@ -1655,15 +1660,14 @@ fn rustc_accepts(label: &str, source: &str) -> bool {
             "lib",
             "--emit",
             "metadata",
-            // The first of the four lints denied by name (issue #161). A
+            // The first of the five lints denied by name (issue #161). A
             // generated `pub` item
             // over a `pub(crate)` type is warn-by-default on current rustc, so
             // a plain exit-status check accepts it — which is why the corpus's
             // own compile proof did not notice a public interface carrying an
-            // `internal` payload. A blanket `-D warnings` is not usable here:
-            // the generated code carries unrelated non-fatal lints by design
-            // (dead code in a crate with no consumers), so denying everything
-            // would fail for reasons that say nothing about visibility.
+            // `internal` payload. A blanket `-D warnings` is not used
+            // here: the lints are denied one by one, so that a failure names
+            // the property it breaks.
             "-D",
             "private-interfaces",
             "-D",
@@ -1685,6 +1689,11 @@ fn rustc_accepts(label: &str, source: &str) -> bool {
             "non_snake_case",
             "-D",
             "non_camel_case_types",
+            // The regression guard for issue #819: the items of an `internal`
+            // declaration are `pub(crate)`, nothing in this crate uses most of
+            // them, and each carries an allowance.
+            "-D",
+            "dead_code",
         ])
         .arg("-o")
         .arg(&meta_path)

@@ -170,10 +170,8 @@ member; rsdl is the apex.
                          for thumbv7em-none-eabihf, a target with no standard
                          library; the corpus crate is also linted with clippy,
                          with its default features and with them off for that
-                         target, under -D warnings, where the only
-                         diagnostics that pass are dead_code for nine named
-                         items the emitter writes for the corpus's internal
-                         types; the lints that its lib.rs
+                         target, under -D warnings, so any diagnostic fails
+                         it, dead_code included; the lints that its lib.rs
                          allows stay allowed.
                          examples/cabin is its own
                          cargo workspace, outside this one, and carries the fmt

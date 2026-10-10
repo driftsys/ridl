@@ -1159,6 +1159,7 @@ pub struct SensorFault {
     pub message: crate::ridl::std::Message,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
 pub(crate) struct RawWheelFrame {
     pub ticks: Counter,
     pub frame: ::std::vec::Vec<::core::primitive::u8>,
@@ -2796,17 +2797,20 @@ for SpeedLimitPayload {
 /// collection's elements have no one view type to hand back.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
+#[allow(dead_code)]
 pub(crate) struct RawWheelFrameFbView<'a> {
     pub(crate) buf: &'a [::core::primitive::u8],
     pub(crate) table: ::core::primitive::usize,
 }
 #[allow(deprecated)]
+#[allow(dead_code)]
 impl<'a> ::ridl_rt::payload::View<'a> for RawWheelFrameFbView<'a> {
     fn bytes(&self) -> &'a [::core::primitive::u8] {
         self.buf
     }
 }
 #[allow(deprecated)]
+#[allow(dead_code)]
 impl<'a> RawWheelFrameFbView<'a> {
     /// Reads `RawWheelFrame`'s `ticks` field in place.
     pub(crate) fn ticks(&self) -> Counter {
@@ -2838,6 +2842,7 @@ impl<'a> RawWheelFrameFbView<'a> {
 }
 /// Writes `RawWheelFrame` as a FlatBuffers table and returns its position.
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_encode_RawWheelFrame(
     value: &RawWheelFrame,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -2876,6 +2881,7 @@ pub(crate) fn __ridl_fb_encode_RawWheelFrame(
 /// map key uniqueness, and named and anonymous scalar ranges,
 /// steps and lengths. Pattern checks require `validate-pattern`.
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_verify_RawWheelFrame(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -2938,6 +2944,7 @@ pub(crate) fn __ridl_fb_verify_RawWheelFrame(
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_decode_RawWheelFrame(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -2969,6 +2976,7 @@ pub(crate) fn __ridl_fb_decode_RawWheelFrame(
     }
 }
 #[allow(deprecated)]
+#[allow(dead_code)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelFrame {
     /// The largest FlatBuffers buffer any legal `RawWheelFrame` encodes to: 76 bytes.
     ///

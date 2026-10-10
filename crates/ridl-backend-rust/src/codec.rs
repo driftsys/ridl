@@ -71,8 +71,9 @@ use ridl_ir::projection::flatbuffers as fb_projection;
 use ridl_ir::codegen::v1;
 
 use crate::{
-    Ctx, GenerateError, ScalarBacking, check_flatbuffers_bound, class_backing, declared, ident,
-    model_type_tokens, pascal_of, tuple_name, type_path, vis_tokens,
+    Ctx, GenerateError, ScalarBacking, allow_dead_code_if_internal, check_flatbuffers_bound,
+    class_backing, declared, ident, model_type_tokens, pascal_of, tuple_name, type_path,
+    vis_tokens,
 };
 
 /// The alignment every buffer this codec writes is finished at: eight, the
@@ -845,14 +846,23 @@ impl<'a> Codec<'a> {
             items.push(self.withheld_note(root)?);
         }
         for root in &roots {
-            items.extend(self.decl_items(root)?);
+            let visibility = self.declaration_of(root)?.visibility;
+            items.extend(
+                self.decl_items(root)?
+                    .into_iter()
+                    .map(|item| allow_dead_code_if_internal(visibility, item)),
+            );
         }
         for index in self.reachable_tuples(&roots) {
             let induced = self.ctx.tuple(index).ok_or_else(|| GenerateError {
                 message: "the lowered model names a tuple it does not carry".to_string(),
             })?;
             let table = self.tuple_table(induced)?;
-            items.extend(self.table_items(tuple_name(induced), induced.visibility, &table)?);
+            items.extend(
+                self.table_items(tuple_name(induced), induced.visibility, &table)?
+                    .into_iter()
+                    .map(|item| allow_dead_code_if_internal(induced.visibility, item)),
+            );
         }
         Ok(items)
     }
