@@ -529,9 +529,10 @@ disagreeing sources is the correct one.
    `ridl_ir::v2::load_ir_json` and `ridl_ir::v2::LoadError`, and `ridl-diff`
    re-exports both under their earlier paths. `ridl-ir` reads the file itself;
    this is the only file I/O in its library. `ridlc` no longer depends on
-   `ridl-diff`; the crates that do are `crates/ridl` and `ridl-mcp`, and the
-   test `xtask/tests/ridlc_diff_boundary.rs` fails if `ridl-diff` enters
-   `ridlc`'s normal dependency closure again (driftsys/ridl#786).
+   `ridl-diff`; the crates with a normal dependency on it are `crates/ridl` and
+   `ridl-mcp`, and the test `xtask/tests/ridlc_diff_boundary.rs` fails if
+   `ridl-diff` enters `ridlc`'s normal or build dependency closure again, with
+   every feature on (driftsys/ridl#786).
 
 10. **The expr-core specification (E2.12) is a document, and it lands before or
     with the E2.4 subset implementation.** E2.4 implements only the guaranteed

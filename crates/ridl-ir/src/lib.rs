@@ -3253,34 +3253,45 @@ mod system_round_trip {
 
 #[cfg(test)]
 mod load_ir_json {
-    use crate::v2::{LoadError, load_ir_json};
+    use crate::v2::{self, LoadError, load_ir_json};
+
+    /// A snapshot written by `to_json_pretty` loads back as the same package.
+    #[test]
+    fn a_snapshot_file_loads() {
+        let dir = tempfile::tempdir().unwrap();
+        let package = v2::Package {
+            name: "veh.cabin".to_string(),
+            ..v2::Package::default()
+        };
+        let path = dir.path().join("cabin.ir.json");
+        std::fs::write(&path, v2::to_json_pretty(&package).unwrap()).unwrap();
+        assert_eq!(load_ir_json(&path).unwrap(), package);
+    }
 
     /// A missing file is an `Io` error and a file that is not IR v2 JSON is a
-    /// `Parse` error, each with the message `ridl diff` prints.
+    /// `Parse` error, each with the message `ridl diff` prints, inner error
+    /// included.
     #[test]
     fn a_missing_file_is_io_and_bad_json_is_parse() {
-        let dir = std::env::temp_dir().join(format!("ridl-ir-load-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = tempfile::tempdir().unwrap();
 
-        let missing = load_ir_json(&dir.join("missing.ir.json")).unwrap_err();
-        assert!(matches!(missing, LoadError::Io(_)), "{missing:?}");
-        assert!(
-            missing
-                .to_string()
-                .starts_with("cannot read the IR snapshot: "),
-            "{missing}"
+        let missing = dir.path().join("missing.ir.json");
+        let io = std::fs::read_to_string(&missing).unwrap_err();
+        let error = load_ir_json(&missing).unwrap_err();
+        assert!(matches!(error, LoadError::Io(_)), "{error:?}");
+        assert_eq!(
+            error.to_string(),
+            format!("cannot read the IR snapshot: {io}")
         );
 
-        let bad = dir.join("bad.ir.json");
+        let bad = dir.path().join("bad.ir.json");
         std::fs::write(&bad, "{").unwrap();
-        let parse = load_ir_json(&bad).unwrap_err();
-        std::fs::remove_dir_all(&dir).unwrap();
-        assert!(matches!(parse, LoadError::Parse(_)), "{parse:?}");
-        assert!(
-            parse
-                .to_string()
-                .starts_with("the IR snapshot is not valid IR v2 JSON: "),
-            "{parse}"
+        let parse = v2::from_json("{").unwrap_err();
+        let error = load_ir_json(&bad).unwrap_err();
+        assert!(matches!(error, LoadError::Parse(_)), "{error:?}");
+        assert_eq!(
+            error.to_string(),
+            format!("the IR snapshot is not valid IR v2 JSON: {parse}")
         );
     }
 }

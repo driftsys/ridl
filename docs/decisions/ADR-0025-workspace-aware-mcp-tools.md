@@ -40,17 +40,15 @@ lints): a ninth tool, `ridl_metrics`, is added under decision 9, and the package
 dependency edges that decision 8 counts are now computed in `ridlc::deps`, which
 `ridl_metrics` reads. `ridl_dependencies` still reports the complete graph.
 
-Amended 2026-10-10 (driftsys/ridl#786): `ridlc` no longer depends on
-`ridl-diff`. The snapshot loader that `load_diff_side` calls moved to `ridl-ir`
-as `ridl_ir::v2::load_ir_json`, under ADR-0008 decision 9. The consequence below
-that says `ridlc` depends on `ridl-diff` records the state on 2026-10-04.
-
 Amended 2026-10-09 (driftsys/ridl#770): decision 7 accepts an overlay path that
 ends in `.rxdl` or `.rmdl`. In a package directory the loader reports such an
 overlay with the warning RIDL-417 (`unsupported-source-file`), as it reports the
 same file on disk, and does not compile it. A lone `.rxdl` or `.rmdl` file in
 single-file mode, with or without an overlay of it, is a load error that names
 the extension, and reaches the agent as a tool error.
+
+Amended 2026-10-10 (driftsys/ridl#786): `ridlc` no longer depends on
+`ridl-diff`; see [ADR-0008](ADR-0008-e2-execution.md) decision 9.
 
 ## Context
 
@@ -200,9 +198,10 @@ From the design's §10. The numbers are the decisions that reject them.
 - Every added tool, input or output field is permanent (decision 9). A removal
   or a rename needs this record amended first.
 - `ridlc` gains `compile_workspace_with`, `load_diff_side` and
-  `WorkspaceOutput.imports`, and depends on `ridl-diff`; `ridl-core` gains
-  `load_workspace_with`. `compile_workspace`, `load_workspace` and the CLI's
-  `ridl diff` output and exit codes are unchanged.
+  `WorkspaceOutput.imports`, and depends on `ridl-diff` (until 2026-10-10, see
+  ADR-0008 decision 9); `ridl-core` gains `load_workspace_with`.
+  `compile_workspace`, `load_workspace` and the CLI's `ridl diff` output and
+  exit codes are unchanged.
 
 ## References
 

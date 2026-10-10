@@ -18,9 +18,9 @@
 //!
 //! This module owns the vocabulary ([`Verdict`], [`Category`], [`Change`],
 //! [`DiffReport`]), the set-level comparison ([`diff_sets`], and
-//! [`diff_workspaces`] with the system headings of [`system`]), snapshot
-//! loading ([`load_ir_json`]), and rendering ([`render_text`],
-//! [`render_json`]). The
+//! [`diff_workspaces`] with the system headings of [`system`]), and rendering
+//! ([`render_text`], [`render_json`]). It re-exports the snapshot loader
+//! [`load_ir_json`] from `ridl-ir`, which owns it. The
 //! classification table itself is documented per category by [`explain`], which
 //! `ridl diff --explain` prints.
 
@@ -32,9 +32,7 @@ pub mod unit_verdict;
 mod walk;
 
 pub use classify::{absence_refused, category_from_word, classify, explain};
-// The snapshot loader lives in `ridl-ir` so that `ridlc` can read a snapshot
-// without depending on this crate (driftsys/ridl#786); it is re-exported here
-// under its earlier path.
+// Re-exported under its earlier path (ADR-0008 decision 9).
 pub use ridl_ir::v2::{LoadError, load_ir_json};
 pub use system::{SystemChange, SystemHeading, diff_systems};
 pub use unit_verdict::{UnitVerdicts, unit_verdict};
