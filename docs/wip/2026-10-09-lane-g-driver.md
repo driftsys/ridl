@@ -366,3 +366,16 @@ Each ruling: what was decided — why — what it costs if wrong.
   `debt` issue now carries a severity label and a milestone. Eight long
   checklists (#338, #342, #347, #607, #653, #679, #682, #690) were spot-checked,
   not audited line by line — if wrong, an item already done stays listed.
+- **R-37** #700, option B: `ridl diff` compares an interface's number and
+  provisional flag on every pairing. `interface_frozen` (same number,
+  provisional to frozen, the `ridl lock` step) is compatible — the wire is
+  unchanged and only the catalog identity moves; `interface_number_changed` (the
+  number differs on any pairing) is breaking — the number is the routing key, so
+  a peer built before cannot reach the interface. An old number 0 (a snapshot
+  from before the lock) is not compared. The region map is not compared: the
+  package-level number comparison catches every change that moves a region hash,
+  and ADR-0022 decision 9 (system changes carry no verdict) stays true. The
+  per-unit verdict of #810 reads these categories as they are: a freeze keeps
+  the compatible-hash list, a number change restarts it — if wrong, a freeze at
+  the same number is reported compatible where a stricter reading would call any
+  catalog-identity change breaking.
