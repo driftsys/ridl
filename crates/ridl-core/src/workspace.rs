@@ -232,7 +232,16 @@ pub fn load_workspace_with(
     }
 
     if entry.is_file() {
-        match entry.parent().and_then(find_root) {
+        // A bare file name has the empty path as its parent, which stands
+        // for the current directory.
+        let parent = entry.parent().map(|dir| {
+            if dir.as_os_str().is_empty() {
+                Path::new(".")
+            } else {
+                dir
+            }
+        });
+        match parent.and_then(find_root) {
             Some(root) => loader.load_root(db, &root)?,
             None => loader.load_single_file(db, entry)?,
         }
