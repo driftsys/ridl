@@ -91,7 +91,12 @@ fn baseline_dir(root: &Path) -> PathBuf {
 
 /// The hash lines of the published `<UNIT>.catalogs`, newest first.
 fn history_lines(root: &Path) -> Vec<String> {
-    let path = baseline_dir(root).join(format!("{UNIT}.catalogs"));
+    history_lines_of(root, UNIT)
+}
+
+/// The hash lines of the published `<unit>.catalogs`, newest first.
+fn history_lines_of(root: &Path, unit: &str) -> Vec<String> {
+    let path = baseline_dir(root).join(format!("{unit}.catalogs"));
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|err| panic!("read {}: {err}", path.display()));
     text.lines()
@@ -326,6 +331,41 @@ fn an_unreadable_history_file_refuses_the_publication() {
         snapshot_before,
         "the snapshot is not replaced"
     );
+    assert!(
+        !root.join(".ridl").join(".baseline.staging").exists(),
+        "the staging directory is removed"
+    );
+}
+
+/// A history path that is not a readable file (here a directory) is an error
+/// other than a missing file: the build fails with exit 2, and the
+/// publication is refused with exit 2 and the staging directory is removed.
+#[test]
+fn a_history_path_that_cannot_be_read_refuses_the_publication() {
+    let dir = TempDir::new("history-is-a-directory");
+    let out = TempDir::new("history-is-a-directory-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    let history = baseline_dir(&root).join(format!("{UNIT}.catalogs"));
+    std::fs::remove_file(&history).expect("remove the published history");
+    std::fs::create_dir(&history).expect("put a directory in its place");
+    set_source(&dir, APPENDED);
+    let (code, stderr) = build(&root, out.path(), "catalog");
+    assert_eq!(code, 2, "an unreadable history fails the build: {stderr}");
+    assert!(
+        stderr.contains(&history.display().to_string()),
+        "stderr names the file: {stderr}"
+    );
+    let (code, stderr) = baseline(&root);
+    assert_eq!(code, 2, "an unreadable history is an error: {stderr}");
+    assert!(
+        stderr.contains(&history.display().to_string()),
+        "stderr names the file: {stderr}"
+    );
+    assert!(
+        !root.join(".ridl").join(".baseline.staging").exists(),
+        "the staging directory is removed"
+    );
 }
 
 #[test]
@@ -337,6 +377,189 @@ fn a_catalog_that_names_a_standard_type_records_the_built_hash() {
     assert_eq!(
         history_lines(&root),
         vec![describe_hash(&root, out.path(), UNIT)]
+    );
+}
+
+/// `NAMES_A_STANDARD_TYPE` with a second `Timestamp` field appended to the
+/// struct: a compatible change to a type that reaches `ridl.std`.
+const NAMES_A_STANDARD_TYPE_TWICE: &str = "package veh.cluster
+type Speed: km/h [0.0..250.0 step 0.5]
+struct DoorReport {
+  observedAt: Timestamp
+  open: boolean
+  closedAt: Timestamp
+}
+interface VehicleStatus {
+  signal currentSpeed: Speed @10ms
+  event doorOpened: DoorReport @[100ms..1s]
+}
+";
+
+/// A catalog that reaches `ridl.std` is compared and hashed with the
+/// standard package in scope, at publication and at build time: the
+/// published tree lists nothing, a compatible change lists the baseline, and
+/// the chain is carried at the second publication.
+#[test]
+fn a_chain_that_reaches_a_standard_type_is_carried() {
+    let dir = TempDir::new("std-chain");
+    let first = TempDir::new("std-chain-first");
+    let second = TempDir::new("std-chain-second");
+    let published_tree = TempDir::new("std-chain-published");
+    let changed_tree = TempDir::new("std-chain-changed");
+    let republished_tree = TempDir::new("std-chain-republished");
+    let root = set_source(&dir, NAMES_A_STANDARD_TYPE);
+    publish(&root);
+    let first_hash = describe_hash(&root, first.path(), UNIT);
+    build_catalog(&root, published_tree.path());
+    assert_eq!(
+        compatible_of(published_tree.path(), UNIT),
+        Vec::<String>::new(),
+        "the published tree lists nothing"
+    );
+    set_source(&dir, NAMES_A_STANDARD_TYPE_TWICE);
+    build_catalog(&root, changed_tree.path());
+    assert_eq!(
+        compatible_of(changed_tree.path(), UNIT),
+        vec![first_hash.clone()],
+        "the compatible change lists the baseline"
+    );
+    publish(&root);
+    let second_hash = describe_hash(&root, second.path(), UNIT);
+    assert_eq!(history_lines(&root), vec![second_hash, first_hash.clone()]);
+    build_catalog(&root, republished_tree.path());
+    assert_eq!(
+        compatible_of(republished_tree.path(), UNIT),
+        vec![first_hash]
+    );
+}
+
+/// `BASE` with a type that no interface reaches.
+const BASE_WITH_UNREACHED: &str = "package veh.cluster
+type Speed: km/h [0.0..250.0 step 0.5]
+type DoorState: integer [0..1]
+type Unreached: integer [0..9]
+interface VehicleStatus {
+  signal currentSpeed: Speed @10ms
+  event doorOpened: DoorState @[100ms..1s]
+}
+";
+
+/// `APPENDED` with a type that no interface reaches.
+const APPENDED_WITH_UNREACHED: &str = "package veh.cluster
+type Speed: km/h [0.0..250.0 step 0.5]
+type DoorState: integer [0..1]
+type Unreached: integer [0..9]
+interface VehicleStatus {
+  signal currentSpeed: Speed @10ms
+  event doorOpened: DoorState @[100ms..1s]
+  event doorClosed: DoorState @[100ms..1s]
+}
+";
+
+/// Removing a declaration no interface reaches is a breaking change of the
+/// unit, but it leaves the catalog hash as published: the catalog did not
+/// change, so the chain is carried at build time and at publication.
+#[test]
+fn an_unchanged_catalog_carries_the_chain_whatever_the_verdict() {
+    let dir = TempDir::new("unchanged-catalog");
+    let first = TempDir::new("unchanged-catalog-first");
+    let second = TempDir::new("unchanged-catalog-second");
+    let out = TempDir::new("unchanged-catalog-out");
+    let root = set_source(&dir, BASE_WITH_UNREACHED);
+    publish(&root);
+    let first_hash = describe_hash(&root, first.path(), UNIT);
+    set_source(&dir, APPENDED_WITH_UNREACHED);
+    publish(&root);
+    let second_hash = describe_hash(&root, second.path(), UNIT);
+
+    set_source(&dir, APPENDED);
+    build_catalog(&root, out.path());
+    assert_eq!(
+        hex_of_bytes(&describe(out.path(), UNIT)["hash"]),
+        second_hash,
+        "the removal leaves the catalog hash as published"
+    );
+    assert_eq!(
+        compatible_of(out.path(), UNIT),
+        vec![first_hash.clone()],
+        "the build carries the chain"
+    );
+    publish(&root);
+    assert_eq!(
+        history_lines(&root),
+        vec![second_hash, first_hash],
+        "the publication carries the chain"
+    );
+}
+
+/// A two-unit workspace: `veh.cluster` with `cluster_source` and `veh.body`
+/// with `body_source`.
+fn write_two_units(dir: &TempDir, cluster_source: &str, body_source: &str) -> PathBuf {
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"cluster\", \"body\"]\n",
+    );
+    dir.write("cluster/ridl.toml", MANIFEST);
+    dir.write("cluster/cluster.ridl", cluster_source);
+    dir.write(
+        "body/ridl.toml",
+        "[package]\nname = \"veh.body\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("body/body.ridl", body_source);
+    let root = dir.path().to_path_buf();
+    lock(&root);
+    root
+}
+
+const BODY: &str = "package veh.body
+type Level: integer [0..100]
+interface Lights {
+  signal level: Level @10ms
+}
+";
+
+/// `BODY` with one signal appended: a compatible change.
+const BODY_APPENDED: &str = "package veh.body
+type Level: integer [0..100]
+interface Lights {
+  signal level: Level @10ms
+  signal dimmed: Level @10ms
+}
+";
+
+/// Each unit is judged by its own verdict: a breaking change in one unit
+/// restarts that unit's chain and leaves the other unit's chain carried, at
+/// build time and at publication.
+#[test]
+fn a_break_in_one_unit_leaves_the_other_chain_carried() {
+    let dir = TempDir::new("two-units");
+    let before = TempDir::new("two-units-before");
+    let out = TempDir::new("two-units-out");
+    let after = TempDir::new("two-units-after");
+    let root = write_two_units(&dir, BASE, BODY);
+    publish(&root);
+    let body_hash = describe_hash(&root, before.path(), "veh.body");
+
+    write_two_units(&dir, RETYPED, BODY_APPENDED);
+    build_catalog(&root, out.path());
+    assert_eq!(
+        compatible_of(out.path(), UNIT),
+        Vec::<String>::new(),
+        "the broken unit lists nothing"
+    );
+    assert_eq!(
+        compatible_of(out.path(), "veh.body"),
+        vec![body_hash.clone()],
+        "the compatible unit lists its baseline"
+    );
+
+    publish(&root);
+    let cluster_hash = describe_hash(&root, after.path(), UNIT);
+    let new_body_hash = hex_of_bytes(&describe(after.path(), "veh.body")["hash"]);
+    assert_eq!(history_lines(&root), vec![cluster_hash]);
+    assert_eq!(
+        history_lines_of(&root, "veh.body"),
+        vec![new_body_hash, body_hash]
     );
 }
 
@@ -373,6 +596,43 @@ fn a_history_of_a_unit_with_no_published_snapshot_is_not_carried() {
     dir.write("cluster/cluster.ridl", BASE);
     let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
     assert_eq!(code, 0, "the added unit's lock is allocated: {stderr}");
+    publish(&root);
+
+    let hash = describe_hash(&root, out.path(), UNIT);
+    assert_eq!(history_lines(&root), vec![hash]);
+}
+
+/// A history left under the name of a unit the published baseline holds no
+/// snapshot of is never carried, so it is not read: a malformed one does not
+/// refuse the publication.
+#[test]
+fn a_malformed_history_of_a_unit_with_no_published_snapshot_is_not_read() {
+    let dir = TempDir::new("unpublished-unit-malformed");
+    let out = TempDir::new("unpublished-unit-malformed-out");
+    dir.write(
+        "common/ridl.toml",
+        "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "common/common.typl",
+        "package veh.common\ntype Speed: km/h [0.0..250.0 step 0.5]\n",
+    );
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"common\"]\n");
+    let root = dir.path().to_path_buf();
+    publish(&root);
+    std::fs::write(
+        baseline_dir(&root).join(format!("{UNIT}.catalogs")),
+        "garbage\n",
+    )
+    .expect("write the malformed leftover history");
+
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"common\", \"cluster\"]\n",
+    );
+    dir.write("cluster/ridl.toml", MANIFEST);
+    dir.write("cluster/cluster.ridl", BASE);
+    lock(&root);
     publish(&root);
 
     let hash = describe_hash(&root, out.path(), UNIT);
@@ -807,5 +1067,30 @@ fn a_build_with_a_plugin_reads_the_baseline() {
     assert!(
         stderr.contains(&snapshot.display().to_string()),
         "stderr names the snapshot:\n{stderr}"
+    );
+}
+
+/// A build with an error diagnostic reports the diagnostic and exits 1, as
+/// it does with no baseline: the published chain is not an error source.
+#[test]
+fn a_build_with_a_source_error_reports_the_error() {
+    let dir = TempDir::new("build-source-error");
+    let out = TempDir::new("build-source-error-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    dir.write(
+        "cluster.ridl",
+        "package veh.cluster
+type Speed: km/h [0.0..250.0 step 0.5]
+interface VehicleStatus {
+  signal currentSpeed: Missing @10ms
+}
+",
+    );
+    let (code, stderr) = build(&root, out.path(), "catalog");
+    assert_eq!(code, 1, "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("Missing"),
+        "stderr names the error:\n{stderr}"
     );
 }

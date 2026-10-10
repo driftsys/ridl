@@ -25,13 +25,13 @@ use crate::{default_baseline_dir, report_diff_side_error};
 /// `ridl check` treats it. Otherwise the published snapshots are compared
 /// with the workspace, and each unit with an interface shape, a published
 /// snapshot and a published `<unit>.catalogs` file gets the file's hashes
-/// less the unit's current
-/// catalog hash when the unit's verdict is compatible or identical, and an
-/// empty list when it is breaking. The hashes are read from the file and
-/// never recomputed from a snapshot; a file that cannot be read is an error
-/// (exit 2), and so is a baseline that cannot be loaded. A workspace that does
-/// not compile gets no list: the build reports the error itself and writes
-/// nothing.
+/// less the unit's current catalog hash when the unit's verdict is
+/// compatible or identical, or when the current catalog hash is the file's
+/// first hash: the catalog did not change, so every hash the file lists still
+/// applies. Otherwise the unit's list is empty. The hashes are read from the
+/// file and never recomputed from a snapshot; a file that cannot be read is
+/// an error (exit 2), and so is a baseline that cannot be loaded. A build
+/// with an error diagnostic gets no list.
 pub(crate) fn compatible_catalogs(
     db: &mut RidlDatabase,
     entry: &Path,
@@ -72,16 +72,20 @@ pub(crate) fn compatible_catalogs(
         let Some(history) = read_history_if_present(&published, unit)? else {
             continue;
         };
-        let hashes = match ridl_diff::unit_verdict(&report, unit, &old, &current) {
-            Verdict::Breaking => Vec::new(),
-            Verdict::Compatible | Verdict::Identical => {
-                let current_hash = catalog_hash(unit, &scope);
-                history
-                    .hashes
-                    .into_iter()
-                    .filter(|hash| *hash != current_hash)
-                    .collect()
-            }
+        let current_hash = catalog_hash(unit, &scope);
+        let carried = history.hashes.first() == Some(&current_hash)
+            || matches!(
+                ridl_diff::unit_verdict(&report, unit, &old, &current),
+                Verdict::Compatible | Verdict::Identical
+            );
+        let hashes = if carried {
+            history
+                .hashes
+                .into_iter()
+                .filter(|hash| *hash != current_hash)
+                .collect()
+        } else {
+            Vec::new()
         };
         compatible.insert(unit.to_string(), hashes);
     }
@@ -94,13 +98,16 @@ pub(crate) fn compatible_catalogs(
 /// Each file holds the unit's catalog hash, computed over the staged
 /// snapshots as `ridl build --emit catalog` computes it. When the unit's
 /// verdict between the snapshots in `published` and the staged ones is
-/// compatible or identical, the hashes of `published/<unit>.catalogs` follow,
-/// read as they are and never recomputed from a snapshot; a breaking verdict
-/// starts the chain again from the one new hash. A hash is listed once.
+/// compatible or identical, or when the new catalog hash is the first hash of
+/// `published/<unit>.catalogs` (the catalog did not change), the hashes of
+/// that file follow, read as they are and never recomputed from a snapshot.
+/// Otherwise the chain starts again from the one new hash. A hash is listed
+/// once.
 ///
 /// A unit with no snapshot in `published` has nothing to compare against, so
-/// it starts a chain. A published history file that cannot be read
-/// is an error (exit 2), and the caller publishes nothing.
+/// it starts a chain, and a history file left under its name is not read. A
+/// published history file of a unit with a published snapshot that cannot be
+/// read is an error (exit 2), and the caller publishes nothing.
 pub(crate) fn write_catalog_histories(
     db: &mut RidlDatabase,
     staging: &Path,
@@ -125,22 +132,28 @@ pub(crate) fn write_catalog_histories(
         // A unit with no published snapshot has no earlier baseline, so a
         // history file left under its name is not carried, whatever the verdict.
         let published_before = old.iter().any(|package| unit_of(package) == unit);
-        let carried = published_before
-            && report.as_ref().is_some_and(|report| {
-                matches!(
-                    ridl_diff::unit_verdict(report, unit, &old, &fresh),
-                    Verdict::Compatible | Verdict::Identical
-                )
-            });
         // The published file is read whatever the verdict, so a file that
         // cannot be read refuses the publication even when the chain restarts.
-        let earlier = read_history(published, unit)?;
+        let earlier = if published_before {
+            read_history(published, unit)?
+        } else {
+            CatalogHistory::default()
+        };
+        let new_hash = catalog_hash(unit, &scope);
+        let carried = published_before
+            && (earlier.hashes.first() == Some(&new_hash)
+                || report.as_ref().is_some_and(|report| {
+                    matches!(
+                        ridl_diff::unit_verdict(report, unit, &old, &fresh),
+                        Verdict::Compatible | Verdict::Identical
+                    )
+                }));
         let mut history = if carried {
             earlier
         } else {
             CatalogHistory::default()
         };
-        history.push_front(catalog_hash(unit, &scope));
+        history.push_front(new_hash);
         write_history(staging, unit, &history)?;
     }
     Ok(())
