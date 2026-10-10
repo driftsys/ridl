@@ -24,8 +24,6 @@
 //! classification table itself is documented per category by [`explain`], which
 //! `ridl diff --explain` prints.
 
-use std::path::Path;
-
 use ridl_ir::v2::{Package, System};
 
 mod classify;
@@ -34,6 +32,10 @@ pub mod unit_verdict;
 mod walk;
 
 pub use classify::{absence_refused, category_from_word, classify, explain};
+// The snapshot loader lives in `ridl-ir` so that `ridlc` can read a snapshot
+// without depending on this crate (driftsys/ridl#786); it is re-exported here
+// under its earlier path.
+pub use ridl_ir::v2::{LoadError, load_ir_json};
 pub use system::{SystemChange, SystemHeading, diff_systems};
 pub use unit_verdict::{UnitVerdicts, unit_verdict};
 
@@ -297,26 +299,6 @@ pub struct DiffReport {
     pub system: Vec<SystemChange>,
 }
 
-/// An error loading an `.ir.json` snapshot.
-#[derive(Debug)]
-pub enum LoadError {
-    /// The file could not be read.
-    Io(std::io::Error),
-    /// The file was not valid IR v2 JSON.
-    Parse(String),
-}
-
-impl std::fmt::Display for LoadError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LoadError::Io(err) => write!(f, "cannot read the IR snapshot: {err}"),
-            LoadError::Parse(err) => write!(f, "the IR snapshot is not valid IR v2 JSON: {err}"),
-        }
-    }
-}
-
-impl std::error::Error for LoadError {}
-
 /// Appends one change.
 ///
 /// The verdict is stamped breaking here and settled by [`classify`] once the
@@ -525,14 +507,6 @@ pub fn diff_workspaces(
         report.system = diff_systems(old_system, new_system);
     }
     report
-}
-
-/// Loads an `.ir.json` snapshot written by `ridl build --emit ir-json` —
-/// canonical protobuf JSON, read through the one reader every surface shares
-/// (ADR-0014 decision 1).
-pub fn load_ir_json(path: &Path) -> Result<Package, LoadError> {
-    let text = std::fs::read_to_string(path).map_err(LoadError::Io)?;
-    ridl_ir::v2::from_json(&text).map_err(|err| LoadError::Parse(err.to_string()))
 }
 
 /// The stable lowercase word for a verdict — used by both the text and JSON

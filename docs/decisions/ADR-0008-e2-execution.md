@@ -522,6 +522,17 @@ disagreeing sources is the correct one.
    PR #175 left it, and rewriting it would claim PR #175 touched a path that did
    not exist when it merged.
 
+   **Extended (2026-10-10):** the snapshot loader moved and the decision did
+   not. `ridlc` had come to depend on `ridl-diff` for one function, the
+   `.ir.json` loader `ridl diff` uses to read a snapshot side, which broke the
+   boundary above. The loader and its error type now live in `ridl-ir`, as
+   `ridl_ir::v2::load_ir_json` and `ridl_ir::v2::LoadError`, and `ridl-diff`
+   re-exports both under their earlier paths. `ridl-ir` reads the file itself;
+   this is the only file I/O in its library. `ridlc` no longer depends on
+   `ridl-diff`; the crates that do are `crates/ridl` and `ridl-mcp`, and the
+   test `xtask/tests/ridlc_diff_boundary.rs` fails if `ridl-diff` enters
+   `ridlc`'s normal dependency closure again (driftsys/ridl#786).
+
 10. **The expr-core specification (E2.12) is a document, and it lands before or
     with the E2.4 subset implementation.** E2.4 implements only the guaranteed
     subset — comparison, boolean connectives, arithmetic, enum access,

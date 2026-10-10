@@ -105,13 +105,13 @@ impl std::fmt::Display for DiffSideError {
                 f,
                 "{}: {}",
                 path.display(),
-                ridl_diff::LoadError::Io(io::Error::new(error.kind(), error.to_string()))
+                ridl_ir::v2::LoadError::Io(io::Error::new(error.kind(), error.to_string()))
             ),
             Self::SnapshotParse { path, error } => write!(
                 f,
                 "{}: {}",
                 path.display(),
-                ridl_diff::LoadError::Parse(error.clone())
+                ridl_ir::v2::LoadError::Parse(error.clone())
             ),
             Self::SourceIo { path, error } => write!(f, "{}: {error}", path.display()),
             Self::OverlayOnSnapshot(path) => write!(
@@ -447,12 +447,12 @@ fn load_snapshots(files: &[PathBuf]) -> Result<Vec<ridl_ir::v2::Package>, DiffSi
     files
         .iter()
         .map(|file| {
-            ridl_diff::load_ir_json(file).map_err(|error| match error {
-                ridl_diff::LoadError::Io(error) => DiffSideError::SnapshotRead {
+            ridl_ir::v2::load_ir_json(file).map_err(|error| match error {
+                ridl_ir::v2::LoadError::Io(error) => DiffSideError::SnapshotRead {
                     path: file.clone(),
                     error,
                 },
-                ridl_diff::LoadError::Parse(error) => DiffSideError::SnapshotParse {
+                ridl_ir::v2::LoadError::Parse(error) => DiffSideError::SnapshotParse {
                     path: file.clone(),
                     error,
                 },
@@ -658,7 +658,7 @@ mod tests {
         fs::write(&path, "{").unwrap();
         let error = load(&path, &[]).err().unwrap();
         assert!(matches!(error, DiffSideError::SnapshotParse { .. }));
-        let parse = ridl_diff::load_ir_json(&path).err().unwrap();
+        let parse = ridl_ir::v2::load_ir_json(&path).err().unwrap();
         assert_eq!(error.to_string(), format!("{}: {parse}", path.display()));
     }
     #[test]

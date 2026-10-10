@@ -162,8 +162,8 @@ helpers that the baseline commands in `main.rs` also need
 `ridlc::diff_side`, with the others that module makes public. The helpers whose
 message depends on the caller (`refuse_nested_snapshot_directory`,
 `refuse_artifact_directory` and the parse remedy of `load_snapshots`) stay in
-`main.rs`. `ridlc` depends on `ridl-diff` for the snapshot parse; `ridl-diff`
-depends only on `ridl-ir`, `serde` and `serde_json`, so there is no cycle.
+`main.rs`. `ridlc` parses a snapshot with `ridl_ir::v2::load_ir_json` and does
+not depend on `ridl-diff` (ADR-0008 decision 9).
 
 ### 4.2 `ridl-mcp`
 

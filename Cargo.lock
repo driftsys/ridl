@@ -2241,7 +2241,6 @@ dependencies = [
  "ridl-backend-ts",
  "ridl-core",
  "ridl-descriptor",
- "ridl-diff",
  "ridl-ir",
  "ridl-sem",
  "ridl-syntax",
