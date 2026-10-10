@@ -342,3 +342,9 @@ Each ruling: what was decided — why — what it costs if wrong.
   new variant would reach two `unreachable!` arms; the module rustdoc names the
   exception — if wrong, a caller that must tell this case from a filesystem
   failure needs the dedicated variant, a contained change.
+- **R-32** G6 is split: the debt triage starts now (2026-10-10), because it
+  changes no code and G1 waits on lane H's H3 for an unknown time; the gardening
+  of this driver stays last, after G1 merges. Bucket E is every open issue
+  labelled `debt` at the start of the triage, minus the issues lanes G and H
+  still work on (#700, #397, #782, #783) — if wrong, an issue G1 makes moot is
+  triaged before G1 lands, and G1's close-out closes it.
