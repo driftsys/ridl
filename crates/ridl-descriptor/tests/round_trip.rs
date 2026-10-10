@@ -10,8 +10,9 @@
 
 use planus::ReadAsRoot;
 use ridl_descriptor::{
-    Catalog, CatalogRef, Encoding, FILE_IDENTIFIER, Interface, Kind, MaxSize, Member, Payload,
-    RetiredInterface, SCHEMA_VERSION, SizeStateTag, Timing, TimingMode, UnboundedCause, finish,
+    Catalog, CatalogRef, EarlierCatalog, Encoding, FILE_IDENTIFIER, Interface, Kind, MaxSize,
+    Member, Payload, RetiredInterface, SCHEMA_VERSION, SizeStateTag, Timing, TimingMode,
+    UnboundedCause, finish,
 };
 
 fn sample() -> Catalog {
@@ -144,11 +145,12 @@ fn planus_writes_the_identifier_before_the_root_offset() {
     assert!(CatalogRef::read_as_root(&bytes).is_err());
 }
 
-/// The builder's string cache (planus's `string-cache` feature, named in
-/// `Cargo.toml` because the workspace leaves planus's defaults off) writes a
-/// repeated string once. Fails when that feature is dropped, which would
-/// change the bytes of every descriptor.
+/// The builder's string cache (planus's `string-cache` feature, which this
+/// crate's `dedup` feature turns on) writes a repeated string once. Fails when
+/// that feature is dropped from `dedup`, which would change the bytes of every
+/// descriptor. With `dedup` off the cache is absent and the test does not run.
 #[test]
+#[cfg(feature = "dedup")]
 fn a_repeated_string_is_written_once() {
     let mut catalog = sample();
     let mut second = catalog.interfaces[0].clone();
@@ -165,11 +167,42 @@ fn a_repeated_string_is_written_once() {
     assert_eq!(count, 1, "the role `value` is written once");
     // The vtable cache shows in the length: the two interfaces, and their
     // members and payloads, have the same shape and share one vtable each.
-    // Without `vtable-cache` the same catalog is 652 bytes. The byte-vector
-    // cache has nothing to share in this catalog, so it is not pinned here.
+    // Without planus's `vtable-cache` (part of `dedup`) the same catalog is
+    // 652 bytes. The byte-vector cache has nothing to share in this catalog;
+    // `a_repeated_byte_vector_is_written_once` pins it.
     assert_eq!(
         bytes.len(),
         576,
         "the buffer length with the vtable and string caches on"
     );
+}
+
+/// The builder's byte-vector cache (planus's `bytes-cache` feature, which this
+/// crate's `dedup` feature turns on) writes a repeated byte vector once. Fails
+/// when that feature is dropped from `dedup`. With `dedup` off the cache is
+/// absent and the test does not run.
+#[test]
+#[cfg(feature = "dedup")]
+fn a_repeated_byte_vector_is_written_once() {
+    let mut catalog = sample();
+    // An earlier catalog whose hash is the same 32 bytes as this catalog's.
+    catalog.compatible = Some(vec![EarlierCatalog {
+        hash: catalog.hash.clone(),
+    }]);
+    let bytes = finish(&catalog);
+    // Both copies read back, so a count of one below can only come from the
+    // cache, not from a `compatible` list that was never written.
+    let view = CatalogRef::read_as_root(&bytes).expect("a finished buffer reads");
+    let compatible = view.compatible().unwrap().expect("the compatible list");
+    assert_eq!(compatible.len(), 1);
+    let earlier = compatible.get(0).unwrap().unwrap();
+    assert_eq!(earlier.hash().unwrap(), catalog.hash.as_slice());
+    // A FlatBuffers vector: its length as a little-endian u32, then the bytes.
+    let len = u32::try_from(catalog.hash.len()).unwrap();
+    let needle = [&len.to_le_bytes()[..], catalog.hash.as_slice()].concat();
+    let count = bytes
+        .windows(needle.len())
+        .filter(|w| *w == needle.as_slice())
+        .count();
+    assert_eq!(count, 1, "the 32-byte hash is written once");
 }

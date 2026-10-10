@@ -106,9 +106,12 @@ test:
     set -euo pipefail
     if [ -f Cargo.toml ]; then
         cargo test --workspace --locked
-        # `ridl-descriptor` with its `std` feature off: the tests of the
-        # reader half, in the configuration an engine builds.
+        # `ridl-descriptor` with its default features off: the tests of the
+        # reader half, in the configuration an engine builds. Then with only
+        # `dedup` on, so that the builder caches are tested. The thumbv7em checks
+        # of `wasm-check` show that they need no `std`.
         cargo test --locked -p ridl-descriptor --no-default-features
+        cargo test --locked -p ridl-descriptor --no-default-features --features dedup
         # The workspace build resolves `ridl-rt` with default features, so the
         # encoding features gate code it never compiles: the helpers a
         # generated codec calls, and their tests. `just compat-check` builds
@@ -172,10 +175,15 @@ wasm-check:
             --no-default-features
         # wasm32-unknown-unknown has a standard library, so the check above
         # cannot show that a crate builds without one. `ridl-descriptor` with
-        # its `std` feature off is the reader an engine links, and a target
-        # with no standard library is the proof that it links none.
+        # its default features off is the reader an engine links, and a target
+        # with no standard library is the proof that it links no standard
+        # library. The second line adds the `dedup` feature, so that the
+        # caches keep their proof of needing none either. That no hashing
+        # crate is linked without `dedup` is checked by
+        # `xtask/tests/oracle_boundary.rs`.
         rustup target add thumbv7em-none-eabihf
         cargo check --target thumbv7em-none-eabihf -p ridl-descriptor --no-default-features
+        cargo check --target thumbv7em-none-eabihf -p ridl-descriptor --no-default-features --features dedup
         # `ridl-descriptor` with its `std` feature on, so that the half of it
         # that builds a descriptor (`lower`, `describe`) is still checked for
         # the browser target, which the first check no longer does now that

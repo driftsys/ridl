@@ -418,3 +418,63 @@ fn the_generated_crate_reaches_no_planus_crate() {
         );
     }
 }
+
+/// The `cargo tree` listing of the normal dependency graph of
+/// `ridl-descriptor`, with the given extra arguments.
+///
+/// `cargo metadata` cannot answer this: it takes one feature set for the
+/// whole workspace, and other members turn on `ridl-descriptor`'s defaults.
+/// `cargo tree -p` resolves the named package with its own feature flags.
+fn descriptor_tree(extra: &[&str]) -> String {
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+    let output = Command::new(cargo)
+        .args(["tree", "--locked", "-p", "ridl-descriptor", "-e", "normal"])
+        .args(["--prefix", "none"])
+        .args(extra)
+        .output()
+        .expect("`cargo tree` must run");
+    assert!(
+        output.status.success(),
+        "`cargo tree` failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).expect("`cargo tree` prints UTF-8")
+}
+
+/// `ridl-descriptor` with its default features off reaches neither
+/// `hashbrown` nor `foldhash`, so a consumer that only reads descriptors
+/// links neither (and needs no Zlib licence exception). With the default
+/// features on, `hashbrown` is reachable through the `dedup` feature, which
+/// shows that the first half of this test can fail.
+#[test]
+fn the_descriptor_reader_reaches_no_hashing_crate() {
+    let reader = descriptor_tree(&["--no-default-features"]);
+    for forbidden in ["hashbrown", "foldhash"] {
+        assert!(
+            !reader.lines().any(|line| line.starts_with(forbidden)),
+            "`{forbidden}` is in `ridl-descriptor`'s normal graph with default \
+             features off:\n{reader}\n\
+             A planus builder cache must stay behind the `dedup` feature."
+        );
+    }
+    let default = descriptor_tree(&[]);
+    assert!(
+        default.lines().any(|line| line.starts_with("hashbrown")),
+        "`hashbrown` is not in `ridl-descriptor`'s graph with default features \
+         on, so the check above cannot fail:\n{default}"
+    );
+    // The caches belong to `dedup`, not to `std`: `dedup` alone brings the
+    // hashing crates and `std` alone brings neither.
+    let dedup = descriptor_tree(&["--no-default-features", "--features", "dedup"]);
+    assert!(
+        dedup.lines().any(|line| line.starts_with("foldhash")),
+        "`dedup` no longer brings `foldhash`:\n{dedup}"
+    );
+    let std_only = descriptor_tree(&["--no-default-features", "--features", "std"]);
+    assert!(
+        !std_only
+            .lines()
+            .any(|line| line.starts_with("hashbrown") || line.starts_with("foldhash")),
+        "`std` brings a hashing crate:\n{std_only}"
+    );
+}
