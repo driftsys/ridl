@@ -7,6 +7,7 @@
 - [Using the generated Rust code](generated-code.md)
 - [Writing a port](writing-a-port.md)
 - [The catalog descriptor](catalog-descriptor.md)
+- [Evolving an interface](evolving-an-interface.md)
 - [Documenting your API](documenting.md)
 - [Writing a codegen plugin](codegen-plugins.md)
 - [CLI reference](cli-reference.md)

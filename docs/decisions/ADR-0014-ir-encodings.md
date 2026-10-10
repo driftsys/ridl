@@ -49,7 +49,7 @@ catalog, and a provider accepts an `attach` that names one of them (frame
 specification §6.1). `ridl baseline` records the chain, `ridl build` emits the
 list from it, both through `ridl diff`'s classifier scoped to the unit, and a
 breaking change restarts it. The reasoning trail is
-[the catalog compatibility design note](../wip/2026-10-09-catalog-compat-design.md)
+[the catalog compatibility design note](../archive/2026-10-09-catalog-compat-design.md)
 (lane H stage H2, ruling R-1 of its driver); the implementation is its plan,
 tracked as driftsys/ridl#787. Decisions 1 to 14 are unchanged.
 
@@ -62,7 +62,7 @@ change that leaves the hash unchanged, such as the removal of a declaration no
 interface of the unit reaches, no longer restarts the chain. Only the first hash
 has this effect; a current hash equal to an older hash of the file follows the
 verdict. Ruling R-H2-3 of
-[the catalog compatibility design note](../wip/2026-10-09-catalog-compat-design.md)
+[the catalog compatibility design note](../archive/2026-10-09-catalog-compat-design.md)
 is amended to match, and the change is tracked as driftsys/ridl#787. Decisions 1
 to 14 are unchanged.
 
