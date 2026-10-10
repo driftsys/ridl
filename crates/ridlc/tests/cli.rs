@@ -2368,3 +2368,47 @@ fn a_single_deployment_is_selected_without_the_flag() {
         "the only deployment is selected, stderr:\n{stderr}"
     );
 }
+
+/// A plugin is an emitted backend too: a build whose only backend is a
+/// `kotlin` plugin compares the links with `[backend.kotlin] encodings`, and
+/// the different-machine link warns once, naming that table. Unix only, for
+/// the script.
+#[cfg(unix)]
+#[test]
+fn a_plugin_is_an_emitted_backend_the_lint_compares_against() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let manifest = "[package]\nname = \"veh.bench\"\nversion = \"1.0.0\"\n\n\
+                    [backend.kotlin]\nencodings = [\"flatbuffers\"]\n\n\
+                    [lints]\nmissing-docs = \"allow\"\n";
+    let dir = link_encodings_workspace("link-encoding-plugin", manifest, None);
+    let script = dir.write(
+        "ridlc-gen-kotlin",
+        "#!/bin/sh\nprintf '{\"files\": [], \"diagnostics\": []}\\n'\n",
+    );
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let out = TempDir::new("link-encoding-plugin-out");
+    let plugin = format!("kotlin={}", script.display());
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        dir.path().as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "ir-json".as_ref(),
+        "--plugin".as_ref(),
+        plugin.as_ref(),
+        "--deployment".as_ref(),
+        "Bench".as_ref(),
+    ]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_eq!(
+        stderr.matches("warning[RSDL-807]").count(),
+        1,
+        "the plugin's table is compared once, stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("`[backend.kotlin] encodings`"),
+        "the message names the plugin's table, got:\n{stderr}"
+    );
+}
