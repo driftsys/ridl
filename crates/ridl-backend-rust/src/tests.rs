@@ -3021,6 +3021,17 @@ fn appendix_b() -> v2::Package {
     package("veh.common", decls)
 }
 
+/// The item that follows each `#[allow(dead_code)]` line of `source`.
+fn items_after_dead_code_allowance(source: &str) -> Vec<&str> {
+    let lines: Vec<&str> = source.lines().collect();
+    lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| line.trim() == "#[allow(dead_code)]")
+        .map(|(index, _)| lines[index + 1])
+        .collect()
+}
+
 /// An `internal` declaration is emitted as `pub(crate)`, and nothing outside the
 /// crate reaches it, so the type, its views and its codec draw `dead_code`
 /// in a consumer that builds the crate with `-D warnings`. Each item the
@@ -3040,19 +3051,79 @@ fn an_internal_declaration_allows_dead_code_on_each_item_and_a_public_one_does_n
             "the internal item `{item}` must carry the allowance directly, got:\n{rust_source}"
         );
     }
-    let allowed = rust_source.matches("#[allow(dead_code)]").count();
-    let internal_items = rust_source
-        .lines()
-        .filter(|line| line.contains("RawWheelFrame"))
-        .count();
-    assert!(
-        allowed > 0 && allowed < internal_items,
-        "only the internal declaration's items carry the allowance, got {allowed} in:\n{rust_source}"
-    );
-    for public in ["pub struct ", "pub enum ", "pub fn "] {
+    // Every allowance sits on an item of the one internal declaration (or its
+    // codec), never on an item of a public one.
+    let items = items_after_dead_code_allowance(&rust_source);
+    assert!(!items.is_empty(), "no allowance was emitted");
+    for item in items {
         assert!(
-            !rust_source.contains(&format!("#[allow(dead_code)]\n{public}")),
-            "an item of a public declaration must not carry the allowance, got:\n{rust_source}"
+            item.contains("RawWheelFrame"),
+            "the allowance sits on `{item}`, which is not an item of the internal declaration"
+        );
+    }
+}
+
+/// An internal constant, enum and union carry the allowance as well, and the
+/// public declarations beside them do not.
+#[test]
+fn an_internal_constant_enum_and_union_allow_dead_code() {
+    let internal = |decl: v2::Decl| v2::Decl {
+        visibility: v2::Visibility::Internal as i32,
+        ..decl
+    };
+    let reading = v2::StructDef {
+        members: vec![field_member(named_field(
+            "value",
+            1,
+            "Counter",
+            false,
+            init_value(true, None),
+        ))],
+        fixed_layout: true,
+    };
+    let union = v2::UnionDef {
+        arms: vec![v2::UnionArm {
+            name: "ok".to_string(),
+            ordinal: 1,
+            type_ref: "Reading".to_string(),
+            doc: String::new(),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
+        }],
+        is_result: false,
+        reserved: Vec::new(),
+    };
+    let source = rust_for(vec![
+        counter_decl(),
+        public_decl("Reading", v2::decl::Kind::StructDef(reading)),
+        internal(gear_position_decl()),
+        internal(public_decl("HiddenUnion", v2::decl::Kind::UnionDef(union))),
+        internal(public_decl(
+            "HIDDEN_MAX",
+            v2::decl::Kind::ConstDef(v2::ConstDef {
+                type_ref: Some("Counter".to_string()),
+                value: "7".to_string(),
+                regex: None,
+            }),
+        )),
+    ]);
+    for item in [
+        "pub(crate) enum GearPosition {",
+        "pub(crate) enum HiddenUnion {",
+        "pub(crate) const HIDDEN_MAX",
+    ] {
+        assert!(
+            source.contains(&format!("#[allow(dead_code)]\n{item}")),
+            "the internal item `{item}` must carry the allowance directly, got:\n{source}"
+        );
+    }
+    for item in items_after_dead_code_allowance(&source) {
+        assert!(
+            ["GearPosition", "HiddenUnion", "HIDDEN_MAX"]
+                .iter()
+                .any(|name| item.contains(name)),
+            "the allowance sits on `{item}`, which is not an item of an internal declaration"
         );
     }
 }

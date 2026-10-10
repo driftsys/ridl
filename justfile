@@ -449,9 +449,9 @@ compat-check: toolchain-check
 #
 # The crate emitted for the veh-cluster corpus is linted too, with its default
 # features and with them off, under `-D warnings` with no command-line
-# allowance. The only diagnostics that pass are `dead_code` for the nine items
-# the emitter writes for the corpus's `internal` types, which the recipe lists
-# by name; the lints the emitted `lib.rs` allows stay allowed. Unlike the run
+# allowance. No diagnostic passes, `dead_code` included: the emitter marks the
+# items it writes for an `internal` declaration with `#[allow(dead_code)]`; the
+# lints the emitted `lib.rs` allows stay allowed. Unlike the run
 # above, this one keeps `allow`: `clippy::module_inception` does not fire on
 # the corpus crate, so a stale entry there does not fail, but the run above
 # fires it and holds it. Any other warning is a defect in the emitter.
@@ -474,9 +474,8 @@ compat-check: toolchain-check
 # drawing a clippy warning; the generated crate drawing a clippy warning that
 # its `lib.rs` does not allow, or an allow that no longer fires; a `lib.rs`
 # with no `#![allow(` line to rewrite; the crate emitted for the veh-cluster
-# corpus drawing a clippy diagnostic that is not `dead_code` for one of the
-# nine listed items, with default features or without them, or cargo finishing
-# no build there; a planus crate in the resolved graph of `examples/cabin`; the
+# corpus drawing a clippy diagnostic, with default features or without them, or
+# cargo finishing no build there; a planus crate in the resolved graph of `examples/cabin`; the
 # planus check running no test or more than one, which is what a renamed test
 # or a changed filter does.
 #
