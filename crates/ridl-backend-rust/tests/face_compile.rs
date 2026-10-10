@@ -96,6 +96,61 @@ fn compile_face(
     (face, compiled)
 }
 
+/// An `internal` interface over `internal` payload types, beside a public
+/// interface over a public type. The package-private interface gets no face:
+/// a face is public API, and its signatures would name `pub(crate)` types
+/// (E0446), so the emitted crate compiles only because no face is written.
+const INTERNAL_BESIDE_PUBLIC: &str = r#"
+package face.hidden
+
+type Level : integer [0..100]
+internal type Raw : integer [0..1000]
+internal struct Frame { ticks: Raw }
+
+interface Summary {
+  signal level: Level @10ms
+  command setLevel(level: Level) @[..50ms]
+}
+
+internal interface Diagnostics {
+  signal ticks: Raw @10ms
+  event frame: Frame @[100ms..1s]
+  command reset(arg: Raw) @[..50ms]
+  query read(arg: Raw): Frame @[..50ms]
+}
+"#;
+
+#[test]
+fn an_internal_interface_beside_a_public_one_compiles() {
+    face_compiles("hidden", INTERNAL_BESIDE_PUBLIC);
+}
+
+/// The face of an `internal` interface is absent, and the public interface
+/// beside it keeps its face. The descriptors of the internal interface stay,
+/// crate-visible, because the catalog describes it whether or not it has a face.
+#[test]
+fn an_internal_interface_gets_no_face_module() {
+    let (face, _) = compile_face("hidden_text", INTERNAL_BESIDE_PUBLIC, "", true);
+    assert!(
+        face.contains("pub mod summary {"),
+        "the public interface keeps its face:\n{face}"
+    );
+    for absent in ["mod diagnostics", "__RIDL_NO_FACE"] {
+        assert!(
+            !face.contains(absent),
+            "an internal interface emits no `{absent}`:\n{face}"
+        );
+    }
+    assert!(
+        face.contains("pub(crate) struct Diagnostics;"),
+        "the descriptor of the internal interface is crate-visible:\n{face}"
+    );
+    assert!(
+        !face.contains("pub struct Diagnostics"),
+        "no descriptor of the internal interface is public:\n{face}"
+    );
+}
+
 /// A ridl member or parameter may carry a name the emitter uses for a local
 /// of its own. The async face put `port`, `deadline`, `this` and
 /// `cx` beside a binding that carries the ridl parameter's name, in the call

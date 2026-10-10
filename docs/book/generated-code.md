@@ -75,7 +75,10 @@ Each interface module holds the parts its own interactions need:
 | `Event` (enum)      | an event                           | the consumer: one variant per event                |
 | `blocking` (module) | an event, a command or a query     | a thread that waits: blocking `Client` and `serve` |
 
-An interface that carries only `fixed` declarations gets no face module. A
+An interface that carries only `fixed` declarations gets no face module, and
+neither does an `internal` interface; its descriptors are crate-visible (the
+[design record](../design/interaction-face.md#the-consumer-face) gives the
+reason). A
 signal-only interface gets a `Client` and a `Publisher` and no `blocking`
 module, because a signal read returns at once.
 

@@ -127,8 +127,17 @@ Why the translator refuses rather than widens, and why it lives behind
 
 ## The consumer face
 
-`src/face.rs` emits, per named interface with at least one member the face
-covers, one `pub mod` named after the interface. Its consumer side is:
+An `internal` interface has no face. A face is public API whose signatures name
+the interface's payload types, and those are `pub(crate)` under an `internal`
+interface, so a public face would name private types (E0446). The emitter writes
+the interface's descriptors with the same visibility, `pub(crate)` and
+`#[allow(dead_code)]`, because their trait impls name the same types; the
+catalog hash is unchanged. The rule is stated here once: the book's
+[generated code](../book/generated-code.md) chapter links to it.
+
+`src/face.rs` emits, per named interface that is not `internal` and has at least
+one member the face covers, one `pub mod` named after the interface. Its
+consumer side is:
 
 - **`Client<P: ...>`** — one read method per signal, returning
   `Result<Sample<T>, ReadError>` at once; a `subscribe_<event>` per event and

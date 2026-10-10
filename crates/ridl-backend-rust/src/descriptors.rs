@@ -87,6 +87,45 @@ fn one_interface(
     interface: &v1::Interface,
     items: &mut Vec<TokenStream>,
 ) -> Result<(), GenerateError> {
+    let first = items.len();
+    one_interface_public(ctx, interface, items)?;
+    if interface.visibility == v1::Visibility::Internal as i32 {
+        for item in &mut items[first..] {
+            *item = crate::allow_dead_code_if_internal(
+                interface.visibility,
+                package_private_structs(std::mem::take(item)),
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Rewrites every `pub struct` among `items` to `pub(crate) struct`.
+///
+/// The descriptors of an `internal` interface implement `ridl_rt` traits whose
+/// associated types name the interface's payload types, which are
+/// `pub(crate)`. A public descriptor would then name a private type (E0446),
+/// so the descriptor takes the visibility of the interface. Every emitted item
+/// parses, because `render` parses the whole output; one that does not is left
+/// alone here and reported there.
+fn package_private_structs(items: TokenStream) -> TokenStream {
+    let Ok(mut file) = syn::parse2::<syn::File>(items.clone()) else {
+        return items;
+    };
+    for item in &mut file.items {
+        if let syn::Item::Struct(item) = item {
+            item.vis = syn::parse_quote! { pub(crate) };
+        }
+    }
+    quote! { #file }
+}
+
+/// The descriptors of one interface, every struct public.
+fn one_interface_public(
+    ctx: &Ctx,
+    interface: &v1::Interface,
+    items: &mut Vec<TokenStream>,
+) -> Result<(), GenerateError> {
     let catalog_name = catalog_name(ctx);
     let iface_name = declared_name(interface).unwrap_or_default();
     let iface_ident = ident(iface_name);

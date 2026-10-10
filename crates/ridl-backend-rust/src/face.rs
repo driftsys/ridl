@@ -151,8 +151,8 @@ struct Call<'a> {
     reply_type: Option<&'a str>,
 }
 
-/// The face module of one interface, or `None` when the interface declares
-/// nothing the face carries. Reachable from the crate for the pipeline's
+/// The face module of one interface, or `None` when the interface is `internal`
+/// or declares nothing the face carries. Reachable from the crate for the pipeline's
 /// per-interface walk (interaction-face design rule 2).
 ///
 /// The module is named by the interface's `snake_case`, so an interface
@@ -165,6 +165,9 @@ struct Call<'a> {
 pub(crate) fn one_interface(
     interface: &v1::Interface,
 ) -> Result<Option<TokenStream>, GenerateError> {
+    if is_internal(interface) {
+        return Ok(None);
+    }
     let iface_name = declared_name(interface).unwrap_or_default();
     let iface = ident(iface_name);
     let module = module_ident(interface);
@@ -672,23 +675,33 @@ pub(crate) fn call_type_ident(camel: &str, suffix: &str) -> Ident {
     ident(&format!("{camel}{suffix}"))
 }
 
+/// Whether an interface is declared `internal`. Such an interface gets no
+/// face: a face is public API whose signatures name the interface's payload
+/// types, and those types are `pub(crate)` when the interface is `internal`,
+/// so a public item would name a private type (E0446). The interface's
+/// descriptors are still emitted.
+fn is_internal(interface: &v1::Interface) -> bool {
+    interface.visibility == v1::Visibility::Internal as i32
+}
+
 /// The interaction kinds the face module carries: a signal, an event, a
 /// command and a query. An interface that declares at least one live member
 /// of those kinds gets a face module when its face is emitted, and one that
 /// declares none (only `fixed` members, or no member) gets none, which is
 /// when [`one_interface`] returns `None`.
 pub(crate) fn emits_module(interface: &v1::Interface) -> bool {
-    interactions(interface).iter().any(|(_, interaction)| {
-        matches!(
-            interaction.shape.as_ref(),
-            Some(
-                v1::interaction::Shape::Signal(_)
-                    | v1::interaction::Shape::Event(_)
-                    | v1::interaction::Shape::Command(_)
-                    | v1::interaction::Shape::Query(_)
+    !is_internal(interface)
+        && interactions(interface).iter().any(|(_, interaction)| {
+            matches!(
+                interaction.shape.as_ref(),
+                Some(
+                    v1::interaction::Shape::Signal(_)
+                        | v1::interaction::Shape::Event(_)
+                        | v1::interaction::Shape::Command(_)
+                        | v1::interaction::Shape::Query(_)
+                )
             )
-        )
-    })
+        })
 }
 
 /// The name of an interface's face module: the pinned `snake_case` of the
