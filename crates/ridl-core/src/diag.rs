@@ -630,7 +630,8 @@ diag_codes! {
         /// written `@[X..]` whose call throttle is longer than the default
         /// response bound the member takes (ridl §9.3), unless the range did
         /// not parse whole: such a range draws FORM-101 and no RIDL-101 from
-        /// the default maximum. Emitted by the checker.
+        /// the default maximum. A range with a bound that drew FORM-102 draws no
+        /// RIDL-101. Emitted by the checker.
         RIDL_101 = "RIDL-101", Error,
             "timing range `@[X..Y]` with `X > Y`, also an `@[X..]` on a `command` or a `query` whose default maximum is shorter than X";
 
@@ -695,7 +696,8 @@ diag_codes! {
         /// `command` or a `query` written `@[X..]` whose call throttle equals
         /// the default response bound the member takes (ridl §9.3), unless
         /// the range did not parse whole: such a range draws FORM-101 and no
-        /// RIDL-108 from the default maximum. Not a
+        /// RIDL-108 from the default maximum. A range with a bound that drew
+        /// FORM-102 draws no RIDL-108. Not a
         /// spelling of the strict-periodic `@Xms`, which is a separate
         /// `TimingMode`. Warning. Emitted by the checker.
         RIDL_108 = "RIDL-108", Warning,
