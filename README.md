@@ -199,10 +199,8 @@ grammar and IR, epic E2 added the ridl interface layer over the same grammar and
 IR v2, epic E6 added rsdl's checks and its lowering to the IR, and the boundary
 model, rxdl and rmdl are sequenced in the roadmap.
 
-**Continuous integration is paused**, so the checks on this repository read as
-failing. The gate itself is unchanged and runs locally: `just verify` is the
-same set of commands CI invokes, and `just gate-parity` fails if the two ever
-drift apart (ADR-0009).
+Continuous integration invokes the same `just` recipes that `just verify` runs
+locally, and `just gate-parity` fails if the two ever drift apart (ADR-0009).
 
 ## A note on ADR numbering
 

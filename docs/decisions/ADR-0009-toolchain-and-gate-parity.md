@@ -300,9 +300,10 @@ prediction.
   holds their expected list). `verify` and `lint-commits` are outside it, and
   that is where the fifth instance hid. Single-sourcing is what protects those
   two; no check does.
-- Negative / accepted: CI installs `just` in five jobs, which is five copies of
-  one download step. A composite action would remove the repetition and add a
-  file that cannot be exercised while CI is stuck.
+- Negative / accepted: CI installs `just` in six jobs (`markdown`, `book`,
+  `rust`, `wasm`, `commit-lint` and `pages`), which is six copies of one
+  download step. A composite action would remove the repetition and add a file
+  that cannot be exercised without a CI run.
 - Negative / accepted: pinning to an exact version means the repository no
   longer discovers a new stable release by failing. It discovers it when someone
   bumps the pin, and the bump PR carries whatever repairs the new release wants.

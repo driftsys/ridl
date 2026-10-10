@@ -71,6 +71,12 @@ repository adds it as a dev-dependency and runs the suite. Its public surface
 follows the port contract of `ridl-rt` at the same version. Sebastien's decision
 of 2026-10-08.
 
+**Amended 2026-10-10 — open item 5, the codegen-model file is not the request's
+bytes.** The `--emit codegen-model` file holds the request's `model` field as
+the same JSON value. The request nests the value one indentation level deeper,
+so the two are equal as JSON and not as bytes (driftsys/ridl#751). The amendment
+is written into the open item in place.
+
 ## Context
 
 Three problems came out of one session, and each has the same shape: a record
@@ -525,9 +531,11 @@ as its public contract.
 5. ~~**Whether the lowered model is a public artifact.**~~ **Closed
    2026-09-22.** It is: `ridl build --emit codegen-model` writes
    `<base>.codegen.json`, one per package, in the canonical encoding — the
-   request's `model` field byte for byte, so a plugin author's fixture is a file
-   `ridlc` wrote. The emit is classified with the code emits, not with the IR
-   dumps: the model is lowered over the same scope a code emit reads, `ridl.std`
+   request's `model` field as the same JSON value, so a plugin author's fixture
+   is a file `ridlc` wrote. (Amended 2026-10-10: the request nests the value one
+   indentation level deeper than the file, so the two are equal as JSON and not
+   as bytes.) The emit is classified with the code emits, not with the IR dumps:
+   the model is lowered over the same scope a code emit reads, `ridl.std`
    included, and `ridl baseline` publishes only `.ir.json`. The schema is
    `ridl.codegen.v1` (`crates/ridl-ir/proto/ridl/codegen/v1/model.proto`); the
    reasoning is the codegen model design note's D-12 and D-14.
