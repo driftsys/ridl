@@ -81,3 +81,20 @@ types = [
 
 [versioning]
 tag_prefix = "v"
+
+# Version pins written in prose. `git std bump` replaces the first capture
+# group of the first match with the new version, and skips a file or a
+# pattern that does not match without an error, so
+# crates/ridlc/tests/prose_version_pins.rs checks that each pin is present
+# and equal to the workspace version.
+[[version_files]]
+path = "crates/ridl-rt-conformance/README.md"
+regex = 'ridl-rt-conformance = "=([^"]+)"'
+
+[[version_files]]
+path = "docs/book/writing-a-port.md"
+regex = '(?m)^ridl-rt = "([^"]+)"'
+
+[[version_files]]
+path = "docs/book/writing-a-port.md"
+regex = 'ridl-rt-conformance = "=([^"]+)"'
