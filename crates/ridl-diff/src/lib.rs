@@ -142,6 +142,22 @@ declare_categories! {
         /// snapshot's retired entries list (lock design §7): the sanctioned
         /// removal of an interface, recorded by `ridl lock --retire`.
         InterfaceRetired,
+        /// An interface matched by name across a provisional old side whose
+        /// number is the same on both sides and whose provisional flag went
+        /// from true to false: the number `ridl lock` froze in place. Nothing
+        /// moves on the wire, but the catalog hash covers the number and the
+        /// flag, so the text report lists it under its own heading
+        /// ([`heading`]). The path carries the name; the detail carries the
+        /// old and the new number, each marked when it is provisional.
+        InterfaceFrozen,
+        /// A matched interface whose number differs between the two sides,
+        /// whatever the two flags: a provisional number moved by a sibling
+        /// added before it, or frozen as another number. The number is the
+        /// routing key, so the change is breaking. An old number 0, from a
+        /// snapshot written before the lock existed, is not compared. The
+        /// detail carries the old and the new number, each marked when it is
+        /// provisional.
+        InterfaceNumberChanged,
         /// A surviving composite member whose slot in the body changed — a
         /// struct field, enum value, enum-set bit or union arm — reported only
         /// when both bodies hold the same member names. For a struct field or
@@ -501,6 +517,8 @@ pub fn category_word(category: Category) -> &'static str {
         Category::DeclRemoved => "decl_removed",
         Category::InterfaceRenamed => "interface_renamed",
         Category::InterfaceRetired => "interface_retired",
+        Category::InterfaceFrozen => "interface_frozen",
+        Category::InterfaceNumberChanged => "interface_number_changed",
         Category::MemberReordered => "member_reordered",
         Category::InteractionAppended => "interaction_appended",
         Category::InteractionInserted => "interaction_inserted",
@@ -546,9 +564,11 @@ pub fn heading(category: Category) -> Option<&'static str> {
         Category::InterfaceRenamed | Category::ServiceInterfaceRemoved => {
             Some("compatible on the wire, visible in source")
         }
+        Category::InterfaceFrozen => Some("compatible on the wire, changes the catalog hash"),
         Category::DeclAdded
         | Category::DeclRemoved
         | Category::InterfaceRetired
+        | Category::InterfaceNumberChanged
         | Category::MemberReordered
         | Category::InteractionAppended
         | Category::InteractionInserted

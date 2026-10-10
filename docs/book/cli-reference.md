@@ -1401,6 +1401,45 @@ compatible on the wire, visible in source:
   [compatible] service_interface_removed veh.cluster/veh.cluster.dash/J: J -> (removed)
 ```
 
+An interface matched by name across a provisional old side has its number and
+its provisional flag compared, because the catalog hash covers both. When the
+number is the same on both sides and only the new side is frozen — the number
+`ridl lock` froze in place — the change is `interface_frozen`: compatible,
+because the routing key did not move, and listed under a heading of its own,
+because the catalog hash changes and a generated face refuses a port whose
+catalog hash is another one. With `old` a unit before `ridl lock` and `new`
+the same unit after it:
+
+```sh
+ridl diff old new
+```
+
+```text
+compatible
+compatible on the wire, changes the catalog hash:
+  [compatible] interface_frozen veh.cluster/Doors: 1 (provisional) -> 1
+```
+
+A number that differs between the two sides is `interface_number_changed`,
+breaking, because the number is the routing key. Between two builds with no
+lock, an interface added before `Doors` in byte order of the name moves its
+provisional number:
+
+```sh
+ridl diff old new
+```
+
+```text
+breaking
+  [breaking] interface_number_changed veh.cluster/Doors: 1 (provisional) -> 2 (provisional)
+  [compatible] decl_added veh.cluster/Aux: (absent) -> interface
+```
+
+An old number 0, from a snapshot written before the lock existed, is not
+compared. A published baseline never holds a provisional number, because
+`ridl baseline` refuses one (RIDL-411), so both categories are seen between
+two builds, not against `.ridl/baseline/`.
+
 The breaking comparison above with `--format json`:
 
 ```sh
@@ -1520,6 +1559,8 @@ the categories `ridl diff` reports are:
   decl_removed
   interface_renamed
   interface_retired
+  interface_frozen
+  interface_number_changed
   member_reordered
   interaction_appended
   interaction_inserted
@@ -1607,7 +1648,10 @@ line is prefixed with the unit directory relative to `PATH` and a colon:
 `hvac: allocated Cabin 1`. A `PATH` inside a workspace member compiles the
 whole workspace and allocates in, edits and reports on that member only.
 Until `ridl lock` has run, a declaration with no entry compiles with a
-provisional number, which carries no identity.
+provisional number, which carries no identity. The catalog hash covers each
+number and its provisional flag, so `ridl lock` changes it: `ridl diff`
+reports a number frozen in place as `interface_frozen`, compatible, and a
+number frozen as another one as `interface_number_changed`, breaking.
 
 The reverse case — a live entry whose interface is gone from the source — is
 RIDL-409 from the compiler, and plain `ridl lock` refuses to allocate over it:

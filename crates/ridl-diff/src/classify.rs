@@ -103,6 +103,14 @@ pub(crate) fn classify_in(
         // forever, so it is never allocated again.
         Category::InterfaceRenamed | Category::InterfaceRetired => Verdict::Compatible,
 
+        // `ridl lock` freezing a provisional number in place keeps the
+        // routing key, so nothing moves on the wire; the catalog hash, which
+        // covers the flag, changes, which the text report's heading says of
+        // it. A number that differs between the two sides is a new routing
+        // key for the same interface.
+        Category::InterfaceFrozen => Verdict::Compatible,
+        Category::InterfaceNumberChanged => Verdict::Breaking,
+
         // A service's list is a set of interface references (ADR-0015
         // decision 19 as amended on 2026-09-15). The routing key does not
         // contain the service, so an interface joining or leaving the set
@@ -1146,6 +1154,43 @@ pub fn explain(category: Category) -> &'static str {
             "              decision D-7). A number gone with no retired entry is\n",
             "              decl_removed, breaking, and `ridl baseline` refuses to publish\n",
             "              it (RIDL-412)"
+        ),
+        Category::InterfaceFrozen => concat!(
+            "An interface matched by name whose number is the same on both sides and\n",
+            "whose provisional flag went from true to false: `ridl lock` froze the\n",
+            "number in place.\n",
+            "  compatible  always — the number is the routing key and it did not\n",
+            "              change, so nothing moves on the wire. The catalog hash\n",
+            "              changes, because it covers each interface's number and its\n",
+            "              provisional flag, and a generated face refuses a port whose\n",
+            "              catalog hash is another one (ADR-0023 decision 8): a peer\n",
+            "              built before the lock and a peer built after it refuse each\n",
+            "              other. This is why the text report lists it under the\n",
+            "              heading \"compatible on the wire, changes the catalog hash\".\n",
+            "              The detail carries the number before and after, marked\n",
+            "              (provisional) on the old side\n",
+            "  note        a baseline never holds a provisional number (`ridl baseline`\n",
+            "              refuses one, RIDL-411), so this change is seen between two\n",
+            "              builds, not against a published baseline. An old number 0,\n",
+            "              from a snapshot written before the lock existed, is not\n",
+            "              compared"
+        ),
+        Category::InterfaceNumberChanged => concat!(
+            "An interface matched across the two sides whose number differs.\n",
+            "  breaking    always — the number is the interface's routing key, so a\n",
+            "              peer built against the old number cannot reach the\n",
+            "              interface at the new one. Seen between two provisional\n",
+            "              builds when a sibling interface added before this one in\n",
+            "              byte order moves its provisional number, and when `ridl\n",
+            "              lock` freezes a provisional number as another number. The\n",
+            "              detail carries the old and the new number, each marked\n",
+            "              (provisional) when it is\n",
+            "  note        two frozen numbers are matched by number, so they never\n",
+            "              differ here: a frozen number changed by hand is\n",
+            "              decl_removed plus decl_added. An old number 0, from a\n",
+            "              snapshot written before the lock existed, is not compared.\n",
+            "              Run `ridl lock` to freeze the numbers, so that a later\n",
+            "              sibling cannot move them"
         ),
         Category::MemberReordered => concat!(
             "A surviving composite member whose slot in the body changed.\n",

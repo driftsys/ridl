@@ -165,8 +165,9 @@ A change to an interface or a type the hash covers is reported by the contract
 comparison instead. The hash also covers each interface's number and provisional
 flag. A frozen number changed by hand, or a frozen number made provisional, is
 reported (as a declaration removed and a declaration added). A provisional
-number that changes, or that `ridl lock` freezes, changes the hash with no
-`ridl diff` output (driftsys/ridl#700).
+number that `ridl lock` freezes in place is reported as `interface_frozen`,
+compatible, and a number that changes on an interface matched by name is
+reported as `interface_number_changed`, breaking.
 
 Both sides must be source trees. A `.ir.json` snapshot carries no system, so
 `ridl diff .ridl/baseline .` lists no system change rather than reporting the

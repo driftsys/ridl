@@ -1134,9 +1134,10 @@ fn a_published_number_zero_is_matched_by_name() {
 
 /// The first PD-1 case: two source trees compiled with no lock file lower
 /// every interface provisional on both sides. An old interface with no
-/// identity is matched by name — the provisional numbers themselves may
-/// differ, since a sibling added before it in byte order moves them — and its
-/// body is diffed as any matched pair's.
+/// identity is matched by name and its body is diffed as any matched pair's.
+/// A sibling added before it in byte order moves its provisional number, and
+/// the number is the routing key, so the moved number is
+/// `InterfaceNumberChanged`, breaking (driftsys/ridl#700).
 #[test]
 fn a_provisional_old_side_is_matched_by_name() {
     let old = package(
@@ -1160,10 +1161,17 @@ fn a_provisional_old_side_is_matched_by_name() {
         vec![],
     );
     let report = diff_packages(&old, &new);
-    assert_eq!(report.verdict, Verdict::Compatible);
+    assert_eq!(report.verdict, Verdict::Breaking);
     assert_eq!(
         report.changes,
         vec![
+            change(
+                "veh.cluster/Doors",
+                Category::InterfaceNumberChanged,
+                Verdict::Breaking,
+                Some("1 (provisional)"),
+                Some("2 (provisional)"),
+            ),
             change(
                 "veh.cluster/Doors/doorClosed",
                 Category::InteractionAppended,
@@ -1180,6 +1188,108 @@ fn a_provisional_old_side_is_matched_by_name() {
             ),
         ]
     );
+}
+
+/// `ridl lock` freezes a provisional number in place: the pair is matched by
+/// name, the number is the same on both sides, and the provisional flag went
+/// from true to false. Nothing moves on the wire, but the catalog hash covers
+/// the flag, so the change is `InterfaceFrozen`, compatible, under its own
+/// heading (driftsys/ridl#700).
+#[test]
+fn a_provisional_number_frozen_in_place_is_interface_frozen() {
+    let old = package(
+        vec![provisional("Doors", 1, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let new = package(
+        vec![frozen("Doors", 1, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Compatible);
+    assert_eq!(
+        report.changes,
+        vec![change(
+            "veh.cluster/Doors",
+            Category::InterfaceFrozen,
+            Verdict::Compatible,
+            Some("1 (provisional)"),
+            Some("1"),
+        )]
+    );
+    assert_eq!(
+        crate::heading(Category::InterfaceFrozen),
+        Some("compatible on the wire, changes the catalog hash")
+    );
+    assert_eq!(crate::heading(Category::InterfaceNumberChanged), None);
+}
+
+/// A provisional number frozen as another number — the lock allocated a
+/// number other than the provisional one — moves the routing key:
+/// `InterfaceNumberChanged`, breaking, and no `InterfaceFrozen` beside it.
+#[test]
+fn a_provisional_number_frozen_as_another_number_is_interface_number_changed() {
+    let old = package(
+        vec![provisional("Doors", 2, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let new = package(
+        vec![frozen("Doors", 1, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Breaking);
+    assert_eq!(
+        report.changes,
+        vec![change(
+            "veh.cluster/Doors",
+            Category::InterfaceNumberChanged,
+            Verdict::Breaking,
+            Some("2 (provisional)"),
+            Some("1"),
+        )]
+    );
+}
+
+/// An old number 0 marks a snapshot written before the lock existed. It is
+/// never allocated, so it is not compared with the new side's number or flag:
+/// a pair matched by name across that transition reports nothing of its own.
+#[test]
+fn an_old_number_zero_is_not_compared() {
+    let old = package(
+        vec![interface("Doors", door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    for new_interface in [
+        provisional("Doors", 2, door_opened("DoorState")),
+        frozen("Doors", 3, door_opened("DoorState")),
+    ] {
+        let new = package(vec![new_interface], vec![], vec![]);
+        let report = diff_packages(&old, &new);
+        assert_eq!(report.verdict, Verdict::Identical);
+        assert_eq!(report.changes, vec![]);
+    }
+}
+
+/// Two provisional builds with the same number and the same flag report
+/// nothing for the interface itself.
+#[test]
+fn an_unchanged_provisional_number_is_identical() {
+    let side = || {
+        package(
+            vec![provisional("Doors", 1, door_opened("DoorState"))],
+            vec![],
+            vec![],
+        )
+    };
+    let report = diff_packages(&side(), &side());
+    assert_eq!(report.verdict, Verdict::Identical);
+    assert_eq!(report.changes, vec![]);
 }
 
 /// An inline shape is an interface with its own number (lock design §3), so

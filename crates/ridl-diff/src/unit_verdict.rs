@@ -311,6 +311,38 @@ mod tests {
         assert_eq!(unit_verdict(&report, "b", &old, &new), Verdict::Identical);
     }
 
+    /// Unit `a` with its interface's number set to `number` and its
+    /// provisional flag to `provisional`, beside units `b` and `c`.
+    fn numbered(number: u32, provisional: bool) -> Vec<Package> {
+        let mut a = unit_a("b.S");
+        a.interfaces[0].number = number;
+        a.interfaces[0].provisional = provisional;
+        vec![a, unit_b(IntWidth::I32), unit_c(IntWidth::I32)]
+    }
+
+    // `ridl lock` freezing the number in place changes the catalog hash and
+    // is compatible, so the unit's verdict keeps the compatible-hash list
+    // that `write_catalog_histories` carries forward.
+    #[test]
+    fn a_number_frozen_in_place_is_compatible_for_its_unit() {
+        let old = numbered(1, true);
+        let new = numbered(1, false);
+        let report = diff_sets(&old, &new);
+        assert_eq!(unit_verdict(&report, "a", &old, &new), Verdict::Compatible);
+        assert_eq!(unit_verdict(&report, "b", &old, &new), Verdict::Identical);
+    }
+
+    // A moved number is a new routing key, so the unit's verdict is breaking
+    // and `write_catalog_histories` restarts the compatible-hash list.
+    #[test]
+    fn a_moved_number_is_breaking_for_its_unit() {
+        let old = numbered(1, true);
+        let new = numbered(2, true);
+        let report = diff_sets(&old, &new);
+        assert_eq!(unit_verdict(&report, "a", &old, &new), Verdict::Breaking);
+        assert_eq!(unit_verdict(&report, "b", &old, &new), Verdict::Identical);
+    }
+
     // The compatible package addition is reported after the breaking change to
     // `b.S`, so a fold that keeps the last verdict instead of the maximum
     // returns `Compatible`.

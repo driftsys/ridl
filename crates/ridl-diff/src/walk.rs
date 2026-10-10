@@ -564,6 +564,12 @@ fn diff_interfaces<'a>(
                 Some(new_catalog_name),
             );
         }
+        emit_number(
+            changes,
+            format!("{held_by}/{name}"),
+            old_shape.interface,
+            new_shape.interface,
+        );
         if !new_shape.is_inline() {
             if interface_envelope_differs(old_shape.interface, new_shape.interface) {
                 emit(
@@ -599,6 +605,42 @@ fn diff_interfaces<'a>(
                 Some("interface".to_string()),
             );
         }
+    }
+}
+
+/// Compares the number and the provisional flag of a matched interface pair
+/// (driftsys/ridl#700). Both are covered by the catalog hash. A number that
+/// differs is [`Category::InterfaceNumberChanged`], whatever the two flags; the
+/// same number frozen in place by `ridl lock` is [`Category::InterfaceFrozen`].
+/// An old number 0, from a snapshot written before the lock existed, was never
+/// allocated, so it is not compared. Two frozen numbers are matched by number
+/// and never differ here.
+fn emit_number(changes: &mut Vec<Change>, path: String, old: &v2::Interface, new: &v2::Interface) {
+    if old.number == 0 {
+        return;
+    }
+    let category = if old.number != new.number {
+        Category::InterfaceNumberChanged
+    } else if old.provisional && !new.provisional {
+        Category::InterfaceFrozen
+    } else {
+        return;
+    };
+    emit(
+        changes,
+        path,
+        category,
+        Some(number_detail(old)),
+        Some(number_detail(new)),
+    );
+}
+
+/// An interface's number as a change detail: `2`, or `2 (provisional)`.
+fn number_detail(interface: &v2::Interface) -> String {
+    if interface.provisional {
+        format!("{} (provisional)", interface.number)
+    } else {
+        interface.number.to_string()
     }
 }
 

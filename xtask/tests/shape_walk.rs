@@ -341,9 +341,10 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-diff/src/unit_verdict.rs",
-        lines: 4,
-        why: "tests appending an interaction to the single fixture interface \
-              of a package to provoke a verdict",
+        lines: 6,
+        why: "tests appending an interaction to, or setting the number and \
+              the provisional flag of, the single fixture interface of a \
+              package to provoke a verdict",
     },
     Allowed {
         path: "crates/ridl-diff/src/classify/classify_tests.rs",
