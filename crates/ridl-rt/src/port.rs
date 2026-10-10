@@ -7,9 +7,10 @@
 //! takes the current time; a runtime reads its own [`Clock`].
 //!
 //! A port is attached to one catalog ([`Attached`]), and the interface numbers
-//! and ordinals its methods take are scoped by that catalog. A port type that
-//! a face is bound to also states the encoding of the bytes it carries
-//! ([`Encoded`]); a port that never meets a face need not.
+//! and ordinals its methods take are scoped by that catalog. A port type may
+//! also state the encoding of the bytes it carries ([`Encoded`]); no port in
+//! this crate's workspace implements it yet, and the generated face does not
+//! read it yet.
 //!
 //! [`ScannableSignals`] and [`CoherentSignals`] are extensions. They describe
 //! mechanisms some runtimes have, not interaction semantics every runtime must
@@ -47,10 +48,12 @@ pub trait Attached {
 ///
 /// A separate trait, not a supertrait of [`Attached`], so a port that never
 /// meets a face — a conformance fixture — is not forced to name an encoding.
-/// Every port type a program binds a face to implements it, and the face
-/// takes its encoding from the port type: a port whose encoding the package
-/// does not carry is a compile error at the binding, because the interface
-/// has no [`Sizes`](crate::contract::Sizes) table for it.
+/// What is built is the trait and its forwarding implementation for
+/// `&mut P`: no port type in this crate's workspace implements it, and the
+/// generated face is written over the FlatBuffers codec and does not read a
+/// port's encoding. A face that takes its encoding from its port, so that a
+/// port whose encoding the package does not carry is refused at the binding,
+/// is tracked as driftsys/ridl#801.
 pub trait Encoded {
     /// The encoding of the bytes this port carries.
     type Encoding: Encoding;
