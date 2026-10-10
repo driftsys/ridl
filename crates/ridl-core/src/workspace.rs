@@ -377,13 +377,19 @@ fn search_ancestors<T>(
 /// The error of the first `ridl.toml` at or above `dir` that cannot be
 /// inspected for a reason other than being absent, naming the manifest.
 /// `find_root` treats such a manifest as missing, so the caller uses this to
-/// report the real cause. The walk visits the directories [`find_root`]
-/// visits ([`search_ancestors`]), the current directory and its ancestors
-/// included for a relative `dir`, and names the manifest in the path form of
-/// `dir`. The walk up the ancestors matters for the errors that can hit an
-/// ancestor's manifest while the entry itself is reachable, such as a
-/// symbolic link loop; a directory that cannot be searched also hides the
-/// entry below it.
+/// report the real cause. The walk starts from the same directories as the
+/// manifest search of [`find_root`] ([`search_ancestors`]), the current
+/// directory and its ancestors included for a relative `dir`; it does not
+/// share the rest of `find_root`'s walk, which skips an unreadable manifest
+/// above a package (driftsys/ridl#847). A relative `dir` is normalised
+/// lexically first, so the manifest is named in that normalised relative
+/// form (`./ridl.toml` for `.`, `x/ridl.toml` for `./x` or `x/`), and an
+/// entry such as `link/..` probes `./ridl.toml`, not the directory the
+/// symbolic link leads to; [`find_root`] normalises the same way, so the
+/// manifest probed is the one the load looked for. The walk up the ancestors
+/// matters for the errors that can hit an ancestor's manifest while the
+/// entry itself is reachable, such as a symbolic link loop; a directory that
+/// cannot be searched also hides the entry below it.
 fn unreadable_manifest(dir: &Path) -> Option<io::Error> {
     let (error, found) = search_ancestors(dir, |candidate| {
         match fs::metadata(candidate.join("ridl.toml")) {

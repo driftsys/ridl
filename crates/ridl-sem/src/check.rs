@@ -5987,10 +5987,11 @@ fn regex_crate_verdict(body: &str) -> Option<String> {
 /// recorded before, and computed and recorded there otherwise. `compile`
 /// runs outside the lock, so a slow pattern on one thread does not hold up a
 /// lookup on another. Two threads that compile the same pattern at once both
-/// return the verdict they computed: the first records it, and the second
-/// finds the entry already present and changes nothing (issue #648).
-/// Recording a new pattern empties `verdicts` first when it holds
-/// [`REGEX_CRATE_VERDICTS_BOUND`] entries.
+/// return the recorded verdict: the first records the verdict it computed,
+/// and the second finds the entry already present, changes nothing and
+/// returns that entry, so every caller gets one verdict for one pattern
+/// (issue #648). Recording a new pattern empties `verdicts` first when it
+/// holds [`REGEX_CRATE_VERDICTS_BOUND`] entries.
 fn recorded_verdict(
     verdicts: &Mutex<HashMap<String, Option<String>>>,
     body: &str,
@@ -6006,14 +6007,10 @@ fn recorded_verdict(
     }
     let verdict = compile(body);
     let mut verdicts = verdicts.lock().unwrap_or_else(PoisonError::into_inner);
-    if verdicts.contains_key(body) {
-        return verdict;
-    }
-    if verdicts.len() >= REGEX_CRATE_VERDICTS_BOUND {
+    if verdicts.len() >= REGEX_CRATE_VERDICTS_BOUND && !verdicts.contains_key(body) {
         verdicts.clear();
     }
-    verdicts.insert(body.to_string(), verdict.clone());
-    verdict
+    verdicts.entry(body.to_string()).or_insert(verdict).clone()
 }
 
 /// The reason the `regex` crate gives for refusing a pattern, on one line
@@ -9425,28 +9422,40 @@ mod tests {
 
     /// Two threads that miss the same pattern in a record one entry short of
     /// its bound and compile it at once leave every other entry in place
-    /// (issue #648): the first
-    /// records the pattern and fills the record, and the second finds the
-    /// entry already present, so it empties nothing and keeps the first
-    /// verdict. The compile step waits on a barrier until both threads have
-    /// missed, so the race happens on every run. The record is the test's
-    /// own, because other tests use the process-wide one at the same time.
+    /// (issue #648): the first records the pattern and fills the record, and
+    /// the second finds the entry already present, so it empties nothing,
+    /// keeps the first verdict and returns it. The compile step waits until
+    /// both threads have missed, so the race happens on every run; the wait
+    /// has a deadline, so a compile run under the lock fails the test instead
+    /// of hanging it. The record is the test's own, because other tests use
+    /// the process-wide one at the same time.
     #[test]
-    fn a_duplicate_regex_verdict_does_not_empty_a_full_record() {
+    fn a_duplicate_regex_verdict_does_not_empty_a_record_one_short_of_its_bound() {
         let verdicts: Mutex<HashMap<String, Option<String>>> = Mutex::new(
             (1..REGEX_CRATE_VERDICTS_BOUND)
                 .map(|n| (format!("^filler-648-{n}$"), None))
                 .collect(),
         );
         let pattern = "^duplicate-for-issue-648$";
-        let both_missed = std::sync::Barrier::new(2);
+        let missed = std::sync::atomic::AtomicUsize::new(0);
         let compiled = std::sync::atomic::AtomicUsize::new(0);
+        let both_missed = || {
+            missed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            while missed.load(std::sync::atomic::Ordering::SeqCst) < 2 {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "the other thread never reached the compile step"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+        };
         let returned: Vec<Option<String>> = std::thread::scope(|scope| {
             let threads: Vec<_> = (0..2)
                 .map(|_| {
                     scope.spawn(|| {
                         recorded_verdict(&verdicts, pattern, |_| {
-                            both_missed.wait();
+                            both_missed();
                             let n = compiled.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                             Some(format!("verdict {n}"))
                         })
@@ -9464,7 +9473,7 @@ mod tests {
             2,
             "both threads compiled the pattern"
         );
-        assert!(returned.iter().all(Option::is_some), "{returned:?}");
+
         let verdicts = verdicts.into_inner().unwrap();
         assert_eq!(verdicts.len(), REGEX_CRATE_VERDICTS_BOUND);
         let fillers = verdicts
@@ -9473,9 +9482,10 @@ mod tests {
             .count();
         assert_eq!(fillers, REGEX_CRATE_VERDICTS_BOUND - 1);
         let kept = verdicts.get(pattern).cloned().flatten();
+        assert!(kept.is_some(), "the record keeps a verdict for the pattern");
         assert!(
-            kept.is_some() && returned.contains(&kept),
-            "the record keeps one of the two verdicts: {kept:?}"
+            returned.iter().all(|verdict| *verdict == kept),
+            "both threads return the recorded verdict {kept:?}: {returned:?}"
         );
     }
 

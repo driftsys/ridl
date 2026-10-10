@@ -427,6 +427,7 @@ async fn path_mode_check_equals_the_cli() {
     .await
     .expect("workspace check timeout");
 }
+
 /// A relative path is resolved against the server's current directory, and
 /// the root the tool reports keeps the relative form: from a member
 /// directory, a bare file name has the workspace root `..`.
@@ -450,6 +451,7 @@ async fn path_mode_check_keeps_the_relative_root_of_a_bare_file_name() {
     .await
     .expect("relative path check timeout");
 }
+
 #[tokio::test]
 async fn an_unsaved_overlay_reports_diagnostics_without_changing_disk() {
     tokio::time::timeout(TIMEOUT, async {
