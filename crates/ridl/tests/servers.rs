@@ -427,6 +427,31 @@ async fn path_mode_check_equals_the_cli() {
     .await
     .expect("workspace check timeout");
 }
+
+/// A relative path is resolved against the server's current directory, and
+/// the root the tool reports keeps the relative form: from a member
+/// directory, a bare file name has the workspace root `..`.
+#[tokio::test]
+async fn path_mode_check_keeps_the_relative_root_of_a_bare_file_name() {
+    tokio::time::timeout(TIMEOUT, async {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_ridl"));
+        command
+            .arg("mcp")
+            .current_dir(workspace_fixture("ws").join("b"));
+        let transport = TokioChildProcess::new(command).expect("spawn ridl mcp");
+        let client = ().serve(transport).await.expect("MCP initialize handshake");
+        let result = call_workspace_tool(&client, "ridl_check", json!({"path":"b.ridl"})).await;
+        assert_ne!(result.is_error, Some(true), "{}", tool_text(&result));
+        assert_eq!(
+            result.structured_content.unwrap()["workspace"]["root"],
+            ".."
+        );
+        client.cancel().await.unwrap();
+    })
+    .await
+    .expect("relative path check timeout");
+}
+
 #[tokio::test]
 async fn an_unsaved_overlay_reports_diagnostics_without_changing_disk() {
     tokio::time::timeout(TIMEOUT, async {
@@ -732,7 +757,17 @@ async fn a_wrong_request_is_is_error_not_a_protocol_error() {
 /// Spawns `ridl lsp` followed by `args`, with all three standard streams
 /// piped.
 fn spawn_lsp(args: &[&str]) -> Child {
-    StdCommand::new(env!("CARGO_BIN_EXE_ridl"))
+    spawn_lsp_in(args, None)
+}
+
+/// [`spawn_lsp`] with the server's current directory set to `cwd` when one
+/// is given.
+fn spawn_lsp_in(args: &[&str], cwd: Option<&Path>) -> Child {
+    let mut command = StdCommand::new(env!("CARGO_BIN_EXE_ridl"));
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
+    command
         .arg("lsp")
         .args(args)
         .stdin(Stdio::piped())
@@ -1069,7 +1104,12 @@ struct LspSession {
 
 impl LspSession {
     fn start(root: &Path) -> LspSession {
-        let mut child = spawn_lsp(&[]);
+        LspSession::start_in(root, None)
+    }
+
+    /// [`LspSession::start`] with the server running from `cwd`.
+    fn start_in(root: &Path, cwd: Option<&Path>) -> LspSession {
+        let mut child = spawn_lsp_in(&[], cwd);
         let mut stdin = child.stdin.take().expect("piped stdin");
         let messages = read_messages(child.stdout.take().expect("piped stdout"));
         let initialize = RequestId::from(1);
@@ -1168,6 +1208,27 @@ fn lsp_matches_check_with_lints() {
     );
 
     let session = LspSession::start(&root);
+    let publishes = session.shutdown_collecting_publishes();
+    let mut lsp: Vec<(String, u8)> = publishes
+        .iter()
+        .flat_map(published_code_severity_pairs)
+        .collect();
+    lsp.sort();
+
+    assert_eq!(lsp, cli, "published: {publishes:#?}");
+}
+
+/// The server finds the root from the absolute paths of the `file://` URIs
+/// it receives, not from its current directory: run from inside member `a`,
+/// it still loads the whole workspace and publishes what the CLI reports for
+/// the root.
+#[test]
+fn lsp_loads_the_root_whatever_its_current_directory() {
+    let dir = TempDir::new("lsp-cwd");
+    let root = lint_workspace(&dir);
+    let cli = cli_code_severity_pairs(&root);
+
+    let session = LspSession::start_in(&root, Some(&root.join("a")));
     let publishes = session.shutdown_collecting_publishes();
     let mut lsp: Vec<(String, u8)> = publishes
         .iter()

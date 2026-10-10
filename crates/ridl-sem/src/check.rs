@@ -5975,14 +5975,30 @@ static REGEX_CRATE_VERDICTS: LazyLock<Mutex<HashMap<String, Option<String>>>> =
 const REGEX_CRATE_VERDICTS_BOUND: usize = 1024;
 
 /// The reason the `regex` crate refuses `body`, or `None` when the crate
-/// compiles it — read from [`REGEX_CRATE_VERDICTS`] when the pattern was
-/// compiled before, and compiled with `regex::Regex::new` and recorded there
-/// otherwise. The compile runs outside the lock, so a slow pattern on one
-/// thread does not hold up a lookup on another; two threads that compile the
-/// same pattern at once record the same verdict twice, and the second record
-/// evicts nothing.
+/// compiles it, kept in [`REGEX_CRATE_VERDICTS`] ([`recorded_verdict`]).
 fn regex_crate_verdict(body: &str) -> Option<String> {
-    let recorded = REGEX_CRATE_VERDICTS
+    recorded_verdict(&REGEX_CRATE_VERDICTS, body, |body| {
+        regex::Regex::new(body)
+            .err()
+            .map(|error| regex_crate_refusal(&error))
+    })
+}
+
+/// The verdict `compile` gives for `body`, read from `verdicts` when it was
+/// recorded before, and computed and recorded there otherwise. `compile`
+/// runs outside the lock, so a slow pattern on one thread does not hold up a
+/// lookup on another. Two threads that compile the same pattern at once both
+/// return the recorded verdict: the first records the verdict it computed,
+/// and the second finds the entry already present, changes nothing and
+/// returns that entry, so every caller gets one verdict for one pattern
+/// (issue #648). Recording a new pattern empties `verdicts` first when it
+/// holds [`REGEX_CRATE_VERDICTS_BOUND`] entries.
+fn recorded_verdict(
+    verdicts: &Mutex<HashMap<String, Option<String>>>,
+    body: &str,
+    compile: impl FnOnce(&str) -> Option<String>,
+) -> Option<String> {
+    let recorded = verdicts
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .get(body)
@@ -5990,29 +6006,12 @@ fn regex_crate_verdict(body: &str) -> Option<String> {
     if let Some(verdict) = recorded {
         return verdict;
     }
-    let verdict = regex::Regex::new(body)
-        .err()
-        .map(|error| regex_crate_refusal(&error));
-    let mut verdicts = REGEX_CRATE_VERDICTS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
-    record_regex_crate_verdict(&mut verdicts, body, &verdict);
-    verdict
-}
-
-/// Records `verdict` for `body` in `verdicts`, emptying `verdicts` first when
-/// it holds [`REGEX_CRATE_VERDICTS_BOUND`] entries and `body` is not one of
-/// them: a thread that compiled `body` while another recorded it replaces the
-/// entry and evicts nothing.
-fn record_regex_crate_verdict(
-    verdicts: &mut HashMap<String, Option<String>>,
-    body: &str,
-    verdict: &Option<String>,
-) {
+    let verdict = compile(body);
+    let mut verdicts = verdicts.lock().unwrap_or_else(PoisonError::into_inner);
     if verdicts.len() >= REGEX_CRATE_VERDICTS_BOUND && !verdicts.contains_key(body) {
         verdicts.clear();
     }
-    verdicts.insert(body.to_string(), verdict.clone());
+    verdicts.entry(body.to_string()).or_insert(verdict).clone()
 }
 
 /// The reason the `regex` crate gives for refusing a pattern, on one line
@@ -9422,24 +9421,73 @@ mod tests {
         assert_eq!(fillers, 0, "{} verdicts recorded", verdicts.len());
     }
 
-    /// A second thread that finishes compiling a pattern another thread has
-    /// recorded in the meantime replaces that entry and empties nothing
-    /// (issue #648), even when the record is full.
+    /// Two threads that miss the same pattern in a record one entry short of
+    /// its bound and compile it at once leave every other entry in place
+    /// (issue #648): the first records the pattern and fills the record, and
+    /// the second finds the entry already present, so it empties nothing,
+    /// keeps the first verdict and returns it. The compile step waits until
+    /// both threads have missed, so the race happens on every run; the wait
+    /// has a deadline, so a compile run under the lock fails the test instead
+    /// of hanging it. The record is the test's own, because other tests use
+    /// the process-wide one at the same time.
     #[test]
-    fn a_duplicate_regex_verdict_does_not_empty_a_full_record() {
-        let mut verdicts: HashMap<String, Option<String>> = (0..REGEX_CRATE_VERDICTS_BOUND)
-            .map(|n| (format!("^filler-648-{n}$"), None))
-            .collect();
+    fn a_duplicate_regex_verdict_does_not_empty_a_record_one_short_of_its_bound() {
+        let verdicts: Mutex<HashMap<String, Option<String>>> = Mutex::new(
+            (1..REGEX_CRATE_VERDICTS_BOUND)
+                .map(|n| (format!("^filler-648-{n}$"), None))
+                .collect(),
+        );
         let pattern = "^duplicate-for-issue-648$";
-        verdicts.remove("^filler-648-0$");
-        verdicts.insert(pattern.to_string(), None);
-        assert_eq!(verdicts.len(), REGEX_CRATE_VERDICTS_BOUND);
+        let missed = std::sync::atomic::AtomicUsize::new(0);
+        let compiled = std::sync::atomic::AtomicUsize::new(0);
+        let both_missed = || {
+            missed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            while missed.load(std::sync::atomic::Ordering::SeqCst) < 2 {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "the other thread never reached the compile step"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+        };
+        let returned: Vec<Option<String>> = std::thread::scope(|scope| {
+            let threads: Vec<_> = (0..2)
+                .map(|_| {
+                    scope.spawn(|| {
+                        recorded_verdict(&verdicts, pattern, |_| {
+                            both_missed();
+                            let n = compiled.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                            Some(format!("verdict {n}"))
+                        })
+                    })
+                })
+                .collect();
+            threads
+                .into_iter()
+                .map(|thread| thread.join().expect("the thread finishes"))
+                .collect()
+        });
 
-        let replacement = Some("replacement".to_string());
-        record_regex_crate_verdict(&mut verdicts, pattern, &replacement);
+        assert_eq!(
+            compiled.into_inner(),
+            2,
+            "both threads compiled the pattern"
+        );
 
+        let verdicts = verdicts.into_inner().unwrap();
         assert_eq!(verdicts.len(), REGEX_CRATE_VERDICTS_BOUND);
-        assert_eq!(verdicts.get(pattern), Some(&replacement));
+        let fillers = verdicts
+            .keys()
+            .filter(|key| key.starts_with("^filler-648-"))
+            .count();
+        assert_eq!(fillers, REGEX_CRATE_VERDICTS_BOUND - 1);
+        let kept = verdicts.get(pattern).cloned().flatten();
+        assert!(kept.is_some(), "the record keeps a verdict for the pattern");
+        assert!(
+            returned.iter().all(|verdict| *verdict == kept),
+            "both threads return the recorded verdict {kept:?}: {returned:?}"
+        );
     }
 
     /// The checker compiles a pattern with the same `regex` configuration the

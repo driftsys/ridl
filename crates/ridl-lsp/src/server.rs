@@ -16,7 +16,9 @@
 //! root. When that load fails, the server shows the error with
 //! `window/showMessage`; when it fails or the client sent no root, the server
 //! loads instead from the first opened file that has a `ridl.toml` at or above
-//! it (issue #384). Both loads find the root with [`find_root`], so a file
+//! it (issue #384). Both loads find the root with [`find_root`]; every path
+//! the server passes it comes from a `file://` URI and is absolute, so the
+//! root does not depend on the server's current directory. A file
 //! inside a member of a `[workspace]` loads the whole workspace and its
 //! imports of sibling members resolve (ADR-0002 §4). The server publishes the
 //! diagnostics of every loaded member; it does not narrow them to the member

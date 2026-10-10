@@ -2834,6 +2834,65 @@ fn a_relative_member_entry_from_the_root_keeps_the_desk_warning_spans() {
     );
 }
 
+/// A bare file name (`ridl check flag.typl` from the package root) finds
+/// the package root's published baseline without `--baseline`, and the desk
+/// check reads every file of the package, so the RIDL-407 of a change in
+/// another file, `cluster.ridl`, carries its file and line.
+#[test]
+fn a_bare_file_name_finds_the_published_baseline_and_keeps_the_spans() {
+    let dir = TempDir::new("bare-name-desk");
+    dir.write(
+        "flag.typl",
+        "package veh.cluster\ntype Flag: integer [0..1]\n",
+    );
+    let root = package_workspace(&dir, BASE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+    dir.write("cluster.ridl", REORDERED);
+
+    let (code, _, stderr) = ridl_in(Some(&root), &["check".as_ref(), "flag.typl".as_ref()]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(
+        stderr.contains("`doorClosed` has moved"),
+        "the default baseline directory is the package root's:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("cluster.ridl:6:"),
+        "the warning names its file and line:\n{stderr}"
+    );
+}
+
+/// A bare file name checked from a subdirectory of the package
+/// (`ridl check flag.typl` from `src/`) finds the baseline published at the
+/// package root, not under the current directory: the default baseline
+/// directory is the root's even when the root is above the current directory.
+#[test]
+fn a_bare_file_name_below_the_root_finds_the_root_baseline() {
+    let dir = TempDir::new("bare-name-below-root");
+    dir.write(
+        "src/flag.typl",
+        "package veh.cluster.src\ntype Flag: integer [0..1]\n",
+    );
+    let root = package_workspace(&dir, BASE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+    dir.write("cluster.ridl", REORDERED);
+
+    let (code, _, stderr) = ridl_in(
+        Some(&root.join("src")),
+        &["check".as_ref(), "flag.typl".as_ref()],
+    );
+    assert_eq!(code, 0, "{stderr}");
+    assert!(
+        stderr.contains("`doorClosed` has moved"),
+        "the default baseline directory is the package root's:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("../cluster.ridl:6:"),
+        "the warning names its file, relative to the current directory:\n{stderr}"
+    );
+}
+
 /// The desk check compares the whole workspace, so it does not run while
 /// another member has a compile error, even though a check of the member
 /// does not report that error.

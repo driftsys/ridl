@@ -230,3 +230,65 @@ fn a_manifest_that_links_to_itself_in_an_ancestor_is_named() {
         );
     }
 }
+
+/// A relative entry is searched through the current directory and its
+/// ancestors, for the manifest it loads and for the manifest it reports as
+/// unreadable alike: a manifest that links to itself above the current
+/// directory is named in the relative form of the entry, not reported as
+/// missing.
+#[test]
+fn a_manifest_that_links_to_itself_above_the_current_directory_is_named() {
+    let fixture = Fixture::new("loop-above-cwd");
+    std::os::unix::fs::symlink("ridl.toml", fixture.root.join("ridl.toml")).unwrap();
+    let cwd = fixture.root.join("sub");
+    std::fs::create_dir(&cwd).unwrap();
+    for args in COMMANDS {
+        let output = Command::new(RIDL)
+            .args(*args)
+            .arg(".")
+            .current_dir(&cwd)
+            .output()
+            .expect("the binary must run");
+        let code = output.status.code().expect("the process exits with a code");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(code, 2, "ridl {args:?}: {stderr}");
+        assert!(
+            stderr.contains("cannot read `../ridl.toml`"),
+            "ridl {args:?} names the manifest above the current directory: {stderr}"
+        );
+        assert!(
+            stderr.contains("Too many levels of symbolic links"),
+            "ridl {args:?} names the cause: {stderr}"
+        );
+    }
+}
+
+/// A relative entry is normalised lexically before the unreadable manifest
+/// is looked for, so the manifest is named in the normalised form: `sub/..`
+/// names `./ridl.toml` and `./x` names `x/ridl.toml`, not
+/// `sub/../ridl.toml` or `./x/ridl.toml`.
+#[test]
+fn an_unreadable_manifest_is_named_in_the_normalised_form_of_the_entry() {
+    let fixture = Fixture::new("normalised-entry");
+    std::os::unix::fs::symlink("ridl.toml", fixture.root.join("ridl.toml")).unwrap();
+    std::fs::create_dir(fixture.root.join("sub")).unwrap();
+    std::fs::create_dir(fixture.root.join("x")).unwrap();
+    std::os::unix::fs::symlink("ridl.toml", fixture.root.join("x/ridl.toml")).unwrap();
+    for (entry, named) in [("sub/..", "`./ridl.toml`"), ("./x", "`x/ridl.toml`")] {
+        let output = Command::new(RIDL)
+            .args(["check", entry])
+            .current_dir(&fixture.root)
+            .output()
+            .expect("the binary must run");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "ridl check {entry}: {stderr}"
+        );
+        assert!(
+            stderr.contains(&format!("cannot read {named}")),
+            "ridl check {entry} names {named}: {stderr}"
+        );
+    }
+}
