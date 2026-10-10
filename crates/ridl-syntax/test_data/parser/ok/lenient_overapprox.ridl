@@ -26,7 +26,15 @@ interface LenientShapes {
   event calibrated : CalPayload = DEFAULT_CAL
   fixed region : Region = REGION_EU
 
-  // Timing and attr block in either order.
+  // Timing and attr block in either order, on every interaction kind.
   query ordered(): DriveState [ flagged ] @10ms
   query reordered(): DriveState @10ms [ flagged ]
+  command attrsFirst() [ flagged ] @[..50ms]
+  command timingFirst() @[..50ms] [ flagged ]
+  signal attrsFirstSignal : Speed [ persist ] @10ms
+  signal timingFirstSignal : Speed @10ms [ persist ]
+  event attrsFirstEvent : DoorPayload [ someKey = 3 ] @[..1s]
+  event timingFirstEvent : DoorPayload @[..1s] [ someKey = 3 ]
+  fixed attrsFirstFixed : Vin [ cached ] @1s
+  fixed timingFirstFixed : Vin @1s [ cached ]
 }
