@@ -43,9 +43,10 @@ what `generate` emits, plus the codec, the descriptor and the face items when
 `encodings` names a codec. It is the only caller of the clause translator
 besides `generate_pipeline`, and the two are the only entry points whose output
 names `::ridl_rt::port`. `ridl build --emit rust` calls `generate_pipeline`,
-which walks interfaces one at a time and emits the face of each it can carry;
-the "The face is emitted by `ridl build`" section below is the record. Why a
-companion entry point rather than folding the face into `generate` is
+which, when `encodings` names a codec, walks interfaces one at a time and emits
+the face of each it can carry; the "The face is emitted by `ridl build`" section
+below is the record. Why a companion entry point rather than folding the face
+into `generate` is
 [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 2.
 
 ## The descriptors
@@ -822,8 +823,10 @@ rather than written as prose.
    backend through the backend contract (`src/contract.rs`), which calls
    `generate_pipeline_over`, the function `generate_pipeline` wraps. The
    pipeline entry point emits the face and the descriptors beside the payload
-   types, so `ridl build --emit rust` produces a package a consumer can link
-   against without a second tool. `generate` is unchanged in what it emits.
+   types when the package's `[backend.rust] encodings` names a codec, so
+   `ridl build --emit rust` then produces a package a consumer can link against
+   without a second tool; without a codec it emits the types only. `generate`
+   emits the types only.
 
 2. **An interface the face cannot carry is skipped, and the rest of the package
    is emitted.** `generate_pipeline` walks interfaces one at a time rather than
