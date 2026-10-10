@@ -1662,8 +1662,10 @@ fn build_dumping_requests(entry: &Path, extra: &[&str]) -> (Vec<serde_json::Valu
 
 /// A plugin receives the options of its own `[backend.<name>]` table and no
 /// other: the fixture's manifest has tables for `rust` and `kotlin`, so a
-/// plugin started as `kotlin` is handed `encodings=flatbuffers,proto3` and one
-/// started as `swift` is handed none. Unix only, for the scripts.
+/// plugin started as `kotlin` is handed `encodings=proto3,flatbuffers` and one
+/// started as `swift` is handed none. The `kotlin` list is not in alphabetical
+/// order, so the value also pins that the names keep their manifest order from
+/// the manifest parser to the plugin's request. Unix only, for the scripts.
 #[cfg(unix)]
 #[test]
 fn a_plugin_receives_its_own_backend_table() {
@@ -1705,10 +1707,10 @@ fn a_plugin_receives_its_own_backend_table() {
             .expect("the plugin was run");
         serde_json::from_str(&text).expect("a request is JSON")
     };
-    // The value joins the table's names in manifest order.
+    // The value joins the table's names in manifest order, not sorted.
     assert_eq!(
         read("kotlin")["options"],
-        serde_json::json!([{"key": "encodings", "value": "flatbuffers,proto3"}])
+        serde_json::json!([{"key": "encodings", "value": "proto3,flatbuffers"}])
     );
     assert!(
         read("swift")

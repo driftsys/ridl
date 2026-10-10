@@ -6,4 +6,4 @@ version = "1.0.0"
 encodings = ["flatbuffers", "proto3"]
 
 [backend.kotlin]
-encodings = ["flatbuffers", "proto3"]
+encodings = ["proto3", "flatbuffers"]
