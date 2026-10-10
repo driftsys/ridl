@@ -107,7 +107,7 @@ with `=`. This `Cargo.toml` fragment is an illustration and is not compiled:
 
 ```toml
 [dependencies]
-ridl-rt = "0.7"
+ridl-rt = "0.7.0"
 
 [dev-dependencies]
 ridl-rt-conformance = "=0.7.0"
