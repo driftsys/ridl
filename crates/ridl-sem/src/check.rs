@@ -9423,8 +9423,9 @@ mod tests {
         assert_eq!(fillers, 0, "{} verdicts recorded", verdicts.len());
     }
 
-    /// Two threads that miss the same pattern in a full record and compile
-    /// it at once leave every other entry in place (issue #648): the first
+    /// Two threads that miss the same pattern in a record one entry short of
+    /// its bound and compile it at once leave every other entry in place
+    /// (issue #648): the first
     /// records the pattern and fills the record, and the second finds the
     /// entry already present, so it empties nothing and keeps the first
     /// verdict. The compile step waits on a barrier until both threads have
