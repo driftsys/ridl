@@ -46,7 +46,7 @@ modifier    = "internal" | "error"          // prefix keywords, Kotlin-style
 A named, typed thing.
 
 ```
-kw name: Backing [shape]? clauses? @timing? [ attrs ]?   ( "=" value )?
+kw name: Backing [shape]? clauses? ( "=" value )? @timing? [ attrs ]?
 ```
 
 | Profile        | Instances                                                                   |
