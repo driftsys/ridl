@@ -10,8 +10,9 @@
 
 use planus::ReadAsRoot;
 use ridl_descriptor::{
-    Catalog, CatalogRef, Encoding, FILE_IDENTIFIER, Interface, Kind, MaxSize, Member, Payload,
-    RetiredInterface, SCHEMA_VERSION, SizeStateTag, Timing, TimingMode, UnboundedCause, finish,
+    Catalog, CatalogRef, EarlierCatalog, Encoding, FILE_IDENTIFIER, Interface, Kind, MaxSize,
+    Member, Payload, RetiredInterface, SCHEMA_VERSION, SizeStateTag, Timing, TimingMode,
+    UnboundedCause, finish,
 };
 
 fn sample() -> Catalog {
@@ -167,11 +168,33 @@ fn a_repeated_string_is_written_once() {
     // The vtable cache shows in the length: the two interfaces, and their
     // members and payloads, have the same shape and share one vtable each.
     // Without planus's `vtable-cache` (part of `dedup`) the same catalog is
-    // 652 bytes. The byte-vector cache has nothing to share in this catalog,
-    // so it is not pinned here.
+    // 652 bytes. The byte-vector cache has nothing to share in this catalog;
+    // `a_repeated_byte_vector_is_written_once` pins it.
     assert_eq!(
         bytes.len(),
         576,
         "the buffer length with the vtable and string caches on"
     );
+}
+
+/// The builder's byte-vector cache (planus's `bytes-cache` feature, which this
+/// crate's `dedup` feature turns on) writes a repeated byte vector once. Fails
+/// when that feature is dropped from `dedup`. With `dedup` off the cache is
+/// absent and the test does not run.
+#[test]
+#[cfg(feature = "dedup")]
+fn a_repeated_byte_vector_is_written_once() {
+    let mut catalog = sample();
+    // An earlier catalog whose hash is the same 32 bytes as this catalog's.
+    catalog.compatible = Some(vec![EarlierCatalog {
+        hash: catalog.hash.clone(),
+    }]);
+    let bytes = finish(&catalog);
+    // A FlatBuffers vector: its length as a little-endian u32, then the bytes.
+    let needle = [&32u32.to_le_bytes()[..], &[7u8; 32]].concat();
+    let count = bytes
+        .windows(needle.len())
+        .filter(|w| *w == needle.as_slice())
+        .count();
+    assert_eq!(count, 1, "the 32-byte hash is written once");
 }
