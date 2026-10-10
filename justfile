@@ -108,7 +108,8 @@ test:
         cargo test --workspace --locked
         # `ridl-descriptor` with its default features off: the tests of the
         # reader half, in the configuration an engine builds. Then with only
-        # `dedup` on, so that the builder caches are tested without `std`.
+        # `dedup` on, so that the builder caches are tested. The thumbv7em checks
+        # of `wasm-check` show that they need no `std`.
         cargo test --locked -p ridl-descriptor --no-default-features
         cargo test --locked -p ridl-descriptor --no-default-features --features dedup
         # The workspace build resolves `ridl-rt` with default features, so the
