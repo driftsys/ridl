@@ -521,14 +521,17 @@ catalog hashes whose successive changes `ridl diff` judged compatible, and
 tree it builds is compatible too. A breaking change restarts the chain when it
 is published: `ridl baseline` records the new hash alone. A tree that is
 breaking relative to the published baseline is built with an empty list, and the
-recorded chain is left as it is until the next publication.
-[ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15, as amended on
-2026-10-09, states the rule. The direction is fixed: an **older consumer**
-attaches to a **newer provider**. A newer consumer attaching to an older
-provider is refused `catalog_mismatch`, because no tool judges that direction
-and the provider is the authority on what it serves. The descriptor field, the
-chain file and the emit are built (driftsys/ridl#787). With an empty list the
-rule above is the exact-match rule.
+recorded chain is left as it is until the next publication. The one exception is
+a catalog that did not change: when the catalog hash equals the newest hash of
+the published chain, the chain is carried at publication and at the build
+whatever the verdict, because every hash it lists is still compatible with that
+catalog. [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15, as
+amended on 2026-10-09 and 2026-10-10, states the rule. The direction is fixed:
+an **older consumer** attaches to a **newer provider**. A newer consumer
+attaching to an older provider is refused `catalog_mismatch`, because no tool
+judges that direction and the provider is the authority on what it serves. The
+descriptor field, the chain file and the emit are built (driftsys/ridl#787).
+With an empty list the rule above is the exact-match rule.
 
 The catalog check is the peers' agreement on the contract, taken once. On a
 session whose `attach` named the provider's own hash, the two runtimes hold the

@@ -392,8 +392,9 @@ of a region are catalog names, relative to the unit (`cluster.SpeedDisplay`),
 while `Model.interfaces[i].name` stays the short name. `Catalog.hash` is the
 hash of the unit's catalog, `Catalog.retired` lists the unit's retired entries
 as the lock spells them, and `Catalog.compatible` lists the hashes of the
-earlier catalogs of the unit that the toolchain judged compatible with this one
-(newest first, empty when no baseline applies; see
+earlier catalogs of the unit that the toolchain judged compatible with this one,
+or carried over unchanged because this catalog's hash is the newest published
+one (newest first, empty when no baseline applies; see
 [the catalog descriptor](catalog-descriptor.md#the-catalog-hash)), each for
 every request of every source package of the unit.
 
