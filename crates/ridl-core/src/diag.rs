@@ -1357,6 +1357,20 @@ diag_codes! {
         MANI_014 = "MANI-014", Error,
             "a source package is declared by two units";
 
+        /// `[backend.<name>] encodings` is malformed: `backend` or
+        /// `[backend.<name>]` is not a table, `encodings` is not an array of
+        /// strings, an element is not one of `flatbuffers`, `proto3` and
+        /// `repr-c`, or an element repeats. The message names the offending
+        /// value and lists the known names.
+        MANI_015 = "MANI-015", Error,
+            "`[backend.<name>] encodings` is not an array of encoding names, names an unknown encoding, or names one twice";
+
+        /// A workspace member's manifest holds a `[backend.<name>]` table. Only
+        /// the workspace root's manifest, or a standalone package's manifest,
+        /// may hold one.
+        MANI_016 = "MANI-016", Error,
+            "`[backend.<name>]` is set in a workspace member";
+
         /// A remote import could not be fetched (network failure, a non-2xx HTTP
         /// status, or a value that is not a fetchable `http(s)` URL).
         MANI_101 = "MANI-101", Error,

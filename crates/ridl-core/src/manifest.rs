@@ -66,6 +66,13 @@ use crate::lint::{LintLevel, LintTable, lint_by_name};
 /// `codegen_header_file` is the raw `[codegen] header-file` value with the byte
 /// range of that value in the manifest text. The loader resolves the path
 /// against the manifest's directory and reads the file.
+///
+/// `backends` holds one [`BackendTable`] per `[backend.<name>]` table, keyed by
+/// the backend's language name, with every `encodings` element that passed
+/// validation; an invalid element is MANI-015 and is dropped. `backend_span` is
+/// the byte range of the `backend` key's table in the manifest text, or `None`
+/// when the manifest has no `[backend.<name>]` table; the loader uses it to
+/// raise MANI-016.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Manifest {
     pub kind: ManifestKind,
@@ -73,6 +80,22 @@ pub struct Manifest {
     pub defaults: TimingDefaults,
     pub lints: LintTable,
     pub codegen_header_file: Option<(String, Range<usize>)>,
+    pub backends: BTreeMap<String, BackendTable>,
+    pub backend_span: Option<Range<usize>>,
+}
+
+/// The encoding names the toolchain knows, spelled as the encoding enum of
+/// `ridl-rt` spells them. `[backend.<name>] encodings` accepts only these.
+pub const ENCODING_NAMES: [&str; 3] = ["flatbuffers", "proto3", "repr-c"];
+
+/// One `[backend.<name>]` table (ADR-0002 §4). The table is the same for every
+/// backend name; whether a backend honours it is the backend's concern.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BackendTable {
+    /// The validated `encodings` names in manifest order, each with the byte
+    /// range of its string in the manifest text. Empty for an absent key and
+    /// for `encodings = []`, both of which mean types only.
+    pub encodings: Vec<(String, Range<usize>)>,
 }
 
 /// The raw `[defaults]` timing strings of one manifest, or the merge of
@@ -189,6 +212,7 @@ pub fn parse_manifest(file_id: FileId, text: &str) -> (Option<Manifest>, Vec<Dia
         })
         .unwrap_or_default();
     let lints = collect_lints(file_id, text, &mut diags);
+    let (backends, backend_span) = collect_backends(file_id, text, &mut diags);
     let codegen_header_file = raw
         .codegen
         .and_then(|codegen| codegen.into_inner().header_file)
@@ -232,6 +256,8 @@ pub fn parse_manifest(file_id: FileId, text: &str) -> (Option<Manifest>, Vec<Dia
             defaults,
             lints,
             codegen_header_file,
+            backends,
+            backend_span,
         }),
         diags,
     )
@@ -339,6 +365,231 @@ fn collect_lints(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) -> Li
     lints
 }
 
+/// The `[backend]` table alone, read in a parse of its own so that each value
+/// carries its span and a wrong shape is MANI-015 with the rest of the manifest
+/// intact, not a failure of the typed manifest parse (as for [`RawLints`]).
+#[derive(Deserialize)]
+struct RawBackends {
+    backend: Option<Spanned<Shape<BTreeMap<String, Spanned<Shape<RawBackend>>>>>>,
+}
+
+#[derive(Default)]
+struct RawBackend {
+    encodings: Option<Spanned<Shape<Vec<Spanned<toml::Value>>>>>,
+}
+
+/// A value that is either the table or array shape a reader expects (`Right`)
+/// or any other shape (`Wrong`). Reading a wrong shape as `Wrong` keeps one
+/// misplaced value from failing the whole typed parse.
+enum Shape<T> {
+    Right(T),
+    Wrong,
+}
+
+/// Implements `Visitor` for [`Shape`] over one container type: `$visit` is
+/// the visitor method that accepts the expected shape and `$body` builds the
+/// value. Every other shape is drained and read as `Wrong`.
+macro_rules! shape_visitor {
+    ($ty:ty, $expecting:literal, |$access:ident| $body:expr, $visit:ident, $access_ty:ident, $other:ident, $other_ty:ident) => {
+        impl<'de> Deserialize<'de> for Shape<$ty> {
+            fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                struct V;
+                impl<'de> serde::de::Visitor<'de> for V {
+                    type Value = Shape<$ty>;
+                    fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        f.write_str($expecting)
+                    }
+                    fn $visit<A: serde::de::$access_ty<'de>>(
+                        self,
+                        mut $access: A,
+                    ) -> Result<Self::Value, A::Error> {
+                        $body
+                    }
+                    fn $other<A: serde::de::$other_ty<'de>>(
+                        self,
+                        mut other: A,
+                    ) -> Result<Self::Value, A::Error> {
+                        drain_shape!($other, other);
+                        Ok(Shape::Wrong)
+                    }
+                    fn visit_bool<E>(self, _: bool) -> Result<Self::Value, E> {
+                        Ok(Shape::Wrong)
+                    }
+                    fn visit_i64<E>(self, _: i64) -> Result<Self::Value, E> {
+                        Ok(Shape::Wrong)
+                    }
+                    fn visit_u64<E>(self, _: u64) -> Result<Self::Value, E> {
+                        Ok(Shape::Wrong)
+                    }
+                    fn visit_f64<E>(self, _: f64) -> Result<Self::Value, E> {
+                        Ok(Shape::Wrong)
+                    }
+                    fn visit_str<E>(self, _: &str) -> Result<Self::Value, E> {
+                        Ok(Shape::Wrong)
+                    }
+                }
+                deserializer.deserialize_any(V)
+            }
+        }
+    };
+}
+
+macro_rules! drain_shape {
+    (visit_seq, $access:ident) => {
+        while $access.next_element::<serde::de::IgnoredAny>()?.is_some() {}
+    };
+    (visit_map, $access:ident) => {
+        while $access
+            .next_entry::<serde::de::IgnoredAny, serde::de::IgnoredAny>()?
+            .is_some()
+        {}
+    };
+}
+
+shape_visitor!(
+    BTreeMap<String, Spanned<Shape<RawBackend>>>,
+    "a table",
+    |map| {
+        let mut tables = BTreeMap::new();
+        while let Some(key) = map.next_key::<String>()? {
+            tables.insert(key, map.next_value::<Spanned<Shape<RawBackend>>>()?);
+        }
+        Ok(Shape::Right(tables))
+    },
+    visit_map,
+    MapAccess,
+    visit_seq,
+    SeqAccess
+);
+
+shape_visitor!(
+    RawBackend,
+    "a table",
+    |map| {
+        let mut table = RawBackend::default();
+        while let Some(key) = map.next_key::<String>()? {
+            if key == "encodings" {
+                table.encodings = Some(map.next_value()?);
+            } else {
+                map.next_value::<serde::de::IgnoredAny>()?;
+            }
+        }
+        Ok(Shape::Right(table))
+    },
+    visit_map,
+    MapAccess,
+    visit_seq,
+    SeqAccess
+);
+
+shape_visitor!(
+    Vec<Spanned<toml::Value>>,
+    "an array",
+    |seq| {
+        let mut elements = Vec::new();
+        while let Some(element) = seq.next_element()? {
+            elements.push(element);
+        }
+        Ok(Shape::Right(elements))
+    },
+    visit_seq,
+    SeqAccess,
+    visit_map,
+    MapAccess
+);
+
+/// Collects the `[backend.<name>]` tables (ADR-0002 §4). Returns the tables and
+/// the span of the `backend` key's table, or `None` when it is absent or not a
+/// table. A `backend` that is not a table, a `[backend.<name>]` that is not a
+/// table, an `encodings` that is not an array, and an element that is not one
+/// of [`ENCODING_NAMES`] or repeats an earlier one are each MANI-015 on the
+/// offending value (the table's, for a wrong shape); an invalid element is
+/// dropped and the rest are kept.
+fn collect_backends(
+    file_id: FileId,
+    text: &str,
+    diags: &mut Vec<Diagnostic>,
+) -> (BTreeMap<String, BackendTable>, Option<Range<usize>>) {
+    let mut backends = BTreeMap::new();
+    // The typed manifest parse accepted this text and `Shape` accepts every
+    // value, so this parse cannot fail; the fallback keeps the function total.
+    let Ok(RawBackends {
+        backend: Some(backend),
+    }) = toml::from_str::<RawBackends>(text)
+    else {
+        return (backends, None);
+    };
+    let span = backend.span();
+    let Shape::Right(tables) = backend.into_inner() else {
+        diags.push(error(
+            DiagCode::MANI_015,
+            file_id,
+            span,
+            format!("`backend` must be a table of `[backend.<name>]` tables; {KNOWN_ENCODINGS}"),
+        ));
+        return (backends, None);
+    };
+    for (name, table) in tables {
+        let table_span = table.span();
+        let Shape::Right(table) = table.into_inner() else {
+            diags.push(error(
+                DiagCode::MANI_015,
+                file_id,
+                table_span,
+                format!("`[backend.{name}]` must be a table; {KNOWN_ENCODINGS}"),
+            ));
+            continue;
+        };
+        let mut entry = BackendTable::default();
+        match table.encodings {
+            None => {}
+            Some(encodings) => {
+                let encodings_span = encodings.span();
+                match encodings.into_inner() {
+                    Shape::Wrong => diags.push(error(
+                        DiagCode::MANI_015,
+                        file_id,
+                        encodings_span,
+                        format!(
+                            "`[backend.{name}] encodings` must be an array of encoding names; {KNOWN_ENCODINGS}"
+                        ),
+                    )),
+                    Shape::Right(elements) => {
+                        for element in elements {
+                            let range = element.span();
+                            let message = match element.get_ref().as_str() {
+                                Some(value) if !ENCODING_NAMES.contains(&value) => Some(format!(
+                                    "unknown encoding `{value}` in `[backend.{name}] encodings`; {KNOWN_ENCODINGS}"
+                                )),
+                                Some(value) if entry.encodings.iter().any(|(seen, _)| seen == value) => {
+                                    Some(format!(
+                                        "encoding `{value}` is named twice in `[backend.{name}] encodings`"
+                                    ))
+                                }
+                                Some(value) => {
+                                    entry.encodings.push((value.to_string(), range.clone()));
+                                    None
+                                }
+                                None => Some(format!(
+                                    "`[backend.{name}] encodings` holds `{}`, which is not a string; {KNOWN_ENCODINGS}",
+                                    element.get_ref()
+                                )),
+                            };
+                            if let Some(message) = message {
+                                diags.push(error(DiagCode::MANI_015, file_id, range, message));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        backends.insert(name, entry);
+    }
+    (backends, Some(span))
+}
+
+const KNOWN_ENCODINGS: &str = "known encodings: flatbuffers, proto3, repr-c";
+
 /// Collects the `[imports]` table into the public `name -> URL` map, flagging
 /// any value that is not a valid import URL (MANI-007). A flagged import is
 /// still recorded verbatim so downstream resolution can report against it.
@@ -374,7 +625,7 @@ fn check_unknown_keys(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) 
         Err(_) => return,
     };
     // The allowed-key lists below must stay in sync with the fields of
-    // `RawPackage`, `RawWorkspace`, `RawDefaults`, and `RawCodegen`: a field added there
+    // `RawPackage`, `RawWorkspace`, `RawDefaults`, `RawCodegen`, and `RawBackend`: a field added there
     // without a matching entry here would wrongly warn as an unknown key.
     // Keys under `[lints]` are lint names; `collect_lints` checks them against
     // the registry (MANI-010), so they are never "unknown" here.
@@ -390,6 +641,23 @@ fn check_unknown_keys(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) 
                 diags,
             ),
             "codegen" => check_section_keys(file_id, "codegen", value, &["header-file"], diags),
+            "backend" => {
+                // One sub-table per backend name; the name is any string, so
+                // only the keys inside each sub-table are checked.
+                if let Some(table) = value.get_ref().as_table() {
+                    for (name, sub) in table {
+                        let section = format!("backend.{name}");
+                        check_table_keys(
+                            file_id,
+                            &section,
+                            sub,
+                            value.span(),
+                            &["encodings"],
+                            diags,
+                        );
+                    }
+                }
+            }
             "imports" => {}
             "lints" => {}
             _ => diags.push(warning(
@@ -412,7 +680,26 @@ fn check_section_keys(
     allowed: &[&str],
     diags: &mut Vec<Diagnostic>,
 ) {
-    let Some(table) = value.get_ref().as_table() else {
+    check_table_keys(
+        file_id,
+        section,
+        value.get_ref(),
+        value.span(),
+        allowed,
+        diags,
+    );
+}
+
+/// [`check_section_keys`] over a plain value and an explicit span.
+fn check_table_keys(
+    file_id: FileId,
+    section: &str,
+    value: &toml::Value,
+    span: Range<usize>,
+    allowed: &[&str],
+    diags: &mut Vec<Diagnostic>,
+) {
+    let Some(table) = value.as_table() else {
         return;
     };
     for key in table.keys() {
@@ -420,7 +707,7 @@ fn check_section_keys(
             diags.push(warning(
                 DiagCode::MANI_005,
                 file_id,
-                value.span(),
+                span.clone(),
                 format!("unknown key `{key}` in `[{section}]`"),
             ));
         }
@@ -1029,6 +1316,120 @@ version = \"1.0.0\"
     #[test]
     fn unknown_codegen_key_is_mani_005() {
         let text = format!("{PACKAGE_HEAD}[codegen]\nheader = \"x\"\n");
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-005"]);
+    }
+
+    fn backend_names(manifest: &Manifest, backend: &str) -> Vec<String> {
+        manifest.backends[backend]
+            .encodings
+            .iter()
+            .map(|(name, _)| name.clone())
+            .collect()
+    }
+
+    #[test]
+    fn backend_encodings_parse_in_order() {
+        let text =
+            format!("{PACKAGE_HEAD}[backend.rust]\nencodings = [\"proto3\", \"flatbuffers\"]\n");
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+        let manifest = manifest.expect("the manifest parses");
+        assert_eq!(backend_names(&manifest, "rust"), ["proto3", "flatbuffers"]);
+        let (name, span) = &manifest.backends["rust"].encodings[0];
+        assert_eq!(&text[span.clone()], format!("\"{name}\""));
+    }
+
+    #[test]
+    fn backend_encodings_empty_is_types_only() {
+        let text = format!("{PACKAGE_HEAD}[backend.rust]\nencodings = []\n");
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+        let manifest = manifest.expect("the manifest parses");
+        assert!(manifest.backends["rust"].encodings.is_empty());
+    }
+
+    #[test]
+    fn backend_table_for_any_name_is_accepted() {
+        let text = format!("{PACKAGE_HEAD}[backend.kotlin]\n");
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+        let manifest = manifest.expect("the manifest parses");
+        assert!(manifest.backends["kotlin"].encodings.is_empty());
+    }
+
+    #[test]
+    fn absent_backend_table_has_no_entry() {
+        let (manifest, _) = parse(&format!("{PACKAGE_HEAD}"));
+        assert!(manifest.expect("the manifest parses").backends.is_empty());
+    }
+
+    #[test]
+    fn unknown_encoding_is_mani_015() {
+        let text = format!("{PACKAGE_HEAD}[backend.rust]\nencodings = [\"FlatBuffers\"]\n");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+        let message = &diags[0].message;
+        assert!(message.contains("FlatBuffers"), "{message}");
+        assert!(message.contains("flatbuffers, proto3, repr-c"), "{message}");
+        let start = usize::from(diags[0].primary.range.start());
+        let end = usize::from(diags[0].primary.range.end());
+        assert_eq!(&text[start..end], "\"FlatBuffers\"");
+        assert!(
+            manifest.expect("the manifest parses").backends["rust"]
+                .encodings
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn duplicate_encoding_is_mani_015() {
+        let text = format!(
+            "{PACKAGE_HEAD}[backend.rust]\nencodings = [\"flatbuffers\", \"flatbuffers\"]\n"
+        );
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+        let start = usize::from(diags[0].primary.range.start());
+        assert_eq!(start, text.rfind("\"flatbuffers\"").unwrap());
+    }
+
+    #[test]
+    fn empty_encoding_name_is_mani_015() {
+        let text = format!("{PACKAGE_HEAD}[backend.rust]\nencodings = [\"\"]\n");
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+    }
+
+    #[test]
+    fn encoding_element_that_is_not_a_string_is_mani_015() {
+        let text = format!("{PACKAGE_HEAD}[backend.rust]\nencodings = [1]\n");
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+    }
+
+    #[test]
+    fn encodings_not_an_array_is_mani_015() {
+        let text = format!("{PACKAGE_HEAD}[backend.rust]\nencodings = \"flatbuffers\"\n");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+        assert!(manifest.is_some());
+    }
+
+    #[test]
+    fn backend_not_a_table_is_mani_015() {
+        for text in [
+            format!("backend = 1\n\n{PACKAGE_HEAD}"),
+            format!("{PACKAGE_HEAD}[backend]\nrust = 1\n"),
+        ] {
+            let (manifest, diags) = parse(&text);
+            assert_eq!(codes(&diags), vec!["MANI-015"], "{text}");
+            assert!(manifest.is_some(), "{text}");
+        }
+    }
+
+    #[test]
+    fn unknown_backend_key_is_mani_005() {
+        let text = format!("{PACKAGE_HEAD}[backend.rust]\nfoo = 1\n");
         let (_, diags) = parse(&text);
         assert_eq!(codes(&diags), vec!["MANI-005"]);
     }

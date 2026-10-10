@@ -1508,6 +1508,24 @@ expression: log
               }
             },
             {
+              "id": "MANI-015",
+              "shortDescription": {
+                "text": "`[backend.<name>] encodings` is not an array of encoding names, names an unknown encoding, or names one twice"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-016",
+              "shortDescription": {
+                "text": "`[backend.<name>]` is set in a workspace member"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
               "id": "MANI-101",
               "shortDescription": {
                 "text": "remote import fetch failed"
@@ -1619,7 +1637,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 162,
+          "ruleIndex": 164,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

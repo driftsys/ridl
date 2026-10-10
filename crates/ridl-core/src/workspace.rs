@@ -588,6 +588,8 @@ impl Loader {
             defaults,
             lints,
             codegen_header_file,
+            backends: _,
+            backend_span: _,
         }) = manifest
         else {
             return Ok(());
@@ -712,10 +714,22 @@ impl Loader {
             defaults,
             lints,
             codegen_header_file,
+            backends: _,
+            backend_span,
         }) = manifest
         else {
             return Ok(());
         };
+        if let Some(range) = backend_span {
+            self.diagnostics.push(error(
+                DiagCode::MANI_016,
+                file_id,
+                byte_range(range.start, range.end),
+                format!(
+                    "a `[backend.<name>]` table is set in workspace member `{member}`; set it in the workspace root's `ridl.toml`"
+                ),
+            ));
+        }
         if let Some((_, range)) = codegen_header_file {
             self.diagnostics.push(error(
                 DiagCode::MANI_012,
@@ -3322,6 +3336,35 @@ service:veh.common.climate 2
         let end = usize::from(diag.primary.range.end());
         assert_eq!(&member[start..end], "\"M.txt\"");
         assert_eq!(loaded.codegen_header.as_deref(), Some("root header"));
+    }
+
+    #[test]
+    fn backend_table_in_member_is_mani_016() {
+        let dir = TempDir::new("backend-member");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"a\"]\n");
+        let member = format!("{PACKAGE_A}\n[backend.rust]\nencodings = [\"flatbuffers\"]\n");
+        dir.write("a/ridl.toml", &member);
+        dir.write("a/a.typl", "package a\ntype A: integer [0..1]\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["MANI-016"]);
+        let diag = &loaded.diagnostics[0];
+        let start = usize::from(diag.primary.range.start());
+        assert!(member[start..].starts_with("backend.rust"), "{member}");
+    }
+
+    #[test]
+    fn backend_table_at_root_is_not_mani_016() {
+        let dir = TempDir::new("backend-root");
+        dir.write(
+            "ridl.toml",
+            "[workspace]\nmembers = [\"a\"]\n\n[backend.rust]\nencodings = [\"flatbuffers\"]\n",
+        );
+        dir.write("a/ridl.toml", PACKAGE_A);
+        dir.write("a/a.typl", "package a\ntype A: integer [0..1]\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert_eq!(codes(&loaded.diagnostics), Vec::<&str>::new());
     }
 
     #[test]
