@@ -157,12 +157,13 @@ semantics.)
 skipping absent slots:
 
 ```
-name → (params) → : Type → [shape] → wire W → = value → @timing → during S → [ attrs ] → { body }
+name → (params) → : Type → [shape] → wire W → = value → @timing → during S (provisional) → [ attrs ] → { body }
 ```
 
-This order is normative. New clauses must be slotted into this order explicitly.
-The parser accepts `@timing` and `[ attrs ]` in either order, and `ridl fmt`
-writes `@timing` before `[ attrs ]` (maintainer decision D-4 of
+This order is normative, except the slot of `during S`, which is provisional
+(see below). New clauses must be slotted into this order explicitly. The parser
+accepts `@timing` and `[ attrs ]` in either order, and `ridl fmt` writes
+`@timing` before `[ attrs ]` (maintainer decision D-4 of
 `fmt-ridl-rsdl-layout.md`); `ridl fmt` reorders no other slot. The parser
 accepts `= value` only before `@timing`, which follows decision 2 of ADR-0008.
 The slot of `during S` is not decided: no parser in the workspace accepts
