@@ -1132,12 +1132,44 @@ fn making_an_interface_internal_changes_only_the_catalog_hash() {
             "the {visibility:?} source is a valid package: {:?}",
             output.diagnostics
         );
-        let generated = generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
-            .expect("generate_pipeline");
-        impl_blocks(&generated.rust_source)
+        generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+            .expect("generate_pipeline")
+            .rust_source
     };
-    let (internal, internal_hashes) = emit("internal ");
-    let (public, public_hashes) = emit("");
+    let internal_source = emit("internal ");
+    let public_source = emit("");
+
+    // The public sibling's own items do not change: its descriptor structs
+    // stay `pub` with no `allow(dead_code)`, and its face module is the same.
+    for descriptor in ["Summary", "SummaryLevel", "SummarySetLevel"] {
+        for source in [&internal_source, &public_source] {
+            let line = format!("pub struct {descriptor};");
+            let at = source
+                .lines()
+                .position(|l| l == line)
+                .unwrap_or_else(|| panic!("no `{line}` at the top level:\n{source}"));
+            let previous = source.lines().nth(at - 1).expect("a line before");
+            assert!(
+                !previous.contains("allow(dead_code)"),
+                "`{descriptor}` allows no dead code:\n{source}"
+            );
+        }
+    }
+    let face_module = |source: &str| {
+        let start = source
+            .find("\npub mod summary {\n")
+            .unwrap_or_else(|| panic!("the public sibling's face:\n{source}"));
+        let end = start + source[start..].find("\n}\n").expect("the module's end");
+        source[start..end].to_string()
+    };
+    assert_eq!(
+        face_module(&internal_source),
+        face_module(&public_source),
+        "the public sibling's face module does not change"
+    );
+
+    let (internal, internal_hashes) = impl_blocks(&internal_source);
+    let (public, public_hashes) = impl_blocks(&public_source);
 
     assert_eq!(internal_hashes.len(), 2, "one CATALOG per interface");
     assert_eq!(public_hashes.len(), 2, "one CATALOG per interface");

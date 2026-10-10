@@ -256,7 +256,9 @@ fn faced_interface(
 }
 
 /// The note left where an interface's face was skipped (design rule 2), or,
-/// for an `internal` interface, where its descriptors were refused.
+/// for an `internal` interface, where its descriptors were refused (the
+/// design record's "The consumer face"; the rest of the package is unaffected
+/// in both cases, as rule 2 states).
 ///
 /// It is a `const` carrying doc attributes rather than a bare comment, for the
 /// reason the codec's withheld note gives: `quote!` emits tokens, and a doc

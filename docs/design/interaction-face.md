@@ -142,10 +142,13 @@ reduced unit in `crates/ridl-ir/src/catalog_hash.rs` keeps each interface's
 visibility); every other `impl` block of the output stays equal, as
 `making_an_interface_internal_changes_only_the_catalog_hash` in
 `crates/ridl-backend-rust/tests/face_compile.rs` pins. When an internal
-interface's descriptors are refused, its skip note cites this section rather
-than design rule 2, which covers an interface the face cannot carry. The rule is
-stated here once: the book's [generated code](../book/generated-code.md) chapter
-and [the CLI reference](../book/cli-reference.md) link to it.
+interface's descriptors are refused, nothing else is refused: the rest of the
+package is emitted and unaffected, as for a skipped face (rule 2 of
+[the design rules](#the-face-is-emitted-by-ridl-build-2026-09-21)). Its skip
+note cites this section rather than rule 2, because an internal interface has no
+face to skip. The rule is stated here once: the book's
+[generated code](../book/generated-code.md) chapter and
+[the CLI reference](../book/cli-reference.md) link to it.
 
 `src/face.rs` emits, per named interface that is not `internal` and has at least
 one member the face covers, one `pub mod` named after the interface. Its
@@ -795,10 +798,12 @@ a companion entry point no CLI called, so there was nothing to link against.
 citation in the tree resolves against this list, which is why it is numbered
 rather than written as prose.
 
-1. **`write_emits` calls `generate_pipeline`, not `generate`.** The pipeline
-   entry point emits the face and the descriptors beside the payload types, so
-   `ridl build --emit rust` produces a package a consumer can link against
-   without a second tool. `generate` is unchanged in what it emits.
+1. **`write_emits` reaches the pipeline, not `generate`.** It runs the Rust
+   backend through the backend contract (`src/contract.rs`), which calls
+   `generate_pipeline_over`, the function `generate_pipeline` wraps. The
+   pipeline entry point emits the face and the descriptors beside the payload
+   types, so `ridl build --emit rust` produces a package a consumer can link
+   against without a second tool. `generate` is unchanged in what it emits.
 
 2. **An interface the face cannot carry is skipped, and the rest of the package
    is emitted.** `generate_pipeline` walks interfaces one at a time rather than

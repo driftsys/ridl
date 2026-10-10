@@ -6303,6 +6303,61 @@ mod skipped_interface_note {
         skipped_interface_note(interface, &err).to_string()
     }
 
+    /// The doc lines of a note, in order.
+    fn doc_lines(interface: &v1::Interface) -> Vec<String> {
+        let err = GenerateError {
+            message: "a refusal".to_string(),
+        };
+        let item: syn::ItemConst =
+            syn::parse2(skipped_interface_note(interface, &err)).expect("the note is a const");
+        item.attrs
+            .iter()
+            .filter(|attr| attr.path().is_ident("doc"))
+            .map(|attr| match &attr.meta {
+                syn::Meta::NameValue(syn::MetaNameValue {
+                    value:
+                        syn::Expr::Lit(syn::ExprLit {
+                            lit: syn::Lit::Str(text),
+                            ..
+                        }),
+                    ..
+                }) => text.value(),
+                _ => panic!("a doc attribute that is not a string"),
+            })
+            .collect()
+    }
+
+    /// The trailer of each note, line for line and in order: the public one
+    /// keeps the lines it had before the tail was shared, and the internal one
+    /// names no face and cites "The consumer face".
+    #[test]
+    fn each_note_ends_with_its_own_trailer() {
+        let tail = [
+            " rest of this package — its domain types, its codec, and every",
+            " other interface — is unaffected, which is why the build succeeded",
+        ];
+        let public = doc_lines(&interface(Vec::new(), false));
+        let mut expected = vec![
+            " Its descriptors are absent for the reason above: the refusal is",
+            " raised by the descriptor emitter, which the face is built on. The",
+        ];
+        expected.extend(tail);
+        expected.push(" (interaction-face design rule 2).");
+        assert_eq!(public[public.len() - expected.len()..], expected);
+        assert_eq!(public[public.len() - expected.len() - 1], "", "{public:#?}");
+
+        let internal = doc_lines(&interface(Vec::new(), true));
+        let mut expected = vec![" Nothing else is refused: the"];
+        expected.extend(tail);
+        expected.push(" (interaction-face design, \"The consumer face\").");
+        assert_eq!(internal[internal.len() - expected.len()..], expected);
+        assert_eq!(
+            internal[internal.len() - expected.len() - 1],
+            "",
+            "{internal:#?}"
+        );
+    }
+
     #[test]
     fn the_call_shape_and_unowned_notes_carry_no_run_of_spaces() {
         let call_shape = note(&interface(vec![bare_command()], false));
