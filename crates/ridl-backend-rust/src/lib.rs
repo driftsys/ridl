@@ -255,7 +255,8 @@ fn faced_interface(
     Ok(items)
 }
 
-/// The note left where an interface's face was skipped (design rule 2).
+/// The note left where an interface's face was skipped (design rule 2), or,
+/// for an `internal` interface, where its descriptors were refused.
 ///
 /// It is a `const` carrying doc attributes rather than a bare comment, for the
 /// reason the codec's withheld note gives: `quote!` emits tokens, and a doc
@@ -301,7 +302,7 @@ fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> Tok
         ///
         #[doc = #owner]
         ///
-        /// Its descriptors are absent for the same reason: the refusal is
+        /// Its descriptors are absent for the reason above: the refusal is
         /// raised by the descriptor emitter, which the face is built on. The
         /// rest of this package — its domain types, its codec, and every
         /// other interface — is unaffected, which is why the build succeeded

@@ -1618,8 +1618,8 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
     );
     // A run of literal spaces inside a note is a broken line continuation in
     // the emitter's string, which reaches the reader's source. Both notes are
-    // checked: `VehicleStatus` is the clause owner and `WheelDiagnostics` the
-    // call-shape one, and they are separate string literals, so checking one
+    // checked: `VehicleStatus` is the clause owner and `WheelDiagnostics`, which
+    // is `internal`, the internal one, and they are separate string literals, so checking one
     // leaves the other free to break.
     let call_shape_note = source
         .split("const __RIDL_NO_FACE_WheelDiagnostics")

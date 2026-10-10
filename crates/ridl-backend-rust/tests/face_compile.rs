@@ -157,7 +157,7 @@ fn an_internal_interface_gets_no_face_module() {
 
 /// The path `ridl build --emit rust` takes is `generate_pipeline`, which skips
 /// an interface it refuses instead of failing. An internal interface gets no
-/// face there either, and no skip note: the note marks a refused face.
+/// face there either, and no skip note: the note marks a refusal.
 #[test]
 fn an_internal_interface_gets_no_face_through_the_pipeline() {
     let output = ridlc::compile("hidden_pipeline.ridl", INTERNAL_BESIDE_PUBLIC);
@@ -172,6 +172,32 @@ fn an_internal_interface_gets_no_face_through_the_pipeline() {
         source.contains("pub(crate) struct Diagnostics;"),
         "{source}"
     );
+    assert!(!source.contains("pub struct Diagnostics"), "{source}");
+}
+
+/// The skip note of a public interface whose call the face cannot carry names
+/// the call shape and its tracking issue.
+#[test]
+fn a_public_interface_with_an_uncarried_call_leaves_the_call_shape_note() {
+    let source = r#"
+package face.shape
+
+type Level : integer [0..100]
+
+interface Wide {
+  command set(first: Level, second: Level) @[..50ms]
+}
+"#;
+    let output = ridlc::compile("shape.ridl", source);
+    let generated = generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+        .expect("generate_pipeline");
+    let text = generated.rust_source;
+    assert!(
+        text.contains("carries no generated interaction face"),
+        "{text}"
+    );
+    assert!(text.contains("A call the face cannot carry"), "{text}");
+    assert!(!text.contains("The interface is `internal`"), "{text}");
 }
 
 /// An internal interface claims no face-module name, so its `snake_case` name

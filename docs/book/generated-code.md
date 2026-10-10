@@ -78,7 +78,7 @@ Each interface module holds the parts its own interactions need:
 
 An interface that carries only `fixed` declarations gets no face module, and
 neither does an `internal` interface, whose descriptors are crate-visible (the
-[design record][face] gives the reason). A signal-only interface gets a `Client` and a `Publisher` and no `blocking`
+[design record][face] gives the reason, under "The consumer face"). A signal-only interface gets a `Client` and a `Publisher` and no `blocking`
 module, because a signal read returns at once.
 
 An interface the face cannot carry gets none of these items and no interaction

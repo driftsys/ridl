@@ -790,7 +790,8 @@ cannot carry — a call that does not take exactly one named parameter, a query
 whose reply is not a named type, or a contract clause outside the form the
 translator accepts — is skipped along with its descriptors, and gets a
 `__RIDL_NO_FACE_<NAME>` constant naming the interface and the reason, and,
-when an issue tracks the limit, that issue. Neither is an error: the rest of the package is
+when an issue tracks the limit, that issue. An `internal` interface gets no
+face in any case; if its descriptors are refused, its note says so. Neither is an error: the rest of the package is
 emitted, and the build succeeds.
 
 The face names the `ridl-rt` port traits and nothing else: the crate carries no
