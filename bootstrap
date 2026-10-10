@@ -9,7 +9,7 @@
 #
 # It then installs the pinned Rust toolchain named in rust-toolchain.toml, if
 # rustup is present, and checks for every other tool `just build` shells out to.
-# It does not install those: `just` and mdBook come from two different package
+# It does not install those: `just`, mdBook and jq come from different package
 # ecosystems, and writing into a contributor's global cargo or system prefix is
 # a choice this script should not make for them. It names each missing tool
 # with the command that installs it and exits non-zero, so a fresh clone
