@@ -654,7 +654,7 @@ expression: log
             {
               "id": "RIDL-101",
               "shortDescription": {
-                "text": "timing range `@[X..Y]` with `X > Y`"
+                "text": "timing range `@[X..Y]` with `X > Y`, also an `@[X..]` on a `command` or a `query` whose default maximum is shorter than X"
               },
               "defaultConfiguration": {
                 "level": "error"
