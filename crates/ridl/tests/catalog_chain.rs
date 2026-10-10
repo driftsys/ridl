@@ -1094,3 +1094,28 @@ interface VehicleStatus {
         "stderr names the error:\n{stderr}"
     );
 }
+
+/// Only the first hash of the history carries the chain whatever the
+/// verdict. A tree whose catalog hash is an older hash of the history, here
+/// the source returned to `BASE` after `APPENDED` was published, is a
+/// breaking change from the baseline, so its list is empty.
+#[test]
+fn only_the_head_of_the_history_carries_the_chain() {
+    let dir = TempDir::new("build-older-hash");
+    let first = TempDir::new("build-older-hash-first");
+    let out = TempDir::new("build-older-hash-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    let base_hash = describe_hash(&root, first.path(), UNIT);
+    set_source(&dir, APPENDED);
+    publish(&root);
+    assert_eq!(history_lines(&root).len(), 2, "the chain holds two hashes");
+    set_source(&dir, BASE);
+    build_catalog(&root, out.path());
+    assert_eq!(
+        hex_of_bytes(&describe(out.path(), UNIT)["hash"]),
+        base_hash,
+        "the tree has the older hash of the history"
+    );
+    assert_eq!(compatible_of(out.path(), UNIT), Vec::<String>::new());
+}
