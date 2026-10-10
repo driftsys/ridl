@@ -8,7 +8,7 @@
 #[path = "support/rustc.rs"]
 mod rustc;
 
-use ridl_backend_rust::generate_face;
+use ridl_backend_rust::{WireEncoding, generate_face, generate_pipeline};
 
 /// Emits the face of `source` and checks it as a library crate
 /// (`--emit=metadata -D warnings`), panicking with rustc's diagnostics when it
@@ -94,6 +94,137 @@ fn compile_face(
         .output()
         .expect("rustc must be installed and runnable for this test to be meaningful");
     (face, compiled)
+}
+
+/// An `internal` interface over `internal` payload types, beside a public
+/// interface over a public type. The package-private interface gets no face:
+/// a face is public API, and its signatures would name `pub(crate)` types
+/// (E0446), so the emitted crate compiles only because no face is written.
+const INTERNAL_BESIDE_PUBLIC: &str = r#"
+package face.hidden
+
+type Level : integer [0..100]
+internal type Raw : integer [0..1000]
+internal struct Frame { ticks: Raw }
+
+interface Summary {
+  signal level: Level @10ms
+  command setLevel(level: Level) @[..50ms]
+}
+
+internal interface Diagnostics {
+  signal ticks: Raw @10ms
+  event frame: Frame @[100ms..1s]
+  command reset(arg: Raw) @[..50ms]
+  query read(arg: Raw): Frame @[..50ms]
+}
+"#;
+
+#[test]
+fn an_internal_interface_beside_a_public_one_compiles() {
+    face_compiles("hidden", INTERNAL_BESIDE_PUBLIC);
+}
+
+/// The face of an `internal` interface is absent, and the public interface
+/// beside it keeps its face. The descriptors of the internal interface stay,
+/// crate-visible, because the catalog describes it whether or not it has a face.
+#[test]
+fn an_internal_interface_gets_no_face_module() {
+    let (face, _) = compile_face("hidden_text", INTERNAL_BESIDE_PUBLIC, "", true);
+    assert!(
+        face.contains("pub mod summary {"),
+        "the public interface keeps its face:\n{face}"
+    );
+    for absent in ["mod diagnostics", "__RIDL_NO_FACE"] {
+        assert!(
+            !face.contains(absent),
+            "an internal interface emits no `{absent}`:\n{face}"
+        );
+    }
+    assert!(
+        face.contains("pub(crate) struct Diagnostics;"),
+        "the descriptor of the internal interface is crate-visible:\n{face}"
+    );
+    assert!(
+        face.contains("#[allow(dead_code)]\npub(crate) struct Diagnostics;"),
+        "the crate-visible descriptor allows dead code:\n{face}"
+    );
+    assert!(
+        !face.contains("pub struct Diagnostics"),
+        "no descriptor of the internal interface is public:\n{face}"
+    );
+}
+
+/// The path `ridl build --emit rust` takes is `generate_pipeline`, which skips
+/// an interface it refuses instead of failing. An internal interface gets no
+/// face there either, and no skip note: the note marks a refusal.
+#[test]
+fn an_internal_interface_gets_no_face_through_the_pipeline() {
+    let output = ridlc::compile("hidden_pipeline.ridl", INTERNAL_BESIDE_PUBLIC);
+    let generated = generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+        .expect("generate_pipeline");
+    let source = generated.rust_source;
+    assert!(source.contains("pub mod summary {"), "{source}");
+    for absent in ["mod diagnostics", "__RIDL_NO_FACE"] {
+        assert!(!source.contains(absent), "no `{absent}`:\n{source}");
+    }
+    assert!(
+        source.contains("pub(crate) struct Diagnostics;"),
+        "{source}"
+    );
+    assert!(!source.contains("pub struct Diagnostics"), "{source}");
+}
+
+/// The skip note of a public interface whose call the face cannot carry names
+/// the call shape and its tracking issue.
+#[test]
+fn a_public_interface_with_an_uncarried_call_leaves_the_call_shape_note() {
+    let source = r#"
+package face.shape
+
+type Level : integer [0..100]
+
+interface Wide {
+  command set(first: Level, second: Level) @[..50ms]
+}
+"#;
+    let output = ridlc::compile("shape.ridl", source);
+    let generated = generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+        .expect("generate_pipeline");
+    let text = generated.rust_source;
+    assert!(
+        text.contains("carries no generated interaction face"),
+        "{text}"
+    );
+    assert!(text.contains("A call the face cannot carry"), "{text}");
+    let owner = &text[text
+        .find("A call the face cannot carry")
+        .expect("owner line")..];
+    assert!(owner.contains("driftsys/ridl#713"), "{text}");
+    assert!(!text.contains("The interface is `internal`"), "{text}");
+}
+
+/// An internal interface claims no face-module name, so its `snake_case` name
+/// can equal another interface's without a collision.
+#[test]
+fn an_internal_interface_claims_no_face_module_name() {
+    let source = r#"
+package face.claims
+
+type Level : integer [0..100]
+
+interface HttpServer {
+  signal level: Level @10ms
+}
+
+internal interface HTTPServer {
+  signal level: Level @10ms
+}
+"#;
+    let output = ridlc::compile("claims.ridl", source);
+    generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+        .expect("the internal interface claims no face module");
+    generate_face(&output.package).expect("generate_face");
 }
 
 /// A ridl member or parameter may carry a name the emitter uses for a local

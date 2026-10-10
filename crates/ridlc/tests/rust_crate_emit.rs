@@ -1618,8 +1618,8 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
     );
     // A run of literal spaces inside a note is a broken line continuation in
     // the emitter's string, which reaches the reader's source. Both notes are
-    // checked: `VehicleStatus` is the clause owner and `WheelDiagnostics` the
-    // call-shape one, and they are separate string literals, so checking one
+    // checked: `VehicleStatus` is the clause owner and `WheelDiagnostics`, which
+    // is `internal`, the internal one, and they are separate string literals, so checking one
     // leaves the other free to break.
     let call_shape_note = source
         .split("const __RIDL_NO_FACE_WheelDiagnostics")
@@ -1628,19 +1628,19 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
     let call_shape_note = &call_shape_note[call_shape_note
         .rfind("Interface `WheelDiagnostics`")
         .expect("the call-shape note's headline")..];
-    let call_shape_reason = &call_shape_note[..call_shape_note
-        .find("A call the face cannot carry")
-        .expect("the call-shape owner line")];
+    // `WheelDiagnostics` is `internal`: it never gets a face, so its note
+    // names the lost descriptors and the refusal reason, not a face gap.
     assert!(
-        call_shape_reason.contains("driftsys/ridl#713"),
-        "the refusal reason names the argument-struct issue, got:\n{call_shape_reason}"
+        call_shape_note.contains("carries no generated interaction descriptors"),
+        "the internal interface's note names its descriptors, got:\n{call_shape_note}"
     );
-    let call_shape_owner = &call_shape_note[call_shape_note
-        .find("A call the face cannot carry")
-        .expect("the call-shape owner line")..];
     assert!(
-        call_shape_owner.contains("driftsys/ridl#713"),
-        "the call-shape owner line names its own issue, got:\n{call_shape_owner}"
+        call_shape_note.contains("driftsys/ridl#713"),
+        "the refusal reason names the argument-struct issue, got:\n{call_shape_note}"
+    );
+    assert!(
+        call_shape_note.contains("The interface is `internal`, so it has no face in any case"),
+        "the note says an internal interface has no face, got:\n{call_shape_note}"
     );
     for (which, text) in [("clause", note), ("call-shape", call_shape_note)] {
         assert!(

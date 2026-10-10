@@ -702,7 +702,9 @@ signal-only interface gets
 a `Client` and a `Publisher` and nothing to settle with and nothing to block
 on, a command-only interface gets a `Client`, a `Provider`, a `serve` and a
 `blocking` module and no `Publisher`, and an interface carrying only `fixed`
-declarations gets no face module at all. Beside the per-package files it
+declarations gets no face module at all, and neither does an `internal`
+interface ([the design record](https://github.com/driftsys/ridl/blob/main/docs/design/interaction-face.md)
+gives the rule). Beside the per-package files it
 writes a `lib.rs` crate root and a `Cargo.toml` naming `ridl-rt` with the
 encoding's feature, and with `ridl-rt/std` behind the crate's own `std`.
 [Using the generated Rust code](generated-code.md) shows how a program uses
@@ -788,7 +790,8 @@ cannot carry — a call that does not take exactly one named parameter, a query
 whose reply is not a named type, or a contract clause outside the form the
 translator accepts — is skipped along with its descriptors, and gets a
 `__RIDL_NO_FACE_<NAME>` constant naming the interface and the reason, and,
-when an issue tracks the limit, that issue. Neither is an error: the rest of the package is
+when an issue tracks the limit, that issue. An `internal` interface gets no
+face in any case; if its descriptors are refused, its note says so. Neither is an error: the rest of the package is
 emitted, and the build succeeds.
 
 The face names the `ridl-rt` port traits and nothing else: the crate carries no

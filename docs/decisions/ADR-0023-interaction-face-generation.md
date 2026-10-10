@@ -22,6 +22,13 @@ decisions produced is
 [the interaction-face design record](../design/interaction-face.md); this record
 is the reasoning behind the choices that had more than one defensible answer.
 
+**Note (2026-10-10) — an `internal` interface has no face.** The face is public
+API that names the interface's payload types, which may be `pub(crate)` under an
+`internal` interface (E0446), so the emitter writes no face for one, and writes
+its descriptors `pub(crate)`. Every decision below applies to the interfaces
+that have a face. The rule is in
+[the interaction-face design record](../design/interaction-face.md).
+
 **Amendment (2026-09-20) — decision 4 amended, and a fifth decision.** An
 assessment of the face and the ports on 2026-09-20 found two costs the face
 imposes on every use: a face borrows its port mutably for its whole life, so one
@@ -354,7 +361,8 @@ argument for it in the command case.
    panics on a mismatch.
 
 6. **Amendment (2026-09-26) — two clients per interface and a `serve`, and the
-   poll face `pub(crate)`.** For every interface the face emits:
+   poll face `pub(crate)`.** For every interface the face emits (an `internal`
+   interface is not one: see the 2026-10-10 note under Status):
 
    - **`<iface>::Client<P>`, async and `no_std`.** One plain method per command
      and query, taking `&mut self` and the argument by value, that evaluates

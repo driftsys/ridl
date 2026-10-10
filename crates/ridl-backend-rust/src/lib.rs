@@ -133,7 +133,8 @@ pub fn generate_face_with(
     let ctx = Ctx::new(package, &model);
     wire.check_emitted();
     // This entry point refuses rather than skips, so every named interface's
-    // descriptors and face are emitted, and each one claims its names.
+    // descriptors are emitted, and the face of every interface that has one,
+    // and each one claims its names.
     let interfaces: Vec<&v1::Interface> = model.interfaces.iter().collect();
     let mut items = package_items(&ctx, &interfaces)?;
     items.extend(descriptors::interface_items(&ctx)?);
@@ -254,7 +255,8 @@ fn faced_interface(
     Ok(items)
 }
 
-/// The note left where an interface's face was skipped (design rule 2).
+/// The note left where an interface's face was skipped (design rule 2), or,
+/// for an `internal` interface, where its descriptors were refused.
 ///
 /// It is a `const` carrying doc attributes rather than a bare comment, for the
 /// reason the codec's withheld note gives: `quote!` emits tokens, and a doc
@@ -268,9 +270,18 @@ fn faced_interface(
 fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> TokenStream {
     let iface_name = descriptors::declared_name(interface).unwrap_or_default();
     let name = format_ident!("__RIDL_NO_FACE_{}", ident(iface_name));
-    let headline = format!(" Interface `{iface_name}` carries no generated interaction face.");
+    let internal = face::is_internal(interface);
+    let headline = if internal {
+        format!(" Interface `{iface_name}` carries no generated interaction descriptors.")
+    } else {
+        format!(" Interface `{iface_name}` carries no generated interaction face.")
+    };
     let reason = format!(" The emitter refused it: {}", err.message);
     let owner = match face_gap(interface, err) {
+        _ if internal => {
+            " The interface is `internal`, so it has no face in any case; only its \
+             descriptors are absent, for the reason above."
+        }
         FaceGap::CallShape => {
             " A call the face cannot carry — an interaction that does not declare \
              exactly one named parameter, or a query whose reply is not a named \
@@ -291,7 +302,7 @@ fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> Tok
         ///
         #[doc = #owner]
         ///
-        /// Its descriptors are absent for the same reason: the refusal is
+        /// Its descriptors are absent for the reason above: the refusal is
         /// raised by the descriptor emitter, which the face is built on. The
         /// rest of this package — its domain types, its codec, and every
         /// other interface — is unaffected, which is why the build succeeded
