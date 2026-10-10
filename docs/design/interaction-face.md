@@ -49,9 +49,11 @@ entry point rather than folding the face into `generate` is
 
 ## The descriptors
 
-For each named interface reached through `Package::shapes()` (a service's inline
-shape is skipped — its identity name is a dotted service name, not a single Rust
-identifier, and descriptors for one are a follow-up), the emitter writes:
+An `internal` interface's descriptors are `pub(crate)` (see "The consumer
+face"). For each named interface reached through `Package::shapes()` (a
+service's inline shape is skipped — its identity name is a dotted service name,
+not a single Rust identifier, and descriptors for one are a follow-up), the
+emitter writes:
 
 - a unit struct with an `Interface` impl carrying `CATALOG`, `NUMBER`,
   `PROVISIONAL`, `NAME` and `MEMBERS`, plus two associated constants,
@@ -128,12 +130,13 @@ Why the translator refuses rather than widens, and why it lives behind
 ## The consumer face
 
 An `internal` interface has no face. A face is public API whose signatures name
-the interface's payload types, and those are `pub(crate)` under an `internal`
-interface, so a public face would name private types (E0446). The emitter writes
-the interface's descriptors with the same visibility, `pub(crate)` and
-`#[allow(dead_code)]`, because their trait impls name the same types; the
-catalog hash is unchanged. The rule is stated here once: the book's
-[generated code](../book/generated-code.md) chapter links to it.
+the interface's payload types, and those types may be `pub(crate)` under an
+`internal` interface, so a public face could name private types (E0446). The
+emitter writes the interface's descriptors (see "The descriptors") with the same
+visibility, `pub(crate)` and `#[allow(dead_code)]`, because their trait impls
+name the same types; the catalog hash is unchanged. The rule is stated here
+once: the book's [generated code](../book/generated-code.md) chapter and
+[the CLI reference](../book/cli-reference.md) link to it.
 
 `src/face.rs` emits, per named interface that is not `internal` and has at least
 one member the face covers, one `pub mod` named after the interface. Its

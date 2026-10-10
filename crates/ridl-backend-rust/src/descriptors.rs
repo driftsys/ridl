@@ -89,7 +89,7 @@ fn one_interface(
 ) -> Result<(), GenerateError> {
     let first = items.len();
     one_interface_public(ctx, interface, items)?;
-    if interface.visibility == v1::Visibility::Internal as i32 {
+    if crate::face::is_internal(interface) {
         for item in &mut items[first..] {
             *item = crate::allow_dead_code_if_internal(
                 interface.visibility,
@@ -103,8 +103,8 @@ fn one_interface(
 /// Rewrites every `pub struct` among `items` to `pub(crate) struct`.
 ///
 /// The descriptors of an `internal` interface implement `ridl_rt` traits whose
-/// associated types name the interface's payload types, which are
-/// `pub(crate)`. A public descriptor would then name a private type (E0446),
+/// associated types name the interface's payload types, which may be
+/// `pub(crate)`. A public descriptor could then name a private type (E0446),
 /// so the descriptor takes the visibility of the interface. Every emitted item
 /// parses, because `render` parses the whole output; one that does not is left
 /// alone here and reported there.

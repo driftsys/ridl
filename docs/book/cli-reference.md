@@ -702,7 +702,9 @@ signal-only interface gets
 a `Client` and a `Publisher` and nothing to settle with and nothing to block
 on, a command-only interface gets a `Client`, a `Provider`, a `serve` and a
 `blocking` module and no `Publisher`, and an interface carrying only `fixed`
-declarations gets no face module at all. Beside the per-package files it
+declarations gets no face module at all, and neither does an `internal`
+interface ([the design record](https://github.com/driftsys/ridl/blob/main/docs/design/interaction-face.md)
+gives the rule). Beside the per-package files it
 writes a `lib.rs` crate root and a `Cargo.toml` naming `ridl-rt` with the
 encoding's feature, and with `ridl-rt/std` behind the crate's own `std`.
 [Using the generated Rust code](generated-code.md) shows how a program uses

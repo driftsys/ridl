@@ -8,7 +8,7 @@
 #[path = "support/rustc.rs"]
 mod rustc;
 
-use ridl_backend_rust::generate_face;
+use ridl_backend_rust::{WireEncoding, generate_face, generate_pipeline};
 
 /// Emits the face of `source` and checks it as a library crate
 /// (`--emit=metadata -D warnings`), panicking with rustc's diagnostics when it
@@ -146,9 +146,55 @@ fn an_internal_interface_gets_no_face_module() {
         "the descriptor of the internal interface is crate-visible:\n{face}"
     );
     assert!(
+        face.contains("#[allow(dead_code)]\npub(crate) struct Diagnostics;"),
+        "the crate-visible descriptor allows dead code:\n{face}"
+    );
+    assert!(
         !face.contains("pub struct Diagnostics"),
         "no descriptor of the internal interface is public:\n{face}"
     );
+}
+
+/// The path `ridl build --emit rust` takes is `generate_pipeline`, which skips
+/// an interface it refuses instead of failing. An internal interface gets no
+/// face there either, and no skip note: the note marks a refused face.
+#[test]
+fn an_internal_interface_gets_no_face_through_the_pipeline() {
+    let output = ridlc::compile("hidden_pipeline.ridl", INTERNAL_BESIDE_PUBLIC);
+    let generated = generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+        .expect("generate_pipeline");
+    let source = generated.rust_source;
+    assert!(source.contains("pub mod summary {"), "{source}");
+    for absent in ["mod diagnostics", "__RIDL_NO_FACE"] {
+        assert!(!source.contains(absent), "no `{absent}`:\n{source}");
+    }
+    assert!(
+        source.contains("pub(crate) struct Diagnostics;"),
+        "{source}"
+    );
+}
+
+/// An internal interface claims no face-module name, so its `snake_case` name
+/// can equal another interface's without a collision.
+#[test]
+fn an_internal_interface_claims_no_face_module_name() {
+    let source = r#"
+package face.claims
+
+type Level : integer [0..100]
+
+interface HttpServer {
+  signal level: Level @10ms
+}
+
+internal interface HTTPServer {
+  signal level: Level @10ms
+}
+"#;
+    let output = ridlc::compile("claims.ridl", source);
+    generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+        .expect("the internal interface claims no face module");
+    generate_face(&output.package).expect("generate_face");
 }
 
 /// A ridl member or parameter may carry a name the emitter uses for a local

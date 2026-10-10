@@ -59,7 +59,8 @@ The package module holds:
 - **The interaction descriptors**: one unit type per interface (here
   `api::Cabin`) that implements `ridl_rt::contract::Interface` and carries the
   interface's `CATALOG`, `NUMBER` and `NAME`.
-- **The face**: one module per interface, named after it (here `api::cabin`).
+- **The face**: one module per interface that has one, named after it (here
+  `api::cabin`).
   The face is what the application calls.
 
 ## The face
@@ -76,10 +77,8 @@ Each interface module holds the parts its own interactions need:
 | `blocking` (module) | an event, a command or a query     | a thread that waits: blocking `Client` and `serve` |
 
 An interface that carries only `fixed` declarations gets no face module, and
-neither does an `internal` interface; its descriptors are crate-visible (the
-[design record](../design/interaction-face.md#the-consumer-face) gives the
-reason). A
-signal-only interface gets a `Client` and a `Publisher` and no `blocking`
+neither does an `internal` interface, whose descriptors are crate-visible (the
+[design record][face] gives the reason). A signal-only interface gets a `Client` and a `Publisher` and no `blocking`
 module, because a signal read returns at once.
 
 An interface the face cannot carry gets none of these items and no interaction

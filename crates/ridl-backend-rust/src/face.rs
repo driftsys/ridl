@@ -677,10 +677,10 @@ pub(crate) fn call_type_ident(camel: &str, suffix: &str) -> Ident {
 
 /// Whether an interface is declared `internal`. Such an interface gets no
 /// face: a face is public API whose signatures name the interface's payload
-/// types, and those types are `pub(crate)` when the interface is `internal`,
-/// so a public item would name a private type (E0446). The interface's
-/// descriptors are still emitted.
-fn is_internal(interface: &v1::Interface) -> bool {
+/// types, and those types may be `pub(crate)` under an `internal` interface,
+/// so a public item could name a private type (E0446). The interface's
+/// descriptors are still emitted, with the interface's own visibility.
+pub(crate) fn is_internal(interface: &v1::Interface) -> bool {
     interface.visibility == v1::Visibility::Internal as i32
 }
 
@@ -688,7 +688,8 @@ fn is_internal(interface: &v1::Interface) -> bool {
 /// command and a query. An interface that declares at least one live member
 /// of those kinds gets a face module when its face is emitted, and one that
 /// declares none (only `fixed` members, or no member) gets none, which is
-/// when [`one_interface`] returns `None`.
+/// when [`one_interface`] returns `None`. An `internal` interface gets none
+/// either (see [`is_internal`]).
 pub(crate) fn emits_module(interface: &v1::Interface) -> bool {
     !is_internal(interface)
         && interactions(interface).iter().any(|(_, interaction)| {
