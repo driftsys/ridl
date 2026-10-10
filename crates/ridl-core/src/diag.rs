@@ -632,7 +632,7 @@ diag_codes! {
         /// not parse whole: such a range draws FORM-101 and no RIDL-101 from
         /// the default maximum. Emitted by the checker.
         RIDL_101 = "RIDL-101", Error,
-            "timing range `@[X..Y]` with `X > Y`";
+            "timing range `@[X..Y]` with `X > Y`, also an `@[X..]` on a `command` or a `query` whose default maximum is shorter than X";
 
         /// A zero or negative timing duration (ridl §9.2, §16.1). Emitted by the
         /// checker.
