@@ -3382,6 +3382,25 @@ service:veh.common.climate 2
         assert_eq!(&member[start..end], "backend", "{member}");
     }
 
+    /// A `backend` key of the wrong shape in a member is MANI-015 for the
+    /// shape and MANI-016 for the place: the key is not allowed in a member
+    /// whatever its value.
+    #[test]
+    fn backend_of_the_wrong_shape_in_member_is_also_mani_016() {
+        let dir = TempDir::new("backend-member-wrong-shape");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"a\"]\n");
+        let member = format!("backend = 1\n\n{PACKAGE_A}");
+        dir.write("a/ridl.toml", &member);
+        dir.write("a/a.typl", "package a\ntype A: integer [0..1]\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["MANI-015", "MANI-016"]);
+        let diag = &loaded.diagnostics[1];
+        let start = usize::from(diag.primary.range.start());
+        let end = usize::from(diag.primary.range.end());
+        assert_eq!(&member[start..end], "1", "{member}");
+    }
+
     #[test]
     fn backend_table_at_root_is_not_mani_016() {
         let dir = TempDir::new("backend-root");

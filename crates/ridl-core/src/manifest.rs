@@ -70,9 +70,9 @@ use crate::lint::{LintLevel, LintTable, lint_by_name};
 /// `backends` holds one [`BackendTable`] per `[backend.<name>]` table, keyed by
 /// the backend's language name, with every `encodings` element that passed
 /// validation; an invalid element is MANI-015 and is dropped. `backend_span` is
-/// the byte range of the `backend` key's table in the manifest text, or `None`
-/// when the manifest has no `[backend.<name>]` table; the loader uses it to
-/// raise MANI-016.
+/// the byte range of the `backend` key's value in the manifest text, whatever
+/// its shape, or `None` when the manifest has no `backend` key; the loader uses
+/// it to raise MANI-016.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Manifest {
     pub kind: ManifestKind,
@@ -437,6 +437,22 @@ macro_rules! shape_visitor {
     };
 }
 
+/// The one key of the map the `toml` deserializer hands a visitor for a TOML
+/// datetime. A datetime is not a table, so a table visitor that reads this key
+/// reads a wrong shape. `toml_datetime` keeps the name private;
+/// `backend_not_a_table_is_mani_015` fails if it changes.
+const TOML_DATETIME_KEY: &str = "$__toml_private_datetime";
+
+/// Drains the rest of a datetime's map and reads it as [`Shape::Wrong`].
+fn datetime<'de, T, A: serde::de::MapAccess<'de>>(mut map: A) -> Result<Shape<T>, A::Error> {
+    map.next_value::<serde::de::IgnoredAny>()?;
+    while map
+        .next_entry::<serde::de::IgnoredAny, serde::de::IgnoredAny>()?
+        .is_some()
+    {}
+    Ok(Shape::Wrong)
+}
+
 macro_rules! drain_shape {
     (visit_seq, $access:ident) => {
         while $access.next_element::<serde::de::IgnoredAny>()?.is_some() {}
@@ -455,6 +471,9 @@ shape_visitor!(
     |map| {
         let mut tables = BTreeMap::new();
         while let Some(key) = map.next_key::<String>()? {
+            if key == TOML_DATETIME_KEY {
+                return datetime(map);
+            }
             tables.insert(key, map.next_value::<Spanned<Shape<RawBackend>>>()?);
         }
         Ok(Shape::Right(tables))
@@ -471,6 +490,9 @@ shape_visitor!(
     |map| {
         let mut table = RawBackend::default();
         while let Some(key) = map.next_key::<String>()? {
+            if key == TOML_DATETIME_KEY {
+                return datetime(map);
+            }
             if key == "encodings" {
                 table.encodings = Some(map.next_value()?);
             } else {
@@ -502,8 +524,7 @@ shape_visitor!(
 );
 
 /// Collects the `[backend.<name>]` tables (ADR-0002 §4). Returns the tables and
-/// the span of the `backend` key's table, or `None` when it is absent or not a
-/// table. A `backend` that is not a table, a `[backend.<name>]` that is not a
+/// the span of the `backend` key's value, or `None` when the key is absent. A `backend` that is not a table, a `[backend.<name>]` that is not a
 /// table, an `encodings` that is not an array, and an element that is not one
 /// of [`ENCODING_NAMES`] or repeats an earlier one are each MANI-015 on the
 /// offending value (the table's, for a wrong shape); an invalid element is
@@ -527,10 +548,10 @@ fn collect_backends(
         diags.push(error(
             DiagCode::MANI_015,
             file_id,
-            span,
+            span.clone(),
             format!("`backend` must be a table of `[backend.<name>]` tables; {KNOWN_ENCODINGS}"),
         ));
-        return (backends, None);
+        return (backends, Some(span));
     };
     for (name, table) in tables {
         let table_span = table.span();
@@ -566,7 +587,7 @@ fn collect_backends(
                                 )),
                                 Some(value) if entry.encodings.iter().any(|(seen, _)| seen == value) => {
                                     Some(format!(
-                                        "encoding `{value}` is named twice in `[backend.{name}] encodings`"
+                                        "encoding `{value}` is named twice in `[backend.{name}] encodings`; {KNOWN_ENCODINGS}"
                                     ))
                                 }
                                 Some(value) => {
@@ -646,18 +667,16 @@ fn check_unknown_keys(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) 
             "codegen" => check_section_keys(file_id, "codegen", value, &["header-file"], diags),
             "backend" => {
                 // One sub-table per backend name; the name is any string, so
-                // only the keys inside each sub-table are checked.
-                if let Some(table) = value.get_ref().as_table() {
-                    for (name, sub) in table {
-                        let section = format!("backend.{name}");
-                        check_table_keys(
+                // only the keys inside each sub-table are checked, each at
+                // its own span.
+                for (name, key, range) in backend_keys(text) {
+                    if key != "encodings" {
+                        diags.push(warning(
+                            DiagCode::MANI_005,
                             file_id,
-                            &section,
-                            sub,
-                            value.span(),
-                            &["encodings"],
-                            diags,
-                        );
+                            range,
+                            format!("unknown key `{key}` in `[backend.{name}]`"),
+                        ));
                     }
                 }
             }
@@ -671,6 +690,38 @@ fn check_unknown_keys(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) 
             )),
         }
     }
+}
+
+/// The keys of every `[backend.<name>]` table, as `(name, key, span of the
+/// key)`. Read from a span-carrying parse of its own, because the untyped map
+/// [`check_unknown_keys`] reads carries the span of a value but not the span of
+/// a key inside it. A `backend` or a `[backend.<name>]` that is not a table has
+/// no keys here; [`collect_backends`] reports its shape.
+fn backend_keys(text: &str) -> Vec<(String, String, Range<usize>)> {
+    let Ok(doc) = toml::de::DeTable::parse(text) else {
+        return Vec::new();
+    };
+    let mut keys = Vec::new();
+    for (key, value) in doc.get_ref().iter() {
+        let (true, toml::de::DeValue::Table(tables)) =
+            (key.get_ref() == "backend", value.get_ref())
+        else {
+            continue;
+        };
+        for (name, table) in tables.iter() {
+            let toml::de::DeValue::Table(table) = table.get_ref() else {
+                continue;
+            };
+            for key in table.keys() {
+                keys.push((
+                    name.get_ref().to_string(),
+                    key.get_ref().to_string(),
+                    key.span(),
+                ));
+            }
+        }
+    }
+    keys
 }
 
 /// Warns (MANI-005) on any key in a mode section that is not in `allowed`. The
@@ -1394,6 +1445,25 @@ version = \"1.0.0\"
         assert_eq!(codes(&diags), vec!["MANI-015"]);
         let start = usize::from(diags[0].primary.range.start());
         assert_eq!(start, text.rfind("\"flatbuffers\"").unwrap());
+        let message = &diags[0].message;
+        assert!(message.contains("is named twice"), "{message}");
+        assert!(
+            message.ends_with("; known encodings: flatbuffers, proto3, repr-c"),
+            "{message}"
+        );
+    }
+
+    /// An invalid element is dropped and the elements around it are kept, in
+    /// their order.
+    #[test]
+    fn an_invalid_encoding_is_dropped_and_the_rest_are_kept() {
+        let text = format!(
+            "{PACKAGE_HEAD}[backend.rust]\nencodings = [\"proto3\", \"nope\", \"proto3\", 1, \"flatbuffers\"]\n"
+        );
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015", "MANI-015", "MANI-015"]);
+        let manifest = manifest.expect("the manifest parses");
+        assert_eq!(backend_names(&manifest, "rust"), ["proto3", "flatbuffers"]);
     }
 
     #[test]
@@ -1425,33 +1495,60 @@ version = \"1.0.0\"
             message.starts_with("`[backend.rust] encodings` must be an array of encoding names;"),
             "{message}"
         );
+        assert_eq!(span_text(&text, &diags[0]), "\"flatbuffers\"");
         assert!(manifest.is_some());
+    }
+
+    /// The source text a diagnostic's primary span covers.
+    fn span_text<'t>(text: &'t str, diag: &Diagnostic) -> &'t str {
+        let start = usize::from(diag.primary.range.start());
+        let end = usize::from(diag.primary.range.end());
+        &text[start..end]
     }
 
     #[test]
     fn backend_not_a_table_is_mani_015() {
-        for (text, head) in [
+        for (text, head, spanned) in [
             (
                 format!("backend = 1\n\n{PACKAGE_HEAD}"),
                 "`backend` must be a table of `[backend.<name>]` tables;",
+                "1",
             ),
             (
-                format!("{PACKAGE_HEAD}[backend]\nrust = 1\n"),
+                format!("{PACKAGE_HEAD}[backend]\nrust = 2\n"),
                 "`[backend.rust]` must be a table;",
+                "2",
+            ),
+            (
+                format!("{PACKAGE_HEAD}[backend]\nrust = 1979-05-27T07:32:00Z\n"),
+                "`[backend.rust]` must be a table;",
+                "1979-05-27T07:32:00Z",
+            ),
+            (
+                format!("backend = 1979-05-27T07:32:00Z\n\n{PACKAGE_HEAD}"),
+                "`backend` must be a table of `[backend.<name>]` tables;",
+                "1979-05-27T07:32:00Z",
             ),
         ] {
             let (manifest, diags) = parse(&text);
             assert_eq!(codes(&diags), vec!["MANI-015"], "{text}");
             let message = &diags[0].message;
             assert!(message.starts_with(head), "{text}: {message}");
-            assert!(manifest.is_some(), "{text}");
+            assert_eq!(span_text(&text, &diags[0]), spanned, "{text}");
+            let manifest = manifest.expect("the manifest parses");
+            assert!(manifest.backends.is_empty(), "{text}");
+            assert!(manifest.backend_span.is_some(), "{text}");
         }
     }
 
     #[test]
     fn unknown_backend_key_is_mani_005() {
-        let text = format!("{PACKAGE_HEAD}[backend.rust]\nfoo = 1\n");
+        let text = format!("{PACKAGE_HEAD}[backend.rust]\nfoo = 1\n\n[backend.kotlin]\nbar = 2\n");
         let (_, diags) = parse(&text);
-        assert_eq!(codes(&diags), vec!["MANI-005"]);
+        assert_eq!(codes(&diags), vec!["MANI-005", "MANI-005"]);
+        // Each warning is on its own key, not on the whole `backend` table.
+        let mut spanned: Vec<&str> = diags.iter().map(|diag| span_text(&text, diag)).collect();
+        spanned.sort_unstable();
+        assert_eq!(spanned, ["bar", "foo"]);
     }
 }
