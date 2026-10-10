@@ -798,7 +798,8 @@ pub fn run_build(
 /// catalog hash. This function reads no baseline and computes no list: the
 /// `ridl` facade reads the published chain and passes the result here, so
 /// that `ridlc` stays a function of the sources alone (ADR-0008 decisions 9
-/// and 14); `ridlc build` passes an empty map.
+/// and 14); `ridlc build` passes an empty map. [`run_build_computing`] is the
+/// variant that computes the list from the build's own compile.
 #[expect(
     clippy::too_many_arguments,
     reason = "the build's options, passed once from each command"
@@ -814,7 +815,7 @@ pub fn run_build_with(
     deployment: Option<&str>,
     compatible: &BTreeMap<String, Vec<[u8; 32]>>,
 ) -> std::io::Result<CliRun> {
-    run_build_computing(
+    run_build_inner(
         entry,
         out_dir,
         emits,
@@ -823,7 +824,8 @@ pub fn run_build_with(
         frozen,
         apply_lints,
         deployment,
-        Some(&mut |_, _, _| Ok(compatible.clone())),
+        compatible,
+        None,
     )
 }
 
@@ -838,14 +840,16 @@ pub type CompatibleCatalogsFn<'a> = dyn FnMut(
     ) -> std::io::Result<BTreeMap<String, Vec<[u8; 32]>>>
     + 'a;
 
-/// [`run_build_with`], with `compatible` computed from the build's own
-/// compile instead of given: once the build has no error diagnostic and is
-/// about to write, `compatible` is called with the checked packages and the
-/// `ridl.std` package, and its result is used as `run_build_with` uses its
-/// `compatible` argument. With `None`, or with an error diagnostic, nothing
-/// is called and no unit has a list. An error it returns is the error of the build. This is how
-/// the `ridl` facade reuses the build's compile instead of compiling the
-/// workspace a second time.
+/// [`run_build_with`], with the list computed from the build's own compile
+/// instead of given. `compute` is called once, right after the compile and
+/// before the manifest's imports are materialized, a plugin is resolved or
+/// any lint level is applied, with the checked packages, the `ridl.std`
+/// package and whether the workspace names `[imports]`. It is not called when
+/// the compile has an error diagnostic, whatever the build later writes. Its
+/// result is used as `run_build_with` uses its `compatible` argument, and an
+/// error it returns is the error of the build. With `None`, no unit has a
+/// list. This is how the `ridl` facade reuses the build's compile instead of
+/// compiling the workspace a second time.
 #[expect(
     clippy::too_many_arguments,
     reason = "the build's options, passed once from each command"
@@ -859,7 +863,37 @@ pub fn run_build_computing(
     frozen: Frozen,
     apply_lints: ApplyLints,
     deployment: Option<&str>,
-    compatible: Option<&mut CompatibleCatalogsFn<'_>>,
+    compute: Option<&mut CompatibleCatalogsFn<'_>>,
+) -> std::io::Result<CliRun> {
+    run_build_inner(
+        entry,
+        out_dir,
+        emits,
+        plugins,
+        plugin_timeout,
+        frozen,
+        apply_lints,
+        deployment,
+        &BTreeMap::new(),
+        compute,
+    )
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the build's options, passed once from each command"
+)]
+fn run_build_inner(
+    entry: &Path,
+    out_dir: &Path,
+    emits: &[Emit],
+    plugins: &[plugin::PluginSpec],
+    plugin_timeout: Duration,
+    frozen: Frozen,
+    apply_lints: ApplyLints,
+    deployment: Option<&str>,
+    given: &BTreeMap<String, Vec<[u8; 32]>>,
+    compute: Option<&mut CompatibleCatalogsFn<'_>>,
 ) -> std::io::Result<CliRun> {
     let mut db = RidlDatabase::default();
     let Compiled {
@@ -876,10 +910,9 @@ pub fn run_build_computing(
     } = load_and_check(&mut db, entry, &[]).map_err(load_io_error)?;
 
     // The earlier catalogs per unit, computed from this compile before
-    // anything else can fail, so a baseline that cannot be read is reported
-    // first. A compile with an error diagnostic gets no list: nothing is
-    // written for it, or (an RSDL-7xx error) only what the error leaves.
-    let compatible = match compatible {
+    // anything else can fail, so a history that cannot be read is reported
+    // first. A compile with an error diagnostic gets no list from `compute`.
+    let computed = match compute {
         Some(compute)
             if !diagnostics
                 .iter()
@@ -893,11 +926,11 @@ pub fn run_build_computing(
                     .packages(&db)
                     .iter()
                     .any(|package| !package.imports(&db).is_empty());
-            compute(&packages, &std_for_catalogs, names_imports)?
+            Some(compute(&packages, &std_for_catalogs, names_imports)?)
         }
-        _ => BTreeMap::new(),
+        _ => None,
     };
-    let compatible = &compatible;
+    let compatible = computed.as_ref().unwrap_or(given);
 
     // An entry inside a member reports on the member only (ADR-0024 decision
     // 9, as ADR-0026 amends it). The diagnostics of the other members are

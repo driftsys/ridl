@@ -1302,7 +1302,7 @@ fn publish_baseline(staging: &Path, out_dir: &Path) -> std::io::Result<()> {
 
 /// Every `*.catalogs` file directly in `dir`, in file-name order.
 fn catalogs_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
-    ridlc::diff_side::files_matching(dir, is_catalogs_file)
+    ridlc::diff_side::files_matching_strict(dir, is_catalogs_file)
 }
 
 /// Whether `path` is a `*.catalogs` file.

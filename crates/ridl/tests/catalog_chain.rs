@@ -353,6 +353,10 @@ fn a_history_path_that_cannot_be_read_refuses_the_publication() {
     let (code, stderr) = build(&root, out.path(), "catalog");
     assert_eq!(code, 2, "an unreadable history fails the build: {stderr}");
     assert!(
+        !stderr.contains("could not be computed"),
+        "the cause is reported once, by name: {stderr}"
+    );
+    assert!(
         stderr.contains(&history.display().to_string()),
         "stderr names the file: {stderr}"
     );
@@ -1264,4 +1268,29 @@ fn a_workspace_with_imports_gets_a_note_beside_the_list() {
         stderr.contains("note: the workspace names `[imports]`"),
         "the note is printed: {stderr}"
     );
+}
+
+/// With no baseline there is no list, so a workspace that names `[imports]`
+/// gets no note.
+#[test]
+fn a_workspace_with_imports_and_no_baseline_gets_no_note() {
+    let dir = TempDir::new("build-imports-no-baseline");
+    let out = TempDir::new("build-imports-no-baseline-out");
+    let root = set_source(&dir, BASE);
+    dir.write(
+        "ridl.toml",
+        &format!(
+            "{MANIFEST}\n[imports]\n\"other.dep\" = \"https://registry.example.com/other/dep@v1.0.0\"\n"
+        ),
+    );
+    let (_, _, stderr) = ridl(&[
+        "build".as_ref(),
+        root.as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "catalog".as_ref(),
+        "--frozen".as_ref(),
+    ]);
+    assert!(!stderr.contains("note: the workspace names"), "{stderr}");
 }

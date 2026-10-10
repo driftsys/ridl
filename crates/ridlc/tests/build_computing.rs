@@ -95,3 +95,27 @@ fn a_workspace_that_names_imports_is_reported_to_the_function() {
     });
     assert_eq!(flags, vec![true]);
 }
+
+#[test]
+fn imports_named_by_the_workspace_root_are_reported_to_the_function() {
+    let root = tempfile::tempdir().expect("a temp dir");
+    std::fs::write(
+        root.path().join("ridl.toml"),
+        "[workspace]\nmembers = [\"a\"]\n\n[imports]\next = \"https://example.invalid/ext.git\"\n",
+    )
+    .expect("the root manifest is written");
+    let member = root.path().join("a");
+    std::fs::create_dir(&member).expect("the member directory is created");
+    std::fs::write(
+        member.join("ridl.toml"),
+        "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n",
+    )
+    .expect("the member manifest is written");
+    std::fs::write(member.join("demo.typl"), SOURCE).expect("the source is written");
+    let mut flags = Vec::new();
+    let _ = build(root.path(), &mut |_, _, names_imports| {
+        flags.push(names_imports);
+        Ok(BTreeMap::new())
+    });
+    assert_eq!(flags, vec![true]);
+}

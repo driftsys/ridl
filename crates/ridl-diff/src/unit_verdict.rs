@@ -468,17 +468,37 @@ mod tests {
     }
 
     #[test]
-    fn the_prepared_verdicts_equal_the_single_calls() {
+    fn one_prepared_value_answers_several_units_in_any_order() {
         let old = baseline();
         let new = vec![unit_a("b.S"), unit_b(IntWidth::I64), unit_c(IntWidth::I32)];
         let report = diff_sets(&old, &new);
         let prepared = super::UnitVerdicts::new(&report, &old, &new);
-        for unit in ["a", "b", "c", "absent"] {
-            assert_eq!(
-                prepared.verdict(unit),
-                unit_verdict(&report, unit, &old, &new),
-                "unit {unit}"
-            );
-        }
+        assert_eq!(prepared.verdict("c"), Verdict::Identical);
+        assert_eq!(prepared.verdict("a"), Verdict::Breaking);
+        assert_eq!(prepared.verdict("c"), Verdict::Identical);
+        assert_eq!(prepared.verdict("b"), Verdict::Breaking);
+        assert_eq!(prepared.verdict("absent"), Verdict::Identical);
+        assert_eq!(prepared.verdict("a"), Verdict::Breaking);
+    }
+
+    #[test]
+    fn a_change_to_a_package_has_no_declaration() {
+        let change = |path: &str| crate::Change {
+            path: path.to_owned(),
+            category: crate::Category::DeclRemoved,
+            verdict: Verdict::Breaking,
+            before: None,
+            after: None,
+        };
+        assert_eq!(change("veh.cluster").package(), "veh.cluster");
+        assert_eq!(change("veh.cluster").declaration(), None);
+        assert_eq!(
+            change("veh.cluster/Status/doorOpened").package(),
+            "veh.cluster"
+        );
+        assert_eq!(
+            change("veh.cluster/Status/doorOpened").declaration(),
+            Some("Status")
+        );
     }
 }

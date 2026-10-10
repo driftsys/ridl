@@ -258,9 +258,12 @@ differing only in the list have the same hash. The rule is
   snapshot, for a unit with no package in the baseline (a file left under its
   name is not read), and for a unit with no file. A tree whose catalog changed
   and that is breaking relative to the baseline is built with an empty list, and
-  the recorded chain is not changed until the next publication. A baseline that
-  is present and cannot be loaded, and a file that cannot be read, are exit 2. A
-  build with an error diagnostic gets no list.
+  the recorded chain is not changed until the next publication. A baseline with
+  at least one `<unit>.catalogs` file that cannot be loaded, and a file that
+  cannot be read, are exit 2; a baseline with no such file is not loaded. A
+  build with an error diagnostic gets no list, and its baseline is not read.
+  When the workspace names `[imports]` and a list is computed, the build prints
+  a note that a unit's list covers the workspace's own packages only.
 - **No runtime reads the list.** The generated face compares only its own
   `CATALOG` (ADR-0023 decision 8), and no runtime in this workspace speaks the
   frame, so nothing here accepts an `attach` on the strength of the list.

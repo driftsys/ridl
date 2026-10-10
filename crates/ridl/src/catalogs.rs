@@ -32,7 +32,8 @@ use crate::{default_baseline_dir, report_diff_side_error};
 /// first hash: the catalog did not change, so every hash the file lists still
 /// applies. Otherwise the unit's list is empty. The hashes are read from the
 /// file and never recomputed from a snapshot; a file that cannot be read is
-/// an error (exit 2), and so is a baseline that cannot be loaded.
+/// an error (exit 2), and so is a baseline that cannot be loaded once a history
+/// file exists.
 pub(crate) fn compatible_catalogs(
     db: &mut RidlDatabase,
     entry: &Path,
@@ -44,12 +45,6 @@ pub(crate) fn compatible_catalogs(
     let mut compatible = BTreeMap::new();
     if !has_history(&published)? || !has_snapshot(&published)? {
         return Ok(compatible);
-    }
-    if names_imports {
-        eprintln!(
-            "note: the workspace names `[imports]`, whose packages the compatible catalogs are not \
-             computed over: a unit's list covers the workspace's own packages only"
-        );
     }
     let old = ridlc::load_diff_side(db, &published, &[])
         .map_err(report_diff_side_error)?
@@ -83,6 +78,12 @@ pub(crate) fn compatible_catalogs(
             Vec::new()
         };
         compatible.insert(unit.to_string(), hashes);
+    }
+    if names_imports && !compatible.is_empty() {
+        eprintln!(
+            "note: the workspace names `[imports]`, whose packages the compatible catalogs are not \
+             computed over: a unit's list covers the workspace's own packages only"
+        );
     }
     Ok(compatible)
 }
@@ -155,7 +156,7 @@ fn has_history(dir: &Path) -> Result<bool, ExitCode> {
     if !dir.is_dir() {
         return Ok(false);
     }
-    let files = ridlc::diff_side::files_matching(dir, has_history_name).map_err(|err| {
+    let files = ridlc::diff_side::files_matching_strict(dir, has_history_name).map_err(|err| {
         eprintln!("error: cannot read {}: {err}", dir.display());
         ExitCode::from(2)
     })?;

@@ -640,9 +640,11 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
       the current catalog hash equals the file's first hash, the file's other
       hashes are given whatever the verdict, because the catalog did not change;
       a current hash equal to an older hash of the file follows the verdict. A
-      baseline that is present and cannot be loaded fails the build, exit 2. The
-      facade passes the per-unit lists to `ridlc::run_build_with` as an input of
-      the build, and `ridlc` writes them into the descriptor and the codegen
+      baseline that holds a `<unit>.catalogs` file and cannot be loaded fails
+      the build, exit 2; a baseline with no such file is not loaded. The facade
+      gives `ridlc` a function that computes the per-unit lists from the build's
+      own compile (`ridlc::run_build_computing`; `ridlc::run_build_with` takes
+      ready lists), and `ridlc` writes them into the descriptor and the codegen
       model without reading any baseline: the compiler stays the pure source →
       IR function of [ADR-0008](ADR-0008-e2-execution.md) decisions 9 and 14,
       and `ridlc build` writes an empty list.
