@@ -427,3 +427,15 @@ Then pass 2, the quick pass, `just verify`, CI green, merge (squash, keep `!`),
 the #328 comment. Last: garden this driver (`sdd-gardening`) — this branch
 `docs/lane-g-driver` is local only; rebase it on `main`, move the driver to
 `docs/archive/`, and open its own PR.
+
+## Closing — 2026-10-10
+
+- **R-39** R-38's heading wording is corrected by G1 to "compatible on the wire,
+  may change the catalog hash": the hash covers only declarations an interface
+  reaches, so a reorder of an unreached enum does not move it; tests in
+  `ridl-ir` pin both cases — if wrong, the heading undersells a hash change.
+
+G1 merged as #813 (88afd157), closing #397, #700 and #809; debt #814. Every
+stage of lane G is merged: #792, #793, #800, #806, #813, and the G6 triage. The
+Handoff section above is complete and kept as the record of the state at that
+point.
