@@ -888,8 +888,8 @@ so that each catches one way of being wrong.
 1. An `attach` naming a catalog the provider serves under a hash that is neither
    the provider's own nor one its descriptor lists as compatible is refused
    `catalog_mismatch`, and no other frame is exchanged; one naming a listed
-   earlier hash is accepted (§6.1; the list is driftsys/ridl#787, so a
-   descriptor written today lists nothing).
+   earlier hash is accepted (§6.1; the toolchain writes the list, and no runtime
+   in this workspace accepts a listed hash, per the As-built note).
 2. A `subscribe` to a signal is followed by exactly one `publish` before any
    provider action: `Init`, `seq` 0, no payload, before a first publication; the
    last publication otherwise (§5.1, §6.2).

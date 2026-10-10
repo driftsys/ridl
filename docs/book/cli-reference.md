@@ -393,7 +393,7 @@ root when the manifest declares `[imports]` (`ridl baseline` builds through
 the snapshots is wholesale: the target directory ends up holding exactly the
 snapshots the workspace declares now. Nothing else in that directory is touched
 except the `*.catalogs` files, which publication replaces as
-[the catalog files](#the-catalog-files) below describes. The snapshots stay one
+[the catalog files](#ridl-baseline) below describes. The snapshots stay one
 per source package; `ridl diff` groups them by
 unit when it compares them. The workspace's interface numbers must be recorded first: a
 provisional number is refused (RIDL-411, under the publication gate below), so
@@ -429,7 +429,7 @@ holds the one new hash. A unit with no published snapshot, or with no
 `<unit>.catalogs` file in the replaced baseline, also starts a chain with the
 one new hash, and a file left under the name of a unit that had no published
 snapshot is not carried. A file that cannot be read, or has a line that is
-neither a comment nor a hash, stops the publication with exit 2: the message
+neither a comment nor a hash, or lists the same hash twice, stops the publication with exit 2: the message
 names the file and the line, and says to repair the file or remove it to start
 the unit's chain again.
 
