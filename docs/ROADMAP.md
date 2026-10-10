@@ -570,13 +570,16 @@ implementations" and a `Cargo.toml` naming the encoding's `ridl-rt` feature.
 Both are already true. E11.7's design note D-1, as its disposition amended it,
 puts the `Payload<FlatBuffers>` implementations in `generate`'s own output
 rather than behind a third entry point, and `ridlc::run_build` calls `generate`
-— so `ridl build --emit rust` has carried the codec since stage K5
-(driftsys/ridl#465), and `crates/ridlc/src/lib.rs` has rendered
-`ridl-rt = { version = "<major>.<minor>", features = ["flatbuffers"] }` since
-the same stage, where the version is the crate's own at the time — `"0.3"` since
-the 0.3.0 release. What remained to E11.14 was the descriptors and the face,
-which `generate_face` emitted and which `run_build` did not call — and which it
-now calls `generate_pipeline` for.
+— so `ridl build --emit rust` carried the codec from stage K5
+(driftsys/ridl#465), and `crates/ridlc/src/lib.rs` rendered
+`ridl-rt = { version = "<major>.<minor>", features = ["flatbuffers"] }` from the
+same stage, where the version is the crate's own at the time — `"0.3"` since the
+0.3.0 release. Since the on-request encodings change (driftsys/ridl#801), the
+codec and the `flatbuffers` feature appear only when the package's
+`[backend.rust] encodings` names `flatbuffers`; with no list the build is
+types-only. What remained to E11.14 was the descriptors and the face, which
+`generate_face` emitted and which `run_build` did not call — and which it now
+calls `generate_pipeline` for.
 
 **E11.14 landed** (driftsys/ridl#479). `ridlc::run_build` calls
 `generate_pipeline`, so `ridl build --emit rust` writes the descriptors and the

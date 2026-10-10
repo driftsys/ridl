@@ -139,10 +139,13 @@ Handing back a borrow instead would mean a second view type for those two
 backings alone, which is not worth the surface; a caller that wants the bytes
 without the allocation reads them off `bytes()`.
 
-Decision 8 narrowed what `generate` accepts, in one direction worth naming. A
-declaration whose box cannot be charged is now refused in its own right, over
-the box's own field: a named scalar with no width, a `string` or `bytes` one
-with no length bound, and an enum set with an unspecified width all answer
+Decision 8 narrowed what the codec accepts, in one direction worth naming. The
+codec is emitted when the package's `encodings` list names `flatbuffers`
+(`generate_pipeline`, `generate_face_with`); `generate`, which emits the domain
+types only, does not apply the refusal below. A declaration whose box cannot be
+charged is now refused in its own right, over the box's own field: a named
+scalar with no width, a `string` or `bytes` one with no length bound, and an
+enum set with an unspecified width all answer
 `` `pkg.Name.value` has no finite FlatBuffers bound ``. A named scalar with **no
 backing at all** — what the front end leaves after a parse error such as
 `type X:` — is told apart from those and answers
@@ -162,9 +165,9 @@ it from a missing fixture. The **vacuous** constructor path — `new` rather tha
 `new_unchecked` — is still live and still tested for a `boolean`, `integer` or
 `float` backing, but for a `string` or a `bytes` one it is now unreachable: such
 a type is vacuous only if it carries no length bound, and a type with no length
-bound has no box bound, so no IR that `generate` accepts can reach it. It is
-dead code rather than an undertested path, and there is no fixture for it
-because there can be none.
+bound has no box bound, so no IR that the codec accepts can reach it. It is dead
+code rather than an undertested path, and there is no fixture for it because
+there can be none.
 
 ## `encode`, `verify`, `decode`, `MAX_SIZE`
 

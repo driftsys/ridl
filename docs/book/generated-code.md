@@ -64,10 +64,12 @@ The package module holds:
   interface's `CATALOG`, `NUMBER` and `NAME`. Each interface also implements
   `ridl_rt::contract::Sizes<FlatBuffers>`, the size table of that codec for the
   interface: its reservations, its largest buffer (`MAX_BUFFER_SIZE`), and the
-  claim and event buffers the face holds.
+  claim and event buffers the face holds. Like the codec, the descriptors are
+  present only when the manifest names `flatbuffers` under
+  `[backend.rust] encodings`.
 - **The face**: one module per interface that has one, named after it (here
-  `api::cabin`).
-  The face is what the application calls.
+  `api::cabin`), present under the same condition. The face is what the
+  application calls.
 
 ## The face
 

@@ -295,7 +295,8 @@ other entry below is Accepted.
   context, called by no generated code yet (driftsys/ridl#754). Its 2026-10-10
   amendment, on decisions 10, 11, 17 and 19, moves the sizes a generated crate
   holds to the per-encoding table `contract::Sizes<E>`, gives each payload its
-  own buffer and adds `port::Encoded`; a breaking change, released as 0.9.0.
+  own buffer and adds `port::Encoded`; a breaking change that ships in `ridl-rt`
+  0.9.0, the next release.
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
   and what carries it: a `System` message in `system.proto`, its own artifact

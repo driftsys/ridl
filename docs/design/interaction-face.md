@@ -874,9 +874,10 @@ rather than written as prose.
    validating a value it did not build, is a surface commitment the public
    surface would take, and `pub(crate)` does not take it.
 
-   Resolution depends on what the caller hands the codec. `generate` is
-   `generate_with(package, &[])` and resolves none, so a type reaching another
-   package is still withheld a codec there and the withheld note says so.
+   Resolution depends on what the caller hands the codec. `generate_pipeline`
+   handed no other package resolves none, so a type reaching another package is
+   still withheld a codec there and the withheld note says so. `generate` and
+   `generate_with` emit no codec, so they withhold nothing and write no note.
    `ridl build --emit rust` hands the build, so nothing is withheld for that
    reason. `docs/design/flatbuffers-codec.md` carries the detail.
 

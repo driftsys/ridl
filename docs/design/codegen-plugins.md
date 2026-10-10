@@ -162,10 +162,12 @@ plugin and the path.
 ## 3. The in-process host
 
 `ridlc::codegen_request(base, package, others, options, deployment)` builds the
-one request per package — the model lowered once, over the same `others` every
+request once per package — the model lowered once, over the same `others` every
 code emit reads, so the request's model is the same JSON value as the artifact,
 and the `deployment` section the build selected once, the same section in every
-request — and `write_emits` hands it to each selected backend through the trait:
+request — and `write_emits` hands each selected backend a copy of it whose
+`options` are those of that backend's own `[backend.<name>]` table, through the
+trait:
 
 ```rust
 pub trait Backend {

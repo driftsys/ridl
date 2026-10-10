@@ -533,10 +533,11 @@ provenance. Nothing here is normative — the current references live in
   (driftsys/ridl#801), stage 1 of the WebSocket and payload formats steering
   note: the manifest's `[backend.<name>] encodings` list, a types-only build by
   default, the per-encoding size table `Sizes<E>` and the payload buffers, the
-  lint RSDL-807, and the generic face. Both are archived verbatim. The plan
-  covers sub-stage 1a only, which landed; the design's sub-stage 1b (the face
-  reads its encoding from the port, section 7.1 and 7.2) is not built, and its
-  sections are copied to
+  lint RSDL-807, and the generic face. The plan is archived verbatim; the design
+  is archived with its section 8 amended, for the RSDL-807 fact stated below.
+  The plan covers sub-stage 1a only, which landed; the design's sub-stage 1b
+  (the face reads its encoding from the port, section 7.1 and 7.2) is not built,
+  and its sections are copied to
   [`../wip/2026-10-10-on-request-encodings-1b-design.md`](../wip/2026-10-10-on-request-encodings-1b-design.md).
   Two facts differ from the design as written: the `ridl-rt` break ships in
   0.9.0, not 0.8.0, because 0.8.0 was released before the work landed; and
