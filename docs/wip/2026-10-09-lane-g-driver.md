@@ -46,7 +46,7 @@ The open-issue sweep of 2026-10-09 (114 open issues) ranked these. Lane H owns
 | Stage | Work                                                                                                                    | Model                                                      |
 | ----- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
 | G0    | Rule on the five waiting decisions (item 4); write each ruling below and on its issue; fold any small code into a stage | the main session                                           |
-| G1    | #700 and #397 in `ridl-diff`                                                                                            | Sonnet stage agent; Opus implementers and task reviewers   |
+| G1    | #700, #397 and #809 in `ridl-diff`                                                                                      | Sonnet stage agent; Opus implementers and task reviewers   |
 | G2    | #778 D-3 in the baseline gate; the specification sentence (R-3); #778 close-out (item 5)                                | Sonnet stage agent; Opus implementers and task reviewers   |
 | G3    | #770, #765, #643 (loader and checker diagnostics)                                                                       | Sonnet stage agent; implementers per task                  |
 | G4    | #657, #623, #728 (formatter, LSP positions, rsdl lowering order)                                                        | Sonnet stage agent; implementers per task                  |
@@ -361,3 +361,8 @@ Each ruling: what was decided — why — what it costs if wrong.
   `severity/major`, P2, and joins G1, the remaining gate stage — a published
   number lost with exit 0 is what this lane exists to refuse — if wrong, G1
   carries one more task.
+- **R-36** G6's triage result: 65 bucket-E issues read; #633, #658 and #660
+  closed as done; #629 narrowed; #809 filed (R-35) and added to G1; every open
+  `debt` issue now carries a severity label and a milestone. Eight long
+  checklists (#338, #342, #347, #607, #653, #679, #682, #690) were spot-checked,
+  not audited line by line — if wrong, an item already done stays listed.
