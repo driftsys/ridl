@@ -96,3 +96,18 @@ fn an_rsdl_system_member_naming_nothing_is_rsdl_602() {
     assert_eq!(json[0].span.path, "sys.rsdl");
     assert_eq!(json[0].span.start.line, 3);
 }
+
+#[test]
+fn a_query_range_with_a_fractional_bound_is_form_102_alone() {
+    // The minimum is longer than the maximum, but the maximum is a rejected
+    // literal, so FORM-102 is the only ordering-related report.
+    let source = "package p\n\
+        type Speed: integer [0..300]\n\
+        interface I {\n  query q(): Speed @[5s..10.5ms]\n}\n";
+    let run = ridlc::check_source("fraction.ridl", source);
+    let all = codes(&run);
+    assert!(all.contains(&"FORM-102"), "{:?}", run.diagnostics);
+    for forbidden in ["RIDL-101", "RIDL-108"] {
+        assert!(!all.contains(&forbidden), "{:?}", run.diagnostics);
+    }
+}

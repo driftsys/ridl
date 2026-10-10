@@ -945,10 +945,11 @@ Rules: `@0ms` is an error (RIDL-102); `@[X..Y]` with `X > Y` is an error
 range — it is a degenerate range, a rate floor equal to its staleness bound,
 which is almost always a mistake. Neither check runs on a range that has a bound
 drawing FORM-102 (a duration that is not a whole number of time units): the
-rejected literal is the only report until the author rewrites it. It is **not**
-a spelling of the strict period `@Xms`: a strict period is a separate mode,
-admitted on signals only, never defaulted (§9.1), recorded in the IR beside the
-bounds, and a change between the two modes is breaking whatever the bounds do.
+rejected literal is the only ordering report until the author rewrites it. It is
+**not** a spelling of the strict period `@Xms`: a strict period is a separate
+mode, admitted on signals only, never defaulted (§9.1), recorded in the IR
+beside the bounds, and a change between the two modes is breaking whatever the
+bounds do.
 
 Timing belongs to every kind but `fixed`. A `signal` takes either form; an
 `event`, a `command`, and a `query` take the range form only, so a strict period
