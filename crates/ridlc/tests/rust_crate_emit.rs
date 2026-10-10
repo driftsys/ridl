@@ -1279,6 +1279,40 @@ fn crate_name_falls_back_for_a_workspace_manifest() {
 /// through that indirection to the root manifest's `[workspace.package]`.
 #[test]
 fn ridl_rt_version_requirement_matches_the_crate() {
+    let requirement = ridl_rt_requirement();
+    // The requirement carries one `ridl-rt` feature per encoding the
+    // manifest's `[backend.rust]` table names, and none for this fixture.
+    // Only the version half is what this test guards, so it matches the
+    // version string inside the dependency table rather than the whole line;
+    // `cargo_toml_enables_one_feature_per_encoding` and
+    // `cargo_toml_has_no_feature_for_types_only` pin the whole line.
+    let expected = format!("ridl-rt = {{ version = \"{requirement}\"");
+
+    let out = tempfile::tempdir().expect("temp dir");
+    let run = ridlc::run_build(
+        Path::new("tests/corpus/veh-common"),
+        out.path(),
+        &[Emit::Rust],
+        false.into(),
+    )
+    .expect("build runs");
+    assert!(
+        !run.has_error(),
+        "expected no error, got: {:?}",
+        run.diagnostics
+    );
+    let manifest = std::fs::read_to_string(out.path().join("Cargo.toml")).unwrap();
+    assert!(
+        manifest.contains(&expected),
+        "expected `{expected}` in the emitted manifest, got:\n{manifest}"
+    );
+}
+
+/// The `ridl-rt` requirement the emitted manifest is expected to carry,
+/// `<major>.<minor>` of the workspace version `crates/ridl-rt/Cargo.toml`
+/// inherits. Every test that pins a `ridl-rt = ...` line reads it from here,
+/// so a release moves only the literal in `render_cargo_toml`.
+fn ridl_rt_requirement() -> String {
     #[derive(serde::Deserialize)]
     struct CargoManifest {
         package: CargoPackage,
@@ -1336,32 +1370,7 @@ fn ridl_rt_version_requirement_matches_the_crate() {
     let minor = segments
         .next()
         .expect("a semver version has a minor segment");
-    // The requirement carries one `ridl-rt` feature per encoding the
-    // manifest's `[backend.rust]` table names, and none for this fixture.
-    // Only the version half is what this test guards, so it matches the
-    // version string inside the dependency table rather than the whole line;
-    // `cargo_toml_enables_one_feature_per_encoding` and
-    // `cargo_toml_has_no_feature_for_types_only` pin the whole line.
-    let expected = format!("ridl-rt = {{ version = \"{major}.{minor}\"");
-
-    let out = tempfile::tempdir().expect("temp dir");
-    let run = ridlc::run_build(
-        Path::new("tests/corpus/veh-common"),
-        out.path(),
-        &[Emit::Rust],
-        false.into(),
-    )
-    .expect("build runs");
-    assert!(
-        !run.has_error(),
-        "expected no error, got: {:?}",
-        run.diagnostics
-    );
-    let manifest = std::fs::read_to_string(out.path().join("Cargo.toml")).unwrap();
-    assert!(
-        manifest.contains(&expected),
-        "expected `{expected}` in the emitted manifest, got:\n{manifest}"
-    );
+    format!("{major}.{minor}")
 }
 
 /// The `regex` requirement in the emitted manifest and the `regex` version the
@@ -1996,7 +2005,10 @@ fn cargo_toml_enables_one_feature_per_encoding() {
 
     assert_eq!(
         ridl_rt_line(out.path()),
-        r#"ridl-rt = { version = "0.8", features = ["flatbuffers"] }"#
+        format!(
+            r#"ridl-rt = {{ version = "{}", features = ["flatbuffers"] }}"#,
+            ridl_rt_requirement()
+        )
     );
     let source =
         std::fs::read_to_string(out.path().join("veh.cabin.rs")).expect("veh.cabin.rs is written");
@@ -2020,7 +2032,10 @@ fn cargo_toml_has_no_feature_for_types_only() {
     let out = tempfile::tempdir().expect("temp dir");
     build_rust(&entry, out.path());
 
-    assert_eq!(ridl_rt_line(out.path()), r#"ridl-rt = { version = "0.8" }"#);
+    assert_eq!(
+        ridl_rt_line(out.path()),
+        format!(r#"ridl-rt = {{ version = "{}" }}"#, ridl_rt_requirement())
+    );
     let source =
         std::fs::read_to_string(out.path().join("veh.cabin.rs")).expect("veh.cabin.rs is written");
     assert!(
@@ -2050,7 +2065,10 @@ fn a_table_for_another_backend_leaves_the_rust_emit_types_only() {
     let out = tempfile::tempdir().expect("temp dir");
     build_rust(&entry, out.path());
 
-    assert_eq!(ridl_rt_line(out.path()), r#"ridl-rt = { version = "0.8" }"#);
+    assert_eq!(
+        ridl_rt_line(out.path()),
+        format!(r#"ridl-rt = {{ version = "{}" }}"#, ridl_rt_requirement())
+    );
     let source =
         std::fs::read_to_string(out.path().join("veh.cabin.rs")).expect("veh.cabin.rs is written");
     assert!(

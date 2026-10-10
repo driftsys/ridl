@@ -1662,7 +1662,7 @@ fn build_dumping_requests(entry: &Path, extra: &[&str]) -> (Vec<serde_json::Valu
 
 /// A plugin receives the options of its own `[backend.<name>]` table and no
 /// other: the fixture's manifest has tables for `rust` and `kotlin`, so a
-/// plugin started as `kotlin` is handed `encodings=flatbuffers` and one
+/// plugin started as `kotlin` is handed `encodings=flatbuffers,proto3` and one
 /// started as `swift` is handed none. Unix only, for the scripts.
 #[cfg(unix)]
 #[test]
@@ -1705,9 +1705,10 @@ fn a_plugin_receives_its_own_backend_table() {
             .expect("the plugin was run");
         serde_json::from_str(&text).expect("a request is JSON")
     };
+    // The value joins the table's names in manifest order.
     assert_eq!(
         read("kotlin")["options"],
-        serde_json::json!([{"key": "encodings", "value": "flatbuffers"}])
+        serde_json::json!([{"key": "encodings", "value": "flatbuffers,proto3"}])
     );
     assert!(
         read("swift")
@@ -2217,6 +2218,83 @@ fn a_link_whose_encoding_is_not_emitted_warns_once() {
     assert!(
         stderr.contains("topology.rsdl:6:"),
         "the location is the different-machine `requires` line, got:\n{stderr}"
+    );
+}
+
+/// The location is the consumer's own `requires` line, not its first: a
+/// consumer with two `requires`, of which only the second crosses machines,
+/// warns once, at the second line.
+#[test]
+fn the_location_is_the_links_own_requires_line() {
+    let topology = "package veh.bench\n\n\
+                    component Lane { offers veh.bench.lane }\n\
+                    component Klaxon { offers veh.bench.horn }\n\
+                    component Telemetry {\n  \
+                      requires LaneAssist\n  \
+                      requires Horn\n\
+                    }\n\n\
+                    system Vehicle { Lane, Klaxon, Telemetry }\n\n\
+                    deployment Bench for Vehicle {\n  \
+                      machine Head { Klaxon }\n  \
+                      machine Body { Lane, Telemetry }\n\
+                    }\n";
+    let manifest = "[package]\nname = \"veh.bench\"\nversion = \"1.0.0\"\n\n\
+                    [backend.rust]\nencodings = [\"flatbuffers\"]\n\n\
+                    [lints]\nmissing-docs = \"allow\"\n";
+    let dir = link_encodings_workspace("link-encoding-own-line", manifest, Some(topology));
+    let out = TempDir::new("link-encoding-own-line-out");
+    let (code, stderr) = build_rust(dir.path(), out.path(), Some("Bench"));
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_eq!(
+        stderr.matches("warning[RSDL-807]").count(),
+        1,
+        "only `Telemetry -> Klaxon` crosses machines, stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("`Telemetry -> Klaxon`") && stderr.contains("topology.rsdl:7:"),
+        "the location is the second `requires` line of `Telemetry`, got:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("topology.rsdl:6:"),
+        "the first `requires` line, whose link stays on one machine, draws nothing, got:\n{stderr}"
+    );
+}
+
+/// A schema emit is independent of the codecs a package carries, and its
+/// backend takes no `encodings` option, so RSDL-807 is not compared against
+/// its table: `--emit rust --emit proto` draws the one warning for
+/// `[backend.rust]` and none for `[backend.proto]`.
+#[test]
+fn a_schema_emit_draws_no_rsdl_807() {
+    let out = TempDir::new("link-encoding-schema-emit");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        Path::new(LINK_ENCODINGS_FIXTURE).as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "rust".as_ref(),
+        "--emit".as_ref(),
+        "proto".as_ref(),
+        "--emit".as_ref(),
+        "flatbuffers".as_ref(),
+        "--emit".as_ref(),
+        "typescript".as_ref(),
+        "--deployment".as_ref(),
+        "Bench".as_ref(),
+    ]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_eq!(
+        stderr.matches("warning[RSDL-807]").count(),
+        1,
+        "only the Rust emit's table is compared, stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("`[backend.rust] encodings`")
+            && !stderr.contains("[backend.proto]")
+            && !stderr.contains("[backend.flatbuffers]")
+            && !stderr.contains("[backend.typescript]"),
+        "the warning names the Rust table and no schema or TypeScript table, got:\n{stderr}"
     );
 }
 

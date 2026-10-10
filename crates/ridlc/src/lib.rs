@@ -677,6 +677,31 @@ impl Emit {
             Emit::Catalog | Emit::IrJson | Emit::IrText | Emit::IrBinary => None,
         }
     }
+
+    /// Whether this emit's backend can carry a payload codec, which is what
+    /// RSDL-807 compares a deployment's links against. Only the Rust backend
+    /// reads an `encodings` list today: a schema emit (`proto`,
+    /// `flatbuffers`) is independent of the codecs a package carries, and the
+    /// TypeScript and codegen-model backends refuse the option, so a warning
+    /// naming their table would ask for a key the table cannot hold. The
+    /// TypeScript emit joins this arm when its backend emits a codec.
+    pub(crate) fn carries_codec(self) -> bool {
+        #[deny(
+            clippy::wildcard_enum_match_arm,
+            clippy::match_wildcard_for_single_variants
+        )]
+        match self {
+            Emit::Rust => true,
+            Emit::TypeScript
+            | Emit::Proto
+            | Emit::Flatbuffers
+            | Emit::CodegenModel
+            | Emit::Catalog
+            | Emit::IrJson
+            | Emit::IrText
+            | Emit::IrBinary => false,
+        }
+    }
 }
 
 /// The render-ready result of a [`run_check`] or [`run_build`] command, or of
@@ -1012,17 +1037,22 @@ fn run_build_inner<E: From<std::io::Error>>(
 
     // RSDL-807: a link of the selected deployment carries an encoding the
     // emitted backend's `encodings` list does not name, once per backend the
-    // build emits — each code emit and each plugin. Raised here, before the
-    // levels are applied, so that `deny` makes it an error the emit gate
-    // below reads. The deployment is the one `select_deployment` selects
-    // below; a name no source declares draws nothing here and is reported
-    // there.
+    // build emits that can carry a codec — the Rust emit (`carries_codec`)
+    // and each plugin. A schema emit's table cannot name an encoding, so it
+    // is not compared. Raised here, before the levels are applied, so that
+    // `deny` makes it an error the emit gate below reads. The deployment is
+    // the one `select_deployment` selects below; a name no source declares
+    // draws nothing here and is reported there.
     if let Some(selected) = requested_or_only(&declared_deployments(&system), deployment) {
-        let tables = emits.iter().filter_map(|emit| emit.backend_table()).chain(
-            resolved_plugins
-                .iter()
-                .map(|plugin| plugin.language.as_str()),
-        );
+        let tables = emits
+            .iter()
+            .filter(|emit| emit.carries_codec())
+            .filter_map(|emit| emit.backend_table())
+            .chain(
+                resolved_plugins
+                    .iter()
+                    .map(|plugin| plugin.language.as_str()),
+            );
         for table in tables {
             diagnostics.extend(link_encodings::link_encoding_not_emitted(
                 &db,
@@ -2256,9 +2286,10 @@ fn write_catalogs(
 /// [`ridl_backend_rust::Backend`] over
 /// [`generate_pipeline`](ridl_backend_rust::generate_pipeline), which emits
 /// the interaction face and the descriptors beside the domain types and the
-/// codec; TypeScript, proto3 and FlatBuffers are their own crates'
-/// `Backend`; `codegen-model` is [`codegen::ModelBackend`], the model
-/// written back. The Rust backend reads the request and never the raw IR, as
+/// codec when the package's `[backend.rust] encodings` names a codec, and
+/// the domain types only otherwise; TypeScript, proto3 and FlatBuffers are
+/// their own crates' `Backend`; `codegen-model` is [`codegen::ModelBackend`],
+/// the model written back. The Rust backend reads the request and never the raw IR, as
 /// `codegen-model` does and as a plugin must; the other three still read the
 /// raw IR, so each is constructed with a [`codegen::RawIr`] — the package and
 /// `others`, the caller's full package list ([`run_build`]), which proto3 and
@@ -2677,6 +2708,45 @@ mod render_lib_rs_tests {
             ),
             "lib.rs was:\n{lib}"
         );
+    }
+}
+
+#[cfg(test)]
+mod emit_table_tests {
+    use super::Emit;
+
+    /// Each code emit reads the table named after its language, the codegen
+    /// model reads `codegen-model`, and an emit that is not a backend reads
+    /// none. The names are what a manifest's `[backend.<name>]` key spells.
+    #[test]
+    fn each_emit_reads_its_own_backend_table() {
+        assert_eq!(Emit::Rust.backend_table(), Some("rust"));
+        assert_eq!(Emit::TypeScript.backend_table(), Some("typescript"));
+        assert_eq!(Emit::Proto.backend_table(), Some("proto"));
+        assert_eq!(Emit::Flatbuffers.backend_table(), Some("flatbuffers"));
+        assert_eq!(Emit::CodegenModel.backend_table(), Some("codegen-model"));
+        for emit in [Emit::Catalog, Emit::IrJson, Emit::IrText, Emit::IrBinary] {
+            assert_eq!(emit.backend_table(), None, "{emit:?}");
+        }
+    }
+
+    /// Only the Rust emit carries a codec, so RSDL-807 compares only its
+    /// table among the in-tree emits.
+    #[test]
+    fn only_the_rust_emit_carries_a_codec() {
+        assert!(Emit::Rust.carries_codec());
+        for emit in [
+            Emit::TypeScript,
+            Emit::Proto,
+            Emit::Flatbuffers,
+            Emit::CodegenModel,
+            Emit::Catalog,
+            Emit::IrJson,
+            Emit::IrText,
+            Emit::IrBinary,
+        ] {
+            assert!(!emit.carries_codec(), "{emit:?}");
+        }
     }
 }
 
