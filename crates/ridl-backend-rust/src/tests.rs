@@ -1052,6 +1052,56 @@ fn the_codec_passes_an_unnamed_string_and_bytes_field_without_a_borrow() {
     );
 }
 
+/// A map entry's key and value are positions of the entry pair, which is a
+/// local binding of the loop that writes the entries. An unnamed `string` or
+/// `bytes` there is an owned place, so the codec calls `as_str` and
+/// `as_slice` on it directly. A leading `&` before the call draws
+/// `clippy::needless_borrow` in the consumer's build.
+#[test]
+fn the_codec_passes_a_map_entrys_string_and_bytes_without_a_borrow() {
+    let inline = |backing: v2::PrimitiveType| {
+        Box::new(v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::InlineScalar(Box::new(v2::TypeDef {
+                backing: Some(v2::Backing {
+                    kind: Some(v2::backing::Kind::Primitive(backing as i32)),
+                }),
+                constraint: Some(v2::Constraint {
+                    len_max: Some(256),
+                    ..Default::default()
+                }),
+                declared_init: None,
+                init: None,
+                width: None,
+            }))),
+        })
+    };
+    let source = rust_for(vec![public_decl(
+        "Holder",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(shaped_field(
+                "byName",
+                1,
+                v2::field_type::Kind::Map(Box::new(v2::MapType {
+                    key: Some(inline(v2::PrimitiveType::String)),
+                    value: Some(inline(v2::PrimitiveType::Bytes)),
+                    min: 0,
+                    max: 8,
+                })),
+            ))],
+            fixed_layout: false,
+        }),
+    )]);
+    assert!(
+        source.contains("builder.push_string(__e.0.as_str())?"),
+        "a map key is passed as the `&str` that `as_str` returns, got:\n{source}"
+    );
+    assert!(
+        source.contains("builder.push_vector(__e.1.as_slice(), 1usize)?"),
+        "a map value is passed as the slice that `as_slice` returns, got:\n{source}"
+    );
+}
+
 /// The integer step check binds its verdict like the float one, and casts
 /// only the value: a cast of an integer literal to `i128` draws
 /// `clippy::unnecessary_cast` in the consumer's build.
@@ -1092,6 +1142,10 @@ fn the_integer_step_check_binds_its_verdict_and_casts_no_literal() {
     assert!(
         source.contains("- __origin) % __step != 0"),
         "the condition must use the bindings, got:\n{source}"
+    );
+    assert!(
+        source.lines().any(|l| l.trim() == "__step <= 0") && !source.contains("<= 0 as "),
+        "a step that is not positive is invalid, and the zero is not cast, got:\n{source}"
     );
     assert!(
         !source.contains("10 as ::core::primitive::i128")

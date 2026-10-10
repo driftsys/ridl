@@ -439,11 +439,14 @@ compat-check: toolchain-check
 # emitter, and a listed lint that no longer fires fails through
 # `unfulfilled_lint_expectations`, so the list cannot go stale.
 #
-# The crate emitted for the veh-cluster corpus is linted too, with no
-# command-line allowance except `dead_code`, because the corpus declares items
-# that nothing uses; the lints the emitted `lib.rs` allows stay allowed. Unlike
-# the run above, this one keeps `allow`: `clippy::module_inception` does not
-# fire on the corpus crate, so a stale entry there does not fail. Any other
+# The crate emitted for the veh-cluster corpus is linted too, with its default
+# features and with them off, and with no command-line allowance except
+# `dead_code`, because the corpus declares `internal` items that nothing uses;
+# the lints the emitted `lib.rs` allows stay allowed. A `dead_code` diagnostic
+# passes only when its source lines name a `Raw` item, the prefix of every
+# `internal` type in the corpus. Unlike the run above, this one keeps `allow`:
+# `clippy::module_inception` does not fire on the corpus crate, so a stale
+# entry there does not fail, but the run above fires it and holds it. Any other
 # warning is a defect in the emitter.
 #
 # The binary is reached through `CARGO_TARGET_DIR` where it is set, the way
@@ -464,7 +467,7 @@ compat-check: toolchain-check
 # drawing a clippy warning; the generated crate drawing a clippy warning that
 # its `lib.rs` does not allow, or an allow that no longer fires; a `lib.rs`
 # with no `#![allow(` line to rewrite; the crate emitted for the veh-cluster
-# corpus drawing a clippy warning other than `dead_code`; a planus crate
+# corpus drawing a clippy warning other than `dead_code`, with default features or without them, or a `dead_code` warning that names no `Raw` item; a planus crate
 # in the resolved graph of `examples/cabin`; the planus check running no test or
 # more than one, which is what a renamed test or a changed filter does.
 #
@@ -534,13 +537,30 @@ demo:
         --no-default-features --target thumbv7em-none-eabihf
     cargo check --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked \
         --no-default-features --features validate-pattern
-    # The corpus crate is linted as well. The only allowance on the command line is
-    # `dead_code`, and the lints that its `lib.rs` allows stay allowed.
-    # `dead_code` is allowed for this one run: the corpus declares items that
-    # nothing uses, and the `dead_code` warnings come from the corpus's
-    # `internal` structs, not from the emitter. Every other lint fails the run.
-    cargo clippy --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked --no-deps \
-        -- -D warnings -A dead_code
+    # The corpus crate is linted as well, with its default features and with
+    # them off for the target that has no standard library, so the code that
+    # compiles only in the second case is linted too. `dead_code` is the one
+    # lint left out of the strict run: the corpus declares `internal` items
+    # that nothing uses, and those draw it. A second run reports `dead_code`
+    # and fails on any diagnostic whose source lines name no `Raw` item, the
+    # prefix of every `internal` type in the corpus, so dead code that the
+    # emitter writes for any other item still fails the run.
+    corpus_lint() {
+        cargo clippy --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked --no-deps \
+            "$@" -- -D warnings -A dead_code
+        stray="$(cargo clippy --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked --no-deps \
+            --message-format=json "$@" -- -W dead_code 2>/dev/null |
+            jq -r 'select(.reason == "compiler-message" and .message.code.code == "dead_code")
+                | select([.message.spans[].text[].text] | any(test("Raw")) | not)
+                | .message.rendered')"
+        if [ -n "$stray" ]; then
+            printf '%s\n' "$stray" >&2
+            echo "demo: the corpus crate has dead code that is not an internal item" >&2
+            exit 1
+        fi
+    }
+    corpus_lint
+    corpus_lint --no-default-features --target thumbv7em-none-eabihf
     cargo fmt --manifest-path examples/cabin/consumer/Cargo.toml --check
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p consumer --locked --all-targets --no-deps -- -D warnings
     # The output is checked, not just the status, and each line carries the
