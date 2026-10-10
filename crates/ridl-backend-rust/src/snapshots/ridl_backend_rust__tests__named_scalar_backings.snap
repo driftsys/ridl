@@ -1,6 +1,6 @@
 ---
 source: crates/ridl-backend-rust/src/tests.rs
-expression: rust_for(decls)
+expression: rust_with_codec(decls)
 ---
 /// Vehicle speed over ground
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -378,5 +378,729 @@ impl ::core::convert::From<Blob> for ::std::vec::Vec<::core::primitive::u8> {
 impl ::core::default::Default for Blob {
     fn default() -> Self {
         Blob::new_unchecked(::std::vec::Vec::new())
+    }
+}
+/// An accessor over FlatBuffers bytes `Speed`'s `verify` accepted.
+///
+/// The buffer's root is the box table ADR-0019 decision 8
+/// gives this declaration: one non-optional `value` field. A
+/// buffer carrying no slot for it holds the FlatBuffers
+/// default, 0, when 0 is a legal value of this type, and is
+/// `MissingRequired` when it is not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct SpeedFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for SpeedFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> SpeedFbView<'a> {
+    /// The value the box carries. `Speed` is one value, so this decodes it rather than borrowing it, which costs one read.
+    pub fn value(&self) -> Speed {
+        __ridl_fb_decode_Speed(self.buf, self.table)
+    }
+}
+/// Writes `Speed` as its box table and returns its position (ADR-0019 decision 8).
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Speed(
+    value: &Speed,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 4u16,
+                value: {
+                    let __s = *value;
+                    ::ridl_rt::flatbuffers::Field::F32(
+                        __s.get() as ::core::primitive::f32,
+                    )
+                },
+            },
+        ];
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
+    })
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Speed(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            4usize,
+        )
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        Speed::check(&(::core::primitive::f64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Speed(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Speed {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
+        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+            Speed::new_unchecked(
+                ::core::primitive::f64::from(
+                    ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
+                ),
+            )
+        }
+        _ => Speed::new_unchecked(0.0f64),
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
+    /// The largest FlatBuffers buffer any legal `Speed` encodes to: 46 bytes.
+    ///
+    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
+    /// which is the one implementation of the bound (design note
+    /// D-6): each table is charged its `soffset`, its inline
+    /// fields, its vtable and one alignment event per slot; a
+    /// string four bytes per declared character plus a
+    /// terminator; a collection its declared maximum. It is a
+    /// literal rather than an expression over the field types
+    /// because that slack is not expressible in Rust's type
+    /// system.
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
+    type View<'a> = SpeedFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, SpeedFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_Speed(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: SpeedFbView { buf: bytes, table },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<SpeedFbView<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_Speed(buf, table)?;
+        ::core::result::Result::Ok(SpeedFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_Speed(__view.buf, __view.table)
+    }
+}
+/// An accessor over FlatBuffers bytes `Counter`'s `verify` accepted.
+///
+/// The buffer's root is the box table ADR-0019 decision 8
+/// gives this declaration: one non-optional `value` field. A
+/// buffer carrying no slot for it holds the FlatBuffers
+/// default, 0, when 0 is a legal value of this type, and is
+/// `MissingRequired` when it is not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct CounterFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for CounterFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> CounterFbView<'a> {
+    /// The value the box carries. `Counter` is one value, so this decodes it rather than borrowing it, which costs one read.
+    pub fn value(&self) -> Counter {
+        __ridl_fb_decode_Counter(self.buf, self.table)
+    }
+}
+/// Writes `Counter` as its box table and returns its position (ADR-0019 decision 8).
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Counter(
+    value: &Counter,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 4u16,
+                value: {
+                    let __s = *value;
+                    ::ridl_rt::flatbuffers::Field::U16(
+                        __s.get() as ::core::primitive::u16,
+                    )
+                },
+            },
+        ];
+        builder.push_table(6usize, 4usize, 1u16, &__box)?
+    })
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Counter(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            2usize,
+        )
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        let __raw = ::ridl_rt::flatbuffers::read_u16(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Counter(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Counter {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize) {
+        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+            Counter::new(
+                ::core::primitive::i64::from(
+                    ::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16),
+                ),
+            )
+        }
+        _ => Counter::new(0i64),
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
+    /// The largest FlatBuffers buffer any legal `Counter` encodes to: 44 bytes.
+    ///
+    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
+    /// which is the one implementation of the bound (design note
+    /// D-6): each table is charged its `soffset`, its inline
+    /// fields, its vtable and one alignment event per slot; a
+    /// string four bytes per declared character plus a
+    /// terminator; a collection its declared maximum. It is a
+    /// literal rather than an expression over the field types
+    /// because that slack is not expressible in Rust's type
+    /// system.
+    const MAX_SIZE: ::core::primitive::usize = 44usize;
+    type Buffer = [::core::primitive::u8; 44usize];
+    const BUFFER: Self::Buffer = [0u8; 44usize];
+    type View<'a> = CounterFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, CounterFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_Counter(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: CounterFbView { buf: bytes, table },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<CounterFbView<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_Counter(buf, table)?;
+        ::core::result::Result::Ok(CounterFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_Counter(__view.buf, __view.table)
+    }
+}
+/// An accessor over FlatBuffers bytes `Enabled`'s `verify` accepted.
+///
+/// The buffer's root is the box table ADR-0019 decision 8
+/// gives this declaration: one non-optional `value` field. A
+/// buffer carrying no slot for it holds the FlatBuffers
+/// default, 0, when 0 is a legal value of this type, and is
+/// `MissingRequired` when it is not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct EnabledFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for EnabledFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> EnabledFbView<'a> {
+    /// The value the box carries. `Enabled` is one value, so this decodes it rather than borrowing it, which costs one read.
+    pub fn value(&self) -> Enabled {
+        __ridl_fb_decode_Enabled(self.buf, self.table)
+    }
+}
+/// Writes `Enabled` as its box table and returns its position (ADR-0019 decision 8).
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Enabled(
+    value: &Enabled,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 4u16,
+                value: {
+                    let __s = *value;
+                    ::ridl_rt::flatbuffers::Field::Bool(__s.get())
+                },
+            },
+        ];
+        builder.push_table(5usize, 4usize, 1u16, &__box)?
+    })
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Enabled(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            1usize,
+        )
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        let __raw = ::ridl_rt::flatbuffers::read_bool(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Enabled(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Enabled {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize) {
+        ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+            Enabled::new(::ridl_rt::flatbuffers::read_bool(buf, __p).unwrap_or(false))
+        }
+        _ => Enabled::new(false),
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Enabled {
+    /// The largest FlatBuffers buffer any legal `Enabled` encodes to: 43 bytes.
+    ///
+    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
+    /// which is the one implementation of the bound (design note
+    /// D-6): each table is charged its `soffset`, its inline
+    /// fields, its vtable and one alignment event per slot; a
+    /// string four bytes per declared character plus a
+    /// terminator; a collection its declared maximum. It is a
+    /// literal rather than an expression over the field types
+    /// because that slack is not expressible in Rust's type
+    /// system.
+    const MAX_SIZE: ::core::primitive::usize = 43usize;
+    type Buffer = [::core::primitive::u8; 43usize];
+    const BUFFER: Self::Buffer = [0u8; 43usize];
+    type View<'a> = EnabledFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, EnabledFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_Enabled(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: EnabledFbView { buf: bytes, table },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<EnabledFbView<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_Enabled(buf, table)?;
+        ::core::result::Result::Ok(EnabledFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_Enabled(__view.buf, __view.table)
+    }
+}
+/// An accessor over FlatBuffers bytes `Label`'s `verify` accepted.
+///
+/// The buffer's root is the box table ADR-0019 decision 8
+/// gives this declaration: one non-optional `value` field. A
+/// buffer carrying no slot for it holds the FlatBuffers
+/// default, 0, when 0 is a legal value of this type, and is
+/// `MissingRequired` when it is not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct LabelFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for LabelFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> LabelFbView<'a> {
+    /// The value the box carries. `Label` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    pub fn value(&self) -> Label {
+        __ridl_fb_decode_Label(self.buf, self.table)
+    }
+}
+/// Writes `Label` as its box table and returns its position (ADR-0019 decision 8).
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Label(
+    value: &Label,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 4u16,
+                value: ::ridl_rt::flatbuffers::Field::Offset(
+                    builder.push_string(value.get())?,
+                ),
+            },
+        ];
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
+    })
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Label(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            let __s = ::ridl_rt::flatbuffers::string(buf, __p)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            Label::check(__s).map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Label(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Label {
+    {
+        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        Label::new_unchecked(
+            ::std::string::String::from(
+                ::ridl_rt::flatbuffers::string(buf, __p).unwrap_or(""),
+            ),
+        )
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Label {
+    /// The largest FlatBuffers buffer any legal `Label` encodes to: 1082 bytes.
+    ///
+    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
+    /// which is the one implementation of the bound (design note
+    /// D-6): each table is charged its `soffset`, its inline
+    /// fields, its vtable and one alignment event per slot; a
+    /// string four bytes per declared character plus a
+    /// terminator; a collection its declared maximum. It is a
+    /// literal rather than an expression over the field types
+    /// because that slack is not expressible in Rust's type
+    /// system.
+    const MAX_SIZE: ::core::primitive::usize = 1082usize;
+    type Buffer = [::core::primitive::u8; 1082usize];
+    const BUFFER: Self::Buffer = [0u8; 1082usize];
+    type View<'a> = LabelFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, LabelFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_Label(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: LabelFbView { buf: bytes, table },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<LabelFbView<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_Label(buf, table)?;
+        ::core::result::Result::Ok(LabelFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_Label(__view.buf, __view.table)
+    }
+}
+/// An accessor over FlatBuffers bytes `Blob`'s `verify` accepted.
+///
+/// The buffer's root is the box table ADR-0019 decision 8
+/// gives this declaration: one non-optional `value` field. A
+/// buffer carrying no slot for it holds the FlatBuffers
+/// default, 0, when 0 is a legal value of this type, and is
+/// `MissingRequired` when it is not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct BlobFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for BlobFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> BlobFbView<'a> {
+    /// The value the box carries. `Blob` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    pub fn value(&self) -> Blob {
+        __ridl_fb_decode_Blob(self.buf, self.table)
+    }
+}
+/// Writes `Blob` as its box table and returns its position (ADR-0019 decision 8).
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Blob(
+    value: &Blob,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 4u16,
+                value: ::ridl_rt::flatbuffers::Field::Offset(
+                    builder.push_vector(value.get(), 1usize)?,
+                ),
+            },
+        ];
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
+    })
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Blob(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 1usize)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            Blob::check(&buf[__v.first..__v.first + __v.len])
+                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Blob(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Blob {
+    {
+        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        Blob::new_unchecked({
+            let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 1usize)
+                .unwrap_or(::ridl_rt::flatbuffers::Vector {
+                    len: 0,
+                    first: 0,
+                });
+            buf.get(__v.first..__v.first + __v.len).unwrap_or(&[]).to_vec()
+        })
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Blob {
+    /// The largest FlatBuffers buffer any legal `Blob` encodes to: 313 bytes.
+    ///
+    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
+    /// which is the one implementation of the bound (design note
+    /// D-6): each table is charged its `soffset`, its inline
+    /// fields, its vtable and one alignment event per slot; a
+    /// string four bytes per declared character plus a
+    /// terminator; a collection its declared maximum. It is a
+    /// literal rather than an expression over the field types
+    /// because that slack is not expressible in Rust's type
+    /// system.
+    const MAX_SIZE: ::core::primitive::usize = 313usize;
+    type Buffer = [::core::primitive::u8; 313usize];
+    const BUFFER: Self::Buffer = [0u8; 313usize];
+    type View<'a> = BlobFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, BlobFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_Blob(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: BlobFbView { buf: bytes, table },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<BlobFbView<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_Blob(buf, table)?;
+        ::core::result::Result::Ok(BlobFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_Blob(__view.buf, __view.table)
     }
 }

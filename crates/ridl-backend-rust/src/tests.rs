@@ -428,7 +428,7 @@ fn rust_for(decls: Vec<v2::Decl>) -> String {
 
 #[test]
 fn scalar_unit_type_with_doc() {
-    insta::assert_snapshot!(rust_for(vec![speed_decl()]));
+    insta::assert_snapshot!(rust_with_codec(vec![speed_decl()]));
 }
 
 #[test]
@@ -447,7 +447,7 @@ fn named_scalar_backings() {
         public_decl("Label", bounded_string_type(init_value(true, Some("")))),
         public_decl("Blob", bounded_bytes_type(init_value(true, Some("")))),
     ];
-    insta::assert_snapshot!(rust_for(decls));
+    insta::assert_snapshot!(rust_with_codec(decls));
 }
 
 #[test]
@@ -648,7 +648,7 @@ fn constrained_scalar_backings() {
         public_decl("Digest", bounded_text_type(v2::PrimitiveType::Bytes, 0, 32)),
         ratio_decl(),
     ];
-    insta::assert_snapshot!(rust_for(decls));
+    insta::assert_snapshot!(rust_with_codec(decls));
 }
 
 #[test]
@@ -1523,7 +1523,7 @@ fn constants_all_forms() {
             }),
         ),
     ];
-    insta::assert_snapshot!(rust_for(decls));
+    insta::assert_snapshot!(rust_with_codec(decls));
 }
 
 #[test]
@@ -1566,7 +1566,7 @@ fn struct_with_optional_and_reserved() {
         ),
         public_decl("DriverProfile", v2::decl::Kind::StructDef(struct_def)),
     ];
-    insta::assert_snapshot!(rust_for(decls));
+    insta::assert_snapshot!(rust_with_codec(decls));
 }
 
 /// One struct with one named field, for the name-projection tests.
@@ -1628,7 +1628,7 @@ fn enum_with_discriminants() {
             reserved: Vec::new(),
         }),
     )];
-    insta::assert_snapshot!(rust_for(decls));
+    insta::assert_snapshot!(rust_with_codec(decls));
 }
 
 /// driftsys/ridl#506: a variant is spelled through `pascal_case`, at every
@@ -1879,7 +1879,7 @@ fn enumset_standalone_form() {
             width: v2::IntWidth::U8 as i32,
         }),
     )];
-    insta::assert_snapshot!(rust_for(decls));
+    insta::assert_snapshot!(rust_with_codec(decls));
 }
 
 #[test]
@@ -2049,7 +2049,7 @@ fn enumset_derived_form() {
             }),
         ),
     ];
-    insta::assert_snapshot!(rust_for(decls));
+    insta::assert_snapshot!(rust_with_codec(decls));
 }
 
 #[test]
@@ -2108,7 +2108,7 @@ fn result_union() {
         },
         public_decl("SensorResult", v2::decl::Kind::UnionDef(union)),
     ];
-    insta::assert_snapshot!(rust_for(decls));
+    insta::assert_snapshot!(rust_with_codec(decls));
 }
 
 fn tuple_field(name: &str, type_ref: &str) -> v2::TupleField {
@@ -2140,7 +2140,7 @@ fn tuple_field_generates_named_struct() {
         speed_decl(),
         public_decl("SensorBounds", v2::decl::Kind::StructDef(struct_def)),
     ];
-    insta::assert_snapshot!(rust_for(decls));
+    insta::assert_snapshot!(rust_with_codec(decls));
 }
 
 /// A tuple field name is camelCase in typl exactly as a struct field name is
@@ -2453,7 +2453,7 @@ fn fixed_and_bounded_arrays() {
         speed_decl(),
         public_decl("Samples", v2::decl::Kind::StructDef(struct_def)),
     ];
-    insta::assert_snapshot!(rust_for(decls));
+    insta::assert_snapshot!(rust_with_codec(decls));
 }
 
 /// A vector of the bare `boolean` primitive, and a vector of `Engaged`, a
@@ -2511,7 +2511,7 @@ fn bool_vector_field() {
         ),
         public_decl("Flags", v2::decl::Kind::StructDef(struct_def)),
     ];
-    insta::assert_snapshot!(rust_for(decls));
+    insta::assert_snapshot!(rust_with_codec(decls));
 }
 
 #[test]
@@ -2543,7 +2543,7 @@ fn bounded_map() {
         counter_decl(),
         public_decl("Table", v2::decl::Kind::StructDef(struct_def)),
     ];
-    insta::assert_snapshot!(rust_for(decls));
+    insta::assert_snapshot!(rust_with_codec(decls));
 }
 
 #[test]
@@ -2576,7 +2576,7 @@ fn deprecated_and_internal_visibility() {
             )
         },
     ];
-    insta::assert_snapshot!(rust_for(decls));
+    insta::assert_snapshot!(rust_with_codec(decls));
 }
 
 // ---------------------------------------------------------------------------
@@ -3151,7 +3151,8 @@ fn an_internal_constant_enum_and_union_allow_dead_code() {
 
 #[test]
 fn appendix_b_rust_snapshot() {
-    let Generated { rust_source, .. } = generate(&appendix_b()).expect("Appendix B generates");
+    let Generated { rust_source, .. } =
+        generate_codec(&appendix_b()).expect("Appendix B generates");
     insta::assert_snapshot!(rust_source);
 }
 
