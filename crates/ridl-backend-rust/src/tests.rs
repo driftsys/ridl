@@ -6251,3 +6251,76 @@ fn a_skipped_interface_note_without_an_owner_names_no_issue() {
         "got: {note}"
     );
 }
+
+/// Each owner line and each trailer of a skip note is its own string literal,
+/// so each is checked for a run of literal spaces, the mark of a lost `\`
+/// continuation. The integration tests reach the clause and internal notes;
+/// this reaches the call-shape and the unowned (`FaceGap::Other`) notes, and
+/// pins which trailer each side gets.
+mod skipped_interface_note {
+    use super::super::{GenerateError, skipped_interface_note};
+    use ridl_ir::codegen::v1;
+
+    fn interface(slots: Vec<v1::InteractionSlot>, internal: bool) -> v1::Interface {
+        let visibility = if internal {
+            v1::Visibility::Internal
+        } else {
+            v1::Visibility::Public
+        };
+        v1::Interface {
+            identity: Some(v1::interface::Identity::Declared(v1::Spellings {
+                declared: "Cabin".to_string(),
+                ..Default::default()
+            })),
+            visibility: visibility as i32,
+            slots,
+            ..Default::default()
+        }
+    }
+
+    /// A command with no parameter: not exactly one named parameter, so the
+    /// call-shape owner.
+    fn bare_command() -> v1::InteractionSlot {
+        v1::InteractionSlot {
+            ordinal: 1,
+            occupant: Some(v1::interaction_slot::Occupant::Interaction(Box::new(
+                v1::Interaction {
+                    name: Some(v1::Spellings {
+                        declared: "set".to_string(),
+                        ..Default::default()
+                    }),
+                    shape: Some(v1::interaction::Shape::Command(Default::default())),
+                    ..Default::default()
+                },
+            ))),
+        }
+    }
+
+    fn note(interface: &v1::Interface) -> String {
+        let err = GenerateError {
+            message: "a refusal".to_string(),
+        };
+        skipped_interface_note(interface, &err).to_string()
+    }
+
+    #[test]
+    fn the_call_shape_and_unowned_notes_carry_no_run_of_spaces() {
+        let call_shape = note(&interface(vec![bare_command()], false));
+        let other = note(&interface(Vec::new(), false));
+        let internal = note(&interface(Vec::new(), true));
+        assert!(call_shape.contains("driftsys/ridl#713"), "{call_shape}");
+        assert!(other.contains("No tracking issue owns this one"), "{other}");
+        for text in [&call_shape, &other] {
+            assert!(text.contains("which the face is built on"), "{text}");
+            assert!(text.contains("design rule 2"), "{text}");
+        }
+        assert!(
+            !internal.contains("which the face is built on"),
+            "{internal}"
+        );
+        assert!(internal.contains("The consumer face"), "{internal}");
+        for text in [&call_shape, &other, &internal] {
+            assert!(!text.contains("     "), "a run of spaces:\n{text}");
+        }
+    }
+}

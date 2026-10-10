@@ -202,11 +202,17 @@ interface Wide {
         .expect("owner line")..];
     assert!(owner.contains("driftsys/ridl#713"), "{text}");
     assert!(!text.contains("The interface is `internal`"), "{text}");
+    assert!(
+        owner.contains("which the face is built on"),
+        "a public note's trailer names the face:\n{text}"
+    );
 }
 
 /// The skip note of a public interface whose query the face cannot carry
 /// names the call shape and its tracking issue. The command case above reaches
-/// the command arm of the owner match; this one reaches the query arm.
+/// the command arm of `face_gap`'s match; this one reaches the query arm
+/// through its parameter operand (two parameters), and the next one through
+/// its reply operand.
 #[test]
 fn a_public_interface_with_an_uncarried_query_leaves_the_call_shape_note() {
     let source = r#"
@@ -230,6 +236,35 @@ interface Wide {
         .find("A call the face cannot carry")
         .unwrap_or_else(|| panic!("the call-shape owner line:\n{text}"))..];
     assert!(owner.contains("driftsys/ridl#713"), "{text}");
+}
+
+/// A public query with one named parameter and an inline tuple reply reaches
+/// the query arm of `face_gap`'s match through its reply operand alone, so it
+/// gets the call-shape owner line, not the unowned one.
+#[test]
+fn a_public_query_with_an_inline_reply_leaves_the_call_shape_note() {
+    let source = r#"
+package face.query_reply
+
+type Level : integer [0..100]
+
+interface Wide {
+  query read(first: Level): (a: Level, b: Level) @[..50ms]
+}
+"#;
+    let output = ridlc::compile("query_reply.ridl", source);
+    let generated = generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+        .expect("generate_pipeline");
+    let text = generated.rust_source;
+    assert!(
+        text.contains("carries no generated interaction face"),
+        "{text}"
+    );
+    let owner = &text[text
+        .find("A call the face cannot carry")
+        .unwrap_or_else(|| panic!("the call-shape owner line:\n{text}"))..];
+    assert!(owner.contains("driftsys/ridl#713"), "{text}");
+    assert!(!text.contains("No tracking issue owns this one"), "{text}");
 }
 
 /// An internal interface whose descriptors are refused for a contract clause
@@ -281,10 +316,9 @@ internal interface Guarded {
     ] {
         assert!(!note.contains(absent), "no `{absent}`:\n{note}");
     }
-    assert!(
-        note.contains("The refusal is raised by the descriptor emitter."),
-        "{note}"
-    );
+    assert!(note.contains("Nothing else is refused: the"), "{note}");
+    assert!(note.contains("\"The consumer face\""), "{note}");
+    assert!(!note.contains("design rule 2"), "{note}");
     assert!(text.contains("pub mod summary {"), "{text}");
 }
 
@@ -309,6 +343,36 @@ internal interface Cabin {
         "`CabinTemperature`",
         "member `temperature`",
         "interface `Cabin`",
+    ] {
+        assert!(err.message.contains(part), "no {part} in: {}", err.message);
+    }
+}
+
+/// The interface-level descriptor of an internal interface is claimed too:
+/// the internal interface `HornActive` and the member `active` of the public
+/// `Horn` both name `HornActive`, and the pair is refused.
+#[test]
+fn an_internal_interface_still_claims_its_interface_descriptor_name() {
+    let source = r#"
+package face.internal_iface_claim
+
+type Level : integer [0..100]
+
+interface Horn {
+  signal active: Level @10ms
+}
+
+internal interface HornActive {
+  signal level: Level @10ms
+}
+"#;
+    let output = ridlc::compile("internal_iface_claim.ridl", source);
+    let err = generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+        .expect_err("the interface descriptor collides with a member descriptor");
+    for part in [
+        "`HornActive`",
+        "the descriptor of interface `HornActive`",
+        "member `active`",
     ] {
         assert!(err.message.contains(part), "no {part} in: {}", err.message);
     }
@@ -994,11 +1058,11 @@ fn timeout_is_under_ridl_rt_s_std_feature() {
     }
 }
 
-/// The top-level `impl` blocks of `source` that hold descriptor constants (the
-/// `Interface` impl, the buffer sizes and the per-member impls), with the
-/// catalog hash bytes cut out and returned on their own. Visibility is
-/// normalised to `pub`, so the internal and the public build compare.
-fn descriptor_constants(source: &str) -> (Vec<String>, Vec<String>) {
+/// Every top-level `impl` block of `source` — the descriptor impls (the
+/// `Interface` impl, the buffer sizes, the per-member impls) and the codec
+/// impls of the payload types — with the catalog hash bytes cut out and
+/// returned on their own.
+fn impl_blocks(source: &str) -> (Vec<String>, Vec<String>) {
     let mut blocks = Vec::new();
     let mut current: Option<String> = None;
     for line in source.lines() {
@@ -1008,54 +1072,72 @@ fn descriptor_constants(source: &str) -> (Vec<String>, Vec<String>) {
             if line == "}" {
                 blocks.push(current.take().expect("open block"));
             }
-        } else if !line.starts_with(char::is_whitespace) && line.ends_with('{') {
+        } else if line.starts_with("impl") && line.ends_with('{') {
             current = Some(format!("{line}\n"));
         }
     }
     let mut hashes = Vec::new();
-    let constants = blocks
+    let blocks = blocks
         .into_iter()
-        .filter(|b| {
-            b.starts_with("impl ")
-                && ["const CATALOG", "MAX_BUFFER_SIZE", "const MEMBER:"]
-                    .iter()
-                    .any(|m| b.contains(m))
-        })
-        .map(|block| {
-            let block = block.replace("pub(crate) ", "pub ");
-            match block.find("CatalogHash([") {
-                Some(start) => {
-                    let end = start + block[start..].find("])").expect("hash end");
-                    hashes.push(block[start..end].split_whitespace().collect());
-                    format!("{}<hash>{}", &block[..start], &block[end..])
-                }
-                None => block,
+        .map(|block| match block.find("CatalogHash([") {
+            Some(start) => {
+                let end = start + block[start..].find("])").expect("hash end");
+                hashes.push(block[start..end].split_whitespace().collect());
+                format!("{}<hash>{}", &block[..start], &block[end..])
             }
+            None => block,
         })
         .collect();
-    (constants, hashes)
+    (blocks, hashes)
 }
 
+/// A unit with one interface and the same unit with it made `internal`. Both
+/// interfaces name only public types, so both are valid packages.
+const ONE_MADE_INTERNAL: &str = r#"
+package face.made_internal
+
+type Level : integer [0..100]
+struct Frame { level: Level }
+
+interface Summary {
+  signal level: Level @10ms
+  command setLevel(level: Level) @[..50ms]
+}
+
+VISIBILITY interface Diagnostics {
+  signal ticks: Level @10ms
+  event frame: Frame @[100ms..1s]
+  command reset(arg: Level) @[..50ms]
+  query read(arg: Level): Frame @[..50ms]
+}
+"#;
+
 /// Making one interface `internal` changes the catalog hash of the unit,
-/// because visibility is part of what is hashed (ADR-0014 decision 15, the
-/// visibility rule in `crates/ridl-ir/src/catalog_hash.rs`), and so the
-/// `CATALOG` of every interface of the unit, the public one beside it
-/// included. Every other descriptor constant is equal: the emitter rule
-/// (no face, crate-visible descriptors) touches visibility only.
+/// because visibility is part of what is hashed (ADR-0014 decision 15; the
+/// reduced unit in `crates/ridl-ir/src/catalog_hash.rs` keeps each interface's
+/// visibility), and so the `CATALOG` of every interface of the unit, the
+/// public one beside it included. Every other `impl` block is equal: the
+/// emitter rule (no face, crate-visible descriptors) touches only the
+/// visibility of the descriptor structs, which are not `impl` blocks.
 #[test]
 fn making_an_interface_internal_changes_only_the_catalog_hash() {
-    let public_source = INTERNAL_BESIDE_PUBLIC.replace("internal interface", "interface");
-    assert_ne!(public_source, INTERNAL_BESIDE_PUBLIC);
-    let emit = |name: &str, source: &str| {
-        let output = ridlc::compile(name, source);
-        generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
-            .expect("generate_pipeline")
-            .rust_source
+    let emit = |visibility: &str| {
+        let source = ONE_MADE_INTERNAL.replace("VISIBILITY ", visibility);
+        let output = ridlc::compile("made_internal.ridl", &source);
+        assert!(
+            output
+                .diagnostics
+                .iter()
+                .all(|d| d.severity != ridl_core::diag::Severity::Error),
+            "the {visibility:?} source is a valid package: {:?}",
+            output.diagnostics
+        );
+        let generated = generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+            .expect("generate_pipeline");
+        impl_blocks(&generated.rust_source)
     };
-    let (internal, internal_hashes) =
-        descriptor_constants(&emit("hidden_pipeline.ridl", INTERNAL_BESIDE_PUBLIC));
-    let (public, public_hashes) =
-        descriptor_constants(&emit("hidden_pipeline.ridl", &public_source));
+    let (internal, internal_hashes) = emit("internal ");
+    let (public, public_hashes) = emit("");
 
     assert_eq!(internal_hashes.len(), 2, "one CATALOG per interface");
     assert_eq!(public_hashes.len(), 2, "one CATALOG per interface");
@@ -1066,6 +1148,6 @@ fn making_an_interface_internal_changes_only_the_catalog_hash() {
         internal_hashes[0], public_hashes[0],
         "visibility is hashed, so making an interface internal changes the hash"
     );
-    assert!(internal.len() > 2, "{internal:#?}");
-    assert_eq!(internal, public, "every other descriptor constant is equal");
+    assert_eq!(internal.len(), 27, "{internal:#?}");
+    assert_eq!(internal, public, "every other impl block is equal");
 }

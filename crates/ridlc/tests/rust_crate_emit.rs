@@ -1612,6 +1612,10 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
         "this interface is skipped for a clause, got:\n{note}"
     );
     assert!(
+        note.contains("which the face is built on"),
+        "a public note's trailer names the face, got:\n{note}"
+    );
+    assert!(
         note.contains("driftsys/ridl#704") && !note.contains("driftsys/ridl#713"),
         "the owner line must name the clause issue, not the multi-parameter \
          one, got:\n{note}"
@@ -1621,9 +1625,10 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
     // checked: `VehicleStatus` carries the clause owner line, and
     // `WheelDiagnostics`, which is `internal`, carries the internal one. They
     // are separate string literals, so checking one leaves the other free to
-    // break. The call-shape owner line of a public interface is pinned in
-    // `crates/ridl-backend-rust/tests/face_compile.rs`, because no interface of
-    // this corpus reaches it.
+    // break. The call-shape and unowned owner lines are checked the same way
+    // by the `skipped_interface_note` unit tests in
+    // `crates/ridl-backend-rust/src/tests.rs`, because no interface of this
+    // corpus reaches them.
     let internal_note = source
         .split("const __RIDL_NO_FACE_WheelDiagnostics")
         .next()
