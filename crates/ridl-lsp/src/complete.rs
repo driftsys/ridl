@@ -41,7 +41,9 @@
 //! - after `for` → the systems.
 //!
 //! A component or a system of the file's own package is offered by its bare
-//! name, one of another package by its qualified name.
+//! name, one of another package by its qualified name. When the part already
+//! written qualifies the reference with the own package, an own-package item
+//! is matched and written by its qualified name.
 //!
 //! The context is decided from the token to the left of the cursor and the
 //! identifier the cursor is completing, not from a well-formed tree — the same
@@ -142,8 +144,7 @@ fn doc_completion(
 /// The completion items for the cursor at `offset` in `file`, an `.rsdl` file
 /// of `pkg`, and the range an item replaces: the part of a reference already
 /// written before the cursor, `None` outside a reference slot. An item whose
-/// `filter_text` is set carries there the qualified name it is written with
-/// when the written part is qualified.
+/// `filter_text` is set is written with that qualified name.
 pub fn rsdl_completion(
     db: &dyn salsa::Database,
     ws: Workspace,
@@ -170,10 +171,14 @@ pub fn rsdl_completion(
         return (Vec::new(), None);
     };
     let keywords = |words| (keyword_completions(words), None);
-    let replaced = Some(TextRange::new(
-        reference_start(&cursor.left, offset),
-        offset,
-    ));
+    let start = reference_start(&cursor.left, offset);
+    let replaced = Some(TextRange::new(start, offset));
+    // Whether the part already written qualifies the reference with the
+    // file's own package, as in `veh.topology.Cr`.
+    let own_qualified = file
+        .text(db)
+        .get(usize::from(start)..usize::from(offset))
+        .is_some_and(|written| written.starts_with(&format!("{}.", pkg.name(db))));
     let items = match slot {
         RsdlSlot::TopLevel => return keywords(RSDL_DEFINITION_KEYWORDS),
         RsdlSlot::ComponentLine => return keywords(COMPONENT_LINE_KEYWORDS),
@@ -205,6 +210,7 @@ pub fn rsdl_completion(
                 .map(|decl| {
                     rsdl_item(
                         own,
+                        own_qualified,
                         &decl.package,
                         &decl.name.name,
                         lt::CompletionItemKind::MODULE,
@@ -224,6 +230,7 @@ pub fn rsdl_completion(
                     for instance in decl.instances.iter().flatten() {
                         items.push(rsdl_item(
                             own,
+                            own_qualified,
                             &decl.package,
                             &format!("{name}.{}", instance.name),
                             lt::CompletionItemKind::FIELD,
@@ -233,6 +240,7 @@ pub fn rsdl_completion(
                 }
                 items.push(rsdl_item(
                     own,
+                    own_qualified,
                     &decl.package,
                     name,
                     lt::CompletionItemKind::CLASS,
@@ -277,23 +285,28 @@ fn service_items(
 
 /// The item for `name`, an rsdl declaration of `package`, as a reference
 /// written in the package `own` names it: bare in its own package, qualified
-/// in another. An item of the own package carries the qualified name as its
-/// `filter_text`, so a partly written qualified reference still matches it.
+/// in another. When `own_qualified`, the part already written qualifies the
+/// reference with the own package, and an item of the own package carries
+/// the qualified name as its `filter_text`, so that it still matches and is
+/// written qualified.
 fn rsdl_item(
     own: &str,
+    own_qualified: bool,
     package: &str,
     name: &str,
     kind: lt::CompletionItemKind,
     detail: String,
 ) -> lt::CompletionItem {
     let qualified = format!("{package}.{name}");
-    if own == package {
+    if own != package {
+        item(&qualified, kind, detail)
+    } else if own_qualified {
         lt::CompletionItem {
             filter_text: Some(qualified),
             ..item(name, kind, detail)
         }
     } else {
-        item(&qualified, kind, detail)
+        item(name, kind, detail)
     }
 }
 
@@ -306,7 +319,7 @@ fn rsdl_item(
 /// the reference.
 fn reference_start(left: &SyntaxToken, offset: TextSize) -> TextSize {
     let mut start = offset;
-    let mut after_dot = false;
+    let mut precedes_dot = false;
     let mut current = Some(left.clone());
     while let Some(token) = current {
         let range = token.text_range();
@@ -315,16 +328,16 @@ fn reference_start(left: &SyntaxToken, offset: TextSize) -> TextSize {
             .text()
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '_');
-        let before_dot = token
+        let follows_dot = token
             .prev_token()
             .is_some_and(|previous| previous.kind() == SyntaxKind::Dot);
         let segment =
-            dot || (word && (token.kind() == SyntaxKind::Ident || after_dot || before_dot));
+            dot || (word && (token.kind() == SyntaxKind::Ident || precedes_dot || follows_dot));
         if !segment || range.start() >= start || range.end() < start {
             break;
         }
         start = range.start();
-        after_dot = dot;
+        precedes_dot = dot;
         current = token.prev_token();
     }
     start
@@ -353,7 +366,14 @@ enum RsdlSlot {
 /// cursor is not in a position the server completes, such as the name of a
 /// declaration or an attribute block.
 fn rsdl_slot(cursor: &Cursor, offset: TextSize) -> Option<RsdlSlot> {
-    match cursor.anchor.as_ref().map(SyntaxToken::kind) {
+    // A keyword after a dot is a segment of a reference (`veh.offers`), not
+    // the keyword that opens a slot.
+    let keyword = cursor.anchor.as_ref().filter(|anchor| {
+        anchor
+            .prev_token()
+            .is_none_or(|previous| previous.kind() != SyntaxKind::Dot)
+    });
+    match keyword.map(SyntaxToken::kind) {
         Some(SyntaxKind::OffersKw) => return Some(RsdlSlot::Offers),
         Some(SyntaxKind::RequiresKw) => return Some(RsdlSlot::Requires),
         Some(SyntaxKind::ForKw) => return Some(RsdlSlot::For),

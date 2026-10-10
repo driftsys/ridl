@@ -3378,6 +3378,7 @@ fn rsdl_completion_keeps_the_keyword_and_the_qualifier() {
     ];
     for (id, (what, cursor)) in (10..).zip(cursors) {
         let items = complete_at(&client, id, system.clone(), cursor);
+        assert!(!items.is_empty(), "after {what}: items are offered");
         for item in &items {
             if let Some(lt::CompletionTextEdit::Edit(edit)) = &item.text_edit {
                 assert!(
@@ -3411,7 +3412,50 @@ fn rsdl_completion_keeps_the_keyword_and_the_qualifier() {
     assert_eq!(edit.range, lt::Range::new(start, cursor));
     assert_eq!(edit.new_text, "veh.topology.Cruise");
 
-    shut_down(&client, 21);
+    // A bare reference with a dot, `Cruise.pr`, stays bare: the instance is
+    // matched and written by its label.
+    let text = RSDL_COMPLETION.replace(
+        "veh.adas.access,  }\n\x20 \n",
+        "veh.adas.access, Cruise.pr }\n\x20 \n",
+    );
+    did_open(&client, &system, &text);
+    let start = find_pos(&text, "Cruise.pr", 0);
+    let cursor = pos_after(&text, "Cruise.pr", 0);
+    let items = complete_at(&client, 22, system.clone(), cursor);
+    let item = items
+        .iter()
+        .find(|item| item.label == "Cruise.primary")
+        .unwrap_or_else(|| panic!("the instance is offered: {:?}", labels(&items)));
+    assert_eq!(item.filter_text, None, "{item:?}");
+    let Some(lt::CompletionTextEdit::Edit(edit)) = &item.text_edit else {
+        panic!("the item carries a text edit: {item:?}");
+    };
+    assert_eq!(edit.range, lt::Range::new(start, cursor));
+    assert_eq!(edit.new_text, "Cruise.primary");
+
+    // A keyword written as a segment after a dot is part of the reference:
+    // `veh.offers.Cr` and `veh.offers` are replaced from `veh`.
+    for (id, written) in (23..).zip(["veh.offers.Cr", "veh.offers"]) {
+        let text = RSDL_COMPLETION.replace(
+            "veh.adas.access,  }\n\x20 \n",
+            &format!("veh.adas.access, {written} }}\n\x20 \n"),
+        );
+        did_open(&client, &system, &text);
+        let needle = format!("{written} }}");
+        let start = find_pos(&text, &needle, 0);
+        let cursor = pos(start.line, start.character + written.len() as u32);
+        let items = complete_at(&client, id, system.clone(), cursor);
+        let item = items
+            .iter()
+            .find(|item| item.label == "Cruise")
+            .unwrap_or_else(|| panic!("`{written}`: the component is offered"));
+        let Some(lt::CompletionTextEdit::Edit(edit)) = &item.text_edit else {
+            panic!("`{written}`: the item carries a text edit: {item:?}");
+        };
+        assert_eq!(edit.range, lt::Range::new(start, cursor), "`{written}`");
+    }
+
+    shut_down(&client, 30);
     server.join().expect("thread joins").expect("clean exit");
 }
 
