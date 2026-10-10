@@ -106,12 +106,16 @@ text, so `GeneratedFile.content` is a `oneof` of `text` (a `string`) and
 note §5 had flagged this for this stage; this is the decision.
 
 **Options** are `{key, value}` pairs, not a `map<>`, because a `map<>` has no
-canonical order (IR specification §3 item 3). The host passes each in-tree
-backend none, and a plugin run from the command line receives an empty list — no
-flag sets an option yet; adding one is additive. What a backend does with a key
-it does not know is its own contract: every in-tree backend and the reference
-plugin refuse it with an error diagnostic, and the Rust backend reads one key,
-`wire-encoding`, whose one value today is `flatbuffers`.
+canonical order (IR specification §3 item 3). The host builds one request per
+package and backend, and each backend receives only the options of its own
+`[backend.<name>]` table in the root manifest. The one key the host sends is
+`encodings`; its value is the table's encoding names joined by `,` in manifest
+order, with no spaces. A backend with no table, or a table with no encoding,
+receives an empty list. A plugin run from the command line receives the table
+named after its `<language>`. What a backend does with a key it does not know,
+or a value it cannot honour, is its own contract: every in-tree backend and the
+reference plugin refuse it with an error diagnostic. The `wire-encoding` key is
+retired and no host sends it.
 
 **A diagnostic** is a severity and a message and nothing else: a backend has no
 source span, because the model carries none. An unset severity is an error, so a

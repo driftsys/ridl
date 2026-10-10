@@ -138,6 +138,7 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
             lints: LintScopes::default(),
             // No manifest: no header file.
             codegen_header: None,
+            backends: BTreeMap::new(),
             report_scope: None,
             // A source text has no directory, so no unit is recorded.
             units: BTreeMap::new(),
@@ -911,9 +912,20 @@ fn run_build_inner<E: From<std::io::Error>>(
         sources,
         lints,
         codegen_header,
+        backends,
         report_scope,
         ..
     } = load_and_check(&mut db, entry, &[]).map_err(|err| E::from(load_io_error(err)))?;
+    // The backends read names only; the spans served the loader's diagnostics.
+    let backends: BTreeMap<String, Vec<String>> = backends
+        .into_iter()
+        .map(|(language, table)| {
+            (
+                language,
+                table.encodings.into_iter().map(|(name, _)| name).collect(),
+            )
+        })
+        .collect();
 
     // The earlier catalogs per unit, computed from this compile before
     // anything else can fail, so a history that cannot be read is reported
@@ -1176,6 +1188,7 @@ fn run_build_inner<E: From<std::io::Error>>(
                 plugin_timeout,
                 selected.as_ref(),
                 codegen_header.as_deref(),
+                &backends,
                 &mut diagnostics,
             )?;
         }
@@ -1196,6 +1209,7 @@ fn run_build_inner<E: From<std::io::Error>>(
                 plugin_timeout,
                 selected.as_ref(),
                 codegen_header.as_deref(),
+                &backends,
                 &mut diagnostics,
             )?;
         }
@@ -1708,6 +1722,8 @@ struct Compiled {
     /// The normalised `[codegen] header-file` text
     /// ([`LoadedWorkspace::codegen_header`]).
     codegen_header: Option<String>,
+    /// The `[backend.<name>]` tables ([`LoadedWorkspace::backends`]).
+    backends: BTreeMap<String, ridl_core::BackendTable>,
     /// The member directory the entry lies in
     /// ([`LoadedWorkspace::report_scope`]).
     report_scope: Option<PathBuf>,
@@ -1738,6 +1754,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         mut sources,
         lints,
         codegen_header,
+        backends,
         report_scope,
         units: _,
     } = loaded;
@@ -1839,6 +1856,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         sources,
         lints,
         codegen_header,
+        backends,
         report_scope,
     }
 }
@@ -2197,6 +2215,7 @@ fn write_emits(
     plugin_timeout: Duration,
     deployment: Option<&v1::Deployment>,
     header: Option<&str>,
+    backends: &BTreeMap<String, Vec<String>>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> std::io::Result<()> {
     // One request per package, built only when something reads it: an IR
@@ -2213,6 +2232,14 @@ fn write_emits(
             header,
         )
     });
+    // Each backend is handed the request with its own `[backend.<name>]`
+    // options; a table for another backend is not visible to it.
+    let request_for = |language: &str| {
+        request.as_ref().map(|request| v1::CodegenRequest {
+            options: backend_options(backends, language),
+            ..request.clone()
+        })
+    };
     let raw = codegen::RawIr {
         package: ir,
         others,
@@ -2284,8 +2311,15 @@ fn write_emits(
                 continue;
             }
         };
-        let request = request.as_ref().expect("a code emit builds the request");
-        let response = backend.generate(request);
+        // The manifest names the codegen model's table `codegen-model`, after
+        // its `--emit` value; the backend itself reports the language `model`.
+        let table = if matches!(emit, Emit::CodegenModel) {
+            "codegen-model"
+        } else {
+            backend.language()
+        };
+        let request = request_for(table).expect("a code emit builds the request");
+        let response = backend.generate(&request);
         write_response(
             out_dir,
             Origin::InTree {
@@ -2297,9 +2331,9 @@ fn write_emits(
     }
 
     for plugin in plugins {
-        let request = request.as_ref().expect("a plugin builds the request");
+        let request = request_for(&plugin.language).expect("a plugin builds the request");
         let name = plugin.name();
-        match plugin::run(plugin, request, plugin_timeout) {
+        match plugin::run(plugin, &request, plugin_timeout) {
             Ok(response) => {
                 write_response(
                     out_dir,
@@ -2317,6 +2351,23 @@ fn write_emits(
         }
     }
     Ok(())
+}
+
+/// The options a backend receives for its `[backend.<name>]` table: none when
+/// the manifest has no table for `language` or the table names no encoding,
+/// otherwise one `encodings` option whose value joins the names with `,` in
+/// manifest order.
+fn backend_options(
+    backends: &BTreeMap<String, Vec<String>>,
+    language: &str,
+) -> Vec<v1::BackendOption> {
+    match backends.get(language) {
+        Some(names) if !names.is_empty() => vec![v1::BackendOption {
+            key: "encodings".to_string(),
+            value: names.join(","),
+        }],
+        _ => Vec::new(),
+    }
 }
 
 /// Writes the lowered system (rsdl reference §13) once for each IR dump in
@@ -2547,6 +2598,43 @@ mod render_lib_rs_tests {
                  extern crate alloc as std;\n"
             ),
             "lib.rs was:\n{lib}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod backend_options_tests {
+    use std::collections::BTreeMap;
+
+    use super::backend_options;
+
+    fn tables() -> BTreeMap<String, Vec<String>> {
+        BTreeMap::from([
+            (
+                "rust".to_string(),
+                vec!["flatbuffers".to_string(), "proto3".to_string()],
+            ),
+            ("kotlin".to_string(), vec!["flatbuffers".to_string()]),
+            ("proto".to_string(), Vec::new()),
+        ])
+    }
+
+    fn encodings(language: &str) -> Vec<(String, String)> {
+        backend_options(&tables(), language)
+            .into_iter()
+            .map(|option| (option.key, option.value))
+            .collect()
+    }
+
+    #[test]
+    fn the_rust_request_carries_the_rust_encodings_only() {
+        let pair = |value: &str| vec![("encodings".to_string(), value.to_string())];
+        assert_eq!(encodings("rust"), pair("flatbuffers,proto3"));
+        assert_eq!(encodings("kotlin"), pair("flatbuffers"));
+        assert!(encodings("typescript").is_empty());
+        assert!(
+            encodings("proto").is_empty(),
+            "a table that names no encoding sends no option"
         );
     }
 }

@@ -370,8 +370,11 @@ fn collect_lints(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) -> Li
 /// intact, not a failure of the typed manifest parse (as for [`RawLints`]).
 #[derive(Deserialize)]
 struct RawBackends {
-    backend: Option<Spanned<Shape<BTreeMap<String, Spanned<Shape<RawBackend>>>>>>,
+    backend: Option<Spanned<Shape<RawBackendTables>>>,
 }
+
+/// The `[backend.<name>]` tables of a manifest, keyed by backend name.
+type RawBackendTables = BTreeMap<String, Spanned<Shape<RawBackend>>>;
 
 #[derive(Default)]
 struct RawBackend {
@@ -1360,7 +1363,7 @@ version = \"1.0.0\"
 
     #[test]
     fn absent_backend_table_has_no_entry() {
-        let (manifest, _) = parse(&format!("{PACKAGE_HEAD}"));
+        let (manifest, _) = parse(PACKAGE_HEAD);
         assert!(manifest.expect("the manifest parses").backends.is_empty());
     }
 

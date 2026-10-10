@@ -1,0 +1,9 @@
+[package]
+name = "veh.tables"
+version = "1.0.0"
+
+[backend.rust]
+encodings = ["flatbuffers", "proto3"]
+
+[backend.kotlin]
+encodings = ["flatbuffers"]

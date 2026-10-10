@@ -70,9 +70,11 @@ message CodegenRequest {
   string header = 8;
 }
 
-// One backend option, as the host gives it. No flag sets one yet: the
-// in-process host passes each in-tree backend none, and a plugin run from
-// the command line receives an empty list.
+// One backend option, as the host gives it. The one key the host sends is
+// `encodings`: when the root manifest has a `[backend.<name>] encodings`
+// table for the backend, the value is its names joined by `,` in manifest
+// order, with no spaces (`flatbuffers,proto3`). A backend without such a
+// table receives an empty list. Each key appears once.
 message BackendOption {
   string key = 1;
   string value = 2;

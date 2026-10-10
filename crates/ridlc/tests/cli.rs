@@ -1660,6 +1660,63 @@ fn build_dumping_requests(entry: &Path, extra: &[&str]) -> (Vec<serde_json::Valu
     (parsed, code, stderr)
 }
 
+/// A plugin receives the options of its own `[backend.<name>]` table and no
+/// other: the fixture's manifest has tables for `rust` and `kotlin`, so a
+/// plugin started as `kotlin` is handed `encodings=flatbuffers` and one
+/// started as `swift` is handed none. Unix only, for the scripts.
+#[cfg(unix)]
+#[test]
+fn a_plugin_receives_its_own_backend_table() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let dir = TempDir::new("plugin-own-table");
+    let requests = dir.path().join("requests");
+    std::fs::create_dir_all(&requests).unwrap();
+    let mut args: Vec<std::ffi::OsString> = Vec::new();
+    for language in ["kotlin", "swift"] {
+        let script = dir.write(
+            &format!("ridlc-gen-{language}"),
+            &format!(
+                "#!/bin/sh\ncat > '{}'/{language}.json\n\
+                 printf '{{\"files\": [], \"diagnostics\": []}}\\n'\n",
+                requests.display()
+            ),
+        );
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        args.push("--plugin".into());
+        args.push(format!("{language}={}", script.display()).into());
+    }
+    let out = TempDir::new("plugin-own-table-out");
+    let entry = Path::new("tests/fixtures/backend-tables");
+    let mut full: Vec<&std::ffi::OsStr> = vec![
+        "build".as_ref(),
+        entry.as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "codegen-model".as_ref(),
+    ];
+    full.extend(args.iter().map(|arg| arg.as_os_str()));
+    let (code, stderr) = ridlc(&full);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+
+    let read = |language: &str| -> serde_json::Value {
+        let text = std::fs::read_to_string(requests.join(format!("{language}.json")))
+            .expect("the plugin was run");
+        serde_json::from_str(&text).expect("a request is JSON")
+    };
+    assert_eq!(
+        read("kotlin")["options"],
+        serde_json::json!([{"key": "encodings", "value": "flatbuffers"}])
+    );
+    assert!(
+        read("swift")
+            .get("options")
+            .is_none_or(|options| options.as_array().is_some_and(Vec::is_empty)),
+        "a plugin with no table is handed no option"
+    );
+}
+
 /// Every request a build hands a plugin carries the selected deployment,
 /// whichever package the request is run for. Three cases: one deployment in
 /// the workspace and no flag, a flag that names one of two, and two

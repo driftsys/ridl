@@ -44,7 +44,7 @@ use crate::db::{InputFile, RidlDatabase, parse_file};
 use crate::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span};
 use crate::interface_lock;
 use crate::lint::{LintLevels, LintScopes};
-use crate::manifest::{Manifest, ManifestKind, TimingDefaults, parse_manifest};
+use crate::manifest::{BackendTable, Manifest, ManifestKind, TimingDefaults, parse_manifest};
 use crate::package::{Package, PackageLock, PackageOrigin, Workspace, package_declarations};
 
 /// The result of [`load_workspace`]: the salsa [`Workspace`] input, the
@@ -65,6 +65,10 @@ pub struct LoadedWorkspace {
     /// `None` when no file is named, when the file holds no text, and in
     /// single-file mode.
     pub codegen_header: Option<String>,
+    /// The root manifest's `[backend.<name>]` tables, keyed by backend name;
+    /// empty when the root names none and in single-file mode. A workspace
+    /// member's manifest cannot carry one (MANI-016).
+    pub backends: BTreeMap<String, BackendTable>,
     /// The member directory the entry lies in, when the entry is inside a
     /// member of the loaded workspace ([`find_root`] walked from the member to
     /// its workspace, or the entry named a path below a member); `None` for
@@ -278,6 +282,7 @@ pub fn load_workspace_with(
         sources: loader.sources,
         lints: loader.lints,
         codegen_header: loader.codegen_header,
+        backends: loader.backends,
         report_scope,
         units: loader.units,
     })
@@ -556,6 +561,8 @@ struct Loader {
     lints: LintScopes,
     /// The workspace root's (or standalone package's) normalised header text.
     codegen_header: Option<String>,
+    /// The workspace root's (or standalone package's) `[backend.<name>]` tables.
+    backends: BTreeMap<String, BackendTable>,
     /// Every member directory of a loaded workspace, in the path form of the
     /// files recorded under it. Empty outside workspace mode.
     member_dirs: Vec<PathBuf>,
@@ -588,12 +595,13 @@ impl Loader {
             defaults,
             lints,
             codegen_header_file,
-            backends: _,
+            backends,
             backend_span: _,
         }) = manifest
         else {
             return Ok(());
         };
+        self.backends = backends;
         if let Some((relative, range)) = codegen_header_file {
             let path = root.join(&relative);
             match fs::read_to_string(&path) {
@@ -3246,6 +3254,25 @@ service:veh.common.climate 2
             loaded.codegen_header.as_deref(),
             Some("SPDX-License-Identifier: MIT")
         );
+    }
+
+    #[test]
+    fn root_backend_tables_are_carried_out_of_the_load() {
+        let dir = TempDir::new("backend-tables");
+        dir.write(
+            "ridl.toml",
+            &format!("{PACKAGE_A}\n[backend.rust]\nencodings = [\"flatbuffers\", \"proto3\"]\n"),
+        );
+        dir.write("a.typl", "package a\ntype A: integer [0..1]\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
+        let names: Vec<&str> = loaded.backends["rust"]
+            .encodings
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect();
+        assert_eq!(names, ["flatbuffers", "proto3"]);
     }
 
     #[test]
