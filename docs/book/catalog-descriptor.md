@@ -126,7 +126,7 @@ does not read, makes `ridl describe` exit with code 2. The
   file; the schema `version`; the `interfaces`; the `retired` interfaces,
   each with its name and number, so a reader can refuse a peer that still uses
   one; and `compatible`, the hashes of earlier catalogs of the unit that the
-  toolchain judged compatible with this one (see
+  toolchain judged compatible or carried over unchanged with this one (see
   [The compatible catalogs](#the-compatible-catalogs)).
 - **Each interface**: its `name`, qualified relative to the unit (`Cabin` for
   an interface of the root source package, `cluster.Speed` for one of the
@@ -164,10 +164,11 @@ emits.
 
 The `hash` identifies one version of the unit exactly. `compatible` lists, as
 32-byte hashes, the earlier versions of the unit that `ridl diff`'s classifier,
-scoped to the unit, judged compatible with this one, newest first. When the current hash is the
-newest published one, the catalog did not change, and the published list is
-carried whatever the classifier's verdict. The current hash is never in it. A reader built for one of those versions can be accepted by
-a provider that serves this one, which is the use the frame specification makes
+scoped to the unit, judged compatible with this one, newest first. When the
+current hash is the newest published one, the catalog did not change, and the
+published list is carried whatever the classifier's verdict. The current hash
+is never in it. A reader built for one of those versions can be accepted by a
+provider that serves this one, which is the use the frame specification makes
 of the list ([section 6.1][attach]). No runtime in this repository accepts an
 `attach` on the strength of the list.
 

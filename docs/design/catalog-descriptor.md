@@ -158,13 +158,13 @@ the order given. It returns `Result<Vec<u8>, LowerError>`.
   existed verifies and reads as absent, and `verify` walks the field when it is
   present. `lower` takes the unit's list as a parameter and writes it in the
   order given; it computes none. The list holds the hashes of the earlier
-  catalogs of the unit that the toolchain judged compatible with this one,
-  newest first, and never this catalog's own hash. `ridl describe` prints it as
-  `compatible`, an array of 32-number arrays, empty when the field is absent or
-  the list is empty. The codegen model carries the same list as
-  `Catalog.compatible` (`repeated bytes`, field 4), for every request of every
-  source package of the unit. How the list is computed is stated under "The
-  catalog hash".
+  catalogs of the unit that the toolchain judged compatible or carried over
+  unchanged with this one, newest first, and never this catalog's own hash.
+  `ridl describe` prints it as `compatible`, an array of 32-number arrays, empty
+  when the field is absent or the list is empty. The codegen model carries the
+  same list as `Catalog.compatible` (`repeated bytes`, field 4), for every
+  request of every source package of the unit. How the list is computed is
+  stated under "The catalog hash".
 - **Members.** One `Member` per interaction, in body order: `name`, `ordinal`
   (the position in the body, ridl §11), `kind` (`Signal`, `Event`, `Command`,
   `Query`, `Fixed`), `payloads`, and `timing` (`mode`, `min_us`, `max_us`) when
@@ -207,12 +207,12 @@ wire schema a build emits.
 
 **The compatible catalogs.** The hash identifies one catalog exactly. Beside it,
 the descriptor and the codegen model list the earlier hashes the toolchain
-judged compatible with the current catalog, so that a provider can accept an
-`attach` that names one of them (frame specification §6.1). The list is not an
-input of the hash, and a test checks that two builds differing only in the list
-have the same hash. The rule is
+judged compatible or carried over unchanged with the current catalog, so that a
+provider can accept an `attach` that names one of them (frame specification
+§6.1). The list is not an input of the hash, and a test checks that two builds
+differing only in the list have the same hash. The rule is
 [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15, amended
-2026-10-09, as built:
+2026-10-09 and 2026-10-10, as built:
 
 - **The chain file.** `ridl baseline` writes `<unit>.catalogs` beside the
   snapshots, one per unit with an interface shape: a header line that starts

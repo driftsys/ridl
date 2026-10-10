@@ -53,14 +53,15 @@ breaking change restarts it. The reasoning trail is
 (lane H stage H2, ruling R-1 of its driver); the implementation is its plan,
 tracked as driftsys/ridl#787. Decisions 1 to 14 are unchanged.
 
-**Amended 2026-10-10 — decision 15, the unchanged catalog.** When a unit's
-current catalog hash equals the first hash of its published `<unit>.catalogs`
-file, the chain is carried whatever the unit's verdict, at publication and at
-the build: the catalog did not change, so every hash the file lists is still
-compatible with it. A breaking change that leaves the hash unchanged, such as
-the removal of a declaration no interface of the unit reaches, no longer
-restarts the chain. Only the first hash has this effect; a current hash equal to
-an older hash of the file follows the verdict. Ruling R-H2-3 of
+**Amended 2026-10-10 — decision 15, the unchanged catalog.** When the published
+baseline holds a package of the unit and the unit's current catalog hash equals
+the first hash of its published `<unit>.catalogs` file, the chain is carried
+whatever the unit's verdict, at publication and at the build: the catalog did
+not change, so every hash the file lists is still compatible with it. A breaking
+change that leaves the hash unchanged, such as the removal of a declaration no
+interface of the unit reaches, no longer restarts the chain. Only the first hash
+has this effect; a current hash equal to an older hash of the file follows the
+verdict. Ruling R-H2-3 of
 [the catalog compatibility design note](../wip/2026-10-09-catalog-compat-design.md)
 is amended to match, and the change is tracked as driftsys/ridl#787. Decisions 1
 to 14 are unchanged.
@@ -625,25 +626,26 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
       twice. A `Breaking` verdict, a replaced baseline with no such file, and a
       first publication each write the one new hash. An earlier hash is the
       value the publishing toolchain computed, never recomputed from a snapshot.
-      **Amended 2026-10-10:** when the fresh catalog hash equals the first hash
-      of the replaced baseline's file, the hashes are carried whatever the
-      verdict, because the catalog did not change.
+      **Amended 2026-10-10:** when the replaced baseline holds a package of the
+      unit and the fresh catalog hash equals the first hash of its file, the
+      hashes are carried whatever the verdict, because the catalog did not
+      change.
     - **The list is emitted at the build, and the `ridl` facade computes it.**
       `ridl build` discovers `.ridl/baseline/` as `ridl check` does and, per
       unit, classifies the baseline against the current tree: `Compatible` or
       `Identical` gives every hash of the file except the current catalog's own;
       `Breaking`, no baseline, no snapshot and no file each give an empty list,
       which is the exact-match behaviour the hash alone gives. **Amended
-      2026-10-10:** when the current catalog hash equals the file's first hash,
-      the file's other hashes are given whatever the verdict, because the
-      catalog did not change; a current hash equal to an older hash of the file
-      follows the verdict. A baseline that is present and cannot be loaded fails
-      the build, exit 2. The facade passes the per-unit lists to
-      `ridlc::run_build_with` as an input of the build, and `ridlc` writes them
-      into the descriptor and the codegen model without reading any baseline:
-      the compiler stays the pure source → IR function of
-      [ADR-0008](ADR-0008-e2-execution.md) decisions 9 and 14, and `ridlc build`
-      writes an empty list.
+      2026-10-10:** when the published baseline holds a package of the unit and
+      the current catalog hash equals the file's first hash, the file's other
+      hashes are given whatever the verdict, because the catalog did not change;
+      a current hash equal to an older hash of the file follows the verdict. A
+      baseline that is present and cannot be loaded fails the build, exit 2. The
+      facade passes the per-unit lists to `ridlc::run_build_with` as an input of
+      the build, and `ridlc` writes them into the descriptor and the codegen
+      model without reading any baseline: the compiler stays the pure source →
+      IR function of [ADR-0008](ADR-0008-e2-execution.md) decisions 9 and 14,
+      and `ridlc build` writes an empty list.
     - **The verdict is `ridl diff`'s, scoped to the unit.**
       `ridl_diff::unit_verdict` takes the maximum over the changes whose package
       is one of the unit's source packages on either side, or whose top-level
