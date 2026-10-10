@@ -68,8 +68,10 @@ fn a_relative_path_below_the_package_root_checks_the_package() {
         check_in(&dir, "src", "b.ridl"),
     ];
     let _ = std::fs::remove_dir_all(&dir);
-    for (code, text) in results {
-        assert_eq!(code, Some(1), "{text}");
+    for (code, text) in &results {
+        assert_eq!(*code, Some(1), "{text}");
         assert!(text.contains("TYPL-011"), "{text}");
     }
+    // A root above the current directory keeps its relative form.
+    assert!(results[2].1.contains("../bad.ridl"), "{}", results[2].1);
 }
