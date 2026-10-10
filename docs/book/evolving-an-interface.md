@@ -108,17 +108,23 @@ records the identity.
 the report's verdict is the worst of them. `identical` means there is no change
 at all. A verdict says whether a consumer built against the old version still
 works with the new one. It does not say whether the catalog hash changed, and
-the two are separate questions: the hash identifies an exact version, and a
-compatible change still makes a new version.
+the two are separate questions: the hash identifies an exact version. A
+compatible change that reaches the hash makes a new version, and a change that
+leaves the hash unchanged makes none.
 
-| Kind of change                                                                    | Verdict    | The catalog hash                              | The list of compatible catalogs                     |
-| --------------------------------------------------------------------------------- | ---------- | --------------------------------------------- | --------------------------------------------------- |
-| None                                                                              | identical  | unchanged                                     | unchanged                                           |
-| A doc comment, a label or `deprecated` changes                                    | compatible | unchanged                                     | unchanged                                           |
-| A declaration is added that no interface reaches                                  | compatible | unchanged                                     | unchanged                                           |
-| A compatible change to an interface, or to a declaration that an interface reaches | compatible | changes                                       | the earlier hashes stay, and the previous one joins |
-| A breaking change to an interface, or to a declaration that an interface reaches  | breaking   | changes                                       | the list restarts with the new hash alone           |
-| A breaking change to a declaration of the unit that no interface reaches          | breaking   | unchanged                                     | unchanged: the hash did not change                  |
+No runtime in this workspace performs the check at `attach`. The last column
+states what the frame specification
+([section 6.1](reference/frame.md#61-attach-and-attached)) specifies for an
+older consumer, built against the version before the change.
+
+| Kind of change                                                                     | Verdict    | The catalog hash | The list in the descriptor and in the history file                                          | At `attach`, by §6.1                                       |
+| ---------------------------------------------------------------------------------- | ---------- | ---------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| None                                                                               | identical  | unchanged        | unchanged                                                                                   | accepted: the hash is the provider's own                   |
+| A doc comment, a label or `deprecated` changes                                     | compatible | unchanged        | unchanged                                                                                   | accepted: the hash is the provider's own                   |
+| A declaration is added that no interface reaches                                   | compatible | unchanged        | unchanged                                                                                   | accepted: the hash is the provider's own                   |
+| A compatible change to an interface, or to a declaration that an interface reaches | compatible | changes          | the earlier hashes stay, and the previous one joins                                         | accepted: the earlier hash is in the list                  |
+| A breaking change to an interface, or to a declaration that an interface reaches   | breaking   | changes          | the descriptor's list is empty; the history file restarts with the new hash alone           | refused with `catalog_mismatch`: the earlier hash is not listed |
+| A breaking change to a declaration of the unit that no interface reaches           | breaking   | unchanged        | unchanged: the hash did not change                                                          | accepted: the hash is the provider's own                   |
 
 The "compatible" and "breaking" rows cover the categories that `ridl diff`
 prints. The rules are in the
@@ -184,17 +190,15 @@ a5973898ecf39cce4b375906dfdbcafc795108832593b70dd49f3e75a90ca841
 ```
 
 The first hash is the catalog hash of the baseline being published, the same
-hash that `ridl build --emit catalog` computes. The hashes after it are the ones
-in the file that the publication replaces, copied as they are and never
-recomputed from a snapshot. They are copied when the unit's verdict from
-the replaced snapshots to the new ones is compatible or identical, and also when
-the new hash equals the first hash of the replaced file. After a
-breaking change that changes the hash, the file holds the new hash alone, and a consumer built before
-the break is not on the list. A unit that had no published snapshot starts a
-chain in the same way.
+hash that `ridl build --emit catalog` computes. The hashes after it are copied
+from the replaced file when the change is compatible or the hash is unchanged,
+and a breaking change that changes the hash restarts the file with the new hash
+alone; the rules are in the
+[`ridl baseline` reference](cli-reference.md#ridl-baseline).
 
-A file that cannot be read, or that has a line that is neither a comment nor a
-hash, or that lists a hash twice, stops `ridl baseline` with exit 2. The message
+For a unit with a published snapshot, a file that cannot be read, or that has a
+line that is neither a comment nor a hash, or that lists a hash twice, stops
+`ridl baseline` with exit 2, and `ridl build` also exits 2. The message
 names the file and the line, and says to repair the file or remove it to start
 the unit's chain again.
 
@@ -218,7 +222,9 @@ The list is empty in these cases:
 - the unit has no `<unit>.catalogs` file;
 - the unit's verdict from the baseline to the working tree is breaking and the
   current hash differs from the first hash of the file.
-- the build has an error diagnostic, so it writes no artifacts.
+
+A build with an error diagnostic writes no list. A build whose only errors are
+`RSDL-7xx` still writes its artifacts, with an empty list.
 
 `ridlc build` reads no baseline, so the descriptors and the codegen requests it
 writes carry an empty list. `ridl build` is the command that fills it.
