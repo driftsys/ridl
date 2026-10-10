@@ -113,14 +113,13 @@ graph of the crate `ridl build` generates for `examples/cabin`, which runs under
 `ridl-descriptor` is published to crates.io, after `ridl-ir` and before `ridlc`
 (`.github/workflows/crates-io-release.yml`).
 
-**The `std` feature.** `ridl-descriptor` has two features, `std` and `dedup`,
-both on by default. `std` carries the half of the crate that builds a
-descriptor: the modules `lower`, `number`, `hash` and `describe`, and the
-dependencies `ridl-ir` and `serde_json`. With the feature off the crate is
-`no_std` with `alloc` and keeps what an engine that reads a descriptor needs:
-the generated accessors, `verify`, `finish`, `VerifyError` and the constants.
-`just wasm-check` checks that build for `thumbv7em-none-eabihf`, a target with
-no standard library.
+**The features.** `ridl-descriptor` has two features, `std` and `dedup`, both on
+by default. `std` carries the half of the crate that builds a descriptor: the
+modules `lower`, `number`, `hash` and `describe`, and the dependencies `ridl-ir`
+and `serde_json`. With the feature off the crate is `no_std` with `alloc` and
+keeps what an engine that reads a descriptor needs: the generated accessors,
+`verify`, `finish`, `VerifyError` and the constants. `just wasm-check` checks
+that build for `thumbv7em-none-eabihf`, a target with no standard library.
 
 **The `dedup` feature.** It turns on the three planus builder caches, which
 deduplicate vtables, strings and byte vectors when `finish` builds a descriptor.

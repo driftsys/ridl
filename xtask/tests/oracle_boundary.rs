@@ -419,8 +419,8 @@ fn the_generated_crate_reaches_no_planus_crate() {
     }
 }
 
-/// The names of the crates `cargo tree` lists in the normal dependency graph
-/// of `ridl-descriptor` with the given extra arguments.
+/// The `cargo tree` listing of the normal dependency graph of
+/// `ridl-descriptor`, with the given extra arguments.
 ///
 /// `cargo metadata` cannot answer this: it takes one feature set for the
 /// whole workspace, and other members turn on `ridl-descriptor`'s defaults.
@@ -462,5 +462,19 @@ fn the_descriptor_reader_reaches_no_hashing_crate() {
         default.lines().any(|line| line.starts_with("hashbrown")),
         "`hashbrown` is not in `ridl-descriptor`'s graph with default features \
          on, so the check above cannot fail:\n{default}"
+    );
+    // The caches belong to `dedup`, not to `std`: `dedup` alone brings the
+    // hashing crates and `std` alone brings neither.
+    let dedup = descriptor_tree(&["--no-default-features", "--features", "dedup"]);
+    assert!(
+        dedup.lines().any(|line| line.starts_with("foldhash")),
+        "`dedup` no longer brings `foldhash`:\n{dedup}"
+    );
+    let std_only = descriptor_tree(&["--no-default-features", "--features", "std"]);
+    assert!(
+        !std_only
+            .lines()
+            .any(|line| line.starts_with("hashbrown") || line.starts_with("foldhash")),
+        "`std` brings a hashing crate:\n{std_only}"
     );
 }

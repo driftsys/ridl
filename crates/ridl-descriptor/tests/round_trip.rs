@@ -166,7 +166,8 @@ fn a_repeated_string_is_written_once() {
     assert_eq!(count, 1, "the role `value` is written once");
     // The vtable cache shows in the length: the two interfaces, and their
     // members and payloads, have the same shape and share one vtable each.
-    // Without planus's `vtable-cache` (part of `dedup`) the same catalog is 652 bytes. The byte-vector
+    // Without planus's `vtable-cache` (part of `dedup`) the same catalog is
+    // 652 bytes. The byte-vector
     // cache has nothing to share in this catalog, so it is not pinned here.
     assert_eq!(
         bytes.len(),

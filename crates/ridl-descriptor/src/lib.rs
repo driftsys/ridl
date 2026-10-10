@@ -14,6 +14,11 @@
 //! the crate is `no_std` with `alloc` and keeps what an engine that reads a
 //! descriptor needs: the generated accessors, [`verify`], [`finish`],
 //! [`VerifyError`] and the constants.
+//!
+//! The `dedup` feature, on by default, makes [`finish`] write each repeated
+//! vtable, string and byte vector once, with the planus builder caches. A
+//! reader needs none of that: with the feature off no hashing crate is linked,
+//! and [`finish`] writes a larger but valid descriptor.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
