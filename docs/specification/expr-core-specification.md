@@ -31,7 +31,7 @@ Version: 0.1.0 — Draft
 6. [The Reference Environment](#6-the-reference-environment)
 7. [Evaluation Domains](#7-evaluation-domains)
 8. [The RIDL-306 Boundary](#8-the-ridl-306-boundary)
-9. [Worked Examples — the ridl §13 Contracts](#9-worked-examples--the-ridl-13-contracts)
+9. [Worked Examples — the ridl Section 13 Contracts](#9-worked-examples--the-ridl-section-13-contracts)
 10. [Alternatives Considered](#10-alternatives-considered)
 
 ---
@@ -398,7 +398,7 @@ contract, not a boundary violation.
 
 ---
 
-## 9. Worked Examples — the ridl §13 Contracts
+## 9. Worked Examples — the ridl Section 13 Contracts
 
 Every guaranteed-subset example in the ridl reference, type-checked under §5 and
 §6. The declarations are ridl §13/§14.0's:
