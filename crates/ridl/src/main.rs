@@ -622,8 +622,9 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
 /// ([`catalogs::compatible_catalogs`]), and only when the build writes a
 /// catalog descriptor or generates code, which are the artifacts that carry
 /// it: an IR dump reads no baseline, as `ridl baseline` does not. `ridlc`
-/// itself reads no baseline (ADR-0008 decisions 9 and 14): the facade computes
-/// the list and passes it in.
+/// itself reads no baseline (ADR-0008 decisions 9 and 14): the facade supplies
+/// the function that computes the list from the build's own checked packages
+/// (`ridlc::run_build_computing`), so the workspace is compiled once.
 fn run_build(
     path: &Path,
     out_dir: &Path,
@@ -634,16 +635,20 @@ fn run_build(
     deployment: Option<&str>,
 ) -> ExitCode {
     let carries_the_list = !plugins.is_empty() || emits.iter().any(|emit| !emit.is_ir_dump());
-    let compatible = if carries_the_list {
-        let mut db = ridl_core::RidlDatabase::default();
-        match catalogs::compatible_catalogs(&mut db, path) {
-            Ok(compatible) => compatible,
-            Err(code) => return code,
-        }
-    } else {
-        BTreeMap::new()
+    // The list is computed from the build's own compile, so the workspace is
+    // compiled once. An error the computation reports has already been
+    // printed; the cell carries its exit code out of the build.
+    let failure: std::cell::Cell<Option<ExitCode>> = std::cell::Cell::new(None);
+    let mut db = ridl_core::RidlDatabase::default();
+    let mut compute = |checked: &[&ridl_ir::v2::Package],
+                       std: &ridl_ir::v2::Package,
+                       names_imports: bool| {
+        catalogs::compatible_catalogs(&mut db, path, checked, std, names_imports).map_err(|code| {
+            failure.set(Some(code));
+            std::io::Error::other("the compatible catalogs could not be computed")
+        })
     };
-    finish(ridlc::run_build_with(
+    let run = ridlc::run_build_computing(
         path,
         out_dir,
         emits,
@@ -652,8 +657,12 @@ fn run_build(
         frozen,
         ApplyLints::Yes,
         deployment,
-        &compatible,
-    ))
+        carries_the_list.then_some(&mut compute),
+    );
+    if let Some(code) = failure.take() {
+        return code;
+    }
+    finish(run)
 }
 
 /// Publishes the workspace at `path` as a baseline.
@@ -720,9 +729,16 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
     // `interface_refusals` refuses a provisional interface number and a
     // published number the fresh snapshot neither carries nor retires (lock
     // design §8). Both gates run, so one run reports every refusal.
+    let sets = match PublicationSets::load(&out_dir, &staging) {
+        Ok(sets) => sets,
+        Err(code) => {
+            let _ = std::fs::remove_dir_all(&staging);
+            return code;
+        }
+    };
     let mut refused = false;
     for gate in [untombstoned_removals, interface_refusals] {
-        match gate(path, &out_dir, &staging, &mut run) {
+        match gate(path, &sets, &mut run) {
             Ok(hit) => refused |= hit,
             Err(code) => {
                 let _ = std::fs::remove_dir_all(&staging);
@@ -737,8 +753,9 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
 
     // The histories are written into the staging directory only once both
     // gates passed, so a refused run leaves every published history as it was.
-    let mut db = ridl_core::RidlDatabase::default();
-    if let Err(code) = catalogs::write_catalog_histories(&mut db, &staging, &out_dir) {
+    if let Err(code) =
+        catalogs::write_catalog_histories(&staging, &out_dir, &sets.published, &sets.fresh)
+    {
         let _ = std::fs::remove_dir_all(&staging);
         return code;
     }
@@ -753,6 +770,41 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
     }
 
     finish(Ok(run))
+}
+
+/// The two snapshot sets a publication compares, loaded once for the
+/// publication gates and the catalog histories: the published baseline in
+/// `out_dir` (empty when the directory does not exist or holds no snapshot)
+/// and the snapshots just built in the staging directory.
+struct PublicationSets {
+    published: Vec<ridl_ir::v2::Package>,
+    fresh: Vec<ridl_ir::v2::Package>,
+    /// `ridl_diff::diff_sets` of the two sets, computed once for both gates;
+    /// `None` when the published set is empty.
+    report: Option<ridl_diff::DiffReport>,
+}
+
+impl PublicationSets {
+    /// Reads the published side through [`load_published`] first and the
+    /// staged side second, so the first error reported is the one the gates
+    /// reported when each read its own sets.
+    fn load(out_dir: &Path, staging: &Path) -> Result<Self, ExitCode> {
+        let published = if out_dir.is_dir() {
+            load_published(out_dir)?
+        } else {
+            Vec::new()
+        };
+        let fresh = load_snapshots(
+            &snapshot_files(staging).map_err(report_diff_side_error)?,
+            None,
+        )?;
+        let report = (!published.is_empty()).then(|| ridl_diff::diff_sets(&published, &fresh));
+        Ok(Self {
+            published,
+            fresh,
+            report,
+        })
+    }
 }
 
 /// Compares the baseline about to be replaced against the snapshots just built
@@ -787,23 +839,13 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
 /// snapshots declaring one package (driftsys/ridl#339 case 1).
 fn untombstoned_removals(
     entry: &Path,
-    out_dir: &Path,
-    staging: &Path,
+    sets: &PublicationSets,
     run: &mut CliRun,
 ) -> Result<bool, ExitCode> {
-    if !out_dir.is_dir() {
+    let Some(report) = &sets.report else {
         return Ok(false);
-    }
-    let published = load_published(out_dir)?;
-    if published.is_empty() {
-        return Ok(false);
-    }
-    let fresh = load_snapshots(
-        &snapshot_files(staging).map_err(report_diff_side_error)?,
-        None,
-    )?;
-
-    let report = ridl_diff::diff_sets(&published, &fresh);
+    };
+    let published = &sets.published;
     // Parsing every source file is wasted work on the common republish that
     // carries no refused change at all, so the index is built only once the
     // first one is actually met.
@@ -821,7 +863,7 @@ fn untombstoned_removals(
         refusals.push(Diagnostic {
             code: DiagCode::RIDL_408,
             severity: Severity::Error,
-            message: untombstoned_removal_message(change, &published),
+            message: untombstoned_removal_message(change, published),
             primary: index.span_of(&change.path, &mut run.sources),
             labels: Vec::new(),
             fixits: Vec::new(),
@@ -984,17 +1026,13 @@ fn published_ordinal(published: &[ridl_ir::v2::Package], path: &str) -> Option<u
 /// same reason.
 fn interface_refusals(
     entry: &Path,
-    out_dir: &Path,
-    staging: &Path,
+    sets: &PublicationSets,
     run: &mut CliRun,
 ) -> Result<bool, ExitCode> {
-    let fresh = load_snapshots(
-        &snapshot_files(staging).map_err(report_diff_side_error)?,
-        None,
-    )?;
+    let fresh = &sets.fresh;
     let mut index: Option<DeclIndex> = None;
     let mut refusals = Vec::new();
-    for package in &fresh {
+    for package in fresh {
         for shape in package.shapes() {
             if !shape.interface.provisional {
                 continue;
@@ -1011,27 +1049,24 @@ fn interface_refusals(
         }
     }
 
-    if out_dir.is_dir() {
-        let published = load_published(out_dir)?;
-        if !published.is_empty() {
-            let report = ridl_diff::diff_sets(&published, &fresh);
-            let mut refused_numbers = BTreeSet::new();
-            for change in &report.changes {
-                for (package, shape) in dropped_numbers(change, &published, &fresh) {
-                    if !refused_numbers.insert((package.name.as_str(), shape.interface.number)) {
-                        continue;
-                    }
-                    let unit = published_unit(package, &fresh);
-                    let gone = ridl_ir::v2::packages_of_unit(unit, &fresh).next().is_none();
-                    refusals.push(Diagnostic {
-                        code: DiagCode::RIDL_412,
-                        severity: Severity::Error,
-                        message: dropped_number_message(package, &shape, unit, gone),
-                        primary: detached_span(),
-                        labels: Vec::new(),
-                        fixits: Vec::new(),
-                    });
+    if let Some(report) = &sets.report {
+        let published = &sets.published;
+        let mut refused_numbers = BTreeSet::new();
+        for change in &report.changes {
+            for (package, shape) in dropped_numbers(change, published, fresh) {
+                if !refused_numbers.insert((package.name.as_str(), shape.interface.number)) {
+                    continue;
                 }
+                let unit = published_unit(package, fresh);
+                let gone = ridl_ir::v2::packages_of_unit(unit, fresh).next().is_none();
+                refusals.push(Diagnostic {
+                    code: DiagCode::RIDL_412,
+                    severity: Severity::Error,
+                    message: dropped_number_message(package, &shape, unit, gone),
+                    primary: detached_span(),
+                    labels: Vec::new(),
+                    fixits: Vec::new(),
+                });
             }
         }
     }
@@ -1265,22 +1300,18 @@ fn publish_baseline(staging: &Path, out_dir: &Path) -> std::io::Result<()> {
     std::fs::remove_dir_all(staging)
 }
 
-/// Every `*.catalogs` file directly in `dir`.
+/// Every `*.catalogs` file directly in `dir`, in file-name order.
 fn catalogs_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-    for entry in std::fs::read_dir(dir)? {
-        let path = entry?.path();
-        if path.is_file()
-            && path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.ends_with(ridl_core::catalog_history::FILE_SUFFIX))
-        {
-            files.push(path);
-        }
-    }
-    files.sort();
-    Ok(files)
+    ridlc::diff_side::files_matching(dir, is_catalogs_file)
+}
+
+/// Whether `path` is a `*.catalogs` file.
+fn is_catalogs_file(path: &Path) -> bool {
+    path.is_file()
+        && path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.ends_with(ridl_core::catalog_history::FILE_SUFFIX))
 }
 
 /// Where to read the baseline from, if anywhere.

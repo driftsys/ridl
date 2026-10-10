@@ -12,21 +12,23 @@ use crate::{DiffReport, Verdict};
 /// [`Verdict::Identical`] when none concerns the unit. `old` and `new` are the
 /// two package sets the report compared.
 ///
-/// The function reads each change's [`Change::path`](crate::Change::path),
-/// which the walk builds as `<package>/<name>[/<member>...]`: the first
-/// `/`-separated segment is the dotted name of the package that holds the new
-/// side, or the old side when the package is gone, and the second, when
-/// present, is the bare name of a package-level declaration, interface or
-/// service of that package. A package name holds
-/// dots and a declaration name holds none, so the first two segments joined
-/// by `.` are the declaration's canonical name, the key that
-/// [`reachable_decls`] uses.
+/// A caller that asks for several units of one diff builds a
+/// [`UnitVerdicts`] once and calls [`UnitVerdicts::verdict`] per unit; this
+/// function builds one for a single call.
+///
+/// The change's package and declaration come from
+/// [`Change::package`](crate::Change::package) and
+/// [`Change::declaration`](crate::Change::declaration): the dotted name of
+/// the package that holds the new side, or the old side when the package is
+/// gone, and, when present, the bare name of a package-level declaration,
+/// interface or service of that package. A package name holds dots and a
+/// declaration name holds none, so the two joined by `.` are the
+/// declaration's canonical name, the key that [`reachable_decls`] uses.
 ///
 /// A change concerns `unit` when either holds:
 ///
-/// - its first segment names a package whose unit ([`unit_of`]) is `unit`, in
-///   `old` or in `new`;
-/// - its first two segments, joined by `.`, are a key of
+/// - its package's unit ([`unit_of`]) is `unit`, in `old` or in `new`;
+/// - its package and declaration, joined by `.`, are a key of
 ///   `reachable_decls(unit, old)` or of `reachable_decls(unit, new)`: a
 ///   declaration of another unit that an interface shape of `unit` reaches on
 ///   either side.
@@ -37,34 +39,62 @@ use crate::{DiffReport, Verdict};
 /// [`DiffReport::verdict`] and its [`DiffReport::system`] changes are not
 /// read.
 pub fn unit_verdict(report: &DiffReport, unit: &str, old: &[Package], new: &[Package]) -> Verdict {
-    let packages: BTreeSet<&str> = old
-        .iter()
-        .chain(new)
-        .filter(|pkg| unit_of(pkg) == unit)
-        .map(|pkg| pkg.name.as_str())
-        .collect();
-    let old_refs: Vec<&Package> = old.iter().collect();
-    let new_refs: Vec<&Package> = new.iter().collect();
-    let reached_old = reachable_decls(unit, &old_refs);
-    let reached_new = reachable_decls(unit, &new_refs);
+    UnitVerdicts::new(report, old, new).verdict(unit)
+}
 
-    report
-        .changes
-        .iter()
-        .filter(|change| {
-            let mut segments = change.path.split('/');
-            let package = segments.next().unwrap_or_default();
-            if packages.contains(package) {
-                return true;
-            }
-            segments.next().is_some_and(|name| {
-                let canonical = format!("{package}.{name}");
-                reached_old.contains_key(&canonical) || reached_new.contains_key(&canonical)
+/// The per-unit verdicts of one diff, with the work every unit shares done
+/// once: the package references of both sides and the canonical key of each
+/// change. See [`unit_verdict`] for what concerns a unit.
+pub struct UnitVerdicts<'a> {
+    old: Vec<&'a Package>,
+    new: Vec<&'a Package>,
+    /// Each change's package, canonical declaration key (absent for a change
+    /// to the package itself) and verdict.
+    changes: Vec<(&'a str, Option<String>, Verdict)>,
+}
+
+impl<'a> UnitVerdicts<'a> {
+    /// Prepares the verdicts of `report`, the diff of `old` against `new`.
+    pub fn new(report: &'a DiffReport, old: &'a [Package], new: &'a [Package]) -> Self {
+        Self {
+            old: old.iter().collect(),
+            new: new.iter().collect(),
+            changes: report
+                .changes
+                .iter()
+                .map(|change| {
+                    let package = change.package();
+                    let canonical = change.declaration().map(|name| format!("{package}.{name}"));
+                    (package, canonical, change.verdict)
+                })
+                .collect(),
+        }
+    }
+
+    /// The verdict over the changes that concern `unit`.
+    pub fn verdict(&self, unit: &str) -> Verdict {
+        let packages: BTreeSet<&str> = self
+            .old
+            .iter()
+            .chain(&self.new)
+            .filter(|pkg| unit_of(pkg) == unit)
+            .map(|pkg| pkg.name.as_str())
+            .collect();
+        let reached_old = reachable_decls(unit, &self.old);
+        let reached_new = reachable_decls(unit, &self.new);
+
+        self.changes
+            .iter()
+            .filter(|(package, canonical, _)| {
+                packages.contains(package)
+                    || canonical.as_ref().is_some_and(|canonical| {
+                        reached_old.contains_key(canonical) || reached_new.contains_key(canonical)
+                    })
             })
-        })
-        .map(|change| change.verdict)
-        .max()
-        .unwrap_or(Verdict::Identical)
+            .map(|(_, _, verdict)| *verdict)
+            .max()
+            .unwrap_or(Verdict::Identical)
+    }
 }
 
 #[cfg(test)]
@@ -402,5 +432,53 @@ mod tests {
         let report = diff_sets(&old, &new);
         assert_eq!(unit_verdict(&report, "a", &old, &new), Verdict::Breaking);
         assert_eq!(unit_verdict(&report, "c", &old, &new), Verdict::Identical);
+    }
+
+    // The walk's path layout is `<package>/<name>[/<member>...]`; the verdicts
+    // read it through the accessors, so a change of layout fails here.
+    #[test]
+    fn a_walked_change_names_its_package_and_declaration() {
+        let old = baseline();
+        let new = vec![unit_a("b.S"), unit_b(IntWidth::I64), unit_c(IntWidth::I32)];
+        let report = diff_sets(&old, &new);
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.package() == "b")
+            .expect("the width change in b.S is reported");
+        assert_eq!(change.declaration(), Some("S"));
+    }
+
+    #[test]
+    fn a_change_matches_by_its_structured_package_and_declaration() {
+        let old = baseline();
+        let new = baseline();
+        let mut report = diff_sets(&old, &new);
+        report.changes.push(crate::Change {
+            path: "b/S/x".to_owned(),
+            category: crate::Category::DeclRemoved,
+            verdict: Verdict::Breaking,
+            before: None,
+            after: None,
+        });
+        // The change names declaration `S` of package `b`, which unit `a`
+        // reaches through its signal payload.
+        assert_eq!(unit_verdict(&report, "a", &old, &new), Verdict::Breaking);
+        assert_eq!(unit_verdict(&report, "c", &old, &new), Verdict::Identical);
+    }
+
+    #[test]
+    fn the_prepared_verdicts_equal_the_single_calls() {
+        let old = baseline();
+        let new = vec![unit_a("b.S"), unit_b(IntWidth::I64), unit_c(IntWidth::I32)];
+        let report = diff_sets(&old, &new);
+        let prepared = super::UnitVerdicts::new(&report, &old, &new);
+        for unit in ["a", "b", "c", "absent"] {
+            assert_eq!(
+                prepared.verdict(unit),
+                unit_verdict(&report, unit, &old, &new),
+                "unit {unit}"
+            );
+        }
     }
 }

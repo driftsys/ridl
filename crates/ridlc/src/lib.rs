@@ -814,6 +814,53 @@ pub fn run_build_with(
     deployment: Option<&str>,
     compatible: &BTreeMap<String, Vec<[u8; 32]>>,
 ) -> std::io::Result<CliRun> {
+    run_build_computing(
+        entry,
+        out_dir,
+        emits,
+        plugins,
+        plugin_timeout,
+        frozen,
+        apply_lints,
+        deployment,
+        Some(&mut |_, _, _| Ok(compatible.clone())),
+    )
+}
+
+/// What a build gives the function that computes the earlier catalogs each
+/// unit is compatible with: every checked package of the workspace, the
+/// `ridl.std` package, and whether the workspace names any `[imports]`. The
+/// packages of an import are not among the checked packages.
+pub type CompatibleCatalogsFn<'a> = dyn FnMut(
+        &[&ridl_ir::v2::Package],
+        &ridl_ir::v2::Package,
+        bool,
+    ) -> std::io::Result<BTreeMap<String, Vec<[u8; 32]>>>
+    + 'a;
+
+/// [`run_build_with`], with `compatible` computed from the build's own
+/// compile instead of given: once the build has no error diagnostic and is
+/// about to write, `compatible` is called with the checked packages and the
+/// `ridl.std` package, and its result is used as `run_build_with` uses its
+/// `compatible` argument. With `None`, or with an error diagnostic, nothing
+/// is called and no unit has a list. An error it returns is the error of the build. This is how
+/// the `ridl` facade reuses the build's compile instead of compiling the
+/// workspace a second time.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the build's options, passed once from each command"
+)]
+pub fn run_build_computing(
+    entry: &Path,
+    out_dir: &Path,
+    emits: &[Emit],
+    plugins: &[plugin::PluginSpec],
+    plugin_timeout: Duration,
+    frozen: Frozen,
+    apply_lints: ApplyLints,
+    deployment: Option<&str>,
+    compatible: Option<&mut CompatibleCatalogsFn<'_>>,
+) -> std::io::Result<CliRun> {
     let mut db = RidlDatabase::default();
     let Compiled {
         workspace,
@@ -827,6 +874,30 @@ pub fn run_build_with(
         report_scope,
         ..
     } = load_and_check(&mut db, entry, &[]).map_err(load_io_error)?;
+
+    // The earlier catalogs per unit, computed from this compile before
+    // anything else can fail, so a baseline that cannot be read is reported
+    // first. A compile with an error diagnostic gets no list: nothing is
+    // written for it, or (an RSDL-7xx error) only what the error leaves.
+    let compatible = match compatible {
+        Some(compute)
+            if !diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.severity == Severity::Error) =>
+        {
+            let packages: Vec<&ridl_ir::v2::Package> =
+                checked.iter().map(|package| &package.ir).collect();
+            let std_for_catalogs = check_package(&db, workspace, std, std).ir;
+            let names_imports = !workspace.imports(&db).is_empty()
+                || workspace
+                    .packages(&db)
+                    .iter()
+                    .any(|package| !package.imports(&db).is_empty());
+            compute(&packages, &std_for_catalogs, names_imports)?
+        }
+        _ => BTreeMap::new(),
+    };
+    let compatible = &compatible;
 
     // An entry inside a member reports on the member only (ADR-0024 decision
     // 9, as ADR-0026 amends it). The diagnostics of the other members are

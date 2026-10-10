@@ -35,7 +35,7 @@ mod walk;
 
 pub use classify::{absence_refused, category_from_word, classify, explain};
 pub use system::{SystemChange, SystemHeading, diff_systems};
-pub use unit_verdict::unit_verdict;
+pub use unit_verdict::{UnitVerdicts, unit_verdict};
 
 #[cfg(test)]
 mod tests;
@@ -264,6 +264,24 @@ pub struct Change {
     pub before: Option<String>,
     /// The rendered new value, absent when the change is a removal.
     pub after: Option<String>,
+}
+
+impl Change {
+    /// The dotted name of the package the change belongs to: the first
+    /// segment of [`path`](Change::path). The walk builds the path as
+    /// `<package>/<name>[/<member>...]`, and this accessor and
+    /// [`declaration`](Change::declaration) are the one place that reads that
+    /// layout back.
+    pub fn package(&self) -> &str {
+        self.path.split('/').next().unwrap_or_default()
+    }
+
+    /// The bare name of the package-level declaration, interface or service
+    /// the change belongs to: the second segment of [`path`](Change::path), or
+    /// `None` for a change to the package itself.
+    pub fn declaration(&self) -> Option<&str> {
+        self.path.split('/').nth(1)
+    }
 }
 
 /// The result of a comparison: every change and the report-level verdict (the

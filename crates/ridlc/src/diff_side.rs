@@ -295,13 +295,16 @@ pub fn is_source_dir(dir: &Path) -> bool {
         || files_matching(dir, is_source_file).is_ok_and(|files| !files.is_empty())
 }
 
-/// The files directly inside `dir` that satisfy `keep`, in file-name order.
+/// The files directly inside `dir` that satisfy `keep`, in file-name order. A
+/// directory entry that cannot be read is an error, not a skipped file.
 pub fn files_matching(dir: &Path, keep: fn(&Path) -> bool) -> std::io::Result<Vec<PathBuf>> {
-    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)?
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| keep(path))
-        .collect();
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let path = entry?.path();
+        if keep(&path) {
+            files.push(path);
+        }
+    }
     files.sort();
     Ok(files)
 }
