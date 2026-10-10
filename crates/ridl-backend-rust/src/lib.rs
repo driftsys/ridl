@@ -256,7 +256,9 @@ fn faced_interface(
 }
 
 /// The note left where an interface's face was skipped (design rule 2), or,
-/// for an `internal` interface, where its descriptors were refused.
+/// for an `internal` interface, where its descriptors were refused (the
+/// design record's "The consumer face"; the rest of the package is unaffected
+/// in both cases, as rule 2 states).
 ///
 /// It is a `const` carrying doc attributes rather than a bare comment, for the
 /// reason the codec's withheld note gives: `quote!` emits tokens, and a doc
@@ -295,6 +297,32 @@ fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> Tok
         }
         FaceGap::Other => " No tracking issue owns this one: the reason above is the whole of it.",
     };
+    // An internal interface has no face, so its trailer cannot say that the
+    // face is built on the descriptor emitter, and its owner line already says
+    // where the refusal came from. The two trailers share their tail, and the
+    // public one keeps the doc lines it always had.
+    let (trailer_head, citation): (&[&str], &str) = if internal {
+        (
+            &[" Nothing else is refused: the"],
+            " (interaction-face design, \"The consumer face\").",
+        )
+    } else {
+        (
+            &[
+                " Its descriptors are absent for the reason above: the refusal is",
+                " raised by the descriptor emitter, which the face is built on. The",
+            ],
+            " (interaction-face design rule 2).",
+        )
+    };
+    let trailer_tail = [
+        " rest of this package — its domain types, its codec, and every",
+        " other interface — is unaffected, which is why the build succeeded",
+    ];
+    let trailer = trailer_head
+        .iter()
+        .chain(trailer_tail.iter())
+        .chain(core::iter::once(&citation));
     quote! {
         #[doc = #headline]
         ///
@@ -302,11 +330,7 @@ fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> Tok
         ///
         #[doc = #owner]
         ///
-        /// Its descriptors are absent for the reason above: the refusal is
-        /// raised by the descriptor emitter, which the face is built on. The
-        /// rest of this package — its domain types, its codec, and every
-        /// other interface — is unaffected, which is why the build succeeded
-        /// (interaction-face design rule 2).
+        #(#[doc = #trailer])*
         #[allow(dead_code, non_upper_case_globals)]
         const #name: () = ();
     }
