@@ -157,13 +157,20 @@ semantics.)
 skipping absent slots:
 
 ```
-name → (params) → : Type → [shape] → wire W → = value → @timing → during S → [ attrs ] → { body }
+name → (params) → : Type → [shape] → wire W → = value → @timing → during S (provisional) → [ attrs ] → { body }
 ```
 
-This order is normative. New clauses must be slotted into this order explicitly.
-The parser accepts `@timing` and `[ attrs ]` in either order, and `ridl fmt`
-writes the order above (maintainer decision D-4 of `fmt-ridl-rsdl-layout.md`).
-The position of `= value` before `@timing` follows decision 2 of ADR-0008.
+This order is normative, except the slot of `during S`, which is provisional
+(see below). New clauses must be slotted into this order explicitly. The parser
+accepts `@timing` and `[ attrs ]` in either order, and `ridl fmt` writes
+`@timing` before `[ attrs ]` (maintainer decision D-4 of
+`fmt-ridl-rsdl-layout.md`); `ridl fmt` reorders no other slot. The parser
+accepts `= value` only before `@timing`, which follows decision 2 of ADR-0008.
+The slot of `during S` is not decided: no parser in the workspace accepts
+`during`, which is only a reserved keyword, and no recorded decision places it.
+The position shown is the one `during S` held relative to `@timing` and
+`[ attrs ]` before ADR-0008 moved `= value`; a decision on the boundary model
+grammar fixes it.
 
 **R6 — Payloads are named types.** Interaction and behaviour layers never define
 shapes inline; they reference typl vocabulary. Contract lines read as domain

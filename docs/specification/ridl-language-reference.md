@@ -497,7 +497,8 @@ family tag with nothing behind it is a declaration wearing a label.
 ### 3.4 Availability
 
 An interaction may be unavailable, and unavailability has **five distinct
-sources**. `during` (§13.3) covers the first; the rest are predicates.
+sources**. `during`, a reserved keyword whose grammar is not decided yet, covers
+the first; the rest are predicates.
 
 | Source           | Example                                    | Carried by                                  |
 | ---------------- | ------------------------------------------ | ------------------------------------------- |
@@ -2229,7 +2230,9 @@ interaction   = signal_def | event_def | command_def | query_def | fixed_def | r
 
 signal_def    = doc_comment? "signal"  camelCase_id ":" type_ref init_value? timing?
                 attr_block? ;
-event_def     = doc_comment? "event"   camelCase_id ":" type_ref timing? attr_block? ;
+event_def     = doc_comment? "event"   camelCase_id ":" type_ref init_value? timing?
+                attr_block? ;
+              (* the parser admits an init; writing one is FORM-102 *)
               (* untimed → configurable default [100ms..1000ms], §9.1 *)
 
               (* There is no family clause. The family (§3.2) is selected by the
@@ -2241,12 +2244,17 @@ event_def     = doc_comment? "event"   camelCase_id ":" type_ref timing? attr_bl
                  as RIDL-501 through RIDL-508 (§16.5). *)
 
 init_value    = "=" ( literal | SCREAMING_SNAKE_ID ) ;   (* bare init override — §4.4 *)
-command_def   = doc_comment? "command" camelCase_id "(" param_list ")" timing? attr_block? ;
+command_def   = doc_comment? "command" camelCase_id "(" param_list ")" ( ":" return_type )?
+                timing? attr_block? ;
+              (* the parser admits a return type; writing one is RIDL-104, §6.1 *)
 query_def     = doc_comment? "query"   camelCase_id "(" param_list ")" ":" return_type
                 timing? attr_block? ;
               (* range form only on command and query — a strict period is RIDL-103, §9.3 *)
-fixed_def     = doc_comment? "fixed"   camelCase_id ":" fixed_type ;
               (* no error syntax — a fallible_type return makes a query fallible, §10.1 *)
+fixed_def     = doc_comment? "fixed"   camelCase_id ":" fixed_type init_value? timing?
+                attr_block? ;
+              (* the parser admits an init and both annotations; an init is
+                 FORM-102; either annotation is RIDL-106, §8, §9.2 *)
 
 param_list    = "" | param { "," param } ;
 param         = doc_comment? camelCase_id ":" param_type ;

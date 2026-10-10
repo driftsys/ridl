@@ -3652,7 +3652,8 @@ impl Checker<'_> {
     // - an attr block parses on `signal`/`event`/`fixed` → RIDL-106 on
     //   `fixed`; predicates draw RIDL-301/-302, keys the gf §4.3 allow-list
     //   (FORM-106/-107/-108);
-    // - an init value parses on `event` and `fixed` → FORM-102;
+    // - an init value parses on `event` and `fixed` (Appendix C shows the
+    //   parser's acceptance) → FORM-102;
     // - a typl declaration parses inside an interface or service body →
     //   RIDL-107, raised by the parser where the keyword is recognised;
     // - a stream `<T>` parses in every type position → RIDL-201 on
@@ -12773,6 +12774,29 @@ interface I {\n\
         // hand-off; ridl §12.3 — typl TYPL-301 territory).
         let checked = check_ridl("app", &format!("{PRELUDE}struct S {{\n  x: <Speed>\n}}\n"));
         assert_eq!(codes(&checked), vec!["TYPL-301"]);
+    }
+
+    #[test]
+    fn stream_in_a_command_return_draws_ridl_104_and_not_typl_301() {
+        // A command return is RIDL-104 whatever its shape, so a stream there
+        // draws that one diagnostic and no stream-position diagnostic (typl
+        // reference, the TYPL-301 row of the diagnostic table).
+        let source = format!("{PRELUDE}interface I {{\n  command c(): <Speed> @[..50ms]\n}}\n");
+        let checked = check_ridl("app", &source);
+        assert_eq!(codes(&checked), vec!["RIDL-104"]);
+        // The diagnostic is the return-type one, on the whole return type —
+        // not one emitted over the stream's element type.
+        let diagnostic = &checked.diagnostics[0];
+        assert!(
+            diagnostic.message.starts_with("return type on command"),
+            "got: {}",
+            diagnostic.message,
+        );
+        let range = diagnostic.primary.range;
+        assert_eq!(
+            &source[usize::from(range.start())..usize::from(range.end())],
+            "<Speed>",
+        );
     }
 
     #[test]
