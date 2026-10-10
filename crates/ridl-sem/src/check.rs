@@ -12776,6 +12776,18 @@ interface I {\n\
     }
 
     #[test]
+    fn stream_in_a_command_return_draws_ridl_104_and_not_typl_301() {
+        // A command return is RIDL-104 whatever its shape, so a stream there
+        // draws that one diagnostic and no stream-position diagnostic (typl
+        // reference, the TYPL-301 row of the diagnostic table).
+        let checked = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  command c(): <Speed> @[..50ms]\n}}\n"),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-104"]);
+    }
+
+    #[test]
     fn error_modifier_on_interface_is_rejected() {
         let checked = check_ridl("app", "package app\nerror interface I { }\n");
         assert_eq!(codes(&checked), vec!["TYPL-212"]);
