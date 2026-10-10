@@ -144,11 +144,12 @@ fn planus_writes_the_identifier_before_the_root_offset() {
     assert!(CatalogRef::read_as_root(&bytes).is_err());
 }
 
-/// The builder's string cache (planus's `string-cache` feature, named in
-/// `Cargo.toml` because the workspace leaves planus's defaults off) writes a
-/// repeated string once. Fails when that feature is dropped, which would
-/// change the bytes of every descriptor.
+/// The builder's string cache (planus's `string-cache` feature, which this
+/// crate's `dedup` feature turns on) writes a repeated string once. Fails when
+/// that feature is dropped from `dedup`, which would change the bytes of every
+/// descriptor. With `dedup` off the cache is absent and the test does not run.
 #[test]
+#[cfg(feature = "dedup")]
 fn a_repeated_string_is_written_once() {
     let mut catalog = sample();
     let mut second = catalog.interfaces[0].clone();
@@ -165,7 +166,7 @@ fn a_repeated_string_is_written_once() {
     assert_eq!(count, 1, "the role `value` is written once");
     // The vtable cache shows in the length: the two interfaces, and their
     // members and payloads, have the same shape and share one vtable each.
-    // Without `vtable-cache` the same catalog is 652 bytes. The byte-vector
+    // Without planus's `vtable-cache` (part of `dedup`) the same catalog is 652 bytes. The byte-vector
     // cache has nothing to share in this catalog, so it is not pinned here.
     assert_eq!(
         bytes.len(),

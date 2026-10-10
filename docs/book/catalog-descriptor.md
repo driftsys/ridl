@@ -214,7 +214,10 @@ crates.io. Its `verify` function checks the whole buffer before it returns a
 view, so a later read cannot fail on a malformed offset. With its default
 features off the crate is `no_std` with `alloc` and keeps `verify`, the
 accessors and `finish`; the parts that build a descriptor from the IR need the
-standard library and come with the `std` feature.
+standard library and come with the `std` feature. The default `dedup` feature
+makes `finish` write each repeated vtable, string and byte vector once. With it
+off as well, a reader links no hashing crate, and `finish` writes a larger but
+valid file.
 
 ## Not built yet
 

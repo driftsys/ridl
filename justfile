@@ -172,10 +172,13 @@ wasm-check:
             --no-default-features
         # wasm32-unknown-unknown has a standard library, so the check above
         # cannot show that a crate builds without one. `ridl-descriptor` with
-        # its `std` feature off is the reader an engine links, and a target
-        # with no standard library is the proof that it links none.
+        # its default features off is the reader an engine links, and a target
+        # with no standard library is the proof that it links no standard
+        # library and no builder cache. The second line adds the `dedup`
+        # feature, so that the caches keep their proof of needing none either.
         rustup target add thumbv7em-none-eabihf
         cargo check --target thumbv7em-none-eabihf -p ridl-descriptor --no-default-features
+        cargo check --target thumbv7em-none-eabihf -p ridl-descriptor --no-default-features --features dedup
         # `ridl-descriptor` with its `std` feature on, so that the half of it
         # that builds a descriptor (`lower`, `describe`) is still checked for
         # the browser target, which the first check no longer does now that
