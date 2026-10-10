@@ -15,7 +15,7 @@
 //!
 //! It is reached from [`crate::generate_pipeline`], which is
 //! what `ridl build --emit rust` calls, as well as from
-//! [`crate::generate_face`]. It is not reached from [`crate::generate`],
+//! [`crate::generate_face_with`]. It is not reached from [`crate::generate`],
 //! whose output is unchanged and carries neither the descriptors nor the
 //! face — which is what is unchanged about it, rather than its bytes (see
 //! the entry points' own documentation).
@@ -698,7 +698,7 @@ fn not_an_interaction(member: &str) -> GenerateError {
 
 #[cfg(test)]
 mod tests {
-    use crate::generate_face;
+    use crate::{WireEncoding, generate_face_with};
     use ridl_ir::v2;
 
     /// `max_size_const` must compute the maximum of its inputs, not their sum,
@@ -839,7 +839,9 @@ mod tests {
             unit: String::new(),
         };
 
-        let source = generate_face(&package).expect("generate_face").rust_source;
+        let source = generate_face_with(&package, &[WireEncoding::FlatBuffers])
+            .expect("generate_face_with")
+            .rust_source;
         let dense: String = source.chars().filter(|c| !c.is_whitespace()).collect();
 
         assert!(dense.contains("pubstructPanelBrightness;"));

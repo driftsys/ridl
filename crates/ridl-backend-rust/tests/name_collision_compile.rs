@@ -66,7 +66,7 @@ fn compile_pipeline(
         errors.is_empty(),
         "{name}.ridl must compile with no error, got: {errors:?}"
     );
-    let mut emitted = generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+    let mut emitted = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
         .expect("generate_pipeline")
         .rust_source;
     emitted.push_str(consumer);

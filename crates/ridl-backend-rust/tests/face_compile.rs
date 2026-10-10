@@ -8,7 +8,7 @@
 #[path = "support/rustc.rs"]
 mod rustc;
 
-use ridl_backend_rust::{WireEncoding, generate_face, generate_pipeline};
+use ridl_backend_rust::{WireEncoding, generate_face_with, generate_pipeline};
 
 /// Emits the face of `source` and checks it as a library crate
 /// (`--emit=metadata -D warnings`), panicking with rustc's diagnostics when it
@@ -59,8 +59,8 @@ fn compile_face(
         errors.is_empty(),
         "{name}.ridl must compile with no error, got: {errors:?}"
     );
-    let mut face = generate_face(&output.package)
-        .expect("generate_face")
+    let mut face = generate_face_with(&output.package, &[WireEncoding::FlatBuffers])
+        .expect("generate_face_with")
         .rust_source;
     face.push_str(consumer);
 
@@ -161,7 +161,7 @@ fn an_internal_interface_gets_no_face_module() {
 #[test]
 fn an_internal_interface_gets_no_face_through_the_pipeline() {
     let output = ridlc::compile("hidden_pipeline.ridl", INTERNAL_BESIDE_PUBLIC);
-    let generated = generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
         .expect("generate_pipeline");
     let source = generated.rust_source;
     assert!(source.contains("pub mod summary {"), "{source}");
@@ -189,7 +189,7 @@ interface Wide {
 }
 "#;
     let output = ridlc::compile("shape.ridl", source);
-    let generated = generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
         .expect("generate_pipeline");
     let text = generated.rust_source;
     assert!(
@@ -225,7 +225,7 @@ interface Wide {
 }
 "#;
     let output = ridlc::compile("query_shape.ridl", source);
-    let generated = generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
         .expect("generate_pipeline");
     let text = generated.rust_source;
     assert!(
@@ -253,7 +253,7 @@ interface Wide {
 }
 "#;
     let output = ridlc::compile("query_reply.ridl", source);
-    let generated = generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
         .expect("generate_pipeline");
     let text = generated.rust_source;
     assert!(
@@ -290,7 +290,7 @@ internal interface Guarded {
 }
 "#;
     let output = ridlc::compile("internal_clause.ridl", source);
-    let generated = generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
         .expect("generate_pipeline");
     let text = generated.rust_source;
     let note = text
@@ -337,7 +337,7 @@ internal interface Cabin {
 }
 "#;
     let output = ridlc::compile("internal_claims.ridl", source);
-    let err = generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+    let err = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
         .expect_err("the descriptor name collides with a declaration");
     for part in [
         "`CabinTemperature`",
@@ -367,7 +367,7 @@ internal interface HornActive {
 }
 "#;
     let output = ridlc::compile("internal_iface_claim.ridl", source);
-    let err = generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+    let err = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
         .expect_err("the interface descriptor collides with a member descriptor");
     for part in [
         "`HornActive`",
@@ -396,9 +396,9 @@ internal interface HTTPServer {
 }
 "#;
     let output = ridlc::compile("claims.ridl", source);
-    generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+    generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
         .expect("the internal interface claims no face module");
-    generate_face(&output.package).expect("generate_face");
+    generate_face_with(&output.package, &[WireEncoding::FlatBuffers]).expect("generate_face_with");
 }
 
 /// A ridl member or parameter may carry a name the emitter uses for a local
@@ -1132,7 +1132,7 @@ fn making_an_interface_internal_changes_only_the_catalog_hash() {
             "the {visibility:?} source is a valid package: {:?}",
             output.diagnostics
         );
-        generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+        generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
             .expect("generate_pipeline")
             .rust_source
     };
@@ -1182,4 +1182,91 @@ fn making_an_interface_internal_changes_only_the_catalog_hash() {
     );
     assert_eq!(internal.len(), 27, "{internal:#?}");
     assert_eq!(internal, public, "every other impl block is equal");
+}
+
+/// A types-only package — one with an interface, built with an empty
+/// `encodings` — compiles as a `no_std` crate against a `ridl-rt` built with
+/// no feature at all: no encoding feature, and no `std`. That is the runtime
+/// a consumer links when the generated `Cargo.toml` enables no encoding
+/// feature and the consumer turns the defaults off, so a codec item or a face
+/// item left in a types-only package fails here, where
+/// `::ridl_rt::flatbuffers` and `::ridl_rt::task` do not exist. The crate root
+/// is the one `ridl build` writes: `no_std`, with `alloc` linked under the
+/// name `std` for the `::std::string::String` a string type names.
+#[test]
+fn a_types_only_crate_compiles_without_a_codec() {
+    let output = ridlc::compile(
+        "types_only.ridl",
+        "package probe.typesonly
+
+type Level : integer [0..100]
+type Label : string [0..8]
+
+struct Reading {
+  level : Level
+  label : Label
+}
+
+interface Cabin {
+  signal level : Level @10ms
+  signal reading : Reading @10ms
+}
+",
+    );
+    let errors: Vec<_> = output
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| matches!(diagnostic.severity, ridl_core::diag::Severity::Error))
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "types_only.ridl must compile with no error, got: {errors:?}"
+    );
+    let source = generate_face_with(&output.package, &[])
+        .expect("generate_face_with")
+        .rust_source;
+    // Anti-vacuity: the proof is about a package that would carry a codec and
+    // a face if the list named one, so both must be absent and the types
+    // present, or the compile below proves nothing about the boundary.
+    assert!(
+        source.contains("pub struct Reading {") && source.contains("::std::string::String"),
+        "the domain types are emitted, got:\n{source}"
+    );
+    for marker in ["Payload<", "FbView", "ridl_rt::contract", "pub mod cabin"] {
+        assert!(
+            !source.contains(marker),
+            "a types-only package must not contain `{marker}`, got:\n{source}"
+        );
+    }
+
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("types_only.rs");
+    std::fs::write(
+        &source_path,
+        format!("#![no_std]\nextern crate alloc as std;\n{source}"),
+    )
+    .expect("the generated source is written");
+    let ridl_rt = rustc::ridl_rt_rlib_bare(dir.path());
+    let compiled = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit=metadata",
+            "-D",
+            "warnings",
+        ])
+        .arg("-o")
+        .arg(dir.path().join("libtypes_only.rmeta"))
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", ridl_rt.display()))
+        .arg(&source_path)
+        .output()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        compiled.status.success(),
+        "a types-only package must compile as no_std against a bare ridl-rt, rustc said:\n{}\nsource:\n{source}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
 }

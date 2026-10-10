@@ -1336,10 +1336,12 @@ fn ridl_rt_version_requirement_matches_the_crate() {
     let minor = segments
         .next()
         .expect("a semver version has a minor segment");
-    // The requirement now carries the `flatbuffers` feature, because
-    // `generate`'s output includes the payload codec. Only
-    // the version half is what this test guards, so it matches the version
-    // string inside the dependency table rather than the whole line.
+    // The requirement carries one `ridl-rt` feature per encoding the
+    // manifest's `[backend.rust]` table names, and none for this fixture.
+    // Only the version half is what this test guards, so it matches the
+    // version string inside the dependency table rather than the whole line;
+    // `cargo_toml_enables_one_feature_per_encoding` and
+    // `cargo_toml_has_no_feature_for_types_only` pin the whole line.
     let expected = format!("ridl-rt = {{ version = \"{major}.{minor}\"");
 
     let out = tempfile::tempdir().expect("temp dir");
@@ -1437,7 +1439,7 @@ fn regex_version_requirement_matches_the_checker() {
 fn write_two_package_workspace(dir: &Path, source_a: &str, source_b: &str) -> PathBuf {
     std::fs::write(
         dir.join("ridl.toml"),
-        "[workspace]\nmembers = [\"a\", \"b\"]\n",
+        "[workspace]\nmembers = [\"a\", \"b\"]\n\n[backend.rust]\nencodings = [\"flatbuffers\"]\n",
     )
     .expect("the workspace manifest is written");
     for (member, name, source) in [("a", "px.a", source_a), ("b", "px.b", source_b)] {
@@ -1520,7 +1522,7 @@ fn an_interface_named_wire_compiles() {
     std::fs::create_dir_all(&entry).expect("the package directory is created");
     std::fs::write(
         entry.join("ridl.toml"),
-        "[package]\nname = \"px.w\"\nversion = \"1.0.0\"\n",
+        "[package]\nname = \"px.w\"\nversion = \"1.0.0\"\n\n[backend.rust]\nencodings = [\"flatbuffers\"]\n",
     )
     .expect("the manifest is written");
     std::fs::write(
@@ -1831,7 +1833,7 @@ fn write_view_named_like_child_package(dir: &Path) -> PathBuf {
     std::fs::create_dir_all(root.join("ReadingFbView")).expect("the child directory is created");
     std::fs::write(
         root.join("ridl.toml"),
-        "[package]\nname = \"veh\"\nversion = \"1.0.0\"\n",
+        "[package]\nname = \"veh\"\nversion = \"1.0.0\"\n\n[backend.rust]\nencodings = [\"flatbuffers\"]\n",
     )
     .expect("the manifest is written");
     std::fs::write(
@@ -1889,7 +1891,7 @@ fn write_face_named_like_child_package(dir: &Path) -> PathBuf {
     std::fs::create_dir_all(root.join("climate")).expect("the child directory is created");
     std::fs::write(
         root.join("ridl.toml"),
-        "[package]\nname = \"veh\"\nversion = \"1.0.0\"\n",
+        "[package]\nname = \"veh\"\nversion = \"1.0.0\"\n\n[backend.rust]\nencodings = [\"flatbuffers\"]\n",
     )
     .expect("the manifest is written");
     std::fs::write(
@@ -1932,4 +1934,134 @@ fn a_face_module_named_like_a_child_package_is_reachable_through_ridl_package() 
     );
     std::fs::write(out.path().join("lib.rs"), &lib).expect("the consumer is appended");
     compile_crate_root(out.path());
+}
+
+/// A one-package fixture with an interface, whose manifest ends with
+/// `manifest_tail`: a package that carries a codec, descriptors and a face
+/// when its `[backend.rust]` table names an encoding, and the domain types
+/// only when no table names one for the Rust backend.
+fn write_interface_fixture(dir: &Path, manifest_tail: &str) -> PathBuf {
+    let package_dir = dir.join("pkg");
+    std::fs::create_dir_all(&package_dir).expect("the package directory is created");
+    std::fs::write(
+        package_dir.join("ridl.toml"),
+        format!("[package]\nname = \"veh.cabin\"\nversion = \"1.0.0\"\n{manifest_tail}"),
+    )
+    .expect("the manifest is written");
+    std::fs::write(
+        package_dir.join("source.ridl"),
+        "package veh.cabin\n\ntype Level : integer [0..100]\n\ninterface Cabin {\n  signal level : Level @10ms\n}\n",
+    )
+    .expect("the source is written");
+    package_dir
+}
+
+/// `--emit rust` of `entry` into `out`, with no error drawn.
+fn build_rust(entry: &Path, out: &Path) {
+    let run = ridlc::run_build(entry, out, &[Emit::Rust], false.into()).expect("build runs");
+    assert!(
+        !run.has_error(),
+        "expected no error, got: {:?}",
+        run.diagnostics
+    );
+}
+
+/// The `ridl-rt` dependency line of the manifest a build wrote to `out`.
+fn ridl_rt_line(out: &Path) -> String {
+    let manifest = std::fs::read_to_string(out.join("Cargo.toml")).expect("Cargo.toml is written");
+    manifest
+        .lines()
+        .find(|line| line.starts_with("ridl-rt = "))
+        .unwrap_or_else(|| panic!("the manifest names ridl-rt, was:\n{manifest}"))
+        .to_string()
+}
+
+/// The two markers a codec brings into a package's generated source: a
+/// `Payload` implementation and the interface descriptor the face reads.
+const CODEC_MARKERS: [&str; 2] = ["Payload<", "impl ::ridl_rt::contract::Interface"];
+
+/// `[backend.rust] encodings = ["flatbuffers"]` enables the `flatbuffers`
+/// feature of `ridl-rt` in the generated manifest, and the package carries
+/// the codec and the descriptors: the table's `rust` key is the one the Rust
+/// emit reads.
+#[test]
+fn cargo_toml_enables_one_feature_per_encoding() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let entry = write_interface_fixture(
+        dir.path(),
+        "\n[backend.rust]\nencodings = [\"flatbuffers\"]\n",
+    );
+    let out = tempfile::tempdir().expect("temp dir");
+    build_rust(&entry, out.path());
+
+    assert_eq!(
+        ridl_rt_line(out.path()),
+        r#"ridl-rt = { version = "0.8", features = ["flatbuffers"] }"#
+    );
+    let source =
+        std::fs::read_to_string(out.path().join("veh.cabin.rs")).expect("veh.cabin.rs is written");
+    for marker in CODEC_MARKERS {
+        assert!(
+            source.contains(marker),
+            "the table's encoding reaches the Rust backend, so the package carries `{marker}`, \
+             got:\n{source}"
+        );
+    }
+    compile_crate_root(out.path());
+}
+
+/// No `[backend.rust]` table is a types-only build: the generated manifest
+/// enables no `ridl-rt` feature, and the package carries no codec and no
+/// descriptor.
+#[test]
+fn cargo_toml_has_no_feature_for_types_only() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let entry = write_interface_fixture(dir.path(), "");
+    let out = tempfile::tempdir().expect("temp dir");
+    build_rust(&entry, out.path());
+
+    assert_eq!(ridl_rt_line(out.path()), r#"ridl-rt = { version = "0.8" }"#);
+    let source =
+        std::fs::read_to_string(out.path().join("veh.cabin.rs")).expect("veh.cabin.rs is written");
+    assert!(
+        source.contains("pub struct Level("),
+        "the domain types are emitted, got:\n{source}"
+    );
+    for marker in CODEC_MARKERS {
+        assert!(
+            !source.contains(marker),
+            "a types-only build carries no `{marker}`, got:\n{source}"
+        );
+    }
+    compile_crate_root(out.path());
+}
+
+/// A table for another backend is not the Rust backend's: with only
+/// `[backend.kotlin] encodings = ["flatbuffers"]`, `--emit rust` sends the
+/// Rust backend no option, the package is types only, and the generated
+/// manifest enables no `ridl-rt` encoding feature.
+#[test]
+fn a_table_for_another_backend_leaves_the_rust_emit_types_only() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let entry = write_interface_fixture(
+        dir.path(),
+        "\n[backend.kotlin]\nencodings = [\"flatbuffers\"]\n",
+    );
+    let out = tempfile::tempdir().expect("temp dir");
+    build_rust(&entry, out.path());
+
+    assert_eq!(ridl_rt_line(out.path()), r#"ridl-rt = { version = "0.8" }"#);
+    let source =
+        std::fs::read_to_string(out.path().join("veh.cabin.rs")).expect("veh.cabin.rs is written");
+    assert!(
+        source.contains("pub struct Level("),
+        "the domain types are emitted, got:\n{source}"
+    );
+    for marker in CODEC_MARKERS {
+        assert!(
+            !source.contains(marker),
+            "another backend's table reaches no Rust emit, so the package carries no \
+             `{marker}`, got:\n{source}"
+        );
+    }
 }

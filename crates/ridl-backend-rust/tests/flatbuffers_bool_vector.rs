@@ -22,9 +22,13 @@ mod rustc;
 /// The generated source for the fixture, with a harness `main` appended.
 fn program(main: &str) -> String {
     let package = ir::compile_fixture("flatbuffers_bool_vector.ridl");
-    let generated = ridl_backend_rust::generate(&package)
-        .expect("the fixture generates")
-        .rust_source;
+    let generated = ridl_backend_rust::generate_pipeline(
+        &package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        &[],
+    )
+    .expect("the fixture generates")
+    .rust_source;
     format!("#![allow(dead_code)]\n{generated}\n{main}")
 }
 

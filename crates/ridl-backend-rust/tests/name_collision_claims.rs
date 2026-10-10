@@ -23,9 +23,11 @@
 //! and pins which interfaces each entry point claims for, so that dropping a
 //! claim, or claiming a name the backend does not emit, fails a test. Some of
 //! its cases expect a refusal and some expect a build, and a few call
-//! `generate`, `generate_with` or `generate_face` in place of the pipeline.
+//! `generate`, `generate_with` or `generate_face_with` in place of the pipeline.
 
-use ridl_backend_rust::{WireEncoding, generate, generate_face, generate_pipeline, generate_with};
+use ridl_backend_rust::{
+    WireEncoding, generate, generate_face_with, generate_pipeline, generate_with,
+};
 
 /// Requires that `source` checks with no error, and returns the message of
 /// the `GenerateError` the pipeline entry point returns for it, panicking
@@ -47,7 +49,7 @@ fn refusal(name: &str, source: &str) -> String {
         "{name}.ridl must check clean, so the refusal is the backend's, got: {errors:?}"
     );
     let output = ridlc::compile(&path, source);
-    match generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[]) {
+    match generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[]) {
         Ok(generated) => panic!(
             "{name}.ridl must be refused by the claim table, but the pipeline emitted:\n{}",
             generated.rust_source
@@ -210,7 +212,7 @@ interface Cabin {
 }
 ";
     let output = ridlc::compile("x08b.ridl", source);
-    let generated = generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
         .expect("a skipped face claims nothing, so the package builds");
     assert!(
         generated.rust_source.contains("__RIDL_NO_FACE_Cabin"),
@@ -493,7 +495,7 @@ fn builds(name: &str, source: &str) -> String {
         "{name}.ridl must check clean, got: {errors:?}"
     );
     let output = ridlc::compile(&path, source);
-    generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+    generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
         .unwrap_or_else(|err| panic!("{name}.ridl must build, got: {}", err.message))
         .rust_source
 }
@@ -689,7 +691,7 @@ struct S {
     );
 }
 
-/// `generate_face` emits every interface's descriptors and face, so it claims
+/// `generate_face_with` emits every interface's descriptors and face, so it claims
 /// their names as the pipeline does.
 #[test]
 fn generate_face_claims_the_interfaces_it_emits() {
@@ -705,7 +707,8 @@ interface Cabin {
 }
 ",
     );
-    let err = generate_face(&output.package).expect_err("the pair is refused");
+    let err = generate_face_with(&output.package, &[WireEncoding::FlatBuffers])
+        .expect_err("the pair is refused");
     for part in ["`CabinXY`", "member `XY`", "member `x_y`"] {
         assert!(
             err.message.contains(part),

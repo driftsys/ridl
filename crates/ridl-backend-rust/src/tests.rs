@@ -2,7 +2,10 @@
 //! Default derivation behaviour (the leaf-recursion rule), and the C header
 //! snapshot.
 
-use super::{Ctx, Generated, check_flatbuffers_bound, generate, generate_face, generate_with};
+use super::{
+    Ctx, Generated, WireEncoding, check_flatbuffers_bound, generate, generate_face_with,
+    generate_pipeline,
+};
 use ridl_ir::v2;
 
 // ---------------------------------------------------------------------------
@@ -371,16 +374,19 @@ fn wire_named_decl() -> v2::Decl {
 /// A package declaring `Wire` is accepted by the face entry point, and its
 /// output holds no `pub type Wire`.
 ///
-/// `generate_face` used to emit that alias at package scope, where a typl
+/// `generate_face_with` used to emit that alias at package scope, where a typl
 /// declaration named `Wire` emits `pub struct Wire`, and interaction-face design rule 5
 /// refused the package over the pair. The alias is gone (`docs/technotes/rust-backend-name-collisions.md`, decision 5, driftsys/ridl#588): every site that named it
 /// writes `::ridl_rt::encoding::FlatBuffers`, so `Wire` is an ordinary
 /// declaration in a package with a face as it always was in one without.
 #[test]
 fn a_declaration_named_wire_generates_a_face_with_no_alias() {
-    let source = generate_face(&package("veh.common", vec![wire_named_decl()]))
-        .expect("a declaration named `Wire` collides with nothing")
-        .rust_source;
+    let source = generate_face_with(
+        &package("veh.common", vec![wire_named_decl()]),
+        &[WireEncoding::FlatBuffers],
+    )
+    .expect("a declaration named `Wire` collides with nothing")
+    .rust_source;
     assert!(source.contains("pub struct Wire("), "got:\n{source}");
     assert!(!source.contains("pub type Wire"), "got:\n{source}");
 }
@@ -399,6 +405,20 @@ fn a_declaration_named_wire_generates_without_a_face() {
 // ---------------------------------------------------------------------------
 // Per-construct snapshots.
 // ---------------------------------------------------------------------------
+
+/// The domain types and the FlatBuffers codec over them, for a test about
+/// what the codec emits — what [`rust_for`] gave before the codec became
+/// something a package asks for.
+fn rust_with_codec(decls: Vec<v2::Decl>) -> String {
+    generate_codec(&package("veh.common", decls))
+        .expect("generates")
+        .rust_source
+}
+
+/// [`generate`] with the FlatBuffers codec: the pipeline over one package.
+fn generate_codec(package: &v2::Package) -> Result<Generated, super::GenerateError> {
+    generate_pipeline(package, &[WireEncoding::FlatBuffers], &[])
+}
 
 fn rust_for(decls: Vec<v2::Decl>) -> String {
     generate(&package("veh.common", decls))
@@ -540,7 +560,7 @@ fn the_float_step_check_binds_its_verdict_before_the_condition() {
 /// consumer's build.
 #[test]
 fn the_codec_borrows_nothing_twice() {
-    let source = rust_for(vec![
+    let source = rust_with_codec(vec![
         public_decl("Label", bounded_string_type(init_value(false, None))),
         struct_with_field("Holder", "name", "Label"),
         bytes_pattern_decl(),
@@ -1032,7 +1052,7 @@ fn the_codec_passes_an_unnamed_string_and_bytes_field_without_a_borrow() {
             width: None,
         }))
     };
-    let source = rust_for(vec![public_decl(
+    let source = rust_with_codec(vec![public_decl(
         "Holder",
         v2::decl::Kind::StructDef(v2::StructDef {
             members: vec![
@@ -1076,7 +1096,7 @@ fn the_codec_passes_a_map_entrys_string_and_bytes_without_a_borrow() {
             }))),
         })
     };
-    let source = rust_for(vec![public_decl(
+    let source = rust_with_codec(vec![public_decl(
         "Holder",
         v2::decl::Kind::StructDef(v2::StructDef {
             members: vec![field_member(shaped_field(
@@ -1129,7 +1149,7 @@ fn the_codec_passes_a_vector_elements_string_and_bytes_without_a_borrow() {
             max: 4,
         }))
     };
-    let source = rust_for(vec![public_decl(
+    let source = rust_with_codec(vec![public_decl(
         "Holder",
         v2::decl::Kind::StructDef(v2::StructDef {
             members: vec![
@@ -1659,10 +1679,10 @@ fn an_empty_pascal_spelling_is_derived_from_snake() {
             }
         }
     }
-    let current = super::generate_pipeline_over(&model, super::WireEncoding::FlatBuffers)
+    let current = super::generate_pipeline_over(&model, &[super::WireEncoding::FlatBuffers])
         .expect("generation succeeds")
         .rust_source;
-    let derived = super::generate_pipeline_over(&older, super::WireEncoding::FlatBuffers)
+    let derived = super::generate_pipeline_over(&older, &[super::WireEncoding::FlatBuffers])
         .expect("generation succeeds")
         .rust_source;
     assert!(current.contains("CheckEngine"), "{current}");
@@ -1749,7 +1769,7 @@ fn a_union_arm_named_view_compiles() {
         is_result: false,
         reserved: Vec::new(),
     };
-    let rust_source = rust_for(vec![
+    let rust_source = rust_with_codec(vec![
         speed_decl(),
         public_decl("Reading", v2::decl::Kind::UnionDef(union)),
     ]);
@@ -3039,7 +3059,8 @@ fn items_after_dead_code_allowance(source: &str) -> Vec<&str> {
 /// declaration carries none, so dead code there is still reported.
 #[test]
 fn an_internal_declaration_allows_dead_code_on_each_item_and_a_public_one_does_not() {
-    let Generated { rust_source, .. } = generate(&appendix_b()).expect("Appendix B generates");
+    let Generated { rust_source, .. } =
+        generate_codec(&appendix_b()).expect("Appendix B generates");
     for item in [
         "pub(crate) struct RawWheelFrame {",
         "pub(crate) struct RawWheelFrameFbView<'a> {",
@@ -3408,7 +3429,8 @@ fn the_harness_rlib_belongs_to_its_caller() {
 /// directory is removed on drop, closing the #102 temp-file leak.
 #[test]
 fn appendix_b_compiles_with_rustc() {
-    let Generated { rust_source, .. } = generate(&appendix_b()).expect("Appendix B generates");
+    let Generated { rust_source, .. } =
+        generate_codec(&appendix_b()).expect("Appendix B generates");
 
     // The stand-in types carry the three derives every generated type carries
     // (design decision 7), because that is what the real `ridl.std` package
@@ -4036,7 +4058,8 @@ fn appendix_a() -> v2::Package {
 /// the module path the cross-package references map to.
 #[test]
 fn appendix_a_compiles_with_rustc() {
-    let Generated { rust_source, .. } = generate(&appendix_a()).expect("Appendix A generates");
+    let Generated { rust_source, .. } =
+        generate_codec(&appendix_a()).expect("Appendix A generates");
 
     // Every stand-in carries the three derives a generated type always
     // carries (design decision 7), because the real packages generate them
@@ -6137,9 +6160,12 @@ fn flatbuffers_bound_leaves_a_cycle_alone() {
     );
 }
 
-/// `generate_with` resolves a reference into another package of the build,
-/// and `generate` — which is `generate_with(package, &[])` — does not
-/// (driftsys/ridl#467).
+/// The pipeline handed the other packages of the build resolves a reference
+/// into one of them, and the pipeline handed none — the relation `generate`
+/// has to `generate_with` — does not (driftsys/ridl#467). The codec is where
+/// the difference shows, which is why this goes through the pipeline with the
+/// FlatBuffers codec and not through `generate_with`, which emits the types
+/// only.
 ///
 /// This is the entry point's own guard. Every other test of cross-package
 /// resolution goes through the pipeline or through a corpus fixture that
@@ -6150,7 +6176,7 @@ fn flatbuffers_bound_leaves_a_cycle_alone() {
 /// to get for every such type, and the point of the story is that it is gone
 /// when the other package is in hand.
 #[test]
-fn generate_with_resolves_a_reference_into_another_package() {
+fn the_pipeline_resolves_a_reference_into_another_package() {
     let foreign = package(
         "px.a",
         vec![public_decl(
@@ -6184,13 +6210,15 @@ fn generate_with_resolves_a_reference_into_another_package() {
         vec![struct_with_field("Line", "from", "px.a.Point")],
     );
 
-    let alone = generate(&local).expect("the package generates").rust_source;
+    let alone = generate_codec(&local)
+        .expect("the package generates")
+        .rust_source;
     assert!(
         alone.contains("__RIDL_FB_NO_CODEC_Line"),
         "without the other package the type is withheld a codec, got:\n{alone}"
     );
 
-    let with_others = generate_with(&local, &[&foreign])
+    let with_others = generate_pipeline(&local, &[WireEncoding::FlatBuffers], &[&foreign])
         .expect("the package generates against the build")
         .rust_source;
     assert!(
@@ -6218,7 +6246,7 @@ fn a_withheld_declaration_claims_no_view_name() {
             struct_with_field("LineFbView", "to", "px.a.Point"),
         ],
     );
-    let source = generate(&local)
+    let source = generate_codec(&local)
         .expect("a withheld declaration claims no view, so the package builds")
         .rust_source;
     assert!(

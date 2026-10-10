@@ -16,7 +16,12 @@ fn enum_field_default_uses_the_declared_member_value() {
         "{:?}",
         output.diagnostics
     );
-    let generated = ridl_backend_rust::generate(&output.package).unwrap();
+    let generated = ridl_backend_rust::generate_pipeline(
+        &output.package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        &[],
+    )
+    .unwrap();
     let source = format!(
         "#![allow(dead_code)]\n{}\n{}",
         generated.rust_source,
@@ -55,7 +60,12 @@ fn bytes_defaults_preserve_utf8_init_values() {
         "{:?}",
         output.diagnostics
     );
-    let generated = ridl_backend_rust::generate(&output.package).unwrap();
+    let generated = ridl_backend_rust::generate_pipeline(
+        &output.package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        &[],
+    )
+    .unwrap();
     let source = format!(
         "#![allow(dead_code)]\n{}\n{}",
         generated.rust_source,

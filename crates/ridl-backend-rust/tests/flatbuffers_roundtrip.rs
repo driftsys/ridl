@@ -25,9 +25,13 @@ mod rustc;
 /// The generated source for the fixture, with a harness `main` appended.
 fn program(main: &str) -> String {
     let package = ir::compile_fixture("flatbuffers_roundtrip.ridl");
-    let generated = ridl_backend_rust::generate(&package)
-        .expect("the fixture generates")
-        .rust_source;
+    let generated = ridl_backend_rust::generate_pipeline(
+        &package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        &[],
+    )
+    .expect("the fixture generates")
+    .rust_source;
     format!(
         // A program's unused `pub` items are dead code, and a view's
         // accessors are read by a consumer rather than by this harness.

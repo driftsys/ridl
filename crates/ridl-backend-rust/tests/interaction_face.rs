@@ -111,10 +111,10 @@ fn send_level_raw(port: &mut Loopback, level: i64) -> Correlation {
     .expect("send")
 }
 
-/// The checked-in output of `generate_face` over `tests/fixtures/interaction_face.ridl`.
+/// The checked-in output of `generate_face_with` over `tests/fixtures/interaction_face.ridl`.
 /// It is `include!`d, never hand-edited; the regeneration guard in
 /// `tests/interaction_face_regeneration.rs` compares it byte-for-byte against a
-/// fresh `generate_face` call. Lint allows live on
+/// fresh `generate_face_with` call. Lint allows live on
 /// this wrapper module, as outer attributes, because the generated file itself
 /// carries no inner attribute (design §7): an inner attribute inside an
 /// `include!`d file is a hard error.

@@ -7,7 +7,7 @@
 //! yet. Task 5 adds the compiled round trip, which is where the settlements
 //! are observed at run time.
 
-use ridl_backend_rust::generate_face;
+use ridl_backend_rust::{WireEncoding, generate_face_with};
 
 #[path = "support/ir.rs"]
 mod ir;
@@ -20,7 +20,9 @@ fn dense(source: &str) -> String {
 /// which is the interface the fixture's calls are declared on.
 fn cabin() -> String {
     let package = ir::compile_fixture("interaction_face.ridl");
-    let source = generate_face(&package).expect("generate_face").rust_source;
+    let source = generate_face_with(&package, &[WireEncoding::FlatBuffers])
+        .expect("generate_face_with")
+        .rust_source;
     let start = source
         .find("pub mod cabin {")
         .unwrap_or_else(|| panic!("generated source has no `pub mod cabin`:\n{source}"));

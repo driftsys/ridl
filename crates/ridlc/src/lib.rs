@@ -1228,12 +1228,17 @@ fn run_build_inner<E: From<std::io::Error>>(
                 package_names.push("ridl.std".to_string());
             }
 
+            // The Rust backend's own table: the manifest enables one `ridl-rt`
+            // feature per encoding the backend was asked to emit a codec for,
+            // and none when it was asked for none.
+            let rust_encodings: &[String] = backends.get("rust").map_or(&[], Vec::as_slice);
             write_crate_files(
                 out_dir,
                 &crate_name_for(entry),
                 manifest_package_name(entry).as_deref(),
                 &package_names,
                 codegen_header.as_deref(),
+                rust_encodings,
                 &diagnostics,
             )?;
         }
@@ -1319,6 +1324,7 @@ fn write_crate_files(
     manifest_package: Option<&str>,
     package_names: &[String],
     header: Option<&str>,
+    encodings: &[String],
     diagnostics: &[Diagnostic],
 ) -> std::io::Result<()> {
     if diagnostics
@@ -1339,7 +1345,11 @@ fn write_crate_files(
     )?;
     std::fs::write(
         out_dir.join("Cargo.toml"),
-        render_cargo_toml(crate_name, &codegen::comment_preamble(&marker, header, "#")),
+        render_cargo_toml(
+            crate_name,
+            &codegen::comment_preamble(&marker, header, "#"),
+            encodings,
+        ),
     )?;
     Ok(())
 }
@@ -1416,14 +1426,16 @@ fn refuse_overwrite(
 /// dependency of its own in any feature combination, and every generated named
 /// scalar's constructor names `::ridl_rt::payload::Violation` from it.
 ///
-/// It carries the `flatbuffers` feature, because `generate`'s output now
-/// includes the FlatBuffers payload codec (design note D-1 as
-/// amended), and that codec names the reading and writing helpers the feature
-/// gates. **This makes the generated manifest unbuildable outside this
-/// repository until a `ridl-rt` release carries the feature's contents**,
-/// which is the release coupling design note D-12 records and the generated manifest
-/// settles; nothing here can test it, because a `rustc` proof
-/// links `ridl-rt`'s source rather than a release.
+/// The `ridl-rt` dependency enables one feature per entry of `encodings`, in
+/// order — the manifest's `[backend.rust] encodings` list, whose names are
+/// `ridl-rt`'s feature names — because the codec the Rust backend emits for
+/// an encoding names the reading and writing helpers that feature gates. An
+/// empty list, which is a types-only build, enables none. **A feature makes
+/// the generated manifest unbuildable outside this repository until a
+/// `ridl-rt` release carries the feature's contents**, which is the release
+/// coupling design note D-12 records and the generated manifest settles;
+/// nothing here can test it, because a `rustc` proof links `ridl-rt`'s
+/// source rather than a release.
 ///
 /// The `std` feature, on by default, forwards to `ridl-rt/std`: the generated
 /// face's `blocking` module is under it and is `block_on` over the async
@@ -1447,7 +1459,18 @@ fn refuse_overwrite(
 /// `crates/ridl-rt/Cargo.toml`, because `ridlc` is an installed binary with no
 /// access to this repository's sources at run time; a guard test
 /// (`crates/ridlc/tests/`) keeps the two from drifting apart silently.
-fn render_cargo_toml(crate_name: &str, preamble: &str) -> String {
+fn render_cargo_toml(crate_name: &str, preamble: &str, encodings: &[String]) -> String {
+    const RIDL_RT_REQUIREMENT: &str = "0.8";
+    let ridl_rt = if encodings.is_empty() {
+        format!(r#"ridl-rt = {{ version = "{RIDL_RT_REQUIREMENT}" }}"#)
+    } else {
+        let features = encodings
+            .iter()
+            .map(|name| format!("\"{name}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(r#"ridl-rt = {{ version = "{RIDL_RT_REQUIREMENT}", features = [{features}] }}"#)
+    };
     format!(
         r#"{preamble}[package]
 name = "{crate_name}"
@@ -1463,7 +1486,7 @@ validate-pattern = ["dep:regex"]
 std = ["ridl-rt/std"]
 
 [dependencies]
-ridl-rt = {{ version = "0.8", features = ["flatbuffers"] }}
+{ridl_rt}
 regex = {{ version = "1.13", optional = true }}
 
 [lib]

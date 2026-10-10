@@ -42,35 +42,48 @@ pub fn ridl_rt_rlib_without_std(dir: &Path) -> PathBuf {
     ridl_rt_rlib_with(dir, false)
 }
 
+/// Builds `ridl-rt` as an rlib in `dir` with no feature at all — no encoding
+/// and no `std` — so a proof can compile a types-only package against the
+/// runtime a consumer links when its generated `Cargo.toml` enables no
+/// encoding feature: `::ridl_rt::flatbuffers` does not exist in that build,
+/// so a codec item left in a types-only package fails to resolve.
+pub fn ridl_rt_rlib_bare(dir: &Path) -> PathBuf {
+    ridl_rt_rlib_features(dir, "libridl_rt_bare.rlib", &[])
+}
+
 fn ridl_rt_rlib_with(dir: &Path, std: bool) -> PathBuf {
+    let mut features = vec!["flatbuffers", "proto3", "repr-c"];
+    if std {
+        features.push("std");
+    }
+    let file = if std {
+        "libridl_rt.rlib"
+    } else {
+        "libridl_rt_no_std.rlib"
+    };
+    ridl_rt_rlib_features(dir, file, &features)
+}
+
+/// One `rustc` call over `ridl-rt`'s `lib.rs`, with one `--cfg feature="…"`
+/// per entry of `features`, written to `<dir>/<file>`.
+fn ridl_rt_rlib_features(dir: &Path, file: &str, features: &[&str]) -> PathBuf {
     let source = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("ridl-rt")
         .join("src")
         .join("lib.rs");
-    let rlib = dir.join(if std {
-        "libridl_rt.rlib"
-    } else {
-        "libridl_rt_no_std.rlib"
-    });
+    let rlib = dir.join(file);
     let mut command = std::process::Command::new("rustc");
-    command
-        .args([
-            "--edition",
-            "2021",
-            "--crate-type",
-            "rlib",
-            "--crate-name",
-            "ridl_rt",
-        ])
-        .arg("--cfg")
-        .arg(r#"feature="flatbuffers""#)
-        .arg("--cfg")
-        .arg(r#"feature="proto3""#)
-        .arg("--cfg")
-        .arg(r#"feature="repr-c""#);
-    if std {
-        command.arg("--cfg").arg(r#"feature="std""#);
+    command.args([
+        "--edition",
+        "2021",
+        "--crate-type",
+        "rlib",
+        "--crate-name",
+        "ridl_rt",
+    ]);
+    for feature in features {
+        command.arg("--cfg").arg(format!(r#"feature="{feature}""#));
     }
     let status = command
         .arg(&source)

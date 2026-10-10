@@ -59,7 +59,12 @@ fn max_sizes(source: &str) -> Vec<(String, u32)> {
 #[test]
 fn every_generated_max_size_is_the_descriptors_flatbuffers_bound() {
     let package = corpus();
-    let generated = ridl_backend_rust::generate(&package).expect("the corpus generates");
+    let generated = ridl_backend_rust::generate_pipeline(
+        &package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        &[],
+    )
+    .expect("the corpus generates");
     let pairs = max_sizes(&generated.rust_source);
 
     let others: [&ridl_ir::v2::Package; 0] = [];

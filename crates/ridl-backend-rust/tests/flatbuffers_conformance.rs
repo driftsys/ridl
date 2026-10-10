@@ -284,9 +284,13 @@ fn planus_inner(speed: u16, label: &str) -> fb::Inner {
 /// The generated codec's source for the fixture, with `main` appended.
 fn program(main: &str) -> String {
     let package = ir::compile_fixture("flatbuffers_roundtrip.ridl");
-    let generated = ridl_backend_rust::generate(&package)
-        .expect("the fixture generates")
-        .rust_source;
+    let generated = ridl_backend_rust::generate_pipeline(
+        &package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        &[],
+    )
+    .expect("the fixture generates")
+    .rust_source;
     format!("#![allow(dead_code)]\n{generated}\n{CONFORMANCE_VALUE}\n{main}")
 }
 
@@ -1485,9 +1489,13 @@ fn the_schema_states_no_default_for_a_field_whose_type_excludes_zero() {
 /// round-trip one, with `main` appended.
 fn fixture_program(fixture: &str, main: &str) -> String {
     let package = ir::compile_fixture(fixture);
-    let generated = ridl_backend_rust::generate(&package)
-        .expect("the fixture generates")
-        .rust_source;
+    let generated = ridl_backend_rust::generate_pipeline(
+        &package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        &[],
+    )
+    .expect("the fixture generates")
+    .rust_source;
     format!("#![allow(dead_code)]\n{generated}\n{main}")
 }
 
@@ -1568,9 +1576,13 @@ fn main() {{
 #[test]
 fn the_generated_codec_checks_for_wasm32() {
     let package = ir::compile_fixture("flatbuffers_roundtrip.ridl");
-    let generated = ridl_backend_rust::generate(&package)
-        .expect("the fixture generates")
-        .rust_source;
+    let generated = ridl_backend_rust::generate_pipeline(
+        &package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        &[],
+    )
+    .expect("the fixture generates")
+    .rust_source;
     let source = format!("#![allow(dead_code)]\n{generated}");
     assert!(
         rustc::check_for_wasm32("fb_wasm32", &source),

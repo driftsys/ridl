@@ -72,7 +72,7 @@
 //!
 //! The face is reached from [`crate::generate_pipeline`], which
 //! is what `ridl build --emit rust` calls, as well as from
-//! [`crate::generate_face`]. It is not reached from [`crate::generate`],
+//! [`crate::generate_face_with`]. It is not reached from [`crate::generate`],
 //! which still emits no face.
 //!
 //! The emitter is split by section. This file holds the per-interface walk,

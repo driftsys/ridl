@@ -248,7 +248,7 @@ fn descriptor_hash_equals_the_rust_face_hash_across_packages() {
     let src = TempDir::new("two-src");
     src.write(
         "ridl.toml",
-        "[workspace]\nmembers = [\"common\", \"cluster\"]\n",
+        "[workspace]\nmembers = [\"common\", \"cluster\"]\n\n[backend.rust]\nencodings = [\"flatbuffers\"]\n",
     );
     src.write(
         "common/ridl.toml",
@@ -296,8 +296,16 @@ interface Dash {\n\
 /// `--emit rust,catalog`, and its hash must equal the face's `CatalogHash`.
 #[test]
 fn the_catalog_alone_hashes_the_standard_package_as_the_rust_face_does() {
+    // A package directory rather than a single file: a single-file build has
+    // no manifest, so no `[backend.rust] encodings`, and emits the domain
+    // types only — no face, and so no `CatalogHash` to compare.
     let src = TempDir::new("std-src");
-    let file = src.write(
+    src.write(
+        "ridl.toml",
+        "[package]\nname = \"veh.clock\"\nversion = \"1.0.0\"\n\n\
+         [backend.rust]\nencodings = [\"flatbuffers\"]\n",
+    );
+    src.write(
         "clock.ridl",
         "package veh.clock\n\
 interface Clock {\n\
@@ -305,9 +313,9 @@ interface Clock {\n\
 }\n",
     );
     let alone = TempDir::new("std-alone");
-    build_from(&file, alone.path(), "catalog");
+    build_from(src.path(), alone.path(), "catalog");
     let with_face = TempDir::new("std-face");
-    build_from(&file, with_face.path(), "rust,catalog");
+    build_from(src.path(), with_face.path(), "rust,catalog");
 
     assert_eq!(
         catalogs_in(alone.path()),
@@ -323,8 +331,8 @@ interface Clock {\n\
         "the descriptor does not depend on the other emits"
     );
 
-    let source = std::fs::read_to_string(with_face.path().join("clock.rs"))
-        .expect("`--emit rust` writes clock.rs");
+    let source = std::fs::read_to_string(with_face.path().join("veh.clock.rs"))
+        .expect("`--emit rust` writes veh.clock.rs");
     let (descriptor_hash, face_hash) = hashes(&alone_bytes, &source);
     assert_eq!(descriptor_hash, face_hash);
 }
