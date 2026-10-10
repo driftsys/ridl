@@ -71,6 +71,12 @@ repository adds it as a dev-dependency and runs the suite. Its public surface
 follows the port contract of `ridl-rt` at the same version. Sebastien's decision
 of 2026-10-08.
 
+**Amended 2026-10-10 — open item 5, the codegen-model file is not the request's
+bytes.** The `--emit codegen-model` file holds the request's `model` field as
+the same JSON value. The request nests the value one indentation level deeper,
+so the two are equal as JSON and not as bytes (driftsys/ridl#751). The amendment
+is written into the open item in place.
+
 ## Context
 
 Three problems came out of one session, and each has the same shape: a record
