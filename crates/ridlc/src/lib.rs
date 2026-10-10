@@ -851,8 +851,9 @@ pub type CompatibleCatalogsFn<'a, E = std::io::Error> = dyn FnMut(
 /// the compile has an error diagnostic, whatever the build later writes. Its
 /// result is used as `run_build_with` uses its `compatible` argument, and an
 /// error it returns is returned as the error of the build, unchanged. An
-/// input or output error of the build itself is converted with `E::from`. With `None`, no unit has a
-/// list. This is how the `ridl` facade reuses the build's compile instead of
+/// input or output error of the build itself is converted with `E::from`.
+/// With `None`, no unit has a list, and the caller names `E` explicitly
+/// (`run_build_computing::<std::io::Error>`), as `E` cannot be inferred. This is how the `ridl` facade reuses the build's compile instead of
 /// compiling the workspace a second time.
 #[expect(
     clippy::too_many_arguments,

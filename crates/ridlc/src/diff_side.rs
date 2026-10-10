@@ -460,8 +460,12 @@ fn load_snapshots(files: &[PathBuf]) -> Result<Vec<ridl_ir::v2::Package>, DiffSi
         })
         .collect()
 }
+
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use ridl_core::{Overlay, RidlDatabase, Severity};
+    use std::fs;
 
     fn is_txt(path: &Path) -> bool {
         path.extension().is_some_and(|extension| extension == "txt")
@@ -498,9 +502,6 @@ mod tests {
             vec![PathBuf::from("a.txt"), PathBuf::from("b.txt")]
         );
     }
-    use super::*;
-    use ridl_core::{Overlay, RidlDatabase, Severity};
-    use std::fs;
 
     fn source() -> (tempfile::TempDir, PathBuf) {
         let dir = tempfile::tempdir().unwrap();

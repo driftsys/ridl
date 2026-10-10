@@ -44,7 +44,8 @@ pub fn unit_verdict(report: &DiffReport, unit: &str, old: &[Package], new: &[Pac
 
 /// The per-unit verdicts of one diff, with the work every unit shares done
 /// once: the package references of both sides, the package names of each
-/// unit and the canonical key of each change. See [`unit_verdict`] for what concerns a unit.
+/// unit and the canonical key of each change. See [`unit_verdict`] for what
+/// concerns a unit.
 pub struct UnitVerdicts<'a> {
     old: Vec<&'a Package>,
     new: Vec<&'a Package>,
