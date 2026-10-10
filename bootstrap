@@ -75,6 +75,7 @@ log "checking the tools 'just build' requires"
 require just "see https://just.systems/man/en/packages.html"
 require rustup "see https://rustup.rs — it is what applies rust-toolchain.toml"
 require mdbook "cargo install mdbook --locked"
+require jq "see https://jqlang.org/download/ — just demo filters clippy output with it"
 
 if [ "$missing" -ne 0 ]; then
   log "'just build' cannot run until the tools listed above are installed"

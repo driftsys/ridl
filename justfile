@@ -443,8 +443,8 @@ compat-check: toolchain-check
 # features and with them off, and with no command-line allowance except
 # `dead_code`, because the corpus declares `internal` items that nothing uses;
 # the lints the emitted `lib.rs` allows stay allowed. A `dead_code` diagnostic
-# passes only when its source lines name a `Raw` item, the prefix of every
-# `internal` type in the corpus. Unlike the run above, this one keeps `allow`:
+# passes only when the item it belongs to is one of the corpus's internal
+# items (the recipe lists them). Unlike the run above, this one keeps `allow`:
 # `clippy::module_inception` does not fire on the corpus crate, so a stale
 # entry there does not fail, but the run above fires it and holds it. Any other
 # warning is a defect in the emitter.
@@ -467,9 +467,10 @@ compat-check: toolchain-check
 # drawing a clippy warning; the generated crate drawing a clippy warning that
 # its `lib.rs` does not allow, or an allow that no longer fires; a `lib.rs`
 # with no `#![allow(` line to rewrite; the crate emitted for the veh-cluster
-# corpus drawing a clippy warning other than `dead_code`, with default features or without them, or a `dead_code` warning that names no `Raw` item; a planus crate
-# in the resolved graph of `examples/cabin`; the planus check running no test or
-# more than one, which is what a renamed test or a changed filter does.
+# corpus drawing a clippy warning other than `dead_code`, with default
+# features or without them, or a `dead_code` warning for an item that is not
+# an internal one of the corpus; a planus crate in the resolved graph of
+# `examples/cabin`; the planus check running no test or more than one, which is what a renamed test or a changed filter does.
 #
 # The planus check is `xtask/tests/oracle_boundary.rs`'s
 # `the_generated_crate_reaches_no_planus_crate`, which is ignored for a plain
@@ -542,17 +543,28 @@ demo:
     # compiles only in the second case is linted too. `dead_code` is the one
     # lint left out of the strict run: the corpus declares `internal` items
     # that nothing uses, and those draw it. A second run reports `dead_code`
-    # and fails on any diagnostic whose source lines name no `Raw` item, the
-    # prefix of every `internal` type in the corpus, so dead code that the
-    # emitter writes for any other item still fails the run.
+    # as JSON and fails on every diagnostic whose owner is not one of the
+    # corpus's internal items. The owner is the type in the header of the
+    # `impl` block for a method, and the backticked name otherwise. It must
+    # match, as a whole, `RawTickCount`, `RawWheelFrame`, `RawWheelSpan` or
+    # `WheelDiagnostics`, followed by any of the generated suffixes `Span`,
+    # `BurstsElement` and `FbView`. Dead code that the emitter writes for any
+    # other owner fails the run. Dead code inside one of those owners does
+    # not: the filter reads the owner, not the member. The two runs stay
+    # separate because a single `-D warnings` JSON run also reports cargo's
+    # own "aborting due to" summary as an error, which the filter would have
+    # to tell apart from a real failure.
     corpus_lint() {
         cargo clippy --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked --no-deps \
             "$@" -- -D warnings -A dead_code
         stray="$(cargo clippy --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked --no-deps \
-            --message-format=json "$@" -- -W dead_code 2>/dev/null |
+            --message-format=json "$@" -- -W dead_code |
             jq -r 'select(.reason == "compiler-message" and .message.code.code == "dead_code")
-                | select([.message.spans[].text[].text] | any(test("Raw")) | not)
-                | .message.rendered')"
+                | .message
+                | (([.spans[].text[0].text | capture("^\\s*impl(<[^>]*>)? (?<n>[A-Za-z0-9_]+)")? | .n][0])
+                    // (.message | capture("`(?<n>[^`]+)`").n)) as $owner
+                | select($owner | test("^(RawTickCount|RawWheelFrame|RawWheelSpan|WheelDiagnostics)(Span|BurstsElement)*(FbView)?$") | not)
+                | .rendered')"
         if [ -n "$stray" ]; then
             printf '%s\n' "$stray" >&2
             echo "demo: the corpus crate has dead code that is not an internal item" >&2
