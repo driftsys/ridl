@@ -390,3 +390,40 @@ Each ruling: what was decided — why — what it costs if wrong.
   decision 15). A renumbered value or bit stays `member_reordered`, breaking,
   with no second `constraint_changed` line on the container — if wrong, a later
   change sorts the hash input and retires `enum_reordered`.
+
+## Handoff — state on 2026-10-10
+
+Merged: G2 #792 (82e83c1a), G4 #793 (3608ef39), G3 #800 (a136a062), G5 #806
+(1b592936). G6 triage done (R-32..R-36). Lane H's H3 merged as #810.
+
+Open: **G1 — PR #813**, branch `fix/diff-gate`, worktree
+`.claude/worktrees/lane-g-g1`. Tasks #397, #700 (R-37), #809 are implemented and
+task-reviewed. Pass 1's four seats have reported; the fix wave must apply:
+
+- R-38: new category `enum_reordered` (compatible, under the `interface_frozen`
+  heading) for a value, bit or `reserved` reorder that moves no number; tests
+  for a pure value reorder and a pure `reserved` reorder (exit 0) and the
+  `unit_verdict` list kept; the rewritten reserved-list test expects it.
+- A renumbered value or bit: `member_reordered` only, no container
+  `constraint_changed` line.
+- Docs: `heading()` doc (two headings now); `member_reordered` explain text; the
+  typl "As built" note; a NEW number 0 is not compared either (category docs and
+  explain rows); cli-reference.md:1383 (provisional is `decl_added` only against
+  a frozen old side); cli-reference.md:1441 and the `InterfaceFrozen` explain
+  text (drop "not against a published baseline").
+- Code: use `classify::value_slots` (pub(crate)) instead of `member_numbers`;
+  compute order-free bodies once if simple; name the shape in `emit_number`'s
+  detail if quick.
+- Tests: assert exit 0 and "compatible" in
+  `an_enum_reorder_with_an_added_value_reports_the_addition_alone`; one loop
+  over `CATEGORIES` checking each explain row's verdict word against the
+  classifier; the #809 sibling direction; the enum-set reorder plus added bit.
+- PR body: the gate is `ridl baseline`, not `ridl check --baseline` (also in the
+  #809 close-out comment); the region map is not compared (R-37); title `!` and
+  a `BREAKING CHANGE:` paragraph naming all behaviour changes;
+  `docs/BACKLOG.md:170,202` drop #397.
+
+Then pass 2, the quick pass, `just verify`, CI green, merge (squash, keep `!`),
+the #328 comment. Last: garden this driver (`sdd-gardening`) — this branch
+`docs/lane-g-driver` is local only; rebase it on `main`, move the driver to
+`docs/archive/`, and open its own PR.
