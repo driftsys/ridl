@@ -971,7 +971,9 @@ fn published_ordinal(published: &[ridl_ir::v2::Package], path: &str) -> Option<u
 /// number, so such a change is a number the fresh side carries under no name
 /// and does not list as retired, and the package-level `DeclRemoved` of a
 /// package whose whole unit is gone from the fresh set, which loses every
-/// shape the package held ([`dropped_numbers`]). A published `number` 0
+/// shape the package held ([`dropped_numbers`]). Each lost number is refused
+/// once per package, since a declared interface and an inline-form service
+/// of one name are reported at one path. A published `number` 0
 /// predates the lock and was matched by name, so its removal is not refused
 /// (plan decision PD-9). RIDL-412 is a lock line deleted by hand, or a package
 /// or unit removed without retiring its numbers: a live entry with no
@@ -1013,8 +1015,12 @@ fn interface_refusals(
         let published = load_published(out_dir)?;
         if !published.is_empty() {
             let report = ridl_diff::diff_sets(&published, &fresh);
+            let mut refused_numbers = BTreeSet::new();
             for change in &report.changes {
                 for (package, shape) in dropped_numbers(change, &published, &fresh) {
+                    if !refused_numbers.insert((package.name.as_str(), shape.interface.number)) {
+                        continue;
+                    }
                     let unit = published_unit(package, &fresh);
                     let gone = ridl_ir::v2::packages_of_unit(unit, &fresh).next().is_none();
                     refusals.push(Diagnostic {
@@ -1077,7 +1083,12 @@ fn published_unit<'a>(
 /// shape.
 ///
 /// An interface-level change has a two-segment path and the walk's `interface`
-/// marker as its `before`; it loses that one shape. A service's own
+/// marker as its `before`. A declared interface and an inline-form service of
+/// one name share that path, so the change cannot say which of the two it
+/// is: it loses every published shape of that name whose number is lost, and
+/// a shape whose number is kept is filtered out. Both shapes removed give two
+/// such changes that each return both shapes, so the caller deduplicates by
+/// package and number. A service's own
 /// `DeclRemoved` carries `service` there and loses nothing. A package-level
 /// change has one segment and `package <name>` as its `before`: the whole
 /// package is gone while its unit has no package in the fresh set (the walk
@@ -1102,7 +1113,6 @@ fn dropped_numbers<'a>(
         (Some(name), Some("interface")) => package
             .shapes()
             .filter(|shape| shape.name == name)
-            .take(1)
             .collect(),
         (None, Some(before)) if before.starts_with("package ") => package.shapes().collect(),
         _ => return Vec::new(),
