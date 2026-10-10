@@ -1339,7 +1339,8 @@ link-check root="":
     fi
     run_gate "$root"
 
-# Check that every `docs/…` file path named in a tracked file resolves.
+# Check that every `docs/…` file path, and every `docs/…` directory path that
+# ends with `/`, named in a tracked file resolves.
 #
 # `link-check` covers Markdown links. This covers the other way a document gets
 # cited: a bare repository-relative path, written in prose, in an inline code
