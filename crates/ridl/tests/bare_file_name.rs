@@ -3,9 +3,10 @@
 //! name `ridl lock`, `ridl baseline`, `ridl build` and `ridl diff`. The tests
 //! pin the package load, not only the exit code: `a.ridl` uses a type that
 //! only the sibling file `types.typl` declares, a broken sibling file is
-//! reported for an entry elsewhere in the package, and the files a command
-//! writes land at the package root, also when it runs from a subdirectory of
-//! the package (driftsys/ridl#830).
+//! reported for an entry elsewhere in the package, and the lockfile and the
+//! published baseline land at the package root, also when the command runs
+//! from a subdirectory of the package (driftsys/ridl#830). `ridl build`
+//! writes where `--out-dir` points, relative to the current directory.
 
 use std::path::Path;
 use std::process::Command;
@@ -142,6 +143,11 @@ fn lock_with_a_bare_file_name_below_the_root_locks_the_package() {
         !is_file(&dir, "src/interfaces.lock"),
         "no lockfile in the current directory: {text}"
     );
+    let lockfile = std::fs::read_to_string(dir.path().join("interfaces.lock")).unwrap_or_default();
+    assert!(
+        lockfile.contains("Status 1"),
+        "the lockfile numbers the interface of the whole package:\n{lockfile}"
+    );
 }
 
 /// `ridl baseline` with a bare file name publishes the package it sits in
@@ -207,6 +213,10 @@ fn build_with_a_bare_file_name_below_the_root_builds_a_crate() {
     assert!(
         manifest.contains("name = \"veh_cluster\""),
         "a crate named after the package is written:\n{manifest}\n{text}"
+    );
+    assert!(
+        is_file(&dir, "src/out/veh.cluster.rs"),
+        "the crate holds the module of the whole package: {text}"
     );
 }
 

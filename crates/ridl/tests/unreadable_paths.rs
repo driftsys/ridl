@@ -262,3 +262,33 @@ fn a_manifest_that_links_to_itself_above_the_current_directory_is_named() {
         );
     }
 }
+
+/// A relative entry is normalised lexically before the unreadable manifest
+/// is looked for, so the manifest is named in the normalised form: `sub/..`
+/// names `./ridl.toml` and `./x` names `x/ridl.toml`, not
+/// `sub/../ridl.toml` or `./x/ridl.toml`.
+#[test]
+fn an_unreadable_manifest_is_named_in_the_normalised_form_of_the_entry() {
+    let fixture = Fixture::new("normalised-entry");
+    std::os::unix::fs::symlink("ridl.toml", fixture.root.join("ridl.toml")).unwrap();
+    std::fs::create_dir(fixture.root.join("sub")).unwrap();
+    std::fs::create_dir(fixture.root.join("x")).unwrap();
+    std::os::unix::fs::symlink("ridl.toml", fixture.root.join("x/ridl.toml")).unwrap();
+    for (entry, named) in [("sub/..", "`./ridl.toml`"), ("./x", "`x/ridl.toml`")] {
+        let output = Command::new(RIDL)
+            .args(["check", entry])
+            .current_dir(&fixture.root)
+            .output()
+            .expect("the binary must run");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "ridl check {entry}: {stderr}"
+        );
+        assert!(
+            stderr.contains(&format!("cannot read {named}")),
+            "ridl check {entry} names {named}: {stderr}"
+        );
+    }
+}

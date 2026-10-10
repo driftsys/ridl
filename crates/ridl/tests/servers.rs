@@ -757,7 +757,17 @@ async fn a_wrong_request_is_is_error_not_a_protocol_error() {
 /// Spawns `ridl lsp` followed by `args`, with all three standard streams
 /// piped.
 fn spawn_lsp(args: &[&str]) -> Child {
-    StdCommand::new(env!("CARGO_BIN_EXE_ridl"))
+    spawn_lsp_in(args, None)
+}
+
+/// [`spawn_lsp`] with the server's current directory set to `cwd` when one
+/// is given.
+fn spawn_lsp_in(args: &[&str], cwd: Option<&Path>) -> Child {
+    let mut command = StdCommand::new(env!("CARGO_BIN_EXE_ridl"));
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
+    command
         .arg("lsp")
         .args(args)
         .stdin(Stdio::piped())
@@ -1094,7 +1104,12 @@ struct LspSession {
 
 impl LspSession {
     fn start(root: &Path) -> LspSession {
-        let mut child = spawn_lsp(&[]);
+        LspSession::start_in(root, None)
+    }
+
+    /// [`LspSession::start`] with the server running from `cwd`.
+    fn start_in(root: &Path, cwd: Option<&Path>) -> LspSession {
+        let mut child = spawn_lsp_in(&[], cwd);
         let mut stdin = child.stdin.take().expect("piped stdin");
         let messages = read_messages(child.stdout.take().expect("piped stdout"));
         let initialize = RequestId::from(1);
@@ -1193,6 +1208,27 @@ fn lsp_matches_check_with_lints() {
     );
 
     let session = LspSession::start(&root);
+    let publishes = session.shutdown_collecting_publishes();
+    let mut lsp: Vec<(String, u8)> = publishes
+        .iter()
+        .flat_map(published_code_severity_pairs)
+        .collect();
+    lsp.sort();
+
+    assert_eq!(lsp, cli, "published: {publishes:#?}");
+}
+
+/// The server finds the root from the absolute paths of the `file://` URIs
+/// it receives, not from its current directory: run from inside member `a`,
+/// it still loads the whole workspace and publishes what the CLI reports for
+/// the root.
+#[test]
+fn lsp_loads_the_root_whatever_its_current_directory() {
+    let dir = TempDir::new("lsp-cwd");
+    let root = lint_workspace(&dir);
+    let cli = cli_code_severity_pairs(&root);
+
+    let session = LspSession::start_in(&root, Some(&root.join("a")));
     let publishes = session.shutdown_collecting_publishes();
     let mut lsp: Vec<(String, u8)> = publishes
         .iter()
