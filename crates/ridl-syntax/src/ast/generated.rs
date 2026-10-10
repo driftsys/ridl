@@ -1175,10 +1175,10 @@ impl CommandDef {
     pub fn return_type(&self) -> Option<ReturnType> {
         support::child(&self.syntax)
     }
-    pub fn attr_block(&self) -> Option<AttrBlock> {
+    pub fn timing(&self) -> Option<Timing> {
         support::child(&self.syntax)
     }
-    pub fn timing(&self) -> Option<Timing> {
+    pub fn attr_block(&self) -> Option<AttrBlock> {
         support::child(&self.syntax)
     }
     pub fn command_token(&self) -> Option<SyntaxToken> {
@@ -1211,10 +1211,10 @@ impl QueryDef {
     pub fn return_type(&self) -> Option<ReturnType> {
         support::child(&self.syntax)
     }
-    pub fn attr_block(&self) -> Option<AttrBlock> {
+    pub fn timing(&self) -> Option<Timing> {
         support::child(&self.syntax)
     }
-    pub fn timing(&self) -> Option<Timing> {
+    pub fn attr_block(&self) -> Option<AttrBlock> {
         support::child(&self.syntax)
     }
     pub fn query_token(&self) -> Option<SyntaxToken> {
