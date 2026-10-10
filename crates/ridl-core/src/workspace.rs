@@ -303,10 +303,7 @@ pub fn load_workspace_with(
 /// `ridl.toml` at or above `dir`. The command line, the language server and
 /// the MCP server all call this, so every entry point loads the same root.
 pub fn find_root(dir: &Path) -> Option<PathBuf> {
-    let package = dir
-        .ancestors()
-        .find(|candidate| candidate.join("ridl.toml").is_file())?
-        .to_path_buf();
+    let package = nearest_manifest_dir(dir)?;
     if !matches!(
         read_manifest_kind(&package),
         Some(ManifestKind::Package { .. })
@@ -338,6 +335,30 @@ pub fn find_root(dir: &Path) -> Option<PathBuf> {
         }
     }
     Some(package)
+}
+
+/// The nearest directory at or above `dir` that contains a `ridl.toml`. A
+/// relative `dir` is searched through its absolute ancestors, so the search
+/// passes the current directory, and the result keeps the relative form, with
+/// `.` for the current directory and `..` above it. The empty path stands for
+/// the current directory.
+fn nearest_manifest_dir(dir: &Path) -> Option<PathBuf> {
+    if dir.is_absolute() {
+        return dir
+            .ancestors()
+            .find(|candidate| candidate.join("ridl.toml").is_file())
+            .map(Path::to_path_buf);
+    }
+    let relative = match normalize(dir) {
+        path if path.as_os_str().is_empty() => PathBuf::from("."),
+        path => path,
+    };
+    let absolute_dir = absolute(&relative)?;
+    absolute_dir
+        .ancestors()
+        .enumerate()
+        .find(|(_, candidate)| candidate.join("ridl.toml").is_file())
+        .map(|(levels, _)| up(&relative, levels))
 }
 
 /// The error of the first `ridl.toml` at or above `dir` that cannot be

@@ -2817,7 +2817,7 @@ fn a_member_check_reports_only_the_member_desk_warnings() {
 }
 
 /// A relative member path from the workspace root (`ridl check cluster`)
-/// finds the root as the empty parent of `cluster`, and the desk check still
+/// finds the root as `.`, the current directory, and the desk check still
 /// reads the workspace's files, so each RIDL-407 carries its file and line.
 #[test]
 fn a_relative_member_entry_from_the_root_keeps_the_desk_warning_spans() {
