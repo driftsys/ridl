@@ -1739,8 +1739,6 @@ fn main() {
     assert_eq!(<Cabin as Sizes<FlatBuffers>>::EVENT_BUFFER.as_ref().len(), event);
     assert!(<Cabin as Sizes<FlatBuffers>>::CLAIM_BUFFER.as_ref().iter().all(|b| *b == 0));
     assert!(<Cabin as Sizes<FlatBuffers>>::EVENT_BUFFER.as_ref().iter().all(|b| *b == 0));
-    assert_eq!(Cabin::MAX_BUFFER_SIZE, claim, "the inherent alias reads the table");
-    assert_eq!(Cabin::EVENT_SOURCE_BUFFER_SIZE, event, "the inherent alias reads the table");
     let smallest = <Level as Payload<FlatBuffers>>::BUFFER;
     assert!(smallest.as_ref().len() < claim, "the smallest call payload's buffer is shorter");
     println!("{claim} {event}");

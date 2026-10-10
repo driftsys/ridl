@@ -74,9 +74,10 @@ fn sizes_item<'a>(sizes_impl: &'a str, item: &str, next: &str) -> &'a str {
 /// `<T as Payload<FlatBuffers>>::MAX_SIZE`, never a literal the emitter would
 /// have to keep equal to the codec's. `RESERVATIONS` has one row per member in
 /// `MEMBERS` order — the signal, the event, the command, then the query as the
-/// sum of its request and its reply — and the two buffer constants of the
-/// descriptor are aliases of the table's. The `EncodedSizes` rows the
-/// descriptor once carried are gone with `PayloadInfo::max_size`.
+/// sum of its request and its reply. The two buffer maxima live in the
+/// table only: the descriptor has no inherent alias of them. The
+/// `EncodedSizes` rows the descriptor once carried are gone with
+/// `PayloadInfo::max_size`.
 #[test]
 fn the_size_table_derives_from_max_size() {
     let package = ir::compile_fixture("interaction_face.ridl");
