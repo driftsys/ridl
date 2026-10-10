@@ -2026,9 +2026,10 @@ fn materialize_and_lock(
 /// so the request's `model` is the same JSON value as the
 /// `--emit codegen-model` artifact, one indentation level deeper — the
 /// backend `options`, the artifact base `ridlc` names this package's files
-/// after, and the selected `deployment` section. The one request per package
-/// every in-tree backend and every plugin is handed; a test that wants the
-/// bytes a plugin sees builds it here.
+/// after, and the selected `deployment` section. [`write_emits`] builds it once
+/// per package and hands each in-tree backend and each plugin a copy whose
+/// `options` are those of that backend's own `[backend.<name>]` table; a test
+/// that wants the bytes a plugin sees builds it here.
 pub fn codegen_request(
     base: &str,
     package: &ridl_ir::v2::Package,
@@ -2281,8 +2282,9 @@ fn write_catalogs(
 /// Every code emit but [`Emit::Catalog`] goes through the backend contract
 /// ([`codegen::Backend`], ADR-0020 decision 9): one [`codegen_request`] is
 /// built for the package — the model lowered once — and each in-tree
-/// backend is called over it as a plugin would be, the response written by
-/// [`write_response`]. The Rust backend is
+/// backend is called, as a plugin would be, over a copy of it whose `options`
+/// are those of the backend's own `[backend.<name>]` table, the response
+/// written by [`write_response`]. The Rust backend is
 /// [`ridl_backend_rust::Backend`] over
 /// [`generate_pipeline`](ridl_backend_rust::generate_pipeline), which emits
 /// the interaction face and the descriptors beside the domain types and the
@@ -2307,8 +2309,8 @@ fn write_catalogs(
 /// that encoding (ADR-0014 decisions 12 and 14) the failure is a diagnostic
 /// and no artifact is written; `ir-binary` has no failure path (decision 7).
 ///
-/// Each plugin runs after the emits, over the same request, through the
-/// process host ([`plugin::run`]); a host failure is an error diagnostic
+/// Each plugin runs after the emits, over a copy of the same request with the
+/// `options` of its own `[backend.<name>]` table, through the process host ([`plugin::run`]); a host failure is an error diagnostic
 /// naming the plugin, and a response is written as an in-tree backend's is.
 ///
 /// `compatible` is the list of earlier catalog hashes of the package's unit,
