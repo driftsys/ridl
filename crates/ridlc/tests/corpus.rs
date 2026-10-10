@@ -1660,7 +1660,7 @@ fn rustc_accepts(label: &str, source: &str) -> bool {
             "lib",
             "--emit",
             "metadata",
-            // The first of the four lints denied by name (issue #161). A
+            // The first of the five lints denied by name (issue #161). A
             // generated `pub` item
             // over a `pub(crate)` type is warn-by-default on current rustc, so
             // a plain exit-status check accepts it — which is why the corpus's
@@ -1689,6 +1689,11 @@ fn rustc_accepts(label: &str, source: &str) -> bool {
             "non_snake_case",
             "-D",
             "non_camel_case_types",
+            // The regression guard for issue #819: the items of an `internal`
+            // declaration are `pub(crate)`, nothing in this crate uses most of
+            // them, and each carries an allowance.
+            "-D",
+            "dead_code",
         ])
         .arg("-o")
         .arg(&meta_path)

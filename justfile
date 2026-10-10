@@ -454,7 +454,7 @@ compat-check: toolchain-check
 # lints the emitted `lib.rs` allows stay allowed. Unlike the run
 # above, this one keeps `allow`: `clippy::module_inception` does not fire on
 # the corpus crate, so a stale entry there does not fail, but the run above
-# fires it and holds it. Any other warning is a defect in the emitter.
+# fires it and holds it. Any warning is a defect in the emitter.
 #
 # The binary is reached through `CARGO_TARGET_DIR` where it is set, the way
 # `compat-check` reads it, rather than through a hardcoded `./target`: a
