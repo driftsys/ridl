@@ -1015,9 +1015,162 @@ fn rsdl_profile_codes_match_the_reference_table() {
     }
 }
 
+/// The rule of each row of the rsdl reference §16.1 table starts with the
+/// summary of the catalogue entry for its code (see [`compare_rule`]), and a
+/// row with no catalogue entry is on [`DEFERRED_OR_RETIRED`].
+#[test]
+fn rsdl_reference_rules_match_the_catalogue_summaries() {
+    let rows = rsdl_reference_rows();
+    let mut mismatches = Vec::new();
+    for entry in ridl_core::diag::RSDL_CATALOG {
+        let code = entry.code.as_str();
+        match rows.get(code) {
+            Some((rule, _)) => mismatches.extend(compare_rule(code, entry.summary, rule)),
+            None => mismatches.push(format!("{code}: no row in the rsdl reference §16.1")),
+        }
+    }
+    let row_codes: BTreeSet<&str> = rows.keys().map(String::as_str).collect();
+    let catalogue_codes: BTreeSet<&str> = ridl_core::diag::RSDL_CATALOG
+        .iter()
+        .map(|entry| entry.code.as_str())
+        .collect();
+    let allowed = deferred_or_retired("RSDL-");
+    mismatches.extend(table_only_mismatches(
+        &row_codes,
+        &catalogue_codes,
+        &allowed,
+    ));
+    assert!(
+        mismatches.is_empty(),
+        "the rsdl catalogue disagrees with the reference §16.1 table:\n  {}",
+        mismatches.join("\n  ")
+    );
+}
+
+/// The codes a reference table specifies that the catalogue has no entry for,
+/// each with the reason: the codes the checker does not emit yet, and the
+/// codes the lock retired.
+/// Each code is a prefix and a number, because the guard that finds code
+/// literals in Rust sources (`codes_written_as_string_literals_are_all_catalogued`)
+/// reads a quoted code as an emitted one, and none of these is catalogued.
+const DEFERRED_OR_RETIRED: &[(&str, u16, &str)] = &[
+    (
+        "TYPL",
+        107,
+        "deferred: no pass emits it (driftsys/ridl#172)",
+    ),
+    (
+        "TYPL",
+        112,
+        "deferred: no pass emits it (driftsys/ridl#172)",
+    ),
+    (
+        "TYPL",
+        205,
+        "deferred: no pass emits it (driftsys/ridl#172)",
+    ),
+    (
+        "TYPL",
+        402,
+        "deferred: the `@labels` vocabulary check is not emitted (driftsys/ridl#172)",
+    ),
+    (
+        "TYPL",
+        403,
+        "deferred: the `@labels` combination check is not emitted (driftsys/ridl#172)",
+    ),
+    (
+        "RIDL",
+        146,
+        "retired by the lock: a service's list holds no tombstone",
+    ),
+    (
+        "RIDL",
+        147,
+        "retired by the lock: interface names are keyed by interface number",
+    ),
+    (
+        "RIDL",
+        148,
+        "retired by the lock: `reserved` in a service's list is a parse error",
+    ),
+    (
+        "RIDL",
+        501,
+        "deferred: the family and obligation checks of ridl §16.5 are not emitted",
+    ),
+    (
+        "RIDL",
+        502,
+        "deferred: the family and obligation checks of ridl §16.5 are not emitted",
+    ),
+    (
+        "RIDL",
+        503,
+        "deferred: the family and obligation checks of ridl §16.5 are not emitted",
+    ),
+    (
+        "RIDL",
+        504,
+        "deferred: the family and obligation checks of ridl §16.5 are not emitted",
+    ),
+    (
+        "RIDL",
+        505,
+        "deferred: the family and obligation checks of ridl §16.5 are not emitted",
+    ),
+    (
+        "RIDL",
+        506,
+        "deferred: the family and obligation checks of ridl §16.5 are not emitted",
+    ),
+    (
+        "RIDL",
+        507,
+        "deferred: the family and obligation checks of ridl §16.5 are not emitted",
+    ),
+    (
+        "RIDL",
+        508,
+        "deferred: the family and obligation checks of ridl §16.5 are not emitted",
+    ),
+];
+
+/// The [`DEFERRED_OR_RETIRED`] codes that start with `prefix`, written out.
+fn deferred_or_retired(prefix: &str) -> Vec<(String, &'static str)> {
+    DEFERRED_OR_RETIRED
+        .iter()
+        .filter(|(family, _, _)| prefix.starts_with(family))
+        .map(|(family, number, reason)| (format!("{family}-{number}"), *reason))
+        .collect()
+}
+
+/// The rows of a table whose code cell starts with `prefix`, each mapped to
+/// its rule cell and its severity cell. A `\|` inside a cell is an escaped
+/// pipe, not a column border, and reads as `|`. The code, rule and severity are
+/// the first three cells, so a table may go on with more columns.
+fn table_rows(section: &str, prefix: &str, what: &str) -> BTreeMap<String, (String, String)> {
+    let mut rows = BTreeMap::new();
+    for line in section.lines() {
+        let cells: Vec<String> = line
+            .replace("\\|", "\u{0}")
+            .split('|')
+            .map(|cell| cell.trim().replace('\u{0}', "|"))
+            .collect();
+        let [_, code, rule, severity, _, ..] = cells.as_slice() else {
+            continue;
+        };
+        if !code.starts_with(prefix) {
+            continue;
+        }
+        let previous = rows.insert(code.clone(), (rule.clone(), severity.clone()));
+        assert!(previous.is_none(), "{what}: {code} has two rows");
+    }
+    rows
+}
+
 /// The rows of a language reference's `## 16. Diagnostics` tables whose code
-/// starts with `prefix`, each mapped to its rule cell and its severity cell. A
-/// `\|` inside a cell is an escaped pipe, not a column border, and reads as `|`.
+/// starts with `prefix`.
 fn reference_diagnostic_rows(file: &str, prefix: &str) -> BTreeMap<String, (String, String)> {
     let path = repository_root().join("docs/specification").join(file);
     let reference = std::fs::read_to_string(&path).expect("the reference is readable");
@@ -1026,32 +1179,75 @@ fn reference_diagnostic_rows(file: &str, prefix: &str) -> BTreeMap<String, (Stri
         .nth(1)
         .and_then(|rest| rest.split("## 17.").next())
         .unwrap_or_else(|| panic!("{file} has a §16 Diagnostics section"));
-    let mut rows = BTreeMap::new();
-    for line in section.lines() {
-        let cells: Vec<String> = line
-            .replace("\\|", "\u{0}")
-            .split('|')
-            .map(|cell| cell.trim().replace('\u{0}', "|"))
-            .collect();
-        let [_, code, rule, severity, _] = cells.as_slice() else {
-            continue;
-        };
-        if !code.starts_with(prefix) {
-            continue;
+    table_rows(section, prefix, &format!("{file} §16"))
+}
+
+/// The rows of the rsdl reference's §16.1 table.
+fn rsdl_reference_rows() -> BTreeMap<String, (String, String)> {
+    let path = repository_root().join("docs/specification/rsdl-language-reference.md");
+    let reference = std::fs::read_to_string(&path).expect("the rsdl reference is readable");
+    let table = reference
+        .split("### 16.1 Codes in force")
+        .nth(1)
+        .and_then(|rest| rest.split("### 16.2").next())
+        .expect("the rsdl reference has a §16.1 table");
+    table_rows(table, "RSDL-", "the rsdl reference §16.1")
+}
+
+/// Compares a reference rule cell with a catalogue summary. The rule is the
+/// summary, or the summary followed by a parenthesis (` (`) or an explanation
+/// (` — `). A `, ` after the summary is not accepted: it is how a clause that
+/// the catalogue lost stays hidden behind the summary that remains. Returns the
+/// mismatch text, or `None` when the two agree.
+fn compare_rule(code: &str, summary: &str, rule: &str) -> Option<String> {
+    let leads = rule == summary
+        || [" (", " — "]
+            .iter()
+            .any(|separator| rule.starts_with(&format!("{summary}{separator}")));
+    (!leads).then(|| {
+        format!(
+            "{code}: the reference rule does not start with the catalogue summary\n    \
+             summary: {summary}\n    rule:    {rule}"
+        )
+    })
+}
+
+/// The mismatches between the codes of a reference table and the codes of its
+/// catalogue: a row with no catalogue entry must be on `allowed` (the deferred
+/// and retired codes, each with its reason), an `allowed` code must have a row,
+/// and an `allowed` code must have no catalogue entry.
+fn table_only_mismatches(
+    row_codes: &BTreeSet<&str>,
+    catalogue_codes: &BTreeSet<&str>,
+    allowed: &[(String, &str)],
+) -> Vec<String> {
+    let mut mismatches = Vec::new();
+    for code in row_codes.difference(catalogue_codes) {
+        if !allowed.iter().any(|(listed, _)| listed == code) {
+            mismatches.push(format!(
+                "{code}: a row with no catalogue entry that is not on the deferred or retired list"
+            ));
         }
-        let previous = rows.insert(code.clone(), (rule.clone(), severity.clone()));
-        assert!(previous.is_none(), "{file}: {code} has two rows in §16");
     }
-    rows
+    for (code, _) in allowed {
+        if !row_codes.contains(code.as_str()) {
+            mismatches.push(format!(
+                "{code}: on the deferred or retired list, with no row"
+            ));
+        }
+        if catalogue_codes.contains(code.as_str()) {
+            mismatches.push(format!(
+                "{code}: on the deferred or retired list, but the catalogue has an entry"
+            ));
+        }
+    }
+    mismatches
 }
 
 /// Every TYPL and RIDL catalogue entry has a row in its language reference's
 /// §16 tables, the row gives the catalogue severity, and the row's rule starts
-/// with the catalogue summary. The rule may go on after the summary, but only
-/// past a parenthesis (` (`), an explanation (` — `) or a clause (`, `), so
-/// the summary is a whole leading phrase of the rule and not a fragment of
-/// one. A row with no catalogue entry is allowed: the references specify codes
-/// the checker does not emit yet, and the codes the lock retired.
+/// with the catalogue summary (see [`compare_rule`]). A row with no catalogue
+/// entry must be on [`DEFERRED_OR_RETIRED`].
 #[test]
 fn typl_and_ridl_catalogue_entries_match_the_reference_tables() {
     let tables = [
@@ -1091,18 +1287,17 @@ fn typl_and_ridl_catalogue_entries_match_the_reference_tables() {
                     "{code}: the catalogue severity is {expected}, {file} §16 gives `{severity}`"
                 ));
             }
-            let summary = entry.summary;
-            let leads = rule == summary
-                || [" (", " — ", ", "]
-                    .iter()
-                    .any(|separator| rule.starts_with(&format!("{summary}{separator}")));
-            if !leads {
-                mismatches.push(format!(
-                    "{code}: the {file} §16 rule does not start with the catalogue summary\n    \
-                     summary: {summary}\n    rule:    {rule}"
-                ));
-            }
+            mismatches.extend(compare_rule(code, entry.summary, rule));
         }
+        let row_codes: BTreeSet<&str> = rows.keys().map(String::as_str).collect();
+        let catalogue_codes: BTreeSet<&str> =
+            catalogue.iter().map(|entry| entry.code.as_str()).collect();
+        let allowed = deferred_or_retired(prefix);
+        mismatches.extend(table_only_mismatches(
+            &row_codes,
+            &catalogue_codes,
+            &allowed,
+        ));
     }
     assert!(
         mismatches.is_empty(),
@@ -2340,5 +2535,82 @@ fn reserved_integer_in_a_struct_or_union_is_inert() {
         tombstones,
         vec![(2, None, Some(3))],
         "the struct tombstone holds its ordinal but records no retired name",
+    );
+}
+
+/// The reference's rule cell for `code`, read through the table reader.
+fn real_rule(rows: &BTreeMap<String, (String, String)>, code: &str) -> String {
+    rows.get(code)
+        .unwrap_or_else(|| panic!("{code} has a row"))
+        .0
+        .clone()
+}
+
+#[test]
+fn a_catalogue_summary_that_lost_a_clause_is_rejected() {
+    let rows = reference_diagnostic_rows("ridl-language-reference.md", "RIDL-");
+    let rule = real_rule(&rows, "RIDL-408");
+    assert!(
+        compare_rule("RIDL-408", "interaction removed", &rule).is_some(),
+        "a summary cut to `interaction removed` must not match the rule `{rule}`"
+    );
+}
+
+#[test]
+fn a_rsdl_summary_altered_by_one_word_is_rejected() {
+    let rows = rsdl_reference_rows();
+    let entry = ridl_core::diag::RSDL_CATALOG
+        .iter()
+        .find(|entry| entry.code.as_str() == "RSDL-306")
+        .expect("RSDL-306 is in the catalogue");
+    let rule = real_rule(&rows, "RSDL-306");
+    assert_eq!(compare_rule("RSDL-306", entry.summary, &rule), None);
+    let altered = entry.summary.replacen("duplicate", "repeated", 1);
+    assert_ne!(altered, entry.summary, "the alteration changes the summary");
+    assert!(compare_rule("RSDL-306", &altered, &rule).is_some());
+}
+
+#[test]
+fn a_renamed_table_only_row_is_rejected_and_the_missing_row_reported() {
+    let rows = reference_diagnostic_rows("typl-language-reference.md", "TYPL-");
+    let mut codes: BTreeSet<&str> = rows.keys().map(String::as_str).collect();
+    let catalogue: BTreeSet<&str> = ridl_core::diag::TYPL_CATALOG
+        .iter()
+        .map(|entry| entry.code.as_str())
+        .collect();
+    let allowed = deferred_or_retired("TYPL-");
+    assert!(
+        table_only_mismatches(&codes, &catalogue, &allowed).is_empty(),
+        "the unmutated table passes"
+    );
+    // The codes are built, not written as literals: no catalogue lists the typo.
+    let deferred = format!("TYPL-{}", 107);
+    let typo = format!("TYPL-{}", 170);
+    assert!(codes.remove(deferred.as_str()), "{deferred} has a row");
+    codes.insert(typo.as_str());
+    let mismatches = table_only_mismatches(&codes, &catalogue, &allowed);
+    assert!(
+        mismatches
+            .iter()
+            .any(|m| m.starts_with(&format!("{typo}:"))),
+        "{typo} is rejected: {mismatches:?}"
+    );
+    assert!(
+        mismatches
+            .iter()
+            .any(|m| m.starts_with(&format!("{deferred}:")) && m.contains("with no row")),
+        "{deferred} is reported missing: {mismatches:?}"
+    );
+}
+
+#[test]
+fn a_stale_exception_is_rejected() {
+    let codes: BTreeSet<&str> = ["TYPL-001"].into();
+    let catalogue: BTreeSet<&str> = ["TYPL-001"].into();
+    let mismatches = table_only_mismatches(&codes, &catalogue, &[(format!("TYPL-{:03}", 1), "x")]);
+    assert!(
+        mismatches
+            .iter()
+            .any(|m| m.contains("catalogue has an entry"))
     );
 }

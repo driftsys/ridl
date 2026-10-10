@@ -632,7 +632,7 @@ diag_codes! {
         /// not parse whole: such a range draws FORM-101 and no RIDL-101 from
         /// the default maximum. Emitted by the checker.
         RIDL_101 = "RIDL-101", Error,
-            "timing range `@[X..Y]` with `X > Y`";
+            "timing range `@[X..Y]` with `X > Y`, also an `@[X..]` on a `command` or a `query` whose default maximum is shorter than X";
 
         /// A zero or negative timing duration (ridl §9.2, §16.1). Emitted by the
         /// checker.
@@ -1082,12 +1082,13 @@ diag_codes! {
         /// `requires` lines, of one component (rsdl §3.2, §16.1). Error. Raised
         /// by the rsdl closure check.
         RSDL_309 = "RSDL-309", Error,
-            "the same service or interface on two lines of one component";
+            "the same service on two `offers` lines, or the same interface on two `requires` lines, of \
+             one component";
 
         /// An `offers` line names something that is not a service, or nothing
         /// (rsdl §3.2, §16.1). Error. Raised by the rsdl closure check.
         RSDL_310 = "RSDL-310", Error,
-            "an `offers` line names something that is not a service";
+            "an `offers` line names something that is not a service, or nothing";
 
         /// A `requires` line names a service whose shape is a list of
         /// interfaces; the diagnostic lists them (rsdl §3.2, §16.1). Error.
@@ -1099,7 +1100,8 @@ diag_codes! {
         /// an inline-shape service, or nothing (rsdl §3.2, §16.1). Error. Raised
         /// by the rsdl closure check.
         RSDL_312 = "RSDL-312", Error,
-            "a `requires` line names neither an interface nor an inline-shape service";
+            "a `requires` line names something that is neither an interface nor an inline-shape \
+             service, or nothing";
 
         /// `external` written with a value — it is a flag (rsdl §5, §16.1).
         /// Error. Raised by the rsdl attribute check.
@@ -1110,7 +1112,7 @@ diag_codes! {
         /// lists — a missing provider (rsdl §8, §16.1). Error. Raised by the rsdl
         /// resolution.
         RSDL_403 = "RSDL-403", Error,
-            "a closure component requires an interface no closure service lists";
+            "a closure component requires an interface that no closure service lists";
 
         /// An interface listed by two services of the closure, raised for every
         /// interface they list (rsdl §8, §16.1). Error. Raised by the rsdl
@@ -1133,7 +1135,7 @@ diag_codes! {
         /// offers it; the diagnostic names the offerer (rsdl §6, §16.1). Error.
         /// Raised by the rsdl closure check.
         RSDL_504 = "RSDL-504", Error,
-            "a member line names a service that a declared component offers";
+            "a member line names a service by its name while a declared component offers it";
 
         /// More than one `system` in the workspace (rsdl §3.1, §16.1). Error.
         /// Raised by the rsdl closure check.
@@ -1143,7 +1145,7 @@ diag_codes! {
         /// A `system` member line names nothing that is a component or a service
         /// (rsdl §3.1, §16.1). Error. Raised by the rsdl closure check.
         RSDL_602 = "RSDL-602", Error,
-            "a `system` member line names neither a component nor a service";
+            "a `system` member line names nothing that is a component or a service";
 
         /// A name listed twice in one `system` body (rsdl §3.1, §16.1). Error.
         /// Raised by the rsdl closure check.
@@ -1154,7 +1156,7 @@ diag_codes! {
         /// at the top level of an `.rsdl` file (rsdl §2, §16.1). Error. Raised
         /// by the parser.
         RSDL_604 = "RSDL-604", Error,
-            "a declaration of another profile in an `.rsdl` file";
+            "a declaration of another profile (a type, an interface, a service) in an `.rsdl` file";
 
         /// An instance of a closure component with no placement in a deployment
         /// (rsdl §9, §16.1). Error; blocks that deployment only (§13). Raised by
@@ -1166,12 +1168,13 @@ diag_codes! {
         /// closure, or a name that resolves to nothing (rsdl §9, §16.1). Error.
         /// Raised by the rsdl placement check.
         RSDL_702 = "RSDL-702", Error,
-            "a placement line names something outside the closure, or nothing";
+            "a placement line names a component, instance or service outside the closure, or a name \
+             that resolves to nothing";
 
         /// `deployment … for Y` where `Y` resolves to no declared `system`
         /// (rsdl §3.4, §16.1). Error. Raised by the rsdl placement check.
         RSDL_704 = "RSDL-704", Error,
-            "a deployment is `for` no declared `system`";
+            "`deployment … for Y` where `Y` resolves to no declared `system`";
 
         /// Two machines with one name in one deployment (rsdl §3.5, §16.1).
         /// Error. Raised by the rsdl placement check.
@@ -1198,8 +1201,8 @@ diag_codes! {
         /// within the key's range (rsdl §5, §16.1). Error, scoped to its
         /// deployment (rsdl §13). Raised by the rsdl attribute reader.
         RSDL_709 = "RSDL-709", Error,
-            "a `depth`, `slots` or `budget` value is not an integer within its range, or the key \
-             is written bare";
+            "a `depth`, `slots` or `budget` value that the parser reads is not an integer within its \
+             range, or the key is written bare";
 
         /// A backend key whose namespace no configured backend claims (rsdl §5,
         /// §16.1). Warning: the key is still carried. Raised by `ridlc`, which
@@ -1230,7 +1233,8 @@ diag_codes! {
         /// without `tier` is exempt (rsdl §3.3, §16.1). Error. Raised by the
         /// rsdl distribution check.
         RSDL_901 = "RSDL-901", Error,
-            "a `PLATFORM` distribution requires into an `APPLICATION` distribution";
+            "a `PLATFORM` distribution holds a component whose `requires` resolves into an \
+             `APPLICATION` distribution";
 
         /// A distribution member line names something outside the closure, or
         /// nothing (rsdl §3.3, §16.1). Error. Raised by the rsdl distribution
@@ -1242,7 +1246,8 @@ diag_codes! {
         /// workspace declares at least one (rsdl §3.3, §16.1). Error. Raised by
         /// the rsdl distribution check.
         RSDL_904 = "RSDL-904", Error,
-            "an implemented closure component in no distribution";
+            "an implemented closure component in no distribution, while the workspace declares at \
+             least one";
 
         /// A component listed by two distributions (rsdl §3.3, §16.1). Error.
         /// Raised by the rsdl distribution check.

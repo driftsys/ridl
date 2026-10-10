@@ -1940,7 +1940,9 @@ story-id-check root="":
 # dropped from CI, or added to `build` and never wired into CI, which is how
 # `mdbook build` came to run in CI and nowhere else. This compares the two
 # lists: every dependency of `build` must appear in .github/workflows/ci.yml as
-# a `run:` step invoking `just <recipe>`.
+# a `run:` step invoking `just <recipe>`. It also checks the members of `build`
+# against the `expected` list in this recipe, so a member added to or removed
+# from `build` without a matching edit here fails.
 #
 # What it checks is narrow, and the narrowness is the point of this paragraph.
 # It checks that the text of a `run: just <member>` step is present in the
@@ -1976,6 +1978,21 @@ gate-parity:
     members="$(just --dump | sed -n 's/^build:[[:space:]]*//p')"
     if [ -z "$members" ]; then
         echo "gate-parity: could not read the dependencies of 'build' from the justfile." >&2
+        exit 1
+    fi
+    # The members `build` is expected to have. A member is stated here and on
+    # the `build:` line, so removing or adding one has to be done twice. Without
+    # this list the check would read its expectation from the line under test,
+    # and a member removed from that line would only shrink what is checked.
+    expected="toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check compile test lint wasm-check compat-check demo check"
+    removed="$(comm -23 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort) | paste -sd' ' -)"
+    added="$(comm -13 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort -u) | paste -sd' ' -)"
+    duplicated="$(printf '%s\n' $members | sort | uniq -d | paste -sd' ' -)"
+    if [ -n "$removed" ] || [ -n "$added" ] || [ -n "$duplicated" ]; then
+        [ -z "$removed" ] || echo "gate-parity: removed from 'build': $removed" >&2
+        [ -z "$added" ] || echo "gate-parity: added to 'build': $added" >&2
+        [ -z "$duplicated" ] || echo "gate-parity: listed twice in 'build': $duplicated" >&2
+        echo "gate-parity: update the expected list in the gate-parity recipe to match 'build'." >&2
         exit 1
     fi
     steps="$(grep -vE '^[[:space:]]*#' "$workflow")"

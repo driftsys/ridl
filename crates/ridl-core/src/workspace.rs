@@ -240,6 +240,9 @@ pub fn load_workspace_with(
         match find_root(entry) {
             Some(root) => loader.load_root(db, &root)?,
             None => {
+                if let Some(error) = unreadable_manifest(entry) {
+                    return Err(error.into());
+                }
                 return Err(io::Error::new(
                     io::ErrorKind::NotFound,
                     format!("no `ridl.toml` found at or above `{}`", entry.display()),
@@ -335,6 +338,34 @@ pub fn find_root(dir: &Path) -> Option<PathBuf> {
         }
     }
     Some(package)
+}
+
+/// The error of the first `ridl.toml` at or above `dir` that cannot be
+/// inspected for a reason other than being absent, naming the manifest.
+/// `find_root` treats such a manifest as missing, so the caller uses this to
+/// report the real cause. The walk up the ancestors matters for the errors that
+/// can hit an ancestor's manifest while the entry itself is reachable, such as
+/// a symbolic link loop; a directory that cannot be searched also hides the
+/// entry below it.
+fn unreadable_manifest(dir: &Path) -> Option<io::Error> {
+    dir.ancestors().find_map(|candidate| {
+        let manifest = candidate.join("ridl.toml");
+        match fs::metadata(&manifest) {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => Some(io::Error::new(
+                e.kind(),
+                format!("cannot read `{}`: {e}", manifest.display()),
+            )),
+            _ => None,
+        }
+    })
+}
+
+/// `error` with the path that failed added to its message.
+fn cannot_read(path: &Path, error: io::Error) -> io::Error {
+    io::Error::new(
+        error.kind(),
+        format!("cannot read `{}`: {error}", path.display()),
+    )
 }
 
 /// The manifest kind of `dir/ridl.toml`, or `None` when the file cannot be
@@ -597,7 +628,8 @@ impl Loader {
             ));
             return Ok(());
         }
-        let text = fs::read_to_string(&manifest_path)?;
+        let text =
+            fs::read_to_string(&manifest_path).map_err(|e| cannot_read(&manifest_path, e))?;
         let file_id = self.sources.file_id(&path_string(&manifest_path), &text);
         let (manifest, diags) = parse_manifest(file_id, &text);
         self.diagnostics.extend(diags);
@@ -726,10 +758,13 @@ impl Loader {
         let mut source_files = Vec::new();
         let mut unsupported_files = Vec::new();
         let mut subdirs = Vec::new();
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
+        let named = |e: io::Error| {
+            io::Error::new(e.kind(), format!("cannot read `{}`: {e}", dir.display()))
+        };
+        for entry in fs::read_dir(dir).map_err(named)? {
+            let entry = entry.map_err(named)?;
             let path = entry.path();
-            let is_symlink = entry.file_type()?.is_symlink();
+            let is_symlink = entry.file_type().map_err(named)?.is_symlink();
             if path.is_dir() {
                 if !is_symlink {
                     subdirs.push(path);
@@ -825,7 +860,8 @@ impl Loader {
             }
             let nested_manifest = subdir.join("ridl.toml");
             if nested_manifest.is_file() {
-                let nested_text = fs::read_to_string(&nested_manifest)?;
+                let nested_text = fs::read_to_string(&nested_manifest)
+                    .map_err(|e| cannot_read(&nested_manifest, e))?;
                 let nested_id = self
                     .sources
                     .file_id(&path_string(&nested_manifest), &nested_text);
@@ -1004,7 +1040,7 @@ impl Loader {
         let replacement = self.take_overlay(path);
         let text = match replacement
             .map(Ok)
-            .unwrap_or_else(|| fs::read_to_string(path))
+            .unwrap_or_else(|| fs::read_to_string(path).map_err(|e| cannot_read(path, e)))
         {
             Ok(text) => text,
             Err(err) if err.kind() == io::ErrorKind::InvalidData => {

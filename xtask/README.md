@@ -34,21 +34,22 @@ and published by replacing each destination file.
 This command builds `ridl-cli` with the locked dependency graph, using
 `<out-dir>/.calibrate-target` as a separate build directory. It copies every
 workspace under `evals/corpus/` into a temporary directory inside `<out-dir>`,
-appends a `[lints]` table setting all five candidate checks to `warn`, and runs
-`ridl check --format json`. It refuses a corpus manifest that already contains a
-`[lints]` table. The original corpus files are read only. Temporary workspace
-copies are removed when the command returns; the build directory remains for
-subsequent runs.
+probes the built `ridl` for the candidate checks it ships, appends a `[lints]`
+table setting only those checks to `warn`, and runs `ridl check --format json`.
+It refuses a corpus manifest that already contains a `[lints]` table. The
+original corpus files are read only. Temporary workspace copies are removed when
+the command returns; the build directory remains for subsequent runs.
 
 The five output files are `<out-dir>/<lint-name>.json`. Each is an array of
 records with `id`, `workspace`, `location`, `message`, and a typed `metric` for
 thresholded checks. Unit and abbreviation records omit `metric`. Empty arrays
 are valid. Two of the five candidates, `inconsistent-abbreviation` and
 `package-fan-out`, did not ship as lints after the calibration
-(`evals/calibration/summary.md`); their `[lints]` entries draw MANI-010 and
-their output arrays are empty on a current build, while their committed label
-files keep the findings that were labelled. Diagnostic errors or malformed
-metadata fail the command before any finding array is written.
+(`evals/calibration/summary.md`); the dump leaves them out of the `[lints]`
+table, so their output arrays are empty on a current build, while their
+committed label files keep the findings that were labelled. Diagnostic errors,
+any MANI-010 in a corpus report, or malformed metadata fail the command before
+any finding array is written.
 
 IDs have the form
 `<lint>:<workspace>:<relative-source-path>:<start-byte>-<end-byte>:<occurrence>`.

@@ -138,12 +138,12 @@ prediction.
    `markdown` when every file is Rust source. The filter fails closed: a path
    that is not on the list runs the job. A push to `main` and a manual run run
    every job, so `just build` is what CI runs on `main`, and a subset of it on a
-   pull request. `gate-parity` still checks only that each member is invoked in
-   the workflow text, not that every pull request runs it, which is the case
-   decision 6 describes. The path list is a maintained input of the workflow: a
-   new test that reads a file outside `crates/` needs no edit, because the file
-   is not listed, but a new documentation path added to the list has to be one
-   that no test reads.
+   pull request. `gate-parity` checks that each member is invoked in the
+   workflow text and that `build` keeps the members it expects, not that every
+   pull request runs it, which is the case decision 6 describes. The path list
+   is a maintained input of the workflow: a new test that reads a file outside
+   `crates/` needs no edit, because the file is not listed, but a new
+   documentation path added to the list has to be one that no test reads.
 
    When CI needs a variant of a check, the recipe takes a parameter and CI
    passes it. That is how the fifth instance was closed: the `convco` job
@@ -161,7 +161,9 @@ prediction.
    came to run in CI alone, and how `wasm-check` came to be a recipe nothing
    depended on (#182). The recipe reads `build`'s dependency list from the
    justfile and fails when any member is not invoked by a `run:` step in
-   `.github/workflows/ci.yml`.
+   `.github/workflows/ci.yml`. It also holds the expected members in a list of
+   its own and fails when `build` loses or gains one, so a member removed from
+   `build` is refused instead of shrinking what is checked (#426).
 
    What it proves is narrow: that the text of each step is present. It does not
    prove the step is reached — dropping a job from the `ci` aggregate's
@@ -294,9 +296,10 @@ prediction.
 - Negative / accepted: mdBook and `just` are pinned on the CI side and unpinned
   on the contributor side (decision 8). The two sides can run different releases
   of both, and did while this ADR was being written.
-- Negative / accepted: `gate-parity` watches only the members of `build`.
-  `verify` and `lint-commits` are outside it, and that is where the fifth
-  instance hid. Single-sourcing is what protects those two; no check does.
+- Negative / accepted: `gate-parity` watches only the members of `build` (and
+  holds their expected list). `verify` and `lint-commits` are outside it, and
+  that is where the fifth instance hid. Single-sourcing is what protects those
+  two; no check does.
 - Negative / accepted: CI installs `just` in five jobs, which is five copies of
   one download step. A composite action would remove the repetition and add a
   file that cannot be exercised while CI is stuck.

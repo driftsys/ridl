@@ -654,7 +654,7 @@ expression: log
             {
               "id": "RIDL-101",
               "shortDescription": {
-                "text": "timing range `@[X..Y]` with `X > Y`"
+                "text": "timing range `@[X..Y]` with `X > Y`, also an `@[X..]` on a `command` or a `query` whose default maximum is shorter than X"
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -1090,7 +1090,7 @@ expression: log
             {
               "id": "RSDL-309",
               "shortDescription": {
-                "text": "the same service or interface on two lines of one component"
+                "text": "the same service on two `offers` lines, or the same interface on two `requires` lines, of one component"
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -1099,7 +1099,7 @@ expression: log
             {
               "id": "RSDL-310",
               "shortDescription": {
-                "text": "an `offers` line names something that is not a service"
+                "text": "an `offers` line names something that is not a service, or nothing"
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -1117,7 +1117,7 @@ expression: log
             {
               "id": "RSDL-312",
               "shortDescription": {
-                "text": "a `requires` line names neither an interface nor an inline-shape service"
+                "text": "a `requires` line names something that is neither an interface nor an inline-shape service, or nothing"
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -1135,7 +1135,7 @@ expression: log
             {
               "id": "RSDL-403",
               "shortDescription": {
-                "text": "a closure component requires an interface no closure service lists"
+                "text": "a closure component requires an interface that no closure service lists"
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -1172,7 +1172,7 @@ expression: log
             {
               "id": "RSDL-504",
               "shortDescription": {
-                "text": "a member line names a service that a declared component offers"
+                "text": "a member line names a service by its name while a declared component offers it"
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -1190,7 +1190,7 @@ expression: log
             {
               "id": "RSDL-602",
               "shortDescription": {
-                "text": "a `system` member line names neither a component nor a service"
+                "text": "a `system` member line names nothing that is a component or a service"
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -1208,7 +1208,7 @@ expression: log
             {
               "id": "RSDL-604",
               "shortDescription": {
-                "text": "a declaration of another profile in an `.rsdl` file"
+                "text": "a declaration of another profile (a type, an interface, a service) in an `.rsdl` file"
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -1226,7 +1226,7 @@ expression: log
             {
               "id": "RSDL-702",
               "shortDescription": {
-                "text": "a placement line names something outside the closure, or nothing"
+                "text": "a placement line names a component, instance or service outside the closure, or a name that resolves to nothing"
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -1235,7 +1235,7 @@ expression: log
             {
               "id": "RSDL-704",
               "shortDescription": {
-                "text": "a deployment is `for` no declared `system`"
+                "text": "`deployment … for Y` where `Y` resolves to no declared `system`"
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -1280,7 +1280,7 @@ expression: log
             {
               "id": "RSDL-709",
               "shortDescription": {
-                "text": "a `depth`, `slots` or `budget` value is not an integer within its range, or the key is written bare"
+                "text": "a `depth`, `slots` or `budget` value that the parser reads is not an integer within its range, or the key is written bare"
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -1319,7 +1319,7 @@ expression: log
             {
               "id": "RSDL-901",
               "shortDescription": {
-                "text": "a `PLATFORM` distribution requires into an `APPLICATION` distribution"
+                "text": "a `PLATFORM` distribution holds a component whose `requires` resolves into an `APPLICATION` distribution"
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -1337,7 +1337,7 @@ expression: log
             {
               "id": "RSDL-904",
               "shortDescription": {
-                "text": "an implemented closure component in no distribution"
+                "text": "an implemented closure component in no distribution, while the workspace declares at least one"
               },
               "defaultConfiguration": {
                 "level": "error"

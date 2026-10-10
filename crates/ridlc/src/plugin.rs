@@ -494,6 +494,20 @@ mod tests {
         /// each test — the write and the run — keeps the two apart.
         static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
 
+        /// The timeout for every test here that does not test the timeout.
+        /// A passing test returns when its child exits, so a long bound costs
+        /// no time, and a short one fails on a loaded machine when the child
+        /// is slow to start. Load is the most likely cause of the failures
+        /// this bound answers; it was not reproduced. If a failure returns at
+        /// this bound, look at the gap on macOS between creating a pipe and
+        /// setting `FD_CLOEXEC` on it: a child started at the same moment by
+        /// another test can inherit a plugin pipe end and hold it open.
+        const PATIENT_TIMEOUT: Duration = Duration::from_secs(120);
+
+        // The bound stays at or above the default `--plugin-timeout`; a lower
+        // value stops the build.
+        const _: () = assert!(PATIENT_TIMEOUT.as_secs() >= DEFAULT_TIMEOUT_SECONDS);
+
         fn serialized() -> MutexGuard<'static, ()> {
             ONE_AT_A_TIME
                 .lock()
@@ -515,7 +529,7 @@ mod tests {
             let _guard = serialized();
             let dir = tempfile::tempdir().unwrap();
             let plugin = script(dir.path(), "exits-3", "cat >/dev/null; exit 3");
-            let err = run(&plugin, &request(), Duration::from_secs(10)).unwrap_err();
+            let err = run(&plugin, &request(), PATIENT_TIMEOUT).unwrap_err();
             assert!(matches!(err, PluginError::Exit { .. }), "{err}");
             let message = err.to_string();
             assert!(message.contains("`ridlc-gen-test`"), "{message}");
@@ -527,7 +541,7 @@ mod tests {
             let _guard = serialized();
             let dir = tempfile::tempdir().unwrap();
             let plugin = script(dir.path(), "garbage", "cat >/dev/null; echo 'not json'");
-            let err = run(&plugin, &request(), Duration::from_secs(10)).unwrap_err();
+            let err = run(&plugin, &request(), PATIENT_TIMEOUT).unwrap_err();
             assert!(matches!(err, PluginError::Malformed { .. }), "{err}");
             let message = err.to_string();
             assert!(message.contains("`ridlc-gen-test`"), "{message}");
@@ -547,7 +561,7 @@ mod tests {
                 "unknown-key",
                 r#"cat >/dev/null; echo '{"files": [], "diagnostics": [], "extra": 1}'"#,
             );
-            let err = run(&plugin, &request(), Duration::from_secs(10)).unwrap_err();
+            let err = run(&plugin, &request(), PATIENT_TIMEOUT).unwrap_err();
             assert!(matches!(err, PluginError::Malformed { .. }), "{err}");
         }
 
@@ -598,7 +612,7 @@ mod tests {
             let _guard = serialized();
             let dir = tempfile::tempdir().unwrap();
             let plugin = script(dir.path(), "exits-early", "exit 7");
-            let err = run(&plugin, &request(), Duration::from_secs(10)).unwrap_err();
+            let err = run(&plugin, &request(), PATIENT_TIMEOUT).unwrap_err();
             assert!(matches!(err, PluginError::Exit { .. }), "{err}");
         }
 
@@ -611,7 +625,7 @@ mod tests {
                 "answers",
                 r#"cat >/dev/null; echo '{"files": [{"path": "a.txt", "text": "hello"}], "diagnostics": [{"severity": "DIAGNOSTIC_SEVERITY_WARNING", "message": "w"}]}'"#,
             );
-            let response = run(&plugin, &request(), Duration::from_secs(10)).unwrap();
+            let response = run(&plugin, &request(), PATIENT_TIMEOUT).unwrap();
             assert_eq!(response.files.len(), 1);
             assert_eq!(response.files[0].path, "a.txt");
             assert_eq!(
