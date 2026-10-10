@@ -15,7 +15,7 @@
 resolver = "2"
 members = ["consumer", "generated", "generated-corpus"]
 
-# The generated manifest requires `ridl-rt = "0.7"`, which is what a consumer
+# The generated manifest requires `ridl-rt = "0.8"`, which is what a consumer
 # outside this repository would resolve from crates.io. The demo must exercise
 # the `ridl-rt` in this tree — the one the codec is developed against and the
 # one the gate's other proofs build — rather than whatever a registry would

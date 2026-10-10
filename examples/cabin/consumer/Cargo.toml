@@ -28,4 +28,4 @@ ridl-loopback = { path = "../../../crates/ridl-loopback" }
 # feature gates: the program polls the generated async client's futures by
 # hand, the way a frame loop does. The `[patch.crates-io]` block in
 # `examples/cabin/Cargo.toml` resolves this to `crates/ridl-rt`.
-ridl-rt = { version = "0.7", features = ["std"] }
+ridl-rt = { version = "0.8", features = ["std"] }

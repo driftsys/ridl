@@ -1,5 +1,141 @@
 # Changelog
 
+## [0.8.0] (2026-10-10)
+
+### Refactoring
+
+- **ridl:** clean up the catalogs path and pin its remaining behaviour ([#823])
+  ([2fc34f5])
+
+### Features
+
+- **ridl-descriptor:** put the planus builder caches behind a default dedup
+  feature ([#822]) ([a5ab02d]), closes [#820]
+- **ridl:** record and emit the compatible catalog hashes per unit ([#810])
+  ([c4c3a9a])
+
+### Performance
+
+- **ridl:** compile the workspace once and load the snapshots once on the
+  catalogs path ([#818]) ([66d5b65])
+
+### Bug Fixes
+
+- **ridl-backend-rust:** allow dead code on the items of an internal declaration
+  ([#825]) ([9a92c5c])
+- **ridl-diff:** compare enum members by value, report a frozen or moved
+  interface number, refuse a lost service number ([#813]) ([88afd15]), closes
+  [#397], [#700], [#809]
+- pin gate membership and the CI filter, fix calibrate dump, unreadable-path
+  causes and drift guards ([#806]) ([1b59293]), closes [#426], [#687], [#739],
+  [#196], [#734], [#646], [#645], refs [#729]
+- **ridl-sem:** report .rxdl files, drop false timing diagnostics, resolve
+  internal types in the viewing package ([#800]) ([a136a06]), closes [#770],
+  [#765], [#643]
+- **ridl-backend-rust:** emit code that draws no needless_borrow or
+  blocks_in_conditions ([#794]) ([0903f0b]), refs [#782], [#782], [#782]
+- **ridl-syntax:** a lone CR is a line break; fmt note for machine comments
+  ([#793]) ([3608ef3]), closes [#657], [#623]
+- **ridl:** refuse a unit gone from the fresh set at baseline ([#792])
+  ([82e83c1]), closes [#778]
+- **ridlc:** keep validate-pattern apart from the std feature ([a42a863]), refs
+  [#772]
+- **ridlc:** make the generated crate no_std with its std feature off
+  ([2231383]), closes [#772]
+- **ridl-backend-rust:** build a string default with String::from ([751aead]),
+  refs [#772]
+
+### Documentation
+
+- **docs:** archive the lane G driver and its rulings ([#815]) ([1a8b907])
+- **docs:** add the "Evolving an interface" chapter and archive lane H ([#812])
+  ([c76aec2])
+- **docs:** add the book chapter Writing a port ([#790]) ([a265dff])
+- design the compatible catalogs list and plan its implementation ([#785])
+  ([6db0eee])
+- **docs:** add lane H for the open items after release 0.7.0 ([#784])
+  ([376aa92])
+- **docs:** give the reason the alias shares the no_std condition ([9696675]),
+  refs [#772]
+- **docs:** describe the no_std condition and the alloc alias ([69c9909]), refs
+  [#772]
+- **repo:** name the corpus crate where the cabin workspace is described
+  ([d070b3b]), refs [#772]
+- **docs:** say the generated crate is no_std with std off ([09e5c7a]), refs
+  [#772]
+
+### BREAKING CHANGES
+
+- a textual reorder of an enum or enum-set body that moves no number is now the compatible category `enum_reordered` (exit 0) instead of breaking; a renumbered value or bit is `member_reordered`, breaking. `ridl diff` compares an interface's number and provisional flag: `interface_frozen` (compatible) for the `ridl lock` freeze at the same number, `interface_number_changed` (breaking) when the number moves. `ridl baseline` now refuses with RIDL-412 a publication that deletes `service X` beside a kept `interface X` and loses the service's number.
+- ridl_descriptor::lower takes a third parameter, the
+compatible hashes, and the owned Catalog has a new compatible field.
+- `ridl_sem::Resolution` has a new public field `package`. A struct literal of `Resolution` outside this repository must set it.
+
+A `.rxdl` or `.rmdl` file in a package directory draws the warning RIDL-417 (`unsupported-source-file`); a lone `.rxdl` or `.rmdl` entry is refused with exit 2. An unreadable RPC range no longer draws RIDL-101 or RIDL-108 from the default maximum. A qualified internal type resolves in the defining package's view.
+- a lone CR inside a line comment, a string literal or a regex literal was accepted text and now ends it. A file with lone-CR line endings lexes and reports line numbers differently.
+- `ridl baseline` (and `ridl build`, which publishes) now refuses with RIDL-412 a publication that drops every interface number of a package or a whole unit that the published baseline holds. A package removed from a unit that remains is released by retiring its numbers with `ridl lock --retire`; a whole unit removed or renamed on purpose is released by deleting that unit's snapshots from `.ridl/baseline/`.
+
+[0.8.0]: https://github.com/driftsys/ridl/compare/v0.7.0...v0.8.0
+[2fc34f5]: https://github.com/driftsys/ridl/commit/2fc34f5
+[#823]: https://github.com/driftsys/ridl/issues/823
+[a5ab02d]: https://github.com/driftsys/ridl/commit/a5ab02d
+[#822]: https://github.com/driftsys/ridl/issues/822
+[#820]: https://github.com/driftsys/ridl/issues/820
+[c4c3a9a]: https://github.com/driftsys/ridl/commit/c4c3a9a
+[#810]: https://github.com/driftsys/ridl/issues/810
+[66d5b65]: https://github.com/driftsys/ridl/commit/66d5b65
+[#818]: https://github.com/driftsys/ridl/issues/818
+[9a92c5c]: https://github.com/driftsys/ridl/commit/9a92c5c
+[#825]: https://github.com/driftsys/ridl/issues/825
+[88afd15]: https://github.com/driftsys/ridl/commit/88afd15
+[#813]: https://github.com/driftsys/ridl/issues/813
+[#397]: https://github.com/driftsys/ridl/issues/397
+[#700]: https://github.com/driftsys/ridl/issues/700
+[#809]: https://github.com/driftsys/ridl/issues/809
+[1b59293]: https://github.com/driftsys/ridl/commit/1b59293
+[#806]: https://github.com/driftsys/ridl/issues/806
+[#426]: https://github.com/driftsys/ridl/issues/426
+[#687]: https://github.com/driftsys/ridl/issues/687
+[#739]: https://github.com/driftsys/ridl/issues/739
+[#196]: https://github.com/driftsys/ridl/issues/196
+[#734]: https://github.com/driftsys/ridl/issues/734
+[#646]: https://github.com/driftsys/ridl/issues/646
+[#645]: https://github.com/driftsys/ridl/issues/645
+[#729]: https://github.com/driftsys/ridl/issues/729
+[a136a06]: https://github.com/driftsys/ridl/commit/a136a06
+[#800]: https://github.com/driftsys/ridl/issues/800
+[#770]: https://github.com/driftsys/ridl/issues/770
+[#765]: https://github.com/driftsys/ridl/issues/765
+[#643]: https://github.com/driftsys/ridl/issues/643
+[0903f0b]: https://github.com/driftsys/ridl/commit/0903f0b
+[#794]: https://github.com/driftsys/ridl/issues/794
+[#782]: https://github.com/driftsys/ridl/issues/782
+[3608ef3]: https://github.com/driftsys/ridl/commit/3608ef3
+[#793]: https://github.com/driftsys/ridl/issues/793
+[#657]: https://github.com/driftsys/ridl/issues/657
+[#623]: https://github.com/driftsys/ridl/issues/623
+[82e83c1]: https://github.com/driftsys/ridl/commit/82e83c1
+[#792]: https://github.com/driftsys/ridl/issues/792
+[#778]: https://github.com/driftsys/ridl/issues/778
+[a42a863]: https://github.com/driftsys/ridl/commit/a42a863
+[#772]: https://github.com/driftsys/ridl/issues/772
+[2231383]: https://github.com/driftsys/ridl/commit/2231383
+[751aead]: https://github.com/driftsys/ridl/commit/751aead
+[1a8b907]: https://github.com/driftsys/ridl/commit/1a8b907
+[#815]: https://github.com/driftsys/ridl/issues/815
+[c76aec2]: https://github.com/driftsys/ridl/commit/c76aec2
+[#812]: https://github.com/driftsys/ridl/issues/812
+[a265dff]: https://github.com/driftsys/ridl/commit/a265dff
+[#790]: https://github.com/driftsys/ridl/issues/790
+[6db0eee]: https://github.com/driftsys/ridl/commit/6db0eee
+[#785]: https://github.com/driftsys/ridl/issues/785
+[376aa92]: https://github.com/driftsys/ridl/commit/376aa92
+[#784]: https://github.com/driftsys/ridl/issues/784
+[9696675]: https://github.com/driftsys/ridl/commit/9696675
+[69c9909]: https://github.com/driftsys/ridl/commit/69c9909
+[d070b3b]: https://github.com/driftsys/ridl/commit/d070b3b
+[09e5c7a]: https://github.com/driftsys/ridl/commit/09e5c7a
+
 ## [0.7.0] (2026-10-09)
 
 ### Features

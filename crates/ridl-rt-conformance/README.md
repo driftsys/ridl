@@ -12,7 +12,7 @@ same version of this crate as of `ridl-rt`.
 
 A patch release can add tests to `suite!`. A runtime that wants a fixed set of
 tests pins this crate with `=` in its `dev-dependencies`, for example
-`ridl-rt-conformance = "=0.7.0"`, and raises the pin when it chooses to.
+`ridl-rt-conformance = "=0.8.0"`, and raises the pin when it chooses to.
 
 ## Usage
 
