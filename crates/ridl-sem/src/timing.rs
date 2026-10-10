@@ -184,6 +184,8 @@ fn parse_default_range(text: &str, require_min: bool) -> Result<TimingSpec, Stri
 /// does not parse whole, such as `@[20ms..50xs]` or `@[20ms 50ms]`, keeps that
 /// written `min` and takes only `max`, and RIDL-101 and RIDL-108 do not
 /// compare the two, because the maximum the author wrote could not be read.
+/// A range with a bound that drew FORM-102 is not compared either: the bound
+/// keeps its value when it can be computed, but the literal is rejected first.
 /// RIDL-112 covers what was not declared — no annotation at all, or the
 /// half-open `@[min..]` — and stays quiet on an annotation the parser could
 /// not read, whose only report is the parser's FORM-101. For `fixed` the
@@ -225,6 +227,13 @@ pub fn resolve_timing(
         let max_token = range.max();
         let min = bound_us(min_token.as_ref(), file, &mut diags);
         let mut max = bound_us(max_token.as_ref(), file, &mut diags);
+        // A written bound that drew FORM-102 keeps its value when the value can
+        // be computed, so the IR reflects the source. The ordering checks
+        // (RIDL-101 and RIDL-108) do not run on such a range: they would
+        // report a consequence of a literal that is already rejected, and the
+        // author has to rewrite that literal first. The checks on one bound
+        // (RIDL-102) and RIDL-112 still run.
+        let bound_rejected = diags.iter().any(|diag| diag.code == DiagCode::FORM_102);
         let node = range.syntax().text_range();
         // The written text of each bound, so every message below quotes the
         // annotation the author typed rather than the microseconds the IR
@@ -277,7 +286,7 @@ pub fn resolve_timing(
         // still lowers, as on any unreadable response bound.
         let parsed_whole = range_parsed_whole(annot, &range);
         let filled_max = default_applied && max.is_some();
-        if let (Some(lo), Some(hi)) = (&min, &max) {
+        if let (Some(lo), Some(hi), false) = (&min, &max, bound_rejected) {
             if filled_max {
                 let (code, severity, relation) = if lo > hi {
                     (DiagCode::RIDL_101, Severity::Error, "is longer than")
@@ -1002,6 +1011,52 @@ mod tests {
             !micros,
             "the message must not answer in canonical microseconds: {message}",
         );
+    }
+
+    /// A bound that draws FORM-102 is reported once. The ordering check does not
+    /// run on it, so no RIDL-101 or RIDL-108 follows from a rejected literal.
+    #[test]
+    fn form_102_bound_draws_no_ordering_diagnostic() {
+        for (kind, decl) in [
+            (InteractionKind::Signal, "signal s : Speed @[5s..10.5ms]"),
+            (InteractionKind::Query, "query q(): Speed @[5s..10.5ms]"),
+            (InteractionKind::Query, "query q(): Speed @[10.5s..5ms]"),
+            (InteractionKind::Signal, "signal s : Speed @[1.5s..1500ms]"),
+        ] {
+            let (_, diags) = resolve(Some(&annot(decl)), kind, &builtin_default_timing());
+            assert_eq!(codes(&diags), vec!["FORM-102"], "{decl}");
+        }
+    }
+
+    /// The skip covers a range whose maximum the default supplied and a
+    /// bound beside RIDL-102 and RIDL-112, so each branch of the ordering
+    /// check and each neighbouring diagnostic is pinned.
+    #[test]
+    fn form_102_bound_beside_other_timing_diagnostics() {
+        // A rejected minimum with no written maximum on an RPC: the default
+        // maximum is not compared with it, and RIDL-112 still warns.
+        for decl in ["query q(): Speed @[10.5s..]", "query q(): Speed @[3.0s..]"] {
+            let (_, diags) = resolve(
+                Some(&annot(decl)),
+                InteractionKind::Query,
+                &builtin_query_timing(),
+            );
+            assert_eq!(codes(&diags), vec!["FORM-102", "RIDL-112"], "{decl}");
+        }
+        // RIDL-102 is a property of one bound, so it still runs.
+        let (_, diags) = resolve(
+            Some(&annot("signal s : Speed @[1.5ms..0ms]")),
+            InteractionKind::Signal,
+            &builtin_default_timing(),
+        );
+        assert_eq!(codes(&diags), vec!["FORM-102", "RIDL-102"]);
+        // The zero bound is itself the rejected literal.
+        let (_, diags) = resolve(
+            Some(&annot("signal s : Speed @[0.0ms..5ms]")),
+            InteractionKind::Signal,
+            &builtin_default_timing(),
+        );
+        assert_eq!(codes(&diags), vec!["FORM-102", "RIDL-102"]);
     }
 
     #[test]
