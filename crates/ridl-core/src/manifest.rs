@@ -1408,6 +1408,11 @@ version = \"1.0.0\"
         let text = format!("{PACKAGE_HEAD}[backend.rust]\nencodings = [1]\n");
         let (_, diags) = parse(&text);
         assert_eq!(codes(&diags), vec!["MANI-015"]);
+        let message = &diags[0].message;
+        assert!(
+            message.starts_with("`[backend.rust] encodings` holds `1`, which is not a string;"),
+            "{message}"
+        );
     }
 
     #[test]
@@ -1415,17 +1420,30 @@ version = \"1.0.0\"
         let text = format!("{PACKAGE_HEAD}[backend.rust]\nencodings = \"flatbuffers\"\n");
         let (manifest, diags) = parse(&text);
         assert_eq!(codes(&diags), vec!["MANI-015"]);
+        let message = &diags[0].message;
+        assert!(
+            message.starts_with("`[backend.rust] encodings` must be an array of encoding names;"),
+            "{message}"
+        );
         assert!(manifest.is_some());
     }
 
     #[test]
     fn backend_not_a_table_is_mani_015() {
-        for text in [
-            format!("backend = 1\n\n{PACKAGE_HEAD}"),
-            format!("{PACKAGE_HEAD}[backend]\nrust = 1\n"),
+        for (text, head) in [
+            (
+                format!("backend = 1\n\n{PACKAGE_HEAD}"),
+                "`backend` must be a table of `[backend.<name>]` tables;",
+            ),
+            (
+                format!("{PACKAGE_HEAD}[backend]\nrust = 1\n"),
+                "`[backend.rust]` must be a table;",
+            ),
         ] {
             let (manifest, diags) = parse(&text);
             assert_eq!(codes(&diags), vec!["MANI-015"], "{text}");
+            let message = &diags[0].message;
+            assert!(message.starts_with(head), "{text}: {message}");
             assert!(manifest.is_some(), "{text}");
         }
     }

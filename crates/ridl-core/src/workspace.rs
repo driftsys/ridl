@@ -3377,7 +3377,9 @@ service:veh.common.climate 2
         assert_eq!(codes(&loaded.diagnostics), vec!["MANI-016"]);
         let diag = &loaded.diagnostics[0];
         let start = usize::from(diag.primary.range.start());
-        assert!(member[start..].starts_with("backend.rust"), "{member}");
+        let end = usize::from(diag.primary.range.end());
+        // The span is the `backend` key of the `[backend.rust]` header.
+        assert_eq!(&member[start..end], "backend", "{member}");
     }
 
     #[test]
