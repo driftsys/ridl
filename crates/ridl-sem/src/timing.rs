@@ -225,6 +225,10 @@ pub fn resolve_timing(
         let max_token = range.max();
         let min = bound_us(min_token.as_ref(), file, &mut diags);
         let mut max = bound_us(max_token.as_ref(), file, &mut diags);
+        // A written bound that drew FORM-102 still carries a value, but that
+        // value is not what the author meant, so an ordering check against it
+        // would report a consequence of the FORM-102 under the wrong wording.
+        let bound_rejected = !diags.is_empty();
         let node = range.syntax().text_range();
         // The written text of each bound, so every message below quotes the
         // annotation the author typed rather than the microseconds the IR
@@ -277,7 +281,12 @@ pub fn resolve_timing(
         // still lowers, as on any unreadable response bound.
         let parsed_whole = range_parsed_whole(annot, &range);
         let filled_max = default_applied && max.is_some();
-        if let (Some(lo), Some(hi)) = (&min, &max) {
+        let ordered = if bound_rejected {
+            (&None, &None)
+        } else {
+            (&min, &max)
+        };
+        if let (Some(lo), Some(hi)) = ordered {
             if filled_max {
                 let (code, severity, relation) = if lo > hi {
                     (DiagCode::RIDL_101, Severity::Error, "is longer than")
@@ -1002,6 +1011,21 @@ mod tests {
             !micros,
             "the message must not answer in canonical microseconds: {message}",
         );
+    }
+
+    /// A bound that draws FORM-102 is reported once. The ordering check does not
+    /// run on it, so no RIDL-101 or RIDL-108 follows from a rejected literal.
+    #[test]
+    fn form_102_bound_draws_no_ordering_diagnostic() {
+        for (kind, decl) in [
+            (InteractionKind::Signal, "signal s : Speed @[5s..10.5ms]"),
+            (InteractionKind::Query, "query q(): Speed @[5s..10.5ms]"),
+            (InteractionKind::Query, "query q(): Speed @[10.5s..5ms]"),
+            (InteractionKind::Signal, "signal s : Speed @[1.5s..1500ms]"),
+        ] {
+            let (_, diags) = resolve(Some(&annot(decl)), kind, &builtin_default_timing());
+            assert_eq!(codes(&diags), vec!["FORM-102"], "{decl}");
+        }
     }
 
     #[test]
