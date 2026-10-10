@@ -460,21 +460,31 @@ struct Operand {
     place: TokenStream,
     /// An expression of type `&T`.
     reference: TokenStream,
+    /// Whether the value is reached through a binding that is already a
+    /// reference, rather than as a place of its own type.
+    borrowed: bool,
+}
+
+impl Operand {
     /// An expression a method is called on without borrowing again: the
     /// place for an owned value, the binding for a reference. `get`,
     /// `as_str` and `as_slice` already return references, so a `&` before
     /// the call draws `clippy::needless_borrow`.
-    receiver: TokenStream,
-}
+    fn receiver(&self) -> &TokenStream {
+        if self.borrowed {
+            &self.reference
+        } else {
+            &self.place
+        }
+    }
 
-impl Operand {
     /// A place and the reference taken from it: a struct field, or a
     /// position of a map entry's pair.
     fn owned(place: TokenStream) -> Self {
         Operand {
             reference: quote! { &#place },
-            receiver: place.clone(),
             place,
+            borrowed: false,
         }
     }
 
@@ -483,8 +493,8 @@ impl Operand {
     fn borrowed(reference: TokenStream) -> Self {
         Operand {
             place: quote! { *#reference },
-            receiver: reference.clone(),
             reference,
+            borrowed: true,
         }
     }
 }
@@ -1716,7 +1726,7 @@ impl<'a> Codec<'a> {
     /// position.
     fn encode_pos(&self, wire: &Wire, expr: &Operand) -> Result<TokenStream, GenerateError> {
         let reference = &expr.reference;
-        let receiver = &expr.receiver;
+        let receiver = expr.receiver();
         Ok(match wire {
             Wire::Scalar(_) => {
                 return Err(GenerateError {

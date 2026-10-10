@@ -155,7 +155,8 @@ This repository follows the driftsys house style. After cloning, run
 [prim](https://github.com/driftsys/prim) (the connective-tissue formatter for
 Markdown/JSON/YAML/TOML), then wires up the repo-local hooks in `.githooks/`. It
 also installs the Rust toolchain `rust-toolchain.toml` pins, and reports any
-other tool the gate needs — `just`, `rustup`, mdBook — that it cannot find.
+other tool the gate needs — `just`, `rustup`, mdBook, `jq` — that it cannot
+find.
 
 The task runner is [`just`](https://github.com/casey/just):
 

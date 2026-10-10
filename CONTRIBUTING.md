@@ -18,14 +18,14 @@ cd ridl
 which wires up the repo-local git hooks in `.githooks/`, and then installs the
 Rust toolchain that `rust-toolchain.toml` pins.
 
-The gate needs three tools `bootstrap` does not install, because they come from
+The gate needs four tools `bootstrap` does not install, because they come from
 package managers it should not write into on your behalf:
 [`just`](https://github.com/casey/just), [`rustup`](https://rustup.rs) (it is
-what applies the toolchain pin), and
-[mdBook](https://rust-lang.github.io/mdBook/). `bootstrap` names each one it
-cannot find, with the command that installs it, and exits non-zero. Nothing is
-skipped when a tool is missing — the recipe that needs it fails and says which
-one (ADR-0009).
+what applies the toolchain pin), [mdBook](https://rust-lang.github.io/mdBook/),
+and [`jq`](https://jqlang.org) (`just demo` filters clippy output with it).
+`bootstrap` names each one it cannot find, with the command that installs it,
+and exits non-zero. Nothing is skipped when a tool is missing — the recipe that
+needs it fails and says which one (ADR-0009).
 
 The Rust toolchain is pinned to an exact version in `rust-toolchain.toml`, so
 `cargo fmt` and `cargo clippy` run the same release here as they do in CI.

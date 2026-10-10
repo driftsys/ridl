@@ -1214,7 +1214,9 @@ fn constraint_checks_with_precision(
             // The language value is i64. The widened difference cannot
             // overflow even when the origin and value are opposite extremes.
             // The step and the origin are integer literals, typed by their
-            // bindings, so they need no cast.
+            // bindings, so they need no cast. typl refuses a `step` on an
+            // integer (TYPL-105), so source cannot reach this branch; the
+            // unit test builds the IR directly.
             quote! {
                 {
                     let __step: ::core::primitive::i128 = #step;

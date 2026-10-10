@@ -167,9 +167,12 @@ member; rsdl is the apex.
                          veh-cluster corpus, check with their default features off
                          for thumbv7em-none-eabihf, a target with no standard
                          library; the corpus crate is also linted with clippy,
-                         where the only allowance on the command line is
-                         dead_code, and the lints that its lib.rs allows
-                         stay allowed.
+                         with its default features and with them off for that
+                         target, under -D warnings, where the only
+                         diagnostics that pass are dead_code for nine named
+                         items the emitter writes for the corpus's internal
+                         types; the lints that its lib.rs
+                         allows stay allowed.
                          examples/cabin is its own
                          cargo workspace, outside this one, and carries the fmt
                          and clippy checks for its consumer, which --all over
