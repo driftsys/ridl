@@ -2352,6 +2352,18 @@ fn the_lint_is_compared_against_the_emitted_backends_table() {
         stderr.contains("`[backend.rust] encodings`") && !stderr.contains("kotlin"),
         "the message names the emitted backend's table, got:\n{stderr}"
     );
+    // The Rust table names `flatbuffers`, so the cross-machine `proto3` link
+    // warns and the same-machine `flatbuffers` link does not. Compared
+    // against the `[backend.kotlin]` list instead, the warning would fall on
+    // the other link, with the same count and the same table name.
+    assert!(
+        stderr.contains("link `Telemetry -> Klaxon` of deployment `Bench` carries `proto3`"),
+        "the warning is the cross-machine link's, got:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Panel -> Lane"),
+        "the same-machine link carries `flatbuffers`, which the Rust table names, got:\n{stderr}"
+    );
 }
 
 /// `[lints] link-encoding-not-emitted = "allow"` removes the diagnostic;
