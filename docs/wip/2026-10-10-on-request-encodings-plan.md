@@ -6,8 +6,9 @@
 > checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A generated Rust package carries a payload codec only when its
-manifest names it, every emitted codec carries one size table per interface that
-the reservation and the table budget read, and `ridl build` warns when a
+manifest names it; every emitted codec carries one size table per interface that
+the reservation and the table budget read, and every payload its own buffer;
+`ridl-rt` 0.8's whole breaking change lands; and `ridl build` warns when a
 selected deployment needs an encoding the package does not carry.
 
 **Architecture:** `ridl-core` parses `[backend.<name>] encodings`; `ridlc` sends
@@ -15,22 +16,26 @@ it to that backend as the `encodings` request option and enables the matching
 `ridl-rt` features in the generated `Cargo.toml`; the Rust backend emits types
 only when the option is absent, and the codec, the descriptors, the `Sizes<E>`
 table and the face when it names `flatbuffers`; `ridl-rt` 0.8 replaces
-`EncodedSizes` by `Sizes<E>`; `ridlc` raises RSDL-807 from the checked system.
-The face stays monomorphic over FlatBuffers in this sub-stage but reads every
-size through `Sizes<FlatBuffers>`, so sub-stage 1b only adds `E`.
+`EncodedSizes` by `Sizes<E>`, gives `Payload<E>` its buffer and adds
+`port::Encoded`; `ridlc` raises RSDL-807 from the checked system. The face stays
+monomorphic over FlatBuffers in this sub-stage but reads every buffer through
+`Payload<FlatBuffers>::BUFFER` or `Sizes<FlatBuffers>`, so sub-stage 1b only
+swaps the concrete path for `P::Encoding` and types `ridl-loopback`.
 
 **Tech Stack:** Rust workspace (pinned toolchain in `rust-toolchain.toml`),
 `toml` + `serde` in `ridl-core`, `quote` + `prettyplease` in the backend,
 `insta` snapshots, `just` recipes as the gate.
 
 **Spec:** `docs/wip/2026-10-10-on-request-encodings-design.md` (sections 3 to 6,
-7.4, 8 to 13; section 7 is sub-stage 1b and is out of scope here).
+7.3, 7.4, 8 to 13; sections 7.1 and 7.2 are sub-stage 1b and out of scope here).
 
 ## Global Constraints
 
 - Every change to `crates/ridl-rt` and to the emitted code compiles under the
   codegen build matrix of ADR-0021 decision 10: edition 2021 with Rust 1.83,
-  edition 2021 with the pin, edition 2024 with the pin (`just compat-check`).
+  edition 2021 with the pin, edition 2024 with the pin. `just compat-check` runs
+  in every task that changes `ridl-rt` or the emitted crate (Tasks 1, 4, 5, 6,
+  7), not only at the end.
 - `ridl-rt` keeps `rust-version = "1.83"`, no dependency, default features off.
 - Encoding names are exactly `flatbuffers`, `proto3`, `repr-c`, the values of
   `ridl_rt::encoding::Encoding::NAME`.
@@ -53,110 +58,122 @@ size through `Sizes<FlatBuffers>`, so sub-stage 1b only adds `E`.
   marked mechanical.
 - Task 3 starts only after PR #787 (lane H3) has merged, or rebases onto it
   first: both edit `write_emits` in `crates/ridlc/src/lib.rs`.
+- The application program of `examples/cabin` (`consumer/src/main.rs`) is not
+  edited by any task of this plan; `just demo` proves it still runs.
 
 ## Review Focus
 
 1. `encodings = []` and an absent key must behave the same (types only) and draw
    no diagnostic; `encodings = [""]` is MANI-015. Pinned in Task 2.
 2. `encodings = ["FlatBuffers"]` (wrong case) is MANI-015 with the known names
-   in the message; a user who reads it corrects the case. Pinned in Task 2.
+   in the message. Pinned in Task 2.
 3. A manifest with `[backend.kotlin] encodings = ["flatbuffers"]` and a build
-   `--emit rust` sends the Rust backend nothing and emits types only, and the
+   `--emit rust` sends the Rust backend nothing, emits types only, and the
    generated `Cargo.toml` enables no `ridl-rt` encoding feature. Pinned in Task
    3 and Task 4.
 4. A types-only crate compiles for a target with no standard library with its
-   default features off (the second build of `just demo` does this for the
-   corpus with a codec; a types-only crate must not regress it). Pinned in
-   Task 4.
-5. A build that selects a deployment with a different-machine link and names
-   only `flatbuffers` warns once per link, and
-   `[lints] link-encoding-not-emitted = "deny"` turns that into exit code 1 with
-   no file written. Pinned in Task 7.
+   default features off, and a crate with the codec still does (the second build
+   of `just demo`). Pinned in Task 4.
+5. A payload smaller than the interface maximum gets a buffer of its own size,
+   and the server's claim buffer one byte short of the interface maximum is
+   refused; the fixture must have a payload smaller than the maximum and an
+   event larger than every call payload. Pinned in Tasks 5 and 7.
 
 ---
 
-### Task 1: `Sizes<E>` and the two budget functions in `ridl-rt` (additive) — fable
+### Task 1: `Sizes<E>`, the budget functions and `port::Encoded` in `ridl-rt` (additive) — fable
 
 **Files:**
 
 - Modify: `crates/ridl-rt/src/contract.rs` (after the `Interaction` trait, lines
   72-75; the `Member` impl at 179-224 is untouched in this task)
-- Modify: `crates/ridl-rt/src/lib.rs` (crate docs listing `contract`'s items, if
+- Modify: `crates/ridl-rt/src/port.rs` (a new trait beside `Attached` at line
+  32, and a forwarding impl beside the `&mut P` impls at 685-845)
+- Modify: `crates/ridl-rt/src/lib.rs` (crate docs listing the modules' items, if
   they enumerate them)
-- Test: `crates/ridl-rt/tests/sizes.rs` (new)
-- Modify: `docs/design/ridl-rt.md` (the `contract` item list around line 36 and
-  the reservation section around lines 289-331 gain the new items; the old items
-  stay listed until Task 5 removes them)
+- Test: `crates/ridl-rt/tests/sizes.rs` (new), `crates/ridl-rt/tests/encoded.rs`
+  (new)
+- Modify: `docs/design/ridl-rt.md` (the `contract` item list around line 36, the
+  `port` section, and the reservation section around lines 289-331: the new
+  items and the registration pattern of spec section 6.2; the old items stay
+  listed until Task 6 removes them)
 
 **Interfaces:**
 
 - Consumes: `contract::Interface`, `contract::Interaction`,
   `encoding::Encoding`, `payload::Payload<E>::MAX_SIZE`.
-- Produces (spec section 6.1 and 6.2, verbatim):
+- Produces (spec sections 6.1, 6.2 and 7.1):
 
 ```rust
+// contract
 pub trait Sizes<E: Encoding>: Interface {
     const RESERVATIONS: &'static [u64];
     const MAX_BUFFER_SIZE: usize;
     const EVENT_SOURCE_BUFFER_SIZE: usize;
-    type CallBuffer: AsRef<[u8]> + AsMut<[u8]> + Copy;
+    type ClaimBuffer: AsRef<[u8]> + AsMut<[u8]> + Copy;
     type EventBuffer: AsRef<[u8]> + AsMut<[u8]> + Copy;
-    const CALL_BUFFER: Self::CallBuffer;
+    const CLAIM_BUFFER: Self::ClaimBuffer;
     const EVENT_BUFFER: Self::EventBuffer;
 }
-pub const fn reservation<X, E>() -> u64
-where X: Interaction, X::Iface: Sizes<E>, E: Encoding;   // X::Iface::RESERVATIONS[X::ROW]
-pub const fn table_budget<I, E>() -> u64
-where I: Sizes<E>, E: Encoding;                           // saturating sum of I::RESERVATIONS
+pub const fn reservation<I: Sizes<E>, E: Encoding>(row: usize) -> u64;   // I::RESERVATIONS[row]; interim form
+pub const fn table_budget<I: Sizes<E>, E: Encoding>() -> u64;            // saturating sum of I::RESERVATIONS
+// port
+pub trait Encoded { type Encoding: Encoding; }
+impl<P: Encoded + ?Sized> Encoded for &mut P { type Encoding = P::Encoding; }
 ```
 
-`Interaction` gains `const ROW: usize` in Task 5, not here; until then
-`reservation` takes the row from a second parameter: write it as
-`pub const fn reservation<I: Sizes<E>, E: Encoding>(row: usize) -> u64` in this
-task and Task 5 changes it to the `X: Interaction` form when `ROW` exists. Task
-5's Interfaces block repeats the final signature.
+`Interaction` gains `const ROW: usize` in Task 6, not here, because generated
+code implements `Interaction` and a required item breaks it; until then
+`reservation` takes the row as a parameter, and Task 6 changes it to
+`reservation<X: Interaction, E>()` where `X::Iface: Sizes<E>`. Task 6's
+Interfaces block repeats the final signature.
 
 - [ ] **Step 1: Write the failing tests** in `crates/ridl-rt/tests/sizes.rs`.
       Hand-write two payload types with `impl Payload<FlatBuffers>` whose
       `MAX_SIZE` are 8 and 24 (copy the shape of `tests/budget.rs`'s fixture),
       an `Interface` `Cabin` with three members, and
       `impl Sizes<FlatBuffers> for Cabin` with `RESERVATIONS = &[8, 32, 24]`,
-      `MAX_BUFFER_SIZE = 24`, `EVENT_SOURCE_BUFFER_SIZE = 8`, the array types,
+      `MAX_BUFFER_SIZE = 24`, `EVENT_SOURCE_BUFFER_SIZE = 8`, the array types
       and the zeroed consts. Tests:
   - `a_reservation_is_its_row`: `reservation::<Cabin, FlatBuffers>(1) == 32` and
-    `reservation::<Cabin, FlatBuffers>(0) == 8` (two rows, so a function that
-    ignores `row` fails).
+    `reservation::<Cabin, FlatBuffers>(0) == 8`.
   - `a_table_budget_sums_every_row`:
     `table_budget::<Cabin, FlatBuffers>() == 64` (three distinct rows, so a
     maximum or a first row fails).
   - `a_table_budget_saturates`: a second interface whose rows are
     `[u64::MAX, 1]` gives `u64::MAX`.
-  - `a_budget_is_a_const`:
-    `const B: u64 = table_budget::<Cabin, FlatBuffers>();` then
-    `assert_eq!(B, 64)`.
-  - `a_call_buffer_has_the_interface_maximum`: a generic
-    `fn hold<I: Sizes<E>, E: Encoding>() -> usize { let mut b = I::CALL_BUFFER; b.as_mut().len() }`
-    returns 24, and the same over `EVENT_BUFFER` returns 8, and every byte of
-    `CALL_BUFFER` is 0.
-- [ ] **Step 2: Run** `cargo test -p ridl-rt --test sizes` — expected: fails to
-      compile, `Sizes` not found.
-- [ ] **Step 3: Implement** the trait and the two `const fn`s in `contract.rs`
-      with the rustdoc of spec section 6.1 and 6.2 (plain English; say that
-      every number derives from `MAX_SIZE` and that a missing table is a compile
-      error). Add `Sizes`, `reservation` and `table_budget` to the module docs'
-      list of what reads the descriptors.
-- [ ] **Step 4: Run** `cargo test -p ridl-rt --test sizes` — expected: PASS.
-      Then `cargo test -p ridl-rt` and `cargo doc -p ridl-rt --no-deps` with
-      `RUSTDOCFLAGS=-Dwarnings` — expected: PASS, no warning.
-- [ ] **Step 5: Update `docs/design/ridl-rt.md`**: add the trait and the two
-      functions to the `contract` item list and a paragraph under the
-      reservation section saying the table is the source and the old row-based
-      functions are retired by the same release (cite nothing by story id).
-- [ ] **Step 6: Gate**: `just compat-check` (the packaged `ridl-rt` builds as
-      edition 2021 with 1.83), `just wasm-check`, `just check`,
+  - `a_static_table_is_sized_from_the_budget`:
+    `static TABLE: [u8; table_budget::<Cabin, FlatBuffers>() as usize] = [0; _];`
+    and `TABLE.len() == 64`.
+  - `the_claim_and_event_buffers_have_the_interface_maxima`: a generic
+    `fn hold<I: Sizes<E>, E: Encoding>() -> (usize, usize)` returning the two
+    buffers' `as_mut().len()` gives `(24, 8)`, and every byte of both is 0.
+  - `a_data_driven_runtime_registers_the_slice`: a function taking
+    `(&'static [Member], &'static [u64])` asserts the two slices have equal
+    length and sums the second to 64 (the registration pattern). In
+    `tests/encoded.rs`: `a_mut_borrow_carries_the_ports_encoding`: a unit struct
+    `P` with `impl Encoded for P { type Encoding = FlatBuffers; }`, and a
+    generic `fn name<Q: Encoded>(_: &Q) -> &'static str { Q::Encoding::NAME }`
+    returns `"flatbuffers"` for `&mut P` as for `P`.
+- [ ] **Step 2: Run** `cargo test -p ridl-rt --test sizes --test encoded` —
+      expected: fails to compile, `Sizes` and `Encoded` not found.
+- [ ] **Step 3: Implement** the trait, the two `const fn`s and `Encoded` with
+      the rustdoc of spec sections 6.1, 6.2 and 7.1 (every number derives from
+      `MAX_SIZE`; a missing table is a compile error; one session has one
+      encoding; `Encoded` is not a supertrait of `Attached`). Add the new items
+      to the module docs' lists.
+- [ ] **Step 4: Run** `cargo test -p ridl-rt` and
+      `RUSTDOCFLAGS=-Dwarnings cargo doc -p ridl-rt --no-deps` — expected: PASS,
+      no warning.
+- [ ] **Step 5: Update `docs/design/ridl-rt.md`**: the new items in the
+      `contract` and `port` lists, the registration pattern paragraph (spec
+      section 6.2), and a sentence under the port traits that `Encoded` states a
+      port's encoding and that the transport defaults are the transport's (spec
+      section 7.1's table).
+- [ ] **Step 6: Gate**: `just compat-check`, `just wasm-check`, `just check`,
       `just link-check`.
 - [ ] **Step 7: Commit**:
-      `feat(ridl-rt): add the per-codec size table Sizes<E> and its budget functions`.
+      `feat(ridl-rt): add the per-codec size table, its budget functions and the Encoded port trait`.
 
 ---
 
@@ -269,9 +286,8 @@ Starts after PR #787 has merged (Global Constraints).
   names, in order.
 
 - [ ] **Step 1: Write the failing tests**:
-  - `the_rust_request_carries_the_rust_encodings_only`: build the new fixture
-    with `--emit codegen-model` is not enough to see the Rust request, so
-    unit-test `backend_options`: for
+  - `the_rust_request_carries_the_rust_encodings_only`: unit-test
+    `backend_options`: for
     `{rust: [flatbuffers, proto3], kotlin: [flatbuffers]}`,
     `backend_options(.., "rust")` is one option `encodings=flatbuffers,proto3`,
     `backend_options(.., "kotlin")` is `encodings=flatbuffers`, and
@@ -284,7 +300,7 @@ Starts after PR #787 has merged (Global Constraints).
   - In `rust_crate_emit.rs`: `cargo_toml_enables_one_feature_per_encoding`
     (fixture with `["flatbuffers"]`: the `ridl-rt` line equals the string above)
     and `cargo_toml_has_no_feature_for_types_only` (a fixture with no table: the
-    line is `ridl-rt = { version = "0.7" }` — a renderer that always writes
+    line is `ridl-rt = { version = "0.7" }`; a renderer that always writes
     `features` fails).
   - The `"0.7"` guard test keeps passing unchanged.
 - [ ] **Step 2: Run** `cargo test -p ridlc` — expected: failures on the new
@@ -344,12 +360,11 @@ pub(crate) fn generate_pipeline_over(model: &v1::Model, encodings: &[WireEncodin
 ```
 
 `generate_face` is removed. `Backend::generate` reads `ENCODINGS_OPTION`, splits
-on `,`, maps each name through `parse` (an unknown name that is one of
-`proto3`/`repr-c` is refused with "the Rust backend has no `proto3` codec
-(driftsys/ridl#264)" / "... `repr-c` ... (driftsys/ridl#317)"; any other name,
-an empty element and a repeated name with "`encodings` names ..."), refuses any
-other key with "takes one option, `encodings`", and calls
-`generate_pipeline_over(model, &list)`.
+on `,`, maps each name through `parse` (`proto3` and `repr-c` are refused with
+"the Rust backend has no `proto3` codec (driftsys/ridl#264)" / "... `repr-c` ...
+(driftsys/ridl#317)"; any other name, an empty element and a repeated name with
+"`encodings` names ..."), refuses any other key with "takes one option,
+`encodings`", and calls `generate_pipeline_over(model, &list)`.
 
 - [ ] **Step 1: Write the failing tests** in `descriptor_generation.rs` (replace
       `the_default_wire_encoding_is_flatbuffers`):
@@ -392,7 +407,71 @@ other key with "takes one option, `encodings`", and calls
 
 ---
 
-### Task 5: the size table replaces the size rows — fable
+### Task 5: `Payload<E>` carries its own buffer — sonnet
+
+One atomic change across `ridl-rt` and the codec emitter: a required trait item
+breaks every generated `Payload` implementation until the emitter writes it.
+
+**Files:**
+
+- Modify: `crates/ridl-rt/src/payload.rs` (the `Payload<E>` trait at line 18;
+  the `Raw` placeholder `impl Payload<ReprC>` at 271 gains
+  `type Buffer = [u8; 0]; const BUFFER: [u8; 0] = [];`)
+- Modify: `crates/ridl-backend-rust/src/codec.rs` (`payload_impl` at 2709-2745:
+  emit the two items beside `MAX_SIZE` from the same literal)
+- Modify: `crates/ridl-backend-rust/tests/generated/interaction_face.rs`
+  (regenerated), `crates/ridl-rt/tests/budget.rs`, `tests/sizes.rs` and every
+  hand-written `impl Payload<..>` in `crates/ridl-rt/tests` and
+  `crates/ridl-backend-rust/tests` (the two items added)
+- Modify: `docs/design/ridl-rt.md` (the `Payload<E>` item list around line 357),
+  `docs/design/flatbuffers-codec.md` (the codec's emitted items)
+- Test: `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`,
+  `crates/ridl-rt/tests/payload.rs`
+
+**Interfaces:**
+
+- Produces (spec section 6.1):
+
+```rust
+pub trait Payload<E: Encoding>: Sized {
+    const MAX_SIZE: usize;
+    type Buffer: AsRef<[u8]> + AsMut<[u8]> + Copy;   // [u8; MAX_SIZE]
+    const BUFFER: Self::Buffer;                        // zeroed
+    // View, encode, verify, decode unchanged
+}
+```
+
+The emitted codec writes, per payload type,
+`type Buffer = [::core::primitive::u8; #max]; const BUFFER: Self::Buffer = [0u8; #max];`
+with `#max` the literal `MAX_SIZE` already uses.
+
+- [ ] **Step 1: Write the failing tests**:
+  - `flatbuffers_conformance.rs`: `every_payload_buffer_is_its_own_max_size`:
+    for every payload type of the fixture,
+    `<T as Payload<FlatBuffers>>::BUFFER.as_ref().len() == T::MAX_SIZE` and
+    every byte is 0; the fixture has two payloads with different `MAX_SIZE`, so
+    one size for all fails (if the fixture's payloads are all one size, extend
+    `interaction_face.ridl` with a bounded string field on one).
+  - `crates/ridl-rt/tests/payload.rs`: `a_buffer_holds_the_largest_encoding`: a
+    hand-written payload whose `MAX_SIZE` is 8 encodes a value into
+    `Self::BUFFER` through `Ref::encode` without error.
+- [ ] **Step 2: Run** `cargo test -p ridl-rt --test payload` — expected: compile
+      failure, `BUFFER` not found.
+- [ ] **Step 3: Implement** the trait items with the rustdoc of spec section
+      6.1, the `Raw` placeholder, the emitter, every hand-written impl;
+      regenerate the fixture
+      (`cargo test -p ridl-backend-rust --test interaction_face_regeneration`
+      with the regeneration env the test documents).
+- [ ] **Step 4: Run** `just test` — expected: PASS.
+- [ ] **Step 5: Docs**: the two design records' item lists.
+- [ ] **Step 6: Gate**: `just compile`, `just test`, `just lint`,
+      `just compat-check`, `just wasm-check`, `just check`.
+- [ ] **Step 7: Commit**:
+      `feat(ridl-rt)!: give every Payload<E> implementation its own buffer type`.
+
+---
+
+### Task 6: the size table replaces the size rows — fable
 
 One atomic change across `ridl-rt` and the backend: the workspace compiles the
 generated fixture against `ridl-rt`, so the removals and the new emission land
@@ -409,13 +488,13 @@ together.
   50-61 and from the three impls at 82-99; the `compile_fail` doctests at 24-48
   and the `Fourth` test at 105-142 lose `max_size`; drop the
   `use crate::contract::EncodedSizes`)
-- Modify: `crates/ridl-rt/tests/budget.rs` (delete, its cases move to
+- Modify: `crates/ridl-rt/tests/budget.rs` (delete; its cases move to
   `tests/sizes.rs`), `tests/descriptors.rs` (`SIZES` and `max_size` fields),
   `tests/payload.rs:170`, `examples/read_sample.rs:19,104`
 - Modify: `crates/ridl-backend-rust/src/descriptors.rs` (100-170 the interface
   descriptor, 380-440 `payload_info` and `max_size_path`)
 - Modify: `crates/ridl-backend-rust/tests/generated/interaction_face.rs`
-  (regenerated by `interaction_face_regeneration.rs`)
+  (regenerated)
 - Test: `crates/ridl-rt/tests/sizes.rs`,
   `crates/ridl-backend-rust/tests/descriptor_generation.rs`,
   `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`
@@ -426,7 +505,8 @@ together.
 
 **Interfaces:**
 
-- Consumes: `Sizes<E>` (Task 1), the pipeline list (Task 4).
+- Consumes: `Sizes<E>` (Task 1), the pipeline list (Task 4), `Payload::BUFFER`
+  (Task 5).
 - Produces, in `ridl-rt`:
 
 ```rust
@@ -445,7 +525,7 @@ pub trait Encoding: sealed::Sealed + 'static { const NAME: &'static str; }
   `EVENT_SOURCE_BUFFER_SIZE` constants on the interface descriptor **stay in
   this task**, redefined as
   `pub const MAX_BUFFER_SIZE: usize = <Self as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE;`
-  so the face compiles unchanged; Task 6 removes them. Each interaction
+  so the face compiles unchanged; Task 7 removes them. Each interaction
   descriptor gains `const ROW: usize = <its index in MEMBERS>;`.
 
 - [ ] **Step 1: Write the failing tests**:
@@ -461,7 +541,7 @@ pub trait Encoding: sealed::Sealed + 'static { const NAME: &'static str; }
     and no `EncodedSizes`; `each_interaction_descriptor_has_its_row`: for every
     `impl Interaction for X` in the fixture, `X::ROW` indexes a member whose
     ordinal equals `X::MEMBER.ordinal` (a compiled check in `face_compile.rs`'s
-    style, or by parsing the fixture).
+    style).
   - `flatbuffers_conformance.rs`:
     `the_reservation_rows_match_the_oracle_bounds`: for the fixture's `Cabin`,
     `<Cabin as Sizes<FlatBuffers>>::RESERVATIONS` equals the rows the test
@@ -470,16 +550,16 @@ pub trait Encoding: sealed::Sealed + 'static { const NAME: &'static str; }
     `the_buffer_sizes_are_the_interface_maxima`: `MAX_BUFFER_SIZE` equals the
     largest call payload's `MAX_SIZE` and differs from the largest event's (the
     fixture has an event larger than every call payload; if not, extend
-    `interaction_face.ridl` with one); `CALL_BUFFER.len() == MAX_BUFFER_SIZE`;
-    `EVENT_BUFFER.len() == EVENT_SOURCE_BUFFER_SIZE`.
+    `interaction_face.ridl` with one);
+    `CLAIM_BUFFER.as_ref().len() == MAX_BUFFER_SIZE`;
+    `EVENT_BUFFER.as_ref().len() == EVENT_SOURCE_BUFFER_SIZE`; the smallest
+    payload's `BUFFER` is shorter than `MAX_BUFFER_SIZE`.
 - [ ] **Step 2: Run** `cargo test -p ridl-rt` then
       `cargo test -p ridl-backend-rust` — expected: compile failures on the
       removed and the new items.
 - [ ] **Step 3: Implement** the `ridl-rt` removals and `ROW`, then the emitter;
-      regenerate the fixture
-      (`cargo test -p ridl-backend-rust --test interaction_face_regeneration`
-      with the regeneration env the test documents); update the `read_sample`
-      example and the `ridl-rt` tests.
+      regenerate the fixture; update the `read_sample` example and the `ridl-rt`
+      tests.
 - [ ] **Step 4: Run** the whole workspace: `just test` — expected: PASS (the
       face still compiles through the inherent aliases).
 - [ ] **Step 5: Docs**: `docs/design/ridl-rt.md` sections listed above; the
@@ -490,11 +570,11 @@ pub trait Encoding: sealed::Sealed + 'static { const NAME: &'static str; }
       `just link-check`.
 - [ ] **Step 7: Commit**:
       `feat(ridl-rt)!: replace the EncodedSizes rows by one size table per codec`
-      — body: the full list of spec section 6.3 except the face-type row.
+      — body: the full `ridl-rt` list of spec section 6.3.
 
 ---
 
-### Task 6: the face takes every size from `Sizes<FlatBuffers>` — sonnet
+### Task 7: the face holds a payload's own buffer, and the table's two shared buffers — sonnet
 
 **Files:**
 
@@ -503,32 +583,32 @@ pub trait Encoding: sealed::Sealed + 'static { const NAME: &'static str; }
 - Modify: `crates/ridl-backend-rust/src/face/poll.rs` (70, 142, 188),
   `face/serve.rs` (64, 94, 104), `face/dispatch.rs` (121-177)
 - Modify: `crates/ridl-backend-rust/src/descriptors.rs` (remove the inherent
-  `MAX_BUFFER_SIZE`/`EVENT_SOURCE_BUFFER_SIZE` aliases Task 5 kept, and the
+  `MAX_BUFFER_SIZE`/`EVENT_SOURCE_BUFFER_SIZE` aliases Task 6 kept, and the
   interface doc string at 121-128)
 - Modify: `crates/ridl-backend-rust/tests/generated/interaction_face.rs`
   (regenerated), `docs/design/interaction-face.md` lines 66-76 and 440 (buffer
-  sizing now names `Sizes<E>::CALL_BUFFER`; the const-evaluable rule moves to
-  the table's items)
+  sizing now names `Payload::BUFFER` and the table's two buffers; the
+  const-evaluable rule moves to the table's items)
 - Test: `crates/ridl-backend-rust/tests/interaction_face.rs`,
   `dispatch_generation.rs`
 
 **Interfaces:**
 
-- Consumes: `Sizes<FlatBuffers>` items emitted by Task 5.
-- Produces: every buffer in the emitted face is
-  `<super::#iface as ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers>>::CALL_BUFFER`
-  (call arguments, replies, `Serve::buf`, the dispatch claim buffer) or
-  `::EVENT_BUFFER` (event polling); `Serve::buf`'s type is
-  `<.. as Sizes<..>>::CallBuffer`; `payload_buffer(type_name)` becomes
-  `call_buffer(iface)` and no emitted line names a payload's own `MAX_SIZE` for
-  a buffer.
+- Consumes: `Payload::BUFFER` (Task 5), `Sizes<FlatBuffers>` items (Task 6).
+- Produces: a typed site holds
+  `<#path as ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>>::BUFFER`
+  (signal read, publisher send, call argument, reply); the claim buffer
+  (`Serve::buf` and the dispatch claim) is
+  `<super::#iface as ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers>>::CLAIM_BUFFER`
+  with type `..::ClaimBuffer`; the next-event buffer is `..::EVENT_BUFFER`.
+  `payload_buffer(type_name)` emits the `BUFFER` path; no emitted line names a
+  `MAX_SIZE` as an array length.
 
 - [ ] **Step 1: Write the failing tests**:
-  - `interaction_face.rs`: `no_buffer_is_sized_by_a_payloads_own_max_size`: the
-    fixture source contains no `MAX_SIZE]` (the array-length form) and contains
-    `CALL_BUFFER` and `EVENT_BUFFER`;
-    `the_descriptor_has_no_inherent_buffer_constants`: the fixture contains no
-    `pub const MAX_BUFFER_SIZE`.
+  - `interaction_face.rs`: `no_buffer_is_sized_by_an_array_length`: the fixture
+    source contains no `MAX_SIZE]` and contains `::BUFFER`, `CLAIM_BUFFER` and
+    `EVENT_BUFFER`; `the_descriptor_has_no_inherent_buffer_constants`: the
+    fixture contains no `pub const MAX_BUFFER_SIZE`.
   - `dispatch_generation.rs`: the existing short-buffer refusal test is kept and
     its buffer is built as
     `[0u8; <Cabin as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE - 1]`; assert it is
@@ -540,16 +620,16 @@ pub trait Encoding: sealed::Sealed + 'static { const NAME: &'static str; }
 - [ ] **Step 3: Implement** the emitter changes and remove the aliases;
       regenerate the fixture.
 - [ ] **Step 4: Run** `cargo test -p ridl-backend-rust` and `just demo` (the
-      cabin program round-trips every value) — expected: PASS.
+      cabin program, unedited, round-trips every value) — expected: PASS.
 - [ ] **Step 5: Docs**: the two passages of `docs/design/interaction-face.md`.
 - [ ] **Step 6: Gate**: `just compile`, `just test`, `just lint`, `just demo`,
       `just compat-check`, `just check`, `just link-check`.
 - [ ] **Step 7: Commit**:
-      `refactor(ridl-backend-rust): size every face buffer from the codec's size table`.
+      `refactor(ridl-backend-rust): hold each payload's own buffer and the table's claim and event buffers`.
 
 ---
 
-### Task 7: RSDL-807 `link-encoding-not-emitted` — fable
+### Task 8: RSDL-807 `link-encoding-not-emitted` — fable
 
 **Files:**
 
@@ -557,12 +637,12 @@ pub trait Encoding: sealed::Sealed + 'static { const NAME: &'static str; }
   name map at 2109-2113)
 - Modify: `crates/ridlc/src/lib.rs` (`run_build_with` around 964-1010, after
   `select_deployment`; `unclaimed_backend_keys` at 1685-1696 is the model)
-- Create: `crates/ridlc/src/link_encodings.rs` (the check;
-  `pub(crate) fn link_encoding_not_emitted(..)`)
+- Create: `crates/ridlc/src/link_encodings.rs` (the check)
 - Modify: `docs/book/lints.md` (table at line 123),
   `docs/specification/rsdl-language-reference.md` (the sentence at 759 and the
   code table at 862-864), `docs/design/codegen-plugins.md` ("The encoding rule",
-  one sentence: the rule is what RSDL-807 compares against)
+  one sentence: the rule is what RSDL-807 compares against, and it is aligned
+  with the transport defaults when `repr(C)` or a shared-memory transport lands)
 - Test: `crates/ridlc/tests/cli.rs` (the RSDL-804 tests at 86-120 are the
   model), a new fixture workspace under `crates/ridlc/tests/` with an rsdl
   system that declares a deployment with one same-machine and one
@@ -613,7 +693,7 @@ pub trait Encoding: sealed::Sealed + 'static { const NAME: &'static str; }
       (catalogue drift test included).
 - [ ] **Step 5: Docs**: the `lints.md` row
       (`link-encoding-not-emitted | RSDL-807 | warn | a link of the selected deployment carries an encoding the emitted backend's encodings list does not name`),
-      the rsdl reference's sentence and table row, the one sentence in
+      the rsdl reference's sentence and table row, the sentence in
       `codegen-plugins.md`.
 - [ ] **Step 6: Gate**: `just compile`, `just test`, `just lint`, `just check`,
       `just link-check`, `just book-check`.
@@ -622,37 +702,40 @@ pub trait Encoding: sealed::Sealed + 'static { const NAME: &'static str; }
 
 ---
 
-### Task 8: the book, the technote and the roadmap describe the built behaviour — sonnet
+### Task 9: the book, the technote and the roadmap describe the built behaviour — sonnet
 
 **Files:**
 
 - Modify: `docs/book/cli-reference.md` (around 618: the emitted items list says
   the codec, the descriptors and the face appear when `encodings` names a codec;
   730-734: replace "no flag for the payload encoding" by the manifest rule and
-  the statement that a single-file build is types only; the manifest chapter or
-  section that lists the tables gains `[backend.<name>]` with the toml example),
+  the statement that a single-file build is types only; the manifest section
+  that lists the tables gains `[backend.<name>]` with the toml example),
   `docs/book/introduction.md` (42-44), `docs/book/generated-code.md` (56: the
-  codec "when the manifest names it"; 229 and the feature table at 235: the
-  `flatbuffers` feature follows the list; a short paragraph on
-  `Sizes<FlatBuffers>` where `MAX_BUFFER_SIZE` was described, if it is)
+  codec "when the manifest names it", with each payload's `BUFFER`; 229 and the
+  feature table at 235: the `flatbuffers` feature follows the list; a short
+  paragraph on `Sizes<FlatBuffers>` where `MAX_BUFFER_SIZE` was described, if it
+  is)
 - Modify: `docs/technotes/walking-skeleton-architecture.md` (the `ridl-core` row
   at 63: the manifest's `[backend.<name>]` table; the `ridl-backend-rust` row at
   159: emits the codecs the request names, types only otherwise)
 - Modify: `docs/ROADMAP.md` (line 525: reword the "`proto3` stays `None`"
   sentence to the per-codec table; the proto3 and `repr(C)` codec rows: each
-  arrives as a `Sizes<E>` implementation)
+  arrives as a `Sizes<E>` implementation and a `Payload<E>` with its buffer)
 
 - [ ] **Step 1: Edit** each passage; every `toml` example is the one of spec
-      section 3.1; no `ridl` fence changes.
+      section 3.1; no `ridl` fence changes. Nothing in the book says the
+      application names an encoding: the encoding is the port's (spec 7.1), and
+      the loopback's default is FlatBuffers.
 - [ ] **Step 2: Gate**: `just book-check`, `just link-check`,
       `just doc-path-check`, `just story-id-check`, `just check`, and
       `cargo test -p ridl-cli --test book_examples`.
 - [ ] **Step 3: Commit**:
-      `docs(docs): describe the on-request codecs and the size table`.
+      `docs(docs): describe the on-request codecs, the size table and the payload buffers`.
 
 ---
 
-### Task 9: the records are amended — sonnet
+### Task 10: the records are amended — sonnet
 
 **Files** (the line numbers are those of main on 2026-10-10; the passages are
 quoted in spec section 10):
@@ -662,32 +745,38 @@ quoted in spec section 10):
   the form of the existing ones); decision 4 (163-164) and 5 (183-197): inline
   `**Amendment (date) — ...**` saying the Rust codec is selected by
   `[backend.rust] encodings`, `--wire` is not the form a codec request takes,
-  the schema emits stay `--emit`; decision 15: the face is generic over the
-  encoding as well as the ports once the generic face lands, and reads its sizes
-  from `Sizes<E>` now.
+  the schema emits stay `--emit`; decision 15: the face reads the encoding from
+  its port once the next sub-stage lands, and reads its sizes from
+  `Payload::BUFFER` and `Sizes<E>` now.
 - Modify: `docs/decisions/ADR-0020-*.md`: decision 5 (199-293): `contract` loses
-  `EncodedSizes` and `Unsized`, gains `Sizes<E>`; a generated package enables
-  one feature per named encoding and none for types only; decision 9 (349): the
-  `encodings` option convention; the "Documents amended" table (542): rows for
-  ADR-0021, ADR-0023, `interaction-face.md`, `ridl-rt.md`.
+  `EncodedSizes` and `Unsized`, gains `Sizes<E>`; `payload::Payload<E>` gains
+  `Buffer`; `port` gains `Encoded`; a generated package enables one feature per
+  named encoding and none for types only; decision 9 (349): the `encodings`
+  option convention; the "Documents amended" table (542): rows for ADR-0021,
+  ADR-0023, `interaction-face.md`, `ridl-rt.md`.
 - Modify: `docs/decisions/ADR-0021-*.md`: decision 10 (485-570): a dated note
-  "ships as 0.8.0" with the list of spec section 6.3; decision 17 (767-780):
-  `Encoding::max_size`, `Member::reservation` and `table_budget(&[Member])`
-  replaced by `Sizes<E>` and the two functions; decision 19: `Bind` unchanged.
+  "ships as 0.8.0" with the `ridl-rt` list of spec section 6.3; decision 17
+  (767-780): `Encoding::max_size`, `Member::reservation` and
+  `table_budget(&[Member])` replaced by `Sizes<E>` and the two functions; the
+  port-contract decision: `Encoded`, with the `&mut` forwarding impl, and that
+  it is not a supertrait of `Attached`; decision 19: `Bind` unchanged.
 - Modify: `docs/decisions/ADR-0023-*.md`: decision 2's consequence note
   (180-192): `ridl build --emit rust` emits the face only when an encoding is
-  named; lines 584-589: buffers are sized from `Sizes<E>`; decision 6 keeps
-  `Client<P>` with a note that the encoding parameter is the next sub-stage's.
+  named; lines 584-589: buffers come from `Payload::BUFFER` and `Sizes<E>`;
+  decision 6 keeps `Client<P>` with a note that the `Encoded` bound and
+  `P::Encoding` are the next sub-stage's.
 - Modify: `docs/design/interaction-face.md`: 89-103 (the `PayloadInfo.max_size`
   passage becomes the `Sizes<FlatBuffers>` table); 581-590 (`WireEncoding`
   default: replaced by the list); 768-805 rule 3 ("No flag selects the encoding,
-  yet" becomes the manifest rule, with why a flag is not used); 897 (the
-  provisional table's size rows); leave 572-580 ("gains no type parameter") with
-  a one-line note that the generic face is specified in the design under
-  `docs/wip/` and lands next.
+  yet" becomes the manifest rule for the codecs and the port rule for the
+  encoding a face uses, with why a flag is not used); 897 (the provisional
+  table's size rows); leave 572-580 ("gains no type parameter") with a one-line
+  note that the face reads its encoding from the port under the design in
+  `docs/wip/`, which lands next.
 - Modify: `docs/design/flatbuffers-codec.md`: 17-29 (emitted on request), 43
   (the `WireEncoding` row), 249-275 (retitle: the face names the codec through
-  `Sizes<FlatBuffers>` and the full path; the alias is gone).
+  `Payload<FlatBuffers>` and `Sizes<FlatBuffers>` by full path; the alias is
+  gone).
 - Modify: `docs/design/catalog-descriptor.md`: 226 (cite the codegen model, not
   `EncodedSizes`), 313-323 (the two sums are `reservation` and `table_budget`
   over `Sizes<E>`; drop the `Unsized` sentence).
@@ -705,7 +794,7 @@ quoted in spec section 10):
 
 ---
 
-### Task 10: the Kotlin heads-up — sonnet
+### Task 11: the Kotlin heads-up — sonnet
 
 **Files:** none in this repository.
 
@@ -722,14 +811,21 @@ quoted in spec section 10):
 
 ## Self-review
 
-- Spec coverage: section 3 → Task 2; 4 → Task 3 (4.3 → Task 10); 5.1-5.3, 5.5 →
-  Task 4; 5.4 → no task (unchanged by design); 6 → Tasks 1, 5; 7.4 → Task 6; 8 →
-  Task 7; 9.1-9.3 → Task 4 (manifests), Tasks 5-6 (fixtures); 9.4 → Task 8; 9.5
-  → Task 10; 10 → Tasks 2, 3, 5, 6, 7, 8, 9; 11 → the tests named in each task;
-  12 → Global Constraints; 13 → this plan is 1a.
+- Spec coverage of sub-stage 1a: section 3 → Task 2; 4 → Task 3 (4.3 → Task 11);
+  5.1-5.3, 5.5 → Task 4; 5.4 → no task (unchanged by design); 6.1
+  `Payload::Buffer` → Task 5; 6.1 `Sizes<E>` and 6.2 → Tasks 1, 6; 6.3 every
+  `ridl-rt` row → Tasks 1, 5, 6 (`Encoded` in Task 1); 7.3 and 7.4 → Task 7; 7.1
+  and 7.2 → sub-stage 1b, out of scope; 8 → Task 8; 9.1-9.3 → Task 4
+  (manifests), Tasks 5-7 (fixtures); 9.4 → Task 9; 9.5 → Task 11; 10 → Tasks 2,
+  3, 5, 6, 7, 8, 9, 10; 11 → the tests named in each task; 12 → Global
+  Constraints; 13 → this plan is 1a.
+- No task contradicts the spec: the cabin program is not edited (spec 9.1);
+  `Encoded` is a separate trait (spec 7.1); the two shared buffers stay in
+  `Sizes<E>` (spec 6.1); `compat-check` runs in Tasks 1, 4, 5, 6 and 7.
 - Type consistency: `Sizes<E>` items, `reservation`'s two forms (Task 1 interim,
-  Task 5 final) and `backend_options` are named once each and reused;
-  `WireEncoding::parse` is defined in Task 4 and used by nothing else.
+  Task 6 final), `Payload::Buffer`/`BUFFER`, `Encoded` and `backend_options` are
+  named once each and reused; `WireEncoding::parse` is defined in Task 4 and
+  used by nothing else.
 - Review Focus items 1-5 each name their owning task.
 - Proportion: the plan carries signatures, test names and assertions, and no
   bodies.
