@@ -431,7 +431,8 @@ pub enum Event {
 }
 ```
 
-The buffer is sized by `Cabin::EVENT_SOURCE_BUFFER_SIZE`, the largest event
+The buffer is sized by
+`<Cabin as Sizes<FlatBuffers>>::EVENT_SOURCE_BUFFER_SIZE`, the largest event
 payload of the interface, because any of them may arrive.
 
 **The generated code checks the interface number before the ordinal.** A port is
@@ -681,10 +682,10 @@ the failure stays settled. `Output` is `Result<Infallible, ProviderError>`, so a
 successful serve never produces a value — it is `Pending` for as long as it
 runs.
 
-The claim buffer — `Cabin::MAX_BUFFER_SIZE` bytes, sized so a reply can be
-encoded into the same buffer the arguments arrived in — is held inside the
-future. The application supplies no buffer and receives no count of claims
-settled; the future's repeated polling is what stands in for both.
+The claim buffer — `<Cabin as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes, sized
+so a reply can be encoded into the same buffer the arguments arrived in — is
+held inside the future. The application supplies no buffer and receives no count
+of claims settled; the future's repeated polling is what stands in for both.
 
 ### The settlement table
 

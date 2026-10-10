@@ -689,9 +689,11 @@ the workspace's own packages only.
 **`rust` is a language backend**, and it writes the whole generated surface of
 a package in one file: the domain types (a struct, an enum, an enum set, a
 union and a named scalar, each with its typl constraints enforced at
-construction), the FlatBuffers codec — `encode`, `verify`,
+construction) always, and, when `[backend.rust] encodings` in the manifest names
+`flatbuffers`, the FlatBuffers codec — `encode`, `verify`,
 `decode` and a `MAX_SIZE` bound — the interaction descriptors, and the
-interaction face. Each interface gets the parts its own interactions need: a
+interaction face. With no `encodings` list the file holds the types only. Each
+interface gets the parts its own interactions need: a
 `Client` for the consumer side when it carries any interaction at all; a
 `Publisher` for the producer side when it carries a signal or an event; and a
 `Provider` trait the application implements plus a `serve` function whose
@@ -807,12 +809,36 @@ against the crate built from it — and `just demo` generates that crate and run
 the program, which prints one round trip per interaction kind through the
 async client and the command and the query again through the blocking one.
 
-There is **no flag for the payload encoding**. A package emits the FlatBuffers
-codec, which is the only one built; the emitted code names it as
+**The manifest says which encodings a backend emits.** There is no flag for the
+payload encoding. A `[backend.<name>]` table in the manifest holds an
+`encodings` list for the backend of that name, and `ridl build` sends each
+backend its own list:
+
+```toml
+[package]
+name = "veh.cabin"
+version = "1.0.0"
+
+[backend.rust]
+encodings = ["flatbuffers"]
+```
+
+The names are `flatbuffers`, `proto3` and `repr-c`. An absent table, an absent
+key and an empty list all mean types only. The Rust backend builds only
+`flatbuffers`: it refuses `proto3` ([driftsys/ridl#264][i264]) and `repr-c`
+([driftsys/ridl#317][i317]). The generated `Cargo.toml` enables one `ridl-rt`
+feature per named encoding, and none for types only. A single-file build has no
+manifest, so it is types only. The emitted code names the codec as
 `::ridl_rt::encoding::FlatBuffers` at each site, and a consumer names the
-encoding from `ridl_rt::encoding`. A `--wire` flag belongs to the story that
-adds the second codec, and [ADR-0010][adr-0010] binds its spelling then rather
-than now.
+encoding from `ridl_rt::encoding`.
+
+MANI-015 is an error when the `encodings` value is not an array of the known
+names or repeats a name, and MANI-016 is an error when the manifest of a
+workspace member holds a `[backend.<name>]` table: only the root sets it. Any
+other key under `[backend.<name>]` is MANI-005. The table is not the `backend.`
+attribute namespace of an rsdl declaration. The lint RSDL-807
+`link-encoding-not-emitted` warns when a link of the selected deployment carries
+an encoding that the emitted backend's list does not name.
 
 **`proto` is a wire backend** (ADR-0013 decision 2): it emits the typl
 surface — structs, enums, enum sets and unions, projected to proto3 messages
@@ -2345,6 +2371,8 @@ argument.
 
 [adr-0007]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0007-e1-execution.md
 [adr-0010]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0010-cli-conventions.md
+[i264]: https://github.com/driftsys/ridl/issues/264
+[i317]: https://github.com/driftsys/ridl/issues/317
 [adr-0014]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0014-ir-encodings.md
 [adr-0020]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md
 [issue-196]: https://github.com/driftsys/ridl/issues/196

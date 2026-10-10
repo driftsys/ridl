@@ -76,7 +76,8 @@ here. This list is not a standing count of every crate the workspace holds — s
   carries a lint name, declared on the same catalogue line. `diag::sarif`
   projects a diagnostic list to a SARIF 2.1.0 log for
   `ridl check --format sarif`. (3) The "ns" core: `ridl.toml` manifest parsing
-  (standalone + workspace modes), the package model with per-package `[imports]`
+  (standalone + workspace modes, and the `[backend.<name>]` table that lists the
+  encodings each backend emits), the package model with per-package `[imports]`
   (ADR-0007 decision 17), workspace loading, the lockfile, the content-addressed
   cache, and `ureq` fetch of uncompressed tar artifacts (ADR-0007 decision 12).
   `ridl.std` is embedded via `include_str!` (ADR-0007 decision 15). Filesystem
@@ -162,10 +163,12 @@ here. This list is not a standing count of every crate the workspace holds — s
 
 - **`crates/ridl-backend-rust`** — one IR v2 package to
   `Generated { rust_source }`. Rust is built as a `quote` token stream and
-  formatted with `prettyplease`: named scalar types become
-  `#[repr(transparent)]` newtypes, and structs whose IR `fixed_layout` flag
-  holds become `#[repr(C)]`. Codegen is total — failures return `GenerateError`,
-  never panic. E2's `interact.rs` and the extern-C header are gone:
+  formatted with `prettyplease`: it emits the codecs that the request's
+  `encodings` option names, and the domain types only when the option is absent
+  or empty; named scalar types become `#[repr(transparent)]` newtypes, and
+  structs whose IR `fixed_layout` flag holds become `#[repr(C)]`. Codegen is
+  total — failures return `GenerateError`, never panic. E2's `interact.rs` and
+  the extern-C header are gone:
   [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
   decisions 15 and 6 retract the interaction layer, restoring it in a second
   phase as a client and a server over `ridl-rt`, and drop C as a target.

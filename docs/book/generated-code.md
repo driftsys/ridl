@@ -54,11 +54,17 @@ The package module holds:
   `new_unchecked` skips the check and is for a value already known to satisfy
   them. `get` returns the value of a named scalar.
 - **The FlatBuffers codec** of each payload type: `encode`, `verify`, `decode`
-  and a `MAX_SIZE` bound. The face calls it; an application calls it only when
-  it moves payloads by itself.
+  and a `MAX_SIZE` bound. It is present when the manifest names `flatbuffers`
+  under `[backend.rust] encodings`; with no list the module holds the types only.
+  Each payload type also has a `Payload::<FlatBuffers>::Buffer` type and a
+  zeroed `BUFFER` value, sized by that type's own `MAX_SIZE`. The face calls the
+  codec; an application calls it only when it moves payloads by itself.
 - **The interaction descriptors**: one unit type per interface (here
   `api::Cabin`) that implements `ridl_rt::contract::Interface` and carries the
-  interface's `CATALOG`, `NUMBER` and `NAME`.
+  interface's `CATALOG`, `NUMBER` and `NAME`. Each interface also implements
+  `ridl_rt::contract::Sizes<FlatBuffers>`, the size table of that codec for the
+  interface: its reservations, its largest buffer (`MAX_BUFFER_SIZE`), and the
+  claim and event buffers the face holds.
 - **The face**: one module per interface that has one, named after it (here
   `api::cabin`).
   The face is what the application calls.
@@ -229,8 +235,9 @@ fragment is an illustration and is not compiled:
 veh_cabin = { path = "generated", default-features = false }
 ```
 
-The generated crate depends on `ridl-rt` with its `flatbuffers` feature, which
-the codec needs. An application that names `ridl-rt` itself, for example to use
+The generated crate depends on `ridl-rt` with one feature per encoding that the
+manifest names: `flatbuffers` when `[backend.rust] encodings` names it, which
+the codec needs, and no feature for a types-only build. An application that names `ridl-rt` itself, for example to use
 `ridl_rt::task::noop_waker` or the error types, selects from its features:
 
 | `ridl-rt` feature | Default | Enables                                                                                                                                                                           |
