@@ -41,3 +41,44 @@ fn generated_interaction_face_matches_the_emitter() {
          RIDL_UPDATE_GENERATED=1 cargo test -p ridl-backend-rust --test interaction_face_regeneration"
     );
 }
+
+/// The fixture declares public interfaces only, and the guard above pins what
+/// `generate_face` emits for them. `ridl build --emit rust` calls
+/// `generate_pipeline` instead, which emits the same items in another order.
+/// This test compares the two outputs as sorted lists of top-level items, so
+/// the checked-in fixture pins the pipeline's output for a public interface as
+/// well: a change to what either entry point emits for a public interface
+/// fails it, or fails the guard above.
+#[test]
+fn the_pipeline_emits_the_items_of_the_checked_in_face() {
+    let package = ir::compile_fixture("interaction_face.ridl");
+    let pipeline = ridl_backend_rust::generate_pipeline(
+        &package,
+        ridl_backend_rust::WireEncoding::FlatBuffers,
+        &[],
+    )
+    .expect("generate_pipeline")
+    .rust_source;
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/generated/interaction_face.rs");
+    let checked_in = std::fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
+    assert_eq!(
+        sorted_items(&pipeline),
+        sorted_items(&checked_in),
+        "the pipeline's items differ from the checked-in face's"
+    );
+}
+
+/// Every top-level item of `source`, rendered as one string, in sorted order.
+fn sorted_items(source: &str) -> Vec<String> {
+    use quote::ToTokens;
+    let file = syn::parse_file(source).expect("the generated source parses");
+    let mut items: Vec<String> = file
+        .items
+        .iter()
+        .map(|item| item.to_token_stream().to_string())
+        .collect();
+    items.sort();
+    items
+}

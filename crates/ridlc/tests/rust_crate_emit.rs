@@ -1618,31 +1618,38 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
     );
     // A run of literal spaces inside a note is a broken line continuation in
     // the emitter's string, which reaches the reader's source. Both notes are
-    // checked: `VehicleStatus` is the clause owner and `WheelDiagnostics`, which
-    // is `internal`, the internal one, and they are separate string literals, so checking one
-    // leaves the other free to break.
-    let call_shape_note = source
+    // checked: `VehicleStatus` carries the clause owner line, and
+    // `WheelDiagnostics`, which is `internal`, carries the internal one. They
+    // are separate string literals, so checking one leaves the other free to
+    // break. The call-shape owner line of a public interface is pinned in
+    // `crates/ridl-backend-rust/tests/face_compile.rs`, because no interface of
+    // this corpus reaches it.
+    let internal_note = source
         .split("const __RIDL_NO_FACE_WheelDiagnostics")
         .next()
         .expect("the note precedes its constant");
-    let call_shape_note = &call_shape_note[call_shape_note
+    let internal_note = &internal_note[internal_note
         .rfind("Interface `WheelDiagnostics`")
-        .expect("the call-shape note's headline")..];
+        .expect("the internal note's headline")..];
     // `WheelDiagnostics` is `internal`: it never gets a face, so its note
     // names the lost descriptors and the refusal reason, not a face gap.
     assert!(
-        call_shape_note.contains("carries no generated interaction descriptors"),
-        "the internal interface's note names its descriptors, got:\n{call_shape_note}"
+        internal_note.contains("carries no generated interaction descriptors"),
+        "the internal interface's note names its descriptors, got:\n{internal_note}"
     );
     assert!(
-        call_shape_note.contains("driftsys/ridl#713"),
-        "the refusal reason names the argument-struct issue, got:\n{call_shape_note}"
+        internal_note.contains("driftsys/ridl#713"),
+        "the refusal reason names the argument-struct issue, got:\n{internal_note}"
     );
     assert!(
-        call_shape_note.contains("The interface is `internal`, so it has no face in any case"),
-        "the note says an internal interface has no face, got:\n{call_shape_note}"
+        internal_note.contains("The interface is `internal`, so it has no face in any case"),
+        "the note says an internal interface has no face, got:\n{internal_note}"
     );
-    for (which, text) in [("clause", note), ("call-shape", call_shape_note)] {
+    assert!(
+        !internal_note.contains("which the face is built on"),
+        "the internal note names no face in its trailer, got:\n{internal_note}"
+    );
+    for (which, text) in [("clause", note), ("internal", internal_note)] {
         assert!(
             !text.contains("     "),
             "the {which} note may not carry a run of literal spaces from a \

@@ -791,8 +791,11 @@ whose reply is not a named type, or a contract clause outside the form the
 translator accepts — is skipped along with its descriptors, and gets a
 `__RIDL_NO_FACE_<NAME>` constant naming the interface and the reason, and,
 when an issue tracks the limit, that issue. An `internal` interface gets no
-face in any case; if its descriptors are refused, its note says so. Neither is an error: the rest of the package is
-emitted, and the build succeeds.
+face in any case
+([the design record](https://github.com/driftsys/ridl/blob/main/docs/design/interaction-face.md#the-consumer-face)
+gives the rule). When its descriptors are refused, its note says that the
+descriptors are absent and gives the reason. Neither is an error: the rest of
+the package is emitted, and the build succeeds.
 
 The face names the `ridl-rt` port traits and nothing else: the crate carries no
 runtime and opens no socket, so an application supplies the ports. The one
