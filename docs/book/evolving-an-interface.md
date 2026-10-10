@@ -198,7 +198,9 @@ alone; the rules are in the
 
 For a unit with a published snapshot, a file that cannot be read, or that has a
 line that is neither a comment nor a hash, or that lists a hash twice, stops
-`ridl baseline` with exit 2, and `ridl build` also exits 2. The message
+`ridl baseline` with exit 2. `ridl build` also exits 2 when it writes a catalog
+descriptor or generates code and the workspace compiles without an error
+diagnostic. The message
 names the file and the line, and says to repair the file or remove it to start
 the unit's chain again.
 
