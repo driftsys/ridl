@@ -5977,7 +5977,8 @@ const REGEX_CRATE_VERDICTS_BOUND: usize = 1024;
 /// compiled before, and compiled with `regex::Regex::new` and recorded there
 /// otherwise. The compile runs outside the lock, so a slow pattern on one
 /// thread does not hold up a lookup on another; two threads that compile the
-/// same pattern at once record the same verdict twice, which changes nothing.
+/// same pattern at once record the same verdict twice, and the second record
+/// evicts nothing.
 fn regex_crate_verdict(body: &str) -> Option<String> {
     let recorded = REGEX_CRATE_VERDICTS
         .lock()
@@ -5993,11 +5994,23 @@ fn regex_crate_verdict(body: &str) -> Option<String> {
     let mut verdicts = REGEX_CRATE_VERDICTS
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
-    if verdicts.len() >= REGEX_CRATE_VERDICTS_BOUND {
+    record_regex_crate_verdict(&mut verdicts, body, &verdict);
+    verdict
+}
+
+/// Records `verdict` for `body` in `verdicts`, emptying `verdicts` first when
+/// it holds [`REGEX_CRATE_VERDICTS_BOUND`] entries and `body` is not one of
+/// them: a thread that compiled `body` while another recorded it replaces the
+/// entry and evicts nothing.
+fn record_regex_crate_verdict(
+    verdicts: &mut HashMap<String, Option<String>>,
+    body: &str,
+    verdict: &Option<String>,
+) {
+    if verdicts.len() >= REGEX_CRATE_VERDICTS_BOUND && !verdicts.contains_key(body) {
         verdicts.clear();
     }
     verdicts.insert(body.to_string(), verdict.clone());
-    verdict
 }
 
 /// The reason the `regex` crate gives for refusing a pattern, on one line
@@ -9405,6 +9418,25 @@ mod tests {
             .filter(|key| key.starts_with("^filler-603-"))
             .count();
         assert_eq!(fillers, 0, "{} verdicts recorded", verdicts.len());
+    }
+
+    /// A second thread that finishes compiling a pattern another thread has
+    /// recorded in the meantime replaces that entry and empties nothing
+    /// (issue #648), even when the record is full.
+    #[test]
+    fn a_duplicate_regex_verdict_does_not_empty_a_full_record() {
+        let mut verdicts: HashMap<String, Option<String>> = (0..REGEX_CRATE_VERDICTS_BOUND)
+            .map(|n| (format!("^filler-648-{n}$"), None))
+            .collect();
+        let pattern = "^duplicate-for-issue-648$";
+        verdicts.remove("^filler-648-0$");
+        verdicts.insert(pattern.to_string(), None);
+        assert_eq!(verdicts.len(), REGEX_CRATE_VERDICTS_BOUND);
+
+        record_regex_crate_verdict(&mut verdicts, pattern, &None);
+
+        assert_eq!(verdicts.len(), REGEX_CRATE_VERDICTS_BOUND);
+        assert_eq!(verdicts.get(pattern), Some(&None));
     }
 
     /// The checker compiles a pattern with the same `regex` configuration the
