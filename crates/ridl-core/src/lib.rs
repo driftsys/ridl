@@ -13,6 +13,7 @@
 
 #[cfg(feature = "fetch")]
 pub mod cache;
+pub mod catalog_history;
 pub mod db;
 pub mod diag;
 #[cfg(feature = "fetch")]

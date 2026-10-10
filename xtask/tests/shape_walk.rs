@@ -340,6 +340,12 @@ const ALLOWED: &[Allowed] = &[
               one interaction",
     },
     Allowed {
+        path: "crates/ridl-diff/src/unit_verdict.rs",
+        lines: 4,
+        why: "tests appending an interaction to the single fixture interface \
+              of a package to provoke a verdict",
+    },
+    Allowed {
         path: "crates/ridl-diff/src/classify/classify_tests.rs",
         lines: 7,
         why: "tests mutating fixture interfaces to provoke each category",

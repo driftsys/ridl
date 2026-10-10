@@ -764,6 +764,7 @@ pub fn run_build(
         frozen,
         ApplyLints::Yes,
         None,
+        &BTreeMap::new(),
     )
 }
 
@@ -788,6 +789,16 @@ pub fn run_build(
 /// command reports with exit code 2 (ADR-0010 decision 1). When the build has
 /// already drawn an error of its own, that error takes precedence: the run
 /// carries it, writes nothing, and exits 1.
+///
+/// `compatible` is, per unit name, the hashes of the earlier catalogs a
+/// consumer built against still works with: each unit's list is written as
+/// given into its catalog descriptor ([`write_catalogs`]) and into the
+/// `catalog.compatible` of its codegen request ([`codegen_request`]), and a
+/// unit absent from the map gets an empty list. The list never feeds the
+/// catalog hash. This function reads no baseline and computes no list: the
+/// `ridl` facade reads the published chain and passes the result here, so
+/// that `ridlc` stays a function of the sources alone (ADR-0008 decisions 9
+/// and 14); `ridlc build` passes an empty map.
 #[expect(
     clippy::too_many_arguments,
     reason = "the build's options, passed once from each command"
@@ -801,6 +812,7 @@ pub fn run_build_with(
     frozen: Frozen,
     apply_lints: ApplyLints,
     deployment: Option<&str>,
+    compatible: &BTreeMap<String, Vec<[u8; 32]>>,
 ) -> std::io::Result<CliRun> {
     let mut db = RidlDatabase::default();
     let Compiled {
@@ -1040,11 +1052,15 @@ pub fn run_build_with(
             } else {
                 package.ir.name.clone()
             };
+            let unit_compatible = compatible
+                .get(ridl_ir::v2::unit_of(&package.ir))
+                .map_or(&[][..], Vec::as_slice);
             write_emits(
                 out_dir,
                 &base,
                 &package.ir,
                 &others,
+                unit_compatible,
                 emits,
                 &resolved_plugins,
                 plugin_timeout,
@@ -1055,7 +1071,7 @@ pub fn run_build_with(
         }
 
         if emits.contains(&Emit::Catalog) {
-            write_catalogs(out_dir, &packages, &others)?;
+            write_catalogs(out_dir, &packages, &others, compatible)?;
         }
 
         if let Some(std_ir) = &std_ir {
@@ -1064,6 +1080,7 @@ pub fn run_build_with(
                 "ridl.std",
                 std_ir,
                 &others,
+                &[],
                 &code_emits,
                 &resolved_plugins,
                 plugin_timeout,
@@ -1786,6 +1803,7 @@ pub fn codegen_request(
     base: &str,
     package: &ridl_ir::v2::Package,
     others: &[&ridl_ir::v2::Package],
+    compatible: &[[u8; 32]],
     options: Vec<v1::BackendOption>,
     deployment: Option<v1::Deployment>,
     header: Option<&str>,
@@ -1793,7 +1811,7 @@ pub fn codegen_request(
     v1::CodegenRequest {
         schema: codegen::SCHEMA.to_string(),
         toolchain: env!("CARGO_PKG_VERSION").to_string(),
-        model: Some(codegen::lower(package, others)),
+        model: Some(codegen::lower_with(package, others, compatible)),
         options,
         artifact_base: base.to_string(),
         deployment,
@@ -1989,13 +2007,16 @@ fn write_response(
 /// order; a unit with no interface shape gets no file. `packages` are the
 /// build's checked packages, which name the units through
 /// `ridl_ir::v2::unit_of`; `others` is the scope the catalogs are lowered
-/// over ([`catalog_scope`]). A lowering failure is an internal error, not a
+/// over ([`catalog_scope`]); `compatible` holds, per unit name, the earlier
+/// catalog hashes the descriptor lists, a unit absent from it listing none.
+/// A lowering failure is an internal error, not a
 /// diagnostic: it is returned as an I/O error, which stops the build and
 /// which the command reports with exit code 2 (ADR-0010 decision 1).
 fn write_catalogs(
     out_dir: &Path,
     packages: &[&ridl_ir::v2::Package],
     others: &[&ridl_ir::v2::Package],
+    compatible: &BTreeMap<String, Vec<[u8; 32]>>,
 ) -> std::io::Result<()> {
     let units: BTreeSet<&str> = packages
         .iter()
@@ -2003,7 +2024,8 @@ fn write_catalogs(
         .map(|package| ridl_ir::v2::unit_of(package))
         .collect();
     for unit in units {
-        let bytes = ridl_descriptor::lower(unit, others)
+        let earlier = compatible.get(unit).map_or(&[][..], Vec::as_slice);
+        let bytes = ridl_descriptor::lower(unit, others, earlier)
             .map_err(|err| std::io::Error::other(err.to_string()))?;
         std::fs::write(
             out_dir.join(format!("{unit}{}", ridl_descriptor::FILE_SUFFIX)),
@@ -2047,6 +2069,9 @@ fn write_catalogs(
 /// Each plugin runs after the emits, over the same request, through the
 /// process host ([`plugin::run`]); a host failure is an error diagnostic
 /// naming the plugin, and a response is written as an in-tree backend's is.
+///
+/// `compatible` is the list of earlier catalog hashes of the package's unit,
+/// carried into the request's `catalog.compatible` as given.
 #[expect(
     clippy::too_many_arguments,
     reason = "the build's per-package facts, passed once from `run_build_with`"
@@ -2056,6 +2081,7 @@ fn write_emits(
     base: &str,
     ir: &ridl_ir::v2::Package,
     others: &[&ridl_ir::v2::Package],
+    compatible: &[[u8; 32]],
     emits: &[Emit],
     plugins: &[plugin::Plugin],
     plugin_timeout: Duration,
@@ -2066,8 +2092,17 @@ fn write_emits(
     // One request per package, built only when something reads it: an IR
     // dump alone lowers nothing.
     let needs_request = !plugins.is_empty() || emits.iter().any(|emit| !emit.is_ir_dump());
-    let request = needs_request
-        .then(|| codegen_request(base, ir, others, Vec::new(), deployment.cloned(), header));
+    let request = needs_request.then(|| {
+        codegen_request(
+            base,
+            ir,
+            others,
+            compatible,
+            Vec::new(),
+            deployment.cloned(),
+            header,
+        )
+    });
     let raw = codegen::RawIr {
         package: ir,
         others,

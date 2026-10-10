@@ -451,6 +451,11 @@ Each ruling: what was decided — why — what it costs if wrong.
 - **R-H2-3** A breaking verdict resets the chain to the one new hash, at
   publication and at build time alike — a consumer built against a pre-break
   catalog must be refused — if wrong, nothing: this is the brief's requirement.
+  **Amended 2026-10-10** by the amendment of the same date to
+  [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15: when the
+  current catalog hash equals the first hash of the published chain, the chain
+  is carried whatever the verdict, because the catalog did not change and every
+  listed hash is still compatible with it.
 - **R-H2-4** Compatibility is carried link by link and assumed transitive —
   every compatible category is monotone, and keeping every earlier baseline
   would change the baseline directory's shape for no gain today — if wrong, a

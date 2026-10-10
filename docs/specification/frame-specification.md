@@ -30,6 +30,9 @@ Version: 0.1.0 — Draft
 > the WebSocket transport (driftsys/ridl#265); the second is a runtime's own
 > binder contract on Android, outside this repository (§11.2, which reverses an
 > earlier AIDL binding generated per interface).
+>
+> The catalog descriptor carries the list of compatible earlier catalog hashes
+> that §6.1 names, and no runtime in this workspace reads it at `attach`.
 
 ---
 
@@ -518,15 +521,17 @@ catalog hashes whose successive changes `ridl diff` judged compatible, and
 tree it builds is compatible too. A breaking change restarts the chain when it
 is published: `ridl baseline` records the new hash alone. A tree that is
 breaking relative to the published baseline is built with an empty list, and the
-recorded chain is left as it is until the next publication.
-[ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15, as amended on
-2026-10-09, states the rule. The direction is fixed: an **older consumer**
-attaches to a **newer provider**. A newer consumer attaching to an older
-provider is refused `catalog_mismatch`, because no tool judges that direction
-and the provider is the authority on what it serves. **Not built yet:** the
-descriptor field, the chain file and the emit are driftsys/ridl#787; until it
-lands every descriptor carries no list, and the rule above with an empty list is
-the exact-match rule it replaces.
+recorded chain is left as it is until the next publication. The one exception is
+a catalog that did not change: when the catalog hash equals the newest hash of
+the published chain, the chain is carried at publication and at the build
+whatever the verdict, because every hash it lists is still compatible with that
+catalog. [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15, as
+amended on 2026-10-09 and 2026-10-10, states the rule. The direction is fixed:
+an **older consumer** attaches to a **newer provider**. A newer consumer
+attaching to an older provider is refused `catalog_mismatch`, because no tool
+judges that direction and the provider is the authority on what it serves. The
+descriptor field, the chain file and the emit are built (driftsys/ridl#787).
+With an empty list the rule above is the exact-match rule.
 
 The catalog check is the peers' agreement on the contract, taken once. On a
 session whose `attach` named the provider's own hash, the two runtimes hold the
@@ -886,8 +891,8 @@ so that each catches one way of being wrong.
 1. An `attach` naming a catalog the provider serves under a hash that is neither
    the provider's own nor one its descriptor lists as compatible is refused
    `catalog_mismatch`, and no other frame is exchanged; one naming a listed
-   earlier hash is accepted (§6.1; the list is driftsys/ridl#787, so a
-   descriptor written today lists nothing).
+   earlier hash is accepted (§6.1; the toolchain writes the list, and no runtime
+   in this workspace accepts a listed hash, per the As-built note).
 2. A `subscribe` to a signal is followed by exactly one `publish` before any
    provider action: `Init`, `seq` 0, no payload, before a first publication; the
    last publication otherwise (§5.1, §6.2).

@@ -124,7 +124,9 @@ other entry below is Accepted.
   of decision 15 adds the compatible catalogs: the descriptor and the codegen
   model carry the earlier hashes `ridl diff` judged compatible, recorded by
   `ridl baseline` and emitted by `ridl build`, and a provider accepts an
-  `attach` naming one of them (frame specification §6.1).
+  `attach` naming one of them (frame specification §6.1). The 2026-10-10
+  amendment carries the chain whatever the verdict when the catalog hash equals
+  the newest published hash, because the catalog did not change.
 
 - **ADR-0015 — QoS absorption, RPC bounds, and the interface as the unit.** ridl
   expresses QoS as semantic obligation, never as a transport knob, so it

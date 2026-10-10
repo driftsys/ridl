@@ -547,6 +547,44 @@ fn corpus_entry(name: &str) -> PathBuf {
 
 /// `examples/cabin` declares one deployment, `Bench`, so a build without
 /// `--deployment` carries it.
+/// The request carries the compatible catalog hashes the caller gives, in that
+/// order, byte for byte.
+#[test]
+fn the_request_carries_the_compatible_catalogs_in_order() {
+    let (_, packages) = corpus_packages()
+        .into_iter()
+        .next()
+        .expect("a corpus entry");
+    let refs: Vec<&v2::Package> = packages.iter().collect();
+    let request = ridlc::codegen_request(
+        "x",
+        &packages[0],
+        &refs[1..],
+        &[[2; 32], [1; 32]],
+        Vec::new(),
+        None,
+        None,
+    );
+    let catalog = request.model.unwrap().catalog.unwrap();
+    assert_eq!(catalog.compatible, vec![vec![2u8; 32], vec![1u8; 32]]);
+}
+
+/// The compatible list is data about history: it never changes the catalog
+/// hash the model carries, whatever the list holds.
+#[test]
+fn the_compatible_catalogs_never_change_the_catalog_hash() {
+    let (_, packages) = corpus_packages()
+        .into_iter()
+        .next()
+        .expect("a corpus entry");
+    let refs: Vec<&v2::Package> = packages.iter().collect();
+    let empty = codegen::lower_with(&packages[0], &refs[1..], &[]);
+    let listed = codegen::lower_with(&packages[0], &refs[1..], &[[7; 32], [9; 32]]);
+    let hash = |model: &v1::Model| model.catalog.as_ref().unwrap().hash.clone();
+    assert_eq!(hash(&empty), hash(&listed));
+    assert_eq!(listed.catalog.unwrap().compatible.len(), 2);
+}
+
 #[test]
 fn a_request_for_cabin_carries_its_one_deployment_without_a_flag() {
     let cabin = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/cabin");
@@ -562,6 +600,7 @@ fn a_request_for_cabin_carries_its_one_deployment_without_a_flag() {
         "veh.cabin",
         &packages[0],
         &refs[1..],
+        &[],
         Vec::new(),
         Some(deployment),
         None,
@@ -585,8 +624,15 @@ fn assert_request_without_deployment(entry: &str, name: &str) {
         ridlc::select_deployment(system.as_ref(), &declared, None, &refs).expect("not an error");
     assert!(selected.is_none(), "{entry}: no deployment without a name");
 
-    let request =
-        ridlc::codegen_request(name, &packages[0], &refs[1..], Vec::new(), selected, None);
+    let request = ridlc::codegen_request(
+        name,
+        &packages[0],
+        &refs[1..],
+        &[],
+        Vec::new(),
+        selected,
+        None,
+    );
     let expected = v1::CodegenRequest {
         schema: codegen::SCHEMA.to_string(),
         toolchain: env!("CARGO_PKG_VERSION").to_string(),

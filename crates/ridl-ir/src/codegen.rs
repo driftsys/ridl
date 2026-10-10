@@ -73,7 +73,7 @@ pub use contract::{
     request_from_json, request_to_json, response_from_json, response_to_json, text_file,
 };
 pub use deployment::lower_deployment;
-pub use lower::lower;
+pub use lower::{lower, lower_with};
 pub use unbounded::attribute as fb_unbounded;
 
 /// The error [`to_json_pretty`] and [`to_text_format`] return, on the two

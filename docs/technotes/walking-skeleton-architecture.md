@@ -83,7 +83,9 @@ here. This list is not a standing count of every crate the workspace holds — s
   discovery sits behind the `fs` feature and network fetch behind `fetch` (which
   pulls `ureq`, `sha2`, `tar` and implies `fs`), so the compiler crates build
   for `wasm32-unknown-unknown` with `--no-default-features` (ADR-0007 decision
-  5).
+  5). The `catalog_history` module reads and writes the `<unit>.catalogs` file
+  that `ridl baseline` publishes: the catalog hashes of a unit's published
+  baselines, newest first.
 
   The `lint` module looks lint names up in the catalogue, defines the four
   levels (`allow`, `info`, `warn`, `deny`), holds the effective levels of each
@@ -185,7 +187,9 @@ here. This list is not a standing count of every crate the workspace holds — s
   2 error. Three matches over `Category` deny `clippy::wildcard_enum_match_arm`
   and `clippy::match_wildcard_for_single_variants`, which is why `just build`
   runs `just lint`: a new variant swept into a wildcard arm compiles and passes
-  the whole test suite.
+  the whole test suite. `unit_verdict` restricts a report's verdict to one unit:
+  the changes in the unit's packages and in the declarations its interfaces
+  reach; `ridl baseline` and `ridl build` read it for the compatible catalogs.
 
 - **`crates/ridlc`** — the pipeline as a library plus the plumbing binary.
   `compile` runs a single file end to end; `compile_workspace` runs the loaded
@@ -224,8 +228,11 @@ here. This list is not a standing count of every crate the workspace holds — s
   landed here rather than in `ridlc`, because `ridlc` stays a pure source→IR
   function — the minimal ISO 26262 tool-qualification boundary (ADR-0008
   decision 9). `ridl baseline` publishes one `<pkg-name>.ir.json` per package
-  into `.ridl/baseline/`; `ridl check --baseline` is the desk-time ordinal-drift
-  check over it; `property.rs` is the `ridl test` runner, which spends the range
+  and one `<unit>.catalogs` file per unit with an interface into
+  `.ridl/baseline/`; `ridl build` reads those files to write each unit's list of
+  compatible catalogs into its descriptor and codegen model (`catalogs.rs`);
+  `ridl check --baseline` is the desk-time ordinal-drift check over the
+  snapshots; `property.rs` is the `ridl test` runner, which spends the range
   strategies on the contract plane.
 
 - **`crates/ridl-fmt`** — the `ridl fmt` engine: CST-based and trivia-aware

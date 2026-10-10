@@ -72,6 +72,12 @@ pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<Value> {
         let entry = entry?;
         retired.push(json!({ "name": entry.name()?, "number": entry.number()? }));
     }
+    let mut compatible = Vec::new();
+    if let Some(earlier) = catalog.compatible()? {
+        for entry in earlier {
+            compatible.push(entry?.hash()?);
+        }
+    }
     Ok(json!({
         "version": catalog.version()?,
         "name": catalog.name()?,
@@ -79,6 +85,7 @@ pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<Value> {
         "toolchain": catalog.toolchain()?,
         "interfaces": interfaces,
         "retired": retired,
+        "compatible": compatible,
     }))
 }
 
@@ -130,8 +137,8 @@ fn cause_name(cause: UnboundedCause) -> &'static str {
 mod tests {
     use super::*;
     use crate::{
-        Catalog, Interface, MaxSize, Member, Payload, RetiredInterface, SCHEMA_VERSION, Timing,
-        verify,
+        Catalog, EarlierCatalog, Interface, MaxSize, Member, Payload, RetiredInterface,
+        SCHEMA_VERSION, Timing, verify,
     };
 
     #[test]
@@ -172,6 +179,7 @@ mod tests {
                 reserved_ordinals: vec![],
             }],
             retired: vec![],
+            compatible: None,
         };
         let bytes = crate::finish(&catalog);
         let json = to_json(verify(&bytes).unwrap()).unwrap();
@@ -202,7 +210,8 @@ mod tests {
                     }],
                     "reserved_ordinals": []
                 }],
-                "retired": []
+                "retired": [],
+                "compatible": []
             })
         );
     }
@@ -235,6 +244,7 @@ mod tests {
                 name: "Old".to_owned(),
                 number: 1,
             }],
+            compatible: None,
         };
         let bytes = crate::finish(&catalog);
         let json = to_json(verify(&bytes).unwrap()).unwrap();
@@ -258,9 +268,30 @@ mod tests {
                     }],
                     "reserved_ordinals": [1, 2]
                 }],
-                "retired": [{ "name": "Old", "number": 1 }]
+                "retired": [{ "name": "Old", "number": 1 }],
+                "compatible": []
             })
         );
+    }
+
+    #[test]
+    fn the_view_lists_the_compatible_hashes_in_order() {
+        let catalog = Catalog {
+            version: SCHEMA_VERSION,
+            name: "p".to_owned(),
+            hash: vec![],
+            toolchain: "0.0.0".to_owned(),
+            interfaces: vec![],
+            retired: vec![],
+            // A descending list, so sorting it would fail the test.
+            compatible: Some(vec![
+                EarlierCatalog { hash: vec![2, 2] },
+                EarlierCatalog { hash: vec![1, 1] },
+            ]),
+        };
+        let bytes = crate::finish(&catalog);
+        let json = to_json(verify(&bytes).unwrap()).unwrap();
+        assert_eq!(json["compatible"], serde_json::json!([[2, 2], [1, 1]]));
     }
 
     /// Every value of each enum the view renders, against the member name

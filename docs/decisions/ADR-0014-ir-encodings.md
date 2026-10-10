@@ -53,6 +53,19 @@ breaking change restarts it. The reasoning trail is
 (lane H stage H2, ruling R-1 of its driver); the implementation is its plan,
 tracked as driftsys/ridl#787. Decisions 1 to 14 are unchanged.
 
+**Amended 2026-10-10 — decision 15, the unchanged catalog.** When the published
+baseline holds a package of the unit and the unit's current catalog hash equals
+the first hash of its published `<unit>.catalogs` file, the chain is carried
+whatever the unit's verdict, at publication and at the build: the catalog did
+not change, so every hash the file lists is still compatible with it. A breaking
+change that leaves the hash unchanged, such as the removal of a declaration no
+interface of the unit reaches, no longer restarts the chain. Only the first hash
+has this effect; a current hash equal to an older hash of the file follows the
+verdict. Ruling R-H2-3 of
+[the catalog compatibility design note](../wip/2026-10-09-catalog-compat-design.md)
+is amended to match, and the change is tracked as driftsys/ridl#787. Decisions 1
+to 14 are unchanged.
+
 The reasoning trail is
 [`docs/archive/2026-08-03-ir-protobuf-encodings-design.md`](../archive/2026-08-03-ir-protobuf-encodings-design.md),
 which carries the measurements and the API confirmations this record summarises.
@@ -477,13 +490,13 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     stays behind prototext, dropping its `serde` feature. Decision 13 is
     unchanged on both sides.
 
-15. **Amendment (2026-10-04, 2026-10-09) — the catalog hash is SHA-256 over the
-    protobuf binary of a reduced unit.** The catalog hash is the identity of a
-    unit's interfaces, their numbers and the types they reach (the rsdl rewrite
-    decisions note, D-7 and D-8). It is derived on every build and never
-    recorded. There is one such identity: the schema hash over the IR that
-    driftsys/ridl#275 asked for is this hash, so it does not depend on which
-    wire schema a build emits — proto3, FlatBuffers or both.
+15. **Amendment (2026-10-04, 2026-10-09, 2026-10-10) — the catalog hash is
+    SHA-256 over the protobuf binary of a reduced unit.** The catalog hash is
+    the identity of a unit's interfaces, their numbers and the types they reach
+    (the rsdl rewrite decisions note, D-7 and D-8). It is derived on every build
+    and never recorded. There is one such identity: the schema hash over the IR
+    that driftsys/ridl#275 asked for is this hash, so it does not depend on
+    which wire schema a build emits — proto3, FlatBuffers or both.
 
     **What is hashed.** `ridl_ir::v2::to_binary` of the package that
     `ridl_ir::catalog_hash::reduced_unit` returns. A unit is selected by the
@@ -613,18 +626,26 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
       twice. A `Breaking` verdict, a replaced baseline with no such file, and a
       first publication each write the one new hash. An earlier hash is the
       value the publishing toolchain computed, never recomputed from a snapshot.
+      **Amended 2026-10-10:** when the replaced baseline holds a package of the
+      unit and the fresh catalog hash equals the first hash of its file, the
+      hashes are carried whatever the verdict, because the catalog did not
+      change.
     - **The list is emitted at the build, and the `ridl` facade computes it.**
       `ridl build` discovers `.ridl/baseline/` as `ridl check` does and, per
       unit, classifies the baseline against the current tree: `Compatible` or
       `Identical` gives every hash of the file except the current catalog's own;
       `Breaking`, no baseline, no snapshot and no file each give an empty list,
-      which is the exact-match behaviour the hash alone gives. A baseline that
-      is present and cannot be loaded fails the build, exit 2. The facade passes
-      the per-unit lists to `ridlc::run_build_with` as an input of the build,
-      and `ridlc` writes them into the descriptor and the codegen model without
-      reading any baseline: the compiler stays the pure source → IR function of
-      [ADR-0008](ADR-0008-e2-execution.md) decisions 9 and 14, and `ridlc build`
-      writes an empty list.
+      which is the exact-match behaviour the hash alone gives. **Amended
+      2026-10-10:** when the published baseline holds a package of the unit and
+      the current catalog hash equals the file's first hash, the file's other
+      hashes are given whatever the verdict, because the catalog did not change;
+      a current hash equal to an older hash of the file follows the verdict. A
+      baseline that is present and cannot be loaded fails the build, exit 2. The
+      facade passes the per-unit lists to `ridlc::run_build_with` as an input of
+      the build, and `ridlc` writes them into the descriptor and the codegen
+      model without reading any baseline: the compiler stays the pure source →
+      IR function of [ADR-0008](ADR-0008-e2-execution.md) decisions 9 and 14,
+      and `ridlc build` writes an empty list.
     - **The verdict is `ridl diff`'s, scoped to the unit.**
       `ridl_diff::unit_verdict` takes the maximum over the changes whose package
       is one of the unit's source packages on either side, or whose top-level
@@ -738,7 +759,8 @@ same change.
 
 The 2026-10-09 amendment of decision 15 (the compatible catalogs) amends
 [the frame specification](../specification/frame-specification.md) §6.1, §6.4
-and §12 in the same change.
+and §12 in the same change. Its 2026-10-10 amendment (the unchanged catalog)
+amends the frame specification §6.1 in the same change.
 [`docs/design/catalog-descriptor.md`](../design/catalog-descriptor.md) describes
 the descriptor as built and changes when the field lands.
 

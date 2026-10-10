@@ -16,8 +16,8 @@ use ridl_ir::v2::{
 use crate::hash::catalog_hash;
 use crate::number::{ZeroNumber, first_zero, unit_shapes};
 use crate::{
-    Catalog, Encoding, Interface, Kind, MaxSize, Member, Payload, RetiredInterface, SCHEMA_VERSION,
-    SizeStateTag, Timing, TimingMode, UnboundedCause,
+    Catalog, EarlierCatalog, Encoding, Interface, Kind, MaxSize, Member, Payload, RetiredInterface,
+    SCHEMA_VERSION, SizeStateTag, Timing, TimingMode, UnboundedCause,
 };
 
 /// Every encoding the size table has a column for, in `Encoding` order.
@@ -58,8 +58,15 @@ impl From<ZeroNumber> for LowerError {
 /// package named twice is read once. The descriptor is named `unit`; its
 /// interfaces are every shape of the unit's packages under the shape's
 /// catalog name, in (number, name) order; its `retired` list is the unit's
-/// (`ridl_ir::v2::unit_retired`).
-pub fn lower(unit: &str, packages: &[&Package]) -> Result<Vec<u8>, LowerError> {
+/// (`ridl_ir::v2::unit_retired`). Its `compatible` list is `compatible`,
+/// written in the order given: the catalog hashes of the earlier catalogs
+/// this one is compatible with. The list is not hashed, so it does not
+/// change the descriptor's `hash`.
+pub fn lower(
+    unit: &str,
+    packages: &[&Package],
+    compatible: &[[u8; 32]],
+) -> Result<Vec<u8>, LowerError> {
     let shapes = unit_shapes(unit, packages);
     // Validates every number before any member is lowered.
     first_zero(&shapes)?;
@@ -113,6 +120,14 @@ pub fn lower(unit: &str, packages: &[&Package]) -> Result<Vec<u8>, LowerError> {
                 number: entry.number,
             })
             .collect(),
+        compatible: Some(
+            compatible
+                .iter()
+                .map(|hash| EarlierCatalog {
+                    hash: hash.to_vec(),
+                })
+                .collect(),
+        ),
     };
     Ok(crate::finish(&catalog))
 }

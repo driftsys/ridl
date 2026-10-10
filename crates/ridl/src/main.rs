@@ -43,6 +43,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+mod catalogs;
 mod lock;
 mod property;
 
@@ -102,12 +103,13 @@ enum Command {
         format: CheckFormat,
     },
     /// Publish the current workspace as a baseline: one `<pkg-name>.ir.json`
-    /// snapshot per package, written to `.ridl/baseline/` at the workspace
-    /// root.
+    /// snapshot per package and one `<unit>.catalogs` file per unit with an
+    /// interface, written to `.ridl/baseline/` at the workspace root.
     Baseline {
         #[arg(default_value = ".")]
         path: PathBuf,
-        /// Write the snapshots here instead of `.ridl/baseline/`.
+        /// Write the snapshots and the catalog files here instead of
+        /// `.ridl/baseline/`.
         #[arg(long, value_name = "DIR")]
         out: Option<PathBuf>,
     },
@@ -281,16 +283,15 @@ fn main() -> ExitCode {
             plugin_timeout,
             frozen,
             deployment,
-        } => finish(ridlc::run_build_with(
+        } => run_build(
             &path,
             &out_dir,
             &emit,
             &plugin,
             std::time::Duration::from_secs(plugin_timeout),
             frozen.into(),
-            ApplyLints::Yes,
             deployment.as_deref(),
-        )),
+        ),
         Command::Test {
             path,
             samples,
@@ -615,6 +616,47 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
     finish_check(run, format)
 }
 
+/// Builds the workspace at `path`: `ridlc`'s own build, given the earlier
+/// catalogs each unit is compatible with.
+///
+/// The list is read from the published baseline at `.ridl/baseline/`
+/// ([`catalogs::compatible_catalogs`]), and only when the build writes a
+/// catalog descriptor or generates code, which are the artifacts that carry
+/// it: an IR dump reads no baseline, as `ridl baseline` does not. `ridlc`
+/// itself reads no baseline (ADR-0008 decisions 9 and 14): the facade computes
+/// the list and passes it in.
+fn run_build(
+    path: &Path,
+    out_dir: &Path,
+    emits: &[Emit],
+    plugins: &[PluginSpec],
+    plugin_timeout: std::time::Duration,
+    frozen: ridl_core::Frozen,
+    deployment: Option<&str>,
+) -> ExitCode {
+    let carries_the_list = !plugins.is_empty() || emits.iter().any(|emit| !emit.is_ir_dump());
+    let compatible = if carries_the_list {
+        let mut db = ridl_core::RidlDatabase::default();
+        match catalogs::compatible_catalogs(&mut db, path) {
+            Ok(compatible) => compatible,
+            Err(code) => return code,
+        }
+    } else {
+        BTreeMap::new()
+    };
+    finish(ridlc::run_build_with(
+        path,
+        out_dir,
+        emits,
+        plugins,
+        plugin_timeout,
+        frozen,
+        ApplyLints::Yes,
+        deployment,
+        &compatible,
+    ))
+}
+
 /// Publishes the workspace at `path` as a baseline.
 ///
 /// The compile and the write are `ridlc`'s own `build --emit ir-json`, so the
@@ -649,6 +691,8 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
         false.into(),
         ApplyLints::No,
         None,
+        // A snapshot carries no list; the chain is written beside it below.
+        &BTreeMap::new(),
     ) {
         Ok(run) => run,
         Err(err) => {
@@ -690,6 +734,14 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
     if refused {
         let _ = std::fs::remove_dir_all(&staging);
         return finish(Ok(run));
+    }
+
+    // The histories are written into the staging directory only once both
+    // gates passed, so a refused run leaves every published history as it was.
+    let mut db = ridl_core::RidlDatabase::default();
+    if let Err(code) = catalogs::write_catalog_histories(&mut db, &staging, &out_dir) {
+        let _ = std::fs::remove_dir_all(&staging);
+        return code;
     }
 
     if let Err(err) = publish_baseline(&staging, &out_dir) {
@@ -1140,19 +1192,43 @@ fn staging_dir(out_dir: &Path) -> PathBuf {
 
 /// Replaces the `.ir.json` set in `out_dir` with the freshly built one in
 /// `staging`, dropping any snapshot whose package the workspace no longer
-/// declares. Only `.ir.json` files are touched: `out_dir` may be a directory a
-/// user pointed `--out` at, and nothing else in it is this command's to delete.
+/// declares, and replaces the `.catalogs` set with the staged one. Only
+/// `.ir.json` and `.catalogs` files are touched: `out_dir` may be a directory
+/// a user pointed `--out` at, and nothing else in it is this command's to
+/// delete.
 ///
-/// The fresh snapshots move in first, each rename replacing the stale file of
-/// the same name, and only then are the stale snapshots no fresh one replaced
-/// removed. A failure part-way — a rename refused, a disk that fills — leaves
+/// The steps run in this order:
+///
+/// 1. Every published `.catalogs` file is removed.
+/// 2. The fresh snapshots move in, each rename replacing the stale file of the
+///    same name.
+/// 3. The fresh `.catalogs` files move in.
+/// 4. The stale snapshots no fresh one replaced are removed.
+///
+/// A failure part-way — a rename refused, a disk that fills — leaves
 /// `out_dir` holding one snapshot per package, some fresh and some stale,
-/// which the next run compares against package by package. The other order,
-/// delete then move, left `out_dir` empty after the same failure, and an
-/// empty directory is a first publication to [`untombstoned_removals`]: the
-/// next run would have skipped the gate.
+/// which the next run compares against package by package. The other order
+/// for snapshots, delete then move, left `out_dir` empty after the same
+/// failure, and an empty directory is a first publication to
+/// [`untombstoned_removals`]: the next run would have skipped the gate.
+///
+/// The histories are removed first, and the fresh ones move in only after
+/// every fresh snapshot, so that a failure never leaves a history of the
+/// replaced baseline beside a fresh snapshot, nor a fresh history beside a
+/// replaced snapshot of the same package. A history of the replaced baseline
+/// beside a fresh snapshot lets the next run carry hashes past a breaking
+/// change; a fresh history beside a replaced snapshot lists a catalog that is
+/// not published. After a failure in the first three steps, a unit has its
+/// fresh history or none, and a unit with none starts its chain again. A
+/// failure in step 4 leaves every fresh history beside every fresh snapshot,
+/// plus the stale snapshot of a package the workspace no longer declares;
+/// that snapshot is compared as a removed package by the next run and
+/// removed by its publication, and no history describes it.
 fn publish_baseline(staging: &Path, out_dir: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(out_dir)?;
+    for history in catalogs_files(out_dir)? {
+        std::fs::remove_file(history)?;
+    }
     let mut published = BTreeSet::new();
     for fresh in ir_json_files(staging)? {
         let name = fresh
@@ -1161,6 +1237,13 @@ fn publish_baseline(staging: &Path, out_dir: &Path) -> std::io::Result<()> {
             .to_os_string();
         std::fs::rename(&fresh, out_dir.join(&name))?;
         published.insert(name);
+    }
+    for fresh in catalogs_files(staging)? {
+        let name = fresh
+            .file_name()
+            .expect("a listed history path has a file name")
+            .to_os_string();
+        std::fs::rename(&fresh, out_dir.join(&name))?;
     }
     for stale in ir_json_files(out_dir)? {
         if stale
@@ -1171,6 +1254,24 @@ fn publish_baseline(staging: &Path, out_dir: &Path) -> std::io::Result<()> {
         }
     }
     std::fs::remove_dir_all(staging)
+}
+
+/// Every `*.catalogs` file directly in `dir`.
+fn catalogs_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.is_file()
+            && path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.ends_with(ridl_core::catalog_history::FILE_SUFFIX))
+        {
+            files.push(path);
+        }
+    }
+    files.sort();
+    Ok(files)
 }
 
 /// Where to read the baseline from, if anywhere.
@@ -2734,4 +2835,74 @@ fn collect_source_files(path: &Path) -> Result<Vec<PathBuf>, (PathBuf, std::io::
     }
     files.sort();
     Ok(files)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A history rename that fails after the snapshots moved in leaves no
+    /// history of the replaced baseline beside the fresh snapshots.
+    #[test]
+    fn an_interrupted_publication_leaves_no_replaced_history() {
+        let root =
+            std::env::temp_dir().join(format!("ridl-publish-interrupted-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let staging = root.join("staging");
+        let out_dir = root.join("out");
+        std::fs::create_dir_all(&staging).unwrap();
+        std::fs::create_dir_all(out_dir.join("a.catalogs").join("blocker")).unwrap();
+        for name in ["a.ir.json", "b.ir.json"] {
+            std::fs::write(staging.join(name), "{}").unwrap();
+        }
+        for name in ["a.catalogs", "b.catalogs"] {
+            std::fs::write(staging.join(name), "fresh\n").unwrap();
+        }
+        std::fs::write(out_dir.join("b.ir.json"), "{}").unwrap();
+        std::fs::write(out_dir.join("b.catalogs"), "marker\n").unwrap();
+
+        let result = publish_baseline(&staging, &out_dir);
+
+        let left = std::fs::read_to_string(out_dir.join("b.catalogs")).unwrap_or_default();
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(result.is_err(), "the history rename onto a directory fails");
+        assert!(
+            !left.contains("marker"),
+            "the replaced history is gone: {left:?}"
+        );
+    }
+
+    /// A snapshot rename that fails leaves no history at all: the fresh
+    /// histories move in only after every fresh snapshot.
+    #[test]
+    fn a_failed_snapshot_rename_leaves_no_history() {
+        let root = std::env::temp_dir().join(format!(
+            "ridl-publish-snapshot-fails-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let staging = root.join("staging");
+        let out_dir = root.join("out");
+        std::fs::create_dir_all(&staging).unwrap();
+        std::fs::create_dir_all(out_dir.join("a.ir.json").join("blocker")).unwrap();
+        for name in ["a.ir.json", "b.ir.json"] {
+            std::fs::write(staging.join(name), "{}").unwrap();
+        }
+        for name in ["a.catalogs", "b.catalogs"] {
+            std::fs::write(staging.join(name), "fresh\n").unwrap();
+        }
+
+        let result = publish_baseline(&staging, &out_dir);
+
+        let histories = catalogs_files(&out_dir).unwrap();
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(
+            result.is_err(),
+            "the snapshot rename onto a directory fails"
+        );
+        assert!(
+            histories.is_empty(),
+            "no history is published: {histories:?}"
+        );
+    }
 }

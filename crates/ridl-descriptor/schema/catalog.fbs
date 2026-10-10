@@ -93,6 +93,12 @@ table RetiredInterface {
   number: uint32;
 }
 
+// A catalog hash an earlier release of the unit published and this one still
+// speaks (ADR-0014 decision 15, 2026-10-09 amendment); 32 bytes.
+table EarlierCatalog {
+  hash: [ubyte] (required);
+}
+
 table Catalog {
   // The schema version of this file; a reader rejects one it does not know.
   version: uint32;
@@ -105,6 +111,11 @@ table Catalog {
   toolchain: string (required);
   interfaces: [Interface] (required);
   retired: [RetiredInterface] (required);
+  // The hashes of earlier catalogs this one is compatible with, in the order
+  // the unit's history file lists them (ADR-0014 decision 15, 2026-10-09
+  // amendment). Appended after `retired` and not `required`, so a file
+  // written before this field existed still verifies and reads as absent.
+  compatible: [EarlierCatalog];
 }
 
 root_type Catalog;

@@ -280,10 +280,12 @@ interface VehicleStatus {
     assert_eq!(
         written,
         vec![
+            "veh.cluster.catalogs".to_string(),
             "veh.cluster.ir.json".to_string(),
             "veh.common.ir.json".to_string(),
         ],
-        "two packages produce two snapshot files",
+        "two packages produce two snapshot files, and the one unit with an interface \
+         shape produces one catalog history",
     );
 }
 

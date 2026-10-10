@@ -30,10 +30,12 @@ use ridl_ir::v2::{Package, System};
 
 mod classify;
 pub mod system;
+pub mod unit_verdict;
 mod walk;
 
 pub use classify::{absence_refused, category_from_word, classify, explain};
 pub use system::{SystemChange, SystemHeading, diff_systems};
+pub use unit_verdict::unit_verdict;
 
 #[cfg(test)]
 mod tests;

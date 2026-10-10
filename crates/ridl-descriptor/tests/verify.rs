@@ -4,9 +4,9 @@
 
 use planus::ReadAsRoot;
 use ridl_descriptor::{
-    Catalog, CatalogRef, Encoding, FILE_IDENTIFIER, Interface, Kind, MaxSize, Member, Payload,
-    RetiredInterface, SCHEMA_VERSION, SizeStateTag, Timing, TimingMode, UnboundedCause,
-    VerifyError, finish, verify,
+    Catalog, CatalogRef, EarlierCatalog, Encoding, FILE_IDENTIFIER, Interface, Kind, MaxSize,
+    Member, Payload, RetiredInterface, SCHEMA_VERSION, SizeStateTag, Timing, TimingMode,
+    UnboundedCause, VerifyError, finish, verify,
 };
 
 fn minimal(version: u32) -> Vec<u8> {
@@ -17,6 +17,7 @@ fn minimal(version: u32) -> Vec<u8> {
         toolchain: "0.0.0".to_owned(),
         interfaces: vec![],
         retired: vec![],
+        compatible: None,
     };
     finish(&catalog)
 }
@@ -132,6 +133,7 @@ fn nested() -> Vec<u8> {
             reserved_ordinals: vec![],
         }],
         retired: vec![],
+        compatible: None,
     })
 }
 
@@ -273,6 +275,10 @@ fn full_with(provisional: bool, timing: bool) -> Vec<u8> {
                 number: 2,
             },
         ],
+        compatible: Some(vec![
+            EarlierCatalog { hash: vec![1; 32] },
+            EarlierCatalog { hash: vec![2; 32] },
+        ]),
     })
 }
 
@@ -304,6 +310,8 @@ const SIZE_STATE: usize = 2;
 const SIZE_CAUSE: usize = 3;
 const RETIRED_NAME: usize = 0;
 const RETIRED_NUMBER: usize = 1;
+const CATALOG_COMPATIBLE: usize = 6;
+const EARLIER_HASH: usize = 0;
 
 fn u32_at(bytes: &[u8], at: usize) -> usize {
     u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap()) as usize
@@ -418,6 +426,7 @@ struct Tables {
     payload: usize,
     size: usize,
     retired: usize,
+    earlier: usize,
 }
 
 fn locate(bytes: &[u8]) -> Tables {
@@ -429,6 +438,7 @@ fn locate(bytes: &[u8]) -> Tables {
     let payload = last_in(bytes, member, MEMBER_PAYLOADS);
     let size = last_in(bytes, payload, PAYLOAD_MAX_SIZES);
     let retired = last_in(bytes, catalog, CATALOG_RETIRED);
+    let earlier = last_in(bytes, catalog, CATALOG_COMPATIBLE);
     Tables {
         catalog,
         interface,
@@ -437,6 +447,7 @@ fn locate(bytes: &[u8]) -> Tables {
         payload,
         size,
         retired,
+        earlier,
     }
 }
 
@@ -453,6 +464,7 @@ fn every_field_the_walk_reads_is_checked() {
     let payload: Pick = |t| t.payload;
     let size: Pick = |t| t.size;
     let retired: Pick = |t| t.retired;
+    let earlier: Pick = |t| t.earlier;
 
     let cases = [
         ("catalog.name", Full, catalog, CATALOG_NAME, Offset),
@@ -536,6 +548,14 @@ fn every_field_the_walk_reads_is_checked() {
         ("size.cause", Full, size, SIZE_CAUSE, Tag),
         ("retired.name", Full, retired, RETIRED_NAME, Offset),
         ("retired.number", Full, retired, RETIRED_NUMBER, Scalar),
+        (
+            "catalog.compatible",
+            Full,
+            catalog,
+            CATALOG_COMPATIBLE,
+            Offset,
+        ),
+        ("earlier.hash", Full, earlier, EARLIER_HASH, Offset),
     ];
     let mut accepted = Vec::new();
     for (name, fixture, pick, slot, how) in cases {
@@ -558,6 +578,32 @@ fn every_field_the_walk_reads_is_checked() {
         accepted.is_empty(),
         "verify accepted a buffer with one damaged field: {accepted:?}"
     );
+}
+
+/// A descriptor laid out as a toolchain wrote it before the `compatible`
+/// field existed: the root table's vtable ends at `retired`.
+fn buffer_without_compatible() -> Vec<u8> {
+    let bytes = finish(&Catalog {
+        version: SCHEMA_VERSION,
+        name: "p".to_owned(),
+        hash: vec![0u8; 32],
+        toolchain: "0.0.0".to_owned(),
+        interfaces: vec![],
+        retired: vec![],
+        compatible: None,
+    });
+    assert!(
+        try_vtable_entry(&bytes, root(&bytes), CATALOG_COMPATIBLE).is_none(),
+        "the vtable must end before the compatible slot"
+    );
+    bytes
+}
+
+#[test]
+fn a_file_without_the_compatible_field_still_verifies() {
+    let bytes = buffer_without_compatible();
+    let catalog = verify(&bytes).unwrap();
+    assert!(catalog.compatible().unwrap().is_none());
 }
 
 /// With `std` off the crate still implements `core::error::Error` for

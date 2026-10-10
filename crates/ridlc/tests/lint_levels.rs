@@ -197,6 +197,7 @@ fn build_without_levels_writes_artifacts() {
         Frozen::No,
         ApplyLints::No,
         None,
+        &std::collections::BTreeMap::new(),
     )
     .expect("the build runs");
     assert!(!run.has_error(), "unexpected error: {:?}", run.diagnostics);

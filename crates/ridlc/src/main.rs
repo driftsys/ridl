@@ -88,6 +88,9 @@ fn main() -> ExitCode {
             Frozen::from(frozen),
             ApplyLints::Yes,
             deployment.as_deref(),
+            // `ridlc` reads no baseline, so the descriptor it writes lists
+            // no earlier catalog (ADR-0008 decisions 9 and 14).
+            &std::collections::BTreeMap::new(),
         ),
     };
     finish(run)
