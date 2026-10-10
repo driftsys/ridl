@@ -100,3 +100,34 @@ fn rsdl_err_corpus_is_lossless_reports_errors_and_matches_snapshots() {
         insta::assert_snapshot!(dump(&parsed));
     });
 }
+
+/// The bare `= value` init parses only before the timing (ADR-0008
+/// decision 2): an init after a timing, or after an attribute block, is a
+/// parse error, while the same members with the init first parse cleanly.
+#[test]
+fn ridl_init_value_parses_only_before_the_annotations() {
+    let wrap = |member: &str| format!("package p\n\ninterface I {{\n  {member}\n}}\n");
+    for member in [
+        "signal s : integer = 1 @10ms",
+        "signal s : integer = 1 [require true]",
+        "signal s : integer = 1 @10ms [require true]",
+    ] {
+        let parsed = parse(&wrap(member), Profile::Ridl);
+        assert!(
+            parsed.errors().is_empty(),
+            "`{member}` must parse cleanly: {:?}",
+            parsed.errors(),
+        );
+    }
+    for member in [
+        "signal s : integer @10ms = 1",
+        "signal s : integer [require true] = 1",
+        "signal s : integer @10ms [require true] = 1",
+    ] {
+        let parsed = parse(&wrap(member), Profile::Ridl);
+        assert!(
+            !parsed.errors().is_empty(),
+            "`{member}` must not parse cleanly",
+        );
+    }
+}
