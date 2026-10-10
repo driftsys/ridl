@@ -197,6 +197,10 @@ interface Wide {
         "{text}"
     );
     assert!(text.contains("A call the face cannot carry"), "{text}");
+    let owner = &text[text
+        .find("A call the face cannot carry")
+        .expect("owner line")..];
+    assert!(owner.contains("driftsys/ridl#713"), "{text}");
     assert!(!text.contains("The interface is `internal`"), "{text}");
 }
 
