@@ -1621,8 +1621,9 @@ fn check_tells_a_tombstone_that_keeps_the_slot_but_not_the_name() {
 }
 
 /// An enum value or enum-set bit takes its identity from its explicit number,
-/// so reordering the body is not a change (typl §8, §9): `ridl diff` reports
-/// the reorder as identical, and the desk check stays silent.
+/// so reordering the body moves nothing on the wire (typl §8, §9): `ridl diff`
+/// reports the reorder as `enum_reordered`, compatible, and the desk check
+/// stays silent.
 #[test]
 fn check_is_silent_for_an_enum_and_enum_set_reorder() {
     let dir = TempDir::new("enum-reorder");
@@ -1636,10 +1637,10 @@ fn check_is_silent_for_an_enum_and_enum_set_reorder() {
         root.join(".ridl/baseline").as_os_str(),
         root.as_os_str(),
     ]);
-    assert_eq!(code, 0, "a textual reorder is not a change:\n{diff}");
+    assert_eq!(code, 0, "a textual reorder is compatible:\n{diff}");
     assert!(
-        diff.starts_with("identical"),
-        "`ridl diff` reports the reorder as identical:\n{diff}",
+        diff.starts_with("compatible") && diff.contains("enum_reordered"),
+        "`ridl diff` reports the reorder as enum_reordered, compatible:\n{diff}",
     );
 
     let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);

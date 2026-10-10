@@ -1378,10 +1378,12 @@ routing identity, and visible in source, because the generated identity-table
 names change, so it shares the heading above; the path carries the new name,
 and a change inside the renamed interface is reported under the new name too.
 A number gone from the new side is `interface_retired` when that side's lock
-retires it, and `decl_removed`, breaking, otherwise. A declaration with no lock
-entry carries a provisional number, which is no identity: it is always
-`decl_added`, and it is never matched to an old interface, so a rename the lock
-does not record is `decl_removed` plus `decl_added`. Two sides with no lock
+retires it, and `decl_removed`, breaking, otherwise. Against an old side whose
+numbers are frozen, a declaration with no lock entry carries a provisional
+number, which is no identity: it is `decl_added`, and it is never matched to an
+old interface, so a rename the lock does not record is `decl_removed` plus
+`decl_added`. Against a provisional old side, interfaces are matched by name,
+as described below. Two sides with no lock
 file — two bare source trees, or a snapshot published before the lock existed —
 are matched by name. Interfaces are matched within the unit, and the names on
 both sides of a change are catalog names, so an interface moved between two
@@ -1435,10 +1437,31 @@ breaking
   [compatible] decl_added veh.cluster/Aux: (absent) -> interface
 ```
 
-An old number 0, from a snapshot written before the lock existed, is not
-compared. A published baseline never holds a provisional number, because
-`ridl baseline` refuses one (RIDL-411), so both categories are seen between
-two builds, not against `.ridl/baseline/`.
+A number 0 on either side, from a snapshot written before the lock existed,
+is not compared. A published baseline never holds a provisional number,
+because `ridl baseline` refuses one (RIDL-411), so both categories are seen
+between two builds, or in a reversed comparison whose old side is a build.
+
+An enum value or an enum-set bit takes its identity from the explicit number
+it declares, so a body whose difference is only order — its values or bits
+reordered with no number changed, an enum's `reserved` list reordered with no
+entry changed, or both — moves nothing on the wire. The catalog hash covers
+the order of the values and bits, so the change is `enum_reordered`,
+compatible, on the container's path and under the same heading. With the
+values of `enum GearPosition` reordered:
+
+```sh
+ridl diff old.ridl new.ridl
+```
+
+```text
+compatible
+compatible on the wire, changes the catalog hash:
+  [compatible] enum_reordered veh.cluster/GearPosition
+```
+
+A value or bit whose number changed is `member_reordered`, breaking, with the
+old and the new number in the detail.
 
 The breaking comparison above with `--format json`:
 
@@ -1562,6 +1585,7 @@ the categories `ridl diff` reports are:
   interface_frozen
   interface_number_changed
   member_reordered
+  enum_reordered
   interaction_appended
   interaction_inserted
   interaction_reordered

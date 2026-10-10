@@ -4,8 +4,8 @@
 //! its §8 and §9 for enum values and enum-set bits, whose identity is the
 //! explicit number they declare): `ridl diff` reporting a swapped struct field
 //! as `member_reordered` rather than a whole-container `constraint_changed`,
-//! and a textual reorder of an enum or enum-set body as no change
-//! (driftsys/ridl#397).
+//! and a textual reorder of an enum or enum-set body as `enum_reordered`,
+//! compatible (driftsys/ridl#397).
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -292,10 +292,11 @@ fn a_reorder_with_an_in_place_change_reports_both() {
 /// An enum value's identity is its explicit number (typl §8), so the slot the
 /// walk compares is that number. A reorder that also changes a value reports
 /// the value whose number changed as `member_reordered`, with the old and new
-/// number, and the container as `constraint_changed`. The two values that only
-/// moved in the text kept their numbers and are not reported.
+/// number. The two values that only moved in the text kept their numbers and
+/// are not reported, and the changed number is the only difference, so the
+/// container is not reported either.
 #[test]
-fn an_enum_reorder_with_a_changed_value_reports_constraint_changed() {
+fn an_enum_reorder_with_a_changed_value_reports_the_value_alone() {
     let dir = TempDir::new("enum-reorder-revalue");
     let old = workspace(&dir, "old", GEARS);
     let new = workspace(&dir, "new", GEARS_REORDERED_AND_REVALUED);
@@ -314,16 +315,17 @@ fn an_enum_reorder_with_a_changed_value_reports_constraint_changed() {
         "a value that kept its number is not reported, wherever it sits:\n{out}",
     );
     assert!(
-        out.contains("constraint_changed veh.cluster/GearPosition\n"),
-        "the changed value is reported on the container:\n{out}",
+        !out.contains("constraint_changed") && !out.contains("enum_reordered"),
+        "the changed number is the only change reported:\n{out}",
     );
 }
 
 /// A textual reorder of an enum with every value unchanged moves no number,
-/// so it changes nothing on any wire (typl §8): the report is `identical`, with
-/// exit 0, and names no change.
+/// so it changes nothing on any wire (typl §8), but the catalog hash covers
+/// the order of the values: the report is `enum_reordered` on the container,
+/// compatible, with exit 0.
 #[test]
-fn an_enum_reorder_with_unchanged_values_is_identical() {
+fn an_enum_reorder_with_unchanged_values_is_enum_reordered() {
     let dir = TempDir::new("enum-reorder");
     let old = workspace(&dir, "old", GEARS);
     let new = workspace(&dir, "new", GEARS_REORDERED);
@@ -331,14 +333,14 @@ fn an_enum_reorder_with_unchanged_values_is_identical() {
     let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
     let out = format!("{stdout}{stderr}");
 
-    assert_eq!(code, 0, "a textual reorder is not a change:\n{out}");
-    assert!(
-        stdout.starts_with("identical"),
-        "the report verdict is identical:\n{out}",
+    assert_eq!(
+        code, 0,
+        "a textual reorder moves nothing on the wire:\n{out}"
     );
-    assert!(
-        !out.contains("member_reordered") && !out.contains("constraint_changed"),
-        "no change is reported:\n{out}",
+    assert_eq!(
+        stdout,
+        "compatible\ncompatible on the wire, changes the catalog hash:\n  [compatible] enum_reordered veh.cluster/GearPosition\n",
+        "the reorder is reported on the container under its heading:\n{out}",
     );
 }
 
@@ -352,7 +354,8 @@ enum GearPosition {
 ";
 
 /// A changed number with no textual move is reported as `member_reordered`
-/// with the old and new number, breaking, and on the container as well.
+/// with the old and new number, breaking. The changed number is the only
+/// difference, so the container is not reported beside it.
 #[test]
 fn a_renumbered_enum_value_reports_its_old_and_new_value() {
     let dir = TempDir::new("enum-revalue");
@@ -372,8 +375,8 @@ fn a_renumbered_enum_value_reports_its_old_and_new_value() {
         "the value is reported with its old and new number:\n{out}",
     );
     assert!(
-        out.contains("constraint_changed veh.cluster/GearPosition\n"),
-        "the changed value is reported on the container:\n{out}",
+        !out.contains("constraint_changed"),
+        "no second line is reported on the container:\n{out}",
     );
 }
 
@@ -397,15 +400,22 @@ fn an_enum_reorder_with_an_added_value_reports_the_addition_alone() {
     let old = workspace(&dir, "old", GEARS);
     let new = workspace(&dir, "new", GEARS_REORDERED_AND_EXTENDED);
 
-    let (_code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
     let out = format!("{stdout}{stderr}");
 
+    assert_eq!(code, 0, "an appended value is compatible:\n{out}");
+    assert!(
+        stdout.starts_with("compatible"),
+        "the report verdict is compatible:\n{out}",
+    );
     assert!(
         out.contains("decl_added veh.cluster/GearPosition/NEUTRAL"),
         "the added value is reported:\n{out}",
     );
     assert!(
-        !out.contains("member_reordered") && !out.contains("constraint_changed"),
+        !out.contains("member_reordered")
+            && !out.contains("constraint_changed")
+            && !out.contains("enum_reordered"),
         "the addition is the only change reported:\n{out}",
     );
 }
@@ -473,13 +483,12 @@ fn a_moved_struct_tombstone_is_not_identical() {
     );
 }
 
-/// The order of an enum's tombstones is removed by the order-insensitive
-/// comparison, so that comparison alone would read a reordered reserved list
-/// as equal. The bodies differ, no value moved, and the walk does not read the
-/// reserved list as identities, so the report is conservative: the container's
-/// `constraint_changed`, breaking, never `identical` with exit 0.
+/// A reordered reserved list with every value and retired number unchanged
+/// moves nothing on the wire, but the catalog hash covers the order of the
+/// body, so the report is `enum_reordered` on the container, compatible, with
+/// exit 0 — never `identical`.
 #[test]
-fn a_reordered_enum_reserved_list_is_not_identical() {
+fn a_reordered_enum_reserved_list_is_enum_reordered() {
     let dir = TempDir::new("enum-reserved-reordered");
     let old = workspace(&dir, "old", GEARS_WITH_RESERVED);
     let new = workspace(&dir, "new", GEARS_RESERVED_REORDERED);
@@ -487,19 +496,19 @@ fn a_reordered_enum_reserved_list_is_not_identical() {
     let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
     let out = format!("{stdout}{stderr}");
 
-    assert_eq!(
-        code, 1,
-        "a changed reserved list is reported breaking:\n{out}"
+    assert_eq!(code, 0, "a reordered reserved list is compatible:\n{out}");
+    assert!(
+        stdout.starts_with("compatible"),
+        "the report verdict is compatible, not identical:\n{out}",
     );
     assert!(
-        stdout.starts_with("breaking"),
-        "the report verdict is breaking, not identical:\n{out}",
+        out.contains("[compatible] enum_reordered veh.cluster/GearPosition\n"),
+        "the reorder is reported on the container:\n{out}",
     );
     assert!(
-        out.contains("constraint_changed veh.cluster/GearPosition\n"),
-        "the change is reported on the container:\n{out}",
+        !out.contains("member_reordered") && !out.contains("constraint_changed"),
+        "no value number changed and nothing else changed:\n{out}",
     );
-    assert!(!out.contains("member_reordered"), "no value moved:\n{out}",);
 }
 
 /// The tombstone moves after both fields: `door` is now ordinal 1 and `latch`
@@ -670,13 +679,11 @@ enum GearPosition {
 }
 ";
 
-/// The values move in the text with their numbers unchanged, which is no
-/// change, and the reserved list is reordered, which the walk reports
-/// conservatively as it does when the reserved list is reordered alone
-/// (`a_reordered_enum_reserved_list_is_not_identical`): the container's
-/// `constraint_changed`, breaking, and no `member_reordered`.
+/// The values move in the text with their numbers unchanged, and the reserved
+/// list is reordered with its entries unchanged: both are order only, so the
+/// report is one `enum_reordered` on the container, compatible, with exit 0.
 #[test]
-fn an_enum_reorder_with_its_reserved_list_reordered_reports_only_the_reserved_list() {
+fn an_enum_reorder_with_its_reserved_list_reordered_is_enum_reordered() {
     let dir = TempDir::new("enum-and-reserved-reordered");
     let old = workspace(&dir, "old", GEARS_WITH_RESERVED);
     let new = workspace(&dir, "new", GEARS_AND_RESERVED_REORDERED);
@@ -684,16 +691,19 @@ fn an_enum_reorder_with_its_reserved_list_reordered_reports_only_the_reserved_li
     let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
     let out = format!("{stdout}{stderr}");
 
+    assert_eq!(code, 0, "a reorder of the body is compatible:\n{out}");
+    assert!(
+        stdout.starts_with("compatible"),
+        "the report verdict is compatible:\n{out}",
+    );
     assert_eq!(
-        code, 1,
-        "a changed reserved list is reported breaking:\n{out}"
+        out.matches("enum_reordered veh.cluster/GearPosition\n")
+            .count(),
+        1,
+        "the reorder is reported once, on the container:\n{out}",
     );
     assert!(
-        out.contains("constraint_changed veh.cluster/GearPosition\n"),
-        "the reordered reserved list is reported on the container:\n{out}",
-    );
-    assert!(
-        !out.contains("member_reordered"),
+        !out.contains("member_reordered") && !out.contains("constraint_changed"),
         "no value number changed:\n{out}",
     );
 }
@@ -905,10 +915,11 @@ enumset WarningFlags {
 ";
 
 /// An enum-set bit's identity is the bit position it declares (typl §9), so a
-/// textual reorder with every bit unchanged is not a change: the report is
-/// `identical`, with exit 0.
+/// textual reorder with every bit unchanged moves nothing on the wire, but the
+/// catalog hash covers the order of the bits: the report is `enum_reordered`
+/// on the container, compatible, with exit 0.
 #[test]
-fn an_enum_set_reorder_with_unchanged_bits_is_identical() {
+fn an_enum_set_reorder_with_unchanged_bits_is_enum_reordered() {
     let dir = TempDir::new("enumset-reorder");
     let old = workspace(&dir, "old", FLAGS);
     let new = workspace(&dir, "new", FLAGS_REORDERED);
@@ -916,24 +927,23 @@ fn an_enum_set_reorder_with_unchanged_bits_is_identical() {
     let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
     let out = format!("{stdout}{stderr}");
 
-    assert_eq!(code, 0, "a textual reorder is not a change:\n{out}");
-    assert!(
-        stdout.starts_with("identical"),
-        "the report verdict is identical:\n{out}",
+    assert_eq!(
+        code, 0,
+        "a textual reorder moves nothing on the wire:\n{out}"
     );
-    assert!(
-        !out.contains("member_reordered") && !out.contains("constraint_changed"),
-        "no change is reported:\n{out}",
+    assert_eq!(
+        stdout,
+        "compatible\ncompatible on the wire, changes the catalog hash:\n  [compatible] enum_reordered veh.cluster/WarningFlags\n",
+        "the reorder is reported on the container under its heading:\n{out}",
     );
 }
 
 /// An enum-set reorder that also changes a bit reports the bit whose number
-/// changed as `member_reordered`, with the old and new bit, and the container
-/// as `constraint_changed` as well: a changed bit is content, and must not
-/// hide behind the reorder. The bits that only moved in the text are not
-/// reported.
+/// changed as `member_reordered`, with the old and new bit. The bits that only
+/// moved in the text are not reported, and the changed bit is the only
+/// difference, so the container is not reported either.
 #[test]
-fn an_enum_set_reorder_with_a_changed_bit_reports_constraint_changed() {
+fn an_enum_set_reorder_with_a_changed_bit_reports_the_bit_alone() {
     let dir = TempDir::new("enumset-reorder-rebit");
     let old = workspace(&dir, "old", FLAGS);
     let new = workspace(&dir, "new", FLAGS_REORDERED_AND_REBITTED);
@@ -952,7 +962,48 @@ fn an_enum_set_reorder_with_a_changed_bit_reports_constraint_changed() {
         "a bit that kept its number is not reported, wherever it sits:\n{out}",
     );
     assert!(
-        out.contains("constraint_changed veh.cluster/WarningFlags\n"),
-        "the changed bit is reported on the container:\n{out}",
+        !out.contains("constraint_changed") && !out.contains("enum_reordered"),
+        "the changed bit is the only change reported:\n{out}",
+    );
+}
+
+/// `LOW_FUEL` and `CHECK_ENGINE` swap places in the text and, in the same
+/// edit, `SEAT_BELT` is added at the end.
+const FLAGS_REORDERED_AND_EXTENDED: &str = "package veh.cluster
+enumset WarningFlags {
+  CHECK_ENGINE = 1
+  LOW_FUEL = 0
+  DOOR_OPEN = 2
+  SEAT_BELT = 3
+}
+";
+
+/// The enum-set counterpart of
+/// `an_enum_reorder_with_an_added_value_reports_the_addition_alone`: the walk
+/// stops at a change to the member names, so the added bit is the only change
+/// reported, compatible, with exit 0.
+#[test]
+fn an_enum_set_reorder_with_an_added_bit_reports_the_addition_alone() {
+    let dir = TempDir::new("enumset-reorder-extend");
+    let old = workspace(&dir, "old", FLAGS);
+    let new = workspace(&dir, "new", FLAGS_REORDERED_AND_EXTENDED);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(code, 0, "an appended bit is compatible:\n{out}");
+    assert!(
+        stdout.starts_with("compatible"),
+        "the report verdict is compatible:\n{out}",
+    );
+    assert!(
+        out.contains("decl_added veh.cluster/WarningFlags/SEAT_BELT"),
+        "the added bit is reported:\n{out}",
+    );
+    assert!(
+        !out.contains("member_reordered")
+            && !out.contains("constraint_changed")
+            && !out.contains("enum_reordered"),
+        "the addition is the only change reported:\n{out}",
     );
 }

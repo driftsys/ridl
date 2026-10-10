@@ -2074,31 +2074,55 @@ fn enum_set_def(members: &[(&str, i64)]) -> v2::decl::Kind {
     })
 }
 
-/// A textual reorder of an enum body moves no explicit number, so it is no
-/// change at all.
+/// A textual reorder of an enum body moves no explicit number, so nothing
+/// moves on the wire, but the catalog hash covers the order of the values: the
+/// change is `EnumReordered` on the container, compatible, with no detail.
 #[test]
-fn an_enum_pure_reorder_is_no_change() {
+fn an_enum_pure_reorder_is_enum_reordered() {
     let old = with_decl("Mode", enum_def(&[("OFF", 0), ("ON", 1)]));
     let new = with_decl("Mode", enum_def(&[("ON", 1), ("OFF", 0)]));
     let report = diff_packages(&old, &new);
-    assert_eq!(report.verdict, Verdict::Identical);
-    assert_eq!(report.changes, vec![]);
+    assert_eq!(report.verdict, Verdict::Compatible);
+    assert_eq!(
+        report.changes,
+        vec![Change {
+            path: "veh.cluster/Mode".to_string(),
+            category: Category::EnumReordered,
+            verdict: Verdict::Compatible,
+            before: None,
+            after: None,
+        }]
+    );
+    assert_eq!(
+        crate::heading(Category::EnumReordered),
+        Some("compatible on the wire, changes the catalog hash"),
+    );
 }
 
-/// A textual reorder of an enum-set body moves no bit, so it is no change at
-/// all.
+/// A textual reorder of an enum-set body moves no bit, so it is
+/// `EnumReordered` on the container, compatible.
 #[test]
-fn an_enum_set_pure_reorder_is_no_change() {
+fn an_enum_set_pure_reorder_is_enum_reordered() {
     let old = with_decl("Flags", enum_set_def(&[("A", 0), ("B", 1)]));
     let new = with_decl("Flags", enum_set_def(&[("B", 1), ("A", 0)]));
     let report = diff_packages(&old, &new);
-    assert_eq!(report.verdict, Verdict::Identical);
-    assert_eq!(report.changes, vec![]);
+    assert_eq!(report.verdict, Verdict::Compatible);
+    assert_eq!(
+        report.changes,
+        vec![Change {
+            path: "veh.cluster/Flags".to_string(),
+            category: Category::EnumReordered,
+            verdict: Verdict::Compatible,
+            before: None,
+            after: None,
+        }]
+    );
 }
 
 /// Enum values renumbered in place — the text order is kept — are each
 /// `MemberReordered` with the old and new explicit number as a `value`
-/// detail, followed by the container's `ConstraintChanged`.
+/// detail. Every difference between the two bodies is a changed number, so the
+/// container's `ConstraintChanged` is not reported beside them.
 #[test]
 fn an_enum_renumber_is_member_reordered_with_the_value() {
     let old = with_decl("Mode", enum_def(&[("OFF", 0), ("ON", 1)]));
@@ -2131,7 +2155,115 @@ fn an_enum_renumber_is_member_reordered_with_the_value() {
                 Some("value 1"),
                 Some("value 0"),
             ),
-            ("veh.cluster/Mode", Category::ConstraintChanged, None, None),
         ]
+    );
+}
+
+/// An enum body with the given values and the given retired numbers.
+fn enum_with_reserved(members: &[(&str, i64)], retired: &[i64]) -> v2::decl::Kind {
+    v2::decl::Kind::EnumDef(v2::EnumDef {
+        values: numbered(members),
+        reserved: retired
+            .iter()
+            .map(|value| v2::Reserved {
+                value: Some(*value),
+                ..Default::default()
+            })
+            .collect(),
+    })
+}
+
+/// A reserved list reordered with nothing else changed is `EnumReordered`,
+/// like a reorder of the values.
+#[test]
+fn an_enum_reserved_list_reorder_is_enum_reordered() {
+    let old = with_decl("Mode", enum_with_reserved(&[("OFF", 0)], &[3, 4]));
+    let new = with_decl("Mode", enum_with_reserved(&[("OFF", 0)], &[4, 3]));
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Compatible);
+    let summary: Vec<_> = report
+        .changes
+        .iter()
+        .map(|change| (change.path.as_str(), change.category))
+        .collect();
+    assert_eq!(summary, vec![("veh.cluster/Mode", Category::EnumReordered)]);
+}
+
+/// Two values that swap their numbers, in an edit that also retires another
+/// number, report the changed numbers and the container's `ConstraintChanged`:
+/// the reserved list is a difference that is not a changed number, so it must
+/// not hide behind the `MemberReordered` lines.
+#[test]
+fn an_enum_renumber_beside_a_reserved_list_change_keeps_constraint_changed() {
+    let old = with_decl("Mode", enum_with_reserved(&[("OFF", 0), ("ON", 1)], &[]));
+    let new = with_decl("Mode", enum_with_reserved(&[("OFF", 1), ("ON", 0)], &[5]));
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Breaking);
+    let summary: Vec<_> = report
+        .changes
+        .iter()
+        .map(|change| (change.path.as_str(), change.category))
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            ("veh.cluster/Mode/OFF", Category::MemberReordered),
+            ("veh.cluster/Mode/ON", Category::MemberReordered),
+            ("veh.cluster/Mode", Category::ConstraintChanged),
+        ]
+    );
+}
+
+/// An enum-set bit renumbered beside a change to the set's backing enum
+/// reports the container's `ConstraintChanged` as well.
+#[test]
+fn an_enum_set_renumber_beside_another_change_keeps_constraint_changed() {
+    let old = with_decl("Flags", enum_set_def(&[("A", 0), ("B", 1)]));
+    let mut new = with_decl("Flags", enum_set_def(&[("A", 2), ("B", 1)]));
+    if let Some(v2::decl::Kind::EnumSetDef(def)) = &mut new.decls[0].kind {
+        def.backing_enum = Some("Mode".to_string());
+    }
+    let report = diff_packages(&old, &new);
+    let summary: Vec<_> = report
+        .changes
+        .iter()
+        .map(|change| (change.path.as_str(), change.category))
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            ("veh.cluster/Flags/A", Category::MemberReordered),
+            ("veh.cluster/Flags", Category::ConstraintChanged),
+        ]
+    );
+}
+
+/// An enum-set bit renumbered with nothing else changed reports the bit alone,
+/// with no `ConstraintChanged` on the container.
+#[test]
+fn an_enum_set_renumber_alone_reports_only_the_bit() {
+    let old = with_decl("Flags", enum_set_def(&[("A", 0), ("B", 1)]));
+    let new = with_decl("Flags", enum_set_def(&[("B", 1), ("A", 2)]));
+    let report = diff_packages(&old, &new);
+    let summary: Vec<_> = report
+        .changes
+        .iter()
+        .map(|change| {
+            (
+                change.path.as_str(),
+                change.category,
+                change.before.as_deref(),
+                change.after.as_deref(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        summary,
+        vec![(
+            "veh.cluster/Flags/A",
+            Category::MemberReordered,
+            Some("bit 0"),
+            Some("bit 2"),
+        )]
     );
 }

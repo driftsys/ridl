@@ -111,6 +111,12 @@ pub(crate) fn classify_in(
         Category::InterfaceFrozen => Verdict::Compatible,
         Category::InterfaceNumberChanged => Verdict::Breaking,
 
+        // An enum value or enum-set bit takes its identity from its explicit
+        // number (typl §8, §9), so a body that differs only in order moves
+        // nothing on the wire. The catalog hash covers that order, which the
+        // text report's heading says of it.
+        Category::EnumReordered => Verdict::Compatible,
+
         // A service's list is a set of interface references (ADR-0015
         // decision 19 as amended on 2026-09-15). The routing key does not
         // contain the service, so an interface joining or leaving the set
@@ -1043,7 +1049,7 @@ fn union_reserved(def: &v2::UnionDef) -> Vec<i64> {
 
 /// Enum values and enum-set bits key on their integer value, not a declaration
 /// ordinal: the number is the wire identity (typl §7.4, §8).
-fn value_slots(values: &[v2::EnumValue]) -> Vec<(String, i64)> {
+pub(crate) fn value_slots(values: &[v2::EnumValue]) -> Vec<(String, i64)> {
     values
         .iter()
         .map(|value| (value.name.clone(), value.value))
@@ -1171,9 +1177,9 @@ pub fn explain(category: Category) -> &'static str {
             "              (provisional) on the old side\n",
             "  note        a baseline never holds a provisional number (`ridl baseline`\n",
             "              refuses one, RIDL-411), so this change is seen between two\n",
-            "              builds, not against a published baseline. An old number 0,\n",
-            "              from a snapshot written before the lock existed, is not\n",
-            "              compared"
+            "              builds, or in a reversed comparison whose old side is a\n",
+            "              build. A number 0 on either side, from a snapshot written\n",
+            "              before the lock existed, is not compared"
         ),
         Category::InterfaceNumberChanged => concat!(
             "An interface matched across the two sides whose number differs.\n",
@@ -1187,8 +1193,9 @@ pub fn explain(category: Category) -> &'static str {
             "              (provisional) when it is\n",
             "  note        two frozen numbers are matched by number, so they never\n",
             "              differ here: a frozen number changed by hand is\n",
-            "              decl_removed plus decl_added. An old number 0, from a\n",
-            "              snapshot written before the lock existed, is not compared.\n",
+            "              decl_removed plus decl_added. A number 0 on either side,\n",
+            "              from a snapshot written before the lock existed, is not\n",
+            "              compared.\n",
             "              Run `ridl lock` to freeze the numbers, so that a later\n",
             "              sibling cannot move them"
         ),
@@ -1201,14 +1208,31 @@ pub fn explain(category: Category) -> &'static str {
             "              and new ordinal. An enum value or enum-set bit takes its\n",
             "              identity from the explicit number it declares (typl 8, 9),\n",
             "              so one whose number changed has a new wire identity; the\n",
-            "              detail carries the old and new value or bit. A textual\n",
-            "              reorder of an enum or enum-set body that changed no number\n",
-            "              is not a change and is not reported\n",
+            "              detail carries the old and new value or bit. An enum or\n",
+            "              enum-set body reordered with no number changed is\n",
+            "              enum_reordered, compatible, instead\n",
             "  note        reported only when both bodies hold the same member names:\n",
             "              a reorder in the same edit as an addition or a removal is\n",
             "              reported through decl_added or decl_removed alone. A reorder\n",
             "              in the same edit as an in-place change to the body is\n",
-            "              reported with constraint_changed on the container as well"
+            "              reported with constraint_changed on the container as well.\n",
+            "              An enum or enum-set body whose only differences are changed\n",
+            "              numbers, in any order, reports member_reordered alone"
+        ),
+        Category::EnumReordered => concat!(
+            "An enum or enum-set body whose difference is only order: its values or\n",
+            "bits reordered with no number changed, the enum's reserved list\n",
+            "reordered with no entry added, removed or changed, or both.\n",
+            "  compatible  always — a value or bit takes its identity from the\n",
+            "              explicit number it declares (typl 8, 9), so nothing moves\n",
+            "              on the wire. The catalog hash changes, because it covers\n",
+            "              the order of the values and bits, and a generated face\n",
+            "              refuses a port whose catalog hash is another one (ADR-0023\n",
+            "              decision 8). This is why the text report lists it under the\n",
+            "              heading \"compatible on the wire, changes the catalog hash\".\n",
+            "              The path is the container's; there is no detail\n",
+            "  note        a value or bit whose number changed is member_reordered,\n",
+            "              breaking, not enum_reordered"
         ),
         Category::InteractionAppended => concat!(
             "An interaction added after every slot that existed before.\n",

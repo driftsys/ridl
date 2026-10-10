@@ -70,9 +70,9 @@ pub fn unit_verdict(report: &DiffReport, unit: &str, old: &[Package], new: &[Pac
 #[cfg(test)]
 mod tests {
     use ridl_ir::v2::{
-        Decl, EventDef, Field, FieldType, IntWidth, Interface, Package, Reserved, SignalDef,
-        StructDef, StructMember, TypeDef, Visibility, backing, decl, field_type, struct_member,
-        type_def,
+        Decl, EnumDef, EnumValue, EventDef, Field, FieldType, IntWidth, Interface, Package,
+        Reserved, SignalDef, StructDef, StructMember, TypeDef, Visibility, backing, decl,
+        field_type, struct_member, type_def,
     };
 
     use super::unit_verdict;
@@ -341,6 +341,54 @@ mod tests {
         let report = diff_sets(&old, &new);
         assert_eq!(unit_verdict(&report, "a", &old, &new), Verdict::Breaking);
         assert_eq!(unit_verdict(&report, "b", &old, &new), Verdict::Identical);
+    }
+
+    /// Unit `b` holding `enum Mode` with `values` in the given order and the
+    /// retired numbers `retired` in the given order.
+    fn unit_b_with_enum(values: &[(&str, i64)], retired: &[i64]) -> Package {
+        let mode = Decl {
+            name: "Mode".to_owned(),
+            visibility: Visibility::Public as i32,
+            kind: Some(decl::Kind::EnumDef(EnumDef {
+                values: values
+                    .iter()
+                    .map(|(name, value)| EnumValue {
+                        name: (*name).to_owned(),
+                        value: *value,
+                        ..Default::default()
+                    })
+                    .collect(),
+                reserved: retired
+                    .iter()
+                    .map(|value| Reserved {
+                        value: Some(*value),
+                        ..Default::default()
+                    })
+                    .collect(),
+            })),
+            ..Default::default()
+        };
+        package("b", vec![mode], Vec::new())
+    }
+
+    // A textual reorder of an enum's values changes the catalog hash, which
+    // covers their order, and moves nothing on the wire, so the unit's
+    // verdict is compatible and `write_catalog_histories` keeps the old hash.
+    #[test]
+    fn an_enum_value_reorder_is_compatible_for_its_unit() {
+        let old = vec![unit_b_with_enum(&[("OFF", 0), ("ON", 1)], &[])];
+        let new = vec![unit_b_with_enum(&[("ON", 1), ("OFF", 0)], &[])];
+        let report = diff_sets(&old, &new);
+        assert_eq!(unit_verdict(&report, "b", &old, &new), Verdict::Compatible);
+    }
+
+    // The same holds for a reordered `reserved` list.
+    #[test]
+    fn an_enum_reserved_list_reorder_is_compatible_for_its_unit() {
+        let old = vec![unit_b_with_enum(&[("OFF", 0)], &[3, 4])];
+        let new = vec![unit_b_with_enum(&[("OFF", 0)], &[4, 3])];
+        let report = diff_sets(&old, &new);
+        assert_eq!(unit_verdict(&report, "b", &old, &new), Verdict::Compatible);
     }
 
     // The compatible package addition is reported after the breaking change to

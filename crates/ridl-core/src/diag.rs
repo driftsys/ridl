@@ -929,7 +929,7 @@ diag_codes! {
         /// The diff reports no reorder beside an addition or a removal, so
         /// the warning for an added or removed member names the siblings
         /// whose ordinal changed. An enum value's or enum-set bit's reorder
-        /// is not a change (typl §8, §9) and does not draw this warning
+        /// moves no wire identity (typl §8, §9) and does not draw this warning
         /// (driftsys/ridl#335); an enum value added or removed is `ridl
         /// diff`'s alone.
         RIDL_407 = "RIDL-407", Warning,

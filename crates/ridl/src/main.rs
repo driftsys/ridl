@@ -552,8 +552,8 @@ const ORDINAL_CATEGORIES: [ridl_diff::Category; 4] = [
 /// The container check is what keeps an enum value's or enum-set bit's
 /// change out: the value or bit takes its identity from its explicit number
 /// (typl §8, §9), not from an ordinal, so a textual reorder of its body is
-/// not reported at all, and its `MemberReordered` carries a changed number
-/// rather than a moved place. The desk has no ordinal to warn about there
+/// `EnumReordered`, compatible, and its `MemberReordered` carries a changed
+/// number rather than a moved place. The desk has no ordinal to warn about there
 /// (driftsys/ridl#335), so a changed number, and an enum value added or
 /// removed, stay `ridl diff`'s alone.
 const MEMBER_CATEGORIES: [ridl_diff::Category; 3] = [

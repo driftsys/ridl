@@ -964,9 +964,12 @@ an `enum` value may be inserted in the middle of a body while a struct field may
 not.
 
 > **As built.** `ridl diff` compares `enum` values and `enumset` bits by the
-> number each declares. A textual reorder that changes no number reports
-> nothing, and a member whose number changed is reported as `member_reordered`
-> with its old and new number, breaking.
+> number each declares. A member whose number changed is reported as
+> `member_reordered` with its old and new number, breaking. A body whose
+> difference is only order — its values or bits reordered with no number
+> changed, or an `enum`'s `reserved` list reordered with no entry changed — is
+> reported as `enum_reordered`, compatible: nothing moves on the wire, but the
+> catalog hash covers the order of the values and bits.
 
 ---
 

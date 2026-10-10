@@ -1352,6 +1352,51 @@ fn baseline_refuses_a_service_removed_beside_a_kept_interface_of_the_same_name()
     assert_eq!(before, after, "a refused publication rewrites nothing");
 }
 
+/// `DOORS_TWICE` with `interface doors` deleted and `service doors` kept.
+const DOORS_SERVICE_ONLY: &str = "package veh.cluster
+type DoorState: integer [0..1]
+service doors {
+  event doorLocked: DoorState @[100ms..1s]
+}
+";
+
+/// The mirror of
+/// `baseline_refuses_a_service_removed_beside_a_kept_interface_of_the_same_name`:
+/// the declared interface is removed and the inline shape of the service of
+/// the same name is kept. The gate must refuse the interface's lost number
+/// (1), not stop at the kept service (2).
+#[test]
+fn baseline_refuses_an_interface_removed_beside_a_kept_service_of_the_same_name() {
+    let dir = TempDir::new("gate-interface-beside-service");
+    let root = package_workspace(&dir, DOORS_TWICE);
+    publish(&root);
+    let before = std::fs::read(snapshot(&root)).expect("the published snapshot is readable");
+
+    dir.write("cluster.ridl", DOORS_SERVICE_ONLY);
+    dir.write(
+        "interfaces.lock",
+        &format!("{LOCK_HEADER}next 3\nservice:doors 2\n"),
+    );
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 1,
+        "the interface's dropped number is refused:\n{stderr}"
+    );
+    assert_eq!(
+        stderr.matches("RIDL-412").count(),
+        1,
+        "one refusal for the one dropped number:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("`doors` holds interface number 1 in the baseline being replaced")
+            && !stderr.contains("`service:doors` holds interface number"),
+        "the message names the interface's number, not the kept service's:\n{stderr}",
+    );
+    let after = std::fs::read(snapshot(&root)).expect("the published snapshot survives");
+    assert_eq!(before, after, "a refused publication rewrites nothing");
+}
+
 /// Both shapes named `doors` removed: the walk reports two interface-level
 /// changes at one path, and each lost number is refused exactly once.
 #[test]
