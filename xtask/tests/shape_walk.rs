@@ -204,7 +204,7 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-ir/src/catalog_hash.rs",
-        lines: 39,
+        lines: 41,
         why: "the reduced unit's own `interfaces` field, which the hash \
               fills from a `shapes()` walk over every package of the unit, \
               sorts and blanks; the rest are test fixtures that build or \
@@ -341,9 +341,10 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-diff/src/unit_verdict.rs",
-        lines: 4,
-        why: "tests appending an interaction to the single fixture interface \
-              of a package to provoke a verdict",
+        lines: 6,
+        why: "tests appending an interaction to, or setting the number and \
+              the provisional flag of, the single fixture interface of a \
+              package to provoke a verdict",
     },
     Allowed {
         path: "crates/ridl-diff/src/classify/classify_tests.rs",

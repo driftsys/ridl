@@ -103,6 +103,21 @@ pub(crate) fn classify_in(
         // forever, so it is never allocated again.
         Category::InterfaceRenamed | Category::InterfaceRetired => Verdict::Compatible,
 
+        // `ridl lock` freezing a provisional number in place keeps the
+        // routing key, so nothing moves on the wire; the catalog hash, which
+        // covers the flag, changes, which the text report's heading says of
+        // it. A number that differs between the two sides is a new routing
+        // key for the same interface.
+        Category::InterfaceFrozen => Verdict::Compatible,
+        Category::InterfaceNumberChanged => Verdict::Breaking,
+
+        // An enum value or enum-set bit takes its identity from its explicit
+        // number (typl §8, §9), so a body that differs only in order moves
+        // nothing on the wire. The catalog hash covers that order when an
+        // interface reaches the enum, which the text report's heading says of
+        // it.
+        Category::EnumReordered => Verdict::Compatible,
+
         // A service's list is a set of interface references (ADR-0015
         // decision 19 as amended on 2026-09-15). The routing key does not
         // contain the service, so an interface joining or leaving the set
@@ -1035,7 +1050,7 @@ fn union_reserved(def: &v2::UnionDef) -> Vec<i64> {
 
 /// Enum values and enum-set bits key on their integer value, not a declaration
 /// ordinal: the number is the wire identity (typl §7.4, §8).
-fn value_slots(values: &[v2::EnumValue]) -> Vec<(String, i64)> {
+pub(crate) fn value_slots(values: &[v2::EnumValue]) -> Vec<(String, i64)> {
     values
         .iter()
         .map(|value| (value.name.clone(), value.value))
@@ -1147,23 +1162,82 @@ pub fn explain(category: Category) -> &'static str {
             "              decl_removed, breaking, and `ridl baseline` refuses to publish\n",
             "              it (RIDL-412)"
         ),
+        Category::InterfaceFrozen => concat!(
+            "An interface matched by name whose number is the same on both sides and\n",
+            "whose provisional flag went from true to false: `ridl lock` froze the\n",
+            "number in place.\n",
+            "  compatible  always — the number is the routing key and it did not\n",
+            "              change, so nothing moves on the wire. The catalog hash\n",
+            "              changes, because it covers each interface's number and its\n",
+            "              provisional flag, and a generated face refuses a port whose\n",
+            "              catalog hash is another one (ADR-0023 decision 8): a peer\n",
+            "              built before the lock and a peer built after it refuse each\n",
+            "              other. This is why the text report lists it under the\n",
+            "              heading \"compatible on the wire, may change the catalog\n",
+            "              hash\".\n",
+            "              The detail carries the number before and after, marked\n",
+            "              (provisional) on the old side\n",
+            "  note        a baseline never holds a provisional number (`ridl baseline`\n",
+            "              refuses one, RIDL-411), so this change is seen between two\n",
+            "              builds, or in a reversed comparison whose old side is a\n",
+            "              build. A number 0 on either side, from a snapshot written\n",
+            "              before the lock existed, is not compared"
+        ),
+        Category::InterfaceNumberChanged => concat!(
+            "An interface matched across the two sides whose number differs.\n",
+            "  breaking    always — the number is the interface's routing key, so a\n",
+            "              peer built against the old number cannot reach the\n",
+            "              interface at the new one. Seen between two provisional\n",
+            "              builds when a sibling interface added before this one in\n",
+            "              byte order moves its provisional number, and when `ridl\n",
+            "              lock` freezes a provisional number as another number. The\n",
+            "              detail carries the old and the new number, each marked\n",
+            "              (provisional) when it is\n",
+            "  note        two frozen numbers are matched by number, so they never\n",
+            "              differ here: a frozen number changed by hand is\n",
+            "              decl_removed plus decl_added. A number 0 on either side,\n",
+            "              from a snapshot written before the lock existed, is not\n",
+            "              compared.\n",
+            "              Run `ridl lock` to freeze the numbers, so that a later\n",
+            "              sibling cannot move them"
+        ),
         Category::MemberReordered => concat!(
             "A surviving composite member whose slot in the body changed.\n",
             "  breaking    always — a struct field or union arm takes its wire\n",
             "              identity from its ordinal, its 1-based place in the body\n",
             "              counting tombstones (typl 7.4), so a member whose ordinal\n",
             "              changed has a new wire identity; the detail carries the old\n",
-            "              and new ordinal. An enum value or enum-set bit carries an\n",
-            "              explicit number instead (typl 8, 9), but the walk compares\n",
-            "              positions, not those numbers, so a textual reorder of an\n",
-            "              enum or enum-set body is reported breaking as well,\n",
-            "              conservatively, even when no number changed; the detail\n",
-            "              carries the old and new position\n",
+            "              and new ordinal. An enum value or enum-set bit takes its\n",
+            "              identity from the explicit number it declares (typl 8, 9),\n",
+            "              so one whose number changed has a new wire identity; the\n",
+            "              detail carries the old and new value or bit. An enum or\n",
+            "              enum-set body reordered with no number changed is\n",
+            "              enum_reordered, compatible, instead\n",
             "  note        reported only when both bodies hold the same member names:\n",
             "              a reorder in the same edit as an addition or a removal is\n",
             "              reported through decl_added or decl_removed alone. A reorder\n",
             "              in the same edit as an in-place change to the body is\n",
-            "              reported with constraint_changed on the container as well"
+            "              reported with constraint_changed on the container as well.\n",
+            "              An enum or enum-set body whose only differences are changed\n",
+            "              numbers, in any order, reports member_reordered alone"
+        ),
+        Category::EnumReordered => concat!(
+            "An enum or enum-set body whose difference is only order: its values or\n",
+            "bits reordered with no number changed, the enum's reserved list\n",
+            "reordered with no entry added, removed or changed, or both.\n",
+            "  compatible  always — a value or bit takes its identity from the\n",
+            "              explicit number it declares (typl 8, 9), so nothing moves\n",
+            "              on the wire. The catalog hash covers only the declarations\n",
+            "              an interface reaches. When an interface reaches the enum or\n",
+            "              enum set, the order of its values or bits, and of an enum's\n",
+            "              reserved list, is part of the hash, so the hash changes\n",
+            "              then, and a generated face refuses a port whose catalog hash\n",
+            "              is another one (ADR-0023 decision 8). This is why the text\n",
+            "              report lists it under the heading \"compatible on the wire,\n",
+            "              may change the catalog hash\". The path is the container's;\n",
+            "              there is no detail\n",
+            "  note        a value or bit whose number changed is member_reordered,\n",
+            "              breaking, not enum_reordered"
         ),
         Category::InteractionAppended => concat!(
             "An interaction added after every slot that existed before.\n",

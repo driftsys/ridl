@@ -142,17 +142,51 @@ declare_categories! {
         /// snapshot's retired entries list (lock design §7): the sanctioned
         /// removal of an interface, recorded by `ridl lock --retire`.
         InterfaceRetired,
+        /// An interface matched by name across a provisional old side whose
+        /// number is the same on both sides and whose provisional flag went
+        /// from true to false: the number `ridl lock` froze in place. Nothing
+        /// moves on the wire, but the catalog hash covers the number and the
+        /// flag, so the hash changes and the text report lists it under the
+        /// heading "compatible on the wire, may change the catalog hash"
+        /// ([`heading`]). A number 0 on
+        /// either side, from a snapshot written before the lock existed, is
+        /// not compared. The path carries the name; the detail carries the
+        /// old and the new number, each marked when it is provisional.
+        InterfaceFrozen,
+        /// A matched interface whose number differs between the two sides,
+        /// whatever the two flags: a provisional number moved by a sibling
+        /// added before it, or frozen as another number. The number is the
+        /// routing key, so the change is breaking. A number 0 on either side,
+        /// from a snapshot written before the lock existed, is not compared. The
+        /// detail carries the old and the new number, each marked when it is
+        /// provisional.
+        InterfaceNumberChanged,
         /// A surviving composite member whose slot in the body changed — a
         /// struct field, enum value, enum-set bit or union arm — reported only
         /// when both bodies hold the same member names. For a struct field or
         /// union arm the slot is the ordinal, which is wire identity (typl
         /// §7.4), and the detail carries the old and new ordinal. An enum value
-        /// or enum-set bit carries an explicit number instead (typl §8, §9),
-        /// but the walk compares positions, not those numbers, so a textual
-        /// reorder of an enum or enum-set body is reported the same way,
-        /// conservatively, even when no number changed; its detail carries the
-        /// old and new position.
+        /// or enum-set bit takes its identity from the explicit number it
+        /// declares instead (typl §8, §9), so its slot is that number: the
+        /// category reports a member whose number changed, with the old and
+        /// new value or bit in the detail. When every difference between the
+        /// two bodies is a changed number, the container's
+        /// [`Category::ConstraintChanged`] is not reported beside it. A body
+        /// of an enum or an enum set that differs only in order is
+        /// [`Category::EnumReordered`] instead.
         MemberReordered,
+        /// An enum or enum-set body whose difference is only order: its live
+        /// values or bits reordered with no number changed, the enum's
+        /// `reserved` list reordered with no entry added, removed or changed,
+        /// or both. A value or bit takes its identity from the explicit number
+        /// it declares (typl §8, §9), so nothing moves on the wire. The catalog
+        /// hash covers only the declarations an interface reaches; when an
+        /// interface reaches the enum or enum set, the order of its values or
+        /// bits, and of an enum's reserved list, is part of the hash, so the
+        /// hash changes then. The text report lists it under the heading that
+        /// [`Category::InterfaceFrozen`] shares ([`heading`]). The path is the
+        /// container's; there is no detail.
+        EnumReordered,
         /// A new interaction added at the end of an interface (no earlier
         /// interaction shifted).
         InteractionAppended,
@@ -501,7 +535,10 @@ pub fn category_word(category: Category) -> &'static str {
         Category::DeclRemoved => "decl_removed",
         Category::InterfaceRenamed => "interface_renamed",
         Category::InterfaceRetired => "interface_retired",
+        Category::InterfaceFrozen => "interface_frozen",
+        Category::InterfaceNumberChanged => "interface_number_changed",
         Category::MemberReordered => "member_reordered",
+        Category::EnumReordered => "enum_reordered",
         Category::InteractionAppended => "interaction_appended",
         Category::InteractionInserted => "interaction_inserted",
         Category::InteractionReordered => "interaction_reordered",
@@ -527,14 +564,19 @@ pub fn category_word(category: Category) -> &'static str {
 }
 
 /// The heading a category's changes are grouped under in the text report, or
-/// `None` for a category listed plainly. One heading exists: "compatible on
-/// the wire, visible in source", for a change that exits 0 but that a
+/// `None` for a category listed plainly. Two headings exist. "compatible on
+/// the wire, visible in source" is for a change that exits 0 but that a
 /// consumer sees in its source — an interface renamed on its number changes
 /// the generated identity-table names in both wire backends, and an interface
 /// leaving a service's set stops the `service.member` addresses of that
-/// interface resolving under the service. Each such category's `--explain`
-/// text states its own consequence; the JSON report carries the category word
-/// and no heading field.
+/// interface resolving under the service. "compatible on the wire, may change
+/// the catalog hash" is for a change that exits 0 but can change the catalog
+/// hash, which a generated face compares with its peer's — a number `ridl
+/// lock` froze in place, which always changes it, and an enum or enum-set body
+/// reordered, which changes it when an interface reaches the enum or enum set
+/// (the hash covers only the declarations an interface reaches). Each such
+/// category's `--explain` text states its own consequence; the JSON report
+/// carries the category word and no heading field.
 ///
 /// Wildcard arms are denied for the reason `category_word` gives.
 #[deny(
@@ -546,9 +588,13 @@ pub fn heading(category: Category) -> Option<&'static str> {
         Category::InterfaceRenamed | Category::ServiceInterfaceRemoved => {
             Some("compatible on the wire, visible in source")
         }
+        Category::InterfaceFrozen | Category::EnumReordered => {
+            Some("compatible on the wire, may change the catalog hash")
+        }
         Category::DeclAdded
         | Category::DeclRemoved
         | Category::InterfaceRetired
+        | Category::InterfaceNumberChanged
         | Category::MemberReordered
         | Category::InteractionAppended
         | Category::InteractionInserted

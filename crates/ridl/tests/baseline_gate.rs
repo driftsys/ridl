@@ -1290,6 +1290,147 @@ fn an_interface_moved_to_another_package_of_the_unit_is_not_refused() {
     assert!(!stderr.contains("RIDL-412"), "stderr:\n{stderr}");
 }
 
+/// A declared interface `doors` and an inline-form service `doors`: two
+/// shapes with one name. Plain `ridl lock` numbers them `doors 1` and
+/// `service:doors 2`, `next 3`.
+const DOORS_TWICE: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface doors {
+  event doorOpened: DoorState @[100ms..1s]
+}
+service doors {
+  event doorLocked: DoorState @[100ms..1s]
+}
+";
+
+/// `DOORS_TWICE` with `service doors` deleted and `interface doors` kept.
+const DOORS_INTERFACE_ONLY: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface doors {
+  event doorOpened: DoorState @[100ms..1s]
+}
+";
+
+/// `DOORS_TWICE` with both shapes deleted.
+const DOORS_NONE: &str = "package veh.cluster
+type DoorState: integer [0..1]
+";
+
+/// `ridl-diff` reports the removed inline shape of `service doors` as an
+/// interface-level `DeclRemoved` at `veh.cluster/doors`, the same path as the
+/// declared `interface doors`. The gate must find the shape whose number is
+/// lost (2), not stop at the kept interface of the same name (1).
+#[test]
+fn baseline_refuses_a_service_removed_beside_a_kept_interface_of_the_same_name() {
+    let dir = TempDir::new("gate-service-beside-interface");
+    let root = package_workspace(&dir, DOORS_TWICE);
+    publish(&root);
+    let before = std::fs::read(snapshot(&root)).expect("the published snapshot is readable");
+
+    dir.write("cluster.ridl", DOORS_INTERFACE_ONLY);
+    dir.write(
+        "interfaces.lock",
+        &format!("{LOCK_HEADER}next 3\ndoors 1\n"),
+    );
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 1,
+        "the service's dropped number is refused:\n{stderr}"
+    );
+    assert_eq!(
+        stderr.matches("RIDL-412").count(),
+        1,
+        "one refusal for the one dropped number:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("`service:doors` holds interface number 2 in the baseline being replaced")
+            && stderr.contains("Restore the line `service:doors 2`"),
+        "the message names the service's number, not the kept interface's:\n{stderr}",
+    );
+    let after = std::fs::read(snapshot(&root)).expect("the published snapshot survives");
+    assert_eq!(before, after, "a refused publication rewrites nothing");
+}
+
+/// `DOORS_TWICE` with `interface doors` deleted and `service doors` kept.
+const DOORS_SERVICE_ONLY: &str = "package veh.cluster
+type DoorState: integer [0..1]
+service doors {
+  event doorLocked: DoorState @[100ms..1s]
+}
+";
+
+/// The mirror of
+/// `baseline_refuses_a_service_removed_beside_a_kept_interface_of_the_same_name`:
+/// the declared interface is removed and the inline shape of the service of
+/// the same name is kept. The gate must refuse the interface's lost number
+/// (1), not stop at the kept service (2).
+#[test]
+fn baseline_refuses_an_interface_removed_beside_a_kept_service_of_the_same_name() {
+    let dir = TempDir::new("gate-interface-beside-service");
+    let root = package_workspace(&dir, DOORS_TWICE);
+    publish(&root);
+    let before = std::fs::read(snapshot(&root)).expect("the published snapshot is readable");
+
+    dir.write("cluster.ridl", DOORS_SERVICE_ONLY);
+    dir.write(
+        "interfaces.lock",
+        &format!("{LOCK_HEADER}next 3\nservice:doors 2\n"),
+    );
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 1,
+        "the interface's dropped number is refused:\n{stderr}"
+    );
+    assert_eq!(
+        stderr.matches("RIDL-412").count(),
+        1,
+        "one refusal for the one dropped number:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("`doors` holds interface number 1 in the baseline being replaced")
+            && !stderr.contains("`service:doors` holds interface number"),
+        "the message names the interface's number, not the kept service's:\n{stderr}",
+    );
+    let after = std::fs::read(snapshot(&root)).expect("the published snapshot survives");
+    assert_eq!(before, after, "a refused publication rewrites nothing");
+}
+
+/// Both shapes named `doors` removed: the walk reports two interface-level
+/// changes at one path, and each lost number is refused exactly once.
+#[test]
+fn both_shapes_of_one_name_removed_draw_one_refusal_per_number() {
+    let dir = TempDir::new("gate-both-shapes-removed");
+    let root = package_workspace(&dir, DOORS_TWICE);
+    publish(&root);
+
+    dir.write("cluster.ridl", DOORS_NONE);
+    dir.write("interfaces.lock", &format!("{LOCK_HEADER}next 3\n"));
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 1, "both dropped numbers are refused:\n{stderr}");
+    assert_eq!(
+        stderr.matches("RIDL-412").count(),
+        2,
+        "one refusal per dropped number, no duplicate:\n{stderr}",
+    );
+    assert_eq!(
+        stderr
+            .matches("`doors` holds interface number 1 in the baseline being replaced")
+            .count(),
+        1,
+        "number 1 is refused once:\n{stderr}",
+    );
+    assert_eq!(
+        stderr
+            .matches("`service:doors` holds interface number 2 in the baseline being replaced")
+            .count(),
+        1,
+        "number 2 is refused once:\n{stderr}",
+    );
+}
+
 // --- The migration from one lock per package to one lock per unit ----------
 
 /// `text`, a published snapshot of a package of unit `veh.hmi`, as a snapshot
@@ -2346,5 +2487,40 @@ fn an_interface_is_numbered_before_an_inline_shape_of_the_same_name() {
     assert_eq!(
         stdout, "allocated doors 1\nallocated service:doors 2\n",
         "the interface takes the lower number",
+    );
+}
+
+/// Two packages of a legacy baseline each hold number 5, which the unit's new
+/// numbering (`Session` 1, `cluster.Speed` 2) does not reach. A refusal is
+/// keyed on the package and the number, so the two lost numbers are two
+/// refusals (RIDL-412), not one.
+#[test]
+fn one_number_lost_in_two_packages_draws_two_refusals() {
+    let dir = TempDir::new("gate-migration-same-number-twice");
+    let root = legacy_per_package_baseline(
+        &dir,
+        SESSION,
+        "next 6\nSession 5\n",
+        &[
+            ("veh.hmi.ir.json", "\"number\": 1", "\"number\": 5"),
+            ("veh.hmi.cluster.ir.json", "\"number\": 2", "\"number\": 5"),
+        ],
+    );
+
+    let (lock, code, stderr) = migrate(&root);
+    assert!(
+        lock.contains("Session 1\n") && lock.contains("cluster.Speed 2\n"),
+        "the unit's numbering:\n{lock}"
+    );
+    assert_eq!(code, 1, "both lost numbers are refused:\n{stderr}");
+    assert_eq!(
+        stderr.matches("RIDL-412").count(),
+        2,
+        "one refusal per package that lost the number:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("`Session` holds interface number 5")
+            && stderr.contains("`cluster.Speed` holds interface number 5"),
+        "each refusal names its own interface:\n{stderr}"
     );
 }

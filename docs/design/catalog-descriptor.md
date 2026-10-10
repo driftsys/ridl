@@ -548,19 +548,18 @@ For these, the archived design note is the record of the agreed direction.
 
 ## Open items and debt
 
-| Item                                                                                                       | Issue             |
-| ---------------------------------------------------------------------------------------------------------- | ----------------- |
-| Narrow a string's byte capacity from an ASCII-only match pattern, after #597                               | driftsys/ridl#665 |
-| ridl-rt: streams (ridl §12) have no port; the stream flag and per-element bound follow it                  | driftsys/ridl#336 |
-| The repr(C) payload codec, which gives the `ReprC` column its rows                                         | driftsys/ridl#317 |
-| debt(ridl-descriptor): Windows schema paths and an unpinned guard in the schema tooling                    | driftsys/ridl#670 |
-| debt(ridl-ir): catalog hash follow-ups deferred from the review of #676                                    | driftsys/ridl#679 |
-| debt: review follow-ups — one name resolver, one proto3 width table                                        | driftsys/ridl#684 |
-| debt: review follow-ups — shared proto3 refusal rules, agreement tests                                     | driftsys/ridl#690 |
-| debt: deferred review items from PR #692 (the lowering and the catalog check)                              | driftsys/ridl#693 |
-| debt: deferred review items from PR #696 (ridl describe)                                                   | driftsys/ridl#697 |
-| ridl diff reports identical when ridl lock freezes a provisional number, although the catalog hash changes | driftsys/ridl#700 |
-| debt: deferred review items from PR #699 (the catalog hash per region)                                     | driftsys/ridl#701 |
+| Item                                                                                      | Issue             |
+| ----------------------------------------------------------------------------------------- | ----------------- |
+| Narrow a string's byte capacity from an ASCII-only match pattern, after #597              | driftsys/ridl#665 |
+| ridl-rt: streams (ridl §12) have no port; the stream flag and per-element bound follow it | driftsys/ridl#336 |
+| The repr(C) payload codec, which gives the `ReprC` column its rows                        | driftsys/ridl#317 |
+| debt(ridl-descriptor): Windows schema paths and an unpinned guard in the schema tooling   | driftsys/ridl#670 |
+| debt(ridl-ir): catalog hash follow-ups deferred from the review of #676                   | driftsys/ridl#679 |
+| debt: review follow-ups — one name resolver, one proto3 width table                       | driftsys/ridl#684 |
+| debt: review follow-ups — shared proto3 refusal rules, agreement tests                    | driftsys/ridl#690 |
+| debt: deferred review items from PR #692 (the lowering and the catalog check)             | driftsys/ridl#693 |
+| debt: deferred review items from PR #696 (ridl describe)                                  | driftsys/ridl#697 |
+| debt: deferred review items from PR #699 (the catalog hash per region)                    | driftsys/ridl#701 |
 
 ## Trace
 

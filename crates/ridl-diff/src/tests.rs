@@ -1134,9 +1134,10 @@ fn a_published_number_zero_is_matched_by_name() {
 
 /// The first PD-1 case: two source trees compiled with no lock file lower
 /// every interface provisional on both sides. An old interface with no
-/// identity is matched by name — the provisional numbers themselves may
-/// differ, since a sibling added before it in byte order moves them — and its
-/// body is diffed as any matched pair's.
+/// identity is matched by name and its body is diffed as any matched pair's.
+/// A sibling added before it in byte order moves its provisional number, and
+/// the number is the routing key, so the moved number is
+/// `InterfaceNumberChanged`, breaking (driftsys/ridl#700).
 #[test]
 fn a_provisional_old_side_is_matched_by_name() {
     let old = package(
@@ -1160,10 +1161,17 @@ fn a_provisional_old_side_is_matched_by_name() {
         vec![],
     );
     let report = diff_packages(&old, &new);
-    assert_eq!(report.verdict, Verdict::Compatible);
+    assert_eq!(report.verdict, Verdict::Breaking);
     assert_eq!(
         report.changes,
         vec![
+            change(
+                "veh.cluster/Doors",
+                Category::InterfaceNumberChanged,
+                Verdict::Breaking,
+                Some("1 (provisional)"),
+                Some("2 (provisional)"),
+            ),
             change(
                 "veh.cluster/Doors/doorClosed",
                 Category::InteractionAppended,
@@ -1179,6 +1187,211 @@ fn a_provisional_old_side_is_matched_by_name() {
                 Some("interface"),
             ),
         ]
+    );
+}
+
+/// `ridl lock` freezes a provisional number in place: the pair is matched by
+/// name, the number is the same on both sides, and the provisional flag went
+/// from true to false. Nothing moves on the wire, but the catalog hash covers
+/// the flag, so the change is `InterfaceFrozen`, compatible, under its own
+/// heading (driftsys/ridl#700).
+#[test]
+fn a_provisional_number_frozen_in_place_is_interface_frozen() {
+    let old = package(
+        vec![provisional("Doors", 1, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let new = package(
+        vec![frozen("Doors", 1, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Compatible);
+    assert_eq!(
+        report.changes,
+        vec![change(
+            "veh.cluster/Doors",
+            Category::InterfaceFrozen,
+            Verdict::Compatible,
+            Some("1 (provisional)"),
+            Some("1"),
+        )]
+    );
+    assert_eq!(
+        crate::heading(Category::InterfaceFrozen),
+        Some("compatible on the wire, may change the catalog hash")
+    );
+    assert_eq!(crate::heading(Category::InterfaceNumberChanged), None);
+}
+
+/// A provisional number frozen as another number — the lock allocated a
+/// number other than the provisional one — moves the routing key:
+/// `InterfaceNumberChanged`, breaking, and no `InterfaceFrozen` beside it.
+#[test]
+fn a_provisional_number_frozen_as_another_number_is_interface_number_changed() {
+    let old = package(
+        vec![provisional("Doors", 2, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let new = package(
+        vec![frozen("Doors", 1, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Breaking);
+    assert_eq!(
+        report.changes,
+        vec![change(
+            "veh.cluster/Doors",
+            Category::InterfaceNumberChanged,
+            Verdict::Breaking,
+            Some("2 (provisional)"),
+            Some("1"),
+        )]
+    );
+}
+
+/// An old number 0 marks a snapshot written before the lock existed. It is
+/// never allocated, so it is not compared with the new side's number or flag:
+/// a pair matched by name across that transition reports nothing of its own.
+#[test]
+fn an_old_number_zero_is_not_compared() {
+    let old = package(
+        vec![interface("Doors", door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    for new_interface in [
+        provisional("Doors", 2, door_opened("DoorState")),
+        frozen("Doors", 3, door_opened("DoorState")),
+    ] {
+        let new = package(vec![new_interface], vec![], vec![]);
+        let report = diff_packages(&old, &new);
+        assert_eq!(report.verdict, Verdict::Identical);
+        assert_eq!(report.changes, vec![]);
+    }
+}
+
+/// Two provisional builds with the same number and the same flag report
+/// nothing for the interface itself.
+#[test]
+fn an_unchanged_provisional_number_is_identical() {
+    let side = || {
+        package(
+            vec![provisional("Doors", 1, door_opened("DoorState"))],
+            vec![],
+            vec![],
+        )
+    };
+    let report = diff_packages(&side(), &side());
+    assert_eq!(report.verdict, Verdict::Identical);
+    assert_eq!(report.changes, vec![]);
+}
+
+/// A new number 0 is the reversed comparison: the new side is a snapshot
+/// written before the lock existed. That number was never allocated either, so
+/// it is not compared with the old side's number or flag.
+#[test]
+fn a_new_number_zero_is_not_compared() {
+    let new = package(
+        vec![interface("Doors", door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let old = package(
+        vec![provisional("Doors", 2, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Identical);
+    assert_eq!(report.changes, vec![]);
+}
+
+/// `inline_service` with its shape's number marked provisional — an inline
+/// service with no lock entry.
+fn provisional_inline_service(name: &str, number: u32, interactions: Vec<v2::Decl>) -> v2::Service {
+    let mut service = inline_service(name, number, interactions);
+    if let Some(v2::service_shape::Kind::Inline(shape)) = &mut service.shapes[0].kind {
+        shape.provisional = true;
+    }
+    service
+}
+
+/// An inline shape's number is compared as a declared interface's is: the
+/// same number frozen in place is `InterfaceFrozen`, compatible, under the
+/// service's path.
+#[test]
+fn an_inline_shape_frozen_in_place_is_interface_frozen() {
+    let old = package(
+        vec![],
+        vec![provisional_inline_service(
+            "veh.cluster.hvac",
+            5,
+            door_opened("DoorState"),
+        )],
+        vec![],
+    );
+    let new = package(
+        vec![],
+        vec![inline_service(
+            "veh.cluster.hvac",
+            5,
+            door_opened("DoorState"),
+        )],
+        vec![],
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Compatible);
+    assert_eq!(
+        report.changes,
+        vec![change(
+            "veh.cluster/veh.cluster.hvac",
+            Category::InterfaceFrozen,
+            Verdict::Compatible,
+            Some("5 (provisional)"),
+            Some("5"),
+        )]
+    );
+}
+
+/// An inline shape whose provisional number is frozen as another number moves
+/// the routing key: `InterfaceNumberChanged`, breaking.
+#[test]
+fn an_inline_shape_frozen_as_another_number_is_interface_number_changed() {
+    let old = package(
+        vec![],
+        vec![provisional_inline_service(
+            "veh.cluster.hvac",
+            6,
+            door_opened("DoorState"),
+        )],
+        vec![],
+    );
+    let new = package(
+        vec![],
+        vec![inline_service(
+            "veh.cluster.hvac",
+            5,
+            door_opened("DoorState"),
+        )],
+        vec![],
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Breaking);
+    assert_eq!(
+        report.changes,
+        vec![change(
+            "veh.cluster/veh.cluster.hvac",
+            Category::InterfaceNumberChanged,
+            Verdict::Breaking,
+            Some("6 (provisional)"),
+            Some("5"),
+        )]
     );
 }
 
@@ -1817,5 +2030,271 @@ fn a_sub_package_snapshot_without_a_unit_is_outside_the_new_unit() {
             ("u.cluster/Speed", Category::DeclRemoved),
             ("u.cluster/Speed", Category::DeclAdded),
         ]
+    );
+}
+
+// --------------------------------------------------------------------------
+// Enum and enum-set slots — the slot is the explicit number, not the position.
+// --------------------------------------------------------------------------
+
+/// A package holding one declaration `name` of `kind`.
+fn with_decl(name: &str, kind: v2::decl::Kind) -> v2::Package {
+    let mut package = package(vec![], vec![], vec![]);
+    package.decls = vec![v2::Decl {
+        name: name.to_string(),
+        kind: Some(kind),
+        ..Default::default()
+    }];
+    package
+}
+
+/// Enum values or enum-set bits, each with its explicit number.
+fn numbered(members: &[(&str, i64)]) -> Vec<v2::EnumValue> {
+    members
+        .iter()
+        .map(|(name, value)| v2::EnumValue {
+            name: name.to_string(),
+            value: *value,
+            ..Default::default()
+        })
+        .collect()
+}
+
+fn enum_def(members: &[(&str, i64)]) -> v2::decl::Kind {
+    v2::decl::Kind::EnumDef(v2::EnumDef {
+        values: numbered(members),
+        ..Default::default()
+    })
+}
+
+fn enum_set_def(members: &[(&str, i64)]) -> v2::decl::Kind {
+    v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+        bits: numbered(members),
+        ..Default::default()
+    })
+}
+
+/// A textual reorder of an enum body moves no explicit number, so nothing
+/// moves on the wire. The catalog hash covers the order of the values when an
+/// interface reaches the enum: the change is `EnumReordered` on the container,
+/// compatible, with no detail.
+#[test]
+fn an_enum_pure_reorder_is_enum_reordered() {
+    let old = with_decl("Mode", enum_def(&[("OFF", 0), ("ON", 1)]));
+    let new = with_decl("Mode", enum_def(&[("ON", 1), ("OFF", 0)]));
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Compatible);
+    assert_eq!(
+        report.changes,
+        vec![Change {
+            path: "veh.cluster/Mode".to_string(),
+            category: Category::EnumReordered,
+            verdict: Verdict::Compatible,
+            before: None,
+            after: None,
+        }]
+    );
+    assert_eq!(
+        crate::heading(Category::EnumReordered),
+        Some("compatible on the wire, may change the catalog hash"),
+    );
+}
+
+/// A textual reorder of an enum-set body moves no bit, so it is
+/// `EnumReordered` on the container, compatible.
+#[test]
+fn an_enum_set_pure_reorder_is_enum_reordered() {
+    let old = with_decl("Flags", enum_set_def(&[("A", 0), ("B", 1)]));
+    let new = with_decl("Flags", enum_set_def(&[("B", 1), ("A", 0)]));
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Compatible);
+    assert_eq!(
+        report.changes,
+        vec![Change {
+            path: "veh.cluster/Flags".to_string(),
+            category: Category::EnumReordered,
+            verdict: Verdict::Compatible,
+            before: None,
+            after: None,
+        }]
+    );
+}
+
+/// Enum values renumbered in place — the text order is kept — are each
+/// `MemberReordered` with the old and new explicit number as a `value`
+/// detail. Every difference between the two bodies is a changed number, so the
+/// container's `ConstraintChanged` is not reported beside them.
+#[test]
+fn an_enum_renumber_is_member_reordered_with_the_value() {
+    let old = with_decl("Mode", enum_def(&[("OFF", 0), ("ON", 1)]));
+    let new = with_decl("Mode", enum_def(&[("OFF", 1), ("ON", 0)]));
+    let report = diff_packages(&old, &new);
+    let summary: Vec<_> = report
+        .changes
+        .iter()
+        .map(|change| {
+            (
+                change.path.as_str(),
+                change.category,
+                change.before.as_deref(),
+                change.after.as_deref(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            (
+                "veh.cluster/Mode/OFF",
+                Category::MemberReordered,
+                Some("value 0"),
+                Some("value 1"),
+            ),
+            (
+                "veh.cluster/Mode/ON",
+                Category::MemberReordered,
+                Some("value 1"),
+                Some("value 0"),
+            ),
+        ]
+    );
+}
+
+/// An enum body with the given values and the given retired numbers.
+fn enum_with_reserved(members: &[(&str, i64)], retired: &[i64]) -> v2::decl::Kind {
+    v2::decl::Kind::EnumDef(v2::EnumDef {
+        values: numbered(members),
+        reserved: retired
+            .iter()
+            .map(|value| v2::Reserved {
+                value: Some(*value),
+                ..Default::default()
+            })
+            .collect(),
+    })
+}
+
+/// A reserved list reordered with nothing else changed is `EnumReordered`,
+/// like a reorder of the values.
+#[test]
+fn an_enum_reserved_list_reorder_is_enum_reordered() {
+    let old = with_decl("Mode", enum_with_reserved(&[("OFF", 0)], &[3, 4]));
+    let new = with_decl("Mode", enum_with_reserved(&[("OFF", 0)], &[4, 3]));
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Compatible);
+    let summary: Vec<_> = report
+        .changes
+        .iter()
+        .map(|change| (change.path.as_str(), change.category))
+        .collect();
+    assert_eq!(summary, vec![("veh.cluster/Mode", Category::EnumReordered)]);
+}
+
+/// Two values that swap their numbers, in an edit that also retires another
+/// number, report the changed numbers and the container's `ConstraintChanged`:
+/// the reserved list is a difference that is not a changed number, so it must
+/// not hide behind the `MemberReordered` lines.
+#[test]
+fn an_enum_renumber_beside_a_reserved_list_change_keeps_constraint_changed() {
+    let old = with_decl("Mode", enum_with_reserved(&[("OFF", 0), ("ON", 1)], &[]));
+    let new = with_decl("Mode", enum_with_reserved(&[("OFF", 1), ("ON", 0)], &[5]));
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Breaking);
+    let summary: Vec<_> = report
+        .changes
+        .iter()
+        .map(|change| (change.path.as_str(), change.category))
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            ("veh.cluster/Mode/OFF", Category::MemberReordered),
+            ("veh.cluster/Mode/ON", Category::MemberReordered),
+            ("veh.cluster/Mode", Category::ConstraintChanged),
+        ]
+    );
+}
+
+/// Two values that swap their numbers, in an edit that also reorders the
+/// reserved list with no entry changed, report the changed numbers alone: a
+/// reordered reserved list is order only, so it adds no `ConstraintChanged`
+/// on the container.
+#[test]
+fn an_enum_renumber_beside_a_reserved_list_reorder_reports_only_the_values() {
+    let old = with_decl(
+        "Mode",
+        enum_with_reserved(&[("OFF", 0), ("ON", 1)], &[3, 4]),
+    );
+    let new = with_decl(
+        "Mode",
+        enum_with_reserved(&[("OFF", 1), ("ON", 0)], &[4, 3]),
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Breaking);
+    let summary: Vec<_> = report
+        .changes
+        .iter()
+        .map(|change| (change.path.as_str(), change.category))
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            ("veh.cluster/Mode/OFF", Category::MemberReordered),
+            ("veh.cluster/Mode/ON", Category::MemberReordered),
+        ]
+    );
+}
+
+/// An enum-set bit renumbered beside a change to the set's backing enum
+/// reports the container's `ConstraintChanged` as well.
+#[test]
+fn an_enum_set_renumber_beside_another_change_keeps_constraint_changed() {
+    let old = with_decl("Flags", enum_set_def(&[("A", 0), ("B", 1)]));
+    let mut new = with_decl("Flags", enum_set_def(&[("A", 2), ("B", 1)]));
+    if let Some(v2::decl::Kind::EnumSetDef(def)) = &mut new.decls[0].kind {
+        def.backing_enum = Some("Mode".to_string());
+    }
+    let report = diff_packages(&old, &new);
+    let summary: Vec<_> = report
+        .changes
+        .iter()
+        .map(|change| (change.path.as_str(), change.category))
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            ("veh.cluster/Flags/A", Category::MemberReordered),
+            ("veh.cluster/Flags", Category::ConstraintChanged),
+        ]
+    );
+}
+
+/// An enum-set bit renumbered with nothing else changed reports the bit alone,
+/// with no `ConstraintChanged` on the container.
+#[test]
+fn an_enum_set_renumber_alone_reports_only_the_bit() {
+    let old = with_decl("Flags", enum_set_def(&[("A", 0), ("B", 1)]));
+    let new = with_decl("Flags", enum_set_def(&[("B", 1), ("A", 2)]));
+    let report = diff_packages(&old, &new);
+    let summary: Vec<_> = report
+        .changes
+        .iter()
+        .map(|change| {
+            (
+                change.path.as_str(),
+                change.category,
+                change.before.as_deref(),
+                change.after.as_deref(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        summary,
+        vec![(
+            "veh.cluster/Flags/A",
+            Category::MemberReordered,
+            Some("bit 0"),
+            Some("bit 2"),
+        )]
     );
 }

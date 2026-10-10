@@ -1353,7 +1353,7 @@ reorder no change, and both are compatible, because an interface's number
 comes from its unit's `interfaces.lock` and the routing key does not
 contain the service. A removal is still visible in source — the
 `service.member` addresses of that interface stop resolving under the service
-— so the text report lists it under a heading of its own, printed once as a
+— so the text report lists it under a heading, shared with `interface_renamed`, printed once as a
 line ending in a colon, after every change that has no heading. The JSON
 report carries the category word and no heading field. With `interface K`
 added and `J` dropped from `service veh.cluster.dash : I, J`:
@@ -1378,10 +1378,12 @@ routing identity, and visible in source, because the generated identity-table
 names change, so it shares the heading above; the path carries the new name,
 and a change inside the renamed interface is reported under the new name too.
 A number gone from the new side is `interface_retired` when that side's lock
-retires it, and `decl_removed`, breaking, otherwise. A declaration with no lock
-entry carries a provisional number, which is no identity: it is always
-`decl_added`, and it is never matched to an old interface, so a rename the lock
-does not record is `decl_removed` plus `decl_added`. Two sides with no lock
+retires it, and `decl_removed`, breaking, otherwise. Against an old side whose
+numbers are frozen, a declaration with no lock entry carries a provisional
+number, which is no identity: it is `decl_added`, and it is never matched to an
+old interface, so a rename the lock does not record is `decl_removed` plus
+`decl_added`. Against a provisional old side, interfaces are matched by name,
+as described below. Two sides with no lock
 file — two bare source trees, or a snapshot published before the lock existed —
 are matched by name. Interfaces are matched within the unit, and the names on
 both sides of a change are catalog names, so an interface moved between two
@@ -1400,6 +1402,69 @@ compatible on the wire, visible in source:
   [compatible] interface_renamed veh.cluster/Jay: J -> Jay
   [compatible] service_interface_removed veh.cluster/veh.cluster.dash/J: J -> (removed)
 ```
+
+An interface matched by name across a provisional old side has its number and
+its provisional flag compared, because the catalog hash covers both. When the
+number is the same on both sides and only the new side is frozen — the number
+`ridl lock` froze in place — the change is `interface_frozen`: compatible,
+because the routing key did not move, and listed under the heading
+"compatible on the wire, may change the catalog hash", which it shares with
+`enum_reordered`, because the catalog hash changes and a generated face refuses
+a port whose catalog hash is another one. With `old` a unit before `ridl lock`
+and `new` the same unit after it:
+
+```sh
+ridl diff old new
+```
+
+```text
+compatible
+compatible on the wire, may change the catalog hash:
+  [compatible] interface_frozen veh.cluster/Doors: 1 (provisional) -> 1
+```
+
+A number that differs between the two sides is `interface_number_changed`,
+breaking, because the number is the routing key. Between two builds with no
+lock, an interface added before `Doors` in byte order of the name moves its
+provisional number:
+
+```sh
+ridl diff old new
+```
+
+```text
+breaking
+  [breaking] interface_number_changed veh.cluster/Doors: 1 (provisional) -> 2 (provisional)
+  [compatible] decl_added veh.cluster/Aux: (absent) -> interface
+```
+
+A number 0 on either side, from a snapshot written before the lock existed,
+is not compared. A published baseline never holds a provisional number,
+because `ridl baseline` refuses one (RIDL-411), so both categories are seen
+between two builds, or in a reversed comparison whose old side is a build.
+
+An enum value or an enum-set bit takes its identity from the explicit number
+it declares, so a body whose difference is only order — its values or bits
+reordered with no number changed, an enum's `reserved` list reordered with no
+entry changed, or both — moves nothing on the wire. The change is
+`enum_reordered`, compatible, on the container's path and under the same
+heading. The catalog hash covers only the declarations an interface reaches:
+when an interface reaches the enum or enum set, the order of its values or
+bits, and of an enum's `reserved` list, is part of the hash, so the hash
+changes then. With the values of `enum GearPosition` reordered:
+
+```sh
+ridl diff old.ridl new.ridl
+```
+
+```text
+compatible
+compatible on the wire, may change the catalog hash:
+  [compatible] enum_reordered veh.cluster/GearPosition
+```
+
+A value or bit whose number changed is `member_reordered`, breaking, with the
+old and the new number in the detail.
 
 The breaking comparison above with `--format json`:
 
@@ -1520,7 +1585,10 @@ the categories `ridl diff` reports are:
   decl_removed
   interface_renamed
   interface_retired
+  interface_frozen
+  interface_number_changed
   member_reordered
+  enum_reordered
   interaction_appended
   interaction_inserted
   interaction_reordered
@@ -1607,7 +1675,10 @@ line is prefixed with the unit directory relative to `PATH` and a colon:
 `hvac: allocated Cabin 1`. A `PATH` inside a workspace member compiles the
 whole workspace and allocates in, edits and reports on that member only.
 Until `ridl lock` has run, a declaration with no entry compiles with a
-provisional number, which carries no identity.
+provisional number, which carries no identity. The catalog hash covers each
+number and its provisional flag, so `ridl lock` changes it: `ridl diff`
+reports a number frozen in place as `interface_frozen`, compatible, and a
+number frozen as another one as `interface_number_changed`, breaking.
 
 The reverse case — a live entry whose interface is gone from the source — is
 RIDL-409 from the compiler, and plain `ridl lock` refuses to allocate over it:

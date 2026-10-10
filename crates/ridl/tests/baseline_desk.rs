@@ -504,6 +504,28 @@ enumset Warnings {
 }
 ";
 
+/// `DRIVE` and `DOOR_OPEN` take new numbers. No member moves in the text.
+const ENUM_MEMBERS_RENUMBERED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type LatchState: integer [0..3]
+struct Report {
+  door: DoorState
+  latch: LatchState
+}
+union Reading {
+  door: DoorState
+  latch: LatchState
+}
+enum Gear {
+  PARK = 0
+  DRIVE = 2
+}
+enumset Warnings {
+  LOW_FUEL = 0
+  DOOR_OPEN = 2
+}
+";
+
 /// Asserts the RIDL-407 block about `member` of `container`: it names both,
 /// states the two ordinals in the typl §7.4 word, cites that rule, names the
 /// remedy, and points its span at `location` — `declaration`'s text alone
@@ -1599,10 +1621,9 @@ fn check_tells_a_tombstone_that_keeps_the_slot_but_not_the_name() {
 }
 
 /// An enum value or enum-set bit takes its identity from its explicit number,
-/// so reordering the body is not a change (typl §8, §9). `ridl diff` still
-/// reports it conservatively; the desk check stays silent, because its
-/// warning says declaration order is the wire identity, which is false here
-/// (the decision recorded on driftsys/ridl#335).
+/// so reordering the body moves nothing on the wire (typl §8, §9): `ridl diff`
+/// reports the reorder as `enum_reordered`, compatible, and the desk check
+/// stays silent.
 #[test]
 fn check_is_silent_for_an_enum_and_enum_set_reorder() {
     let dir = TempDir::new("enum-reorder");
@@ -1616,18 +1637,11 @@ fn check_is_silent_for_an_enum_and_enum_set_reorder() {
         root.join(".ridl/baseline").as_os_str(),
         root.as_os_str(),
     ]);
-    assert_eq!(code, 1, "`ridl diff` gates on the reorder:\n{diff}");
-    for member in [
-        "Gear/PARK",
-        "Gear/DRIVE",
-        "Warnings/LOW_FUEL",
-        "Warnings/DOOR_OPEN",
-    ] {
-        assert!(
-            diff.contains(&format!("member_reordered veh.cluster/{member}: position")),
-            "the fixture is a reorder `ridl diff` reports for `{member}`:\n{diff}",
-        );
-    }
+    assert_eq!(code, 0, "a textual reorder is compatible:\n{diff}");
+    assert!(
+        diff.starts_with("compatible") && diff.contains("enum_reordered"),
+        "`ridl diff` reports the reorder as enum_reordered, compatible:\n{diff}",
+    );
 
     let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
     assert!(
@@ -1635,6 +1649,43 @@ fn check_is_silent_for_an_enum_and_enum_set_reorder() {
         "an enum or enum-set reorder moves no wire identity:\n{stderr}",
     );
     assert_eq!(code, 0, "the reorder leaves a clean check clean:\n{stderr}");
+}
+
+/// A changed enum value or enum-set bit is `member_reordered` in `ridl diff`,
+/// with the old and new number. The desk check stays silent for it, because
+/// its warning says declaration order is the wire identity, which is false
+/// for an enum or enum-set member (the decision recorded on
+/// driftsys/ridl#335): the change stays `ridl diff`'s alone.
+#[test]
+fn check_is_silent_for_a_renumbered_enum_and_enum_set_member() {
+    let dir = TempDir::new("enum-renumber");
+    let root = package_workspace(&dir, COMPOSITES);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    dir.write("cluster.ridl", ENUM_MEMBERS_RENUMBERED);
+    let (code, diff, _) = ridl(&[
+        "diff".as_ref(),
+        root.join(".ridl/baseline").as_os_str(),
+        root.as_os_str(),
+    ]);
+    assert_eq!(code, 1, "`ridl diff` gates on the changed numbers:\n{diff}");
+    for line in [
+        "member_reordered veh.cluster/Gear/DRIVE: value 1 -> value 2",
+        "member_reordered veh.cluster/Warnings/DOOR_OPEN: bit 1 -> bit 2",
+    ] {
+        assert!(
+            diff.contains(line),
+            "the fixture is a change `ridl diff` reports as `{line}`:\n{diff}",
+        );
+    }
+
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    assert!(
+        !stderr.contains("RIDL-407"),
+        "an enum or enum-set member has no ordinal to warn about:\n{stderr}",
+    );
+    assert_eq!(code, 0, "the change leaves a clean check clean:\n{stderr}");
 }
 
 /// With no baseline anywhere, `ridl check` behaves exactly as before: no extra

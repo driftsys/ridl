@@ -323,8 +323,9 @@ in the source can move it, and recording it with
 hash covers each interface's number and its `provisional` flag. A provisional
 number is fine during development. Never rely on it across parties that are
 built separately; run `ridl lock` and commit `interfaces.lock` first.
-`ridl diff` does not report the hash change that `ridl lock` causes
-([driftsys/ridl#700][i700]).
+[`ridl diff`](cli-reference.md#ridl-diff) reports the number that `ridl lock`
+freezes as `interface_frozen`, and a provisional number that moves as
+`interface_number_changed`.
 
 ## The catalog descriptor
 
@@ -418,7 +419,6 @@ section carries those facts to a plugin at build time.
 [layout]: https://github.com/driftsys/ridl/blob/main/crates/ridlc/tests/layout.rs
 [kotlin]: https://github.com/driftsys/ridlc-gen-kotlin
 [i317]: https://github.com/driftsys/ridl/issues/317
-[i700]: https://github.com/driftsys/ridl/issues/700
 [i718]: https://github.com/driftsys/ridl/issues/718
 [i725]: https://github.com/driftsys/ridl/issues/725
 [i735]: https://github.com/driftsys/ridl/issues/735

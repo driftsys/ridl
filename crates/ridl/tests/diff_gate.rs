@@ -227,6 +227,66 @@ fn every_reported_category_is_explainable() {
     }
 }
 
+/// The verdict label each `--explain` row prints at the start of a line
+/// (`  compatible  ...`, `  breaking    ...`) must be the verdict the
+/// classifier fixes for that category, so the row and the gate cannot
+/// disagree. A category whose verdict the classifier reads from the two
+/// bodies prints both labels, one per direction, and is skipped here: its
+/// fixed verdict cannot be read without a pair of bodies, and
+/// `explain_prints_the_rule_row_for_a_category` covers such a row.
+#[test]
+fn each_fixed_verdict_row_names_the_verdict_the_classifier_gives() {
+    use ridl_diff::{Category, Change, Verdict};
+    let body_dependent = [
+        Category::DeclAdded,
+        Category::VisibilityChanged,
+        Category::InteractionAppended,
+        Category::ConstraintChanged,
+        Category::TimingChanged,
+        Category::RpcBoundChanged,
+        Category::ContractChanged,
+    ];
+    let empty = ridl_ir::v2::Package::default();
+    let mut checked = 0;
+    for category in ridl_diff::CATEGORIES {
+        if body_dependent.contains(&category) {
+            continue;
+        }
+        let change = Change {
+            path: "p/x".to_string(),
+            category,
+            verdict: Verdict::Identical,
+            before: None,
+            after: None,
+        };
+        let expected = match ridl_diff::classify(&change, &empty, &empty) {
+            Verdict::Identical => "identical",
+            Verdict::Compatible => "compatible",
+            Verdict::Breaking => "breaking",
+        };
+        let word = ridl_diff::category_word(category);
+        let (code, stdout, stderr) = ridl(&["diff".as_ref(), "--explain".as_ref(), word.as_ref()]);
+        assert_eq!(code, 0, "{word} must be explainable, stderr:\n{stderr}");
+        let labels: Vec<&str> = stdout
+            .lines()
+            .filter_map(|line| line.strip_prefix("  "))
+            .filter(|line| !line.starts_with(' '))
+            .filter_map(|line| line.split_whitespace().next())
+            .filter(|label| ["identical", "compatible", "breaking"].contains(label))
+            .collect();
+        assert_eq!(
+            labels,
+            [expected],
+            "the {word} row must name the classifier's verdict alone, stdout:\n{stdout}"
+        );
+        checked += 1;
+    }
+    assert!(
+        checked >= 20,
+        "most categories have a fixed verdict: {checked}"
+    );
+}
+
 /// The category words are the report's stable vocabulary — the `category`
 /// field of the JSON schema and the argument `--explain` takes — so a renamed
 /// variant must fail here rather than reach a consumer. This list is a second
@@ -247,7 +307,10 @@ fn the_category_spellings_are_pinned() {
             "decl_removed",
             "interface_renamed",
             "interface_retired",
+            "interface_frozen",
+            "interface_number_changed",
             "member_reordered",
+            "enum_reordered",
             "interaction_appended",
             "interaction_inserted",
             "interaction_reordered",
@@ -275,9 +338,9 @@ fn the_category_spellings_are_pinned() {
 }
 
 /// The `member_reordered` row states what its detail carries — the ordinal for
-/// a struct field or union arm, the position for an enum value or enum-set bit
-/// — and the limit of the category: it is reported only when both bodies hold
-/// the same member names.
+/// a struct field or union arm, the explicit value or bit for an enum value or
+/// enum-set bit — and the limit of the category: it is reported only when both
+/// bodies hold the same member names.
 #[test]
 fn explain_member_reordered_states_its_detail_and_its_limit() {
     let (code, stdout, stderr) = ridl(&[
@@ -294,7 +357,7 @@ fn explain_member_reordered_states_its_detail_and_its_limit() {
     // not its line breaks.
     let text = stdout.split_whitespace().collect::<Vec<_>>().join(" ");
     assert!(
-        text.contains("old and new ordinal") && text.contains("old and new position"),
+        text.contains("old and new ordinal") && text.contains("old and new value or bit"),
         "the row states what the detail carries for each composite kind, stdout:\n{stdout}"
     );
     assert!(
