@@ -221,19 +221,19 @@ here. This list is not a standing count of every crate the workspace holds — s
 
 - **`crates/ridl`** — the porcelain facade: `ridl check`, `ridl baseline`,
   `ridl build`, `ridl test`, `ridl fmt`, `ridl diff`, `ridl lock`, `ridl lsp`,
-  `ridl mcp`, and `ridl describe`, driving the `ridlc` command drivers, the
-  `ridl-fmt` engine, the `ridl-diff` engine, the `ridl-lsp`/`ridl-mcp`
-  libraries, and the `ridl-descriptor` verifier and JSON view (the
-  plumbing/porcelain split of concept note §8.1). Everything E2 added to the CLI
-  landed here rather than in `ridlc`, because `ridlc` stays a pure source→IR
-  function — the minimal ISO 26262 tool-qualification boundary (ADR-0008
-  decision 9). `ridl baseline` publishes one `<pkg-name>.ir.json` per package
-  and one `<unit>.catalogs` file per unit with an interface into
-  `.ridl/baseline/`; `ridl build` reads those files to write each unit's list of
-  compatible catalogs into its descriptor and codegen model (`catalogs.rs`);
-  `ridl check --baseline` is the desk-time ordinal-drift check over the
-  snapshots; `property.rs` is the `ridl test` runner, which spends the range
-  strategies on the contract plane.
+  `ridl mcp`, `ridl describe`, and `ridl init` and `ridl new` (the scaffolding
+  in `src/scaffold.rs`), driving the `ridlc` command drivers, the `ridl-fmt`
+  engine, the `ridl-diff` engine, the `ridl-lsp`/`ridl-mcp` libraries, and the
+  `ridl-descriptor` verifier and JSON view (the plumbing/porcelain split of
+  concept note §8.1). Everything E2 added to the CLI landed here rather than in
+  `ridlc`, because `ridlc` stays a pure source→IR function — the minimal ISO
+  26262 tool-qualification boundary (ADR-0008 decision 9). `ridl baseline`
+  publishes one `<pkg-name>.ir.json` per package and one `<unit>.catalogs` file
+  per unit with an interface into `.ridl/baseline/`; `ridl build` reads those
+  files to write each unit's list of compatible catalogs into its descriptor and
+  codegen model (`catalogs.rs`); `ridl check --baseline` is the desk-time
+  ordinal-drift check over the snapshots; `property.rs` is the `ridl test`
+  runner, which spends the range strategies on the contract plane.
 
 - **`crates/ridl-fmt`** — the `ridl fmt` engine: CST-based and trivia-aware
   (comments are preserved and re-anchored), total (input with parse errors is

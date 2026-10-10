@@ -1923,19 +1923,26 @@ from inside the member.
 
 The name is the directory's basename when that is already a legal package name
 (lowercase dot-separated segments, each a letter followed by letters or
-digits). The command never rewrites a name: a basename that is not legal exits 2
-with an error that asks for `--name`, and so does a `--name` value that is not
-legal. With `--workspace`, `--name` names the member and the root directory keeps
-its own name.
+digits). The basename is taken from the path as written, so a symbolic link is
+not followed to find it. The command never rewrites a name: a basename that is
+not legal exits 2 with an error that asks for `--name`, and so does a `--name`
+value that is not legal. A name with a reserved word as a segment, such as
+`type` or `veh.signal`, is also refused, because a source file that declares it
+does not parse. With `--workspace`, `--name` names the member and the root
+directory keeps its own name.
 
 **Exit codes.** 0 when the files are written. 2, with an `error:` line on
 stderr and nothing written, when a target file already exists, the path is not a
-directory, the name is not legal, or a `ridl.toml` at or above the directory
-would claim it: the directory sits inside another unit (MANI-013) or inside a
-workspace, and this command does not add a member to an existing workspace. The
-search upward stops after the first directory that holds `.git`. Every target is
-checked before any file is written. There is no exit 1. The cases are confirmed
-against the built binary by `crates/ridl/tests/scaffold_cli.rs`.
+directory, the name is not legal or holds a reserved word, or a `ridl.toml`
+above or below the package directory would make a manifest inside a unit
+(MANI-013): the directory sits inside another unit or inside a workspace, or it
+already holds a `ridl.toml` in a subdirectory. This command does not add a member
+to an existing workspace. The search upward does not stop at a `.git` directory,
+because MANI-013 does not, and it follows symbolic links. Every target is
+checked before any file is written, the member files are written before the
+workspace root manifest, and a write that fails removes the paths this command
+created. There is no exit 1. The cases are confirmed against the built binary by
+`crates/ridl/tests/scaffold_cli.rs`.
 
 ### `ridl new`
 
@@ -2257,11 +2264,11 @@ compiler directly and want its stable, default-free flags.
 | `ridl build` / `ridlc build` | clean, every requested artifact written | a diagnostic is an error, nothing written — except for an RSDL-7xx error, which leaves only its deployment out of the lowered system | the workspace cannot be found, or (for `ridlc build`) a missing `--out-dir` |
 | `ridl baseline` | clean, snapshot(s) published | a diagnostic is an error, or the publication gate refuses: the replacement under the tombstone rule (RIDL-408), a provisional interface number (RIDL-411), or a published number the fresh snapshot neither carries nor retires (RIDL-412); the existing baseline is left untouched | the workspace cannot be found, the output directory cannot be read or written, a published `.ir.json` snapshot fails to parse, two published snapshots declare one package, or a snapshot-named entry in the output directory cannot be stat'ed |
 | `ridl test` | every range self-corpus and sampled `require` passed | a self-corpus failure, or a clause raised an evaluation error | the workspace fails to compile, cannot be found, or `--samples 0` |
-| `ridl fmt` | nothing under `--check` would change, or the rewrite succeeded | a file under `--check` would change, or has a parse error | the path does not exist, or a directory the walk reaches is unreadable — named in the message, unlike six of the other nine, which name no path at all |
+| `ridl fmt` | nothing under `--check` would change, or the rewrite succeeded | a file under `--check` would change, or has a parse error | the path does not exist, or a directory the walk reaches is unreadable — named in the message, unlike `ridl check`, `ridl build`, `ridl baseline`, `ridl lock`, `ridlc check` and `ridlc build`, which name no path at all |
 | `ridl diff` | the change is compatible, or the two sides are identical | the change is breaking | a side fails to compile, an input is missing, or neither `--explain` nor both inputs were given |
 | `ridl lock` | the file is written, or there is nothing to change | a diagnostic error over the source, nothing written: a live entry with no declaration under plain `ridl lock` (RIDL-409), a malformed lock file (RIDL-410), or any other compile error | the path is missing or unreadable; a bad flag — `--rename` naming no live entry or a `NEW` that is not a declaration without an entry, `--retire` naming a still-declared interface, either flag over more than one package; an I/O failure writing |
 | `ridl lock merge` | the three sides merge clean, and the result is written to OURS | entries disagree: OURS is written with conflict markers around only the disagreeing entries, and is malformed (RIDL-410) until resolved | an input cannot be read or does not parse (OURS is left as it was), `MARKER_SIZE` is not a number from 1 up, or an I/O failure writing OURS |
-| `ridl init` / `ridl new` | the files are written | | a target file exists, `new` was given an existing path, the path is not a directory, the name is not a legal package name, or a `ridl.toml` at or above the directory would claim it; nothing is written |
+| `ridl init` / `ridl new` | the files are written | | a target file exists, `new` was given an existing path, the path is not a directory, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the package directory would make a manifest inside a unit (MANI-013); nothing is written |
 | `ridl describe` | the descriptor was printed |   | a missing or unreadable path; a file that is not a catalog descriptor; a version this toolchain does not read; a malformed buffer; an I/O failure writing to stdout |
 
 This table is this repository's own taxonomy, recorded in
@@ -2309,7 +2316,7 @@ For more information, try '--help'.
 `--help` itself, on any subcommand of either binary, always exits 0 — and so
 does `--version`/`-V`, covered [above](#ridl).
 
-Seven of the ten subcommands that take a path also share a lesser-known gap:
+Seven of the subcommands that take a path also share a lesser-known gap:
 [issue driftsys/ridl#196][issue-196] records that when the *workspace root
 itself* is unreadable, `ridl check`, `ridl build`, `ridl baseline`,
 `ridl lock`, `ridlc check`, and `ridlc build` all report

@@ -17,13 +17,13 @@ raised to `deny` exits 1 in `ridl check`, `ridl build`, `ridlc check` and
 `ridlc build`, and that of the other subcommands only the `ridl lsp` and
 `ridl mcp` servers apply lint levels, with no effect on their exit code.
 
-Amended 2026-10-10: decision 1 gained a row for `ridl init` and `ridl new`.
-
 Amended 2026-10-04 (issue driftsys/ridl#708): decision 8, the consequence that
 repeats it, and the ADR-0007 entry in References describe the `0.0.0` version as
 the state when the ADR was written. [ADR-0007](ADR-0007-e1-execution.md)
 decision 14's 2026-09-21 amendment retired the `0.0.0` pin, so each of the three
 now carries an amendment note that states what `--version` prints today.
+
+Amended 2026-10-10: decision 1 gained a row for `ridl init` and `ridl new`.
 
 ## Context
 
@@ -235,17 +235,31 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    **`ridl init` and `ridl new` earned a row on 2026-10-10, when they were added
    and checked** by the tests in `crates/ridl/tests/scaffold_cli.rs` against the
    built `ridl` binary. The 0 cell is `new_creates_a_package_that_checks_clean`
-   and its workspace and `init` variants. The 2 cell is one test per clause:
-   `new_on_an_existing_path_exits_2_and_changes_nothing`,
+   and its workspace and `init` variants. The 2 cell has a test per clause, and
+   each asserts exit 2, an empty stdout, the reason text on stderr and the tree
+   unchanged: an existing target
+   (`new_on_an_existing_path_exits_2_and_changes_nothing`,
+   `new_refuses_an_existing_directory_reached_through_a_parent_component`,
+   `new_refuses_a_dangling_symlink`,
    `init_with_an_existing_manifest_exits_2_and_writes_nothing`,
    `init_with_an_existing_source_file_exits_2_and_writes_nothing`,
    `workspace_with_an_existing_member_file_exits_2_and_writes_nothing`,
-   `init_inside_an_existing_unit_exits_2_and_writes_nothing`,
+   `workspace_with_an_existing_root_manifest_creates_no_member_directory`); a
+   path that is not a directory (`init_refuses_a_missing_directory`,
+   `init_refuses_a_file`, `workspace_with_a_file_at_the_member_path_exits_2`);
+   an illegal or reserved name (`an_illegal_basename_exits_2_and_asks_for_name`,
+   `an_illegal_name_flag_exits_2_and_writes_nothing`,
+   `a_reserved_word_basename_exits_2_and_asks_for_name`,
+   `a_reserved_word_name_flag_exits_2_and_writes_nothing`); and a manifest that
+   would make MANI-013
+   (`init_inside_an_existing_unit_exits_2_and_writes_nothing`,
+   `init_several_levels_below_a_unit_exits_2`,
    `new_inside_an_existing_workspace_exits_2_and_writes_nothing`,
-   `an_illegal_basename_exits_2_and_asks_for_name` and
-   `an_illegal_name_flag_exits_2_and_writes_nothing`; each asserts the tree
-   byte-identical afterwards, or that the directory was not created. The 1
-   column is empty: both commands write files or could not answer.
+   `the_search_for_an_enclosing_unit_does_not_stop_at_a_git_directory`,
+   `the_search_for_an_enclosing_unit_follows_a_symlink`,
+   `init_over_a_directory_that_holds_a_manifest_below_it_exits_2`). The removal
+   of a partly written scaffold after an I/O failure has no test. The 1 column
+   is empty: both commands write files or could not answer.
 
 2. **The clig.dev guidance that applies, quoted rather than paraphrased:**
 

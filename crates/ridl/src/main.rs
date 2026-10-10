@@ -32,6 +32,9 @@
 //! to their library and only wire the transport here, so one installed binary
 //! serves the editor, the agent, and the command line.
 //!
+//! `ridl init` and `ridl new` scaffold a package or a workspace; the work is in
+//! the `scaffold` module.
+//!
 //! `ridl lock` writes a unit's `interfaces.lock` (lock design §5): plain, it
 //! allocates a number to every interface that has none; with `--rename` or
 //! `--retire`, it rewrites one unit's entries in place. It lives here
