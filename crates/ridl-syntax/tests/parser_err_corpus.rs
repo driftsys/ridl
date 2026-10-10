@@ -102,32 +102,55 @@ fn rsdl_err_corpus_is_lossless_reports_errors_and_matches_snapshots() {
 }
 
 /// The bare `= value` init parses only before the timing (ADR-0008
-/// decision 2): an init after a timing, or after an attribute block, is a
-/// parse error, while the same members with the init first parse cleanly.
+/// decision 2): on `signal`, `event` and `fixed`, an init after a timing,
+/// or after an attribute block, is a parse error reported on the `=`,
+/// while the same members with the init first parse cleanly.
 #[test]
 fn ridl_init_value_parses_only_before_the_annotations() {
     let wrap = |member: &str| format!("package p\n\ninterface I {{\n  {member}\n}}\n");
-    for member in [
-        "signal s : integer = 1 @10ms",
-        "signal s : integer = 1 [require true]",
-        "signal s : integer = 1 @10ms [require true]",
-    ] {
-        let parsed = parse(&wrap(member), Profile::Ridl);
-        assert!(
-            parsed.errors().is_empty(),
-            "`{member}` must parse cleanly: {:?}",
-            parsed.errors(),
-        );
+    for kw in ["signal", "event", "fixed"] {
+        for tail in [
+            "= 1 @10ms",
+            "= 1 [require true]",
+            "= 1 @10ms [require true]",
+        ] {
+            let member = format!("{kw} s : Speed {tail}");
+            let parsed = parse(&wrap(&member), Profile::Ridl);
+            assert!(
+                parsed.errors().is_empty(),
+                "`{member}` must parse cleanly: {:?}",
+                parsed.errors(),
+            );
+        }
+        for tail in [
+            "@10ms = 1",
+            "[require true] = 1",
+            "@10ms [require true] = 1",
+        ] {
+            let member = format!("{kw} s : Speed {tail}");
+            let source = wrap(&member);
+            let parsed = parse(&source, Profile::Ridl);
+            let equals = source.find(" = 1").expect("the init in the source") + 1;
+            assert!(
+                parsed
+                    .errors()
+                    .iter()
+                    .any(|error| usize::from(error.range.start()) == equals),
+                "`{member}` must draw an error on its `=`: {:?}",
+                parsed.errors(),
+            );
+        }
     }
-    for member in [
-        "signal s : integer @10ms = 1",
-        "signal s : integer [require true] = 1",
-        "signal s : integer @10ms [require true] = 1",
-    ] {
-        let parsed = parse(&wrap(member), Profile::Ridl);
-        assert!(
-            !parsed.errors().is_empty(),
-            "`{member}` must not parse cleanly",
-        );
-    }
+}
+
+/// `during` is a reserved keyword with no grammar yet: a `during` clause on
+/// an interface member does not parse cleanly.
+#[test]
+fn ridl_during_on_an_interface_member_is_rejected() {
+    let source = "package p\n\ninterface I {\n  signal s : Speed during READY\n}\n";
+    let parsed = parse(source, Profile::Ridl);
+    assert!(
+        !parsed.errors().is_empty(),
+        "`during` must not parse cleanly"
+    );
 }
