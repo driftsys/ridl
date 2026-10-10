@@ -1221,7 +1221,7 @@ fn a_provisional_number_frozen_in_place_is_interface_frozen() {
     );
     assert_eq!(
         crate::heading(Category::InterfaceFrozen),
-        Some("compatible on the wire, changes the catalog hash")
+        Some("compatible on the wire, may change the catalog hash")
     );
     assert_eq!(crate::heading(Category::InterfaceNumberChanged), None);
 }
@@ -2075,8 +2075,9 @@ fn enum_set_def(members: &[(&str, i64)]) -> v2::decl::Kind {
 }
 
 /// A textual reorder of an enum body moves no explicit number, so nothing
-/// moves on the wire, but the catalog hash covers the order of the values: the
-/// change is `EnumReordered` on the container, compatible, with no detail.
+/// moves on the wire. The catalog hash covers the order of the values when an
+/// interface reaches the enum: the change is `EnumReordered` on the container,
+/// compatible, with no detail.
 #[test]
 fn an_enum_pure_reorder_is_enum_reordered() {
     let old = with_decl("Mode", enum_def(&[("OFF", 0), ("ON", 1)]));
@@ -2095,7 +2096,7 @@ fn an_enum_pure_reorder_is_enum_reordered() {
     );
     assert_eq!(
         crate::heading(Category::EnumReordered),
-        Some("compatible on the wire, changes the catalog hash"),
+        Some("compatible on the wire, may change the catalog hash"),
     );
 }
 
@@ -2210,6 +2211,36 @@ fn an_enum_renumber_beside_a_reserved_list_change_keeps_constraint_changed() {
             ("veh.cluster/Mode/OFF", Category::MemberReordered),
             ("veh.cluster/Mode/ON", Category::MemberReordered),
             ("veh.cluster/Mode", Category::ConstraintChanged),
+        ]
+    );
+}
+
+/// Two values that swap their numbers, in an edit that also reorders the
+/// reserved list with no entry changed, report the changed numbers alone: a
+/// reordered reserved list is order only, so it adds no `ConstraintChanged`
+/// on the container.
+#[test]
+fn an_enum_renumber_beside_a_reserved_list_reorder_reports_only_the_values() {
+    let old = with_decl(
+        "Mode",
+        enum_with_reserved(&[("OFF", 0), ("ON", 1)], &[3, 4]),
+    );
+    let new = with_decl(
+        "Mode",
+        enum_with_reserved(&[("OFF", 1), ("ON", 0)], &[4, 3]),
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Breaking);
+    let summary: Vec<_> = report
+        .changes
+        .iter()
+        .map(|change| (change.path.as_str(), change.category))
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            ("veh.cluster/Mode/OFF", Category::MemberReordered),
+            ("veh.cluster/Mode/ON", Category::MemberReordered),
         ]
     );
 }

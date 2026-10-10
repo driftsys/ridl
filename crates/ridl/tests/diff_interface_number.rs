@@ -75,8 +75,8 @@ fn workspace(dir: &TempDir, side: &str, source: &str) -> PathBuf {
 
 /// `ridl lock` freezes the provisional number in place. The old side is the
 /// workspace before the lock, the new side the same workspace after it: the
-/// change is `interface_frozen`, compatible (exit 0), under its own heading,
-/// and not `identical`.
+/// change is `interface_frozen`, compatible (exit 0), under the heading it
+/// shares with `enum_reordered`, and not `identical`.
 #[test]
 fn a_lock_that_freezes_a_provisional_number_is_interface_frozen() {
     let dir = TempDir::new("frozen");
@@ -89,7 +89,7 @@ fn a_lock_that_freezes_a_provisional_number_is_interface_frozen() {
     assert_eq!(code, 0, "a frozen number is compatible, stderr:\n{stderr}");
     assert_eq!(
         stdout,
-        "compatible\ncompatible on the wire, changes the catalog hash:\n  [compatible] interface_frozen veh.cluster/Doors: 1 (provisional) -> 1\n"
+        "compatible\ncompatible on the wire, may change the catalog hash:\n  [compatible] interface_frozen veh.cluster/Doors: 1 (provisional) -> 1\n"
     );
 }
 

@@ -831,6 +831,109 @@ mod tests {
         assert_eq!(hash_of(&p, &fw), before);
     }
 
+    fn enum_value(name: &str, value: i64) -> EnumValue {
+        EnumValue {
+            name: name.to_owned(),
+            value,
+            ..Default::default()
+        }
+    }
+
+    fn reserved_value(value: i64) -> crate::v2::Reserved {
+        crate::v2::Reserved {
+            value: Some(value),
+            ..Default::default()
+        }
+    }
+
+    /// The fixture with an enum `Mode` (values OFF = 0 and ON = 1, reserved
+    /// 3 and 4) and an enum set `Flags` (bits A = 0 and B = 1), each the
+    /// payload of a signal of `I` when `reached`, and declared but not
+    /// reached otherwise.
+    fn enum_fixture(reached: bool) -> (Package, Package) {
+        let (mut p, fw) = fixture();
+        p.decls.push(Decl {
+            name: "Mode".to_owned(),
+            kind: Some(decl::Kind::EnumDef(EnumDef {
+                values: vec![enum_value("OFF", 0), enum_value("ON", 1)],
+                reserved: vec![reserved_value(3), reserved_value(4)],
+            })),
+            ..Default::default()
+        });
+        p.decls.push(Decl {
+            name: "Flags".to_owned(),
+            kind: Some(decl::Kind::EnumSetDef(EnumSetDef {
+                bits: vec![enum_value("A", 0), enum_value("B", 1)],
+                ..Default::default()
+            })),
+            ..Default::default()
+        });
+        if reached {
+            p.interfaces[0].interactions.push(signal("mode", "Mode"));
+            p.interfaces[0].interactions.push(signal("flags", "Flags"));
+        }
+        (p, fw)
+    }
+
+    fn enum_def(p: &mut Package) -> &mut EnumDef {
+        match p
+            .decls
+            .iter_mut()
+            .find(|d| d.name == "Mode")
+            .and_then(|d| d.kind.as_mut())
+        {
+            Some(decl::Kind::EnumDef(def)) => def,
+            _ => panic!("Mode is not an enum"),
+        }
+    }
+
+    fn enum_set_def(p: &mut Package) -> &mut EnumSetDef {
+        match p
+            .decls
+            .iter_mut()
+            .find(|d| d.name == "Flags")
+            .and_then(|d| d.kind.as_mut())
+        {
+            Some(decl::Kind::EnumSetDef(def)) => def,
+            _ => panic!("Flags is not an enum set"),
+        }
+    }
+
+    /// The hash covers the order of an enum's values, of its reserved list
+    /// and of an enum set's bits, for an enum or enum set an interface
+    /// reaches. `ridl diff` reports such a reorder as `enum_reordered`,
+    /// compatible on the wire, and relies on this test for its statement
+    /// that the hash changes.
+    #[test]
+    fn reordering_a_reached_enum_body_moves_the_hash() {
+        let (p, fw) = enum_fixture(true);
+        let before = hash_of(&p, &fw);
+
+        let mut values = p.clone();
+        enum_def(&mut values).values.reverse();
+        assert_ne!(hash_of(&values, &fw), before, "values reordered");
+
+        let mut reserved = p.clone();
+        enum_def(&mut reserved).reserved.reverse();
+        assert_ne!(hash_of(&reserved, &fw), before, "reserved list reordered");
+
+        let mut bits = p.clone();
+        enum_set_def(&mut bits).bits.reverse();
+        assert_ne!(hash_of(&bits, &fw), before, "bits reordered");
+    }
+
+    /// An enum and an enum set that no interface reaches are outside the
+    /// reduced unit, so reordering their bodies leaves the hash unchanged.
+    #[test]
+    fn reordering_an_unreached_enum_body_does_not_move_the_hash() {
+        let (mut p, fw) = enum_fixture(false);
+        let before = hash_of(&p, &fw);
+        enum_def(&mut p).values.reverse();
+        enum_def(&mut p).reserved.reverse();
+        enum_set_def(&mut p).bits.reverse();
+        assert_eq!(hash_of(&p, &fw), before);
+    }
+
     #[test]
     fn a_reached_foreign_type_moves_the_hash() {
         let (p, mut fw) = fixture();

@@ -958,18 +958,21 @@ enum GearPosition {
 **Identity is the value, not the position.** An `enum` value's wire identity is
 the explicit number it declares, and nothing about it depends on where the value
 sits in the body. Reordering the members of an `enum` body therefore changes
-nothing on any wire and is not a change. This is the opposite of a struct field
-or a union arm, whose identity _is_ its declaration order (§7.4), and it is why
-an `enum` value may be inserted in the middle of a body while a struct field may
-not.
+nothing on any wire; `ridl diff` reports it as `enum_reordered`, compatible.
+This is the opposite of a struct field or a union arm, whose identity _is_ its
+declaration order (§7.4), and it is why an `enum` value may be inserted in the
+middle of a body while a struct field may not.
 
 > **As built.** `ridl diff` compares `enum` values and `enumset` bits by the
 > number each declares. A member whose number changed is reported as
 > `member_reordered` with its old and new number, breaking. A body whose
 > difference is only order — its values or bits reordered with no number
 > changed, or an `enum`'s `reserved` list reordered with no entry changed — is
-> reported as `enum_reordered`, compatible: nothing moves on the wire, but the
-> catalog hash covers the order of the values and bits.
+> reported as `enum_reordered`, compatible: nothing moves on the wire. The
+> catalog hash covers only the declarations an interface reaches; when an
+> interface reaches the `enum` or `enumset`, the order of its values or bits,
+> and of an `enum`'s `reserved` list, is part of the hash, so the hash changes
+> then.
 
 ---
 
@@ -980,7 +983,8 @@ width inferred from the highest bit position.
 
 An `enumset` bit's identity is the bit position it declares, not its position in
 the body, so reordering the members of an `enumset` body changes nothing on any
-wire and is not a change — the same rule as §8's, for the same reason.
+wire, and `ridl diff` reports it as `enum_reordered`, compatible — the same rule
+as §8's, for the same reason.
 
 ### 9.1 Standalone Form
 

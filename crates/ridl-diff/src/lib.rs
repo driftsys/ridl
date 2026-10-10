@@ -146,8 +146,9 @@ declare_categories! {
         /// number is the same on both sides and whose provisional flag went
         /// from true to false: the number `ridl lock` froze in place. Nothing
         /// moves on the wire, but the catalog hash covers the number and the
-        /// flag, so the text report lists it under the heading "compatible on
-        /// the wire, changes the catalog hash" ([`heading`]). A number 0 on
+        /// flag, so the hash changes and the text report lists it under the
+        /// heading "compatible on the wire, may change the catalog hash"
+        /// ([`heading`]). A number 0 on
         /// either side, from a snapshot written before the lock existed, is
         /// not compared. The path carries the name; the detail carries the
         /// old and the new number, each marked when it is provisional.
@@ -178,9 +179,11 @@ declare_categories! {
         /// values or bits reordered with no number changed, the enum's
         /// `reserved` list reordered with no entry added, removed or changed,
         /// or both. A value or bit takes its identity from the explicit number
-        /// it declares (typl §8, §9), so nothing moves on the wire, but the
-        /// catalog hash covers the order of the values and bits, so the text
-        /// report lists it under the heading that
+        /// it declares (typl §8, §9), so nothing moves on the wire. The catalog
+        /// hash covers only the declarations an interface reaches; when an
+        /// interface reaches the enum or enum set, the order of its values or
+        /// bits, and of an enum's reserved list, is part of the hash, so the
+        /// hash changes then. The text report lists it under the heading that
         /// [`Category::InterfaceFrozen`] shares ([`heading`]). The path is the
         /// container's; there is no detail.
         EnumReordered,
@@ -566,10 +569,12 @@ pub fn category_word(category: Category) -> &'static str {
 /// consumer sees in its source — an interface renamed on its number changes
 /// the generated identity-table names in both wire backends, and an interface
 /// leaving a service's set stops the `service.member` addresses of that
-/// interface resolving under the service. "compatible on the wire, changes
-/// the catalog hash" is for a change that exits 0 but changes the catalog hash,
-/// which a generated face compares with its peer's — a number `ridl lock`
-/// froze in place, and an enum or enum-set body reordered. Each such
+/// interface resolving under the service. "compatible on the wire, may change
+/// the catalog hash" is for a change that exits 0 but can change the catalog
+/// hash, which a generated face compares with its peer's — a number `ridl
+/// lock` froze in place, which always changes it, and an enum or enum-set body
+/// reordered, which changes it when an interface reaches the enum or enum set
+/// (the hash covers only the declarations an interface reaches). Each such
 /// category's `--explain` text states its own consequence; the JSON report
 /// carries the category word and no heading field.
 ///
@@ -584,7 +589,7 @@ pub fn heading(category: Category) -> Option<&'static str> {
             Some("compatible on the wire, visible in source")
         }
         Category::InterfaceFrozen | Category::EnumReordered => {
-            Some("compatible on the wire, changes the catalog hash")
+            Some("compatible on the wire, may change the catalog hash")
         }
         Category::DeclAdded
         | Category::DeclRemoved

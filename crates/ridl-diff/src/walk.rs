@@ -136,8 +136,9 @@ fn diff_decl(pkg: &str, name: &str, old: &v2::Decl, new: &v2::Decl, changes: &mu
         // An enum value or enum-set bit takes its identity from the explicit
         // number it declares (typl §8, §9), so a body that differs only in
         // order — the live members, and for an enum the reserved list — moves
-        // nothing on any wire. It still changes the catalog hash, which covers
-        // that order, so it is reported as `EnumReordered` on the container.
+        // nothing on any wire. The catalog hash covers that order when an
+        // interface reaches the enum, so the hash changes then; the change is
+        // reported as `EnumReordered` on the container.
         (Some(Kind::EnumDef(a)), Some(Kind::EnumDef(b))) => {
             if a != b {
                 let (old_sorted, new_sorted) = (enum_ignoring_order(a), enum_ignoring_order(b));

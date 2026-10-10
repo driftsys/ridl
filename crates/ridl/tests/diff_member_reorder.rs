@@ -321,9 +321,9 @@ fn an_enum_reorder_with_a_changed_value_reports_the_value_alone() {
 }
 
 /// A textual reorder of an enum with every value unchanged moves no number,
-/// so it changes nothing on any wire (typl §8), but the catalog hash covers
-/// the order of the values: the report is `enum_reordered` on the container,
-/// compatible, with exit 0.
+/// so it changes nothing on any wire (typl §8). The catalog hash covers the
+/// order of the values when an interface reaches the enum: the report is
+/// `enum_reordered` on the container, compatible, with exit 0.
 #[test]
 fn an_enum_reorder_with_unchanged_values_is_enum_reordered() {
     let dir = TempDir::new("enum-reorder");
@@ -339,7 +339,7 @@ fn an_enum_reorder_with_unchanged_values_is_enum_reordered() {
     );
     assert_eq!(
         stdout,
-        "compatible\ncompatible on the wire, changes the catalog hash:\n  [compatible] enum_reordered veh.cluster/GearPosition\n",
+        "compatible\ncompatible on the wire, may change the catalog hash:\n  [compatible] enum_reordered veh.cluster/GearPosition\n",
         "the reorder is reported on the container under its heading:\n{out}",
     );
 }
@@ -484,9 +484,10 @@ fn a_moved_struct_tombstone_is_not_identical() {
 }
 
 /// A reordered reserved list with every value and retired number unchanged
-/// moves nothing on the wire, but the catalog hash covers the order of the
-/// body, so the report is `enum_reordered` on the container, compatible, with
-/// exit 0 — never `identical`.
+/// moves nothing on the wire. The catalog hash covers the order of the
+/// reserved list when an interface reaches the enum, so the report is
+/// `enum_reordered` on the container, compatible, with exit 0 — never
+/// `identical`.
 #[test]
 fn a_reordered_enum_reserved_list_is_enum_reordered() {
     let dir = TempDir::new("enum-reserved-reordered");
@@ -915,9 +916,10 @@ enumset WarningFlags {
 ";
 
 /// An enum-set bit's identity is the bit position it declares (typl §9), so a
-/// textual reorder with every bit unchanged moves nothing on the wire, but the
-/// catalog hash covers the order of the bits: the report is `enum_reordered`
-/// on the container, compatible, with exit 0.
+/// textual reorder with every bit unchanged moves nothing on the wire. The
+/// catalog hash covers the order of the bits when an interface reaches the
+/// enum set: the report is `enum_reordered` on the container, compatible,
+/// with exit 0.
 #[test]
 fn an_enum_set_reorder_with_unchanged_bits_is_enum_reordered() {
     let dir = TempDir::new("enumset-reorder");
@@ -933,7 +935,7 @@ fn an_enum_set_reorder_with_unchanged_bits_is_enum_reordered() {
     );
     assert_eq!(
         stdout,
-        "compatible\ncompatible on the wire, changes the catalog hash:\n  [compatible] enum_reordered veh.cluster/WarningFlags\n",
+        "compatible\ncompatible on the wire, may change the catalog hash:\n  [compatible] enum_reordered veh.cluster/WarningFlags\n",
         "the reorder is reported on the container under its heading:\n{out}",
     );
 }

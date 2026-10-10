@@ -204,7 +204,7 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-ir/src/catalog_hash.rs",
-        lines: 39,
+        lines: 41,
         why: "the reduced unit's own `interfaces` field, which the hash \
               fills from a `shapes()` walk over every package of the unit, \
               sorts and blanks; the rest are test fixtures that build or \

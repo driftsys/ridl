@@ -139,9 +139,10 @@ common cases:
   scalar constraint widened (`constraint_changed`); a signal or event bound
   tightened (`timing_changed`); an interface joining or leaving a service's list
   (`service_interface_added`, `service_interface_removed`).
-- **Compatible, and the hash changes**: an enum body reordered with no number
-  changed (`enum_reordered`), and a provisional interface number frozen by
-  `ridl lock` (`interface_frozen`).
+- **Compatible, and the hash may change**: an enum body reordered with no
+  number changed (`enum_reordered`), which changes the hash when an interface
+  reaches the enum, and a provisional interface number frozen by `ridl lock`
+  (`interface_frozen`), which always changes it.
 - **Breaking**: an interaction inserted, removed without a tombstone or
   reordered (`interaction_inserted`, `interaction_removed`,
   `interaction_reordered`); a payload, a parameter list or a return shape

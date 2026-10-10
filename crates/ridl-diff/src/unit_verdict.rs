@@ -371,8 +371,8 @@ mod tests {
         package("b", vec![mode], Vec::new())
     }
 
-    // A textual reorder of an enum's values changes the catalog hash, which
-    // covers their order, and moves nothing on the wire, so the unit's
+    // A textual reorder of an enum's values changes the catalog hash when an
+    // interface reaches the enum, and moves nothing on the wire, so the unit's
     // verdict is compatible and `write_catalog_histories` keeps the old hash.
     #[test]
     fn an_enum_value_reorder_is_compatible_for_its_unit() {

@@ -1407,10 +1407,11 @@ An interface matched by name across a provisional old side has its number and
 its provisional flag compared, because the catalog hash covers both. When the
 number is the same on both sides and only the new side is frozen — the number
 `ridl lock` froze in place — the change is `interface_frozen`: compatible,
-because the routing key did not move, and listed under a heading of its own,
-because the catalog hash changes and a generated face refuses a port whose
-catalog hash is another one. With `old` a unit before `ridl lock` and `new`
-the same unit after it:
+because the routing key did not move, and listed under the heading
+"compatible on the wire, may change the catalog hash", which it shares with
+`enum_reordered`, because the catalog hash changes and a generated face refuses
+a port whose catalog hash is another one. With `old` a unit before `ridl lock`
+and `new` the same unit after it:
 
 ```sh
 ridl diff old new
@@ -1418,7 +1419,7 @@ ridl diff old new
 
 ```text
 compatible
-compatible on the wire, changes the catalog hash:
+compatible on the wire, may change the catalog hash:
   [compatible] interface_frozen veh.cluster/Doors: 1 (provisional) -> 1
 ```
 
@@ -1445,10 +1446,12 @@ between two builds, or in a reversed comparison whose old side is a build.
 An enum value or an enum-set bit takes its identity from the explicit number
 it declares, so a body whose difference is only order — its values or bits
 reordered with no number changed, an enum's `reserved` list reordered with no
-entry changed, or both — moves nothing on the wire. The catalog hash covers
-the order of the values and bits, so the change is `enum_reordered`,
-compatible, on the container's path and under the same heading. With the
-values of `enum GearPosition` reordered:
+entry changed, or both — moves nothing on the wire. The change is
+`enum_reordered`, compatible, on the container's path and under the same
+heading. The catalog hash covers only the declarations an interface reaches:
+when an interface reaches the enum or enum set, the order of its values or
+bits, and of an enum's `reserved` list, is part of the hash, so the hash
+changes then. With the values of `enum GearPosition` reordered:
 
 ```sh
 ridl diff old.ridl new.ridl
@@ -1456,7 +1459,7 @@ ridl diff old.ridl new.ridl
 
 ```text
 compatible
-compatible on the wire, changes the catalog hash:
+compatible on the wire, may change the catalog hash:
   [compatible] enum_reordered veh.cluster/GearPosition
 ```
 

@@ -113,8 +113,9 @@ pub(crate) fn classify_in(
 
         // An enum value or enum-set bit takes its identity from its explicit
         // number (typl §8, §9), so a body that differs only in order moves
-        // nothing on the wire. The catalog hash covers that order, which the
-        // text report's heading says of it.
+        // nothing on the wire. The catalog hash covers that order when an
+        // interface reaches the enum, which the text report's heading says of
+        // it.
         Category::EnumReordered => Verdict::Compatible,
 
         // A service's list is a set of interface references (ADR-0015
@@ -1172,7 +1173,8 @@ pub fn explain(category: Category) -> &'static str {
             "              catalog hash is another one (ADR-0023 decision 8): a peer\n",
             "              built before the lock and a peer built after it refuse each\n",
             "              other. This is why the text report lists it under the\n",
-            "              heading \"compatible on the wire, changes the catalog hash\".\n",
+            "              heading \"compatible on the wire, may change the catalog\n",
+            "              hash\".\n",
             "              The detail carries the number before and after, marked\n",
             "              (provisional) on the old side\n",
             "  note        a baseline never holds a provisional number (`ridl baseline`\n",
@@ -1225,12 +1227,15 @@ pub fn explain(category: Category) -> &'static str {
             "reordered with no entry added, removed or changed, or both.\n",
             "  compatible  always — a value or bit takes its identity from the\n",
             "              explicit number it declares (typl 8, 9), so nothing moves\n",
-            "              on the wire. The catalog hash changes, because it covers\n",
-            "              the order of the values and bits, and a generated face\n",
-            "              refuses a port whose catalog hash is another one (ADR-0023\n",
-            "              decision 8). This is why the text report lists it under the\n",
-            "              heading \"compatible on the wire, changes the catalog hash\".\n",
-            "              The path is the container's; there is no detail\n",
+            "              on the wire. The catalog hash covers only the declarations\n",
+            "              an interface reaches. When an interface reaches the enum or\n",
+            "              enum set, the order of its values or bits, and of an enum's\n",
+            "              reserved list, is part of the hash, so the hash changes\n",
+            "              then, and a generated face refuses a port whose catalog hash\n",
+            "              is another one (ADR-0023 decision 8). This is why the text\n",
+            "              report lists it under the heading \"compatible on the wire,\n",
+            "              may change the catalog hash\". The path is the container's;\n",
+            "              there is no detail\n",
             "  note        a value or bit whose number changed is member_reordered,\n",
             "              breaking, not enum_reordered"
         ),
