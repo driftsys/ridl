@@ -105,9 +105,5 @@ fn a_query_range_with_a_fractional_bound_is_form_102_alone() {
         type Speed: integer [0..300]\n\
         interface I {\n  query q(): Speed @[5s..10.5ms]\n}\n";
     let run = ridlc::check_source("fraction.ridl", source);
-    let all = codes(&run);
-    assert!(all.contains(&"FORM-102"), "{:?}", run.diagnostics);
-    for forbidden in ["RIDL-101", "RIDL-108"] {
-        assert!(!all.contains(&forbidden), "{:?}", run.diagnostics);
-    }
+    assert_eq!(codes(&run), ["FORM-102"], "{:?}", run.diagnostics);
 }
