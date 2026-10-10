@@ -211,6 +211,22 @@ started in `veh/cluster` finds the root manifest that lists `veh/cluster`, so
 the member still sees `veh.common`, and the root's settings apply to it. The
 check then reports only the diagnostics of files in `veh/cluster`.
 
+To start a project of your own, `ridl new` scaffolds one. Run it outside the
+tutorial workspace, for example from the directory that holds `tutorial/`, because it refuses a directory
+that sits inside an existing unit. It creates the directory and writes a
+`ridl.toml` and a small `.ridl` file that already checks:
+
+```sh
+ridl new demo
+ridl check demo
+```
+
+`ridl init` does the same inside a directory that exists, and `--workspace`
+writes a workspace root with one member instead of a standalone package. Both
+refuse, and write nothing, when a file they would write exists or when the
+directory sits inside, or above, another unit. The [CLI reference](cli-reference.md#ridl-init)
+lists the flags and the refusals.
+
 ## Your first vocabulary
 
 Create `veh/common/types.ridl`:

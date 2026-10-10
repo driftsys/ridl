@@ -56,7 +56,8 @@ other entry below is Accepted.
   apply lint levels, with no effect on their exit code. Amended 2026-10-04
   (#708): decision 8 and the two passages that repeat it, which gave the version
   as `0.0.0`, now carry an amendment note that states what `--version` prints as
-  built.
+  built. Amended 2026-10-10: decision 1 gained a row for `ridl init` and
+  `ridl new`.
 
 - **ADR-0011 — The provisioned-constant keyword.** ridl's `final` renamed to
   `fixed`, so both ridl and uxdl spell one concept one way; `final` removed from

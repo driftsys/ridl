@@ -283,6 +283,35 @@ pub fn load_workspace_with(
     })
 }
 
+/// The first `ridl.toml` found in a subdirectory of `dir`, searched the way
+/// the loader searches a unit's tree for MANI-013: only real directories are
+/// entered (a symbolic link is not followed), a directory whose name starts
+/// with a dot is skipped, a manifest counts when `subdirectory/ridl.toml` is a
+/// file, and the search does not enter a directory that holds one. The
+/// manifest in `dir` itself is not looked at. Used by `ridl init` to refuse a
+/// package directory that already holds a nested manifest.
+pub fn find_nested_manifest(dir: &Path) -> io::Result<Option<PathBuf>> {
+    let mut pending = vec![dir.to_path_buf()];
+    while let Some(next) = pending.pop() {
+        for entry in fs::read_dir(&next)? {
+            let entry = entry?;
+            let path = entry.path();
+            if !path.is_dir() || entry.file_type()?.is_symlink() {
+                continue;
+            }
+            if entry.file_name().to_string_lossy().starts_with('.') {
+                continue;
+            }
+            let manifest = path.join("ridl.toml");
+            if manifest.is_file() {
+                return Ok(Some(manifest));
+            }
+            pending.push(path);
+        }
+    }
+    Ok(None)
+}
+
 /// The directory [`load_workspace`] loads from for an entry at or below
 /// `dir` (ADR-0002 §4). It starts at the nearest directory at or above `dir`
 /// that contains a `ridl.toml`. When that manifest is a `[package]`, the walk
