@@ -297,12 +297,15 @@ having no slot layout.
 
 ### Lane H — open items after release 0.7.0
 
-Driver: [`2026-10-09-lane-h-driver.md`](2026-10-09-lane-h-driver.md). Added
-2026-10-09. Four items left open when the book user chapters landed: the emitter
-lints of driftsys/ridl#782, the conflict between `ridl diff`'s compatible
-verdict and the catalog check at `attach` (frame specification §6.1), the book
-chapters "Writing a port" and "Evolving an interface", and an issue for
+Driver: [`2026-10-09-lane-h-driver.md`](../archive/2026-10-09-lane-h-driver.md).
+Added 2026-10-09. Four items left open when the book user chapters landed: the
+emitter lints of driftsys/ridl#782, the conflict between `ridl diff`'s
+compatible verdict and the catalog check at `attach` (frame specification §6.1),
+the book chapters "Writing a port" and "Evolving an interface", and an issue for
 `cargo publish --workspace`. Stages H0 to H5 are in the driver.
+
+**Closed 2026-10-10**, stages H0 to H5 landed. The driver, the catalog
+compatibility design and its plan are archived.
 
 ## 5. Gates
 

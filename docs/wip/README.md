@@ -42,7 +42,11 @@ generated-file marker and header design and plan
 (`2026-10-06-generated-file-headers-{design,plan}.md`) were archived on
 2026-10-07, once #746 landed; ADR-0018, ADR-0020 and
 [`../design/codegen-plugins.md`](../design/codegen-plugins.md) are their durable
-records.
+records. The catalog compatibility design and plan
+(`2026-10-09-catalog-compat-{design,plan}.md`) and the lane H driver were
+archived on 2026-10-10, once #810 landed; ADR-0014 decision 15 and
+[`../design/catalog-descriptor.md`](../design/catalog-descriptor.md) are their
+durable records.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
@@ -223,13 +227,6 @@ records.
   documentation (doc lints, language server, rules in generated facade docs),
   split into four specs over a shared lint foundation. Scope only; each spec
   starts its own design session from it.
-- **2026-10-09-catalog-compat-design.md** and
-  **2026-10-09-catalog-compat-plan.md** — the compatible catalogs list (option A
-  of the catalog hash conflict): `ridl baseline` records the chain of hashes
-  `ridl diff` judged compatible, `ridl build` emits it in the descriptor and the
-  codegen model, and a provider accepts an `attach` naming one of them. Amends
-  ADR-0014 decision 15 and frame specification §6.1, §6.4 and §12; the plan is
-  seven tasks. Gardened by lane H stage H5 once the plan lands.
 
 ridl-boundary-model-review.md, superseded by ADR-0012, is archived too — see
 [`../archive/README.md`](../archive/README.md). So is

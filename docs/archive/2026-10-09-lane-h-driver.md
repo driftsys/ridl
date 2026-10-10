@@ -145,3 +145,95 @@ Each ruling: what was decided — why — what it costs if wrong.
   hand-written list stays one release longer.
 - **R-3** H5 waits for H3 — the book describes the system as built — if wrong,
   the evolution chapter lands later than it could have.
+- **R-4** In H2, the `ridl` facade reads the baseline and computes the list of
+  compatible earlier hashes, then passes the list to `ridlc`. `ridlc` stays a
+  pure source-to-IR function — ADR-0008 decisions 9 and 14 keep baseline reads
+  outside the compiler, as its tool-qualification boundary — if wrong, the build
+  options carry one input field more than needed.
+- **R-5** In H1, the corpus crate's clippy run rewrites the crate's `allow` to
+  `expect` as the cabin run does, when both lints fire on the corpus crate;
+  otherwise it keeps `allow` and records a deferred Minor — the two runs then
+  check the same thing — if wrong, a stale `expect` fails `just demo` until the
+  emitter stops emitting it.
+- **R-6** In H2, fix both pass 2 Minors in the pull request — they were one link
+  and one sentence — if wrong, nothing; the fix was small.
+- **H2's own rulings** R-H2-1 to R-H2-13 are in the Rulings section of
+  `2026-10-09-catalog-compat-design.md` (merged in #785, 6db0eee7). R-H2-14 was
+  withdrawn and replaced by R-4. H3 is tracked on driftsys/ridl#787;
+  driftsys/ridl#786 records `ridlc`'s existing dependency on `ridl-diff`.
+- **H4's rulings** (merged in #790, a265dff7): the chapter does not cover an
+  "Appendix B", because the frame specification has none (Appendix B is "Codegen
+  Targets" in the ridl reference) — if wrong, one section to add; the Factory
+  skeleton is a `rust,ignore` fence with a link to the loopback test, because
+  `just book-check` copies only `docs/` and `examples/` — if wrong, the example
+  is not compile-checked; the TOML example keeps the `0.7` pins — if wrong, it
+  goes stale at the next release, tracked on driftsys/ridl#796; "the previous
+  chapter" in `catalog-descriptor.md` now names its chapter — no cost.
+- **R-7** On #794 pass 1, fix the Important and seven Minors in the pull
+  request, including the `unnecessary_cast` on the integer step check, which
+  predates the change but is the same class as #782. Park three: `-A dead_code`
+  on the whole corpus crate (the brief asked for it), no lint of the
+  `--no-default-features` path, and `Operand::receiver` duplicating state (a
+  design preference) — the parked three are cheap to revisit later — if wrong,
+  one more small pull request.
+- **R-8** Start H3 before H1 merges. H1 changes `crates/ridl-backend-rust` and
+  the `corpus__rust` snapshots; H3's plan changes neither, so the overlap is at
+  most a rebase — if wrong, H3 regenerates snapshots after H1 merges.
+- **R-9** On #794 pass 2, fix the Important (the integer step test let a mutant
+  that casts literals survive) and the Minor (an assertion broader than the
+  property) in the pull request, with a scoped re-review — two passes is the cap
+  — if wrong, one more small pull request.
+- **R-10** On #794's quick pass, defer two Minors about the integer step check
+  (a no-cast assertion that names only the fixture's literals, and an unpinned
+  `__step <= 0` guard) — typl rejects `step` on an integer type (TYPL-105), so
+  no source reaches that path — if wrong, a later change that makes the path
+  reachable must add the tests.
+- **R-11** In H3 Task 2, the `.catalogs` parser is strict: it drops the per-line
+  `trim`, so a line with surrounding whitespace or a CRLF ending is refused —
+  the design says each line is exactly 64 lowercase hex characters and the
+  toolchain writes the file — if wrong, a file edited by hand on Windows is
+  refused until it is rewritten.
+- **H1 outcome:** merged as #794 (0903f0bf), closing #782; the deferred Minors
+  are on driftsys/ridl#798.
+- **R-12** In H3, the `shape_walk` xtask test that Task 1 broke is fixed in its
+  own reviewed commit before Task 4, and every later implementer and task review
+  runs the whole workspace's tests — Task 1's implementer and reviewer ran only
+  the crate's tests, and the failure passed both — if wrong, the cost is the
+  longer test run per task.
+- **R-13** In H3, a test pins that the `compatible` list does not feed the
+  catalog hash: one catalog built with an empty list and with a non-empty list
+  has the same hash — otherwise recording an earlier hash would change the
+  current one — if wrong, nothing; the test only asserts the design.
+- **R-14** In H3, `ridl baseline` orders its two moves (the snapshots and the
+  history files) so that an interrupted publication can only drop an earlier
+  hash, never carry one past a breaking change — dropping refuses an older
+  consumer, which is safe; carrying lets an incompatible consumer attach — if no
+  order achieves it, the residual risk goes to a follow-up issue.
+- **R-15** In H3, `ridl build` reads a unit's history only when the baseline
+  holds a package of that unit, the same guard `ridl baseline` applies — a stray
+  history file would otherwise list hashes no published snapshot backs — if
+  wrong, nothing; the guard only drops hashes.
+- **R-16** H3's final review found the branch ready. Two trivial fixes and the
+  transitive-reach test go into the pull request. A residual risk (a partially
+  hand-edited baseline can carry hashes past a breaking change) does not block
+  the merge and is filed as driftsys/ridl#808, with a hardening option that is a
+  design decision — if wrong, a hand-edited baseline can let an incompatible
+  consumer attach until #808 lands.
+- **R-17** When a unit's current catalog hash equals the head of its published
+  history, the chain is carried whatever the unit verdict — the catalog did not
+  change, so every listed hash stays compatible — if wrong, a change that
+  `unit_verdict` calls breaking but that leaves the hash equal keeps the chain.
+- **R-18** (amends R-11) The history parser accepts exactly one trailing `\r`
+  per line, so a file checked out with git's autocrlf still parses; any other
+  padding is still refused — if wrong, nothing; a CR carries no meaning here.
+- **R-19** A build with any error diagnostic, RSDL-7xx included, writes no
+  compatible list; the prose says so — an empty list is the safe direction — if
+  wrong, a build that writes artifacts despite an RSDL-7xx error lists nothing.
+- **#810 pass 1 outcome:** six Important findings fixed in the pull request; the
+  cost and structure Minors are on driftsys/ridl#811.
+- **R-20** R-17 changes ADR-0014 decision 15 and frame specification §6.1, so
+  #810 carries a dated amendment of both, and three tests pass 2 found missing —
+  a decision that changes is recorded in its record — if wrong, nothing.
+
+Lane H closed 2026-10-10: H1 #794, H2 #785, H3 #810, H4 #790, H5 #812;
+follow-ups #796, #798, #808, #811.

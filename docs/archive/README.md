@@ -520,3 +520,11 @@ provenance. Nothing here is normative — the current references live in
   a test harness: the corpus codegen snapshots are lowered over the scope
   `ridl build` uses. Two items of the issue were left open on the issue by
   decision. Its other decisions are implementation choices.
+- **2026-10-09-catalog-compat-design.md**, **2026-10-09-catalog-compat-plan.md**
+  and **2026-10-09-lane-h-driver.md** — the compatible catalogs list
+  (driftsys/ridl#787) and the lane H driver. The design and the plan are
+  archived verbatim; the driver is archived with the lane's rulings and closing
+  line added. The as-built behaviour is in
+  [the catalog descriptor design record](../design/catalog-descriptor.md),
+  [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15, and the book
+  chapter "Evolving an interface".
