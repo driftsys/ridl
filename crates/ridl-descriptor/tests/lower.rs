@@ -29,7 +29,8 @@ fn the_compatible_catalogs_are_written_in_order() {
         name: "u".to_owned(),
         ..Default::default()
     };
-    let bytes = lower(unit_of(&package), &[&package], &[[1; 32], [2; 32]]).unwrap();
+    // A descending list, so sorting it would fail the test.
+    let bytes = lower(unit_of(&package), &[&package], &[[2; 32], [1; 32]]).unwrap();
     let catalog = verify(&bytes).unwrap();
     let listed: Vec<Vec<u8>> = catalog
         .compatible()
@@ -38,7 +39,7 @@ fn the_compatible_catalogs_are_written_in_order() {
         .iter()
         .map(|entry| entry.unwrap().hash().unwrap().to_vec())
         .collect();
-    assert_eq!(listed, vec![vec![1; 32], vec![2; 32]]);
+    assert_eq!(listed, vec![vec![2; 32], vec![1; 32]]);
 }
 
 #[test]

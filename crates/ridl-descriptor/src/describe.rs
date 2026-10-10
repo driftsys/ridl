@@ -283,14 +283,15 @@ mod tests {
             toolchain: "0.0.0".to_owned(),
             interfaces: vec![],
             retired: vec![],
+            // A descending list, so sorting it would fail the test.
             compatible: Some(vec![
-                EarlierCatalog { hash: vec![1, 1] },
                 EarlierCatalog { hash: vec![2, 2] },
+                EarlierCatalog { hash: vec![1, 1] },
             ]),
         };
         let bytes = crate::finish(&catalog);
         let json = to_json(verify(&bytes).unwrap()).unwrap();
-        assert_eq!(json["compatible"], serde_json::json!([[1, 1], [2, 2]]));
+        assert_eq!(json["compatible"], serde_json::json!([[2, 2], [1, 1]]));
     }
 
     /// Every value of each enum the view renders, against the member name

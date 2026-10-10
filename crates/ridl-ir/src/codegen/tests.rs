@@ -2990,3 +2990,19 @@ fn request_from_json_rejects_a_field_written_twice() {
     let twice = json.replacen("{", "{\"artifactBase\": \"b\",", 1);
     super::request_from_json(&twice).expect_err("a duplicate field is an error");
 }
+
+/// `Catalog.compatible` is field 4 on the wire: the binary encoding of one
+/// one-byte entry is the tag of field 4 with the length-delimited wire type
+/// (`4 << 3 | 2`), the length, then the byte. The JSON and text encodings
+/// use the field's name, so only this test reads its number.
+#[test]
+fn the_compatible_list_is_field_four_on_the_wire() {
+    let catalog = v1::Catalog {
+        compatible: vec![vec![0xab]],
+        ..Default::default()
+    };
+    assert_eq!(
+        prost::Message::encode_to_vec(&catalog),
+        vec![0x22, 0x01, 0xab]
+    );
+}

@@ -58,7 +58,10 @@ impl From<ZeroNumber> for LowerError {
 /// package named twice is read once. The descriptor is named `unit`; its
 /// interfaces are every shape of the unit's packages under the shape's
 /// catalog name, in (number, name) order; its `retired` list is the unit's
-/// (`ridl_ir::v2::unit_retired`).
+/// (`ridl_ir::v2::unit_retired`). Its `compatible` list is `compatible`,
+/// written in the order given: the catalog hashes of the earlier catalogs
+/// this one is compatible with. The list is not hashed, so it does not
+/// change the descriptor's `hash`.
 pub fn lower(
     unit: &str,
     packages: &[&Package],
