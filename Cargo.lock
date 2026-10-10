@@ -2234,6 +2234,7 @@ dependencies = [
  "clap",
  "insta",
  "pulldown-cmark",
+ "regex",
  "ridl-backend-flatbuffers",
  "ridl-backend-proto",
  "ridl-backend-rust",

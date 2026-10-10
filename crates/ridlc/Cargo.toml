@@ -27,5 +27,7 @@ serde_json.workspace = true
 insta = { workspace = true, features = ["glob"] }
 # `cli_reference.rs` reads the book's fences and tables.
 pulldown-cmark.workspace = true
+# `prose_version_pins.rs` applies the `[[version_files]]` patterns of `.git-std.toml`.
+regex.workspace = true
 tempfile = "3.15.0"
 toml.workspace = true
