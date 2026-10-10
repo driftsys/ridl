@@ -5963,13 +5963,14 @@ fn regex_body(raw: &str) -> &str {
 /// verdict is the one the crate would give again. The record keeps the
 /// verdict and not the compiled regex, and it is emptied when it reaches
 /// [`REGEX_CRATE_VERDICTS_BOUND`] entries, so a long-running process cannot
-/// grow it without limit.
+/// grow its entry count without limit.
 static REGEX_CRATE_VERDICTS: LazyLock<Mutex<HashMap<String, Option<String>>>> =
     LazyLock::new(Mutex::default);
 
 /// The number of verdicts [`REGEX_CRATE_VERDICTS`] holds before it is
-/// emptied: more patterns than a workspace declares, and small enough that
-/// the pattern texts and reasons it holds stay under a few hundred kilobytes.
+/// emptied: more patterns than a workspace declares. It caps the number of
+/// entries and not their size: the pattern text of an entry has no length
+/// limit here, so the record has no fixed byte bound.
 const REGEX_CRATE_VERDICTS_BOUND: usize = 1024;
 
 /// The reason the `regex` crate refuses `body`, or `None` when the crate

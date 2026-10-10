@@ -157,7 +157,7 @@ semantics.)
 skipping absent slots:
 
 ```
-name → (params) → : Type → [shape] → wire W → @timing → during S → [ attrs ] → = value → { body }
+name → (params) → : Type → [shape] → wire W → during S → [ attrs ] → = value → { body } → @timing
 ```
 
 This order already held in every grammar of every reference before it was

@@ -1412,14 +1412,15 @@ is in ridl §16.4.
 ### 16.4 Profile Boundary (TYPL-3xx)
 
 Emitted when a `.typl` file (or a package declared `profile = "typl"` in
-`ridl.toml`) contains constructs of a higher layer:
+`ridl.toml`) contains constructs of a higher layer. TYPL-301 is also emitted in
+a `.ridl` file, as its row says:
 
-| Code     | Rule                                                                                                                                                                                                                   | Severity |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| TYPL-301 | stream type `<T>` outside interaction position — in a typl context, and in a ridl file anywhere but a parameter or a query return, such as a struct field, a collection, a type definition or a union arm (ridl §12.3) | error    |
-| TYPL-302 | timing annotation or duration literal in a typl context                                                                                                                                                                | error    |
-| TYPL-303 | `require`/`ensure` attribute in a typl context                                                                                                                                                                         | error    |
-| TYPL-304 | interaction declaration in a typl context — one of the ridl interaction words at declaration start; an rmdl or rsdl word there is FORM-102                                                                             | error    |
+| Code     | Rule                                                                                                                                                                                                                                                                                                                                        | Severity |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| TYPL-301 | stream type `<T>` outside interaction position — in a typl context, and in a ridl file anywhere but a parameter or a query return, such as a struct field, a collection, a type definition or a union arm, except a position diagnosed separately: a `signal` or `event` payload is RIDL-201 and a `fixed` payload is FORM-102 (ridl §12.3) | error    |
+| TYPL-302 | timing annotation or duration literal in a typl context                                                                                                                                                                                                                                                                                     | error    |
+| TYPL-303 | `require`/`ensure` attribute in a typl context                                                                                                                                                                                                                                                                                              | error    |
+| TYPL-304 | interaction declaration in a typl context — one of the ridl interaction words at declaration start; an rmdl or rsdl word there is FORM-102                                                                                                                                                                                                  | error    |
 
 ### 16.5 Documentation (TYPL-4xx)
 
