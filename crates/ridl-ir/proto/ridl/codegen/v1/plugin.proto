@@ -71,10 +71,11 @@ message CodegenRequest {
 }
 
 // One backend option, as the host gives it. The one key the host sends is
-// `encodings`: when the root manifest has a `[backend.<name>] encodings`
-// table for the backend, the value is its names joined by `,` in manifest
-// order, with no spaces (`flatbuffers,proto3`). A backend without such a
-// table receives an empty list. Each key appears once.
+// `encodings`: when the root manifest's `[backend.<name>]` table for the
+// backend names at least one encoding, the value is its names joined by `,`
+// in manifest order, with no spaces (`flatbuffers,proto3`). No `encodings`
+// option is sent when the table is absent, the key is absent or the array is
+// empty, so `options` is then empty. Each key appears once.
 message BackendOption {
   string key = 1;
   string value = 2;
