@@ -34,13 +34,16 @@ impl fmt::Display for HistoryError {
 
 impl std::error::Error for HistoryError {}
 
-/// Reads a history file. Blank lines and lines that start with `#` are
-/// skipped; every other line is 64 lowercase hex characters, and no hash
-/// repeats.
+/// Reads a history file. Lines end with `\n`, and one `\r` before it is
+/// dropped, so a file checked out with CRLF line endings reads the same. An
+/// empty line and a line that starts with `#` are skipped; every other line
+/// is exactly 64 lowercase hex characters, with no space or other padding,
+/// and no hash repeats.
 pub fn parse(text: &str) -> Result<CatalogHistory, HistoryError> {
     let mut hashes: Vec<[u8; 32]> = Vec::new();
     for (index, raw) in text.split_terminator('\n').enumerate() {
         let line = index + 1;
+        let raw = raw.strip_suffix('\r').unwrap_or(raw);
         if raw.is_empty() || raw.starts_with('#') {
             continue;
         }
@@ -150,11 +153,35 @@ mod tests {
     }
 
     #[test]
-    fn surrounding_whitespace_and_crlf_are_refused() {
+    fn surrounding_whitespace_is_refused() {
         let line = "00".repeat(32);
-        assert!(parse(&format!("{line}\r\n")).is_err());
         assert!(parse(&format!(" {line}\n")).is_err());
         assert!(parse(&format!("{line} \n")).is_err());
+        assert!(parse(&format!("{line} \r\n")).is_err());
+    }
+
+    #[test]
+    fn crlf_line_endings_are_read_as_lf() {
+        let text = format!(
+            "{HEADER}\r\n\r\n{}\r\n{}\r\n",
+            "00".repeat(32),
+            "11".repeat(32)
+        );
+        assert_eq!(
+            parse(&text),
+            Ok(CatalogHistory {
+                hashes: vec![[0; 32], [0x11; 32]]
+            })
+        );
+    }
+
+    #[test]
+    fn a_second_carriage_return_is_refused() {
+        let parsed = parse(&format!("{}\r\r\n", "00".repeat(32)));
+        assert!(
+            matches!(parsed, Err(HistoryError { line: 1, .. })),
+            "{parsed:?}"
+        );
     }
 
     #[test]
