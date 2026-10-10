@@ -141,6 +141,27 @@ opaque bytes, and the spec already says one binding per transport. Cost if
 wrong: a consumer that assumed WebSocket means proto3 names the tag, which
 `attach` already requires.
 
+**Refined 2026-10-10, during the stage 1 spec review.** #265 lands with
+`connect_with::<FlatBuffers>` only, the codec that exists; plain `connect`,
+whose default is proto3 (decision I), is added when #264 lands, additively.
+
+### I. The encoding comes from the port type
+
+Decided 2026-10-10 during the stage 1 spec review. A port type states the
+encoding of the bytes it carries (`ridl_rt::port::Encoded`), and the generated
+face reads it from its port type parameter: application code names no encoding,
+and `cabin::Client::new(rt.attach())` stays as it is today. Each transport picks
+a default from how coupled its two ends are — WebSocket proto3, shared memory
+`repr(C)`, the in-process loopback FlatBuffers — and the construction can
+override it (`connect_with::<E>(url)`, `Loopback::<E>::with_encoding(..)`). A
+cargo feature for the default was rejected: features must be additive. The
+manifest says which codecs a package carries, not which one a port uses. One
+session has one encoding (frame specification rule); a transport serving several
+encodings hands out one port per session, each typed with its own. This refines
+A3 (`Bind<E>`, `serve::<E>` become `Client<P>` with `P: Encoded`) and B (above).
+Cost if wrong: a port type per transport that implements one trait;
+`ridl-loopback` typed by `E`.
+
 ### C. `repr(C)` stays in step 1, record first
 
 Its projection record is written before any code, as ADR-0020 decision 4 says.
@@ -209,6 +230,27 @@ fills the `KNOWN` row and #718's WebSocket row.
   refuses on a hash mismatch. Lane H owns it; stage 2 reads lane H's answer
   before writing the binding's `attach` rules.
 - **A generic inspector** with no generated code: not designed; it reopens G.
+- **FlatBuffers' place among the three encodings** (added 2026-10-10): after
+  #264 lands, measure proto3 against FlatBuffers on real payloads — encode time,
+  decode time, encoded size, native and wasm. Deprecate FlatBuffers if it never
+  wins on in-place reads of large messages. ADR-0020 open item 1 (`Inline`
+  versus `repr(C)` read in place) is part of the same measurement.
+- **JSON at the edges of JavaScript applications** (added 2026-10-10, for the
+  step 2 TypeScript design): generated TypeScript types as plain data, so that
+  `JSON.stringify` works on them, and a `fromJSON` that re-runs the typl
+  constraint checks through the wasm constructor; whether JSON, in the form of
+  the protobuf JSON mapping, becomes a fourth payload encoding; 64-bit integers
+  mapped by their typl range (`number` when the range fits within ±2^53,
+  `bigint` otherwise, written as decimal strings in JSON per the protobuf JSON
+  mapping; `JSON.rawJSON` source-text access is an option to check); `bytes` as
+  `Uint8Array` in memory and base64 only at the JSON edge (native `toBase64` and
+  `fromBase64` support to check), with large binary data kept out of JSON.
+- **The encoding rule versus the transport defaults** (added 2026-10-10):
+  `docs/design/codegen-plugins.md` "The encoding rule" derives a link's encoding
+  from its crossing (same machine FlatBuffers, otherwise proto3) and the
+  RSDL-807 lint of stage 1 uses it; decision I gives a shared-memory transport
+  `repr(C)`. Align the rule with the transport defaults when `repr(C)` or a
+  shared-memory transport lands.
 
 ## 4. Proposed next stages
 
