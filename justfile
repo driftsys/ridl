@@ -1352,10 +1352,13 @@ link-check root="":
 # way in driftsys/ridl#419, in `.rs`, `.ridl` and `.md` files, and every gate
 # passed.
 #
-# Only the file form is checked. The extractor needs a filename extension to
-# know where a path ends, so a directory citation — a `docs/…` path whose last
-# segment carries no extension, such as `docs/decisions/` — is not checked at
-# all, and renaming a directory is not caught here.
+# Two forms are checked. A file path ends with a filename extension, such as
+# `docs/ROADMAP.md`, and has to name something that exists. A directory path
+# ends with `/`, such as `docs/decisions/`, and has to name a directory; a `.`
+# right after that slash is read as the end of a sentence. A directory written
+# without its trailing slash, such as `docs/book`, has nothing that tells it
+# apart from a word, so it is not checked: cite a directory with the slash for
+# this recipe to check it. The bare `docs/` is not checked either.
 #
 # Two trees are skipped, for the same reason in both: a `docs/…` path in them
 # records what was true when it was written, not a claim about the tree now.
@@ -1394,7 +1397,19 @@ doc-path-check root="":
     # in front of it, and no URL stripping is needed. A relative citation
     # written with a leading `../` is excluded by that same rule and is
     # therefore never checked. The sample below pins both.
-    path_re="(^|[^A-Za-z0-9._/-])$d/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*\.[A-Za-z0-9]+"
+    #
+    # The grep below takes the whole token after that boundary: the longest run
+    # of path characters that starts with `docs/`. The sed after it classifies
+    # each token. A token made of segments that each end with `/`, optionally
+    # followed by one `.` that ends a sentence, is a directory path, and is kept
+    # with its trailing slash; it needs at least one segment, so the bare `docs/`
+    # is left out. Any other token is cut after the file form, which needs an
+    # extension to know where a path ends, and a token with no extension, such
+    # as `docs/book`, gives nothing. The `d` in the directory branch ends the
+    # cycle, so a directory token is never also read as a file path.
+    token_re="(^|[^A-Za-z0-9._/-])$d/[A-Za-z0-9._/-]*"
+    dir_form="$d/([A-Za-z0-9._-]+/)+"
+    file_form="$d/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*\.[A-Za-z0-9]+"
     # `-I` states that a file holding a NUL byte is skipped rather than leaving
     # that to whichever grep is installed; no tracked file is binary today, so
     # it pins the behaviour rather than changing it. The two greps this was run
@@ -1407,14 +1422,17 @@ doc-path-check root="":
     # long one rather than skip it, and report a string that is in no file.
     extract_paths() {
         local matches status=0
-        matches="$(grep -IoE "$path_re" "$1")" || status=$?
+        matches="$(grep -IoE "$token_re" "$1")" || status=$?
         # grep exits 1 when nothing matched and 2 when it could not read the
         # file. Only the first of those is not an error.
         if [ "$status" -gt 1 ]; then
             return 1
         fi
         if [ -n "$matches" ]; then
-            printf '%s\n' "$matches" | sed -E 's#^[^d]*##' | sort -u
+            printf '%s\n' "$matches" | sed -E 's#^[^d]*##' \
+                | sed -nE -e "\\#^$dir_form\\.?\$#{s#\\.\$##;p;d;}" \
+                    -e "s#^($file_form).*#\\1#p" \
+                | sort -u
         fi
     }
     # Report every extracted path that does not resolve under $1, over the file
@@ -1425,7 +1443,7 @@ doc-path-check root="":
     # it is not read for paths, so whatever it cites goes unchecked, and a gate
     # that loses coverage has to say where.
     scan_paths() {
-        local root="$1" broken=0 file target targets
+        local root="$1" broken=0 file target targets test_op
         while IFS= read -r file; do
             if ! targets="$(extract_paths "$root/$file")"; then
                 echo "doc-path-check: cannot read '$file'." >&2
@@ -1433,7 +1451,14 @@ doc-path-check root="":
             fi
             if [ -n "$targets" ]; then
                 while IFS= read -r target; do
-                    if [ ! -e "$root/$target" ]; then
+                    # A directory path has to name a directory; a file
+                    # path has to name anything that exists.
+                    if [ "${target%/}" != "$target" ]; then
+                        test_op=-d
+                    else
+                        test_op=-e
+                    fi
+                    if [ ! "$test_op" "$root/$target" ]; then
                         echo "doc-path-check: $file -> $target" >&2
                         broken=$((broken + 1))
                     fi
@@ -1448,7 +1473,9 @@ doc-path-check root="":
             fi
         done
         if [ "$broken" -ne 0 ]; then
-            echo "doc-path-check: $broken docs/ file path(s) above do not resolve." >&2
+            echo "doc-path-check: $broken docs/ path(s) above do not resolve." >&2
+            echo "doc-path-check: a path with an extension has to exist; a path ending with '/' has to be a directory." >&2
+            echo "doc-path-check: a directory cited without its trailing slash is not checked." >&2
             echo "doc-path-check: $skip_archive and $skip_wip are not scanned; a path" >&2
             echo "doc-path-check: belonging to another repository should be written as a URL." >&2
             return 1
@@ -1517,7 +1544,7 @@ doc-path-check root="":
         fi
         tracked="$(printf '%s\n' "$files" | grep -c . || true)"
         printf '%s\n' "$files" | scan_paths .
-        echo "doc-path-check: every docs/ file path named outside $skip_archive and $skip_wip resolves, over $tracked tracked files."
+        echo "doc-path-check: every docs/ file path, and every docs/ directory path ending with '/', named outside $skip_archive and $skip_wip resolves, over $tracked tracked files."
     )
     # The fixtures. Each one builds a case the gate has to pass or fail and
     # fails this recipe when the gate does not. They run in a subshell, so the
@@ -1531,6 +1558,12 @@ doc-path-check root="":
         # segment, a segment carrying digits and an underscore, a filename with
         # more than one dot and an extension that is neither two letters nor short,
         # a relative citation, and a repeat of an earlier path for `sort -u`.
+        # Then the directory form: a directory in prose, in an inline code span
+        # and at the end of a sentence, which keep their trailing slash, one
+        # whose name has a dot, which must not also give a file path, and
+        # four forms that give nothing — a directory without its trailing
+        # slash, the bare `docs/`, `docs/` followed by an ellipsis, and a
+        # relative or URL directory citation.
         sample="$work/sample"
         printf '%s\n' \
             "$d/plain.md named in prose" \
@@ -1546,10 +1579,18 @@ doc-path-check root="":
             "two dots and a five-letter extension in $d/ir/cruise.system.txtpb" \
             "an eight-letter extension in $d/typl-language-reference.markdown" \
             "a relative citation ../$d/design/relative.md" \
-            "$d/plain.md a second time" > "$sample"
-        expected="$d/ROADMAP.md $d/comment.md $d/decisions/ADR-0012-boundary_model.md"
-        expected="$expected $d/ir/cruise.system.txtpb $d/lines.md $d/link.md $d/plain.md"
-        expected="$expected $d/span.md $d/sub/dir/nested.md $d/typl-language-reference.markdown "
+            "$d/plain.md a second time" \
+            "$d/design/ a directory in prose" \
+            "a directory in a code span \`$d/decisions/\`" \
+            "a directory at the end of a sentence, $d/technotes/." \
+            "a directory whose name has a dot, $d/v1.2/, is not also a file" \
+            "a directory without its slash, $d/book, is not checked" \
+            "the bare $d/ and $d/... give nothing" \
+            "a relative directory ../$d/rel/ and a URL https://example.com/$d/web/" > "$sample"
+        expected="$d/ROADMAP.md $d/comment.md $d/decisions/ $d/decisions/ADR-0012-boundary_model.md"
+        expected="$expected $d/design/ $d/ir/cruise.system.txtpb $d/lines.md $d/link.md $d/plain.md"
+        expected="$expected $d/span.md $d/sub/dir/nested.md $d/technotes/"
+        expected="$expected $d/typl-language-reference.markdown $d/v1.2/ "
         if [ "$(extract_paths "$sample" | tr '\n' ' ')" != "$expected" ]; then
             echo "doc-path-check: the extractor no longer gives the expected paths on the built-in sample:" >&2
             extract_paths "$sample" >&2
@@ -1559,25 +1600,31 @@ doc-path-check root="":
         # is the shape this fixture exists to catch, so the status, every report
         # line and the count in the summary are all asserted. One of the two files
         # cites two paths that do not exist, behind one that does, so a scan that
-        # stops at the first breakage in a file fails here as well.
+        # stops at the first breakage in a file fails here as well. The other
+        # cites three directories: one that exists, one that does not, and a
+        # file cited as a directory, which has to fail because it is not one.
         root="$work/fixture"
         mkdir -p "$root/$d/design" "$root/src"
         : > "$root/$d/design/aa-present.md"
+        : > "$root/$d/design/ee-file"
         printf '%s\n' "//! $d/design/aa-present.md" "//! $d/design/bb-gone.md" \
             "//! $d/design/cc-gone.md" > "$root/src/a.rs"
-        printf '%s\n' "// $d/design/dd-gone.md" > "$root/src/b.ridl"
+        printf '%s\n' "// $d/design/dd-gone.md" "// $d/design/" "// $d/design/ff-gone/" \
+            "// $d/design/ee-file/" > "$root/src/b.ridl"
         report="$work/report"
         if printf '%s\n' src/a.rs src/b.ridl | scan_paths "$root" 2>"$report"; then
-            echo "doc-path-check: the scan returned 0 over a fixture citing three paths that do not exist:" >&2
+            echo "doc-path-check: the scan returned 0 over a fixture citing five paths that do not resolve:" >&2
             cat "$report" >&2
             exit 1
         fi
-        if [ "$(grep -c -- '->' "$report" || true)" -ne 3 ] \
+        if [ "$(grep -c -- '->' "$report" || true)" -ne 5 ] \
             || ! grep -q -- "src/a.rs -> $d/design/bb-gone.md" "$report" \
             || ! grep -q -- "src/a.rs -> $d/design/cc-gone.md" "$report" \
             || ! grep -q -- "src/b.ridl -> $d/design/dd-gone.md" "$report" \
-            || ! grep -q -- '^doc-path-check: 3 docs/ file path' "$report"; then
-            echo "doc-path-check: the scan no longer reports exactly the three broken paths in its fixture:" >&2
+            || ! grep -q -- "src/b.ridl -> $d/design/ff-gone/" "$report" \
+            || ! grep -q -- "src/b.ridl -> $d/design/ee-file/" "$report" \
+            || ! grep -q -- '^doc-path-check: 5 docs/ path' "$report"; then
+            echo "doc-path-check: the scan no longer reports exactly the five broken paths in its fixture:" >&2
             cat "$report" >&2
             exit 1
         fi
@@ -1668,15 +1715,16 @@ doc-path-check root="":
             cat "$run" >&2
             exit 1
         fi
-        printf '%s\n' "//! $d/design/hh-gone.md" > "$gate/src/broken.rs"
+        printf '%s\n' "//! $d/design/hh-gone.md" "//! $d/gone/" > "$gate/src/broken.rs"
         git_at "$gate" -c core.excludesFile=/dev/null add -A
         if "{{just_executable()}}" doc-path-check "$gate" >"$run" 2>&1; then
-            echo "doc-path-check: the gate returned 0 over a fixture citing a path that does not exist:" >&2
+            echo "doc-path-check: the gate returned 0 over a fixture citing paths that do not exist:" >&2
             cat "$run" >&2
             exit 1
         fi
-        if ! grep -q -- "src/broken.rs -> $d/design/hh-gone.md" "$run"; then
-            echo "doc-path-check: the gate did not report the broken path in its fixture:" >&2
+        if ! grep -q -- "src/broken.rs -> $d/design/hh-gone.md" "$run" \
+            || ! grep -q -- "src/broken.rs -> $d/gone/" "$run"; then
+            echo "doc-path-check: the gate did not report the broken paths in its fixture:" >&2
             cat "$run" >&2
             exit 1
         fi
