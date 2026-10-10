@@ -553,7 +553,9 @@ trusted with no `unsafe` and no second verification pass.
       `contract::reservation::<X, E>()`, and
       `contract::table_budget::<E>(&[Member])` by
       `contract::table_budget::<I, E>()`.
-    - `contract::Unsized` is removed; a missing size is a compile error.
+    - `contract::Unsized` is removed; a payload with no bound makes the backend
+      refuse to generate, and a missing `Sizes<E>` implementation is a compile
+      error.
     - `contract::Interaction` gains `const ROW: usize`, which breaks an
       implementor; only generated code implements it.
     - `contract::Sizes<E>` is added.
@@ -859,8 +861,9 @@ trusted with no `unsafe` and no second verification pass.
     `EVENT_BUFFER`; `reservation::<X, E>()` (where `X: Interaction` and
     `X::Iface: Sizes<E>`) returns the row of one member, and
     `table_budget::<I, E>()` returns the sum of the rows of an interface. Both
-    functions are `const fn` and cannot fail, because a missing size is a
-    compile error. The references to `Member::reservation` and `table_budget` in
+    functions are `const fn` and cannot fail, because a payload with no bound is
+    refused at generation and a missing `Sizes<E>` implementation is a compile
+    error. The references to `Member::reservation` and `table_budget` in
     decision 15 read as these functions.
 
 18. **Amendment (2026-09-26) — E11.16 to E11.19 ship as one 0.x minor.** The

@@ -103,11 +103,11 @@ the descriptor has no inherent constant of either name.
   in member order, each a `u64` computed by a const-evaluable expression from
   the payloads' `<T as Payload<FlatBuffers>>::MAX_SIZE`, which the codec emitter
   writes from the codegen model's bound, so the table recomputes nothing. A
-  payload whose projection has no bound is a compile error in the table rather
-  than a missing value, so there is no `None` and no reading of one. A proto3 or
-  `repr(C)` table arrives as a `Sizes<E>` implementation when the backend emits
-  that codec; until then the interface has no such table (driftsys/ridl#264,
-  driftsys/ridl#317). The face reads buffers from
+  payload whose projection has no bound makes the backend refuse to generate,
+  rather than leaving a missing value, so there is no `None` and no reading of
+  one. A proto3 or `repr(C)` table arrives as a `Sizes<E>` implementation when
+  the backend emits that codec; until then the interface has no such table
+  (driftsys/ridl#264, driftsys/ridl#317). The face reads buffers from
   `<T as Payload<::ridl_rt::encoding::FlatBuffers>>::BUFFER` and the table's
   `CLAIM_BUFFER` and `EVENT_BUFFER`; `reservation::<X, E>()` and
   `table_budget::<I, E>()` in `ridl_rt::contract` serve a runtime that sizes a

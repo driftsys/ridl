@@ -307,8 +307,9 @@ as its public contract.
    `contract` module loses `EncodedSizes` and `Unsized`, and gains `Sizes<E>`,
    the per-interface table of one encoding: `RESERVATIONS`, `MAX_BUFFER_SIZE`,
    `EVENT_SOURCE_BUFFER_SIZE`, the buffer types `ClaimBuffer` and `EventBuffer`,
-   and their zeroed values `CLAIM_BUFFER` and `EVENT_BUFFER`. A missing size is
-   a compile error, so `Unsized` has no use. `payload::Payload<E>` gains
+   and their zeroed values `CLAIM_BUFFER` and `EVENT_BUFFER`. A payload with no
+   bound makes the backend refuse to generate, and a codec with no table is a
+   compile error, so `Unsized` has no use. `payload::Payload<E>` gains
    `type Buffer` and `const BUFFER`, an array of `MAX_SIZE` zero bytes emitted
    beside `MAX_SIZE`. `port` gains `Encoded`, a trait that states the encoding
    of the bytes a port carries; it is not a supertrait of the port traits. A
