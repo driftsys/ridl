@@ -1,6 +1,6 @@
 //! The verdict of a [`DiffReport`] restricted to one unit.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use ridl_ir::catalog_hash::reachable_decls;
 use ridl_ir::v2::{Package, unit_of};
@@ -43,11 +43,13 @@ pub fn unit_verdict(report: &DiffReport, unit: &str, old: &[Package], new: &[Pac
 }
 
 /// The per-unit verdicts of one diff, with the work every unit shares done
-/// once: the package references of both sides and the canonical key of each
-/// change. See [`unit_verdict`] for what concerns a unit.
+/// once: the package references of both sides, the package names of each
+/// unit and the canonical key of each change. See [`unit_verdict`] for what concerns a unit.
 pub struct UnitVerdicts<'a> {
     old: Vec<&'a Package>,
     new: Vec<&'a Package>,
+    /// The names of the packages of each unit, on either side.
+    names_by_unit: BTreeMap<&'a str, BTreeSet<&'a str>>,
     /// Each change's package, canonical declaration key (absent for a change
     /// to the package itself) and verdict.
     changes: Vec<(&'a str, Option<String>, Verdict)>,
@@ -56,9 +58,25 @@ pub struct UnitVerdicts<'a> {
 impl<'a> UnitVerdicts<'a> {
     /// Prepares the verdicts of `report`, the diff of `old` against `new`.
     pub fn new(report: &'a DiffReport, old: &'a [Package], new: &'a [Package]) -> Self {
+        let old: Vec<&Package> = old.iter().collect();
+        let new: Vec<&Package> = new.iter().collect();
+        Self::from_refs(report, &old, &new)
+    }
+
+    /// [`UnitVerdicts::new`] over borrowed packages, for a caller that holds
+    /// the packages by reference and would otherwise clone them.
+    pub fn from_refs(report: &'a DiffReport, old: &[&'a Package], new: &[&'a Package]) -> Self {
+        let mut names_by_unit: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+        for package in old.iter().chain(new) {
+            names_by_unit
+                .entry(unit_of(package))
+                .or_default()
+                .insert(package.name.as_str());
+        }
         Self {
-            old: old.iter().collect(),
-            new: new.iter().collect(),
+            old: old.to_vec(),
+            new: new.to_vec(),
+            names_by_unit,
             changes: report
                 .changes
                 .iter()
@@ -73,13 +91,8 @@ impl<'a> UnitVerdicts<'a> {
 
     /// The verdict over the changes that concern `unit`.
     pub fn verdict(&self, unit: &str) -> Verdict {
-        let packages: BTreeSet<&str> = self
-            .old
-            .iter()
-            .chain(&self.new)
-            .filter(|pkg| unit_of(pkg) == unit)
-            .map(|pkg| pkg.name.as_str())
-            .collect();
+        let no_packages = BTreeSet::new();
+        let packages = self.names_by_unit.get(unit).unwrap_or(&no_packages);
         let reached_old = reachable_decls(unit, &self.old);
         let reached_new = reachable_decls(unit, &self.new);
 

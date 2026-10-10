@@ -43,17 +43,17 @@ pub(crate) fn compatible_catalogs(
 ) -> Result<BTreeMap<String, Vec<[u8; 32]>>, ExitCode> {
     let published = default_baseline_dir(entry);
     let mut compatible = BTreeMap::new();
-    if !has_history(&published)? || !has_snapshot(&published)? {
+    if !holds_history_and_snapshot(&published)? {
         return Ok(compatible);
     }
     let old = ridlc::load_diff_side(db, &published, &[])
         .map_err(report_diff_side_error)?
         .packages;
-    let current: Vec<Package> = checked.iter().map(|package| (*package).clone()).collect();
-    let report = ridl_diff::diff_sets_in(&old, &current, std::slice::from_ref(std));
-    let verdicts = ridl_diff::UnitVerdicts::new(&report, &old, &current);
+    let old_refs: Vec<&Package> = old.iter().collect();
+    let report = ridl_diff::diff_refs_in(&old_refs, checked, &[std]);
+    let verdicts = ridl_diff::UnitVerdicts::from_refs(&report, &old_refs, checked);
     let scope = ridlc::catalog_scope(checked, Some(std));
-    for unit in shaped_units(&current) {
+    for unit in shaped_units(checked.iter().copied()) {
         // A unit with no published snapshot has no earlier baseline, so a
         // history file left under its name is not read, whatever the verdict.
         if !old.iter().any(|package| unit_of(package) == unit) {
@@ -118,7 +118,7 @@ pub(crate) fn write_catalog_histories(
         .map(|report| ridl_diff::UnitVerdicts::new(report, old, fresh));
     let fresh_refs: Vec<&Package> = fresh.iter().collect();
     let scope = ridlc::catalog_scope(&fresh_refs, Some(&std));
-    for unit in shaped_units(fresh) {
+    for unit in shaped_units(fresh.iter()) {
         // A unit with no published snapshot has no earlier baseline, so a
         // history file left under its name is not carried, whatever the verdict.
         let published_before = old.iter().any(|package| unit_of(package) == unit);
@@ -149,18 +149,23 @@ pub(crate) fn write_catalog_histories(
     Ok(())
 }
 
-/// Whether `dir` holds at least one entry named `<unit>.catalogs`. An entry
-/// that is not a readable file counts, so that [`read_history_if_present`]
-/// reports it.
-fn has_history(dir: &Path) -> Result<bool, ExitCode> {
+/// Whether `dir` holds at least one entry named `<unit>.catalogs` and at
+/// least one `.ir.json` snapshot, from one listing of `dir`. An entry named
+/// like a history file counts whatever it is, so that
+/// [`read_history_if_present`] reports it; a directory entry that cannot be
+/// read is an error (exit 2).
+fn holds_history_and_snapshot(dir: &Path) -> Result<bool, ExitCode> {
     if !dir.is_dir() {
         return Ok(false);
     }
-    let files = ridlc::diff_side::files_matching_strict(dir, has_history_name).map_err(|err| {
+    let entries = ridlc::diff_side::files_matching_strict(dir, |_| true).map_err(|err| {
         eprintln!("error: cannot read {}: {err}", dir.display());
         ExitCode::from(2)
     })?;
-    Ok(!files.is_empty())
+    Ok(entries.iter().any(|path| has_history_name(path))
+        && entries
+            .iter()
+            .any(|path| ridlc::diff_side::is_ir_json(path)))
 }
 
 /// Whether `path` is named like a `<unit>.catalogs` file.
@@ -168,18 +173,6 @@ fn has_history_name(path: &Path) -> bool {
     path.file_name()
         .and_then(|name| name.to_str())
         .is_some_and(|name| name.ends_with(FILE_SUFFIX))
-}
-
-/// Whether `dir` holds at least one `.ir.json` snapshot.
-fn has_snapshot(dir: &Path) -> Result<bool, ExitCode> {
-    if !dir.is_dir() {
-        return Ok(false);
-    }
-    let files = ridlc::diff_side::ir_json_files(dir).map_err(|err| {
-        eprintln!("error: cannot read {}: {err}", dir.display());
-        ExitCode::from(2)
-    })?;
-    Ok(!files.is_empty())
 }
 
 /// The history `published/<unit>.catalogs` holds, or an empty one when the
@@ -215,9 +208,10 @@ fn read_history_if_present(
 
 /// The units of `packages` that hold at least one interface shape, in name
 /// order — the units `ridl build --emit catalog` writes a descriptor for.
-fn shaped_units(packages: &[Package]) -> std::collections::BTreeSet<&str> {
+fn shaped_units<'a>(
+    packages: impl Iterator<Item = &'a Package>,
+) -> std::collections::BTreeSet<&'a str> {
     packages
-        .iter()
         .filter(|package| package.shapes().next().is_some())
         .map(unit_of)
         .collect()

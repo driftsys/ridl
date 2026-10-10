@@ -430,7 +430,7 @@ impl<'a> Matching<'a> {
     /// Matches the frozen numbers of `old` within their units on `new`. Both
     /// sides are read in package name order, then shape key order, so the
     /// result does not depend on the order of the slices.
-    pub(crate) fn new(old: &'a [v2::Package], new: &'a [v2::Package]) -> Self {
+    pub(crate) fn new(old: &[&'a v2::Package], new: &[&'a v2::Package]) -> Self {
         // Each unit's frozen numbers on the new side. Two new shapes of one
         // unit cannot carry one frozen number — the checker refuses the lock
         // that would give them one (RIDL-410) — so the first is kept.
@@ -485,8 +485,8 @@ impl<'a> Matching<'a> {
 }
 
 /// The packages of `set`, in name order.
-fn by_name(set: &[v2::Package]) -> Vec<&v2::Package> {
-    let mut packages: Vec<&v2::Package> = set.iter().collect();
+fn by_name<'a>(set: &[&'a v2::Package]) -> Vec<&'a v2::Package> {
+    let mut packages: Vec<&v2::Package> = set.to_vec();
     packages.sort_by_key(|package| package.name.as_str());
     packages
 }

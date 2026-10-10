@@ -1325,3 +1325,33 @@ fn a_workspace_with_imports_and_no_list_gets_no_note() {
     assert!(stderr.contains("MANI-103"), "{stderr}");
     assert!(!stderr.contains("note: the workspace names"), "{stderr}");
 }
+
+/// The compatible catalogs are computed before any lint level is applied, so a
+/// baseline that cannot be loaded is reported (exit 2) even when the
+/// workspace also draws a lint at `deny`, which alone would exit 1.
+#[test]
+fn a_baseline_that_cannot_be_loaded_is_reported_before_a_deny_level_applies() {
+    let dir = TempDir::new("build-deny-after-baseline");
+    let out = TempDir::new("build-deny-after-baseline-out");
+    // A signal with no timing draws `missing-timing`.
+    let root = set_source(&dir, &BASE.replace(" @10ms", ""));
+    dir.write(
+        "ridl.toml",
+        &format!("{MANIFEST}\n[lints]\nmissing-timing = \"deny\"\n"),
+    );
+    let (code, _) = build(&root, out.path(), "ir-json");
+    assert_eq!(code, 1, "the lint at deny alone exits 1");
+
+    dir.write(
+        &format!(".ridl/baseline/{UNIT}.ir.json"),
+        "this is not an IR snapshot",
+    );
+    dir.write(
+        &format!(".ridl/baseline/{UNIT}.catalogs"),
+        &format!("{}\n", "ab".repeat(32)),
+    );
+    let (code, stderr) = build(&root, out.path(), "catalog");
+    assert_eq!(code, 2, "the baseline error wins over the lint: {stderr}");
+    assert!(stderr.contains("error: "), "{stderr}");
+    assert!(!stderr.contains("RIDL-100"), "{stderr}");
+}

@@ -396,7 +396,7 @@ pub(crate) fn report(changes: Vec<Change>) -> DiffReport {
 /// appended with such a type classifies breaking (driftsys/ridl#598).
 /// [`diff_sets_in`] resolves it.
 pub fn diff_packages(old: &Package, new: &Package) -> DiffReport {
-    let matching = walk::Matching::new(std::slice::from_ref(old), std::slice::from_ref(new));
+    let matching = walk::Matching::new(&[old], &[new]);
     let mut changes = Vec::new();
     walk::walk_packages(old, new, &matching, &mut changes);
     classify_all(&mut changes, old, new, &[]);
@@ -425,15 +425,26 @@ pub fn diff_sets(old: &[Package], new: &[Package]) -> DiffReport {
 /// `ridl.std` here, so a struct field appended with a `ridl.std` type is judged
 /// by that type's declaration (driftsys/ridl#598).
 pub fn diff_sets_in(old: &[Package], new: &[Package], context: &[Package]) -> DiffReport {
+    let old: Vec<&Package> = old.iter().collect();
+    let new: Vec<&Package> = new.iter().collect();
+    let context: Vec<&Package> = context.iter().collect();
+    diff_refs_in(&old, &new, &context)
+}
+
+/// [`diff_sets_in`] over borrowed packages, for a caller that holds the
+/// packages by reference and would otherwise clone them.
+pub fn diff_refs_in(old: &[&Package], new: &[&Package], context: &[&Package]) -> DiffReport {
     use std::collections::BTreeMap;
 
-    use ridl_ir::v2::{packages_of_unit, unit_of};
+    use ridl_ir::v2::{members_of_unit, unit_of};
 
-    let scope: Vec<&Package> = new.iter().chain(context).collect();
+    let scope: Vec<&Package> = new.iter().chain(context).copied().collect();
     let matching = walk::Matching::new(old, new);
 
-    let old_by: BTreeMap<&str, &Package> = old.iter().map(|pkg| (pkg.name.as_str(), pkg)).collect();
-    let new_by: BTreeMap<&str, &Package> = new.iter().map(|pkg| (pkg.name.as_str(), pkg)).collect();
+    let old_by: BTreeMap<&str, &Package> =
+        old.iter().map(|pkg| (pkg.name.as_str(), *pkg)).collect();
+    let new_by: BTreeMap<&str, &Package> =
+        new.iter().map(|pkg| (pkg.name.as_str(), *pkg)).collect();
 
     // Each matched pair is walked and classified against its own two snapshots,
     // because the classifier resolves a change's path back into the packages it
@@ -451,7 +462,7 @@ pub fn diff_sets_in(old: &[Package], new: &[Package], context: &[Package]) -> Di
             // with nothing in it, so that each shape is matched in the unit,
             // retired by the unit, or removed, and each other declaration is
             // removed on its own line.
-            None if packages_of_unit(unit_of(old_pkg), new).next().is_some() => {
+            None if members_of_unit(unit_of(old_pkg), new).next().is_some() => {
                 let gone = Package {
                     name: old_pkg.name.clone(),
                     unit: old_pkg.unit.clone(),
