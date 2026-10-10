@@ -300,8 +300,9 @@ pub fn load_workspace_with(
 ///
 /// A relative `dir` gives a root in the same relative form, built with `..`
 /// when the root is above the current directory. `None` means there is no
-/// `ridl.toml` at or above `dir`. The command line, the language server and
-/// the MCP server all call this, so every entry point loads the same root.
+/// `ridl.toml` at or above `dir`, or that `dir` is relative and the current
+/// directory cannot be read. The command line, the language server and the
+/// MCP server all call this, so every entry point loads the same root.
 pub fn find_root(dir: &Path) -> Option<PathBuf> {
     let package = nearest_manifest_dir(dir)?;
     if !matches!(
@@ -337,17 +338,30 @@ pub fn find_root(dir: &Path) -> Option<PathBuf> {
     Some(package)
 }
 
-/// The nearest directory at or above `dir` that contains a `ridl.toml`. A
-/// relative `dir` is searched through its absolute ancestors, so the search
-/// passes the current directory, and the result keeps the relative form, with
-/// `.` for the current directory and `..` above it. The empty path stands for
-/// the current directory.
+/// The nearest directory at or above `dir` that contains a `ridl.toml`, in
+/// the path form [`search_ancestors`] gives.
 fn nearest_manifest_dir(dir: &Path) -> Option<PathBuf> {
+    search_ancestors(dir, |candidate| {
+        candidate.join("ridl.toml").is_file().then_some(())
+    })
+    .map(|((), found)| found)
+}
+
+/// The first directory at or above `dir` for which `probe` gives a value,
+/// with that value. A relative `dir` is searched through its absolute
+/// ancestors, so the search passes the current directory, and the directory
+/// returned keeps the relative form, with `.` for the current directory and
+/// `..` above it. The empty path stands for the current directory. `None`
+/// means no directory gives a value, or that `dir` is relative and the
+/// current directory cannot be read.
+fn search_ancestors<T>(
+    dir: &Path,
+    mut probe: impl FnMut(&Path) -> Option<T>,
+) -> Option<(T, PathBuf)> {
     if dir.is_absolute() {
         return dir
             .ancestors()
-            .find(|candidate| candidate.join("ridl.toml").is_file())
-            .map(Path::to_path_buf);
+            .find_map(|candidate| Some((probe(candidate)?, candidate.to_path_buf())));
     }
     let relative = match normalize(dir) {
         path if path.as_os_str().is_empty() => PathBuf::from("."),
@@ -357,28 +371,31 @@ fn nearest_manifest_dir(dir: &Path) -> Option<PathBuf> {
     absolute_dir
         .ancestors()
         .enumerate()
-        .find(|(_, candidate)| candidate.join("ridl.toml").is_file())
-        .map(|(levels, _)| up(&relative, levels))
+        .find_map(|(levels, candidate)| Some((probe(candidate)?, up(&relative, levels))))
 }
 
 /// The error of the first `ridl.toml` at or above `dir` that cannot be
 /// inspected for a reason other than being absent, naming the manifest.
 /// `find_root` treats such a manifest as missing, so the caller uses this to
-/// report the real cause. The walk up the ancestors matters for the errors that
-/// can hit an ancestor's manifest while the entry itself is reachable, such as
-/// a symbolic link loop; a directory that cannot be searched also hides the
+/// report the real cause. The walk visits the directories [`find_root`]
+/// visits ([`search_ancestors`]), the current directory and its ancestors
+/// included for a relative `dir`, and names the manifest in the path form of
+/// `dir`. The walk up the ancestors matters for the errors that can hit an
+/// ancestor's manifest while the entry itself is reachable, such as a
+/// symbolic link loop; a directory that cannot be searched also hides the
 /// entry below it.
 fn unreadable_manifest(dir: &Path) -> Option<io::Error> {
-    dir.ancestors().find_map(|candidate| {
-        let manifest = candidate.join("ridl.toml");
-        match fs::metadata(&manifest) {
-            Err(e) if e.kind() != io::ErrorKind::NotFound => Some(io::Error::new(
-                e.kind(),
-                format!("cannot read `{}`: {e}", manifest.display()),
-            )),
+    let (error, found) = search_ancestors(dir, |candidate| {
+        match fs::metadata(candidate.join("ridl.toml")) {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => Some(e),
             _ => None,
         }
-    })
+    })?;
+    let manifest = found.join("ridl.toml");
+    Some(io::Error::new(
+        error.kind(),
+        format!("cannot read `{}`: {error}", manifest.display()),
+    ))
 }
 
 /// `error` with the path that failed added to its message.
@@ -3120,9 +3137,9 @@ service:veh.common.climate 2
         );
     }
 
-    /// A relative entry inside the current directory's member reaches the
-    /// workspace above the current directory, and the root keeps the
-    /// relative form.
+    /// `up` removes a trailing name per level, gives `.` once the last name
+    /// of a relative path is removed, adds `..` once no name is left, and
+    /// removes a name from an absolute path the same way.
     #[test]
     fn up_keeps_the_relative_form_of_the_entry() {
         assert_eq!(up(Path::new("members/a"), 2), PathBuf::from("."));
