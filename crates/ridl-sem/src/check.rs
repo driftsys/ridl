@@ -12780,11 +12780,22 @@ interface I {\n\
         // A command return is RIDL-104 whatever its shape, so a stream there
         // draws that one diagnostic and no stream-position diagnostic (typl
         // reference, the TYPL-301 row of the diagnostic table).
-        let checked = check_ridl(
-            "app",
-            &format!("{PRELUDE}interface I {{\n  command c(): <Speed> @[..50ms]\n}}\n"),
-        );
+        let source = format!("{PRELUDE}interface I {{\n  command c(): <Speed> @[..50ms]\n}}\n");
+        let checked = check_ridl("app", &source);
         assert_eq!(codes(&checked), vec!["RIDL-104"]);
+        // The diagnostic is the return-type one, on the whole return type —
+        // not one emitted over the stream's element type.
+        let diagnostic = &checked.diagnostics[0];
+        assert!(
+            diagnostic.message.starts_with("return type on command"),
+            "got: {}",
+            diagnostic.message,
+        );
+        let range = diagnostic.primary.range;
+        assert_eq!(
+            &source[usize::from(range.start())..usize::from(range.end())],
+            "<Speed>",
+        );
     }
 
     #[test]
