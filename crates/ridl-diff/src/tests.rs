@@ -1292,6 +1292,109 @@ fn an_unchanged_provisional_number_is_identical() {
     assert_eq!(report.changes, vec![]);
 }
 
+/// A new number 0 is the reversed comparison: the new side is a snapshot
+/// written before the lock existed. That number was never allocated either, so
+/// it is not compared with the old side's number or flag.
+#[test]
+fn a_new_number_zero_is_not_compared() {
+    let new = package(
+        vec![interface("Doors", door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let old = package(
+        vec![provisional("Doors", 2, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Identical);
+    assert_eq!(report.changes, vec![]);
+}
+
+/// `inline_service` with its shape's number marked provisional — an inline
+/// service with no lock entry.
+fn provisional_inline_service(name: &str, number: u32, interactions: Vec<v2::Decl>) -> v2::Service {
+    let mut service = inline_service(name, number, interactions);
+    if let Some(v2::service_shape::Kind::Inline(shape)) = &mut service.shapes[0].kind {
+        shape.provisional = true;
+    }
+    service
+}
+
+/// An inline shape's number is compared as a declared interface's is: the
+/// same number frozen in place is `InterfaceFrozen`, compatible, under the
+/// service's path.
+#[test]
+fn an_inline_shape_frozen_in_place_is_interface_frozen() {
+    let old = package(
+        vec![],
+        vec![provisional_inline_service(
+            "veh.cluster.hvac",
+            5,
+            door_opened("DoorState"),
+        )],
+        vec![],
+    );
+    let new = package(
+        vec![],
+        vec![inline_service(
+            "veh.cluster.hvac",
+            5,
+            door_opened("DoorState"),
+        )],
+        vec![],
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Compatible);
+    assert_eq!(
+        report.changes,
+        vec![change(
+            "veh.cluster/veh.cluster.hvac",
+            Category::InterfaceFrozen,
+            Verdict::Compatible,
+            Some("5 (provisional)"),
+            Some("5"),
+        )]
+    );
+}
+
+/// An inline shape whose provisional number is frozen as another number moves
+/// the routing key: `InterfaceNumberChanged`, breaking.
+#[test]
+fn an_inline_shape_frozen_as_another_number_is_interface_number_changed() {
+    let old = package(
+        vec![],
+        vec![provisional_inline_service(
+            "veh.cluster.hvac",
+            6,
+            door_opened("DoorState"),
+        )],
+        vec![],
+    );
+    let new = package(
+        vec![],
+        vec![inline_service(
+            "veh.cluster.hvac",
+            5,
+            door_opened("DoorState"),
+        )],
+        vec![],
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Breaking);
+    assert_eq!(
+        report.changes,
+        vec![change(
+            "veh.cluster/veh.cluster.hvac",
+            Category::InterfaceNumberChanged,
+            Verdict::Breaking,
+            Some("6 (provisional)"),
+            Some("5"),
+        )]
+    );
+}
+
 /// An inline shape is an interface with its own number (lock design §3), so
 /// it follows that number across a rename of its service: the shape is
 /// `InterfaceRenamed` and its body is diffed, while the service itself — which
@@ -1926,6 +2029,109 @@ fn a_sub_package_snapshot_without_a_unit_is_outside_the_new_unit() {
         vec![
             ("u.cluster/Speed", Category::DeclRemoved),
             ("u.cluster/Speed", Category::DeclAdded),
+        ]
+    );
+}
+
+// --------------------------------------------------------------------------
+// Enum and enum-set slots — the slot is the explicit number, not the position.
+// --------------------------------------------------------------------------
+
+/// A package holding one declaration `name` of `kind`.
+fn with_decl(name: &str, kind: v2::decl::Kind) -> v2::Package {
+    let mut package = package(vec![], vec![], vec![]);
+    package.decls = vec![v2::Decl {
+        name: name.to_string(),
+        kind: Some(kind),
+        ..Default::default()
+    }];
+    package
+}
+
+/// Enum values or enum-set bits, each with its explicit number.
+fn numbered(members: &[(&str, i64)]) -> Vec<v2::EnumValue> {
+    members
+        .iter()
+        .map(|(name, value)| v2::EnumValue {
+            name: name.to_string(),
+            value: *value,
+            ..Default::default()
+        })
+        .collect()
+}
+
+fn enum_def(members: &[(&str, i64)]) -> v2::decl::Kind {
+    v2::decl::Kind::EnumDef(v2::EnumDef {
+        values: numbered(members),
+        ..Default::default()
+    })
+}
+
+fn enum_set_def(members: &[(&str, i64)]) -> v2::decl::Kind {
+    v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+        bits: numbered(members),
+        ..Default::default()
+    })
+}
+
+/// A textual reorder of an enum body moves no explicit number, so it is no
+/// change at all.
+#[test]
+fn an_enum_pure_reorder_is_no_change() {
+    let old = with_decl("Mode", enum_def(&[("OFF", 0), ("ON", 1)]));
+    let new = with_decl("Mode", enum_def(&[("ON", 1), ("OFF", 0)]));
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Identical);
+    assert_eq!(report.changes, vec![]);
+}
+
+/// A textual reorder of an enum-set body moves no bit, so it is no change at
+/// all.
+#[test]
+fn an_enum_set_pure_reorder_is_no_change() {
+    let old = with_decl("Flags", enum_set_def(&[("A", 0), ("B", 1)]));
+    let new = with_decl("Flags", enum_set_def(&[("B", 1), ("A", 0)]));
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Identical);
+    assert_eq!(report.changes, vec![]);
+}
+
+/// Enum values renumbered in place — the text order is kept — are each
+/// `MemberReordered` with the old and new explicit number as a `value`
+/// detail, followed by the container's `ConstraintChanged`.
+#[test]
+fn an_enum_renumber_is_member_reordered_with_the_value() {
+    let old = with_decl("Mode", enum_def(&[("OFF", 0), ("ON", 1)]));
+    let new = with_decl("Mode", enum_def(&[("OFF", 1), ("ON", 0)]));
+    let report = diff_packages(&old, &new);
+    let summary: Vec<_> = report
+        .changes
+        .iter()
+        .map(|change| {
+            (
+                change.path.as_str(),
+                change.category,
+                change.before.as_deref(),
+                change.after.as_deref(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            (
+                "veh.cluster/Mode/OFF",
+                Category::MemberReordered,
+                Some("value 0"),
+                Some("value 1"),
+            ),
+            (
+                "veh.cluster/Mode/ON",
+                Category::MemberReordered,
+                Some("value 1"),
+                Some("value 0"),
+            ),
+            ("veh.cluster/Mode", Category::ConstraintChanged, None, None),
         ]
     );
 }

@@ -2444,3 +2444,38 @@ fn an_interface_is_numbered_before_an_inline_shape_of_the_same_name() {
         "the interface takes the lower number",
     );
 }
+
+/// Two packages of a legacy baseline each hold number 5, which the unit's new
+/// numbering (`Session` 1, `cluster.Speed` 2) does not reach. A refusal is
+/// keyed on the package and the number, so the two lost numbers are two
+/// refusals (RIDL-412), not one.
+#[test]
+fn one_number_lost_in_two_packages_draws_two_refusals() {
+    let dir = TempDir::new("gate-migration-same-number-twice");
+    let root = legacy_per_package_baseline(
+        &dir,
+        SESSION,
+        "next 6\nSession 5\n",
+        &[
+            ("veh.hmi.ir.json", "\"number\": 1", "\"number\": 5"),
+            ("veh.hmi.cluster.ir.json", "\"number\": 2", "\"number\": 5"),
+        ],
+    );
+
+    let (lock, code, stderr) = migrate(&root);
+    assert!(
+        lock.contains("Session 1\n") && lock.contains("cluster.Speed 2\n"),
+        "the unit's numbering:\n{lock}"
+    );
+    assert_eq!(code, 1, "both lost numbers are refused:\n{stderr}");
+    assert_eq!(
+        stderr.matches("RIDL-412").count(),
+        2,
+        "one refusal per package that lost the number:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("`Session` holds interface number 5")
+            && stderr.contains("`cluster.Speed` holds interface number 5"),
+        "each refusal names its own interface:\n{stderr}"
+    );
+}

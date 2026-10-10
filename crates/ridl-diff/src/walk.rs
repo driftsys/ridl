@@ -321,10 +321,12 @@ fn diff_composite(
         }
     }
     // With no slot moved, the bodies differ in content only: a member changed
-    // in place, or a tombstone list changed without shifting a live member. A
-    // reorder can also arrive in the same edit as a change to a member's
-    // content or to the container itself. Comparing the bodies with member
-    // order removed tells the two apart: when they still differ, the
+    // in place, or a tombstone list changed without shifting a live member.
+    // For a struct or a union, a reorder can also arrive in the same edit as a
+    // change to a member's content or to the container itself; for an enum or
+    // an enum set, a moved slot is a changed number, so the bodies below always
+    // differ and the container is always reported. Comparing the bodies with
+    // member order removed tells the two apart: when they still differ, the
     // container's `ConstraintChanged` is reported as well, after the
     // per-member lines, so the content change is not hidden behind the
     // reorder.
@@ -612,11 +614,12 @@ fn diff_interfaces<'a>(
 /// (driftsys/ridl#700). Both are covered by the catalog hash. A number that
 /// differs is [`Category::InterfaceNumberChanged`], whatever the two flags; the
 /// same number frozen in place by `ridl lock` is [`Category::InterfaceFrozen`].
-/// An old number 0, from a snapshot written before the lock existed, was never
-/// allocated, so it is not compared. Two frozen numbers are matched by number
-/// and never differ here.
+/// A number 0 on either side, from a snapshot written before the lock existed,
+/// was never allocated, so it is not compared: on the old side for a diff
+/// forward from such a snapshot, on the new side for a diff in reverse. Two
+/// frozen numbers are matched by number and never differ here.
 fn emit_number(changes: &mut Vec<Change>, path: String, old: &v2::Interface, new: &v2::Interface) {
-    if old.number == 0 {
+    if old.number == 0 || new.number == 0 {
         return;
     }
     let category = if old.number != new.number {
