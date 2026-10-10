@@ -190,8 +190,16 @@ fn a_repeated_byte_vector_is_written_once() {
         hash: catalog.hash.clone(),
     }]);
     let bytes = finish(&catalog);
+    // Both copies read back, so a count of one below can only come from the
+    // cache, not from a `compatible` list that was never written.
+    let view = CatalogRef::read_as_root(&bytes).expect("a finished buffer reads");
+    let compatible = view.compatible().unwrap().expect("the compatible list");
+    assert_eq!(compatible.len(), 1);
+    let earlier = compatible.get(0).unwrap().unwrap();
+    assert_eq!(earlier.hash().unwrap(), catalog.hash.as_slice());
     // A FlatBuffers vector: its length as a little-endian u32, then the bytes.
-    let needle = [&32u32.to_le_bytes()[..], &[7u8; 32]].concat();
+    let len = u32::try_from(catalog.hash.len()).unwrap();
+    let needle = [&len.to_le_bytes()[..], catalog.hash.as_slice()].concat();
     let count = bytes
         .windows(needle.len())
         .filter(|w| *w == needle.as_slice())
