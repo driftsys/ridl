@@ -33,19 +33,20 @@ pub enum Target {
     Interface(InterfaceId),
 }
 
-/// A reference under a cursor and the declaration it names.
+/// A reference and the declaration a part of it names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReferenceTarget {
     /// The reference as the model holds it.
     pub reference: Reference,
     /// The part of the reference that names the target: the instance segment
-    /// of `Name.inst` when the cursor is on it, the segments before it when the
-    /// cursor is on those, and the whole reference for every other form.
+    /// of `Name.inst` for the instance, the segments before it for the
+    /// component, and the whole reference for every other form.
     pub range: TextRange,
     pub target: Target,
 }
 
 /// Where a reference is written. Its role depends on the slot (rsdl §4).
+#[derive(Clone, Copy)]
 enum Slot<'a> {
     /// A member line of a `system`, `distribution` or `machine` in `package`;
     /// `placement` for a machine's, the one member line that may name an
@@ -77,10 +78,55 @@ pub fn reference_at(
         .find(|(reference, _)| {
             reference.site.file == file && reference.site.range.contains_inclusive(offset)
         })?;
-    let reference = reference.clone();
-    let whole = reference.site.range;
     let catalog = service_catalog(db, ws, std);
     let lookup = Lookup::new(db, ws, std, system, &catalog);
+    target_of(db, system, &lookup, reference, slot, offset)
+}
+
+/// Every reference of `system` the checker binds, with what it names. An
+/// instance reference `Name.inst` appears twice: once for the component its segments before `inst` name, and once
+/// for the instance, when the component declares it.
+///
+/// `system` is the result of [`check_system`](super::check_system) for `ws`
+/// and `std`.
+pub fn references(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    system: &CheckedSystem,
+) -> Vec<ReferenceTarget> {
+    let catalog = service_catalog(db, ws, std);
+    let lookup = Lookup::new(db, ws, std, system, &catalog);
+    let mut found = Vec::new();
+    for (reference, slot) in written_references(system) {
+        let range = reference.site.range;
+        // The start of a reference is on its first part, its end on its
+        // last part: the instance segment of an instance reference.
+        let mut offsets = vec![range.start()];
+        if matches!(reference.form, ReferenceForm::Instance { .. }) {
+            offsets.push(range.end());
+        }
+        for offset in offsets {
+            if let Some(target) = target_of(db, system, &lookup, reference, slot, offset) {
+                found.push(target);
+            }
+        }
+    }
+    found
+}
+
+/// What `reference`, written in `slot`, names at `offset`, which lies inside
+/// the reference.
+fn target_of(
+    db: &dyn salsa::Database,
+    system: &CheckedSystem,
+    lookup: &Lookup<'_>,
+    reference: &Reference,
+    slot: Slot<'_>,
+    offset: TextSize,
+) -> Option<ReferenceTarget> {
+    let reference = reference.clone();
+    let whole = reference.site.range;
     let (target, range) = match slot {
         Slot::Offers { component, line } => {
             let service = system.component_lines.get(component)?.offers.get(line)?;

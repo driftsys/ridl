@@ -454,7 +454,9 @@ fn references_in(source: &SourceFile) -> Vec<Reference> {
 /// [`find_references`] returns the span of the whole reference: a single name
 /// for a bare reference, but the whole `pkg.Name` for a qualified one. Rename
 /// must touch only the final `Name` segment, so this narrows a qualified
-/// reference to its last token and leaves a bare reference unchanged.
+/// reference to its last token and leaves a bare reference unchanged. Only a
+/// token inside `range` counts, so the part of an rsdl instance reference
+/// before its instance segment narrows to the component's name.
 pub fn final_segment_range(
     db: &dyn salsa::Database,
     file: InputFile,
@@ -466,7 +468,11 @@ pub fn final_segment_range(
         rowan::NodeOrToken::Node(node) => node
             .descendants_with_tokens()
             .filter_map(|element| element.into_token())
-            .filter(|token| !token.kind().is_trivia() && token.kind() != SyntaxKind::Dot)
+            .filter(|token| {
+                !token.kind().is_trivia()
+                    && token.kind() != SyntaxKind::Dot
+                    && range.contains_range(token.text_range())
+            })
             .last()
             .map(|token| token.text_range())
             .unwrap_or(range),

@@ -923,14 +923,37 @@ impl ServerState {
     /// included when the client asks for it — and every doc link
     /// that names the symbol (ADR-0026). The cursor may sit on a doc link to
     /// the symbol; a link to one of its members names no symbol of its own.
+    ///
+    /// In an `.rsdl` file, every rsdl reference the checker binds to the
+    /// declaration an rsdl reference or declaration name names. On a declared
+    /// interface the ridl navigation finds the references, the rsdl
+    /// `requires` lines among them; a doc link takes the same path as in a
+    /// typl file. No typl symbol is looked up at the cursor there, as in
+    /// hover.
     fn references(&mut self, params: &lt::ReferenceParams) -> Option<Vec<lt::Location>> {
         let position = params.text_document_position.position;
         let path = convert::uri_to_path(&params.text_document_position.text_document.uri)?;
         let (file, package) = self.locate(&path)?;
         let offset = self.line_index_of(file).offset(position);
-        let symbol = match nav::symbol_at(&self.db, self.workspace, self.std, package, file, offset)
-        {
-            Some(located) => located.symbol,
+        let include_declaration = params.context.include_declaration;
+        let located = if profile_of_path(&path) == Profile::Rsdl {
+            match rsdl::references(&self.db, self.workspace, self.std, file, offset) {
+                Some(rsdl::References::Rsdl {
+                    declaration,
+                    references,
+                }) => {
+                    let declaration = declaration.filter(|_| include_declaration);
+                    return Some(self.locations(declaration.into_iter().chain(references)));
+                }
+                Some(rsdl::References::Interface(symbol)) => Some(symbol),
+                None => None,
+            }
+        } else {
+            nav::symbol_at(&self.db, self.workspace, self.std, package, file, offset)
+                .map(|located| located.symbol)
+        };
+        let symbol = match located {
+            Some(symbol) => symbol,
             None => {
                 let link = nav::resolve_doc_link_at(
                     &self.db,
@@ -955,37 +978,71 @@ impl ServerState {
             &symbol,
         ));
 
-        let mut locations = Vec::new();
-        if params.context.include_declaration
-            && let Some(location) = self.location(symbol.file, symbol.range)
-        {
-            locations.push(location);
-        }
-        for (file, range) in references {
-            if let Some(location) = self.location(file, range) {
-                locations.push(location);
-            }
-        }
-        Some(locations)
+        let declaration = include_declaration.then_some((symbol.file, symbol.range));
+        Some(self.locations(declaration.into_iter().chain(references)))
+    }
+
+    /// The LSP locations of `sites`, in order, dropping a site whose file has
+    /// no `file://` URI.
+    fn locations(
+        &mut self,
+        sites: impl IntoIterator<Item = (InputFile, TextRange)>,
+    ) -> Vec<lt::Location> {
+        sites
+            .into_iter()
+            .filter_map(|(file, range)| self.location(file, range))
+            .collect()
     }
 
     /// `textDocument/completion`: the items offered for the cursor position,
     /// dispatched by the syntactic context the cursor sits in.
+    ///
+    /// In an `.rsdl` file, the rsdl contexts: an item that completes a
+    /// reference replaces the part of it already written.
     fn completion(&mut self, params: &lt::CompletionParams) -> Option<lt::CompletionResponse> {
         let position = params.text_document_position.position;
         let path = convert::uri_to_path(&params.text_document_position.text_document.uri)?;
         let (file, package) = self.locate(&path)?;
-        let offset = self.line_index_of(file).offset(position);
+        let index = self.line_index_of(file);
+        let offset = index.offset(position);
         let packages = self.search_packages();
-        let items = complete::completion(
-            &self.db,
-            self.workspace,
-            self.std,
-            package,
-            file,
-            offset,
-            &packages,
-        );
+        let items = if profile_of_path(&path) == Profile::Rsdl {
+            let (mut items, replaced) = complete::rsdl_completion(
+                &self.db,
+                self.workspace,
+                self.std,
+                package,
+                file,
+                offset,
+                &packages,
+            );
+            if let Some(replaced) = replaced {
+                let range = index.range(replaced);
+                for item in &mut items {
+                    // An own-package item of a reference written qualified
+                    // stays qualified (see `complete::rsdl_completion`).
+                    let new_text = item
+                        .filter_text
+                        .clone()
+                        .unwrap_or_else(|| item.label.clone());
+                    item.text_edit = Some(lt::CompletionTextEdit::Edit(lt::TextEdit {
+                        range,
+                        new_text,
+                    }));
+                }
+            }
+            items
+        } else {
+            complete::completion(
+                &self.db,
+                self.workspace,
+                self.std,
+                package,
+                file,
+                offset,
+                &packages,
+            )
+        };
         Some(lt::CompletionResponse::Array(items))
     }
 
@@ -1021,6 +1078,10 @@ impl ServerState {
 
     /// `textDocument/prepareRename`: the name span the cursor is on when it is a
     /// renameable symbol, so the client can validate before applying.
+    ///
+    /// In an `.rsdl` file, the name of a system, component, instance or
+    /// declared interface under the cursor; nothing on a service or on an rsdl
+    /// reference the checker binds to nothing.
     fn prepare_rename(
         &mut self,
         params: &lt::TextDocumentPositionParams,
@@ -1028,7 +1089,18 @@ impl ServerState {
         let path = convert::uri_to_path(&params.text_document.uri)?;
         let (file, package) = self.locate(&path)?;
         let offset = self.line_index_of(file).offset(params.position);
-        let range = rename::prepare(&self.db, self.workspace, self.std, package, file, offset)?;
+        let rsdl = if profile_of_path(&path) == Profile::Rsdl {
+            rsdl::rename_at(&self.db, self.workspace, self.std, file, offset)
+        } else {
+            rsdl::RenameAt::Typl
+        };
+        let range = match rsdl {
+            rsdl::RenameAt::Rsdl { span, .. } | rsdl::RenameAt::Interface { span, .. } => span,
+            rsdl::RenameAt::Refused => return None,
+            rsdl::RenameAt::Typl => {
+                rename::prepare(&self.db, self.workspace, self.std, package, file, offset)?
+            }
+        };
         let lsp_range = self.line_index_of(file).range(range);
         Some(lt::PrepareRenameResponse::Range(lsp_range))
     }
@@ -1036,6 +1108,11 @@ impl ServerState {
     /// `textDocument/rename`: the workspace edit renaming the symbol under the
     /// cursor, or a [`RenameError`](rename::RenameError) the caller turns into an
     /// LSP error response.
+    ///
+    /// In an `.rsdl` file, a system, component or instance is renamed with its
+    /// rsdl references and import lines, and a declared interface by the ridl
+    /// rename; a service, and an rsdl reference the checker binds to nothing,
+    /// are not renamed.
     fn rename(
         &mut self,
         params: &lt::RenameParams,
@@ -1048,6 +1125,34 @@ impl ServerState {
             .ok_or(rename::RenameError::NotRenameable)?;
         let offset = self.line_index_of(file).offset(position);
         let packages = self.search_packages();
+        if profile_of_path(&path) == Profile::Rsdl {
+            match rsdl::rename_at(&self.db, self.workspace, self.std, file, offset) {
+                rsdl::RenameAt::Rsdl { target, .. } => {
+                    let edits = rsdl::rename(
+                        &self.db,
+                        self.workspace,
+                        self.std,
+                        &packages,
+                        &target,
+                        &params.new_name,
+                    )?;
+                    return Ok(self.workspace_edit(edits, &params.new_name));
+                }
+                rsdl::RenameAt::Interface { symbol, .. } => {
+                    let edits = rename::rename_symbol(
+                        &self.db,
+                        self.workspace,
+                        self.std,
+                        &packages,
+                        symbol,
+                        &params.new_name,
+                    )?;
+                    return Ok(self.workspace_edit(edits, &params.new_name));
+                }
+                rsdl::RenameAt::Refused => return Err(rename::RenameError::NotRenameable),
+                rsdl::RenameAt::Typl => {}
+            }
+        }
         let edits = rename::rename(
             &self.db,
             self.workspace,
