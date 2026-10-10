@@ -109,7 +109,13 @@ pub trait Sizes<E: Encoding>: Interface {
     /// Row `i` is the bytes one in-flight instance of `MEMBERS[i]` reserves:
     /// the sum of `MAX_SIZE` over the member's payloads — one payload for most
     /// kinds, the request and then the reply for a `query`, none for a
-    /// `fixed`. The rows are parallel to [`Interface::MEMBERS`].
+    /// `fixed`, whose row is `0` because a fixed value is never in flight.
+    /// The rows are parallel to [`Interface::MEMBERS`].
+    ///
+    /// The codegen model's `Interaction.reservation` and
+    /// `Interface.table_budget` count a `fixed` member's payload, so for an
+    /// interface with a `fixed` member they are larger than this row and
+    /// than [`table_budget`] by the size of each fixed payload.
     const RESERVATIONS: &'static [u64];
     /// The largest `MAX_SIZE` over the argument and reply payloads of the
     /// interface's commands and queries; `0` when it has none.
@@ -238,7 +244,8 @@ pub struct Member {
     /// before commands and queries took a default response bound.
     pub timing: Option<Timing>,
     /// One entry per payload: two for a `query` (the request, then the
-    /// reply), one for every other kind.
+    /// reply), one for every other kind. A `fixed` has its one entry here
+    /// although its row of [`Sizes::RESERVATIONS`] is `0`.
     pub payloads: &'static [PayloadInfo],
 }
 
