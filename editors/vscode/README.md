@@ -30,8 +30,11 @@ Learn the languages:
   into the per-kind reading of family general form §6.2, and completion offers
   the interaction keywords inside an interface body.
 - **On a `.rsdl` file**: the system checks of the rsdl reference publish over
-  the whole workspace, and hover and go-to-definition follow a reference to the
-  component, instance, system, service or interface it names.
+  the whole workspace; hover, go-to-definition and find-references follow a
+  reference to the component, instance, system, service or interface it names;
+  rename rewrites a system, component or instance with every reference to it;
+  and completion offers what each slot admits — a service after `offers`, an
+  interface after `requires`, a component on a member line.
 - **MCP server** (`ridl mcp`): the extension registers an MCP server definition,
   so an MCP-aware agent host (Claude Code, GitHub Copilot, or another MCP
   client) can call the same `ridl_check` tool — the same parser, resolver and

@@ -60,7 +60,8 @@ pub enum RenameError {
     Reserved(String),
     /// The new name breaks the case convention for the symbol's kind.
     CaseConvention(String),
-    /// The new name already names a declaration in an affected package.
+    /// The new name already names a declaration or an import in an affected
+    /// package.
     Collision(String),
 }
 
@@ -74,7 +75,7 @@ impl RenameError {
             }
             RenameError::CaseConvention(message) => message.clone(),
             RenameError::Collision(name) => {
-                format!("`{name}` already names a declaration in an affected package")
+                format!("`{name}` already names a declaration or an import in an affected package")
             }
         }
     }
@@ -118,7 +119,20 @@ pub fn rename(
     new_name: &str,
 ) -> Result<Vec<Edit>, RenameError> {
     let (target, _) = locate(db, ws, std, pkg, file, offset).ok_or(RenameError::NotRenameable)?;
+    rename_symbol(db, ws, std, packages, target, new_name)
+}
 
+/// The workspace edit renaming the declaration `target` to `new_name`, or a
+/// [`RenameError`] when the rename is rejected. [`rename`] after the cursor is
+/// resolved; the rsdl rename of a declared interface enters here.
+pub fn rename_symbol(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    packages: &[Package],
+    target: Symbol,
+    new_name: &str,
+) -> Result<Vec<Edit>, RenameError> {
     // Reject: a symbol declared in the embedded `ridl.std`. Its declaration
     // lives in a built-in source with no editable file, so the declaration edit
     // would be silently dropped while user references are rewritten, leaving them
@@ -280,7 +294,7 @@ fn check_case(target: &Symbol, new_name: &str) -> Result<(), RenameError> {
 
 /// Whether `name` is UpperCamelCase: a leading ASCII uppercase letter and only
 /// ASCII alphanumerics after (no underscores).
-fn is_camel_case(name: &str) -> bool {
+pub(crate) fn is_camel_case(name: &str) -> bool {
     name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
         && name.chars().all(|c| c.is_ascii_alphanumeric())
 }
@@ -295,7 +309,11 @@ fn is_screaming_snake(name: &str) -> bool {
 }
 
 /// The package in `packages` named `name`, if loaded.
-fn package_named(db: &dyn salsa::Database, packages: &[Package], name: &str) -> Option<Package> {
+pub(crate) fn package_named(
+    db: &dyn salsa::Database,
+    packages: &[Package],
+    name: &str,
+) -> Option<Package> {
     packages
         .iter()
         .copied()
@@ -303,7 +321,7 @@ fn package_named(db: &dyn salsa::Database, packages: &[Package], name: &str) -> 
 }
 
 /// Whether `package` has its own declaration named `name`.
-fn declares(
+pub(crate) fn declares(
     db: &dyn salsa::Database,
     ws: Workspace,
     std: Package,
