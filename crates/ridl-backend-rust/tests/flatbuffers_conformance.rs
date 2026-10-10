@@ -1658,18 +1658,34 @@ fn codec_max_size(source: &str, type_name: &str) -> u64 {
 /// codec's bounds: one row per member in `MEMBERS` order, the query's row the
 /// sum of its request and its reply. The request and the reply have different
 /// bounds, so a row that took the larger of the two instead of their sum
-/// fails.
+/// fails. `Wiper`'s rows are the fixed's `0` and then the signal's bound: a
+/// fixed is never in flight, and a table that dropped its row would shift
+/// the signal's. Each descriptor's `ROW` indexes the member of its ordinal.
 #[test]
 fn the_reservation_rows_match_the_oracle_bounds() {
     let source = face_program(
         r#"
-use ridl_rt::contract::Sizes;
+use ridl_rt::contract::{Interaction, Kind, Ordinal, Sizes};
 use ridl_rt::encoding::FlatBuffers;
 
-fn main() {
-    for row in <Cabin as Sizes<FlatBuffers>>::RESERVATIONS {
+fn print_rows<I: Sizes<FlatBuffers>>() {
+    let rows = <I as Sizes<FlatBuffers>>::RESERVATIONS;
+    assert_eq!(rows.len(), I::MEMBERS.len(), "one row per member");
+    for row in rows {
         println!("{row}");
     }
+}
+
+fn main() {
+    print_rows::<Cabin>();
+    println!("--");
+    print_rows::<Wiper>();
+    assert_eq!(WiperBlades::ROW, 0);
+    assert_eq!(WiperBlades::MEMBER.ordinal, Ordinal(1));
+    assert_eq!(WiperBlades::MEMBER.kind, Kind::Fixed);
+    assert_eq!(WiperSpeed::ROW, 1);
+    assert_eq!(WiperSpeed::MEMBER.ordinal, Ordinal(2));
+    assert_eq!(WiperSpeed::MEMBER.kind, Kind::Signal);
 }
 "#,
     );
@@ -1682,17 +1698,24 @@ fn main() {
         bound("Average"),
         "the query's two payloads differ in size"
     );
-    let expected = [
+    let expected_cabin = [
         bound("Temperature"),
         bound("Warning"),
         bound("Level"),
         bound("Window") + bound("Average"),
     ];
-    let rows: Vec<u64> = transcript
-        .lines()
-        .map(|line| line.trim().parse().expect("a row is a number"))
-        .collect();
-    assert_eq!(rows, expected);
+    let expected_wiper = [0, bound("Level")];
+    let (cabin, wiper) = transcript
+        .split_once("--")
+        .expect("the two tables are separated");
+    let rows = |text: &str| -> Vec<u64> {
+        text.lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| line.trim().parse().expect("a row is a number"))
+            .collect()
+    };
+    assert_eq!(rows(cabin), expected_cabin);
+    assert_eq!(rows(wiper), expected_wiper);
 }
 
 /// `Cabin`'s two buffer sizes are the interface maxima over the codec's

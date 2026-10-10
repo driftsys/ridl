@@ -86,3 +86,15 @@ interface Valve {
   command open(level: Level)
   query pressure(window: Window): Average
 }
+
+// ------ An interface with a fixed before a signal, for the size table ------
+//
+// A `fixed` is provisioned, never in flight, so its row of the size table is
+// 0; the signal after it keeps its own row, so a table that dropped the
+// fixed's row would shift the signal's. Named to sort after `Valve`, for the
+// reason `Siren` gives.
+
+interface Wiper {
+  fixed  blades : Level
+  signal speed  : Level @10ms
+}

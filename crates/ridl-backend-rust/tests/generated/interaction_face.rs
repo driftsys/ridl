@@ -1280,8 +1280,8 @@ impl ::ridl_rt::contract::Interface for Cabin {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            31, 111, 244, 243, 55, 3, 153, 22, 131, 29, 54, 178, 244, 122, 83, 161, 14,
-            40, 142, 54, 154, 45, 241, 237, 234, 84, 50, 114, 41, 54, 92, 30,
+            235, 3, 42, 93, 94, 94, 34, 76, 58, 156, 122, 56, 159, 106, 60, 40, 128, 28,
+            22, 206, 53, 97, 57, 115, 66, 251, 28, 51, 216, 250, 71, 26,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(1);
@@ -1499,8 +1499,8 @@ impl ::ridl_rt::contract::Interface for Horn {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            31, 111, 244, 243, 55, 3, 153, 22, 131, 29, 54, 178, 244, 122, 83, 161, 14,
-            40, 142, 54, 154, 45, 241, 237, 234, 84, 50, 114, 41, 54, 92, 30,
+            235, 3, 42, 93, 94, 94, 34, 76, 58, 156, 122, 56, 159, 106, 60, 40, 128, 28,
+            22, 206, 53, 97, 57, 115, 66, 251, 28, 51, 216, 250, 71, 26,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(2);
@@ -1567,8 +1567,8 @@ impl ::ridl_rt::contract::Interface for Siren {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            31, 111, 244, 243, 55, 3, 153, 22, 131, 29, 54, 178, 244, 122, 83, 161, 14,
-            40, 142, 54, 154, 45, 241, 237, 234, 84, 50, 114, 41, 54, 92, 30,
+            235, 3, 42, 93, 94, 94, 34, 76, 58, 156, 122, 56, 159, 106, 60, 40, 128, 28,
+            22, 206, 53, 97, 57, 115, 66, 251, 28, 51, 216, 250, 71, 26,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(3);
@@ -1647,8 +1647,8 @@ impl ::ridl_rt::contract::Interface for Valve {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            31, 111, 244, 243, 55, 3, 153, 22, 131, 29, 54, 178, 244, 122, 83, 161, 14,
-            40, 142, 54, 154, 45, 241, 237, 234, 84, 50, 114, 41, 54, 92, 30,
+            235, 3, 42, 93, 94, 94, 34, 76, 58, 156, 122, 56, 159, 106, 60, 40, 128, 28,
+            22, 206, 53, 97, 57, 115, 66, 251, 28, 51, 216, 250, 71, 26,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(4);
@@ -1772,6 +1772,95 @@ impl ::ridl_rt::contract::Query for ValvePressure {
         _reply: &Self::Reply,
     ) -> ::core::result::Result<(), ()> {
         ::core::result::Result::Ok(())
+    }
+}
+/**Descriptor for interface `Wiper`.
+
+Its size table in FlatBuffers is `<Wiper as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound.*/
+pub struct Wiper;
+impl ::ridl_rt::contract::Interface for Wiper {
+    const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
+        name: "face.demo",
+        hash: ::ridl_rt::contract::CatalogHash([
+            235, 3, 42, 93, 94, 94, 34, 76, 58, 156, 122, 56, 159, 106, 60, 40, 128, 28,
+            22, 206, 53, 97, 57, 115, 66, 251, 28, 51, 216, 250, 71, 26,
+        ]),
+    };
+    const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(5);
+    const PROVISIONAL: ::core::primitive::bool = true;
+    const NAME: &'static ::core::primitive::str = "Wiper";
+    const MEMBERS: &'static [::ridl_rt::contract::Member] = &[
+        ::ridl_rt::contract::Member {
+            ordinal: ::ridl_rt::contract::Ordinal(1),
+            kind: ::ridl_rt::contract::Kind::Fixed,
+            name: "blades",
+            timing: ::core::option::Option::None,
+            payloads: &[
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "Level",
+                },
+            ],
+        },
+        ::ridl_rt::contract::Member {
+            ordinal: ::ridl_rt::contract::Ordinal(2),
+            kind: ::ridl_rt::contract::Kind::Signal,
+            name: "speed",
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
+                mode: ::ridl_rt::contract::TimingMode::StrictPeriodic,
+                min: ::core::option::Option::Some(::ridl_rt::sample::Duration(10000)),
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(10000)),
+            }),
+            payloads: &[
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "Level",
+                },
+            ],
+        },
+    ];
+}
+impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Wiper {
+    const RESERVATIONS: &'static [::core::primitive::u64] = &[
+        0u64,
+        <Level as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64,
+    ];
+    const MAX_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    type ClaimBuffer = [::core::primitive::u8; Self::MAX_BUFFER_SIZE];
+    type EventBuffer = [::core::primitive::u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
+    const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+}
+impl Wiper {
+    ///The largest argument or reply payload of this interface in FlatBuffers: `Sizes::MAX_BUFFER_SIZE` of this interface's table. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
+    pub const MAX_BUFFER_SIZE: ::core::primitive::usize = <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE;
+    ///The largest event payload of this interface in FlatBuffers: `Sizes::EVENT_SOURCE_BUFFER_SIZE` of this interface's table. `0` when the interface declares no event.
+    pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE;
+}
+pub struct WiperBlades;
+impl ::ridl_rt::contract::Interaction for WiperBlades {
+    type Iface = Wiper;
+    const MEMBER: &'static ::ridl_rt::contract::Member = &<Wiper as ::ridl_rt::contract::Interface>::MEMBERS[0];
+    const ROW: ::core::primitive::usize = 0;
+}
+impl ::ridl_rt::contract::Fixed for WiperBlades {
+    type Payload = Level;
+}
+pub struct WiperSpeed;
+impl ::ridl_rt::contract::Interaction for WiperSpeed {
+    type Iface = Wiper;
+    const MEMBER: &'static ::ridl_rt::contract::Member = &<Wiper as ::ridl_rt::contract::Interface>::MEMBERS[1];
+    const ROW: ::core::primitive::usize = 1;
+}
+impl ::ridl_rt::contract::Signal for WiperSpeed {
+    type Payload = Level;
+    fn init() -> Self::Payload {
+        <Level as ::core::default::Default>::default()
     }
 }
 ///The generated interaction face of interface `Cabin`.
@@ -4514,5 +4603,173 @@ Panics when `h` is attached to a catalog other than the one this face was genera
                 None => Ok(()),
             }
         }
+    }
+}
+///The generated interaction face of interface `Wiper`.
+pub mod wiper {
+    ///Panics unless `found` is the catalog the face of interface `Wiper` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new` of the face, and `serve` where the interface emits one, call it once, before they store or use the port.
+    #[track_caller]
+    fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
+        let expected = <super::Wiper as ::ridl_rt::contract::Interface>::CATALOG;
+        if *found != *expected {
+            ::core::panic!(
+                "the face of interface `Wiper` was generated from catalog {:?}, but the port is attached to catalog {:?}",
+                expected, found
+            );
+        }
+    }
+    ///The consumer face of interface `Wiper`, generic over exactly the ports the interface's interactions need. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, in scope through `prelude`.
+    pub struct Client<P: ::ridl_rt::port::SignalReader> {
+        port: P,
+    }
+    impl<P: ::ridl_rt::port::SignalReader> Client<P> {
+        ///Reads signal `speed` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        pub fn speed(
+            &self,
+        ) -> ::core::result::Result<
+            ::ridl_rt::sample::Sample<super::Level>,
+            ::ridl_rt::port::ReadError,
+        > {
+            let mut buf = [0u8; <super::Level as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE];
+            let raw = self
+                .port
+                .read(
+                    <super::Wiper as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(2u32),
+                    &mut buf,
+                )?;
+            let (value, provenance) = match raw.provenance {
+                ::ridl_rt::sample::Provenance::Init
+                | ::ridl_rt::sample::Provenance::Invalid(
+                    ::ridl_rt::sample::Cause::Declared,
+                ) if raw.len == 0 => {
+                    (
+                        <super::WiperSpeed as ::ridl_rt::contract::Signal>::init(),
+                        raw.provenance,
+                    )
+                }
+                _ => {
+                    match ::ridl_rt::payload::Ref::<
+                        super::Level,
+                        ::ridl_rt::encoding::FlatBuffers,
+                    >::verify(&buf[..raw.len]) {
+                        Ok(checked) => (checked.decode(), raw.provenance),
+                        Err(error) => {
+                            (
+                                <super::WiperSpeed as ::ridl_rt::contract::Signal>::init(),
+                                ::ridl_rt::sample::Provenance::Invalid(
+                                    ::ridl_rt::sample::Cause::Detected(
+                                        match error {
+                                            ::ridl_rt::payload::VerifyError::Contract(violation) => {
+                                                ::ridl_rt::sample::Detection::InvalidValue(violation)
+                                            }
+                                            _ => ::ridl_rt::sample::Detection::Corrupt,
+                                        },
+                                    ),
+                                ),
+                            )
+                        }
+                    }
+                }
+            };
+            Ok(::ridl_rt::sample::Sample {
+                value,
+                provenance,
+                freshness: raw.freshness,
+                envelope: raw.envelope,
+            })
+        }
+    }
+    impl<P: ::ridl_rt::port::SignalReader> ::ridl_rt::face::Bind for Client<P> {
+        type Port = P;
+        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Wiper as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Wiper` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
+        fn new(port: P) -> Self {
+            check_catalog(::ridl_rt::port::Attached::catalog(&port));
+            Client { port }
+        }
+    }
+    ///Stages the invalid state of one signal of interface `Wiper`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>` (ADR-0023 decision 7); `prelude` brings it into scope anonymously.
+    pub trait Invalidate {
+        ///Stages the invalid state for signal `speed`, with `Cause::Declared`. It is published by `commit`.
+        fn invalidate_speed(
+            &mut self,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError>;
+    }
+    ///The provider face of interface `Wiper`'s signals and events. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `commit` is `ridl_rt::face::Publish`'s and `invalidate_<signal>` is this module's `Invalidate`'s, all in scope through `prelude`.
+    pub struct Publisher<W: ::ridl_rt::port::SignalWriter> {
+        port: W,
+    }
+    impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
+        ///Stages a new value for signal `speed`. It is published by `commit`.
+        pub fn speed(
+            &mut self,
+            value: super::Level,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
+            let mut buf = [0u8; <super::Level as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE];
+            let bytes = match ::ridl_rt::payload::Ref::<
+                super::Level,
+                ::ridl_rt::encoding::FlatBuffers,
+            >::encode(&value, &mut buf) {
+                Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                    unreachable!(
+                        "encoding `Level` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<Level as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        needed, available
+                    )
+                }
+                Err(_) => unreachable!("encoding `Level` failed"),
+            };
+            self.port
+                .set(
+                    <super::Wiper as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(2u32),
+                    bytes,
+                )
+        }
+    }
+    impl<W: ::ridl_rt::port::SignalWriter> ::ridl_rt::face::Bind for Publisher<W> {
+        type Port = W;
+        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Wiper as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Wiper` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
+        fn new(port: W) -> Self {
+            check_catalog(::ridl_rt::port::Attached::catalog(&port));
+            Publisher { port }
+        }
+    }
+    impl<W: ::ridl_rt::port::SignalWriter> ::ridl_rt::face::Publish for Publisher<W> {
+        /// Publishes every staged signal change.
+        fn commit(&mut self) {
+            self.port.commit()
+        }
+    }
+    impl<W: ::ridl_rt::port::SignalWriter> Invalidate for Publisher<W> {
+        fn invalidate_speed(
+            &mut self,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
+            self.port
+                .invalidate(
+                    <super::Wiper as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(2u32),
+                )
+        }
+    }
+    ///The traits a consumer of interface `Wiper`'s face needs in scope. Glob-import this module, `use <this interface's module>::prelude::*;`, and every method of those traits — `new`, `commit`, `invalidate_<signal>` — is called as an inherent method would be. Only the `ridl-rt` traits are re-exported by name; this module's own traits are re-exported as `_`, so the preludes of two interfaces can share one scope.
+    pub mod prelude {
+        pub use ::ridl_rt::face::Bind;
+        pub use ::ridl_rt::face::Publish;
+        pub use super::Invalidate as _;
     }
 }

@@ -89,7 +89,7 @@ fn the_size_table_derives_from_max_size() {
         !d.contains("EncodedSizes") && !d.contains("max_size:"),
         "no per-payload size row is emitted"
     );
-    for iface in ["Cabin", "Horn", "Siren", "Valve"] {
+    for iface in ["Cabin", "Horn", "Siren", "Valve", "Wiper"] {
         sizes_impl(&d, iface);
     }
 
@@ -117,6 +117,21 @@ fn the_size_table_derives_from_max_size() {
         without_trailing_commas(rows),
         without_trailing_commas(&expected_rows),
         "Cabin's rows are the four members' sums over MAX_SIZE, in MEMBERS order"
+    );
+
+    // A fixed is never in flight: its row is `0u64`, and the signal after it
+    // keeps its own row, so a table that dropped the fixed's row would shift
+    // the signal's.
+    let wiper = sizes_impl(&d, "Wiper");
+    let rows = sizes_item(wiper, "RESERVATIONS", "constMAX_BUFFER_SIZE");
+    let expected_rows = format!(
+        "&'static[::core::primitive::u64]=&[0u64,{level}>>::MAX_SIZEas::core::primitive::u64,];",
+        level = max_size_path("Level"),
+    );
+    assert_eq!(
+        without_trailing_commas(rows),
+        without_trailing_commas(&expected_rows),
+        "Wiper's rows are the fixed's 0 and then the signal's MAX_SIZE"
     );
 
     let claim = sizes_item(cabin, "MAX_BUFFER_SIZE", "constEVENT_SOURCE_BUFFER_SIZE");
@@ -180,8 +195,8 @@ fn each_interaction_descriptor_has_its_row() {
         .collect();
     assert_eq!(
         descriptors.len(),
-        8,
-        "the fixture's eight interactions have a descriptor each: {descriptors:?}"
+        10,
+        "the fixture's ten interactions have a descriptor each: {descriptors:?}"
     );
 
     let checks: String = descriptors
@@ -204,7 +219,7 @@ fn each_interaction_descriptor_has_its_row() {
 fn the_fixture_compiles_clean() {
     let package = ir::compile_fixture("interaction_face.ridl");
     assert_eq!(package.name, "face.demo");
-    assert_eq!(package.shapes().count(), 4);
+    assert_eq!(package.shapes().count(), 5);
 }
 
 #[test]
