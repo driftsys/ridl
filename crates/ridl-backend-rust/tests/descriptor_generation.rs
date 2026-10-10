@@ -1,9 +1,11 @@
 //! Descriptor-layer generation over the interaction-face fixture. Asserts that
 //! `generate_face_with` emits the `Interface` and `Interaction` descriptors and the
 //! interaction-kind traits over the runtime crate when `encodings` names a
-//! codec, that the buffer constants are sized from the right payloads, that an
-//! empty `encodings` emits the domain types only, and that the pipeline
-//! `generate` stays clean of the face.
+//! codec, that each interface carries its size table (`Sizes<FlatBuffers>`)
+//! with every number a const expression over the codec's `MAX_SIZE`, that the
+//! buffer constants are sized from the right payloads, that an empty
+//! `encodings` emits the domain types only, and that the pipeline `generate`
+//! stays clean of the face.
 
 use ridl_backend_rust::{WireEncoding, generate, generate_face_with};
 use ridl_ir::codegen::v1;
@@ -18,6 +20,8 @@ fn encodings_option(value: &str) -> v1::BackendOption {
 
 #[path = "support/ir.rs"]
 mod ir;
+#[path = "support/rustc.rs"]
+mod rustc;
 
 /// Whitespace-stripped copy, so an assertion is robust to how prettyplease
 /// spaces a token stream.
@@ -38,170 +42,162 @@ fn max_size_path(type_name: &str) -> String {
     ))
 }
 
-/// Every `PayloadInfo.max_size` carries the model's own FlatBuffers bound
-/// (`Payload.flatbuffers_max_size`, which `max_size` computed) in its
-/// `flatbuffers` column and nothing else: `proto3` is `None` because this
-/// backend emits no proto3 codec, and `repr_c` is `None` until the layout is defined
-/// (driftsys/ridl#317). The payloads are read from the model the emitter reads, so
-/// the number asserted is the model's, not one this test derives.
+/// The `Sizes<FlatBuffers>` implementation of `iface`, whitespace-stripped:
+/// the text from its header to the next `impl`.
+fn sizes_impl<'a>(dense_source: &'a str, iface: &str) -> &'a str {
+    let header =
+        format!("impl::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers>for{iface}{{");
+    let at = dense_source
+        .find(&header)
+        .unwrap_or_else(|| panic!("{iface} has a Sizes<FlatBuffers> implementation"));
+    let body = &dense_source[at + header.len()..];
+    &body[..body.find("impl").unwrap_or(body.len())]
+}
+
+/// The expression of one `const` item of a `Sizes<FlatBuffers>`
+/// implementation, whitespace-stripped: the text from `=` to the next item,
+/// which `next` names.
+fn sizes_item<'a>(sizes_impl: &'a str, item: &str, next: &str) -> &'a str {
+    let header = format!("const{item}:");
+    let at = sizes_impl
+        .find(&header)
+        .unwrap_or_else(|| panic!("the table carries `{item}`"));
+    let body = &sizes_impl[at + header.len()..];
+    let end = body
+        .find(next)
+        .unwrap_or_else(|| panic!("`{item}` is followed by `{next}`"));
+    &body[..end]
+}
+
+/// The interface descriptor carries one size table per codec, and every
+/// number in it is a const expression over the codec's own
+/// `<T as Payload<FlatBuffers>>::MAX_SIZE`, never a literal the emitter would
+/// have to keep equal to the codec's. `RESERVATIONS` has one row per member in
+/// `MEMBERS` order — the signal, the event, the command, then the query as the
+/// sum of its request and its reply — and the two buffer constants of the
+/// descriptor are aliases of the table's. The `EncodedSizes` rows the
+/// descriptor once carried are gone with `PayloadInfo::max_size`.
 #[test]
-fn encoded_sizes_carry_the_models_flatbuffers_bound() {
+fn the_size_table_derives_from_max_size() {
     let package = ir::compile_fixture("interaction_face.ridl");
     let face = generate_face_with(&package, &[WireEncoding::FlatBuffers])
         .expect("generate_face_with")
         .rust_source;
     let d = dense(&face);
-    assert!(
-        face.contains("FlatBuffers bound as the codegen model carries it"),
-        "the descriptor doc comment states the sizes as filled, not deferred"
-    );
 
-    let model = ridl_ir::codegen::lower(&package, &[]);
-    let mut seen = 0;
-    for interface in &model.interfaces {
-        for slot in &interface.slots {
-            let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
-                slot.occupant.as_ref()
-            else {
-                continue;
-            };
-            let payloads: Vec<&v1::Payload> = match interaction.shape.as_ref() {
-                Some(v1::interaction::Shape::Signal(signal)) => signal.payload.iter().collect(),
-                Some(v1::interaction::Shape::Event(event)) => event.payload.iter().collect(),
-                Some(v1::interaction::Shape::Command(command)) => command.request.iter().collect(),
-                Some(v1::interaction::Shape::Query(query)) => query
-                    .request
-                    .iter()
-                    .chain(query.reply_payload.iter())
-                    .collect(),
-                Some(v1::interaction::Shape::Fixed(fixed)) => fixed.named.iter().collect(),
-                None => Vec::new(),
-            };
-            for payload in payloads {
-                let name = payload
-                    .r#type
-                    .as_ref()
-                    .map(|reference| reference.reference.as_str())
-                    .unwrap_or_default();
-                let bound = payload
-                    .flatbuffers_max_size
-                    .unwrap_or_else(|| panic!("{name} is bounded in the fixture"));
-                let expected = dense(&format!(
-                    "::ridl_rt::contract::PayloadInfo {{
-                        type_name: \"{name}\",
-                        max_size: ::ridl_rt::contract::EncodedSizes {{
-                            proto3: ::core::option::Option::None,
-                            flatbuffers: ::core::option::Option::Some({bound}),
-                            repr_c: ::core::option::Option::None,
-                        }},
-                    }}"
-                ));
-                assert!(d.contains(&expected), "{name}: expected {expected}");
-                // The codec writes `MAX_SIZE` from another model field
-                // (`FbRoot.bound`, `payload_impl` in `codec.rs`); the column
-                // and the constant must carry the same number.
-                assert_eq!(
-                    codec_max_size(&d, name),
-                    Some(bound),
-                    "{name}: the codec's MAX_SIZE is the descriptor's flatbuffers column"
-                );
-                seen += 1;
-            }
-        }
+    assert!(
+        !d.contains("EncodedSizes") && !d.contains("max_size:"),
+        "no per-payload size row is emitted"
+    );
+    for iface in ["Cabin", "Horn", "Siren", "Valve"] {
+        sizes_impl(&d, iface);
     }
-    assert!(
-        seen >= 10,
-        "the fixture's ten payload positions, over six types, were checked, saw {seen}"
-    );
-    assert!(
-        !d.contains("flatbuffers:::core::option::Option::None"),
-        "every payload of the fixture is sized"
-    );
-}
 
-/// A payload the model carries no FlatBuffers bound for is emitted with
-/// `None` in the `flatbuffers` column — not a number, and not the column of
-/// another payload. The fixture's payloads are all bounded, so the model is
-/// edited: `Horn.active`'s `Health` loses its bound before generation.
-#[test]
-fn a_payload_without_a_flatbuffers_bound_emits_none() {
-    use ridl_ir::codegen::Backend as _;
-
-    let package = ir::compile_fixture("interaction_face.ridl");
-    let mut model = ridl_ir::codegen::lower(&package, &[]);
-    let mut cleared = 0;
-    for interface in &mut model.interfaces {
-        for slot in &mut interface.slots {
-            let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
-                slot.occupant.as_mut()
-            else {
-                continue;
-            };
-            let Some(v1::interaction::Shape::Signal(signal)) = interaction.shape.as_mut() else {
-                continue;
-            };
-            let Some(payload) = signal.payload.as_mut() else {
-                continue;
-            };
-            if payload.r#type.as_ref().map(|r| r.reference.as_str()) == Some("Health") {
-                payload.flatbuffers_max_size = None;
-                cleared += 1;
-            }
-        }
-    }
-    assert_eq!(cleared, 1, "`Horn.active` is the one `Health` signal");
-
-    let request = v1::CodegenRequest {
-        model: Some(model),
-        options: vec![encodings_option("flatbuffers")],
-        artifact_base: "face_demo".to_string(),
-        ..Default::default()
-    };
-    let response = ridl_backend_rust::Backend.generate(&request);
-    let text = response
-        .files
-        .iter()
-        .find_map(|file| match &file.content {
-            Some(v1::generated_file::Content::Text(text)) => Some(text.as_str()),
-            _ => None,
-        })
-        .unwrap_or_else(|| panic!("a generated file, got {:?}", response.diagnostics));
-    let d = dense(text);
-    let expected = dense(
-        "::ridl_rt::contract::PayloadInfo {
-            type_name: \"Health\",
-            max_size: ::ridl_rt::contract::EncodedSizes {
-                proto3: ::core::option::Option::None,
-                flatbuffers: ::core::option::Option::None,
-                repr_c: ::core::option::Option::None,
-            },
-        }",
+    let cabin = sizes_impl(&d, "Cabin");
+    let rows = sizes_item(cabin, "RESERVATIONS", "constMAX_BUFFER_SIZE");
+    let expected_rows = format!(
+        "&'static[::core::primitive::u64]=&[\
+         {temperature}>>::MAX_SIZEas::core::primitive::u64,\
+         {warning}>>::MAX_SIZEas::core::primitive::u64,\
+         {level}>>::MAX_SIZEas::core::primitive::u64,\
+         {window}>>::MAX_SIZEas::core::primitive::u64\
+         +{average}>>::MAX_SIZEas::core::primitive::u64,\
+         ];",
+        temperature = max_size_path("Temperature"),
+        warning = max_size_path("Warning"),
+        level = max_size_path("Level"),
+        window = max_size_path("Window"),
+        average = max_size_path("Average"),
     );
-    assert!(d.contains(&expected), "expected {expected}");
+    // prettyplease wraps a long path and then writes a trailing comma inside
+    // the generic arguments and after the last row; neither comma is a token
+    // of the table, so both sides are compared without them.
+    let without_trailing_commas = |text: &str| text.replace(",>", ">").replace(",]", "]");
     assert_eq!(
-        d.matches("flatbuffers:::core::option::Option::None")
-            .count(),
-        1,
-        "every other payload keeps its bound"
+        without_trailing_commas(rows),
+        without_trailing_commas(&expected_rows),
+        "Cabin's rows are the four members' sums over MAX_SIZE, in MEMBERS order"
     );
+
+    let claim = sizes_item(cabin, "MAX_BUFFER_SIZE", "constEVENT_SOURCE_BUFFER_SIZE");
+    let event = sizes_item(cabin, "EVENT_SOURCE_BUFFER_SIZE", "typeClaimBuffer");
+    for (what, expression) in [("the claim buffer", claim), ("the event buffer", event)] {
+        assert!(
+            !expression.contains("usize=0") && !expression.contains("usize={0}"),
+            "{what} of Cabin is sized over MAX_SIZE, not a literal: {expression}"
+        );
+    }
+    assert!(
+        cabin.contains("typeClaimBuffer=[::core::primitive::u8;Self::MAX_BUFFER_SIZE];"),
+        "the claim buffer type is the table's own maximum"
+    );
+    assert!(
+        cabin.contains("typeEventBuffer=[::core::primitive::u8;Self::EVENT_SOURCE_BUFFER_SIZE];"),
+        "the event buffer type is the table's own maximum"
+    );
+    assert!(
+        cabin.contains("constCLAIM_BUFFER:Self::ClaimBuffer=[0u8;Self::MAX_BUFFER_SIZE];"),
+        "the claim buffer is zeroed over the table's maximum"
+    );
+    assert!(
+        cabin.contains("constEVENT_BUFFER:Self::EventBuffer=[0u8;Self::EVENT_SOURCE_BUFFER_SIZE];"),
+        "the event buffer is zeroed over the table's maximum"
+    );
+
+    // The descriptor's inherent constants are aliases of the table's, so the
+    // face compiles unchanged.
+    for constant in ["MAX_BUFFER_SIZE", "EVENT_SOURCE_BUFFER_SIZE"] {
+        let alias = format!(
+            "pubconst{constant}:::core::primitive::usize=\
+             <Selfas::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers>>::{constant};"
+        );
+        assert!(
+            without_trailing_commas(&d).contains(&alias),
+            "the inherent `{constant}` reads the table"
+        );
+    }
 }
 
-/// The `MAX_SIZE` the codec's `Payload<FlatBuffers>` impl for `type_name`
-/// carries, read from the whitespace-stripped source between that impl's
-/// header and the next impl header; `None` when the impl or the constant is
-/// missing.
-fn codec_max_size(dense_source: &str, type_name: &str) -> Option<u32> {
-    const HEADER: &str = "impl::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>for";
-    const CONST: &str = "constMAX_SIZE:::core::primitive::usize=";
-    let header = format!("{HEADER}{type_name}{{");
-    let at = dense_source.find(&header)?;
-    let body = &dense_source[at + header.len()..];
-    let body = &body[..body.find(HEADER).unwrap_or(body.len())];
-    let digits: String = body[body.find(CONST)? + CONST.len()..]
-        .chars()
-        .take_while(char::is_ascii_digit)
+/// Every interaction descriptor's `ROW` indexes, in its interface's
+/// `MEMBERS`, the member its `MEMBER` points at. Proven by compiling and
+/// running the fixture's face, over every `impl Interaction` it emits.
+#[test]
+fn each_interaction_descriptor_has_its_row() {
+    let package = ir::compile_fixture("interaction_face.ridl");
+    let face = generate_face_with(&package, &[WireEncoding::FlatBuffers])
+        .expect("generate_face_with")
+        .rust_source;
+
+    const HEADER: &str = "impl ::ridl_rt::contract::Interaction for ";
+    let descriptors: Vec<&str> = face
+        .match_indices(HEADER)
+        .map(|(at, _)| {
+            let rest = &face[at + HEADER.len()..];
+            rest.split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                .next()
+                .expect("an identifier follows the header")
+        })
         .collect();
-    digits.parse().ok()
+    assert_eq!(
+        descriptors.len(),
+        8,
+        "the fixture's eight interactions have a descriptor each: {descriptors:?}"
+    );
+
+    let checks: String = descriptors
+        .iter()
+        .map(|name| format!("    row_is_member::<{name}>();\n"))
+        .collect();
+    let program = format!(
+        "#![allow(dead_code)]\n{face}\n\
+         fn row_is_member<X: ::ridl_rt::contract::Interaction>() {{\n\
+             let members = <X::Iface as ::ridl_rt::contract::Interface>::MEMBERS;\n\
+             assert_eq!(members[X::ROW].ordinal, X::MEMBER.ordinal, \"{{}}\", X::MEMBER.name);\n\
+             assert_eq!(members[X::ROW], *X::MEMBER, \"{{}}\", X::MEMBER.name);\n\
+         }}\n\
+         fn main() {{\n{checks}}}\n"
+    );
+    rustc::run_program("descriptor_rows", &program);
 }
 
 #[test]
@@ -369,6 +365,9 @@ fn generate_face_emits_the_contract_clause_bodies() {
     assert!(d.contains("Err(())"), "a failing clause returns Err(())");
 }
 
+/// `MAX_BUFFER_SIZE` of the table is the maximum over the call argument and
+/// reply payloads, and over nothing else: a signal payload has a row in
+/// `RESERVATIONS` but is not sized into the claim buffer.
 #[test]
 fn the_interface_buffer_constant_is_the_max_argument_and_reply_size() {
     let package = ir::compile_fixture("interaction_face.ridl");
@@ -377,26 +376,43 @@ fn the_interface_buffer_constant_is_the_max_argument_and_reply_size() {
             .expect("generate_face_with")
             .rust_source,
     );
-
-    assert!(
-        d.contains("constMAX_BUFFER_SIZE:::core::primitive::usize"),
-        "MAX_BUFFER_SIZE constant"
-    );
+    let cabin = sizes_impl(&d, "Cabin");
+    let claim = sizes_item(cabin, "MAX_BUFFER_SIZE", "constEVENT_SOURCE_BUFFER_SIZE");
 
     // The call argument and reply types are sized in.
-    assert!(d.contains(&max_size_path("Level")), "command arg sized in");
-    assert!(d.contains(&max_size_path("Window")), "query arg sized in");
     assert!(
-        d.contains(&max_size_path("Average")),
+        claim.contains(&max_size_path("Level")),
+        "command arg sized in"
+    );
+    assert!(
+        claim.contains(&max_size_path("Window")),
+        "query arg sized in"
+    );
+    assert!(
+        claim.contains(&max_size_path("Average")),
         "query reply sized in"
     );
-    // A signal payload is not an argument or a reply, so it is not sized in.
+    // A signal payload is not an argument or a reply, so it is not sized in,
+    // and an event payload is not either.
     assert!(
-        !d.contains(&max_size_path("Temperature")),
+        !claim.contains(&max_size_path("Temperature")),
         "a signal payload is not in the argument/reply buffer",
+    );
+    assert!(
+        !claim.contains(&max_size_path("Warning")),
+        "an event payload is not in the argument/reply buffer",
+    );
+    // A signal-only interface has no call, so its claim buffer is empty.
+    let horn = sizes_impl(&d, "Horn");
+    assert_eq!(
+        sizes_item(horn, "MAX_BUFFER_SIZE", "constEVENT_SOURCE_BUFFER_SIZE"),
+        "::core::primitive::usize=0usize;",
+        "Horn declares no call"
     );
 }
 
+/// `EVENT_SOURCE_BUFFER_SIZE` of the table is the maximum over the event
+/// payloads, and over nothing else.
 #[test]
 fn the_event_source_constant_is_the_max_event_size() {
     let package = ir::compile_fixture("interaction_face.ridl");
@@ -405,20 +421,28 @@ fn the_event_source_constant_is_the_max_event_size() {
             .expect("generate_face_with")
             .rust_source,
     );
+    let cabin = sizes_impl(&d, "Cabin");
+    let event = sizes_item(cabin, "EVENT_SOURCE_BUFFER_SIZE", "typeClaimBuffer");
 
-    assert!(
-        d.contains("constEVENT_SOURCE_BUFFER_SIZE:::core::primitive::usize"),
-        "EVENT_SOURCE_BUFFER_SIZE constant",
-    );
     // The event payload is sized into the event-source buffer.
     assert!(
-        d.contains(&max_size_path("Warning")),
+        event.contains(&max_size_path("Warning")),
         "event payload sized in"
     );
-    // A signal-only interface's payload is not an event, so it is not sized in.
-    assert!(
-        !d.contains(&max_size_path("Health")),
-        "a signal payload is not in the event-source buffer",
+    // A signal payload and the call payloads are not events, so they are not
+    // sized in.
+    for payload in ["Temperature", "Level", "Window", "Average"] {
+        assert!(
+            !event.contains(&max_size_path(payload)),
+            "{payload} is not in the event-source buffer",
+        );
+    }
+    // A signal-only interface has no event, so its event buffer is empty.
+    let horn = sizes_impl(&d, "Horn");
+    assert_eq!(
+        sizes_item(horn, "EVENT_SOURCE_BUFFER_SIZE", "typeClaimBuffer"),
+        "::core::primitive::usize=0usize;",
+        "Horn declares no event"
     );
 }
 

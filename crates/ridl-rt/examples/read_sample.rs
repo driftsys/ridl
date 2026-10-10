@@ -16,8 +16,8 @@
 use std::cell::Cell;
 
 use ridl_rt::contract::{
-    CatalogHash, CatalogRef, EncodedSizes, Interaction, Interface, InterfaceNo, Kind, Member,
-    Ordinal, PayloadInfo, Signal, Timing, TimingMode,
+    CatalogHash, CatalogRef, Interaction, Interface, InterfaceNo, Kind, Member, Ordinal,
+    PayloadInfo, Signal, Timing, TimingMode,
 };
 use ridl_rt::encoding::ReprC;
 use ridl_rt::error::Contract;
@@ -98,17 +98,7 @@ impl Interface for Drivetrain {
             min: Some(Duration(20_000)),
             max: Some(Duration(500_000)),
         }),
-        // A generated descriptor fills in every encoding that can carry the
-        // payload. This program writes only the `repr(C)` codec, so it fills
-        // in only that size.
-        payloads: &[PayloadInfo {
-            type_name: "Speed",
-            max_size: EncodedSizes {
-                proto3: None,
-                flatbuffers: None,
-                repr_c: Some(2),
-            },
-        }],
+        payloads: &[PayloadInfo { type_name: "Speed" }],
     }];
 }
 
@@ -118,6 +108,7 @@ pub struct SpeedSignal;
 impl Interaction for SpeedSignal {
     type Iface = Drivetrain;
     const MEMBER: &'static Member = &Drivetrain::MEMBERS[0];
+    const ROW: usize = 0;
 }
 
 impl Signal for SpeedSignal {

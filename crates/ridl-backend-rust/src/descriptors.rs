@@ -6,12 +6,15 @@
 //! `ridl-rt` runtime crate named by its absolute path (`::ridl_rt::…`):
 //!
 //! - one unit struct per interface with an [`Interface`](::ridl_rt) impl
-//!   carrying `CATALOG`, `NUMBER`, `PROVISIONAL`, `NAME` and `MEMBERS`, plus
-//!   the `MAX_BUFFER_SIZE` and `EVENT_SOURCE_BUFFER_SIZE` associated
-//!   constants;
-//! - one unit struct per interaction with an `Interaction` impl (both required
-//!   items, `type Iface` and `const MEMBER`) and the kind's trait — `Signal`,
-//!   `Event`, `Command`, `Query` or `Fixed`.
+//!   carrying `CATALOG`, `NUMBER`, `PROVISIONAL`, `NAME` and `MEMBERS`, a
+//!   `Sizes<FlatBuffers>` impl — the interface's size table in the one codec
+//!   this backend emits, every item a const expression over the codec's own
+//!   `<T as Payload<FlatBuffers>>::MAX_SIZE` — and the inherent
+//!   `MAX_BUFFER_SIZE` and `EVENT_SOURCE_BUFFER_SIZE` constants, which read
+//!   the table so that the face can name them without the trait;
+//! - one unit struct per interaction with an `Interaction` impl (the three
+//!   required items, `type Iface`, `const MEMBER` and `const ROW`) and the
+//!   kind's trait — `Signal`, `Event`, `Command`, `Query` or `Fixed`.
 //!
 //! It is reached from [`crate::generate_pipeline`], which is
 //! what `ridl build --emit rust` calls, as well as from
@@ -136,6 +139,7 @@ fn one_interface_public(
     let interactions = interactions(interface);
 
     let mut member_rows: Vec<TokenStream> = Vec::new();
+    let mut reservations: Vec<TokenStream> = Vec::new();
     let mut call_sizes: Vec<TokenStream> = Vec::new();
     let mut event_sizes: Vec<TokenStream> = Vec::new();
     let mut interaction_items: Vec<TokenStream> = Vec::new();
@@ -147,6 +151,7 @@ fn one_interface_public(
             &iface_ident,
             interaction,
             interaction.row as usize,
+            &mut reservations,
             &mut call_sizes,
             &mut event_sizes,
         )?);
@@ -160,11 +165,10 @@ fn one_interface_public(
 
     let interface_doc = format!(
         "Descriptor for interface `{iface_name}`.\n\n\
-         Each `PayloadInfo.max_size.flatbuffers` is the payload's FlatBuffers \
-         bound as the codegen model carries it (`Payload.flatbuffers_max_size`, \
-         computed by `ridl_ir::projection::flatbuffers::max_size`), or `None` \
-         when the projection has none. `proto3` is `None`: this backend emits no \
-         proto3 codec. `repr_c` is `None` until the layout is defined (driftsys/ridl#317)."
+         Its size table in FlatBuffers is `<{iface_name} as Sizes<FlatBuffers>>`: \
+         one reservation row per member of `MEMBERS`, in order, and the two \
+         buffer sizes, every one a const expression over \
+         `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound."
     );
 
     items.push(quote! {
@@ -189,21 +193,42 @@ fn one_interface_public(
         }
     });
 
-    let max_buffer_doc = "The largest argument or reply payload of this \
-        interface, over `<T as Payload<FlatBuffers>>::MAX_SIZE`. The claim \
-        buffer `serve` holds is this large, because a reply is encoded into \
-        the same buffer as the arguments. `0` when the interface declares no \
-        call.";
-    let event_buffer_doc = "The largest event payload of this interface, over \
-        `<T as Payload<FlatBuffers>>::MAX_SIZE`. `0` when the interface \
-        declares no event.";
+    // The size table in the one codec this backend emits. The rows and the
+    // two maxima are const expressions over the codec's `MAX_SIZE`, never a
+    // number this emitter would have to keep equal to it.
+    items.push(quote! {
+        impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for #iface_ident {
+            const RESERVATIONS: &'static [::core::primitive::u64] = &[
+                #(#reservations),*
+            ];
+            const MAX_BUFFER_SIZE: ::core::primitive::usize = #max_buffer;
+            const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = #event_buffer;
+            type ClaimBuffer = [::core::primitive::u8; Self::MAX_BUFFER_SIZE];
+            type EventBuffer = [::core::primitive::u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+            const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
+            const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+        }
+    });
 
+    let max_buffer_doc = "The largest argument or reply payload of this \
+        interface in FlatBuffers: `Sizes::MAX_BUFFER_SIZE` of this interface's \
+        table. The claim buffer `serve` holds is this large, because a reply \
+        is encoded into the same buffer as the arguments. `0` when the \
+        interface declares no call.";
+    let event_buffer_doc = "The largest event payload of this interface in \
+        FlatBuffers: `Sizes::EVENT_SOURCE_BUFFER_SIZE` of this interface's \
+        table. `0` when the interface declares no event.";
+
+    // The face names the two maxima as inherent constants; each reads the
+    // table, so the two cannot differ from it.
     items.push(quote! {
         impl #iface_ident {
             #[doc = #max_buffer_doc]
-            pub const MAX_BUFFER_SIZE: ::core::primitive::usize = #max_buffer;
+            pub const MAX_BUFFER_SIZE: ::core::primitive::usize =
+                <Self as ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers>>::MAX_BUFFER_SIZE;
             #[doc = #event_buffer_doc]
-            pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = #event_buffer;
+            pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize =
+                <Self as ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers>>::EVENT_SOURCE_BUFFER_SIZE;
         }
     });
 
@@ -277,13 +302,15 @@ fn member_row(slot: u32, interaction: &v1::Interaction) -> Result<TokenStream, G
 }
 
 /// One interaction's unit struct, its `Interaction` impl, and its kind trait
-/// impl. Appends the interaction's argument, reply and event payload sizes to
-/// the interface's two buffer-constant worklists.
+/// impl. Appends the interaction's reservation row to the interface's size
+/// table, and its argument, reply and event payload sizes to the two
+/// buffer-constant worklists.
 fn interaction_item(
     ctx: &Ctx,
     iface_ident: &proc_macro2::Ident,
     interaction: &v1::Interaction,
     row_index: usize,
+    reservations: &mut Vec<TokenStream>,
     call_sizes: &mut Vec<TokenStream>,
     event_sizes: &mut Vec<TokenStream>,
 ) -> Result<TokenStream, GenerateError> {
@@ -293,7 +320,9 @@ fn interaction_item(
 
     let kind_impl = match interaction.shape.as_ref() {
         Some(v1::interaction::Shape::Signal(signal)) => {
-            let payload = type_path(payload_reference(signal.payload.as_ref()));
+            let reference = payload_reference(signal.payload.as_ref());
+            let payload = type_path(reference);
+            reservations.push(reservation_row(&[max_size_path(reference)]));
             // `init()` returns the payload type's default, which is the
             // channel init (ridl §4.4) for a signal with no `= value`
             // override — the fixture's case. A declared init override is a
@@ -312,6 +341,7 @@ fn interaction_item(
         Some(v1::interaction::Shape::Event(event)) => {
             let reference = payload_reference(event.payload.as_ref());
             let payload = type_path(reference);
+            reservations.push(reservation_row(&[max_size_path(reference)]));
             event_sizes.push(max_size_path(reference));
             quote! {
                 impl ::ridl_rt::contract::Event for #struct_ident {
@@ -321,6 +351,8 @@ fn interaction_item(
         }
         Some(v1::interaction::Shape::Fixed(fixed)) => {
             let payload = type_path(payload_reference(Some(fixed_payload(fixed, member)?)));
+            // A fixed is provisioned, never in flight, so it reserves nothing.
+            reservations.push(reservation_row(&[]));
             quote! {
                 impl ::ridl_rt::contract::Fixed for #struct_ident {
                     type Payload = #payload;
@@ -330,6 +362,7 @@ fn interaction_item(
         Some(v1::interaction::Shape::Command(command)) => {
             let arg_name = single_param_type(command, member)?;
             let args = type_path(arg_name);
+            reservations.push(reservation_row(&[max_size_path(arg_name)]));
             call_sizes.push(max_size_path(arg_name));
             let require = clauses::translate(
                 ctx,
@@ -356,6 +389,10 @@ fn interaction_item(
             let reply_name = query_reply_type(query, member)?;
             let args = type_path(arg_name);
             let reply = type_path(reply_name);
+            reservations.push(reservation_row(&[
+                max_size_path(arg_name),
+                max_size_path(reply_name),
+            ]));
             call_sizes.push(max_size_path(arg_name));
             call_sizes.push(max_size_path(reply_name));
 
@@ -412,39 +449,33 @@ fn interaction_item(
             type Iface = #iface_ident;
             const MEMBER: &'static ::ridl_rt::contract::Member =
                 &<#iface_ident as ::ridl_rt::contract::Interface>::MEMBERS[#index];
+            const ROW: ::core::primitive::usize = #index;
         }
 
         #kind_impl
     })
 }
 
-/// The `PayloadInfo` of one payload of the model. The `flatbuffers` column
-/// is the model's `Payload.flatbuffers_max_size`: the bound
-/// `ridl_ir::projection::flatbuffers::max_size` computed, read and never
-/// recomputed, because a plugin receives only the model; `None` when the
-/// projection has none. `proto3` is `None` because this backend emits no
-/// proto3 codec (the `EncodedSizes` doc in `ridl-rt`: a backend writes `None`
-/// for a codec it does not emit). `repr_c` is `None` until the layout is defined
-/// (driftsys/ridl#317).
+/// The `PayloadInfo` of one payload of the model: its type name. The
+/// payload's size is not here but in the interface's size table, as the
+/// member's row over the codec's own `MAX_SIZE` ([`reservation_row`]).
 fn payload_info(payload: Option<&v1::Payload>) -> TokenStream {
     let type_name = payload_reference(payload);
-    let flatbuffers = match payload.and_then(|payload| payload.flatbuffers_max_size) {
-        Some(bound) => {
-            let bound = Literal::u32_unsuffixed(bound);
-            quote! { ::core::option::Option::Some(#bound) }
-        }
-        None => quote! { ::core::option::Option::None },
-    };
     quote! {
         ::ridl_rt::contract::PayloadInfo {
             type_name: #type_name,
-            max_size: ::ridl_rt::contract::EncodedSizes {
-                proto3: ::core::option::Option::None,
-                flatbuffers: #flatbuffers,
-                repr_c: ::core::option::Option::None,
-            },
         }
     }
+}
+
+/// One row of the size table: the sum, as a `u64`, of the `MAX_SIZE` paths
+/// of a member's payloads — one for most kinds, the request and then the
+/// reply for a query — or `0u64` for a fixed, which has none.
+fn reservation_row(sizes: &[TokenStream]) -> TokenStream {
+    if sizes.is_empty() {
+        return quote! { 0u64 };
+    }
+    quote! { #(#sizes as ::core::primitive::u64)+* }
 }
 
 /// The `<T as Payload<::ridl_rt::encoding::FlatBuffers>>::MAX_SIZE`

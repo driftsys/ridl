@@ -1622,3 +1622,127 @@ fn main() {
     );
     assert_eq!(transcript.trim(), "ok");
 }
+
+/// The generated face of the interaction-face fixture, whose `Cabin` has one
+/// member of four kinds, with `main` appended.
+fn face_program(main: &str) -> String {
+    fixture_program("interaction_face.ridl", main)
+}
+
+/// The `MAX_SIZE` literal the codec's `Payload<FlatBuffers>` implementation
+/// for `type_name` carries in `source`: the bound the conformance cases above
+/// hold the codec to, read back from the text so a table checked against it
+/// is checked against the codec and not against itself.
+fn codec_max_size(source: &str, type_name: &str) -> u64 {
+    let dense: String = source.chars().filter(|c| !c.is_whitespace()).collect();
+    const HEADER: &str = "impl::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>for";
+    const CONST: &str = "constMAX_SIZE:::core::primitive::usize=";
+    let header = format!("{HEADER}{type_name}{{");
+    let at = dense
+        .find(&header)
+        .unwrap_or_else(|| panic!("{type_name} has a FlatBuffers codec"));
+    let body = &dense[at + header.len()..];
+    let body = &body[..body.find(HEADER).unwrap_or(body.len())];
+    let at = body
+        .find(CONST)
+        .unwrap_or_else(|| panic!("{type_name}'s codec states MAX_SIZE"));
+    body[at + CONST.len()..]
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect::<String>()
+        .parse()
+        .unwrap_or_else(|error| panic!("{type_name}'s MAX_SIZE is a literal: {error}"))
+}
+
+/// `Cabin`'s `RESERVATIONS` are the rows a runtime would compute from the
+/// codec's bounds: one row per member in `MEMBERS` order, the query's row the
+/// sum of its request and its reply. The request and the reply have different
+/// bounds, so a row that took the larger of the two instead of their sum
+/// fails.
+#[test]
+fn the_reservation_rows_match_the_oracle_bounds() {
+    let source = face_program(
+        r#"
+use ridl_rt::contract::Sizes;
+use ridl_rt::encoding::FlatBuffers;
+
+fn main() {
+    for row in <Cabin as Sizes<FlatBuffers>>::RESERVATIONS {
+        println!("{row}");
+    }
+}
+"#,
+    );
+    let transcript =
+        rustc::run_program_capturing_stdout("fb_conformance_reservation_rows", &source);
+
+    let bound = |type_name: &str| codec_max_size(&source, type_name);
+    assert_ne!(
+        bound("Window"),
+        bound("Average"),
+        "the query's two payloads differ in size"
+    );
+    let expected = [
+        bound("Temperature"),
+        bound("Warning"),
+        bound("Level"),
+        bound("Window") + bound("Average"),
+    ];
+    let rows: Vec<u64> = transcript
+        .lines()
+        .map(|line| line.trim().parse().expect("a row is a number"))
+        .collect();
+    assert_eq!(rows, expected);
+}
+
+/// `Cabin`'s two buffer sizes are the interface maxima over the codec's
+/// bounds: the claim buffer is the largest call payload, the event buffer the
+/// largest event payload, and the two differ because the fixture's event is
+/// larger than every call payload. Each buffer constant is as long as its
+/// size, and a payload's own buffer is shorter than the claim buffer when the
+/// payload is not the largest.
+#[test]
+fn the_buffer_sizes_are_the_interface_maxima() {
+    let source = face_program(
+        r#"
+use ridl_rt::contract::Sizes;
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::Payload;
+
+fn main() {
+    let claim = <Cabin as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE;
+    let event = <Cabin as Sizes<FlatBuffers>>::EVENT_SOURCE_BUFFER_SIZE;
+    assert_eq!(<Cabin as Sizes<FlatBuffers>>::CLAIM_BUFFER.as_ref().len(), claim);
+    assert_eq!(<Cabin as Sizes<FlatBuffers>>::EVENT_BUFFER.as_ref().len(), event);
+    assert!(<Cabin as Sizes<FlatBuffers>>::CLAIM_BUFFER.as_ref().iter().all(|b| *b == 0));
+    assert!(<Cabin as Sizes<FlatBuffers>>::EVENT_BUFFER.as_ref().iter().all(|b| *b == 0));
+    assert_eq!(Cabin::MAX_BUFFER_SIZE, claim, "the inherent alias reads the table");
+    assert_eq!(Cabin::EVENT_SOURCE_BUFFER_SIZE, event, "the inherent alias reads the table");
+    let smallest = <Level as Payload<FlatBuffers>>::BUFFER;
+    assert!(smallest.as_ref().len() < claim, "the smallest call payload's buffer is shorter");
+    println!("{claim} {event}");
+}
+"#,
+    );
+    let transcript = rustc::run_program_capturing_stdout("fb_conformance_buffer_maxima", &source);
+
+    let bound = |type_name: &str| codec_max_size(&source, type_name);
+    let largest_call = [bound("Level"), bound("Window"), bound("Average")]
+        .into_iter()
+        .max()
+        .expect("three call payloads");
+    let largest_event = bound("Warning");
+    assert!(
+        largest_event > largest_call,
+        "the fixture's event is larger than every call payload"
+    );
+    assert!(
+        bound("Level") < largest_call,
+        "the fixture's call payloads differ in size"
+    );
+    let sizes: Vec<u64> = transcript
+        .split_whitespace()
+        .map(|word| word.parse().expect("a size is a number"))
+        .collect();
+    assert_eq!(sizes, [largest_call, largest_event]);
+}

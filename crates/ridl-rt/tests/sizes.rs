@@ -1,13 +1,13 @@
-//! The size table per codec: `Sizes<E>`, `reservation` and
-//! `interface_budget`. Every number in a table derives from
-//! `<T as Payload<E>>::MAX_SIZE`, so each row of the fixture below is written
-//! as that path, never as a number, the way generated code writes it.
+//! The size table per codec: `Sizes<E>`, `reservation` and `table_budget`.
+//! Every number in a table derives from `<T as Payload<E>>::MAX_SIZE`, so
+//! each row of the fixture below is written as that path, never as a number,
+//! the way generated code writes it.
 
 #![forbid(unsafe_code)]
 
 use ridl_rt::contract::{
-    interface_budget, reservation, CatalogHash, CatalogRef, EncodedSizes, Interface, InterfaceNo,
-    Kind, Member, Ordinal, PayloadInfo, Sizes,
+    reservation, table_budget, CatalogHash, CatalogRef, Interaction, Interface, InterfaceNo, Kind,
+    Member, Ordinal, PayloadInfo, Sizes,
 };
 use ridl_rt::encoding::{Encoding, FlatBuffers};
 use ridl_rt::payload::{EncodeError, Encoded, Malformed, Payload, Ref, VerifyError};
@@ -16,14 +16,6 @@ const CABIN: CatalogRef = CatalogRef {
     name: "cabin",
     hash: CatalogHash([3; 32]),
 };
-
-const fn flatbuffers_size(size: u32) -> EncodedSizes {
-    EncodedSizes {
-        proto3: None,
-        flatbuffers: Some(size),
-        repr_c: None,
-    }
-}
 
 /// Writes `value` into the front of `out`, padded to `len` bytes, and returns
 /// the bytes written.
@@ -103,7 +95,6 @@ const WARNING: Member = Member {
     timing: None,
     payloads: &[PayloadInfo {
         type_name: "Warning",
-        max_size: flatbuffers_size(8),
     }],
 };
 
@@ -115,11 +106,9 @@ const AVERAGE: Member = Member {
     payloads: &[
         PayloadInfo {
             type_name: "Window",
-            max_size: flatbuffers_size(24),
         },
         PayloadInfo {
             type_name: "Warning",
-            max_size: flatbuffers_size(8),
         },
     ],
 };
@@ -131,7 +120,6 @@ const SET_WINDOW: Member = Member {
     timing: None,
     payloads: &[PayloadInfo {
         type_name: "Window",
-        max_size: flatbuffers_size(24),
     }],
 };
 
@@ -164,6 +152,32 @@ impl Sizes<FlatBuffers> for Cabin {
     const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
 }
 
+/// The interaction descriptors, each carrying its row, as generated code
+/// writes them.
+struct CabinWarning;
+
+impl Interaction for CabinWarning {
+    type Iface = Cabin;
+    const MEMBER: &'static Member = &Cabin::MEMBERS[0];
+    const ROW: usize = 0;
+}
+
+struct CabinAverage;
+
+impl Interaction for CabinAverage {
+    type Iface = Cabin;
+    const MEMBER: &'static Member = &Cabin::MEMBERS[1];
+    const ROW: usize = 1;
+}
+
+struct CabinSetWindow;
+
+impl Interaction for CabinSetWindow {
+    type Iface = Cabin;
+    const MEMBER: &'static Member = &Cabin::MEMBERS[2];
+    const ROW: usize = 2;
+}
+
 /// `interface Huge`: two rows whose sum overflows a `u64`.
 struct Huge;
 
@@ -185,34 +199,127 @@ impl Sizes<FlatBuffers> for Huge {
     const EVENT_BUFFER: Self::EventBuffer = [];
 }
 
-/// `Sizes::RESERVATIONS`: a reservation is the row at the given index.
-#[test]
-fn a_reservation_is_its_row() {
-    assert_eq!(reservation::<Cabin, FlatBuffers>(1), 32);
-    assert_eq!(reservation::<Cabin, FlatBuffers>(0), 8);
+/// `interface Empty`: no member, so no row.
+struct Empty;
+
+impl Interface for Empty {
+    const CATALOG: &'static CatalogRef = &CABIN;
+    const NUMBER: InterfaceNo = InterfaceNo(3);
+    const PROVISIONAL: bool = false;
+    const NAME: &'static str = "Empty";
+    const MEMBERS: &'static [Member] = &[];
 }
 
-/// `interface_budget` sums every row: three distinct rows, so a maximum or a
+impl Sizes<FlatBuffers> for Empty {
+    const RESERVATIONS: &'static [u64] = &[];
+    const MAX_BUFFER_SIZE: usize = 0;
+    const EVENT_SOURCE_BUFFER_SIZE: usize = 0;
+    type ClaimBuffer = [u8; 0];
+    type EventBuffer = [u8; 0];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [];
+    const EVENT_BUFFER: Self::EventBuffer = [];
+}
+
+/// `interface Wide`: one query whose request and reply are each as large as a
+/// `u32` can state. The row is written as the sum of the two sizes, each cast
+/// to `u64` first, the way generated code writes a query's row.
+struct Wide;
+
+impl Interface for Wide {
+    const CATALOG: &'static CatalogRef = &CABIN;
+    const NUMBER: InterfaceNo = InterfaceNo(4);
+    const PROVISIONAL: bool = false;
+    const NAME: &'static str = "Wide";
+    const MEMBERS: &'static [Member] = &[AVERAGE];
+}
+
+impl Sizes<FlatBuffers> for Wide {
+    const RESERVATIONS: &'static [u64] = &[(u32::MAX as usize) as u64 + (u32::MAX as usize) as u64];
+    const MAX_BUFFER_SIZE: usize = 0;
+    const EVENT_SOURCE_BUFFER_SIZE: usize = 0;
+    type ClaimBuffer = [u8; 0];
+    type EventBuffer = [u8; 0];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [];
+    const EVENT_BUFFER: Self::EventBuffer = [];
+}
+
+struct WideAverage;
+
+impl Interaction for WideAverage {
+    type Iface = Wide;
+    const MEMBER: &'static Member = &Wide::MEMBERS[0];
+    const ROW: usize = 0;
+}
+
+/// `Interaction::ROW` and `Sizes::RESERVATIONS`: an interaction's reservation
+/// is its row of its interface's table. The query's row is the sum of its two
+/// payloads, so a maximum over them (24) or the first alone fails.
+#[test]
+fn a_reservation_is_the_interactions_row() {
+    assert_eq!(reservation::<CabinAverage, FlatBuffers>(), 32);
+    assert_eq!(reservation::<CabinWarning, FlatBuffers>(), 8);
+    assert_eq!(reservation::<CabinSetWindow, FlatBuffers>(), 24);
+}
+
+/// `ROW` indexes the member `MEMBER` points at, for every descriptor of the
+/// interface.
+#[test]
+fn a_row_indexes_the_descriptors_member() {
+    fn row_is_member<X: Interaction>() {
+        assert_eq!(
+            <X::Iface as Interface>::MEMBERS[X::ROW],
+            *X::MEMBER,
+            "{}",
+            X::MEMBER.name
+        );
+    }
+    row_is_member::<CabinWarning>();
+    row_is_member::<CabinAverage>();
+    row_is_member::<CabinSetWindow>();
+}
+
+/// `table_budget` sums every row: three distinct rows, so a maximum or a
 /// first row gives another number.
 #[test]
 fn a_table_budget_sums_every_row() {
-    assert_eq!(interface_budget::<Cabin, FlatBuffers>(), 64);
+    assert_eq!(table_budget::<Cabin, FlatBuffers>(), 64);
+}
+
+/// An interface with no member has a budget of zero.
+#[test]
+fn an_empty_table_has_a_budget_of_zero() {
+    assert_eq!(table_budget::<Empty, FlatBuffers>(), 0);
+}
+
+/// A row is a `u64`, wider than one `u32` size, so a query whose two payloads
+/// are each the largest size a `u32` states does not overflow its row.
+#[test]
+fn the_sum_is_wider_than_one_size() {
+    assert_eq!(
+        reservation::<WideAverage, FlatBuffers>(),
+        2 * u64::from(u32::MAX)
+    );
+    assert_eq!(table_budget::<Wide, FlatBuffers>(), 2 * u64::from(u32::MAX));
 }
 
 /// The sum saturates rather than wrapping.
 #[test]
 fn a_table_budget_saturates() {
-    assert_eq!(interface_budget::<Huge, FlatBuffers>(), u64::MAX);
+    assert_eq!(table_budget::<Huge, FlatBuffers>(), u64::MAX);
 }
 
-/// `interface_budget` is a `const fn`: a `static` table is sized from it at
-/// compile time, with no allocator. The initializer repeats the length,
-/// because `[0; _]` is not accepted by the oldest Rust this crate supports.
+/// `table_budget` and `reservation` are `const fn`: a `static` table is sized
+/// from them at compile time, with no allocator. The initializer repeats the
+/// length, because `[0; _]` is not accepted by the oldest Rust this crate
+/// supports.
 #[test]
 fn a_static_table_is_sized_from_the_budget() {
-    static TABLE: [u8; interface_budget::<Cabin, FlatBuffers>() as usize] =
-        [0; interface_budget::<Cabin, FlatBuffers>() as usize];
+    static TABLE: [u8; table_budget::<Cabin, FlatBuffers>() as usize] =
+        [0; table_budget::<Cabin, FlatBuffers>() as usize];
+    static ROW: [u8; reservation::<CabinAverage, FlatBuffers>() as usize] =
+        [0; reservation::<CabinAverage, FlatBuffers>() as usize];
     assert_eq!(TABLE.len(), 64);
+    assert_eq!(ROW.len(), 32);
 }
 
 /// Holds both interface-wide buffers through the trait alone, as a face

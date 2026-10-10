@@ -1274,7 +1274,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
 }
 /**Descriptor for interface `Cabin`.
 
-Each `PayloadInfo.max_size.flatbuffers` is the payload's FlatBuffers bound as the codegen model carries it (`Payload.flatbuffers_max_size`, computed by `ridl_ir::projection::flatbuffers::max_size`), or `None` when the projection has none. `proto3` is `None`: this backend emits no proto3 codec. `repr_c` is `None` until the layout is defined (driftsys/ridl#317).*/
+Its size table in FlatBuffers is `<Cabin as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound.*/
 pub struct Cabin;
 impl ::ridl_rt::contract::Interface for Cabin {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -1300,11 +1300,6 @@ impl ::ridl_rt::contract::Interface for Cabin {
             payloads: &[
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Temperature",
-                    max_size: ::ridl_rt::contract::EncodedSizes {
-                        proto3: ::core::option::Option::None,
-                        flatbuffers: ::core::option::Option::Some(43),
-                        repr_c: ::core::option::Option::None,
-                    },
                 },
             ],
         },
@@ -1320,11 +1315,6 @@ impl ::ridl_rt::contract::Interface for Cabin {
             payloads: &[
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Warning",
-                    max_size: ::ridl_rt::contract::EncodedSizes {
-                        proto3: ::core::option::Option::None,
-                        flatbuffers: ::core::option::Option::Some(60),
-                        repr_c: ::core::option::Option::None,
-                    },
                 },
             ],
         },
@@ -1340,11 +1330,6 @@ impl ::ridl_rt::contract::Interface for Cabin {
             payloads: &[
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Level",
-                    max_size: ::ridl_rt::contract::EncodedSizes {
-                        proto3: ::core::option::Option::None,
-                        flatbuffers: ::core::option::Option::Some(43),
-                        repr_c: ::core::option::Option::None,
-                    },
                 },
             ],
         },
@@ -1360,27 +1345,33 @@ impl ::ridl_rt::contract::Interface for Cabin {
             payloads: &[
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Window",
-                    max_size: ::ridl_rt::contract::EncodedSizes {
-                        proto3: ::core::option::Option::None,
-                        flatbuffers: ::core::option::Option::Some(46),
-                        repr_c: ::core::option::Option::None,
-                    },
                 },
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Average",
-                    max_size: ::ridl_rt::contract::EncodedSizes {
-                        proto3: ::core::option::Option::None,
-                        flatbuffers: ::core::option::Option::Some(44),
-                        repr_c: ::core::option::Option::None,
-                    },
                 },
             ],
         },
     ];
 }
-impl Cabin {
-    ///The largest argument or reply payload of this interface, over `<T as Payload<FlatBuffers>>::MAX_SIZE`. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
-    pub const MAX_BUFFER_SIZE: ::core::primitive::usize = {
+impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Cabin {
+    const RESERVATIONS: &'static [::core::primitive::u64] = &[
+        <Temperature as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64,
+        <Warning as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64,
+        <Level as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64,
+        <Window as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64
+            + <Average as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE as ::core::primitive::u64,
+    ];
+    const MAX_BUFFER_SIZE: ::core::primitive::usize = {
         let sizes = [
             <Level as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -1402,8 +1393,7 @@ impl Cabin {
         }
         max
     };
-    ///The largest event payload of this interface, over `<T as Payload<FlatBuffers>>::MAX_SIZE`. `0` when the interface declares no event.
-    pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = {
+    const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = {
         let sizes = [
             <Warning as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -1419,11 +1409,26 @@ impl Cabin {
         }
         max
     };
+    type ClaimBuffer = [::core::primitive::u8; Self::MAX_BUFFER_SIZE];
+    type EventBuffer = [::core::primitive::u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
+    const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+}
+impl Cabin {
+    ///The largest argument or reply payload of this interface in FlatBuffers: `Sizes::MAX_BUFFER_SIZE` of this interface's table. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
+    pub const MAX_BUFFER_SIZE: ::core::primitive::usize = <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE;
+    ///The largest event payload of this interface in FlatBuffers: `Sizes::EVENT_SOURCE_BUFFER_SIZE` of this interface's table. `0` when the interface declares no event.
+    pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE;
 }
 pub struct CabinTemperature;
 impl ::ridl_rt::contract::Interaction for CabinTemperature {
     type Iface = Cabin;
     const MEMBER: &'static ::ridl_rt::contract::Member = &<Cabin as ::ridl_rt::contract::Interface>::MEMBERS[0];
+    const ROW: ::core::primitive::usize = 0;
 }
 impl ::ridl_rt::contract::Signal for CabinTemperature {
     type Payload = Temperature;
@@ -1435,6 +1440,7 @@ pub struct CabinWarning;
 impl ::ridl_rt::contract::Interaction for CabinWarning {
     type Iface = Cabin;
     const MEMBER: &'static ::ridl_rt::contract::Member = &<Cabin as ::ridl_rt::contract::Interface>::MEMBERS[1];
+    const ROW: ::core::primitive::usize = 1;
 }
 impl ::ridl_rt::contract::Event for CabinWarning {
     type Payload = Warning;
@@ -1443,6 +1449,7 @@ pub struct CabinSetLevel;
 impl ::ridl_rt::contract::Interaction for CabinSetLevel {
     type Iface = Cabin;
     const MEMBER: &'static ::ridl_rt::contract::Member = &<Cabin as ::ridl_rt::contract::Interface>::MEMBERS[2];
+    const ROW: ::core::primitive::usize = 2;
 }
 impl ::ridl_rt::contract::Command for CabinSetLevel {
     type Args = Level;
@@ -1459,6 +1466,7 @@ pub struct CabinAverage;
 impl ::ridl_rt::contract::Interaction for CabinAverage {
     type Iface = Cabin;
     const MEMBER: &'static ::ridl_rt::contract::Member = &<Cabin as ::ridl_rt::contract::Interface>::MEMBERS[3];
+    const ROW: ::core::primitive::usize = 3;
 }
 impl ::ridl_rt::contract::Query for CabinAverage {
     type Args = Window;
@@ -1485,7 +1493,7 @@ impl ::ridl_rt::contract::Query for CabinAverage {
 }
 /**Descriptor for interface `Horn`.
 
-Each `PayloadInfo.max_size.flatbuffers` is the payload's FlatBuffers bound as the codegen model carries it (`Payload.flatbuffers_max_size`, computed by `ridl_ir::projection::flatbuffers::max_size`), or `None` when the projection has none. `proto3` is `None`: this backend emits no proto3 codec. `repr_c` is `None` until the layout is defined (driftsys/ridl#317).*/
+Its size table in FlatBuffers is `<Horn as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound.*/
 pub struct Horn;
 impl ::ridl_rt::contract::Interface for Horn {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -1511,26 +1519,39 @@ impl ::ridl_rt::contract::Interface for Horn {
             payloads: &[
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Health",
-                    max_size: ::ridl_rt::contract::EncodedSizes {
-                        proto3: ::core::option::Option::None,
-                        flatbuffers: ::core::option::Option::Some(50),
-                        repr_c: ::core::option::Option::None,
-                    },
                 },
             ],
         },
     ];
 }
+impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Horn {
+    const RESERVATIONS: &'static [::core::primitive::u64] = &[
+        <Health as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64,
+    ];
+    const MAX_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    type ClaimBuffer = [::core::primitive::u8; Self::MAX_BUFFER_SIZE];
+    type EventBuffer = [::core::primitive::u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
+    const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+}
 impl Horn {
-    ///The largest argument or reply payload of this interface, over `<T as Payload<FlatBuffers>>::MAX_SIZE`. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
-    pub const MAX_BUFFER_SIZE: ::core::primitive::usize = 0usize;
-    ///The largest event payload of this interface, over `<T as Payload<FlatBuffers>>::MAX_SIZE`. `0` when the interface declares no event.
-    pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    ///The largest argument or reply payload of this interface in FlatBuffers: `Sizes::MAX_BUFFER_SIZE` of this interface's table. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
+    pub const MAX_BUFFER_SIZE: ::core::primitive::usize = <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE;
+    ///The largest event payload of this interface in FlatBuffers: `Sizes::EVENT_SOURCE_BUFFER_SIZE` of this interface's table. `0` when the interface declares no event.
+    pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE;
 }
 pub struct HornActive;
 impl ::ridl_rt::contract::Interaction for HornActive {
     type Iface = Horn;
     const MEMBER: &'static ::ridl_rt::contract::Member = &<Horn as ::ridl_rt::contract::Interface>::MEMBERS[0];
+    const ROW: ::core::primitive::usize = 0;
 }
 impl ::ridl_rt::contract::Signal for HornActive {
     type Payload = Health;
@@ -1540,7 +1561,7 @@ impl ::ridl_rt::contract::Signal for HornActive {
 }
 /**Descriptor for interface `Siren`.
 
-Each `PayloadInfo.max_size.flatbuffers` is the payload's FlatBuffers bound as the codegen model carries it (`Payload.flatbuffers_max_size`, computed by `ridl_ir::projection::flatbuffers::max_size`), or `None` when the projection has none. `proto3` is `None`: this backend emits no proto3 codec. `repr_c` is `None` until the layout is defined (driftsys/ridl#317).*/
+Its size table in FlatBuffers is `<Siren as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound.*/
 pub struct Siren;
 impl ::ridl_rt::contract::Interface for Siren {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -1566,21 +1587,19 @@ impl ::ridl_rt::contract::Interface for Siren {
             payloads: &[
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Warning",
-                    max_size: ::ridl_rt::contract::EncodedSizes {
-                        proto3: ::core::option::Option::None,
-                        flatbuffers: ::core::option::Option::Some(60),
-                        repr_c: ::core::option::Option::None,
-                    },
                 },
             ],
         },
     ];
 }
-impl Siren {
-    ///The largest argument or reply payload of this interface, over `<T as Payload<FlatBuffers>>::MAX_SIZE`. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
-    pub const MAX_BUFFER_SIZE: ::core::primitive::usize = 0usize;
-    ///The largest event payload of this interface, over `<T as Payload<FlatBuffers>>::MAX_SIZE`. `0` when the interface declares no event.
-    pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = {
+impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Siren {
+    const RESERVATIONS: &'static [::core::primitive::u64] = &[
+        <Warning as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64,
+    ];
+    const MAX_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = {
         let sizes = [
             <Warning as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -1596,18 +1615,33 @@ impl Siren {
         }
         max
     };
+    type ClaimBuffer = [::core::primitive::u8; Self::MAX_BUFFER_SIZE];
+    type EventBuffer = [::core::primitive::u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
+    const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+}
+impl Siren {
+    ///The largest argument or reply payload of this interface in FlatBuffers: `Sizes::MAX_BUFFER_SIZE` of this interface's table. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
+    pub const MAX_BUFFER_SIZE: ::core::primitive::usize = <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE;
+    ///The largest event payload of this interface in FlatBuffers: `Sizes::EVENT_SOURCE_BUFFER_SIZE` of this interface's table. `0` when the interface declares no event.
+    pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE;
 }
 pub struct SirenTripped;
 impl ::ridl_rt::contract::Interaction for SirenTripped {
     type Iface = Siren;
     const MEMBER: &'static ::ridl_rt::contract::Member = &<Siren as ::ridl_rt::contract::Interface>::MEMBERS[0];
+    const ROW: ::core::primitive::usize = 0;
 }
 impl ::ridl_rt::contract::Event for SirenTripped {
     type Payload = Warning;
 }
 /**Descriptor for interface `Valve`.
 
-Each `PayloadInfo.max_size.flatbuffers` is the payload's FlatBuffers bound as the codegen model carries it (`Payload.flatbuffers_max_size`, computed by `ridl_ir::projection::flatbuffers::max_size`), or `None` when the projection has none. `proto3` is `None`: this backend emits no proto3 codec. `repr_c` is `None` until the layout is defined (driftsys/ridl#317).*/
+Its size table in FlatBuffers is `<Valve as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound.*/
 pub struct Valve;
 impl ::ridl_rt::contract::Interface for Valve {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -1633,11 +1667,6 @@ impl ::ridl_rt::contract::Interface for Valve {
             payloads: &[
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Level",
-                    max_size: ::ridl_rt::contract::EncodedSizes {
-                        proto3: ::core::option::Option::None,
-                        flatbuffers: ::core::option::Option::Some(43),
-                        repr_c: ::core::option::Option::None,
-                    },
                 },
             ],
         },
@@ -1653,27 +1682,27 @@ impl ::ridl_rt::contract::Interface for Valve {
             payloads: &[
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Window",
-                    max_size: ::ridl_rt::contract::EncodedSizes {
-                        proto3: ::core::option::Option::None,
-                        flatbuffers: ::core::option::Option::Some(46),
-                        repr_c: ::core::option::Option::None,
-                    },
                 },
                 ::ridl_rt::contract::PayloadInfo {
                     type_name: "Average",
-                    max_size: ::ridl_rt::contract::EncodedSizes {
-                        proto3: ::core::option::Option::None,
-                        flatbuffers: ::core::option::Option::Some(44),
-                        repr_c: ::core::option::Option::None,
-                    },
                 },
             ],
         },
     ];
 }
-impl Valve {
-    ///The largest argument or reply payload of this interface, over `<T as Payload<FlatBuffers>>::MAX_SIZE`. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
-    pub const MAX_BUFFER_SIZE: ::core::primitive::usize = {
+impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Valve {
+    const RESERVATIONS: &'static [::core::primitive::u64] = &[
+        <Level as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64,
+        <Window as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64
+            + <Average as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE as ::core::primitive::u64,
+    ];
+    const MAX_BUFFER_SIZE: ::core::primitive::usize = {
         let sizes = [
             <Level as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
@@ -1695,13 +1724,27 @@ impl Valve {
         }
         max
     };
-    ///The largest event payload of this interface, over `<T as Payload<FlatBuffers>>::MAX_SIZE`. `0` when the interface declares no event.
-    pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    type ClaimBuffer = [::core::primitive::u8; Self::MAX_BUFFER_SIZE];
+    type EventBuffer = [::core::primitive::u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
+    const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+}
+impl Valve {
+    ///The largest argument or reply payload of this interface in FlatBuffers: `Sizes::MAX_BUFFER_SIZE` of this interface's table. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
+    pub const MAX_BUFFER_SIZE: ::core::primitive::usize = <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE;
+    ///The largest event payload of this interface in FlatBuffers: `Sizes::EVENT_SOURCE_BUFFER_SIZE` of this interface's table. `0` when the interface declares no event.
+    pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE;
 }
 pub struct ValveOpen;
 impl ::ridl_rt::contract::Interaction for ValveOpen {
     type Iface = Valve;
     const MEMBER: &'static ::ridl_rt::contract::Member = &<Valve as ::ridl_rt::contract::Interface>::MEMBERS[0];
+    const ROW: ::core::primitive::usize = 0;
 }
 impl ::ridl_rt::contract::Command for ValveOpen {
     type Args = Level;
@@ -1714,6 +1757,7 @@ pub struct ValvePressure;
 impl ::ridl_rt::contract::Interaction for ValvePressure {
     type Iface = Valve;
     const MEMBER: &'static ::ridl_rt::contract::Member = &<Valve as ::ridl_rt::contract::Interface>::MEMBERS[1];
+    const ROW: ::core::primitive::usize = 1;
 }
 impl ::ridl_rt::contract::Query for ValvePressure {
     type Args = Window;

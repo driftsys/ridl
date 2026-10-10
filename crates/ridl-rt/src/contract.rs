@@ -4,13 +4,12 @@
 //! are the per-member form of the ordinal table of ADR-0013 decision 3,
 //! extended with the interface number and the catalog hash.
 //!
-//! Two computations read the descriptors: a member's call deadline
-//! ([`Member::call_deadline`]) and the in-flight byte budget
-//! ([`Member::reservation`], [`table_budget`]).
+//! One computation reads the descriptors: a member's call deadline
+//! ([`Member::call_deadline`]).
 //!
 //! The size table of an interface in one encoding is [`Sizes`], which
 //! generated code implements once per interface per codec; [`reservation`]
-//! and [`interface_budget`] read it.
+//! and [`table_budget`] read it.
 
 use crate::encoding::Encoding;
 use crate::sample::Duration;
@@ -80,6 +79,10 @@ pub trait Interaction {
     type Iface: Interface;
     /// The interaction's row in `Iface::MEMBERS`.
     const MEMBER: &'static Member;
+    /// The index of `MEMBER` in `Iface::MEMBERS`, which is also the
+    /// interaction's row in every size table of the interface
+    /// ([`Sizes::RESERVATIONS`]), so a row is reached without a scan.
+    const ROW: usize;
 }
 
 /// The size table of an interface in encoding `E`: what a face and a runtime
@@ -126,21 +129,20 @@ pub trait Sizes<E: Encoding>: Interface {
     const EVENT_BUFFER: Self::EventBuffer;
 }
 
-/// The bytes one in-flight instance of the member at `row` of interface `I`
-/// reserves in encoding `E`: that row of the interface's size table
-/// ([`Sizes::RESERVATIONS`]). `row` is the member's index in
-/// [`Interface::MEMBERS`].
+/// The bytes one in-flight instance of interaction `X` reserves in encoding
+/// `E`: its row ([`Interaction::ROW`]) of the interface's size table
+/// ([`Sizes::RESERVATIONS`]).
 ///
 /// Infallible: a row exists for every member, because a codec is emitted for
 /// every payload type of the package or the build fails. A `const fn`, so a
 /// runtime may size a static table from it.
-///
-/// # Panics
-///
-/// When `row` is not an index of the table; in a constant, that is a compile
-/// error.
-pub const fn reservation<I: Sizes<E>, E: Encoding>(row: usize) -> u64 {
-    I::RESERVATIONS[row]
+pub const fn reservation<X, E>() -> u64
+where
+    X: Interaction,
+    X::Iface: Sizes<E>,
+    E: Encoding,
+{
+    <X::Iface as Sizes<E>>::RESERVATIONS[X::ROW]
 }
 
 /// The in-flight byte budget of interface `I`'s table in encoding `E`: the
@@ -150,7 +152,7 @@ pub const fn reservation<I: Sizes<E>, E: Encoding>(row: usize) -> u64 {
 /// Infallible, for the reason [`reservation`] gives. A `const fn`, so a
 /// runtime whose set of interfaces is known statically sizes a `static` table
 /// from it at compile time, with no allocator.
-pub const fn interface_budget<I: Sizes<E>, E: Encoding>() -> u64 {
+pub const fn table_budget<I: Sizes<E>, E: Encoding>() -> u64 {
     let rows = I::RESERVATIONS;
     let mut total: u64 = 0;
     let mut i = 0;
@@ -257,67 +259,6 @@ impl Member {
     pub fn call_deadline(&self) -> Option<Duration> {
         self.timing.and_then(|timing| timing.max)
     }
-
-    /// The bytes one in-flight instance of this member reserves in encoding
-    /// `E`: the sum of `PayloadInfo::max_size` for `E` over its `payloads` —
-    /// one payload for most kinds, two for a `query`, the request and then the
-    /// reply.
-    ///
-    /// No specification defines this budget. It is derived from the
-    /// descriptors alone, so that every runtime sizing a table of calls in
-    /// flight computes the same number.
-    ///
-    /// # Errors
-    ///
-    /// [`Unsized`], naming this member and the first payload whose size for
-    /// `E` is `None`. A missing size is reported, never replaced by an
-    /// estimate.
-    pub fn reservation<E: Encoding>(&self) -> Result<u64, Unsized> {
-        let mut total: u64 = 0;
-        for payload in self.payloads {
-            let size = E::max_size(&payload.max_size).ok_or(Unsized {
-                ordinal: self.ordinal,
-                member: self.name,
-                type_name: payload.type_name,
-            })?;
-            total = total.saturating_add(u64::from(size));
-        }
-        Ok(total)
-    }
-}
-
-/// The in-flight byte budget of a table of members in encoding `E`: the sum of
-/// [`Member::reservation`] over `members`. Pass an interface's
-/// `Interface::MEMBERS`; a table serving several interfaces adds the budget of
-/// each.
-///
-/// No specification defines this budget. It is derived from the descriptors
-/// alone, and it counts every member it is given, whatever its kind.
-///
-/// # Errors
-///
-/// [`Unsized`] for the first member, in the order given, whose reservation has
-/// a payload with no size for `E`.
-pub fn table_budget<E: Encoding>(members: &[Member]) -> Result<u64, Unsized> {
-    let mut total: u64 = 0;
-    for member in members {
-        total = total.saturating_add(member.reservation::<E>()?);
-    }
-    Ok(total)
-}
-
-/// A payload with no size in the encoding a budget was asked for: its
-/// `EncodedSizes` field for that encoding is `None`. The budget is not
-/// computed, because a missing size is not estimated.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct Unsized {
-    /// The member's ordinal.
-    pub ordinal: Ordinal,
-    /// The member's name.
-    pub member: &'static str,
-    /// The name of the payload type that has no size.
-    pub type_name: &'static str,
 }
 
 /// The form of a timing annotation (ridl §9).
@@ -346,34 +287,14 @@ pub struct Timing {
 }
 
 /// One payload of a member.
+///
+/// A payload's size in an encoding is not here: it is the member's row of the
+/// interface's size table ([`Sizes::RESERVATIONS`]), which derives from the
+/// payload type's own `MAX_SIZE` for that encoding.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PayloadInfo {
     /// The payload type's name.
     pub type_name: &'static str,
-    /// The payload's largest encoded size in each core encoding.
-    pub max_size: EncodedSizes,
-}
-
-/// A payload's largest encoded size in bytes, one field per core encoding.
-///
-/// A field is `None` when the toolchain cannot size the payload for that
-/// encoding. That covers two cases the reader does not have to tell apart: the
-/// encoding cannot carry the payload at all, and the encoding can carry it but
-/// the size is not derivable yet, because the layout is not defined yet
-/// (driftsys/ridl#317). The `repr(C)` column is `None` for every payload, and a backend that emits descriptors
-/// before its codec exists writes `None` for that codec's column too.
-///
-/// So a consumer reads `None` as "no size is available here", never as "this
-/// payload cannot be encoded this way", and asks the catalog descriptor rather
-/// than this field when it needs to know which encodings a payload has.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct EncodedSizes {
-    /// The proto3 size.
-    pub proto3: Option<u32>,
-    /// The FlatBuffers size.
-    pub flatbuffers: Option<u32>,
-    /// The `repr(C)` size.
-    pub repr_c: Option<u32>,
 }
 
 #[cfg(test)]

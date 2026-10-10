@@ -137,7 +137,7 @@ impl<const N: usize> Table<N> {
     );
 
     /// An empty table. `budget` is the byte budget reservations are debited
-    /// from — a runtime with a catalog descriptor sizes it with
+    /// from — a runtime sizes it from an interface's size table with
     /// [`table_budget`](crate::contract::table_budget) — or `None` for no
     /// budget, in which case only the slot count bounds the calls in flight.
     pub const fn new(budget: Option<u64>) -> Self {
