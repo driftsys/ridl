@@ -146,7 +146,7 @@ pub trait Interface {
     const NAME: &'static str;
     const MEMBERS: &'static [Member]; // ordinal order; a reserved ordinal has no row
 }
-pub trait Interaction { type Iface: Interface; const MEMBER: &'static Member; }
+pub trait Interaction { type Iface: Interface; const MEMBER: &'static Member; const ROW: usize; }
 pub trait Signal:  Interaction { type Payload; fn init() -> Self::Payload; }
 pub trait Event:   Interaction { type Payload; }
 pub trait Fixed:   Interaction { type Payload; }
@@ -349,8 +349,10 @@ pub const fn table_budget<I: Sizes<E>, E: Encoding>() -> u64;
   `EventSource::next` fills `EventBuffer` and reports the ordinal afterwards;
   each is an associated type because a generic array length is not expressible
   on stable Rust. The Rust backend emits `Sizes<FlatBuffers>` for every
-  interface whose descriptors it emits, with the generated interface's inherent
-  `MAX_BUFFER_SIZE` and `EVENT_SOURCE_BUFFER_SIZE` reading the table.
+  interface whose descriptors it emits; the two sizes are reached only as
+  `<I as Sizes<E>>::MAX_BUFFER_SIZE` and
+  `<I as Sizes<E>>::EVENT_SOURCE_BUFFER_SIZE`, the descriptor has no inherent
+  constant of either name.
 
 `Continuity` is exhaustive, like `Freshness`: it is not an error enum, so
 ADR-0021 decision 9 does not cover it, and a caller is meant to handle every

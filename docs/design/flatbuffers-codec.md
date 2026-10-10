@@ -73,15 +73,19 @@ is in `crates/ridl-backend-flatbuffers/src/tests.rs`, over the corpus fixtures.
 
 ## What is emitted, and where
 
-The `Payload<FlatBuffers>` implementations are in `generate`'s own output, not
-behind a third entry point beside `generate_face`. A consumer of a generated
-package needs the codec whether or not it ever dispatches, and `generate`
-already names `ridl-rt`. `ridlc::run_build` calls `generate_pipeline`, whose
-output is `generate`'s plus the descriptors and the face, so
-`ridl build --emit rust` carries the codec, and `crates/ridlc/src/lib.rs`
-renders `ridl-rt = { version = "<major.minor>", features = ["flatbuffers"] }` in
-the manifest it writes (the version is a literal there, and moves with each
-release).
+The `Payload<FlatBuffers>` implementations are emitted by
+`generate_face_with(package, encodings)` and by `generate_pipeline` when
+`encodings` names `flatbuffers`, in the same output as the descriptors and the
+face; `generate` and `generate_with` emit the domain types only. There is one
+codec emitter and one call to it, so the face compiles over the same
+implementations as any other reader of the output. `ridlc::run_build` calls
+`generate_pipeline` with the list the manifest's `[backend.rust] encodings`
+names, so `ridl build --emit rust` carries the codec when that list names
+`flatbuffers`, and `crates/ridlc/src/lib.rs` then renders
+`ridl-rt = { version = "<major.minor>", features = ["flatbuffers"] }` in the
+manifest it writes (the version is a literal there, and moves with each
+release); with no list the manifest names no feature and the package holds the
+types only.
 
 Per table: three free functions — `__ridl_fb_{encode,verify,decode}_<Name>` —
 and one view struct `<T>FbView<'a>`, at the generated package's module scope
@@ -260,10 +264,11 @@ prove a position unbounded and never prove one bounded.
 
 ## The face names this codec through `Payload<FlatBuffers>` and `Sizes<FlatBuffers>`
 
-`generate` emits the codec when its `encodings` list names `flatbuffers`, and
-`generate_face` appends the interaction face to exactly the items `generate`
-emits. There is one codec emitter and one call to it, so a face compiles over
-the same implementations a consumer of `generate` gets rather than over a second
+`generate_face_with(package, encodings)` and `generate_pipeline` emit the codec
+when `encodings` names `flatbuffers`, and the interaction face in the same call,
+over exactly those items; `generate` emits the domain types only. There is one
+codec emitter and one call to it, so a face compiles over the same
+implementations every other reader of the output gets rather than over a second
 set written for it.
 
 The face names the encoding by its full path at each site: every buffer is

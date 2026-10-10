@@ -161,8 +161,11 @@ jq '{schema, toolchain, options, artifactBase, generatedMarker, header}' request
   its catalog. It is the same JSON value that
   `ridl build --emit codegen-model` writes to `<base>.codegen.json`, one
   indentation level deeper, so that file is a fixture for a plugin's tests.
-- **`options`** is a list of `{key, value}` pairs sorted by key. No flag sets
-  an option yet, so a plugin run from the command line receives an empty list.
+- **`options`** is a list of `{key, value}` pairs sorted by key. It holds one
+  `encodings` option, the names joined by `,` in manifest order, when the root
+  manifest's `[backend.<language>]` table names an encoding (the
+  [CLI reference](cli-reference.md#ridl-build) describes the table), and is
+  empty otherwise. No flag sets an option.
 - **`artifactBase`** is the name `ridl` gives this package's files: the
   package name, or the file stem in single-file mode. A plugin that lays its
   output out another way can ignore it.

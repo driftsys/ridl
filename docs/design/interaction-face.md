@@ -37,14 +37,15 @@ function beside the domain-type emission:
   bodies. `src/face/dispatch.rs` names those generated methods from the step it
   writes, but does not translate a clause itself.
 
-`generate(package)` keeps its original output: the domain types and the codec,
-naming no port. `generate_face(package)` is a companion entry point that emits
-what `generate` emits, plus the descriptor and face items. It is the only caller
-of the clause translator, and the only entry point whose output names
-`::ridl_rt::port`. `ridl build --emit rust` calls `generate_pipeline`, which
-walks interfaces one at a time and emits the face of each it can carry; the "The
-face is emitted by `ridl build`" section below is the record. Why a companion
-entry point rather than folding the face into `generate` is
+`generate(package)` emits the domain types only, naming no port.
+`generate_face_with(package, encodings)` is a companion entry point that emits
+what `generate` emits, plus the codec, the descriptor and the face items when
+`encodings` names a codec. It is the only caller of the clause translator
+besides `generate_pipeline`, and the two are the only entry points whose output
+names `::ridl_rt::port`. `ridl build --emit rust` calls `generate_pipeline`,
+which walks interfaces one at a time and emits the face of each it can carry;
+the "The face is emitted by `ridl build`" section below is the record. Why a
+companion entry point rather than folding the face into `generate` is
 [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 2.
 
 ## The descriptors
@@ -60,8 +61,8 @@ emitter writes:
   interface's size table, whose `MAX_BUFFER_SIZE` and `EVENT_SOURCE_BUFFER_SIZE`
   items size the claim buffer and the next-event buffer;
 - a unit struct per interaction with an `Interaction` impl (`type Iface`,
-  `const MEMBER`) and the kind's trait — `Signal`, `Event`, `Command`, `Query`
-  or `Fixed`.
+  `const MEMBER`, `const ROW`) and the kind's trait — `Signal`, `Event`,
+  `Command`, `Query` or `Fixed`.
 
 **The interface number is the IR's own, never invented.** The example package
 carries no `interfaces.lock`, so `Interface::NUMBER` and
@@ -133,7 +134,7 @@ pre-empting the tree:
 - A command or query declaring no clause of a kind emits `Ok(())`.
 
 Why the translator refuses rather than widens, and why it lives behind
-`generate_face` rather than `generate`, is
+`generate_face_with` rather than `generate`, is
 [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 1.
 
 ## The consumer face
@@ -612,10 +613,9 @@ type parameter: a `Client<E: Encoding, ...>` would put `E` on every descriptor,
 every provider trait and every caller, and a `where` bound per payload type on
 every impl, for a choice made once per generated package.
 
-_Under the design in `docs/wip/2026-10-10-on-request-encodings-design.md`, which
-lands next, the face still gains no type parameter and reads its encoding from
-its port (`P::Encoding`, through `ridl_rt::port::Encoded`). The paragraph above
-describes the face as built._
+A face that reads its encoding from its port (`P::Encoding`, through
+`ridl_rt::port::Encoded`) with no type parameter of its own is later work,
+tracked as driftsys/ridl#801; the paragraph above describes the face as built.
 
 The codecs a package carries are listed in the manifest:
 `[backend.rust]
@@ -630,10 +630,12 @@ when the Rust backend emits their codecs; until then the backend refuses those
 names, so a second encoding cannot produce a face over implementations that do
 not exist. A consumer names the encoding from `ridl_rt::encoding`.
 
-`generate_face` appends the face to the items `generate` emits, the codec
-included. There is one codec emitter and one call to it, so the face compiles
-over the same implementations a consumer of `generate` gets rather than over a
-second set written for it, and the checked-in fixture stays a single `include!`.
+`generate_face_with` with a non-empty list emits the codec, the descriptors and
+the face beside the items `generate` emits, and `generate_pipeline` does the
+same over the whole build. There is one codec emitter and one call to it, so the
+face compiles over the same implementations every other reader of the output
+gets rather than over a second set written for it, and the checked-in fixture
+stays a single `include!`.
 
 **Until 2026-09-29 the face named the encoding through one alias**,
 `pub type Wire = ::ridl_rt::encoding::FlatBuffers;`, emitted once per package at
@@ -700,11 +702,12 @@ The fixture declares no `fixed` interaction; the descriptor emitter's `Fixed`
 path is covered instead by a hand-built-IR unit test in `src/descriptors.rs`.
 
 **The generated face is checked in, not regenerated at test time.**
-`tests/generated/interaction_face.rs` is `generate_face`'s output for the
-fixture, brought into `tests/interaction_face.rs` with `include!` under a
-handwritten module carrying only outer `#[allow(...)]` lint attributes — the
-emitter itself must never emit an inner attribute, because one inside an
-`include!`d file is a hard compile error. A test in its own target,
+`tests/generated/interaction_face.rs` is the output of
+`generate_face_with(package, &[WireEncoding::FlatBuffers])` for the fixture,
+brought into `tests/interaction_face.rs` with `include!` under a handwritten
+module carrying only outer `#[allow(...)]` lint attributes — the emitter itself
+must never emit an inner attribute, because one inside an `include!`d file is a
+hard compile error. A test in its own target,
 `tests/interaction_face_regeneration.rs`, regenerates the fixture and compares
 the result byte-for-byte against the checked-in file, failing with the
 instruction to regenerate
@@ -1004,8 +1007,8 @@ ports" above.
   [`2026-09-25-async-face-design.md`](../archive/2026-09-25-async-face-design.md),
   [`2026-09-25-async-face-plan.md`](../archive/2026-09-25-async-face-plan.md)
 - `crates/ridl-backend-rust/src/descriptors.rs`, `src/face.rs` and its
-  submodules under `src/face/`, `src/clauses.rs`, `src/lib.rs` (`generate_face`,
-  `generate_pipeline`) — the emitter as built
+  submodules under `src/face/`, `src/clauses.rs`, `src/lib.rs`
+  (`generate_face_with`, `generate_pipeline`) — the emitter as built
 - `crates/ridl-backend-rust/tests/fixtures/interaction_face.ridl`,
   `tests/generated/interaction_face.rs`, `tests/interaction_face.rs`,
   `tests/interaction_face_regeneration.rs`, `tests/support/doubles.rs` — the

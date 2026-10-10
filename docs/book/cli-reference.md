@@ -834,11 +834,15 @@ encoding from `ridl_rt::encoding`.
 
 MANI-015 is an error when the `encodings` value is not an array of the known
 names or repeats a name, and MANI-016 is an error when the manifest of a
-workspace member holds a `[backend.<name>]` table: only the root sets it. Any
-other key under `[backend.<name>]` is MANI-005. The table is not the `backend.`
-attribute namespace of an rsdl declaration. The lint RSDL-807
-`link-encoding-not-emitted` warns when a link of the selected deployment carries
-an encoding that the emitted backend's list does not name.
+workspace member holds a `[backend.<name>]` table: only the workspace root,
+or a standalone package, sets it. Any other key under `[backend.<name>]` is
+MANI-005. The table is not the `backend.` attribute namespace of an rsdl
+declaration. The lint RSDL-807 `link-encoding-not-emitted` warns when a link of
+the selected deployment carries an encoding that the emitted backend's list
+does not name. It is compared once per emitted backend that can carry a codec:
+the `rust` emit and each `--plugin`. A schema emit (`proto`, `flatbuffers`),
+the `typescript` emit and `codegen-model` are not compared, because their
+backends take no `encodings` option.
 
 **`proto` is a wire backend** (ADR-0013 decision 2): it emits the typl
 surface — structs, enums, enum sets and unions, projected to proto3 messages
@@ -888,8 +892,10 @@ emits are written for — `ridl.std` included, under the same rule as above — 
 receives on its standard input one `ridl.codegen.v1.CodegenRequest` in canonical
 protobuf JSON: `schema` (`"ridl.codegen.v1"`) and `toolchain` (this `ridl`'s
 version) first, then `model` (the same JSON value as the package's
-`codegen-model` artifact, one indentation level deeper), `options` (empty from
-this command line; no flag sets one yet), `artifactBase`, the `<base>` of the
+`codegen-model` artifact, one indentation level deeper), `options` (one
+`encodings` option when the root manifest's `[backend.<language>]` table names
+an encoding, as described above; empty otherwise; no flag sets one),
+`artifactBase`, the `<base>` of the
 emit list above, `generatedMarker` (the marker line) and `header` (the header
 text, an empty string when there is none), both always present, and
 `deployment`, the deployment section — the one `--deployment`

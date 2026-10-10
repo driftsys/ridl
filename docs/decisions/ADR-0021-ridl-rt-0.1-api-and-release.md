@@ -149,8 +149,9 @@ from `EncodedSizes` and `Payload::MAX_SIZE` alone to a per-encoding table,
 `contract::Sizes<E>`, and each payload carries its own zeroed buffer. A port
 states the encoding it carries through the new `port::Encoded`. This is a
 breaking change under decision 10, to be released with the workspace in
-`ridl-rt` 0.9.0 (the next minor release after 0.8.0). The design is
-[`docs/wip/2026-10-10-on-request-encodings-design.md`](../wip/2026-10-10-on-request-encodings-design.md).
+`ridl-rt` 0.9.0 (the next minor release after 0.8.0). The change is tracked as
+driftsys/ridl#801; the as-built record is
+[the `ridl-rt` design record](../design/ridl-rt.md).
 
 ## Context
 

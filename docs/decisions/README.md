@@ -11,7 +11,9 @@ other entry below is Accepted.
   member loads the member's workspace. Amended 2026-10-09 by the
   catalog-per-unit design: §1 gains the unit, a manifest and the tree of source
   packages below it, and a source package belongs to one unit (MANI-014); §4
-  refuses a `ridl.toml` inside a unit's tree (MANI-013).
+  refuses a `ridl.toml` inside a unit's tree (MANI-013). Amended 2026-10-10 by
+  the on-request encodings design (driftsys/ridl#801): §4 gains the
+  `[backend.<name>]` tables with the `encodings` key (MANI-015, MANI-016).
 - **ADR-0004 — Implementation sequencing and stack.** _Proposed._ The build
   order and technology choices (companion to the roadmap). Amended 2026-08-03:
   uxdl retires as an epic (ADR-0012), rsdl runs ahead of rmdl's runtime, rmdl
@@ -202,7 +204,10 @@ other entry below is Accepted.
   Not epic-scoped: it binds every backend and the runtime. Amended 2026-09-12 on
   decisions 3, 6, 15, 16 and 17, and on the name `ridl-rt`, which now belongs to
   the library rather than to the engine; decisions 3, 6 and 15 rest on ADR-0020,
-  and decisions 16 and 17 on the re-scope's other decisions.
+  and decisions 16 and 17 on the re-scope's other decisions. Amended 2026-10-10
+  on decisions 4, 5 and 15: the Rust codec is requested by the manifest's
+  `[backend.rust] encodings`, not by a flag, and a build that names no encoding
+  emits the domain types only.
 
 - **ADR-0019 — The FlatBuffers projection.** Seven rules the second wire backend
   needed: a union isolated in a wrapper table, a non-table union arm boxed,
@@ -239,7 +244,11 @@ other entry below is Accepted.
   parity test now exists, in `crates/ridlc-gen-rust/tests/parity.rs`, and the
   `ridlc-gen-model` one stays beside it. Amended 2026-10-03: the FlatBuffers
   runtime decision 5 permits `ridl-rt` cannot be planus; the toolchain may
-  depend on planus, and `ridl-rt` and every generated package must not.
+  depend on planus, and `ridl-rt` and every generated package must not. Amended
+  2026-10-10 on decisions 5 and 9: `contract` loses `EncodedSizes` and `Unsized`
+  and gains `Sizes<E>`, `Payload<E>` gains `Buffer`, `port` gains `Encoded`, a
+  generated package enables one `ridl-rt` feature per named encoding, and the
+  request carries the `encodings` option.
 
 - **ADR-0021 — The `ridl-rt` 0.1 API: identity, the proof type, the port
   dispositions, and the release policy.** Fixes what the earlier records left
@@ -283,7 +292,10 @@ other entry below is Accepted.
   change to be released with the workspace as 0.6.0. A 2026-10-07 amendment adds
   decision 22: under the `std` feature, `trace::Propagation`, `AlreadySet`,
   `set_propagation` and `propagation`, the application's hook for the trace
-  context, called by no generated code yet (driftsys/ridl#754).
+  context, called by no generated code yet (driftsys/ridl#754). Its 2026-10-10
+  amendment, on decisions 10, 11, 17 and 19, moves the sizes a generated crate
+  holds to the per-encoding table `contract::Sizes<E>`, gives each payload its
+  own buffer and adds `port::Encoded`; a breaking change, released as 0.9.0.
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
   and what carries it: a `System` message in `system.proto`, its own artifact
@@ -308,18 +320,19 @@ other entry below is Accepted.
   decision 4 for the public surface. The Rust backend's contract-clause
   translator accepts one expression form and refuses every other with a
   `GenerateError`, never dropping a clause silently; the face is emitted from a
-  companion entry point, `generate_face`, while `generate` stays exactly what it
-  emitted before this story, following the precedent ADR-0017 decision 1 set; a
-  `Provider` method takes its argument by reference, superseding the M1 design's
-  by-value example, which cannot compile; and a consumer-side send returns a
-  correlation on success and `SendError` on failure — the face's internal method
-  since the 2026-09-26 amendment, whose decision 6 gives the public call —
-  closing a gap that design left open. The 2026-09-20 amendment makes that
-  success half the call's own `Copy` correlation newtype, one per command and
-  per query, so a query's correlation cannot be passed to an `ack`; and its
-  decision 5 has a face hold its port by value, with no lifetime parameter. The
-  2026-09-28 amendment bounds one poll of `serve` to 32 claims, after which the
-  future wakes itself and is `Pending`; a frame loop polls with
+  companion entry point (`generate_face`, since the 2026-10-10 amendment
+  `generate_face_with` with an `encodings` list), while `generate` stays exactly
+  what it emitted before this story, following the precedent ADR-0017 decision 1
+  set; a `Provider` method takes its argument by reference, superseding the M1
+  design's by-value example, which cannot compile; and a consumer-side send
+  returns a correlation on success and `SendError` on failure — the face's
+  internal method since the 2026-09-26 amendment, whose decision 6 gives the
+  public call — closing a gap that design left open. The 2026-09-20 amendment
+  makes that success half the call's own `Copy` correlation newtype, one per
+  command and per query, so a query's correlation cannot be passed to an `ack`;
+  and its decision 5 has a face hold its port by value, with no lifetime
+  parameter. The 2026-09-28 amendment bounds one poll of `serve` to 32 claims,
+  after which the future wakes itself and is `Pending`; a frame loop polls with
   `ridl_rt::task::flag_waker` to poll again in the same frame. A second
   2026-09-28 amendment adds decision 7: the face's fixed methods — `new`,
   `next_event`, `commit`, `with_timeout`, `set_timeout` — are methods of the
@@ -335,8 +348,11 @@ other entry below is Accepted.
   amendment records that the emitted client methods and event raise pass `None`
   as the trace context (driftsys/ridl#752, #754). Binds every later story that
   extends the Rust backend's interaction face, until superseded: E5.1, Epic 10,
-  and any later language backend that follows this precedent. The as-built face
-  this record's decisions produced is
+  and any later language backend that follows this precedent. Its 2026-10-10
+  amendment, on decisions 2, 6 and 7, emits the face only when the manifest's
+  `[backend.rust] encodings` names `flatbuffers` and reads every buffer from
+  `Payload::BUFFER` or `Sizes<FlatBuffers>`. The as-built face this record's
+  decisions produced is
   [the interaction-face design record](../design/interaction-face.md).
 
 - **ADR-0024 — The lint registry and levels.** Sixteen decisions: seven agreed

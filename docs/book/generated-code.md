@@ -56,7 +56,7 @@ The package module holds:
 - **The FlatBuffers codec** of each payload type: `encode`, `verify`, `decode`
   and a `MAX_SIZE` bound. It is present when the manifest names `flatbuffers`
   under `[backend.rust] encodings`; with no list the module holds the types only.
-  Each payload type also has a `Payload::<FlatBuffers>::Buffer` type and a
+  Each payload type also has a `<T as Payload<FlatBuffers>>::Buffer` type and a
   zeroed `BUFFER` value, sized by that type's own `MAX_SIZE`. The face calls the
   codec; an application calls it only when it moves payloads by itself.
 - **The interaction descriptors**: one unit type per interface (here

@@ -467,8 +467,10 @@ store and a local socket on one machine stays the plugin's. Both carry
 FlatBuffers, so the choice does not change a size.
 
 This rule is also what RSDL-807 (`link-encoding-not-emitted`) compares a
-`[backend.<name>] encodings` list against; it is aligned with the transport
-defaults when `repr(C)` or a shared-memory transport lands.
+`[backend.<name>] encodings` list against, once per emitted backend that can
+carry a codec — the Rust emit and each plugin, not a schema emit, whose backend
+takes no `encodings` option; it is aligned with the transport defaults when
+`repr(C)` or a shared-memory transport lands.
 
 ### The depth rule
 

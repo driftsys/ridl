@@ -150,8 +150,10 @@ driftsys/ridl#754.
 buffers.** `ridl build --emit rust` emits the face only when the manifest's
 `[backend.rust] encodings` names `flatbuffers`. The face reads every buffer from
 `Payload::BUFFER` or `Sizes<FlatBuffers>`. Decision 6 keeps `Client<P>`. The
-design is
-[`docs/wip/2026-10-10-on-request-encodings-design.md`](../wip/2026-10-10-on-request-encodings-design.md).
+companion entry point of decision 2 is `generate_face_with(package, encodings)`;
+`generate_face(package)` is removed, and `generate` emits the domain types only.
+The change is tracked as driftsys/ridl#801; the as-built record is
+[the interaction-face design record](../design/interaction-face.md).
 
 ## Context
 
