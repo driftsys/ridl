@@ -129,10 +129,12 @@ member; rsdl is the apex.
     just doc-path-check  every docs/ file path named in a tracked file
                          resolves — the bare paths link-check cannot see, in
                          prose, in an inline code span, and in a source
-                         comment. A directory citation carries no extension,
-                         so it is not checked. Skips docs/archive/ and
-                         docs/wip/, where such a path records what was true
-                         when it was written
+                         comment. A directory citation is checked when it
+                         ends with /; the slashless form (docs/book) is not.
+                         Skips docs/archive/, docs/wip/ and CHANGELOG.md,
+                         where such a path records what was true when it was
+                         written (the changelog is generated from commit
+                         history)
     just story-id-check  no story id (`E16.5`, `E2.8b`) and no plan name
                          (`epic E11`, `stage K3`, `lane M`, `E2 task 9`) in a
                          tracked file under crates/, xtask/, examples/,
