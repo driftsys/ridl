@@ -1019,7 +1019,7 @@ interface Lights {
 }
 
 /// A chain of three lists the two earlier hashes newest first, the order of
-/// the history file.
+/// the history file, in the descriptor and in the codegen model.
 #[test]
 fn a_list_of_several_hashes_is_newest_first() {
     let dir = TempDir::new("build-chain-of-three");
@@ -1034,10 +1034,14 @@ fn a_list_of_several_hashes_is_newest_first() {
     let second_hash = describe_hash(&root, second.path(), UNIT);
     set_source(&dir, APPENDED_TWICE);
     publish(&root);
-    build_catalog(&root, out.path());
+    let (code, stderr) = build(&root, out.path(), "catalog,codegen-model");
+    assert_eq!(code, 0, "the build succeeds: {stderr}");
+    let expected = vec![second_hash, first_hash];
+    assert_eq!(compatible_of(out.path(), UNIT), expected, "the descriptor");
     assert_eq!(
-        compatible_of(out.path(), UNIT),
-        vec![second_hash, first_hash]
+        model_compatible_of(out.path(), UNIT),
+        expected,
+        "the codegen model"
     );
 }
 
@@ -1095,6 +1099,38 @@ interface VehicleStatus {
     );
 }
 
+/// The error gate comes before the chain is read: a build with an error
+/// diagnostic exits 1 even when the published history file is malformed,
+/// which would otherwise fail the build with exit 2.
+#[test]
+fn a_build_with_a_source_error_does_not_read_the_history() {
+    let dir = TempDir::new("build-source-error-malformed");
+    let out = TempDir::new("build-source-error-malformed-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    let history = baseline_dir(&root).join(format!("{UNIT}.catalogs"));
+    std::fs::write(&history, "garbage\n").expect("damage the history");
+    dir.write(
+        "cluster.ridl",
+        "package veh.cluster
+type Speed: km/h [0.0..250.0 step 0.5]
+interface VehicleStatus {
+  signal currentSpeed: Missing @10ms
+}
+",
+    );
+    let (code, stderr) = build(&root, out.path(), "catalog");
+    assert_eq!(code, 1, "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("Missing"),
+        "stderr names the error:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains(".catalogs"),
+        "stderr does not name the history file:\n{stderr}"
+    );
+}
+
 /// Only the first hash of the history carries the chain whatever the
 /// verdict. A tree whose catalog hash is an older hash of the history, here
 /// the source returned to `BASE` after `APPENDED` was published, is a
@@ -1118,4 +1154,53 @@ fn only_the_head_of_the_history_carries_the_chain() {
         "the tree has the older hash of the history"
     );
     assert_eq!(compatible_of(out.path(), UNIT), Vec::<String>::new());
+}
+
+/// A struct with one required field: the payload of `STRUCT_WITH_OPTIONAL`
+/// before its optional field is added.
+const STRUCT_BASE: &str = "package veh.cluster
+struct DoorReport {
+  open: boolean
+}
+interface VehicleStatus {
+  event doorOpened: DoorReport @[100ms..1s]
+}
+";
+
+/// `STRUCT_BASE` with an optional field appended to the struct: a compatible
+/// change. Removing the field again is a breaking change that no publication
+/// check refuses.
+const STRUCT_WITH_OPTIONAL: &str = "package veh.cluster
+struct DoorReport {
+  open: boolean
+  ajar: boolean?
+}
+interface VehicleStatus {
+  event doorOpened: DoorReport @[100ms..1s]
+}
+";
+
+/// At publication too, only the first hash of the history carries the chain
+/// whatever the verdict. Removing the optional field returns the catalog to
+/// an older hash of the history, and the removal is breaking, so the chain
+/// starts again from that hash alone.
+#[test]
+fn a_publication_back_to_an_older_hash_restarts_the_chain() {
+    let dir = TempDir::new("publish-older-hash");
+    let first = TempDir::new("publish-older-hash-first");
+    let second = TempDir::new("publish-older-hash-second");
+    let root = set_source(&dir, STRUCT_BASE);
+    publish(&root);
+    let first_hash = describe_hash(&root, first.path(), UNIT);
+    set_source(&dir, STRUCT_WITH_OPTIONAL);
+    publish(&root);
+    let second_hash = describe_hash(&root, second.path(), UNIT);
+    assert_eq!(
+        history_lines(&root),
+        vec![second_hash, first_hash.clone()],
+        "the optional field is a compatible change"
+    );
+    set_source(&dir, STRUCT_BASE);
+    publish(&root);
+    assert_eq!(history_lines(&root), vec![first_hash]);
 }
