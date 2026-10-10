@@ -353,6 +353,10 @@ fn a_history_path_that_cannot_be_read_refuses_the_publication() {
     let (code, stderr) = build(&root, out.path(), "catalog");
     assert_eq!(code, 2, "an unreadable history fails the build: {stderr}");
     assert!(
+        !stderr.contains("could not be computed"),
+        "the cause is reported once, by name: {stderr}"
+    );
+    assert!(
         stderr.contains(&history.display().to_string()),
         "stderr names the file: {stderr}"
     );
@@ -1203,4 +1207,121 @@ fn a_publication_back_to_an_older_hash_restarts_the_chain() {
     set_source(&dir, STRUCT_BASE);
     publish(&root);
     assert_eq!(history_lines(&root), vec![first_hash]);
+}
+
+/// With no `<unit>.catalogs` file there is no history to carry, so a build
+/// does not load the snapshots: a snapshot that cannot be parsed does not
+/// fail it.
+#[test]
+fn a_baseline_with_no_history_file_is_not_loaded_by_a_build() {
+    let dir = TempDir::new("build-no-history");
+    let out = TempDir::new("build-no-history-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    let baseline = baseline_dir(&root);
+    std::fs::remove_file(baseline.join(format!("{UNIT}.catalogs"))).expect("remove the history");
+    std::fs::write(baseline.join(format!("{UNIT}.ir.json")), "{").expect("damage the snapshot");
+    let (code, stderr) = build(&root, out.path(), "catalog");
+    assert_eq!(code, 0, "the build never loads the snapshot: {stderr}");
+    assert_eq!(compatible_of(out.path(), UNIT), Vec::<String>::new());
+}
+
+/// A workspace that names `[imports]` gets a note that a unit's list covers
+/// the workspace's own packages only, when there is a history to carry. The
+/// frozen build fails on the missing lockfile entry, offline, after the note.
+#[test]
+fn a_workspace_with_imports_gets_a_note_beside_the_list() {
+    let dir = TempDir::new("build-imports-note");
+    let out = TempDir::new("build-imports-note-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    let frozen_build = |out: &Path| {
+        let (code, _, stderr) = ridl(&[
+            "build".as_ref(),
+            root.as_os_str(),
+            "--out-dir".as_ref(),
+            out.as_os_str(),
+            "--emit".as_ref(),
+            "catalog".as_ref(),
+            "--frozen".as_ref(),
+        ]);
+        (code, stderr)
+    };
+    let (code, stderr) = frozen_build(out.path());
+    assert_eq!(code, 0, "no imports, no failure: {stderr}");
+    assert!(
+        !stderr.contains("[imports]"),
+        "no note without imports: {stderr}"
+    );
+    dir.write(
+        "ridl.toml",
+        &format!(
+            "{MANIFEST}\n[imports]\n\"other.dep\" = \"https://registry.example.com/other/dep@v1.0.0\"\n"
+        ),
+    );
+    let (code, stderr) = frozen_build(out.path());
+    assert_eq!(
+        code, 1,
+        "the missing lockfile entry fails the build: {stderr}"
+    );
+    assert!(
+        stderr.contains("note: the workspace names `[imports]`"),
+        "the note is printed: {stderr}"
+    );
+}
+
+const IMPORTS: &str =
+    "\n[imports]\n\"other.dep\" = \"https://registry.example.com/other/dep@v1.0.0\"\n";
+
+/// Runs a frozen `ridl build --emit catalog` on `root`, returning
+/// `(exit_code, stderr)`.
+fn frozen_catalog_build(root: &Path, out: &Path) -> (i32, String) {
+    let (code, _, stderr) = ridl(&[
+        "build".as_ref(),
+        root.as_os_str(),
+        "--out-dir".as_ref(),
+        out.as_os_str(),
+        "--emit".as_ref(),
+        "catalog".as_ref(),
+        "--frozen".as_ref(),
+    ]);
+    (code, stderr)
+}
+
+/// The note is printed once a list is computed, so a baseline that cannot be
+/// loaded fails the build before it.
+#[test]
+fn a_workspace_with_imports_and_an_unloadable_baseline_gets_no_note() {
+    let dir = TempDir::new("build-imports-bad-baseline");
+    let out = TempDir::new("build-imports-bad-baseline-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    std::fs::write(baseline_dir(&root).join(format!("{UNIT}.ir.json")), "{")
+        .expect("damage the snapshot");
+    dir.write("ridl.toml", &format!("{MANIFEST}{IMPORTS}"));
+    let (code, stderr) = frozen_catalog_build(&root, out.path());
+    assert_eq!(code, 2, "the baseline fails the build: {stderr}");
+    assert!(!stderr.contains("note: the workspace names"), "{stderr}");
+}
+
+/// A unit with no published package gets no list, so no list is computed and
+/// there is no note.
+#[test]
+fn a_workspace_with_imports_and_no_list_gets_no_note() {
+    let dir = TempDir::new("build-imports-no-list");
+    let out = TempDir::new("build-imports-no-list-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    dir.write(
+        "ridl.toml",
+        &format!("[package]\nname = \"veh.other\"\nversion = \"1.0.0\"\n{IMPORTS}"),
+    );
+    dir.write("cluster.ridl", &BASE.replace("veh.cluster", "veh.other"));
+    let (code, stderr) = frozen_catalog_build(&root, out.path());
+    assert_eq!(
+        code, 1,
+        "the missing lockfile entry fails the build: {stderr}"
+    );
+    assert!(stderr.contains("MANI-103"), "{stderr}");
+    assert!(!stderr.contains("note: the workspace names"), "{stderr}");
 }

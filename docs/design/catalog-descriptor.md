@@ -245,21 +245,25 @@ differing only in the list have the same hash. The rule is
   its chain again, so a history is never read beside a snapshot of another
   baseline.
 - **The build emits the list.** `ridl build` computes it when the build writes a
-  catalog descriptor or generates code, and passes it to
-  `ridlc::run_build_with`; `ridlc` reads no baseline (ADR-0008 decisions 9 and
-  14), and `ridlc build` writes an empty list. For each unit that has an
-  interface shape and a package in the baseline, `ridl build` reads the unit's
-  `<unit>.catalogs` file and lists its hashes, less the current catalog's hash,
-  when the unit's verdict from the baseline to the tree is `Compatible` or
-  `Identical`, or when the current catalog's hash is the file's first hash. The
-  list is empty for a `Breaking` verdict when the current hash is not the file's
-  first hash, for a workspace with no `.ridl/baseline/` directory or one holding
-  no `.ir.json` snapshot, for a unit with no package in the baseline (a file
-  left under its name is not read), and for a unit with no file. A tree whose
-  catalog changed and that is breaking relative to the baseline is built with an
-  empty list, and the recorded chain is not changed until the next publication.
-  A baseline that is present and cannot be loaded, and a file that cannot be
-  read, are exit 2. A build with an error diagnostic gets no list.
+  catalog descriptor or generates code, from the build's own checked packages
+  through `ridlc::run_build_computing` (`ridlc::run_build_with` takes a ready
+  list); `ridlc` reads no baseline (ADR-0008 decisions 9 and 14), and
+  `ridlc build` writes an empty list. For each unit that has an interface shape
+  and a package in the baseline, `ridl build` reads the unit's `<unit>.catalogs`
+  file and lists its hashes, less the current catalog's hash, when the unit's
+  verdict from the baseline to the tree is `Compatible` or `Identical`, or when
+  the current catalog's hash is the file's first hash. The list is empty for a
+  `Breaking` verdict when the current hash is not the file's first hash, for a
+  workspace with no `.ridl/baseline/` directory or one holding no `.ir.json`
+  snapshot, for a unit with no package in the baseline (a file left under its
+  name is not read), and for a unit with no file. A tree whose catalog changed
+  and that is breaking relative to the baseline is built with an empty list, and
+  the recorded chain is not changed until the next publication. A baseline with
+  at least one `<unit>.catalogs` file that cannot be loaded, and a file that
+  cannot be read, are exit 2; a baseline with no such file is not loaded. A
+  compile with an error diagnostic gets no list, and its baseline is not read.
+  When the workspace names `[imports]` and a list is computed, the build prints
+  a note that a unit's list covers the workspace's own packages only.
 - **No runtime reads the list.** The generated face compares only its own
   `CATALOG` (ADR-0023 decision 8), and no runtime in this workspace speaks the
   frame, so nothing here accepts an `attach` on the strength of the list.

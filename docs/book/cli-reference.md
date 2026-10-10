@@ -672,14 +672,17 @@ from the unit's `<unit>.catalogs` file (see [`ridl baseline`](#ridl-baseline)),
 in the file's order, newest first, and it never holds the current catalog's own
 hash. It is empty when the workspace has no baseline directory or the directory
 holds no `.ir.json` snapshot, when the baseline holds no package of the unit,
-when the unit has no `<unit>.catalogs` file, and when `ridl diff`'s classifier,
+when the unit has no `<unit>.catalogs` file (or the baseline has none at all), and when `ridl diff`'s classifier,
 scoped to the unit, judges the change from the baseline to the tree breaking
 and the current catalog hash is not the file's first hash. When the two hashes
 are equal the catalog did not change, and the list holds the file's other
 hashes whatever the verdict. The recorded file is not changed by the build. An
-IR dump reads no baseline. A baseline that is present and cannot be loaded, or
-a `<unit>.catalogs` file that cannot be read, is exit 2. A build with an error
-diagnostic gets no list.
+IR dump reads no baseline. A baseline with at least one `<unit>.catalogs` file that cannot be loaded, or
+a `<unit>.catalogs` file that cannot be read, is exit 2; a baseline with no
+`<unit>.catalogs` file is not loaded. A compile with an error diagnostic gets no
+list, and its baseline is not read. When the workspace names `[imports]` and a
+list is computed, the build prints a note on stderr that a unit's list covers
+the workspace's own packages only.
 
 **`rust` is a language backend**, and it writes the whole generated surface of
 a package in one file: the domain types (a struct, an enum, an enum set, a
