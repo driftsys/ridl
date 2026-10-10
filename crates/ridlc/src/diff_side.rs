@@ -298,21 +298,41 @@ pub fn is_source_dir(dir: &Path) -> bool {
 /// The files directly inside `dir` that satisfy `keep`, in file-name order. A
 /// directory entry that cannot be read is skipped.
 pub fn files_matching(dir: &Path, keep: fn(&Path) -> bool) -> std::io::Result<Vec<PathBuf>> {
-    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)?
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| keep(path))
-        .collect();
-    files.sort();
-    Ok(files)
+    Ok(keep_readable(entry_paths(dir)?, keep))
 }
 
 /// [`files_matching`], except that a directory entry that cannot be read is an
 /// error instead of a skipped file.
 pub fn files_matching_strict(dir: &Path, keep: fn(&Path) -> bool) -> std::io::Result<Vec<PathBuf>> {
+    keep_all_or_report(entry_paths(dir)?, keep)
+}
+
+/// The path of each entry directly inside `dir`, or the error that kept an
+/// entry from being read.
+fn entry_paths(dir: &Path) -> std::io::Result<impl Iterator<Item = std::io::Result<PathBuf>>> {
+    Ok(std::fs::read_dir(dir)?.map(|entry| entry.map(|entry| entry.path())))
+}
+
+/// The paths of `entries` that satisfy `keep`, sorted. An entry that is an
+/// error is skipped.
+fn keep_readable(
+    entries: impl Iterator<Item = std::io::Result<PathBuf>>,
+    keep: fn(&Path) -> bool,
+) -> Vec<PathBuf> {
+    let mut files: Vec<PathBuf> = entries.flatten().filter(|path| keep(path)).collect();
+    files.sort();
+    files
+}
+
+/// The paths of `entries` that satisfy `keep`, sorted, or the first entry
+/// that is an error.
+fn keep_all_or_report(
+    entries: impl Iterator<Item = std::io::Result<PathBuf>>,
+    keep: fn(&Path) -> bool,
+) -> std::io::Result<Vec<PathBuf>> {
     let mut files = Vec::new();
-    for entry in std::fs::read_dir(dir)? {
-        let path = entry?.path();
+    for entry in entries {
+        let path = entry?;
         if keep(&path) {
             files.push(path);
         }
@@ -440,11 +460,48 @@ fn load_snapshots(files: &[PathBuf]) -> Result<Vec<ridl_ir::v2::Package>, DiffSi
         })
         .collect()
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use ridl_core::{Overlay, RidlDatabase, Severity};
     use std::fs;
+
+    fn is_txt(path: &Path) -> bool {
+        path.extension().is_some_and(|extension| extension == "txt")
+    }
+
+    fn entries() -> Vec<std::io::Result<PathBuf>> {
+        vec![
+            Ok(PathBuf::from("b.txt")),
+            Err(std::io::Error::other("unreadable entry")),
+            Ok(PathBuf::from("c.md")),
+            Ok(PathBuf::from("a.txt")),
+        ]
+    }
+
+    #[test]
+    fn an_unreadable_entry_is_skipped_by_the_lenient_listing() {
+        assert_eq!(
+            keep_readable(entries().into_iter(), is_txt),
+            vec![PathBuf::from("a.txt"), PathBuf::from("b.txt")]
+        );
+    }
+
+    #[test]
+    fn an_unreadable_entry_is_reported_by_the_strict_listing() {
+        let error = keep_all_or_report(entries().into_iter(), is_txt).unwrap_err();
+        assert_eq!(error.to_string(), "unreadable entry");
+    }
+
+    #[test]
+    fn the_strict_listing_keeps_and_sorts_when_every_entry_reads() {
+        let readable = entries().into_iter().filter(Result::is_ok);
+        assert_eq!(
+            keep_all_or_report(readable, is_txt).unwrap(),
+            vec![PathBuf::from("a.txt"), PathBuf::from("b.txt")]
+        );
+    }
 
     fn source() -> (tempfile::TempDir, PathBuf) {
         let dir = tempfile::tempdir().unwrap();

@@ -637,17 +637,13 @@ fn run_build(
     let carries_the_list = !plugins.is_empty() || emits.iter().any(|emit| !emit.is_ir_dump());
     // The list is computed from the build's own compile, so the workspace is
     // compiled once. An error the computation reports has already been
-    // printed; the cell carries its exit code out of the build.
-    let failure: std::cell::Cell<Option<ExitCode>> = std::cell::Cell::new(None);
+    // printed; it carries its exit code out of the build.
     let mut db = ridl_core::RidlDatabase::default();
-    let mut compute = |checked: &[&ridl_ir::v2::Package],
-                       std: &ridl_ir::v2::Package,
-                       names_imports: bool| {
-        catalogs::compatible_catalogs(&mut db, path, checked, std, names_imports).map_err(|code| {
-            failure.set(Some(code));
-            std::io::Error::other("the compatible catalogs could not be computed")
-        })
-    };
+    let mut compute =
+        |checked: &[&ridl_ir::v2::Package], std: &ridl_ir::v2::Package, names_imports: bool| {
+            catalogs::compatible_catalogs(&mut db, path, checked, std, names_imports)
+                .map_err(BuildFailure::Exit)
+        };
     let run = ridlc::run_build_computing(
         path,
         out_dir,
@@ -659,10 +655,25 @@ fn run_build(
         deployment,
         carries_the_list.then_some(&mut compute),
     );
-    if let Some(code) = failure.take() {
-        return code;
+    match run {
+        Err(BuildFailure::Exit(code)) => code,
+        Err(BuildFailure::Io(err)) => finish(Err(err)),
+        Ok(run) => finish(Ok(run)),
     }
-    finish(run)
+}
+
+/// Why a build run by [`run_build`] stopped without a result: the computation
+/// of the compatible catalogs reported an error and chose the exit code, or
+/// the build itself failed to read or write.
+enum BuildFailure {
+    Exit(ExitCode),
+    Io(std::io::Error),
+}
+
+impl From<std::io::Error> for BuildFailure {
+    fn from(err: std::io::Error) -> Self {
+        Self::Io(err)
+    }
 }
 
 /// Publishes the workspace at `path` as a baseline.

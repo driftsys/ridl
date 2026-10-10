@@ -815,7 +815,7 @@ pub fn run_build_with(
     deployment: Option<&str>,
     compatible: &BTreeMap<String, Vec<[u8; 32]>>,
 ) -> std::io::Result<CliRun> {
-    run_build_inner(
+    run_build_inner::<std::io::Error>(
         entry,
         out_dir,
         emits,
@@ -833,11 +833,14 @@ pub fn run_build_with(
 /// unit is compatible with: every checked package of the workspace, the
 /// `ridl.std` package, and whether the workspace names any `[imports]`. The
 /// packages of an import are not among the checked packages.
-pub type CompatibleCatalogsFn<'a> = dyn FnMut(
+///
+/// `E` is the error the function reports, chosen by the caller; it defaults to
+/// [`std::io::Error`].
+pub type CompatibleCatalogsFn<'a, E = std::io::Error> = dyn FnMut(
         &[&ridl_ir::v2::Package],
         &ridl_ir::v2::Package,
         bool,
-    ) -> std::io::Result<BTreeMap<String, Vec<[u8; 32]>>>
+    ) -> Result<BTreeMap<String, Vec<[u8; 32]>>, E>
     + 'a;
 
 /// [`run_build_with`], with the list computed from the build's own compile
@@ -847,14 +850,17 @@ pub type CompatibleCatalogsFn<'a> = dyn FnMut(
 /// package and whether the workspace names `[imports]`. It is not called when
 /// the compile has an error diagnostic, whatever the build later writes. Its
 /// result is used as `run_build_with` uses its `compatible` argument, and an
-/// error it returns is the error of the build. With `None`, no unit has a
-/// list. This is how the `ridl` facade reuses the build's compile instead of
+/// error it returns is returned as the error of the build, unchanged. An
+/// input or output error of the build itself is converted with `E::from`.
+/// With `None`, no unit has a list, and the caller names `E` explicitly
+/// (`run_build_computing::<std::io::Error>`), as `E` cannot be inferred.
+/// This is how the `ridl` facade reuses the build's compile instead of
 /// compiling the workspace a second time.
 #[expect(
     clippy::too_many_arguments,
     reason = "the build's options, passed once from each command"
 )]
-pub fn run_build_computing(
+pub fn run_build_computing<E: From<std::io::Error>>(
     entry: &Path,
     out_dir: &Path,
     emits: &[Emit],
@@ -863,8 +869,8 @@ pub fn run_build_computing(
     frozen: Frozen,
     apply_lints: ApplyLints,
     deployment: Option<&str>,
-    compute: Option<&mut CompatibleCatalogsFn<'_>>,
-) -> std::io::Result<CliRun> {
+    compute: Option<&mut CompatibleCatalogsFn<'_, E>>,
+) -> Result<CliRun, E> {
     run_build_inner(
         entry,
         out_dir,
@@ -883,7 +889,7 @@ pub fn run_build_computing(
     clippy::too_many_arguments,
     reason = "the build's options, passed once from each command"
 )]
-fn run_build_inner(
+fn run_build_inner<E: From<std::io::Error>>(
     entry: &Path,
     out_dir: &Path,
     emits: &[Emit],
@@ -893,8 +899,8 @@ fn run_build_inner(
     apply_lints: ApplyLints,
     deployment: Option<&str>,
     given: &BTreeMap<String, Vec<[u8; 32]>>,
-    compute: Option<&mut CompatibleCatalogsFn<'_>>,
-) -> std::io::Result<CliRun> {
+    compute: Option<&mut CompatibleCatalogsFn<'_, E>>,
+) -> Result<CliRun, E> {
     let mut db = RidlDatabase::default();
     let Compiled {
         workspace,
@@ -907,7 +913,7 @@ fn run_build_inner(
         codegen_header,
         report_scope,
         ..
-    } = load_and_check(&mut db, entry, &[]).map_err(load_io_error)?;
+    } = load_and_check(&mut db, entry, &[]).map_err(|err| E::from(load_io_error(err)))?;
 
     // The earlier catalogs per unit, computed from this compile before
     // anything else can fail, so a history that cannot be read is reported
@@ -1117,7 +1123,7 @@ fn run_build_inner(
             }
         };
 
-        std::fs::create_dir_all(out_dir)?;
+        std::fs::create_dir_all(out_dir).map_err(E::from)?;
         let single_file = entry.is_file() && manifest_root_of(entry).is_none();
         let file_stem = module_name_from_path(&entry.to_string_lossy());
 
