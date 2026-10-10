@@ -348,3 +348,16 @@ Each ruling: what was decided — why — what it costs if wrong.
   labelled `debt` at the start of the triage, minus the issues lanes G and H
   still work on (#700, #397, #782, #783) — if wrong, an issue G1 makes moot is
   triaged before G1 lands, and G1's close-out closes it.
+- **R-33** G6 closures: #633, #658 and #660 close as done (their tests are on
+  `main`); #629 stays open, narrowed to the three items PR #663 did not cover
+  (the formatter attribution prefix, the EditorConfig absolute-path fallback,
+  the root LICENSE text) — #663 covered only its VSIX items — if wrong, one
+  issue stays open with items already pinned.
+- **R-34** G6 questions: #135 stays one roll-up (splitting it moves text, not
+  work); #370 stays open without a decision in this lane; #481 stays open for
+  its missing agreement test; the proposed milestones stand.
+- **R-35** #797 item 1 (deleting `service doors` beside a kept `interface doors`
+  loses number 2 with exit 0) is a gate hole: it becomes its own issue,
+  `severity/major`, P2, and joins G1, the remaining gate stage — a published
+  number lost with exit 0 is what this lane exists to refuse — if wrong, G1
+  carries one more task.
