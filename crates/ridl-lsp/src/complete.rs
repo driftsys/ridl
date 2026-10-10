@@ -41,9 +41,11 @@
 //! - after `for` → the systems.
 //!
 //! A component or a system of the file's own package is offered by its bare
-//! name, one of another package by its qualified name. When the part already
-//! written qualifies the reference with the own package, an own-package item
-//! is matched and written by its qualified name.
+//! name, one of another package by its qualified name; an interface after
+//! `requires` by the name the package sees it under. When the part already
+//! written qualifies the reference with the package that declares a
+//! bare-named item, the item is matched and written by its qualified name.
+//! Inside a plain comment nothing is offered: it is prose.
 //!
 //! The context is decided from the token to the left of the cursor and the
 //! identifier the cursor is completing, not from a well-formed tree — the same
@@ -163,12 +165,19 @@ pub fn rsdl_completion(
     let Some(cursor) = Cursor::at(source.syntax(), offset) else {
         return (Vec::new(), None);
     };
-    // A plain comment is prose; a doc comment was handled above.
-    if matches!(
-        cursor.left.kind(),
-        SyntaxKind::LineComment | SyntaxKind::BlockComment
-    ) && cursor.left.text_range().start() < offset
-    {
+    // Inside a plain comment, which is prose, nothing is offered; a doc
+    // comment was handled above. A cursor right after the `*/` of a block
+    // comment is outside it.
+    let comment = cursor.left.text_range();
+    let inside_comment = match cursor.left.kind() {
+        SyntaxKind::LineComment => comment.start() < offset,
+        SyntaxKind::BlockComment => {
+            comment.start() < offset
+                && (offset < comment.end() || !cursor.left.text().ends_with("*/"))
+        }
+        _ => false,
+    };
+    if inside_comment {
         return (Vec::new(), None);
     }
     if cursor.in_import() {

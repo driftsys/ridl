@@ -84,8 +84,9 @@ pub fn reference_at(
 }
 
 /// Every reference of `system` the checker binds, with what it names. An
-/// instance reference `Name.inst` appears twice: once for the component its segments before `inst` name, and once
-/// for the instance, when the component declares it.
+/// instance reference `Name.inst` appears twice: once for the component its
+/// segments before `inst` name, and once for the instance, when the
+/// component declares it.
 ///
 /// `system` is the result of [`check_system`](super::check_system) for `ws`
 /// and `std`.

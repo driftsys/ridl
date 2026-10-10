@@ -3733,6 +3733,10 @@ fn rsdl_completion_offers_no_reference_where_none_can_be_written() {
             "system Vehicle { // a note\n  Cruise,",
         )
         .replace(
+            "veh.adas.access,  }\n\ndeployment",
+            "veh.adas.access, /* a block */ }\n\ndeployment",
+        )
+        .replace(
             "package veh.topology\n",
             "package veh.topology\n// a file note\n",
         )
@@ -3762,6 +3766,11 @@ fn rsdl_completion_offers_no_reference_where_none_can_be_written() {
         (
             "a plain comment in a system body",
             pos_after(&edited, "// a note", 0),
+            vec![],
+        ),
+        (
+            "a block comment in a system body",
+            pos_in(&edited, "/* a block */", 0, 4),
             vec![],
         ),
         (
@@ -3797,6 +3806,16 @@ fn rsdl_completion_offers_no_reference_where_none_can_be_written() {
         assert_eq!(got, expected, "{what}");
     }
 
+    // Right after the `*/` of a block comment the cursor is outside it, on a
+    // member line.
+    let items = complete_at(
+        &client,
+        29,
+        system.clone(),
+        pos_after(&edited, "/* a block */", 0),
+    );
+    assert!(labels(&items).contains(&"Cruise"), "{:?}", labels(&items));
+
     // An `import` line offers the public declarations of the package.
     let items = complete_at(
         &client,
@@ -3813,8 +3832,8 @@ fn rsdl_completion_offers_no_reference_where_none_can_be_written() {
 
 /// The third member of the rsdl rename and completion fixtures: a package
 /// that imports two components of `veh.topology`, one through an alias, and
-/// an interface of `veh.adas` through an alias, and names them in a
-/// distribution.
+/// an interface of `veh.adas` through an alias, and names the components in
+/// a distribution.
 const RSDL_EXTRA: &str = "package veh.extra\n\
 \n\
 import veh.topology.Cruise\n\
@@ -4060,6 +4079,155 @@ fn rsdl_rename_covers_systems_refusals_and_interfaces() {
     );
 
     shut_down(&client, 70);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// prepareRename and rename in an `.rsdl` file: the span is the last segment
+/// of a qualified reference — a qualified interface, a qualified component,
+/// and the component part of a qualified placement; an rsdl reference the
+/// checker binds to nothing is refused in every slot, up to its last
+/// character; the typl rename still handles an import line and a doc link,
+/// and a cursor in another file is not taken for a reference of this one;
+/// and the import of the renamed component does not collide with the new
+/// name.
+#[test]
+fn rsdl_rename_spans_slots_and_fallbacks() {
+    let dir = TempDir::new("rsdl-rename-spans");
+    let (_contracts, system, extra) = write_rsdl_workspace_with_extra(&dir, RSDL_EXTRA);
+    let (client, server) = start(uri_of(dir.path()));
+    let prepared = |id: i32, uri: &lt::Uri, cursor: lt::Position| {
+        prepare_rename_at(&client, id, uri.clone(), cursor).map(|response| match response {
+            lt::PrepareRenameResponse::Range(range) => range,
+            other => panic!("expected a range, got {other:?}"),
+        })
+    };
+
+    let text = RSDL_SYSTEM
+        .replace(
+            "import veh.adas.LaneAssist\n",
+            "import veh.adas.LaneAssist\nimport veh.adas.Flag\n",
+        )
+        .replace(
+            "/// A component.\ncomponent Lane { offers veh.adas.lane }",
+            "/// Keeps [LaneAssist].\ncomponent Lane { offers veh.adas.lane, offers Flag, requires Flag }",
+        )
+        .replace(
+            "distribution Adas { veh.adas.access, Cruise, Lane, Panel }",
+            "distribution Adas { veh.adas.access, Cruise, Lane, Panel, Flag }",
+        )
+        .replace(
+            "machine Hpc { Cruise.primary, Lane, veh.adas.access }",
+            "machine Hpc { Cruise.primary, Lane, veh.adas.access, Flag }",
+        )
+        .replace("Cruise.backup", "veh.topology.Cruise.backup")
+        + "\ndeployment Test for Flag {}\n";
+    did_open(&client, &system, &text);
+
+    // The last segment of a qualified reference.
+    let spans = [
+        (
+            "a qualified interface",
+            &system,
+            pos_in(&text, "requires veh.adas.LaneAssist", 0, 12),
+            range_of(&text, "LaneAssist", 3),
+        ),
+        (
+            "the component part of a qualified placement",
+            &system,
+            pos_in(&text, "veh.topology.Cruise.backup", 0, 15),
+            range_of(&text, "Cruise", 4),
+        ),
+        (
+            "a qualified component in another package",
+            &extra,
+            pos_in(RSDL_EXTRA, "veh.topology.Panel", 0, 2),
+            range_of(RSDL_EXTRA, "Panel", 0),
+        ),
+        // The typl rename handles an import line and a doc link.
+        (
+            "an import line",
+            &system,
+            pos_in(&text, "import veh.adas.LaneAssist", 0, 18),
+            range_of(&text, "LaneAssist", 0),
+        ),
+        (
+            "a doc link",
+            &system,
+            pos_in(&text, "[LaneAssist]", 0, 3),
+            range_of(&text, "LaneAssist", 2),
+        ),
+    ];
+    for (id, (what, uri, cursor, expected)) in (10..).zip(spans) {
+        assert_eq!(prepared(id, uri, cursor), Some(expected), "{what}");
+    }
+
+    // The qualified placement is renamed at its component part.
+    let edit = rename_at(
+        &client,
+        20,
+        system.clone(),
+        pos_in(&text, "{ Cruise, Lane", 0, 3),
+        "Cruiser",
+    );
+    let edits: Vec<lt::Range> = edits_for(&edit, &system)
+        .into_iter()
+        .map(|edit| edit.range)
+        .collect();
+    assert!(
+        edits.contains(&range_of(&text, "Cruise", 4)),
+        "the qualified placement: {edits:?}"
+    );
+
+    // An unbound `Flag` in each slot, the last character included.
+    let unbound = [
+        ("an `offers` line", pos_in(&text, "offers Flag", 0, 8)),
+        ("a `requires` line", pos_in(&text, "requires Flag", 0, 10)),
+        (
+            "a distribution member line",
+            pos_in(&text, "Panel, Flag }", 0, 8),
+        ),
+        ("a placement line", pos_in(&text, "access, Flag }", 0, 9)),
+        ("the `for` reference", pos_in(&text, "for Flag", 0, 5)),
+        ("the end of a reference", pos_after(&text, "offers Flag", 0)),
+    ];
+    for (id, (what, cursor)) in (30..).zip(unbound) {
+        assert_eq!(prepared(id, &system, cursor), None, "{what}");
+    }
+
+    // A cursor in another file, at an offset inside a reference of
+    // `system.rsdl`, is on that file's import line, which the typl rename
+    // handles.
+    let reference = text
+        .find("veh.adas.access, Flag }")
+        .expect("the placement reference");
+    let header = "package veh.extra\n\n// ";
+    let import = "import veh.adas.";
+    let padding = reference + 2 - (header.len() + 1 + import.len());
+    let other = format!(
+        "{header}{}\n{import}CruiseControl as Keeper\n",
+        "x".repeat(padding)
+    );
+    assert_eq!(other.find("CruiseControl"), Some(reference + 2));
+    did_open(&client, &extra, &other);
+    assert_eq!(
+        prepared(40, &extra, find_pos(&other, "CruiseControl", 0)),
+        Some(range_of(&other, "CruiseControl", 0)),
+        "an import line in another file"
+    );
+    did_open(&client, &extra, RSDL_EXTRA);
+
+    // `veh.extra` binds `Track` through the import of `Lane` itself, which the
+    // rename rewrites, so renaming `Lane` to `Track` is no collision.
+    let edit = rename_at(
+        &client,
+        41,
+        system.clone(),
+        pos_in(&text, "component Lane", 0, 11),
+        "Track",
+    );
+    assert!(!edits_for(&edit, &system).is_empty(), "{edit:?}");
+
+    shut_down(&client, 50);
     server.join().expect("thread joins").expect("clean exit");
 }
 

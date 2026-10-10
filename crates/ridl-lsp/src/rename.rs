@@ -60,7 +60,8 @@ pub enum RenameError {
     Reserved(String),
     /// The new name breaks the case convention for the symbol's kind.
     CaseConvention(String),
-    /// The new name already names a declaration in an affected package.
+    /// The new name already names a declaration or an import in an affected
+    /// package.
     Collision(String),
 }
 
@@ -74,7 +75,7 @@ impl RenameError {
             }
             RenameError::CaseConvention(message) => message.clone(),
             RenameError::Collision(name) => {
-                format!("`{name}` already names a declaration in an affected package")
+                format!("`{name}` already names a declaration or an import in an affected package")
             }
         }
     }
