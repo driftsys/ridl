@@ -2,13 +2,14 @@
 //! (rsdl reference §4).
 //!
 //! The cursor's reference and its target come from
-//! [`ridl_sem::rsdl::reference_at`], and every bound reference with its target
-//! from [`ridl_sem::rsdl::references`]; both read the checked system model.
-//! This module does not resolve a name itself: it turns a target into a
-//! declaration site, into hover markdown, into the list of references to it,
-//! and into the edits that rename it. A component, an instance and the system are declared in
-//! `.rsdl` files and render from the model. An interface and a service are
-//! declared in ridl and render as a hover on the ridl declaration does.
+//! [`ridl_sem::rsdl::reference_at`], and every bound reference with its
+//! target from [`ridl_sem::rsdl::references`]; both read the checked system
+//! model. This module does not resolve a name itself: it turns a target into
+//! a declaration site, into hover markdown, into the list of references to
+//! it, and into the edits that rename it. A component, an instance and the
+//! system are declared in `.rsdl` files and render from the model. An
+//! interface and a service are declared in ridl and render as a hover on the
+//! ridl declaration does.
 //!
 //! The name of an rsdl declaration — a system, a component, a distribution, a
 //! deployment or a machine — has a hover too, and every rsdl hover shows the
@@ -17,10 +18,12 @@
 //!
 //! Find-references reports every rsdl reference the checker binds to the same
 //! declaration, from [`ridl_sem::rsdl::references`]; on a declared interface
-//! it adds the references the ridl navigation finds. Rename rewrites a system,
-//! a component or a declared instance, with every rsdl reference and import
-//! line that names it. An interface is renamed by the ridl rename, which
-//! already rewrites the rsdl references to it; a service is not renamed.
+//! the ridl navigation finds the references, the rsdl `requires` lines among
+//! them. Rename rewrites a system, a component or a declared instance, with
+//! every rsdl reference and import line that names it. An interface is
+//! renamed by the ridl rename, which already rewrites the rsdl references to
+//! it. A service, and an rsdl reference the checker binds to nothing, are not
+//! renamed.
 
 use ridl_core::db::InputFile;
 use ridl_core::package::{Package, Workspace, package_of, service_catalog};
@@ -30,7 +33,6 @@ use ridl_sem::rsdl::{
     CheckedSystem, DeclAttrs, InterfaceId, MemberRef, Target, UNIT_INSTANCE, reference_at,
 };
 use ridl_sem::{Symbol, SymbolKind, check_package, check_system, resolve_package};
-use ridl_syntax::SyntaxKind;
 use ridl_syntax::ast::AstNode;
 use ridl_syntax::keywords;
 use rowan::{TextRange, TextSize};
@@ -308,11 +310,8 @@ fn same_declaration(a: &Target, b: &Target) -> bool {
 /// What find-references reports for a cursor in an `.rsdl` file.
 pub enum References {
     /// A declared interface: the typl symbol, whose references the ridl
-    /// navigation finds, and the rsdl references to it.
-    Interface {
-        symbol: Symbol,
-        references: Vec<(InputFile, TextRange)>,
-    },
+    /// navigation finds, the rsdl `requires` lines among them.
+    Interface(Symbol),
     /// Any other rsdl target: its declaration site, when it has one, and the
     /// part of every rsdl reference that names it.
     Rsdl {
@@ -332,14 +331,13 @@ pub fn references(
 ) -> Option<References> {
     let system = check_system(db, ws, std);
     let (target, _) = target_at(db, ws, std, &system, file, offset)?;
-    let references = rsdl_references(db, ws, std, &system, &target);
     if let Target::Interface(InterfaceId::Declared { package, name }) = &target {
         let symbol = interface_symbol(db, ws, std, package, name)?;
-        return Some(References::Interface { symbol, references });
+        return Some(References::Interface(symbol));
     }
     Some(References::Rsdl {
         declaration: declaration_site(db, ws, std, &system, &target),
-        references,
+        references: rsdl_references(db, ws, std, &system, &target),
     })
 }
 
@@ -363,12 +361,16 @@ pub enum RenameAt {
     /// A system, component or declared instance, which [`rename`] rewrites;
     /// `span` is the name under the cursor.
     Rsdl { target: Target, span: TextRange },
-    /// A service. Its dotted name is declared in ridl and is global to the
-    /// workspace, so it is not renamed.
+    /// A declared interface, which the ridl rename rewrites with every
+    /// reference to it, the rsdl `requires` lines among them; `span` is the
+    /// name under the cursor.
+    Interface { symbol: Symbol, span: TextRange },
+    /// Not renamed: a service or the inline shape of one, whose dotted name
+    /// is declared in ridl and is global to the workspace, or an rsdl
+    /// reference the checker binds to nothing.
     Refused,
-    /// A declared interface, or no rsdl target: the typl rename handles the
-    /// cursor, as it handles an interface reference or a doc link in a ridl
-    /// file.
+    /// No rsdl reference: the typl rename handles the cursor, as it handles a
+    /// doc link, an import line or a typl declaration.
     Typl,
 }
 
@@ -382,41 +384,55 @@ pub fn rename_at(
 ) -> RenameAt {
     let system = check_system(db, ws, std);
     let Some((target, range)) = target_at(db, ws, std, &system, file, offset) else {
-        return RenameAt::Typl;
+        // An rsdl reference names nothing a typl symbol lookup should find,
+        // as hover and go-to-definition read it.
+        return if in_reference(&system, file, offset) {
+            RenameAt::Refused
+        } else {
+            RenameAt::Typl
+        };
     };
-    match target {
-        Target::Interface(InterfaceId::Declared { .. }) => RenameAt::Typl,
-        Target::Service(_) | Target::Interface(InterfaceId::Inline { .. }) => RenameAt::Refused,
-        Target::System(_) | Target::Component(_) | Target::Instance { .. } => {
-            match last_segment(db, file, range) {
-                Some(span) => RenameAt::Rsdl { target, span },
+    let span = nav::final_segment_range(db, file, range);
+    match &target {
+        Target::Interface(InterfaceId::Declared { package, name }) => {
+            match interface_symbol(db, ws, std, package, name) {
+                Some(symbol) => RenameAt::Interface { symbol, span },
                 None => RenameAt::Refused,
             }
+        }
+        Target::Service(_) | Target::Interface(InterfaceId::Inline { .. }) => RenameAt::Refused,
+        Target::System(_) | Target::Component(_) | Target::Instance { .. } => {
+            RenameAt::Rsdl { target, span }
         }
     }
 }
 
-/// The last name segment written inside `range` in `file`: `Cruise` in
-/// `veh.topology.Cruise`.
-fn last_segment(db: &dyn salsa::Database, file: InputFile, range: TextRange) -> Option<TextRange> {
-    nav::source_file(db, file)
-        .syntax()
-        .covering_element(range)
-        .into_node()
-        .map_or_else(
-            || Some(range),
-            |node| {
-                node.descendants_with_tokens()
-                    .filter_map(|element| element.into_token())
-                    .filter(|token| {
-                        !token.kind().is_trivia()
-                            && token.kind() != SyntaxKind::Dot
-                            && range.contains_range(token.text_range())
-                    })
-                    .map(|token| token.text_range())
-                    .last()
-            },
+/// Whether `offset` in `file` is on a reference written in an rsdl slot: a
+/// member line, an `offers` or `requires` line, or the `for` reference.
+fn in_reference(system: &CheckedSystem, file: InputFile, offset: TextSize) -> bool {
+    let lines = system
+        .systems
+        .iter()
+        .flat_map(|d| &d.members)
+        .chain(
+            system
+                .components
+                .iter()
+                .flat_map(|d| d.offers.iter().chain(&d.requires)),
         )
+        .chain(system.distributions.iter().flat_map(|d| &d.members))
+        .chain(
+            system
+                .deployments
+                .iter()
+                .flat_map(|d| &d.machines)
+                .flat_map(|m| &m.members),
+        )
+        .map(|line| &line.reference);
+    let clauses = system.deployments.iter().filter_map(|d| d.system.as_ref());
+    lines.chain(clauses).any(|reference| {
+        reference.site.file == file && reference.site.range.contains_inclusive(offset)
+    })
 }
 
 /// The edits renaming `target`, a system, component or declared instance, to
@@ -425,9 +441,9 @@ fn last_segment(db: &dyn salsa::Database, file: InputFile, range: TextRange) -> 
 /// last segment of every import line that binds it.
 ///
 /// A system or component name stays UpperCamelCase and an instance name
-/// lowerCamelCase (rsdl reference §4); a new name that a declaration of an
-/// affected package holds, or that another instance of the component holds,
-/// is a collision.
+/// lowerCamelCase (rsdl reference §2, R7). A new name is a collision when a
+/// declaration of an affected package holds it, when an import there binds
+/// it, or, for an instance, when another instance of the component holds it.
 pub fn rename(
     db: &dyn salsa::Database,
     ws: Workspace,
@@ -487,7 +503,7 @@ pub fn rename(
                     "`{new_name}` is not UpperCamelCase — a system or component name must be"
                 )));
             }
-            if package_declares(db, ws, std, &system, packages, package, new_name) {
+            if package_binds(db, ws, std, &system, packages, package, new_name, &[]) {
                 return Err(RenameError::Collision(new_name.to_string()));
             }
         }
@@ -500,9 +516,7 @@ pub fn rename(
     // A reference written through an import alias does not spell the old
     // name; it stays as written, as a ridl rename leaves it.
     for (file, range) in rsdl_references(db, ws, std, &system, target) {
-        let Some(segment) = last_segment(db, file, range) else {
-            continue;
-        };
+        let segment = nav::final_segment_range(db, file, range);
         if file
             .text(db)
             .get(usize::from(segment.start())..usize::from(segment.end()))
@@ -539,18 +553,30 @@ pub fn rename(
             let importing_name = importing.name(db);
             if imports_target
                 && importing_name != package
-                && package_declares(db, ws, std, &system, packages, importing_name, new_name)
+                && package_binds(
+                    db,
+                    ws,
+                    std,
+                    &system,
+                    packages,
+                    importing_name,
+                    new_name,
+                    &imported,
+                )
             {
                 return Err(RenameError::Collision(new_name.to_string()));
             }
         }
     }
-    Ok(rename::dedup(edits))
+    Ok(edits)
 }
 
-/// Whether the package `package` declares `name`: a typl, ridl or rsdl
-/// declaration, which share the package's names (typl §3, TYPL-009).
-fn package_declares(
+/// Whether `name` is bound in the package `package`: by a typl, ridl or rsdl
+/// declaration, which share the package's names (typl §3, TYPL-009), or by an
+/// import, under its alias or its last segment. The import of the path
+/// `renamed`, which the rename rewrites, is not counted.
+#[allow(clippy::too_many_arguments)]
+fn package_binds(
     db: &dyn salsa::Database,
     ws: Workspace,
     std: Package,
@@ -558,6 +584,7 @@ fn package_declares(
     packages: &[Package],
     package: &str,
     name: &str,
+    renamed: &[String],
 ) -> bool {
     let rsdl = system
         .systems
@@ -567,8 +594,23 @@ fn package_declares(
         .chain(system.distributions.iter().map(|d| (&d.package, &d.name)))
         .chain(system.deployments.iter().map(|d| (&d.package, &d.name)))
         .any(|(declaring, named)| declaring == package && named.name == name);
-    rsdl || rename::package_named(db, packages, package)
-        .is_some_and(|declaring| rename::declares(db, ws, std, declaring, name))
+    let Some(declaring) = rename::package_named(db, packages, package) else {
+        return rsdl;
+    };
+    let imported = declaring.files(db).iter().any(|file| {
+        nav::source_file(db, *file).imports().any(|import| {
+            let Some(qualified) = import.qualified_name() else {
+                return false;
+            };
+            let segments = nav::qualified_segments(qualified.syntax());
+            let bound = match import.alias() {
+                Some(alias) => alias.syntax().text().to_string(),
+                None => segments.last().cloned().unwrap_or_default(),
+            };
+            bound == name && segments != renamed
+        })
+    });
+    rsdl || imported || rename::declares(db, ws, std, declaring, name)
 }
 
 /// Whether `name` is lowerCamelCase: a leading ASCII lowercase letter and only

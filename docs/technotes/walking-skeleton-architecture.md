@@ -396,7 +396,9 @@ already canonical, and a `null` result when it has parse errors. In an `.rsdl`
 file, hover, goto-definition, find-references, prepare-rename and rename
 dispatch to `rsdl.rs`, which reads what a reference names from the checked
 system model rather than from a typl symbol lookup, and completion offers the
-rsdl slots.
+rsdl slots. Two cases still take the typl path there: a doc link, and a declared
+interface, whose references and rename are the ridl ones once `rsdl.rs` has
+found its symbol.
 
 ## What E1 closed from the E0 note
 

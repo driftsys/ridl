@@ -118,7 +118,20 @@ pub fn rename(
     new_name: &str,
 ) -> Result<Vec<Edit>, RenameError> {
     let (target, _) = locate(db, ws, std, pkg, file, offset).ok_or(RenameError::NotRenameable)?;
+    rename_symbol(db, ws, std, packages, target, new_name)
+}
 
+/// The workspace edit renaming the declaration `target` to `new_name`, or a
+/// [`RenameError`] when the rename is rejected. [`rename`] after the cursor is
+/// resolved; the rsdl rename of a declared interface enters here.
+pub fn rename_symbol(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    packages: &[Package],
+    target: Symbol,
+    new_name: &str,
+) -> Result<Vec<Edit>, RenameError> {
     // Reject: a symbol declared in the embedded `ridl.std`. Its declaration
     // lives in a built-in source with no editable file, so the declaration edit
     // would be silently dropped while user references are rewritten, leaving them
@@ -223,7 +236,7 @@ pub fn rename(
 
 /// Drops repeated `(file, range)` edits — a declaration that is also
 /// self-imported could otherwise be edited twice.
-pub(crate) fn dedup(edits: Vec<Edit>) -> Vec<Edit> {
+fn dedup(edits: Vec<Edit>) -> Vec<Edit> {
     let mut unique: Vec<Edit> = Vec::new();
     for edit in edits {
         if !unique

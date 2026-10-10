@@ -49,6 +49,8 @@
 //! identifier the cursor is completing, not from a well-formed tree — the same
 //! discipline the resolver and navigation use.
 
+use std::collections::HashSet;
+
 use lsp_types as lt;
 use ridl_core::db::InputFile;
 use ridl_core::package::{Package, Workspace, service_catalog};
@@ -161,6 +163,14 @@ pub fn rsdl_completion(
     let Some(cursor) = Cursor::at(source.syntax(), offset) else {
         return (Vec::new(), None);
     };
+    // A plain comment is prose; a doc comment was handled above.
+    if matches!(
+        cursor.left.kind(),
+        SyntaxKind::LineComment | SyntaxKind::BlockComment
+    ) && cursor.left.text_range().start() < offset
+    {
+        return (Vec::new(), None);
+    }
     if cursor.in_import() {
         return (
             import_completions(db, ws, std, packages, &source, offset),
@@ -173,12 +183,10 @@ pub fn rsdl_completion(
     let keywords = |words| (keyword_completions(words), None);
     let start = reference_start(&cursor.left, offset);
     let replaced = Some(TextRange::new(start, offset));
-    // Whether the part already written qualifies the reference with the
-    // file's own package, as in `veh.topology.Cr`.
-    let own_qualified = file
+    let written = file
         .text(db)
         .get(usize::from(start)..usize::from(offset))
-        .is_some_and(|written| written.starts_with(&format!("{}.", pkg.name(db))));
+        .unwrap_or_default();
     let items = match slot {
         RsdlSlot::TopLevel => return keywords(RSDL_DEFINITION_KEYWORDS),
         RsdlSlot::ComponentLine => return keywords(COMPONENT_LINE_KEYWORDS),
@@ -191,10 +199,13 @@ pub fn rsdl_completion(
                 .iter()
                 .filter(|(_, symbol)| symbol.kind == SymbolKind::Interface)
                 .map(|(name, symbol)| {
-                    item(
-                        name,
-                        lt::CompletionItemKind::INTERFACE,
-                        format!("{}.{}", symbol.package, symbol.name),
+                    let qualified = format!("{}.{}", symbol.package, symbol.name);
+                    let detail = qualified.clone();
+                    qualified_when_written(
+                        item(name, lt::CompletionItemKind::INTERFACE, detail),
+                        &symbol.package,
+                        qualified,
+                        written,
                     )
                 })
                 .collect();
@@ -210,7 +221,7 @@ pub fn rsdl_completion(
                 .map(|decl| {
                     rsdl_item(
                         own,
-                        own_qualified,
+                        written,
                         &decl.package,
                         &decl.name.name,
                         lt::CompletionItemKind::MODULE,
@@ -230,7 +241,7 @@ pub fn rsdl_completion(
                     for instance in decl.instances.iter().flatten() {
                         items.push(rsdl_item(
                             own,
-                            own_qualified,
+                            written,
                             &decl.package,
                             &format!("{name}.{}", instance.name),
                             lt::CompletionItemKind::FIELD,
@@ -240,7 +251,7 @@ pub fn rsdl_completion(
                 }
                 items.push(rsdl_item(
                     own,
-                    own_qualified,
+                    written,
                     &decl.package,
                     name,
                     lt::CompletionItemKind::CLASS,
@@ -249,13 +260,15 @@ pub fn rsdl_completion(
             }
             // A service a declared component offers stands for no member
             // (RSDL-504).
-            let offered = |name: &str| {
-                system
-                    .component_lines
-                    .iter()
-                    .any(|lines| lines.offers.iter().flatten().any(|service| service == name))
-            };
-            items.extend(service_items(db, ws, std, |name, _| !offered(name)));
+            let offered: HashSet<&str> = system
+                .component_lines
+                .iter()
+                .flat_map(|lines| lines.offers.iter().flatten())
+                .map(String::as_str)
+                .collect();
+            items.extend(service_items(db, ws, std, |name, _| {
+                !offered.contains(name)
+            }));
             items
         }
     };
@@ -285,29 +298,37 @@ fn service_items(
 
 /// The item for `name`, an rsdl declaration of `package`, as a reference
 /// written in the package `own` names it: bare in its own package, qualified
-/// in another. When `own_qualified`, the part already written qualifies the
-/// reference with the own package, and an item of the own package carries
-/// the qualified name as its `filter_text`, so that it still matches and is
-/// written qualified.
+/// in another. `written` is the part of the reference already written.
 fn rsdl_item(
     own: &str,
-    own_qualified: bool,
+    written: &str,
     package: &str,
     name: &str,
     kind: lt::CompletionItemKind,
     detail: String,
 ) -> lt::CompletionItem {
     let qualified = format!("{package}.{name}");
-    if own != package {
-        item(&qualified, kind, detail)
-    } else if own_qualified {
-        lt::CompletionItem {
-            filter_text: Some(qualified),
-            ..item(name, kind, detail)
-        }
+    if own == package {
+        qualified_when_written(item(name, kind, detail), package, qualified, written)
     } else {
-        item(name, kind, detail)
+        item(&qualified, kind, detail)
     }
+}
+
+/// `item`, named by a bare label, with the qualified name `qualified` as its
+/// `filter_text` when `written`, the part of the reference already written,
+/// qualifies it with `package`: the item then still matches, and is written
+/// qualified.
+fn qualified_when_written(
+    mut item: lt::CompletionItem,
+    package: &str,
+    qualified: String,
+    written: &str,
+) -> lt::CompletionItem {
+    if written.starts_with(&format!("{package}.")) {
+        item.filter_text = Some(qualified);
+    }
+    item
 }
 
 /// The start of the dotted reference the cursor is writing: the first of the
@@ -368,10 +389,14 @@ enum RsdlSlot {
 fn rsdl_slot(cursor: &Cursor, offset: TextSize) -> Option<RsdlSlot> {
     // A keyword after a dot is a segment of a reference (`veh.offers`), not
     // the keyword that opens a slot.
+    //
+    // With the cursor touching the end of the keyword, the keyword itself is
+    // being written: no reference can follow it without a space.
     let keyword = cursor.anchor.as_ref().filter(|anchor| {
         anchor
             .prev_token()
             .is_none_or(|previous| previous.kind() != SyntaxKind::Dot)
+            && anchor.text_range().end() < offset
     });
     match keyword.map(SyntaxToken::kind) {
         Some(SyntaxKind::OffersKw) => return Some(RsdlSlot::Offers),

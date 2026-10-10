@@ -33,14 +33,14 @@ pub enum Target {
     Interface(InterfaceId),
 }
 
-/// A reference under a cursor and the declaration it names.
+/// A reference and the declaration a part of it names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReferenceTarget {
     /// The reference as the model holds it.
     pub reference: Reference,
     /// The part of the reference that names the target: the instance segment
-    /// of `Name.inst` when the cursor is on it, the segments before it when the
-    /// cursor is on those, and the whole reference for every other form.
+    /// of `Name.inst` for the instance, the segments before it for the
+    /// component, and the whole reference for every other form.
     pub range: TextRange,
     pub target: Target,
 }
@@ -83,9 +83,8 @@ pub fn reference_at(
     target_of(db, system, &lookup, reference, slot, offset)
 }
 
-/// Every reference of `system` the checker binds, with what it names, in the
-/// order of the declaration lists. An instance reference `Name.inst` appears
-/// twice: once for the component its segments before `inst` name, and once
+/// Every reference of `system` the checker binds, with what it names. An
+/// instance reference `Name.inst` appears twice: once for the component its segments before `inst` name, and once
 /// for the instance, when the component declares it.
 ///
 /// `system` is the result of [`check_system`](super::check_system) for `ws`

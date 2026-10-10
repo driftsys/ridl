@@ -3218,9 +3218,50 @@ fn find_references_follows_rsdl_references() {
         false,
     )
     .expect("a references result");
-    assert_eq!(locations.len(), 4, "{locations:?}");
+    let expected: Vec<_> = (1..5)
+        .map(|occurrence| at(&system, RSDL_SYSTEM, "Cruise", occurrence))
+        .collect();
+    assert_eq!(sorted_locations(locations), expected);
 
-    shut_down(&client, 21);
+    // From the name of the system declaration: the declaration and the `for`
+    // reference.
+    let locations = references_at(
+        &client,
+        21,
+        system.clone(),
+        pos_in(RSDL_SYSTEM, "system Vehicle", 0, 9),
+        true,
+    )
+    .expect("a references result");
+    assert_eq!(
+        sorted_locations(locations),
+        vec![
+            at(&system, RSDL_SYSTEM, "Vehicle", 0),
+            at(&system, RSDL_SYSTEM, "Vehicle", 1),
+        ],
+    );
+
+    // A distribution, a deployment and a machine are named by no reference.
+    let names = [
+        (
+            "distribution",
+            pos_in(RSDL_SYSTEM, "distribution Adas", 0, 14),
+        ),
+        (
+            "deployment",
+            pos_in(RSDL_SYSTEM, "deployment Production", 0, 12),
+        ),
+        ("machine", pos_in(RSDL_SYSTEM, "machine Hpc", 0, 9)),
+    ];
+    for (id, (what, cursor)) in (22..).zip(names) {
+        let locations = references_at(&client, id, system.clone(), cursor, true);
+        assert!(
+            locations.as_ref().is_none_or(Vec::is_empty),
+            "{what}: {locations:?}"
+        );
+    }
+
+    shut_down(&client, 30);
     server.join().expect("thread joins").expect("clean exit");
 }
 
@@ -3229,6 +3270,7 @@ fn find_references_follows_rsdl_references() {
 const RSDL_COMPLETION: &str = "package veh.topology\n\
 \n\
 import veh.adas.LaneAssist\n\
+import veh.adas.Flag\n\
 \n\
 component Cruise [ instances = (primary, backup) ] {\n\
 \x20 offers veh.adas.cruise\n\
@@ -3266,13 +3308,13 @@ fn completion_in_an_rsdl_file_offers_what_the_slot_admits() {
     let cases: [(&str, lt::Position, Vec<&str>, Vec<&str>); 8] = [
         (
             "the top level",
-            pos(18, 0),
+            pos(19, 0),
             vec!["component", "deployment", "distribution", "system"],
             vec!["type", "struct", "interface"],
         ),
         (
             "an empty line of a component body",
-            pos(7, 2),
+            pos(8, 2),
             vec!["offers", "requires"],
             vec!["type", "Cruise"],
         ),
@@ -3286,7 +3328,14 @@ fn completion_in_an_rsdl_file_offers_what_the_slot_admits() {
             "after `requires`",
             pos_after(text, "requires ", 0),
             vec!["LaneAssist", "veh.adas.access"],
-            vec!["Cruise", "requires"],
+            vec![
+                "Cruise",
+                "requires",
+                "veh.adas.cruise",
+                "veh.adas.lane",
+                "Flag",
+                "CruiseControl",
+            ],
         ),
         (
             "a system member line",
@@ -3314,7 +3363,7 @@ fn completion_in_an_rsdl_file_offers_what_the_slot_admits() {
         ),
         (
             "an empty line of a deployment body",
-            pos(16, 2),
+            pos(17, 2),
             vec!["machine"],
             vec!["Cruise", "type"],
         ),
@@ -3364,31 +3413,38 @@ fn rsdl_completion_keeps_the_keyword_and_the_qualifier() {
     let (_contracts, system) = write_rsdl_workspace(&dir);
     let (client, server) = start(uri_of(dir.path()));
 
-    // Right after `offers`, `requires` or `for`, with no space: no item
-    // replaces the keyword.
-    let text = RSDL_COMPLETION.replace(
-        "component Lane { offers veh.adas.lane }",
-        "component Lane { offers }",
-    );
-    did_open(&client, &system, &text);
-    let cursors = [
-        ("`offers`", pos_after(&text, "{ offers", 0)),
-        ("`requires`", pos_after(&text, "requires", 0)),
-        ("`for`", pos_after(&text, " for", 0)),
+    // A partly written reference after `offers`, `requires` or `for` is
+    // completed and replaced from its start.
+    let partials = [
+        (
+            "{ offers veh.adas.lane }",
+            "{ offers veh.ad }",
+            "veh.ad",
+            "veh.adas.lane",
+        ),
+        (
+            "requires LaneAssist",
+            "requires LaneA",
+            "LaneA",
+            "LaneAssist",
+        ),
+        ("for Vehicle", "for Veh", "Veh", "Vehicle"),
     ];
-    for (id, (what, cursor)) in (10..).zip(cursors) {
+    for (id, (from, to, written, label)) in (10..).zip(partials) {
+        let text = RSDL_COMPLETION.replace(from, to);
+        did_open(&client, &system, &text);
+        let index = to.find(written).expect("the written part is in the line");
+        let start = pos_in(&text, to, 0, index as u32);
+        let cursor = pos(start.line, start.character + written.len() as u32);
         let items = complete_at(&client, id, system.clone(), cursor);
-        assert!(!items.is_empty(), "after {what}: items are offered");
-        for item in &items {
-            if let Some(lt::CompletionTextEdit::Edit(edit)) = &item.text_edit {
-                assert!(
-                    edit.range.start == cursor,
-                    "after {what}: `{}` replaces {:?}, before the cursor {cursor:?}",
-                    item.label,
-                    edit.range
-                );
-            }
-        }
+        let item = items
+            .iter()
+            .find(|item| item.label == label)
+            .unwrap_or_else(|| panic!("`{to}`: `{label}` in {:?}", labels(&items)));
+        let Some(lt::CompletionTextEdit::Edit(edit)) = &item.text_edit else {
+            panic!("`{to}`: the item carries a text edit: {item:?}");
+        };
+        assert_eq!(edit.range, lt::Range::new(start, cursor), "`{to}`");
     }
 
     // `veh.topology.Cr` on a placement line: the own-package component is
@@ -3434,8 +3490,9 @@ fn rsdl_completion_keeps_the_keyword_and_the_qualifier() {
     assert_eq!(edit.new_text, "Cruise.primary");
 
     // A keyword written as a segment after a dot is part of the reference:
-    // `veh.offers.Cr` and `veh.offers` are replaced from `veh`.
-    for (id, written) in (23..).zip(["veh.offers.Cr", "veh.offers"]) {
+    // `veh.offers.Cr` and `veh.offers` are replaced from `veh`, and
+    // `string.Cr`, whose first segment is a keyword, from `string`.
+    for (id, written) in (23..).zip(["veh.offers.Cr", "veh.offers", "string.Cr"]) {
         let text = RSDL_COMPLETION.replace(
             "veh.adas.access,  }\n\x20 \n",
             &format!("veh.adas.access, {written} }}\n\x20 \n"),
@@ -3650,6 +3707,359 @@ distribution Spare { Cruise, veh.topology.Lane }\n";
     }
 
     shut_down(&client, 30);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Completion in an `.rsdl` file offers no reference where none can be
+/// written: with the cursor touching the end of `offers` or `requires` the
+/// keyword itself is being written, so the component line keywords are
+/// offered; touching the end of `for`, nothing is offered. Nothing is offered
+/// inside a plain comment, at a naming position, or right after the `}` of a
+/// declaration. A partly written keyword at the start of a component line is
+/// completed, and an `import` line offers what a ridl import does.
+#[test]
+fn rsdl_completion_offers_no_reference_where_none_can_be_written() {
+    let dir = TempDir::new("rsdl-completion-none");
+    let (_contracts, system) = write_rsdl_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let edited = RSDL_COMPLETION
+        .replace(
+            "component Lane { offers veh.adas.lane }",
+            "component Lane { offers }",
+        )
+        .replace(
+            "system Vehicle { Cruise,",
+            "system Vehicle { // a note\n  Cruise,",
+        )
+        .replace(
+            "package veh.topology\n",
+            "package veh.topology\n// a file note\n",
+        )
+        .replace(
+            "\n\ncomponent Lane",
+            "\n\ncomponent Gate { off }\n\ncomponent Lane",
+        )
+        .replace(
+            "import veh.adas.Flag\n",
+            "import veh.adas.Flag\nimport veh.adas.\n",
+        );
+    did_open(&client, &system, &edited);
+    let keywords = vec!["offers", "requires"];
+    // (what the cursor is on, cursor, the labels offered, exactly).
+    let cases: Vec<(&str, lt::Position, Vec<&str>)> = vec![
+        (
+            "touching `offers`",
+            pos_after(&edited, "{ offers", 0),
+            keywords.clone(),
+        ),
+        (
+            "touching `requires`",
+            pos_after(&edited, "requires", 0),
+            keywords.clone(),
+        ),
+        ("touching `for`", pos_after(&edited, " for", 0), vec![]),
+        (
+            "a plain comment in a system body",
+            pos_after(&edited, "// a note", 0),
+            vec![],
+        ),
+        (
+            "a plain comment at the top level",
+            pos_after(&edited, "// a file note", 0),
+            vec![],
+        ),
+        (
+            "the name after `component`",
+            pos_after(&edited, "component ", 1),
+            vec![],
+        ),
+        (
+            "the name after `machine`",
+            pos_after(&edited, "machine ", 0),
+            vec![],
+        ),
+        (
+            "right after the `}` of a component",
+            pos_after(&edited, "{ offers }", 0),
+            vec![],
+        ),
+        (
+            "a partly written component line keyword",
+            pos_after(&edited, "{ off", 0),
+            keywords.clone(),
+        ),
+    ];
+    for (id, (what, cursor, expected)) in (10..).zip(cases) {
+        let items = complete_at(&client, id, system.clone(), cursor);
+        let mut got = labels(&items);
+        got.sort_unstable();
+        assert_eq!(got, expected, "{what}");
+    }
+
+    // An `import` line offers the public declarations of the package.
+    let items = complete_at(
+        &client,
+        30,
+        system.clone(),
+        pos_after(&edited, "import veh.adas.", 2),
+    );
+    let got = labels(&items);
+    assert!(got.contains(&"CruiseControl"), "{got:?}");
+
+    shut_down(&client, 31);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// The third member of the rsdl rename and completion fixtures: a package
+/// that imports two components of `veh.topology`, one through an alias, and
+/// an interface of `veh.adas` through an alias, and names them in a
+/// distribution.
+const RSDL_EXTRA: &str = "package veh.extra\n\
+\n\
+import veh.topology.Cruise\n\
+import veh.topology.Lane as Track\n\
+import veh.adas.CruiseControl as Keeper\n\
+\n\
+/// The distribution.\n\
+distribution Spare { Cruise, Track, veh.topology.Panel,  }\n";
+
+/// Writes the rsdl fixture with a third member, `veh.extra`, holding
+/// `extra_text`, and a typl file in `veh.topology` that declares `Speed`.
+/// Returns the `(contracts, system, extra)` file URIs.
+fn write_rsdl_workspace_with_extra(dir: &TempDir, extra_text: &str) -> (lt::Uri, lt::Uri, lt::Uri) {
+    let (contracts, system) = write_rsdl_workspace(dir);
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"adas\", \"topology\", \"extra\"]\n",
+    );
+    std::fs::create_dir_all(dir.path().join("extra")).expect("create the member directory");
+    dir.write(
+        "extra/ridl.toml",
+        "[package]\nname = \"veh.extra\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "topology/speed.typl",
+        "package veh.topology\n\n/// A speed.\ntype Speed: integer\n",
+    );
+    let extra = uri_of(&dir.write("extra/extra.rsdl", extra_text));
+    (contracts, system, extra)
+}
+
+/// Completion names a component of another package by its qualified name,
+/// and an interface after `requires` matches and keeps a qualified prefix.
+/// A reference whose first segment is a keyword is replaced from that
+/// keyword.
+#[test]
+fn rsdl_completion_qualifies_across_packages() {
+    let dir = TempDir::new("rsdl-completion-qualified");
+    let (_contracts, system, extra) = write_rsdl_workspace_with_extra(&dir, RSDL_EXTRA);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let items = complete_at(
+        &client,
+        10,
+        extra.clone(),
+        pos_after(RSDL_EXTRA, "veh.topology.Panel, ", 0),
+    );
+    let got = labels(&items);
+    assert!(got.contains(&"veh.topology.Cruise"), "{got:?}");
+    assert!(!got.contains(&"Cruise"), "{got:?}");
+
+    let text = RSDL_COMPLETION.replace("requires LaneAssist", "requires veh.adas.La");
+    did_open(&client, &system, &text);
+    let start = pos_in(&text, "requires veh.adas.La", 0, 9);
+    let cursor = pos_after(&text, "requires veh.adas.La", 0);
+    let items = complete_at(&client, 11, system.clone(), cursor);
+    let item = items
+        .iter()
+        .find(|item| item.label == "LaneAssist")
+        .unwrap_or_else(|| panic!("the interface is offered: {:?}", labels(&items)));
+    assert_eq!(item.filter_text.as_deref(), Some("veh.adas.LaneAssist"));
+    let Some(lt::CompletionTextEdit::Edit(edit)) = &item.text_edit else {
+        panic!("the item carries a text edit: {item:?}");
+    };
+    assert_eq!(edit.range, lt::Range::new(start, cursor));
+    assert_eq!(edit.new_text, "veh.adas.LaneAssist");
+
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Rename in an `.rsdl` file: a system from its declaration and from the
+/// `for` reference; renaming to the same name; the refusals, each with its
+/// reason. A name that a declaration of an affected package holds, or that an
+/// import there binds, is a collision. An rsdl reference the checker binds to
+/// nothing, an inline-shape service, and the name of a distribution, a
+/// deployment or a machine are not renamed. A declared interface is renamed
+/// by the ridl rename. A reference written through an alias keeps the alias.
+#[test]
+fn rsdl_rename_covers_systems_refusals_and_interfaces() {
+    let dir = TempDir::new("rsdl-rename-more");
+    let (contracts, system, extra) = write_rsdl_workspace_with_extra(&dir, RSDL_EXTRA);
+    let (client, server) = start(uri_of(dir.path()));
+    let ranges = |edit: &lt::WorkspaceEdit, uri: &lt::Uri| -> Vec<lt::Range> {
+        edits_for(edit, uri)
+            .into_iter()
+            .map(|edit| edit.range)
+            .collect()
+    };
+    let error = |response: Response| -> String {
+        match response.response_result {
+            Err(error) => error.message,
+            Ok(value) => panic!("expected a refusal, got {value:?}"),
+        }
+    };
+
+    // A system, from its declaration and from the `for` reference.
+    let vehicle = vec![
+        range_of(RSDL_SYSTEM, "Vehicle", 0),
+        range_of(RSDL_SYSTEM, "Vehicle", 1),
+    ];
+    for (id, cursor) in [
+        (10, pos_in(RSDL_SYSTEM, "system Vehicle", 0, 9)),
+        (11, pos_in(RSDL_SYSTEM, "for Vehicle", 0, 5)),
+    ] {
+        let edit = rename_at(&client, id, system.clone(), cursor, "Car");
+        assert_eq!(ranges(&edit, &system), vehicle, "cursor {cursor:?}");
+    }
+    assert_eq!(
+        prepare_rename_at(
+            &client,
+            12,
+            system.clone(),
+            pos_in(RSDL_SYSTEM, "system Vehicle", 0, 9)
+        ),
+        Some(lt::PrepareRenameResponse::Range(vehicle[0])),
+    );
+
+    // Renaming to the same name edits nothing.
+    let edit = rename_at(
+        &client,
+        13,
+        system.clone(),
+        pos_in(RSDL_SYSTEM, "{ Cruise, Lane", 0, 3),
+        "Cruise",
+    );
+    assert!(ranges(&edit, &system).is_empty(), "{edit:?}");
+
+    // A reference written through an alias keeps the alias; the import line
+    // and the qualified reference are rewritten.
+    let edit = rename_at(
+        &client,
+        14,
+        system.clone(),
+        pos_in(RSDL_SYSTEM, "component Lane", 0, 11),
+        "Lanes",
+    );
+    assert_eq!(
+        ranges(&edit, &extra),
+        vec![range_of(RSDL_EXTRA, "Lane", 0)],
+        "the import line only"
+    );
+
+    // Collisions: (what, cursor, new name).
+    let cruise = pos_in(RSDL_SYSTEM, "{ Cruise, Lane", 0, 3);
+    let collisions = [
+        ("an rsdl component of the package", cruise, "Panel"),
+        ("a deployment of the package", cruise, "Production"),
+        ("a typl declaration of the package", cruise, "Speed"),
+        (
+            "a name an import of the package binds",
+            cruise,
+            "LaneAssist",
+        ),
+        ("a distribution of an importing package", cruise, "Spare"),
+        ("an alias an importing package binds", cruise, "Keeper"),
+        (
+            "an instance of the same component",
+            pos_in(RSDL_SYSTEM, "Cruise.primary", 0, 9),
+            "backup",
+        ),
+    ];
+    for (id, (what, cursor, new_name)) in (20..).zip(collisions) {
+        let message = error(rename_raw(&client, id, system.clone(), cursor, new_name));
+        assert!(message.contains("already names"), "{what}: {message}");
+    }
+    let message = error(rename_raw(
+        &client,
+        30,
+        system.clone(),
+        pos_in(RSDL_SYSTEM, "Cruise.primary", 0, 9),
+        "back_up",
+    ));
+    assert!(message.contains("lowerCamelCase"), "{message}");
+
+    // Not renameable from an `.rsdl` file: an rsdl reference the checker binds
+    // to nothing (a typl type on a member line), an inline-shape service, and
+    // the names of a distribution, a deployment and a machine.
+    let text = RSDL_SYSTEM
+        .replace(
+            "import veh.adas.LaneAssist\n",
+            "import veh.adas.LaneAssist\nimport veh.adas.Flag\n",
+        )
+        .replace("Panel, veh.adas.access }", "Panel, veh.adas.access, Flag }");
+    did_open(&client, &system, &text);
+    let refused = [
+        (
+            "a reference bound to nothing",
+            pos_in(&text, "access, Flag", 0, 9),
+        ),
+        (
+            "an inline-shape service",
+            pos_in(&text, "requires veh.adas.access", 0, 12),
+        ),
+        ("a distribution", pos_in(&text, "distribution Adas", 0, 14)),
+        (
+            "a deployment",
+            pos_in(&text, "deployment Production", 0, 12),
+        ),
+        ("a machine", pos_in(&text, "machine Hpc", 0, 9)),
+    ];
+    for (id, (what, cursor)) in (40..).zip(refused) {
+        let prepared = prepare_rename_at(&client, id, system.clone(), cursor);
+        assert_eq!(prepared, None, "{what}");
+        let message = error(rename_raw(
+            &client,
+            id + 10,
+            system.clone(),
+            cursor,
+            "Other",
+        ));
+        assert!(
+            message.contains("no renameable symbol"),
+            "{what}: {message}"
+        );
+    }
+
+    // A declared interface, from a `requires` line: the ridl rename.
+    let cursor = pos_in(&text, "requires LaneAssist", 0, 10);
+    assert_eq!(
+        prepare_rename_at(&client, 60, system.clone(), cursor),
+        Some(lt::PrepareRenameResponse::Range(range_of(
+            &text,
+            "LaneAssist",
+            1
+        ))),
+    );
+    let edit = rename_at(&client, 61, system.clone(), cursor, "LaneKeeping");
+    assert_eq!(
+        ranges(&edit, &contracts),
+        vec![
+            range_of(RSDL_CONTRACTS, "LaneAssist", 0),
+            range_of(RSDL_CONTRACTS, "LaneAssist", 1),
+        ],
+    );
+    assert_eq!(
+        ranges(&edit, &system),
+        vec![
+            range_of(&text, "LaneAssist", 0),
+            range_of(&text, "LaneAssist", 1),
+            range_of(&text, "LaneAssist", 2),
+        ],
+    );
+
+    shut_down(&client, 70);
     server.join().expect("thread joins").expect("clean exit");
 }
 

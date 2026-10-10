@@ -925,16 +925,17 @@ impl ServerState {
     /// the symbol; a link to one of its members names no symbol of its own.
     ///
     /// In an `.rsdl` file, every rsdl reference the checker binds to the
-    /// declaration an rsdl reference or declaration name names; on a declared
-    /// interface, the ridl references to it too. A typl symbol lookup never
-    /// runs there, as in hover.
+    /// declaration an rsdl reference or declaration name names. On a declared
+    /// interface the ridl navigation finds the references, the rsdl
+    /// `requires` lines among them; a doc link takes the same path as in a
+    /// typl file. No typl symbol is looked up at the cursor there, as in
+    /// hover.
     fn references(&mut self, params: &lt::ReferenceParams) -> Option<Vec<lt::Location>> {
         let position = params.text_document_position.position;
         let path = convert::uri_to_path(&params.text_document_position.text_document.uri)?;
         let (file, package) = self.locate(&path)?;
         let offset = self.line_index_of(file).offset(position);
         let include_declaration = params.context.include_declaration;
-        let mut rsdl_references = Vec::new();
         let located = if profile_of_path(&path) == Profile::Rsdl {
             match rsdl::references(&self.db, self.workspace, self.std, file, offset) {
                 Some(rsdl::References::Rsdl {
@@ -944,10 +945,7 @@ impl ServerState {
                     let declaration = declaration.filter(|_| include_declaration);
                     return Some(self.locations(declaration.into_iter().chain(references)));
                 }
-                Some(rsdl::References::Interface { symbol, references }) => {
-                    rsdl_references = references;
-                    Some(symbol)
-                }
+                Some(rsdl::References::Interface(symbol)) => Some(symbol),
                 None => None,
             }
         } else {
@@ -980,13 +978,6 @@ impl ServerState {
             &symbol,
         ));
 
-        // The ridl navigation already walks an rsdl reference to an
-        // interface; one it does not walk is added once.
-        for site in rsdl_references {
-            if !references.contains(&site) {
-                references.push(site);
-            }
-        }
         let declaration = include_declaration.then_some((symbol.file, symbol.range));
         Some(self.locations(declaration.into_iter().chain(references)))
     }
@@ -1088,8 +1079,9 @@ impl ServerState {
     /// `textDocument/prepareRename`: the name span the cursor is on when it is a
     /// renameable symbol, so the client can validate before applying.
     ///
-    /// In an `.rsdl` file, the name of a system, component or instance under
-    /// the cursor; nothing on a service.
+    /// In an `.rsdl` file, the name of a system, component, instance or
+    /// declared interface under the cursor; nothing on a service or on an rsdl
+    /// reference the checker binds to nothing.
     fn prepare_rename(
         &mut self,
         params: &lt::TextDocumentPositionParams,
@@ -1103,7 +1095,7 @@ impl ServerState {
             rsdl::RenameAt::Typl
         };
         let range = match rsdl {
-            rsdl::RenameAt::Rsdl { span, .. } => span,
+            rsdl::RenameAt::Rsdl { span, .. } | rsdl::RenameAt::Interface { span, .. } => span,
             rsdl::RenameAt::Refused => return None,
             rsdl::RenameAt::Typl => {
                 rename::prepare(&self.db, self.workspace, self.std, package, file, offset)?
@@ -1118,7 +1110,9 @@ impl ServerState {
     /// LSP error response.
     ///
     /// In an `.rsdl` file, a system, component or instance is renamed with its
-    /// rsdl references and import lines; a service is not renamed.
+    /// rsdl references and import lines, and a declared interface by the ridl
+    /// rename; a service, and an rsdl reference the checker binds to nothing,
+    /// are not renamed.
     fn rename(
         &mut self,
         params: &lt::RenameParams,
@@ -1140,6 +1134,17 @@ impl ServerState {
                         self.std,
                         &packages,
                         &target,
+                        &params.new_name,
+                    )?;
+                    return Ok(self.workspace_edit(edits, &params.new_name));
+                }
+                rsdl::RenameAt::Interface { symbol, .. } => {
+                    let edits = rename::rename_symbol(
+                        &self.db,
+                        self.workspace,
+                        self.std,
+                        &packages,
+                        symbol,
                         &params.new_name,
                     )?;
                     return Ok(self.workspace_edit(edits, &params.new_name));
