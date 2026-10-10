@@ -275,9 +275,9 @@ fn the_category_spellings_are_pinned() {
 }
 
 /// The `member_reordered` row states what its detail carries — the ordinal for
-/// a struct field or union arm, the position for an enum value or enum-set bit
-/// — and the limit of the category: it is reported only when both bodies hold
-/// the same member names.
+/// a struct field or union arm, the explicit value or bit for an enum value or
+/// enum-set bit — and the limit of the category: it is reported only when both
+/// bodies hold the same member names.
 #[test]
 fn explain_member_reordered_states_its_detail_and_its_limit() {
     let (code, stdout, stderr) = ridl(&[
@@ -294,7 +294,7 @@ fn explain_member_reordered_states_its_detail_and_its_limit() {
     // not its line breaks.
     let text = stdout.split_whitespace().collect::<Vec<_>>().join(" ");
     assert!(
-        text.contains("old and new ordinal") && text.contains("old and new position"),
+        text.contains("old and new ordinal") && text.contains("old and new value or bit"),
         "the row states what the detail carries for each composite kind, stdout:\n{stdout}"
     );
     assert!(

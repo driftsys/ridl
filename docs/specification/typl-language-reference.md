@@ -963,10 +963,10 @@ or a union arm, whose identity _is_ its declaration order (§7.4), and it is why
 an `enum` value may be inserted in the middle of a body while a struct field may
 not.
 
-> **As built.** `ridl-diff` still compares these members by their position in
-> the body and reports a textual reorder as breaking. That is a conservative
-> tool behaviour, not the language rule above; driftsys/ridl#397 makes the
-> comparison value-aware.
+> **As built.** `ridl diff` compares `enum` values and `enumset` bits by the
+> number each declares. A textual reorder that changes no number reports
+> nothing, and a member whose number changed is reported as `member_reordered`
+> with its old and new number, breaking.
 
 ---
 

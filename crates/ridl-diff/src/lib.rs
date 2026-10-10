@@ -147,11 +147,11 @@ declare_categories! {
         /// when both bodies hold the same member names. For a struct field or
         /// union arm the slot is the ordinal, which is wire identity (typl
         /// §7.4), and the detail carries the old and new ordinal. An enum value
-        /// or enum-set bit carries an explicit number instead (typl §8, §9),
-        /// but the walk compares positions, not those numbers, so a textual
-        /// reorder of an enum or enum-set body is reported the same way,
-        /// conservatively, even when no number changed; its detail carries the
-        /// old and new position.
+        /// or enum-set bit takes its identity from the explicit number it
+        /// declares instead (typl §8, §9), so its slot is that number: the
+        /// category reports a member whose number changed, with the old and
+        /// new value or bit in the detail, and a textual reorder of an enum or
+        /// enum-set body that changed no number is not reported at all.
         MemberReordered,
         /// A new interaction added at the end of an interface (no earlier
         /// interaction shifted).
