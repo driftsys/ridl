@@ -47,6 +47,9 @@ same file on disk, and does not compile it. A lone `.rxdl` or `.rmdl` file in
 single-file mode, with or without an overlay of it, is a load error that names
 the extension, and reaches the agent as a tool error.
 
+Amended 2026-10-10 (driftsys/ridl#786): `ridlc` no longer depends on
+`ridl-diff`; see [ADR-0008](ADR-0008-e2-execution.md) decision 9.
+
 ## Context
 
 Before this work `ridl mcp` exposed one tool, `ridl_check(source, profile)`. It
@@ -195,9 +198,10 @@ From the design's §10. The numbers are the decisions that reject them.
 - Every added tool, input or output field is permanent (decision 9). A removal
   or a rename needs this record amended first.
 - `ridlc` gains `compile_workspace_with`, `load_diff_side` and
-  `WorkspaceOutput.imports`, and depends on `ridl-diff`; `ridl-core` gains
-  `load_workspace_with`. `compile_workspace`, `load_workspace` and the CLI's
-  `ridl diff` output and exit codes are unchanged.
+  `WorkspaceOutput.imports`, and depends on `ridl-diff` (until 2026-10-10, see
+  ADR-0008 decision 9); `ridl-core` gains `load_workspace_with`.
+  `compile_workspace`, `load_workspace` and the CLI's `ridl diff` output and
+  exit codes are unchanged.
 
 ## References
 

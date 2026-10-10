@@ -290,6 +290,36 @@ pub mod v2 {
         read_json(text)
     }
 
+    /// An error loading an `.ir.json` snapshot with [`load_ir_json`].
+    #[derive(Debug)]
+    pub enum LoadError {
+        /// The file could not be read.
+        Io(std::io::Error),
+        /// The file was not valid IR v2 JSON.
+        Parse(String),
+    }
+
+    impl std::fmt::Display for LoadError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                LoadError::Io(err) => write!(f, "cannot read the IR snapshot: {err}"),
+                LoadError::Parse(err) => {
+                    write!(f, "the IR snapshot is not valid IR v2 JSON: {err}")
+                }
+            }
+        }
+    }
+
+    impl std::error::Error for LoadError {}
+
+    /// Loads an `.ir.json` snapshot written by `ridl build --emit ir-json` —
+    /// canonical protobuf JSON, read through [`from_json`], the one reader
+    /// every surface shares (ADR-0014 decision 1).
+    pub fn load_ir_json(path: &std::path::Path) -> Result<Package, LoadError> {
+        let text = std::fs::read_to_string(path).map_err(LoadError::Io)?;
+        from_json(&text).map_err(|err| LoadError::Parse(err.to_string()))
+    }
+
     /// Reads a lowered system from canonical protobuf JSON — the inverse of
     /// [`system_to_json_pretty`], under the rules and guards of
     /// [`from_json`].
@@ -3217,6 +3247,78 @@ mod system_round_trip {
         assert_eq!(
             system.distributions[0].qualified_name(),
             "veh.topology.Adas"
+        );
+    }
+}
+
+#[cfg(test)]
+mod load_ir_json {
+    use crate::v2::{self, LoadError, MAX_JSON_NESTING, load_ir_json};
+
+    /// A snapshot written by `to_json_pretty` loads back as the same package.
+    #[test]
+    fn a_snapshot_file_loads() {
+        let dir = tempfile::tempdir().unwrap();
+        let package = v2::Package {
+            name: "veh.cabin".to_string(),
+            ..v2::Package::default()
+        };
+        let path = dir.path().join("cabin.ir.json");
+        std::fs::write(&path, v2::to_json_pretty(&package).unwrap()).unwrap();
+        assert_eq!(load_ir_json(&path).unwrap(), package);
+    }
+
+    /// A missing file is an `Io` error and a file that is not IR v2 JSON is a
+    /// `Parse` error, each with the message `ridl diff` prints, inner error
+    /// included.
+    #[test]
+    fn a_missing_file_is_io_and_bad_json_is_parse() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let missing = dir.path().join("missing.ir.json");
+        let io = std::fs::read_to_string(&missing).unwrap_err();
+        let error = load_ir_json(&missing).unwrap_err();
+        assert!(matches!(error, LoadError::Io(_)), "{error:?}");
+        assert_eq!(
+            error.to_string(),
+            format!("cannot read the IR snapshot: {io}")
+        );
+
+        // The leading newline puts the error on line 2, so a loader that
+        // trimmed the text first would report a different position.
+        let bad = dir.path().join("bad.ir.json");
+        std::fs::write(&bad, "\n{").unwrap();
+        let parse = v2::from_json("\n{").unwrap_err();
+        let error = load_ir_json(&bad).unwrap_err();
+        assert!(matches!(error, LoadError::Parse(_)), "{error:?}");
+        assert_eq!(
+            error.to_string(),
+            format!("the IR snapshot is not valid IR v2 JSON: {parse}")
+        );
+    }
+
+    /// The loader reads through `from_json`: input nested past its cap draws
+    /// the cap's own message, which a plain `serde_json` parse would not.
+    #[test]
+    fn input_past_the_nesting_cap_draws_from_json_s_refusal() {
+        let dir = tempfile::tempdir().unwrap();
+        let deep = format!(
+            "{}{}",
+            "[".repeat(MAX_JSON_NESTING + 1),
+            "]".repeat(MAX_JSON_NESTING + 1)
+        );
+        let path = dir.path().join("deep.ir.json");
+        std::fs::write(&path, &deep).unwrap();
+        let refusal = v2::from_json(&deep).unwrap_err().to_string();
+        assert!(
+            refusal.contains("the ceiling this reader enforces"),
+            "{refusal}"
+        );
+        let error = load_ir_json(&path).unwrap_err();
+        assert!(matches!(error, LoadError::Parse(_)), "{error:?}");
+        assert_eq!(
+            error.to_string(),
+            format!("the IR snapshot is not valid IR v2 JSON: {refusal}")
         );
     }
 }

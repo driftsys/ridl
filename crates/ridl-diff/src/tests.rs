@@ -2298,3 +2298,12 @@ fn an_enum_set_renumber_alone_reports_only_the_bit() {
         )]
     );
 }
+
+/// The snapshot loader stays reachable under its earlier path, re-exported
+/// from `ridl-ir` (ADR-0008 decision 9): this fails to compile without the
+/// re-export.
+#[test]
+fn the_snapshot_loader_is_re_exported() {
+    let load: fn(&std::path::Path) -> Result<v2::Package, crate::LoadError> = crate::load_ir_json;
+    let _ = load;
+}

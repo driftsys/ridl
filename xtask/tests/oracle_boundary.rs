@@ -69,6 +69,10 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 
+mod dep_graph;
+
+use dep_graph::{cargo_metadata, edges, member_id, package_names, path_to, reach};
+
 /// One boundary this guard protects: `package` may depend on `oracle` only
 /// as a dev-dependency, never as a normal one.
 struct Boundary {
@@ -127,55 +131,9 @@ const PLANUS_CRATES: &[&str] = &["planus", "planus-codegen", "planus-translation
 /// them.
 const RUNTIME_PACKAGES: &[&str] = &["ridl-rt"];
 
-/// Runs `cargo metadata --format-version 1 --locked` and parses its stdout
-/// as JSON. `--locked` matches every other cargo invocation this workspace's
-/// gate makes (`justfile`): the lockfile is already the resolved graph, and
-/// this guard must read that graph, not silently re-resolve a different one.
-fn cargo_metadata() -> serde_json::Value {
-    cargo_metadata_of(None, false)
-}
-
-/// [`cargo_metadata`] for the workspace whose root manifest is `manifest`,
-/// or for this workspace when it is `None`. With `all_features`, every
-/// feature of every workspace member is on, so the resolved graph holds
-/// every optional dependency, including one that no feature in the workspace
-/// turns on.
-fn cargo_metadata_of(manifest: Option<&Path>, all_features: bool) -> serde_json::Value {
-    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
-    let mut command = Command::new(cargo);
-    command.args(["metadata", "--format-version", "1", "--locked"]);
-    if all_features {
-        command.arg("--all-features");
-    }
-    if let Some(manifest) = manifest {
-        command.arg("--manifest-path").arg(manifest);
-    }
-    let output = command.output().expect("`cargo metadata` must run");
-    assert!(
-        output.status.success(),
-        "`cargo metadata` failed:\n{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    serde_json::from_slice(&output.stdout).expect("`cargo metadata` must print valid JSON")
-}
-
-/// A package id (`cargo metadata`'s pkgid string, e.g.
-/// `path+file:///.../ridl-ir#0.0.0`) to the plain crate name it resolves to.
-fn package_names(metadata: &serde_json::Value) -> HashMap<&str, &str> {
-    metadata["packages"]
-        .as_array()
-        .expect("cargo metadata carries a `packages` array")
-        .iter()
-        .map(|pkg| {
-            let id = pkg["id"].as_str().expect("a package id is a string");
-            let name = pkg["name"].as_str().expect("a package name is a string");
-            (id, name)
-        })
-        .collect()
-}
-
 /// Every package reachable from `package` by NORMAL dependency edges only,
-/// each mapped to the edge that first reached it, so a failure can print the
+/// by package id, each mapped to the id of the package it was first reached
+/// from, so a failure can print the
 /// path rather than only the endpoint.
 ///
 /// **A normal edge is one whose `dep_kinds[].kind` is JSON null.** `"dev"`
@@ -217,17 +175,14 @@ fn package_names(metadata: &serde_json::Value) -> HashMap<&str, &str> {
 /// backend's test oracle. Separating the two would need the guard to know
 /// which use of a crate it is looking at, which is a distinction the
 /// resolved graph does not carry.
-fn normal_closure<'a>(
-    metadata: &'a serde_json::Value,
-    package: &'a str,
-) -> HashMap<&'a str, &'a str> {
+fn normal_closure<'a>(metadata: &'a serde_json::Value, package: &str) -> HashMap<&'a str, &'a str> {
     let normal = edges(metadata, |kind| kind.is_none());
-    reach(&normal, &normal, package)
+    reach(&normal, &normal, member_id(metadata, package))
 }
 
 /// Every package reachable from `package` by any kind of dependency edge on
-/// the first step, then by normal and build edges only, each mapped to the
-/// edge that first reached it.
+/// the first step, then by normal and build edges only, by package id, each
+/// mapped to the id of the package it was first reached from.
 ///
 /// The first step takes every kind because [`RUNTIME_PACKAGES`] must not
 /// reach a planus crate as a dev-dependency either. The later steps leave out dev edges because
@@ -237,105 +192,24 @@ fn normal_closure<'a>(
 /// generated package.
 fn runtime_closure<'a>(
     metadata: &'a serde_json::Value,
-    package: &'a str,
+    package: &str,
 ) -> HashMap<&'a str, &'a str> {
     let any = edges(metadata, |_| true);
     let shipped = edges(metadata, |kind| kind != Some("dev"));
-    reach(&any, &shipped, package)
-}
-
-/// Every resolved node's dependency names, by the node's own name, keeping
-/// an edge when `keep` accepts any of its kinds. A kind is `None` for a
-/// normal edge (JSON null), otherwise `"dev"` or `"build"`.
-fn edges(
-    metadata: &serde_json::Value,
-    keep: impl Fn(Option<&str>) -> bool,
-) -> HashMap<&str, Vec<&str>> {
-    let names = package_names(metadata);
-    let nodes = metadata["resolve"]["nodes"]
-        .as_array()
-        .expect("cargo metadata carries `resolve.nodes`");
-
-    let mut edges: HashMap<&str, Vec<&str>> = HashMap::new();
-    for node in nodes {
-        let id = node["id"].as_str().expect("a node id is a string");
-        let from = *names.get(id).expect("every node id names a package");
-        let deps = node["deps"]
-            .as_array()
-            .expect("a resolved node carries a `deps` array")
-            .iter()
-            .filter(|dep| {
-                dep["dep_kinds"]
-                    .as_array()
-                    .expect("a dependency edge carries a `dep_kinds` array")
-                    .iter()
-                    .any(|entry| keep(entry["kind"].as_str()))
-            })
-            .map(|dep| {
-                let dep_id = dep["pkg"].as_str().expect("a dep's `pkg` is a string");
-                *names.get(dep_id).expect("every dep id names a package")
-            })
-            .collect();
-        edges.insert(from, deps);
-    }
-    edges
-}
-
-/// Walks from `package`: its own edges in `first`, every later step's in
-/// `rest`. Returns each package reached, mapped to the package it was first
-/// reached from.
-fn reach<'a>(
-    first: &HashMap<&'a str, Vec<&'a str>>,
-    rest: &HashMap<&'a str, Vec<&'a str>>,
-    package: &'a str,
-) -> HashMap<&'a str, &'a str> {
-    assert!(
-        first.contains_key(package),
-        "cargo metadata's resolved graph has no node for `{package}` — is it \
-         still a workspace member?"
-    );
-
-    let mut reached: HashMap<&str, &str> = HashMap::new();
-    let mut queue: Vec<&str> = vec![package];
-    while let Some(from) = queue.pop() {
-        let step = if from == package { first } else { rest };
-        for &to in step.get(from).into_iter().flatten() {
-            if reached.contains_key(to) || to == package {
-                continue;
-            }
-            reached.insert(to, from);
-            queue.push(to);
-        }
-    }
-    reached
-}
-
-/// The chain of edges from `package` to `oracle`, as `a -> b -> oracle`,
-/// read back out of the predecessor map [`normal_closure`] or
-/// [`runtime_closure`] returns.
-fn normal_path(reached: &HashMap<&str, &str>, package: &str, oracle: &str) -> String {
-    let mut chain = vec![oracle];
-    let mut at = oracle;
-    while let Some(&from) = reached.get(at) {
-        chain.push(from);
-        if from == package {
-            break;
-        }
-        at = from;
-    }
-    chain.reverse();
-    chain.join(" -> ")
+    reach(&any, &shipped, member_id(metadata, package))
 }
 
 /// Every [`Boundary`] holds: no oracle is reachable from its backend crate
 /// through normal dependency edges, at any distance.
 #[test]
 fn schema_compilers_stay_dev_dependencies() {
-    let metadata = cargo_metadata();
+    let metadata = cargo_metadata(None, false);
+    let names = package_names(&metadata);
     for boundary in BOUNDARIES {
         let reached = normal_closure(&metadata, boundary.package);
+        let path = path_to(&names, &reached, boundary.oracle);
         assert!(
-            !reached.contains_key(boundary.oracle),
+            path.is_none(),
             "\n\
              `{oracle}` is in `{package}`'s NORMAL dependency closure: \
              {path}\n\
@@ -347,7 +221,7 @@ fn schema_compilers_stay_dev_dependencies() {
              offending edge back to `[dev-dependencies]`.\n",
             package = boundary.package,
             oracle = boundary.oracle,
-            path = normal_path(&reached, boundary.package, boundary.oracle),
+            path = path.unwrap_or_default(),
         );
     }
 }
@@ -362,12 +236,14 @@ fn schema_compilers_stay_dev_dependencies() {
 /// this test must see it.
 #[test]
 fn the_runtime_reaches_no_planus_crate() {
-    let metadata = cargo_metadata_of(None, true);
+    let metadata = cargo_metadata(None, true);
+    let names = package_names(&metadata);
     for &package in RUNTIME_PACKAGES {
         let reached = runtime_closure(&metadata, package);
         for &forbidden in PLANUS_CRATES {
+            let path = path_to(&names, &reached, forbidden);
             assert!(
-                !reached.contains_key(forbidden),
+                path.is_none(),
                 "\n\
                  `{forbidden}` is in `{package}`'s dependency closure: {path}\n\
                  \n\
@@ -375,7 +251,7 @@ fn the_runtime_reaches_no_planus_crate() {
                  must not depend on planus in any way, not even as a \
                  dev-dependency (lane E16 driver, section 4, answer 8). The \
                  toolchain may reach planus through `ridl-descriptor` instead.\n",
-                path = normal_path(&reached, package, forbidden),
+                path = path.unwrap_or_default(),
             );
         }
     }
@@ -398,7 +274,7 @@ fn the_runtime_reaches_no_planus_crate() {
 #[ignore = "needs examples/cabin/generated and generated-corpus, which `just demo` writes; `just demo` runs it"]
 fn the_generated_crate_reaches_no_planus_crate() {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/cabin/Cargo.toml");
-    let metadata = cargo_metadata_of(Some(&manifest), true);
+    let metadata = cargo_metadata(Some(&manifest), true);
     let names = package_names(&metadata);
     assert!(
         names.values().any(|&name| name == "veh_cabin"),

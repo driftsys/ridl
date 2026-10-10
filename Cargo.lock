@@ -2144,6 +2144,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tempfile",
 ]
 
 [[package]]
@@ -2241,7 +2242,6 @@ dependencies = [
  "ridl-backend-ts",
  "ridl-core",
  "ridl-descriptor",
- "ridl-diff",
  "ridl-ir",
  "ridl-sem",
  "ridl-syntax",
