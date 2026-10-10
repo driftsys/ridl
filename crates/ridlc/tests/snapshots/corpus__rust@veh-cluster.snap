@@ -1202,6 +1202,7 @@ pub struct SensorFault {
     pub message: crate::ridl::std::Message,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
 pub(crate) struct RawWheelFrame {
     pub ticks: Counter,
     pub frame: ::std::vec::Vec<::core::primitive::u8>,
@@ -2841,17 +2842,20 @@ for SpeedLimitPayload {
 /// collection's elements have no one view type to hand back.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
+#[allow(dead_code)]
 pub(crate) struct RawWheelFrameFbView<'a> {
     pub(crate) buf: &'a [::core::primitive::u8],
     pub(crate) table: ::core::primitive::usize,
 }
 #[allow(deprecated)]
+#[allow(dead_code)]
 impl<'a> ::ridl_rt::payload::View<'a> for RawWheelFrameFbView<'a> {
     fn bytes(&self) -> &'a [::core::primitive::u8] {
         self.buf
     }
 }
 #[allow(deprecated)]
+#[allow(dead_code)]
 impl<'a> RawWheelFrameFbView<'a> {
     /// Reads `RawWheelFrame`'s `ticks` field in place.
     pub(crate) fn ticks(&self) -> Counter {
@@ -2883,6 +2887,7 @@ impl<'a> RawWheelFrameFbView<'a> {
 }
 /// Writes `RawWheelFrame` as a FlatBuffers table and returns its position.
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_encode_RawWheelFrame(
     value: &RawWheelFrame,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -2921,6 +2926,7 @@ pub(crate) fn __ridl_fb_encode_RawWheelFrame(
 /// map key uniqueness, and named and anonymous scalar ranges,
 /// steps and lengths. Pattern checks require `validate-pattern`.
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_verify_RawWheelFrame(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -2985,6 +2991,7 @@ pub(crate) fn __ridl_fb_verify_RawWheelFrame(
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_decode_RawWheelFrame(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -3016,6 +3023,7 @@ pub(crate) fn __ridl_fb_decode_RawWheelFrame(
     }
 }
 #[allow(deprecated)]
+#[allow(dead_code)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelFrame {
     /// The largest FlatBuffers buffer any legal `RawWheelFrame` encodes to: 76 bytes.
     ///
@@ -3166,7 +3174,9 @@ impl ::core::default::Default for FaultPage {
 /// `internal` name never resolves (typl §3.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
+#[allow(dead_code)]
 pub(crate) struct RawTickCount(::core::primitive::i64);
+#[allow(dead_code)]
 impl RawTickCount {
     /// Constructs the value, enforcing its typl constraints.
     pub(crate) fn new(
@@ -3215,6 +3225,7 @@ impl RawTickCount {
         self.0
     }
 }
+#[allow(dead_code)]
 impl ::core::convert::TryFrom<::core::primitive::i64> for RawTickCount {
     type Error = ::ridl_rt::payload::Violation;
     fn try_from(
@@ -3223,11 +3234,13 @@ impl ::core::convert::TryFrom<::core::primitive::i64> for RawTickCount {
         Self::new(value)
     }
 }
+#[allow(dead_code)]
 impl ::core::convert::From<RawTickCount> for ::core::primitive::i64 {
     fn from(value: RawTickCount) -> Self {
         value.0
     }
 }
+#[allow(dead_code)]
 impl ::core::default::Default for RawTickCount {
     fn default() -> Self {
         RawTickCount::new_unchecked(0)
@@ -3236,10 +3249,12 @@ impl ::core::default::Default for RawTickCount {
 /// The window of raw tick counts a wheel diagnostic covers.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(C)]
+#[allow(dead_code)]
 pub(crate) struct RawWheelSpan {
     pub span: RawWheelSpanSpan,
     pub bursts: [RawWheelSpanBurstsElement; 2],
 }
+#[allow(dead_code)]
 impl ::core::default::Default for RawWheelSpan {
     fn default() -> Self {
         RawWheelSpan {
@@ -3465,10 +3480,12 @@ pub const FAN_TAG: &::core::primitive::str = "cabin-fan";
 /// The same label, reached through the constant above.
 pub const FAN_LABEL: &::core::primitive::str = "cabin-fan";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
 pub(crate) struct RawWheelSpanSpan {
     pub first: RawTickCount,
     pub latest: RawTickCount,
 }
+#[allow(dead_code)]
 impl ::core::default::Default for RawWheelSpanSpan {
     fn default() -> Self {
         RawWheelSpanSpan {
@@ -3478,10 +3495,12 @@ impl ::core::default::Default for RawWheelSpanSpan {
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
 pub(crate) struct RawWheelSpanBurstsElement {
     pub first: RawTickCount,
     pub latest: RawTickCount,
 }
+#[allow(dead_code)]
 impl ::core::default::Default for RawWheelSpanBurstsElement {
     fn default() -> Self {
         RawWheelSpanBurstsElement {
@@ -3924,17 +3943,20 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DiagError
 /// `MissingRequired` when it is not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
+#[allow(dead_code)]
 pub(crate) struct RawTickCountFbView<'a> {
     pub(crate) buf: &'a [::core::primitive::u8],
     pub(crate) table: ::core::primitive::usize,
 }
 #[allow(deprecated)]
+#[allow(dead_code)]
 impl<'a> ::ridl_rt::payload::View<'a> for RawTickCountFbView<'a> {
     fn bytes(&self) -> &'a [::core::primitive::u8] {
         self.buf
     }
 }
 #[allow(deprecated)]
+#[allow(dead_code)]
 impl<'a> RawTickCountFbView<'a> {
     /// The value the box carries. `RawTickCount` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub(crate) fn value(&self) -> RawTickCount {
@@ -3943,6 +3965,7 @@ impl<'a> RawTickCountFbView<'a> {
 }
 /// Writes `RawTickCount` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_encode_RawTickCount(
     value: &RawTickCount,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -3967,6 +3990,7 @@ pub(crate) fn __ridl_fb_encode_RawTickCount(
     })
 }
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_verify_RawTickCount(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -3987,6 +4011,7 @@ pub(crate) fn __ridl_fb_verify_RawTickCount(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_decode_RawTickCount(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -4003,6 +4028,7 @@ pub(crate) fn __ridl_fb_decode_RawTickCount(
     }
 }
 #[allow(deprecated)]
+#[allow(dead_code)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawTickCount {
     /// The largest FlatBuffers buffer any legal `RawTickCount` encodes to: 44 bytes.
     ///
@@ -4073,17 +4099,20 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawTickCo
 /// collection's elements have no one view type to hand back.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
+#[allow(dead_code)]
 pub(crate) struct RawWheelSpanFbView<'a> {
     pub(crate) buf: &'a [::core::primitive::u8],
     pub(crate) table: ::core::primitive::usize,
 }
 #[allow(deprecated)]
+#[allow(dead_code)]
 impl<'a> ::ridl_rt::payload::View<'a> for RawWheelSpanFbView<'a> {
     fn bytes(&self) -> &'a [::core::primitive::u8] {
         self.buf
     }
 }
 #[allow(deprecated)]
+#[allow(dead_code)]
 impl<'a> RawWheelSpanFbView<'a> {
     /// Reads `RawWheelSpan`'s `span` field in place.
     pub(crate) fn span(&self) -> RawWheelSpanSpanFbView<'a> {
@@ -4118,6 +4147,7 @@ impl<'a> RawWheelSpanFbView<'a> {
 }
 /// Writes `RawWheelSpan` as a FlatBuffers table and returns its position.
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_encode_RawWheelSpan(
     value: &RawWheelSpan,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -4163,6 +4193,7 @@ pub(crate) fn __ridl_fb_encode_RawWheelSpan(
 /// map key uniqueness, and named and anonymous scalar ranges,
 /// steps and lengths. Pattern checks require `validate-pattern`.
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_verify_RawWheelSpan(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -4227,6 +4258,7 @@ pub(crate) fn __ridl_fb_verify_RawWheelSpan(
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_decode_RawWheelSpan(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -4263,6 +4295,7 @@ pub(crate) fn __ridl_fb_decode_RawWheelSpan(
     }
 }
 #[allow(deprecated)]
+#[allow(dead_code)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelSpan {
     /// The largest FlatBuffers buffer any legal `RawWheelSpan` encodes to: 210 bytes.
     ///
@@ -4987,17 +5020,20 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanTag {
 /// collection's elements have no one view type to hand back.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
+#[allow(dead_code)]
 pub(crate) struct RawWheelSpanSpanFbView<'a> {
     pub(crate) buf: &'a [::core::primitive::u8],
     pub(crate) table: ::core::primitive::usize,
 }
 #[allow(deprecated)]
+#[allow(dead_code)]
 impl<'a> ::ridl_rt::payload::View<'a> for RawWheelSpanSpanFbView<'a> {
     fn bytes(&self) -> &'a [::core::primitive::u8] {
         self.buf
     }
 }
 #[allow(deprecated)]
+#[allow(dead_code)]
 impl<'a> RawWheelSpanSpanFbView<'a> {
     /// Reads `RawWheelSpanSpan`'s `first` field in place.
     pub(crate) fn first(&self) -> RawTickCount {
@@ -5028,6 +5064,7 @@ impl<'a> RawWheelSpanSpanFbView<'a> {
 }
 /// Writes `RawWheelSpanSpan` as a FlatBuffers table and returns its position.
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_encode_RawWheelSpanSpan(
     value: &RawWheelSpanSpan,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -5067,6 +5104,7 @@ pub(crate) fn __ridl_fb_encode_RawWheelSpanSpan(
 /// map key uniqueness, and named and anonymous scalar ranges,
 /// steps and lengths. Pattern checks require `validate-pattern`.
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_verify_RawWheelSpanSpan(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -5112,6 +5150,7 @@ pub(crate) fn __ridl_fb_verify_RawWheelSpanSpan(
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_decode_RawWheelSpanSpan(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -5147,17 +5186,20 @@ pub(crate) fn __ridl_fb_decode_RawWheelSpanSpan(
 /// collection's elements have no one view type to hand back.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
+#[allow(dead_code)]
 pub(crate) struct RawWheelSpanBurstsElementFbView<'a> {
     pub(crate) buf: &'a [::core::primitive::u8],
     pub(crate) table: ::core::primitive::usize,
 }
 #[allow(deprecated)]
+#[allow(dead_code)]
 impl<'a> ::ridl_rt::payload::View<'a> for RawWheelSpanBurstsElementFbView<'a> {
     fn bytes(&self) -> &'a [::core::primitive::u8] {
         self.buf
     }
 }
 #[allow(deprecated)]
+#[allow(dead_code)]
 impl<'a> RawWheelSpanBurstsElementFbView<'a> {
     /// Reads `RawWheelSpanBurstsElement`'s `first` field in place.
     pub(crate) fn first(&self) -> RawTickCount {
@@ -5188,6 +5230,7 @@ impl<'a> RawWheelSpanBurstsElementFbView<'a> {
 }
 /// Writes `RawWheelSpanBurstsElement` as a FlatBuffers table and returns its position.
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_encode_RawWheelSpanBurstsElement(
     value: &RawWheelSpanBurstsElement,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -5227,6 +5270,7 @@ pub(crate) fn __ridl_fb_encode_RawWheelSpanBurstsElement(
 /// map key uniqueness, and named and anonymous scalar ranges,
 /// steps and lengths. Pattern checks require `validate-pattern`.
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_verify_RawWheelSpanBurstsElement(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -5272,6 +5316,7 @@ pub(crate) fn __ridl_fb_verify_RawWheelSpanBurstsElement(
 /// value `verify` has already range-checked (`check`), so this
 /// never re-checks and never fails.
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_decode_RawWheelSpanBurstsElement(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,

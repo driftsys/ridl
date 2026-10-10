@@ -232,7 +232,9 @@ impl ::core::default::Default for OldFlag {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
+#[allow(dead_code)]
 pub(crate) struct RawTicks(::core::primitive::i64);
+#[allow(dead_code)]
 impl RawTicks {
     /// Constructs the value. This type declares no constraint, so
     /// construction cannot fail.
@@ -243,16 +245,19 @@ impl RawTicks {
         self.0
     }
 }
+#[allow(dead_code)]
 impl ::core::convert::From<::core::primitive::i64> for RawTicks {
     fn from(value: ::core::primitive::i64) -> Self {
         Self(value)
     }
 }
+#[allow(dead_code)]
 impl ::core::convert::From<RawTicks> for ::core::primitive::i64 {
     fn from(value: RawTicks) -> Self {
         value.0
     }
 }
+#[allow(dead_code)]
 impl ::core::default::Default for RawTicks {
     fn default() -> Self {
         RawTicks::new(0)
@@ -547,17 +552,20 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for OldFlag {
 /// `MissingRequired` when it is not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
+#[allow(dead_code)]
 pub(crate) struct RawTicksFbView<'a> {
     pub(crate) buf: &'a [::core::primitive::u8],
     pub(crate) table: ::core::primitive::usize,
 }
 #[allow(deprecated)]
+#[allow(dead_code)]
 impl<'a> ::ridl_rt::payload::View<'a> for RawTicksFbView<'a> {
     fn bytes(&self) -> &'a [::core::primitive::u8] {
         self.buf
     }
 }
 #[allow(deprecated)]
+#[allow(dead_code)]
 impl<'a> RawTicksFbView<'a> {
     /// The value the box carries. `RawTicks` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub(crate) fn value(&self) -> RawTicks {
@@ -566,6 +574,7 @@ impl<'a> RawTicksFbView<'a> {
 }
 /// Writes `RawTicks` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_encode_RawTicks(
     value: &RawTicks,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
@@ -590,6 +599,7 @@ pub(crate) fn __ridl_fb_encode_RawTicks(
     })
 }
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_verify_RawTicks(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -608,6 +618,7 @@ pub(crate) fn __ridl_fb_verify_RawTicks(
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
 pub(crate) fn __ridl_fb_decode_RawTicks(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
@@ -624,6 +635,7 @@ pub(crate) fn __ridl_fb_decode_RawTicks(
     }
 }
 #[allow(deprecated)]
+#[allow(dead_code)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawTicks {
     /// The largest FlatBuffers buffer any legal `RawTicks` encodes to: 46 bytes.
     ///

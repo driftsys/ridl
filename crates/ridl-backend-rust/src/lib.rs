@@ -891,7 +891,9 @@ fn emit_decl(ctx: &Ctx, decl: &v1::Declaration) -> TokenStream {
     let derived = derives::derive_attr(ctx, decl);
     let item = match decl.kind.as_ref() {
         Some(v1::declaration::Kind::Scalar(sc)) => emit_type_def(decl, sc, &derived),
-        Some(v1::declaration::Kind::Constant(cd)) => return emit_const(ctx, decl, cd),
+        Some(v1::declaration::Kind::Constant(cd)) => {
+            return allow_dead_code_if_internal(decl.visibility, emit_const(ctx, decl, cd));
+        }
         Some(v1::declaration::Kind::Struct(sd)) => emit_struct(ctx, decl, sd, &derived),
         Some(v1::declaration::Kind::Enum(ed)) => emit_enum(decl, ed, &derived),
         Some(v1::declaration::Kind::EnumSet(esd)) => emit_enum_set(decl, esd, &derived),
@@ -913,7 +915,7 @@ fn emit_decl(ctx: &Ctx, decl: &v1::Declaration) -> TokenStream {
         })
         .unwrap_or_default();
 
-    quote! { #item #default_impl }
+    allow_dead_code_if_internal(decl.visibility, quote! { #item #default_impl })
 }
 
 /// A named scalar becomes a `#[repr(transparent)]` newtype with a private
@@ -1798,7 +1800,7 @@ fn emit_tuple_struct(ctx: &Ctx, induced: &v1::InducedTuple) -> TokenStream {
         })
         .unwrap_or_default();
 
-    quote! { #struct_item #default_impl }
+    allow_dead_code_if_internal(induced.visibility, quote! { #struct_item #default_impl })
 }
 
 // ---------------------------------------------------------------------------
@@ -2049,6 +2051,49 @@ pub(crate) fn vis_tokens(visibility: i32) -> TokenStream {
         v1::Visibility::Internal => quote! { pub(crate) },
         _ => quote! { pub },
     }
+}
+
+/// Marks every item of `items` `#[allow(dead_code)]` when `visibility` is
+/// `internal`, and returns `items` unchanged otherwise.
+///
+/// An `internal` declaration is emitted as `pub(crate)`, so nothing outside the
+/// generated crate reaches it, and nothing inside the crate reaches it unless
+/// the generated code itself does. The type, its accessors, its views and its
+/// codec are all written for it whether or not another declaration of the
+/// build uses them, and rustc reports each one it finds unused, which fails a
+/// consumer that builds the crate with `-D warnings`.
+///
+/// The items are kept rather than omitted, because the emitted modules can be
+/// included in a crate that has code of its own, and `pub(crate)` is exactly
+/// the visibility that code can reach. The allowance sits on each item the
+/// declaration induces and on nothing else, so dead code in an item of a
+/// public declaration is still reported. An `impl` block carries it for the
+/// methods inside.
+pub(crate) fn allow_dead_code_if_internal(visibility: i32, items: TokenStream) -> TokenStream {
+    if v1::Visibility::try_from(visibility).ok() != Some(v1::Visibility::Internal) {
+        return items;
+    }
+    // Every emitted item parses, because `render` parses the whole output; an
+    // item that does not is left alone here and reported there.
+    let Ok(mut file) = syn::parse2::<syn::File>(items.clone()) else {
+        return items;
+    };
+    let allow: syn::Attribute = syn::parse_quote! { #[allow(dead_code)] };
+    for item in &mut file.items {
+        let attrs = match item {
+            syn::Item::Struct(item) => &mut item.attrs,
+            syn::Item::Enum(item) => &mut item.attrs,
+            syn::Item::Union(item) => &mut item.attrs,
+            syn::Item::Impl(item) => &mut item.attrs,
+            syn::Item::Fn(item) => &mut item.attrs,
+            syn::Item::Const(item) => &mut item.attrs,
+            syn::Item::Static(item) => &mut item.attrs,
+            syn::Item::Type(item) => &mut item.attrs,
+            _ => continue,
+        };
+        attrs.push(allow.clone());
+    }
+    quote! { #file }
 }
 
 // ---------------------------------------------------------------------------

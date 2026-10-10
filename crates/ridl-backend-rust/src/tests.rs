@@ -3021,6 +3021,42 @@ fn appendix_b() -> v2::Package {
     package("veh.common", decls)
 }
 
+/// An `internal` declaration is emitted as `pub(crate)`, and nothing outside the
+/// crate reaches it, so the type, its views and its codec draw `dead_code`
+/// in a consumer that builds the crate with `-D warnings`. Each item the
+/// declaration induces carries `#[allow(dead_code)]`; an item of a public
+/// declaration carries none, so dead code there is still reported.
+#[test]
+fn an_internal_declaration_allows_dead_code_on_each_item_and_a_public_one_does_not() {
+    let Generated { rust_source, .. } = generate(&appendix_b()).expect("Appendix B generates");
+    for item in [
+        "pub(crate) struct RawWheelFrame {",
+        "pub(crate) struct RawWheelFrameFbView<'a> {",
+        "impl<'a> RawWheelFrameFbView<'a> {",
+        "pub(crate) fn __ridl_fb_encode_RawWheelFrame(",
+    ] {
+        assert!(
+            rust_source.contains(&format!("#[allow(dead_code)]\n{item}")),
+            "the internal item `{item}` must carry the allowance directly, got:\n{rust_source}"
+        );
+    }
+    let allowed = rust_source.matches("#[allow(dead_code)]").count();
+    let internal_items = rust_source
+        .lines()
+        .filter(|line| line.contains("RawWheelFrame"))
+        .count();
+    assert!(
+        allowed > 0 && allowed < internal_items,
+        "only the internal declaration's items carry the allowance, got {allowed} in:\n{rust_source}"
+    );
+    for public in ["pub struct ", "pub enum ", "pub fn "] {
+        assert!(
+            !rust_source.contains(&format!("#[allow(dead_code)]\n{public}")),
+            "an item of a public declaration must not carry the allowance, got:\n{rust_source}"
+        );
+    }
+}
+
 #[test]
 fn appendix_b_rust_snapshot() {
     let Generated { rust_source, .. } = generate(&appendix_b()).expect("Appendix B generates");
