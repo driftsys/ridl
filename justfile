@@ -1432,15 +1432,16 @@ doc-path-check root="":
     dir_form="$d/([A-Za-z0-9._-]+/)+"
     file_form="$d/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*\.[A-Za-z0-9]+"
     # `-I` states that a file holding a NUL byte is skipped rather than leaving
-    # that to whichever grep is installed; no tracked file is binary today, so
-    # it pins the behaviour rather than changing it. The two greps this was run
-    # against announce a match in a binary file differently: BSD grep prints
-    # `Binary file <name> matches` on stdout, and GNU grep 3.12 writes
-    # `grep: <name>: binary file matches` on stderr. The fixture below asserts
-    # the whole report, so it catches a dropped `-I` under GNU grep, which CI
-    # runs. Under BSD grep it does not: the sed discards the stdout line, as it
-    # is not a path, and the scan then names the file as not text, which is the
-    # expected report. The extension is unbounded: capping its length would
+    # that to whichever grep is installed. One tracked file is binary today,
+    # editors/vscode/images/icon.png, and the scan names it as not text. The
+    # greps this was run against announce a match in a binary file
+    # differently: BSD grep and ugrep 7.8.4 (the `/usr/bin/grep` of recent
+    # macOS releases) print `Binary file <name> matches` on stdout, and GNU
+    # grep 3.12 writes `grep: <name>: binary file matches` on stderr. The
+    # fixture below asserts the whole report, so it catches a dropped `-I`
+    # under GNU grep, which CI runs. Under BSD grep and ugrep it does not: the
+    # sed discards the stdout line, as it is not a path, and the scan then
+    # names the file as not text, which is the expected report. The extension is unbounded: capping its length would
     # truncate a long one rather than skip it, and report a string that is in
     # no file.
     extract_paths() {
@@ -1543,7 +1544,7 @@ doc-path-check root="":
         # without reporting it.
         for skipped in "$skip_archive" "$skip_wip" "$skip_changelog"; do
             if [ -z "$(git_at . ls-files "$skipped")" ]; then
-                echo "doc-path-check: the skipped tree '$skipped' matches no tracked file; correct the pathspec, or drop the exclusion if that tree is gone." >&2
+                echo "doc-path-check: the skipped path '$skipped' matches no tracked file; correct the pathspec, or drop the exclusion if that path is gone." >&2
                 exit 1
             fi
         done
@@ -1592,7 +1593,9 @@ doc-path-check root="":
         # directory in prose, in an inline code span and at the end of a
         # sentence, which keep their trailing slash, one followed by two dots
         # and one by three, a directory with an omitted `...` segment and a
-        # file after it, which give the directory in front of the `...`, a
+        # file after it, which give the directory in front of the `...`, two
+        # such segments, which are cut at the first, a segment that ends with
+        # `...` but does not follow a slash, which is not cut, a
         # nested directory with an uppercase letter and an underscore, a file
         # cited with a trailing slash, which is a directory citation, and one
         # whose name has a dot, which must not also give a file path. Then
@@ -1622,6 +1625,8 @@ doc-path-check root="":
             "a directory at the end of a sentence, $d/technotes/." \
             "two and three dots after a directory, $d/two/.. and $d/three/..." \
             "an omitted segment, $d/omitted/.../more.md" \
+            "two omitted segments, cut at the first, $d/first/.../mid/.../last.md" \
+            "a segment ending with three dots is not omitted, $d/keep.../kept.md" \
             "a nested directory, $d/Multi_Seg/two-2/, with an uppercase letter and an underscore" \
             "a file cited as a directory, $d/ROADMAP.md/" \
             "a directory whose name has a dot, $d/v1.2/, is not also a file" \
@@ -1630,8 +1635,9 @@ doc-path-check root="":
             "the bare $d/ and $d/... give nothing" \
             "a relative directory ../$d/rel/ and a URL https://example.com/$d/web/" > "$sample"
         expected="$d/Multi_Seg/two-2/ $d/ROADMAP.md $d/ROADMAP.md/ $d/comment.md $d/cut-draft.md $d/cut.md $d/decisions/"
-        expected="$expected $d/decisions/ADR-0012-boundary_model.md $d/design/"
-        expected="$expected $d/ir/cruise.system.txtpb $d/lines.md $d/link.md $d/omitted/ $d/plain.md"
+        expected="$expected $d/decisions/ADR-0012-boundary_model.md $d/design/ $d/first/"
+        expected="$expected $d/ir/cruise.system.txtpb $d/keep.../kept.md $d/lines.md $d/link.md"
+        expected="$expected $d/omitted/ $d/plain.md"
         expected="$expected $d/span.md $d/sub/dir/nested.md $d/technotes/ $d/three/ $d/two/"
         expected="$expected $d/typl-language-reference.markdown $d/v1.2/ "
         if [ "$(extract_paths "$sample" | tr '\n' ' ')" != "$expected" ]; then
@@ -1758,12 +1764,31 @@ doc-path-check root="":
         git_at "$gate" -c init.defaultBranch=main -c init.templateDir= init -q
         git_at "$gate" -c core.excludesFile=/dev/null add -A
         run="$work/run"
-        if ! "{{just_executable()}}" doc-path-check "$gate" >"$run" 2>&1; then
+        if ! "{{just_executable()}}" doc-path-check "$gate" >"$run" 2>&1 \
+            || ! grep -q -- "named outside $skip_archive, $skip_wip and $skip_changelog resolves" "$run"; then
             echo "doc-path-check: the gate did not pass over a fixture whose scanned citations all resolve:" >&2
             cat "$run" >&2
             exit 1
         fi
+        # Each skipped path has to match a tracked file. Each one in turn is
+        # dropped from the index, and the gate has to fail and name it; the
+        # citations it holds are broken, so the failure can only come from the
+        # guard if the scan still skips it, and the message is asserted too.
+        for skipped in "$d/archive/old.md:$skip_archive" "$d/wip/plan.md:$skip_wip" \
+            "CHANGELOG.md:$skip_changelog"; do
+            git_at "$gate" rm -q --cached "${skipped%%:*}"
+            if "{{just_executable()}}" doc-path-check "$gate" >"$run" 2>&1 \
+                || ! grep -q -- "the skipped path '${skipped#*:}' matches no tracked file" "$run"; then
+                echo "doc-path-check: the gate no longer fails when '${skipped#*:}' matches no tracked file:" >&2
+                cat "$run" >&2
+                exit 1
+            fi
+            git_at "$gate" -c core.excludesFile=/dev/null add -A
+        done
+        # Only the changelog at the root is skipped: one in a subdirectory is
+        # scanned like any other file.
         printf '%s\n' "//! $d/design/hh-gone.md" "//! $d/gone/" > "$gate/src/broken.rs"
+        printf '%s\n' "moved $d/design/jj-gone.md" > "$gate/src/CHANGELOG.md"
         git_at "$gate" -c core.excludesFile=/dev/null add -A
         if "{{just_executable()}}" doc-path-check "$gate" >"$run" 2>&1; then
             echo "doc-path-check: the gate returned 0 over a fixture citing paths that do not exist:" >&2
@@ -1771,7 +1796,9 @@ doc-path-check root="":
             exit 1
         fi
         if ! grep -q -- "src/broken.rs -> $d/design/hh-gone.md" "$run" \
-            || ! grep -q -- "src/broken.rs -> $d/gone/" "$run"; then
+            || ! grep -q -- "src/broken.rs -> $d/gone/" "$run" \
+            || ! grep -q -- "src/CHANGELOG.md -> $d/design/jj-gone.md" "$run" \
+            || ! grep -q -- "^doc-path-check: $skip_archive, $skip_wip and $skip_changelog are not scanned" "$run"; then
             echo "doc-path-check: the gate did not report the broken paths in its fixture:" >&2
             cat "$run" >&2
             exit 1
