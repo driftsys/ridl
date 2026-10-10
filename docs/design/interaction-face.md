@@ -56,8 +56,9 @@ not a single Rust identifier, and descriptors for one are a follow-up), the
 emitter writes:
 
 - a unit struct with an `Interface` impl carrying `CATALOG`, `NUMBER`,
-  `PROVISIONAL`, `NAME` and `MEMBERS`, plus two associated constants,
-  `MAX_BUFFER_SIZE` and `EVENT_SOURCE_BUFFER_SIZE`;
+  `PROVISIONAL`, `NAME` and `MEMBERS`, and a `Sizes<FlatBuffers>` impl, the
+  interface's size table, whose `MAX_BUFFER_SIZE` and `EVENT_SOURCE_BUFFER_SIZE`
+  items size the claim buffer and the next-event buffer;
 - a unit struct per interaction with an `Interaction` impl (`type Iface`,
   `const MEMBER`) and the kind's trait — `Signal`, `Event`, `Command`, `Query`
   or `Fixed`.
@@ -67,8 +68,8 @@ carries no `interfaces.lock`, so `Interface::NUMBER` and
 `Interface::PROVISIONAL` come straight from the IR's provisional assignment
 (`Interface.number`, `Interface.provisional`, added by the lock design's L4).
 
-**The two buffer constants are computed, not counted.** `MAX_BUFFER_SIZE` is the
-maximum over every argument and reply
+**The table's two buffer sizes are computed, not counted.** `MAX_BUFFER_SIZE` is
+the maximum over every argument and reply
 `<T as Payload<::ridl_rt::encoding::FlatBuffers>>::MAX_SIZE` the interface's
 calls use — arguments alone would under-size the claim buffer whenever a query's
 reply is larger than its argument, because a reply is encoded into the same
@@ -77,6 +78,14 @@ because `EventSource::next`'s payload type is not known until the occurrence's
 ordinal is read. Both are emitted as a const-evaluable block (a `while` loop
 over an array), not as a folded literal, so the maximum is computed by the same
 code a consumer compiles, not precomputed and trusted by the emitter.
+
+The face holds no array whose length it computes. A site that knows the payload
+type holds that payload's own buffer, `<T as Payload<FlatBuffers>>::BUFFER`: a
+signal read, a publisher's send, a call argument and a reply. The two sites that
+read before they know the type hold a buffer of the table: the server's claim
+buffer is `<Iface as Sizes<FlatBuffers>>::CLAIM_BUFFER` and the next-event
+buffer is `EVENT_BUFFER`. The const-evaluable rule applies to the table's items;
+the descriptor has no inherent constant of either name.
 
 **The catalog hash, and one placeholder until its replacing story lands:**
 
@@ -100,9 +109,9 @@ code a consumer compiles, not precomputed and trusted by the emitter.
   cannot be encoded this way" (`crates/ridl-rt/src/contract.rs`) — and the doc
   comment the emitter writes into every generated file
   (`crates/ridl-backend-rust/src/descriptors.rs`) states the same three facts.
-  Nothing in the face reads these fields — it sizes buffers from
-  `<T as Payload<::ridl_rt::encoding::FlatBuffers>>::MAX_SIZE` directly — so the
-  columns serve a catalog consumer, not the face.
+  Nothing in the face reads these fields — it holds buffers from
+  `<T as Payload<::ridl_rt::encoding::FlatBuffers>>::BUFFER` and the interface's
+  size table directly — so the columns serve a catalog consumer, not the face.
 
 ## The contract-clause translator
 
@@ -388,13 +397,14 @@ limit of polls per frame. The handler port's failure resolves the future to
 `ProviderError::Claim`, with every claim settled before it staying settled.
 `Output` is `Result<Infallible, ProviderError>`: the future never resolves to
 `Ok` (F-7). It holds the handler by value, the provider by `&mut`, and the claim
-buffer of `MAX_BUFFER_SIZE` bytes inline, so the application supplies no buffer
-and reads no count. A resolved `Serve` panics when it is polled again. Over
-`ridl-loopback`, registering the served set means a handler under `serve` is
-presented only the interface's own members; the settlement table's unknown-route
-rows are reachable only through the internal step directly, which is how
-`tests/interaction_face.rs` still exercises them — the test file is inside the
-crate that `include!`s the fixture, so `pub(crate)` reaches it.
+buffer `CLAIM_BUFFER` of the interface's table, `MAX_BUFFER_SIZE` bytes, inline,
+so the application supplies no buffer and reads no count. A resolved `Serve`
+panics when it is polled again. Over `ridl-loopback`, registering the served set
+means a handler under `serve` is presented only the interface's own members; the
+settlement table's unknown-route rows are reachable only through the internal
+step directly, which is how `tests/interaction_face.rs` still exercises them —
+the test file is inside the crate that `include!`s the fixture, so `pub(crate)`
+reaches it.
 
 **The internal step, `dispatch`**, is `pub(crate)` and returns
 `Result<usize, ReadError>` — the count of claims `Handler::settle` accepted, or
@@ -460,19 +470,19 @@ That test is not written, which is a gap in the tests rather than a defect in
 the generated code.
 
 **`EncodeError::Capacity` is a provider-side invariant violation, never a
-manufactured contract error.** Every buffer the face encodes into is sized from
-`<T as Payload<::ridl_rt::encoding::FlatBuffers>>::MAX_SIZE`, the largest
-encoded size of any legal value, so a legal value cannot exceed it. If
-`Ref::encode` still returns `Capacity`, the provider returned a value outside
-its own type's range, or a `Payload` implementation does not honor `MAX_SIZE` —
-a defect the generated code has no vocabulary to describe as one of the five
-settlement outcomes, because `EncodeError::Capacity` carries no received bytes
-and no violated rule. The generated branch is an explicit `unreachable!` naming
-the type, the needed size and the available size. No runtime test drives this
-branch: doing so needs a `Payload` implementation that lies about `MAX_SIZE`
-without corrupting the buffers the round trip's other assertions share, and
-nothing in the fixture isolates one type enough to do that safely under the test
-binary's parallel execution.
+manufactured contract error.** Every buffer the face encodes into is the
+payload's own `<T as Payload<::ridl_rt::encoding::FlatBuffers>>::BUFFER`,
+`MAX_SIZE` bytes, the largest encoded size of any legal value, so a legal value
+cannot exceed it. If `Ref::encode` still returns `Capacity`, the provider
+returned a value outside its own type's range, or a `Payload` implementation
+does not honor `MAX_SIZE` — a defect the generated code has no vocabulary to
+describe as one of the five settlement outcomes, because `EncodeError::Capacity`
+carries no received bytes and no violated rule. The generated branch is an
+explicit `unreachable!` naming the type, the needed size and the available size.
+No runtime test drives this branch: doing so needs a `Payload` implementation
+that lies about `MAX_SIZE` without corrupting the buffers the round trip's other
+assertions share, and nothing in the fixture isolates one type enough to do that
+safely under the test binary's parallel execution.
 
 **A `SettleError` is left to the handler** — which already owns that claim's
 settlement — and is not turned into a different `CallError`; the step continues

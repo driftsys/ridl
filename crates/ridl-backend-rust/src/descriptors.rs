@@ -9,9 +9,8 @@
 //!   carrying `CATALOG`, `NUMBER`, `PROVISIONAL`, `NAME` and `MEMBERS`, a
 //!   `Sizes<FlatBuffers>` impl — the interface's size table in the one codec
 //!   this backend emits, every item a const expression over the codec's own
-//!   `<T as Payload<FlatBuffers>>::MAX_SIZE` — and the inherent
-//!   `MAX_BUFFER_SIZE` and `EVENT_SOURCE_BUFFER_SIZE` constants, which read
-//!   the table so that the face can name them without the trait;
+//!   `<T as Payload<FlatBuffers>>::MAX_SIZE`, which the face reads for its
+//!   claim and event buffers;
 //! - one unit struct per interaction with an `Interaction` impl (the three
 //!   required items, `type Iface`, `const MEMBER` and `const ROW`) and the
 //!   kind's trait — `Signal`, `Event`, `Command`, `Query` or `Fixed`.
@@ -168,7 +167,8 @@ fn one_interface_public(
          Its size table in FlatBuffers is `<{iface_name} as Sizes<FlatBuffers>>`: \
          one reservation row per member of `MEMBERS`, in order, and the two \
          buffer sizes, every one a const expression over \
-         `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound."
+         `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound. The \
+         face holds the table's claim and event buffers."
     );
 
     items.push(quote! {
@@ -207,28 +207,6 @@ fn one_interface_public(
             type EventBuffer = [::core::primitive::u8; Self::EVENT_SOURCE_BUFFER_SIZE];
             const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
             const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
-        }
-    });
-
-    let max_buffer_doc = "The largest argument or reply payload of this \
-        interface in FlatBuffers: `Sizes::MAX_BUFFER_SIZE` of this interface's \
-        table. The claim buffer `serve` holds is this large, because a reply \
-        is encoded into the same buffer as the arguments. `0` when the \
-        interface declares no call.";
-    let event_buffer_doc = "The largest event payload of this interface in \
-        FlatBuffers: `Sizes::EVENT_SOURCE_BUFFER_SIZE` of this interface's \
-        table. `0` when the interface declares no event.";
-
-    // The face names the two maxima as inherent constants; each reads the
-    // table, so the two cannot differ from it.
-    items.push(quote! {
-        impl #iface_ident {
-            #[doc = #max_buffer_doc]
-            pub const MAX_BUFFER_SIZE: ::core::primitive::usize =
-                <Self as ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers>>::MAX_BUFFER_SIZE;
-            #[doc = #event_buffer_doc]
-            pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize =
-                <Self as ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers>>::EVENT_SOURCE_BUFFER_SIZE;
         }
     });
 

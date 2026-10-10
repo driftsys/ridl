@@ -1274,7 +1274,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
 }
 /**Descriptor for interface `Cabin`.
 
-Its size table in FlatBuffers is `<Cabin as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound.*/
+Its size table in FlatBuffers is `<Cabin as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound. The face holds the table's claim and event buffers.*/
 pub struct Cabin;
 impl ::ridl_rt::contract::Interface for Cabin {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -1414,16 +1414,6 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Cabin {
     const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
     const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
 }
-impl Cabin {
-    ///The largest argument or reply payload of this interface in FlatBuffers: `Sizes::MAX_BUFFER_SIZE` of this interface's table. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
-    pub const MAX_BUFFER_SIZE: ::core::primitive::usize = <Self as ::ridl_rt::contract::Sizes<
-        ::ridl_rt::encoding::FlatBuffers,
-    >>::MAX_BUFFER_SIZE;
-    ///The largest event payload of this interface in FlatBuffers: `Sizes::EVENT_SOURCE_BUFFER_SIZE` of this interface's table. `0` when the interface declares no event.
-    pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = <Self as ::ridl_rt::contract::Sizes<
-        ::ridl_rt::encoding::FlatBuffers,
-    >>::EVENT_SOURCE_BUFFER_SIZE;
-}
 pub struct CabinTemperature;
 impl ::ridl_rt::contract::Interaction for CabinTemperature {
     type Iface = Cabin;
@@ -1493,7 +1483,7 @@ impl ::ridl_rt::contract::Query for CabinAverage {
 }
 /**Descriptor for interface `Horn`.
 
-Its size table in FlatBuffers is `<Horn as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound.*/
+Its size table in FlatBuffers is `<Horn as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound. The face holds the table's claim and event buffers.*/
 pub struct Horn;
 impl ::ridl_rt::contract::Interface for Horn {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -1537,16 +1527,6 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Horn {
     const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
     const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
 }
-impl Horn {
-    ///The largest argument or reply payload of this interface in FlatBuffers: `Sizes::MAX_BUFFER_SIZE` of this interface's table. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
-    pub const MAX_BUFFER_SIZE: ::core::primitive::usize = <Self as ::ridl_rt::contract::Sizes<
-        ::ridl_rt::encoding::FlatBuffers,
-    >>::MAX_BUFFER_SIZE;
-    ///The largest event payload of this interface in FlatBuffers: `Sizes::EVENT_SOURCE_BUFFER_SIZE` of this interface's table. `0` when the interface declares no event.
-    pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = <Self as ::ridl_rt::contract::Sizes<
-        ::ridl_rt::encoding::FlatBuffers,
-    >>::EVENT_SOURCE_BUFFER_SIZE;
-}
 pub struct HornActive;
 impl ::ridl_rt::contract::Interaction for HornActive {
     type Iface = Horn;
@@ -1561,7 +1541,7 @@ impl ::ridl_rt::contract::Signal for HornActive {
 }
 /**Descriptor for interface `Siren`.
 
-Its size table in FlatBuffers is `<Siren as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound.*/
+Its size table in FlatBuffers is `<Siren as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound. The face holds the table's claim and event buffers.*/
 pub struct Siren;
 impl ::ridl_rt::contract::Interface for Siren {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -1620,16 +1600,6 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Siren {
     const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
     const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
 }
-impl Siren {
-    ///The largest argument or reply payload of this interface in FlatBuffers: `Sizes::MAX_BUFFER_SIZE` of this interface's table. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
-    pub const MAX_BUFFER_SIZE: ::core::primitive::usize = <Self as ::ridl_rt::contract::Sizes<
-        ::ridl_rt::encoding::FlatBuffers,
-    >>::MAX_BUFFER_SIZE;
-    ///The largest event payload of this interface in FlatBuffers: `Sizes::EVENT_SOURCE_BUFFER_SIZE` of this interface's table. `0` when the interface declares no event.
-    pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = <Self as ::ridl_rt::contract::Sizes<
-        ::ridl_rt::encoding::FlatBuffers,
-    >>::EVENT_SOURCE_BUFFER_SIZE;
-}
 pub struct SirenTripped;
 impl ::ridl_rt::contract::Interaction for SirenTripped {
     type Iface = Siren;
@@ -1641,7 +1611,7 @@ impl ::ridl_rt::contract::Event for SirenTripped {
 }
 /**Descriptor for interface `Valve`.
 
-Its size table in FlatBuffers is `<Valve as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound.*/
+Its size table in FlatBuffers is `<Valve as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound. The face holds the table's claim and event buffers.*/
 pub struct Valve;
 impl ::ridl_rt::contract::Interface for Valve {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -1730,16 +1700,6 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Valve {
     const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
     const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
 }
-impl Valve {
-    ///The largest argument or reply payload of this interface in FlatBuffers: `Sizes::MAX_BUFFER_SIZE` of this interface's table. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
-    pub const MAX_BUFFER_SIZE: ::core::primitive::usize = <Self as ::ridl_rt::contract::Sizes<
-        ::ridl_rt::encoding::FlatBuffers,
-    >>::MAX_BUFFER_SIZE;
-    ///The largest event payload of this interface in FlatBuffers: `Sizes::EVENT_SOURCE_BUFFER_SIZE` of this interface's table. `0` when the interface declares no event.
-    pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = <Self as ::ridl_rt::contract::Sizes<
-        ::ridl_rt::encoding::FlatBuffers,
-    >>::EVENT_SOURCE_BUFFER_SIZE;
-}
 pub struct ValveOpen;
 impl ::ridl_rt::contract::Interaction for ValveOpen {
     type Iface = Valve;
@@ -1776,7 +1736,7 @@ impl ::ridl_rt::contract::Query for ValvePressure {
 }
 /**Descriptor for interface `Wiper`.
 
-Its size table in FlatBuffers is `<Wiper as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound.*/
+Its size table in FlatBuffers is `<Wiper as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound. The face holds the table's claim and event buffers.*/
 pub struct Wiper;
 impl ::ridl_rt::contract::Interface for Wiper {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -1831,16 +1791,6 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Wiper {
     type EventBuffer = [::core::primitive::u8; Self::EVENT_SOURCE_BUFFER_SIZE];
     const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
     const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
-}
-impl Wiper {
-    ///The largest argument or reply payload of this interface in FlatBuffers: `Sizes::MAX_BUFFER_SIZE` of this interface's table. The claim buffer `serve` holds is this large, because a reply is encoded into the same buffer as the arguments. `0` when the interface declares no call.
-    pub const MAX_BUFFER_SIZE: ::core::primitive::usize = <Self as ::ridl_rt::contract::Sizes<
-        ::ridl_rt::encoding::FlatBuffers,
-    >>::MAX_BUFFER_SIZE;
-    ///The largest event payload of this interface in FlatBuffers: `Sizes::EVENT_SOURCE_BUFFER_SIZE` of this interface's table. `0` when the interface declares no event.
-    pub const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = <Self as ::ridl_rt::contract::Sizes<
-        ::ridl_rt::encoding::FlatBuffers,
-    >>::EVENT_SOURCE_BUFFER_SIZE;
 }
 pub struct WiperBlades;
 impl ::ridl_rt::contract::Interaction for WiperBlades {
@@ -1909,9 +1859,9 @@ pub mod cabin {
             ::ridl_rt::sample::Sample<super::Temperature>,
             ::ridl_rt::port::ReadError,
         > {
-            let mut buf = [0u8; <super::Temperature as ::ridl_rt::payload::Payload<
+            let mut buf = <super::Temperature as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE];
+            >>::BUFFER;
             let raw = self
                 .port
                 .read(
@@ -2356,9 +2306,9 @@ The interface number is checked before the ordinal, for the reason `serve` check
                     ::ridl_rt::error::Contract::PreconditionFailed,
                 )
             })?;
-        let mut buf = [0u8; <super::Level as ::ridl_rt::payload::Payload<
+        let mut buf = <super::Level as ::ridl_rt::payload::Payload<
             ::ridl_rt::encoding::FlatBuffers,
-        >>::MAX_SIZE];
+        >>::BUFFER;
         let bytes = match ::ridl_rt::payload::Ref::<
             super::Level,
             ::ridl_rt::encoding::FlatBuffers,
@@ -2402,9 +2352,9 @@ The interface number is checked before the ordinal, for the reason `serve` check
                     ::ridl_rt::error::Contract::PreconditionFailed,
                 )
             })?;
-        let mut buf = [0u8; <super::Window as ::ridl_rt::payload::Payload<
+        let mut buf = <super::Window as ::ridl_rt::payload::Payload<
             ::ridl_rt::encoding::FlatBuffers,
-        >>::MAX_SIZE];
+        >>::BUFFER;
         let bytes = match ::ridl_rt::payload::Ref::<
             super::Window,
             ::ridl_rt::encoding::FlatBuffers,
@@ -2437,9 +2387,9 @@ The interface number is checked before the ordinal, for the reason `serve` check
         >,
         ::ridl_rt::port::ReadError,
     > {
-        let mut buf = [0u8; <super::Average as ::ridl_rt::payload::Payload<
+        let mut buf = <super::Average as ::ridl_rt::payload::Payload<
             ::ridl_rt::encoding::FlatBuffers,
-        >>::MAX_SIZE];
+        >>::BUFFER;
         match port.reply(correlation.0, &mut buf)? {
             None => Ok(None),
             Some(Err(error)) => Ok(Some(Err(error))),
@@ -2478,7 +2428,9 @@ The interface number is checked before the ordinal, for the reason `serve` check
         ::core::option::Option<Event>,
         ::ridl_rt::port::ReadError,
     > {
-        let mut buf = [0u8; super::Cabin::EVENT_SOURCE_BUFFER_SIZE];
+        let mut buf = <super::Cabin as ::ridl_rt::contract::Sizes<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::EVENT_BUFFER;
         let Some(occurrence) = port.next(&mut buf)? else {
             return Ok(None);
         };
@@ -2537,9 +2489,9 @@ The interface number is checked before the ordinal, for the reason `serve` check
             &mut self,
             value: super::Temperature,
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
-            let mut buf = [0u8; <super::Temperature as ::ridl_rt::payload::Payload<
+            let mut buf = <super::Temperature as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE];
+            >>::BUFFER;
             let bytes = match ::ridl_rt::payload::Ref::<
                 super::Temperature,
                 ::ridl_rt::encoding::FlatBuffers,
@@ -2565,9 +2517,9 @@ The interface number is checked before the ordinal, for the reason `serve` check
             &mut self,
             value: super::Warning,
         ) -> ::core::result::Result<(), ::ridl_rt::port::RaiseError> {
-            let mut buf = [0u8; <super::Warning as ::ridl_rt::payload::Payload<
+            let mut buf = <super::Warning as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE];
+            >>::BUFFER;
             let bytes = match ::ridl_rt::payload::Ref::<
                 super::Warning,
                 ::ridl_rt::encoding::FlatBuffers,
@@ -2636,9 +2588,9 @@ An argument is taken by reference because `serve` reads it again when it evaluat
     }
     /**Settles the claims of interface `Cabin` that are waiting, up to `budget` of them, and returns how many were settled, or the handler port's failure. It is the one-pass step `serve` calls on each poll.
 
-It does not wait: it makes one pass over the claims the handler already has and returns. `budget` is decreased by one for each claim taken from `Handler::next_claim`, whether or not its settlement is accepted — except an oversized claim whose settlement the handler refused, below — and the pass stops when it reaches 0 without asking for another claim. With a buffer of at least `Cabin::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 means the handler has no claim waiting, or refused the settlement of an oversized claim that stays waiting; `Ok` with `budget` at 0 means claims may still be waiting; `Err` means `Handler::next_claim` failed, and every claim settled before the failure stays settled. `ReadError::ShortClaim` is not a failure: the claim's arguments do not fit `Cabin::MAX_BUFFER_SIZE`, the interface's largest argument or reply payload, so they are larger than any valid encoding of this interface's members, and the claim is settled `Transport::Corrupt` by its id without being read, whichever interface or member it names — a claim naming another interface may be validly larger, and is settled `Corrupt` too, because this step cannot read it; it counts toward `budget`, and the pass continues. When the handler refuses that settlement the pass ends at once, returning the count so far with the budget unspent, as if no claim were waiting, because the runtime keeps the unsettled claim the next one; the claims behind it wait until the handler can settle it (driftsys/ridl#569).
+It does not wait: it makes one pass over the claims the handler already has and returns. `budget` is decreased by one for each claim taken from `Handler::next_claim`, whether or not its settlement is accepted — except an oversized claim whose settlement the handler refused, below — and the pass stops when it reaches 0 without asking for another claim. With a buffer of at least `<Cabin as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 means the handler has no claim waiting, or refused the settlement of an oversized claim that stays waiting; `Ok` with `budget` at 0 means claims may still be waiting; `Err` means `Handler::next_claim` failed, and every claim settled before the failure stays settled. `ReadError::ShortClaim` is not a failure: the claim's arguments do not fit `<Cabin as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE`, the interface's largest argument or reply payload, so they are larger than any valid encoding of this interface's members, and the claim is settled `Transport::Corrupt` by its id without being read, whichever interface or member it names — a claim naming another interface may be validly larger, and is settled `Corrupt` too, because this step cannot read it; it counts toward `budget`, and the pass continues. When the handler refuses that settlement the pass ends at once, returning the count so far with the budget unspent, as if no claim were waiting, because the runtime keeps the unsettled claim the next one; the claims behind it wait until the handler can settle it (driftsys/ridl#569).
 
-`buf` must be at least `Cabin::MAX_BUFFER_SIZE` bytes, because a reply is encoded into the same buffer as the arguments. A shorter buffer returns `Ok(0)` without consuming a claim or changing `budget`.
+`buf` must be at least `<Cabin as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes, because a reply is encoded into the same buffer as the arguments. A shorter buffer returns `Ok(0)` without consuming a claim or changing `budget`.
 
 Every claim that is taken is settled, including one whose interface number or ordinal this interface does not recognise, which settles `Contract::UnknownInteraction`. A claim is counted only once `Handler::settle` has accepted it; a `SettleError` is left to the handler, which already owns that claim's settlement, and the pass continues with the next claim, except for an oversized claim, whose refused settlement ends the pass as stated above.
 
@@ -2653,7 +2605,11 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
         H: ::ridl_rt::port::Handler,
         P: Provider,
     {
-        if buf.len() < super::Cabin::MAX_BUFFER_SIZE {
+        if buf.len()
+            < <super::Cabin as ::ridl_rt::contract::Sizes<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_BUFFER_SIZE
+        {
             return Ok(0);
         }
         let mut settled = 0usize;
@@ -2881,11 +2837,13 @@ Panics when `h` is attached to a catalog other than the one this face was genera
         Serve {
             handler: h,
             provider: p,
-            buf: [0u8; super::Cabin::MAX_BUFFER_SIZE],
+            buf: <super::Cabin as ::ridl_rt::contract::Sizes<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::CLAIM_BUFFER,
             state,
         }
     }
-    ///The future `serve` returns over interface `Cabin`. It holds the handler, the provider, and the claim buffer of `Cabin::MAX_BUFFER_SIZE` bytes. It never resolves to `Ok`, and polling it again after it resolved panics.
+    ///The future `serve` returns over interface `Cabin`. It holds the handler, the provider, and the claim buffer of `<Cabin as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes. It never resolves to `Ok`, and polling it again after it resolved panics.
     #[must_use = "claims are served only while the future is polled"]
     pub struct Serve<
         'a,
@@ -2894,7 +2852,9 @@ Panics when `h` is attached to a catalog other than the one this face was genera
     > {
         handler: H,
         provider: &'a mut P,
-        buf: [u8; super::Cabin::MAX_BUFFER_SIZE],
+        buf: <super::Cabin as ::ridl_rt::contract::Sizes<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::ClaimBuffer,
         state: ServeState,
     }
     /// Where `serve` is, as its future's `poll` moves it.
@@ -3202,9 +3162,9 @@ pub mod horn {
             ::ridl_rt::sample::Sample<super::Health>,
             ::ridl_rt::port::ReadError,
         > {
-            let mut buf = [0u8; <super::Health as ::ridl_rt::payload::Payload<
+            let mut buf = <super::Health as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE];
+            >>::BUFFER;
             let raw = self
                 .port
                 .read(
@@ -3284,9 +3244,9 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             &mut self,
             value: super::Health,
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
-            let mut buf = [0u8; <super::Health as ::ridl_rt::payload::Payload<
+            let mut buf = <super::Health as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE];
+            >>::BUFFER;
             let bytes = match ::ridl_rt::payload::Ref::<
                 super::Health,
                 ::ridl_rt::encoding::FlatBuffers,
@@ -3450,7 +3410,9 @@ The interface number is checked before the ordinal, for the reason `serve` check
         ::core::option::Option<Event>,
         ::ridl_rt::port::ReadError,
     > {
-        let mut buf = [0u8; super::Siren::EVENT_SOURCE_BUFFER_SIZE];
+        let mut buf = <super::Siren as ::ridl_rt::contract::Sizes<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::EVENT_BUFFER;
         let Some(occurrence) = port.next(&mut buf)? else {
             return Ok(None);
         };
@@ -3502,9 +3464,9 @@ The interface number is checked before the ordinal, for the reason `serve` check
             &mut self,
             value: super::Warning,
         ) -> ::core::result::Result<(), ::ridl_rt::port::RaiseError> {
-            let mut buf = [0u8; <super::Warning as ::ridl_rt::payload::Payload<
+            let mut buf = <super::Warning as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE];
+            >>::BUFFER;
             let bytes = match ::ridl_rt::payload::Ref::<
                 super::Warning,
                 ::ridl_rt::encoding::FlatBuffers,
@@ -3994,9 +3956,9 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                     ::ridl_rt::error::Contract::PreconditionFailed,
                 )
             })?;
-        let mut buf = [0u8; <super::Level as ::ridl_rt::payload::Payload<
+        let mut buf = <super::Level as ::ridl_rt::payload::Payload<
             ::ridl_rt::encoding::FlatBuffers,
-        >>::MAX_SIZE];
+        >>::BUFFER;
         let bytes = match ::ridl_rt::payload::Ref::<
             super::Level,
             ::ridl_rt::encoding::FlatBuffers,
@@ -4040,9 +4002,9 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                     ::ridl_rt::error::Contract::PreconditionFailed,
                 )
             })?;
-        let mut buf = [0u8; <super::Window as ::ridl_rt::payload::Payload<
+        let mut buf = <super::Window as ::ridl_rt::payload::Payload<
             ::ridl_rt::encoding::FlatBuffers,
-        >>::MAX_SIZE];
+        >>::BUFFER;
         let bytes = match ::ridl_rt::payload::Ref::<
             super::Window,
             ::ridl_rt::encoding::FlatBuffers,
@@ -4075,9 +4037,9 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         >,
         ::ridl_rt::port::ReadError,
     > {
-        let mut buf = [0u8; <super::Average as ::ridl_rt::payload::Payload<
+        let mut buf = <super::Average as ::ridl_rt::payload::Payload<
             ::ridl_rt::encoding::FlatBuffers,
-        >>::MAX_SIZE];
+        >>::BUFFER;
         match port.reply(correlation.0, &mut buf)? {
             None => Ok(None),
             Some(Err(error)) => Ok(Some(Err(error))),
@@ -4120,9 +4082,9 @@ An argument is taken by reference because `serve` reads it again when it evaluat
     }
     /**Settles the claims of interface `Valve` that are waiting, up to `budget` of them, and returns how many were settled, or the handler port's failure. It is the one-pass step `serve` calls on each poll.
 
-It does not wait: it makes one pass over the claims the handler already has and returns. `budget` is decreased by one for each claim taken from `Handler::next_claim`, whether or not its settlement is accepted — except an oversized claim whose settlement the handler refused, below — and the pass stops when it reaches 0 without asking for another claim. With a buffer of at least `Valve::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 means the handler has no claim waiting, or refused the settlement of an oversized claim that stays waiting; `Ok` with `budget` at 0 means claims may still be waiting; `Err` means `Handler::next_claim` failed, and every claim settled before the failure stays settled. `ReadError::ShortClaim` is not a failure: the claim's arguments do not fit `Valve::MAX_BUFFER_SIZE`, the interface's largest argument or reply payload, so they are larger than any valid encoding of this interface's members, and the claim is settled `Transport::Corrupt` by its id without being read, whichever interface or member it names — a claim naming another interface may be validly larger, and is settled `Corrupt` too, because this step cannot read it; it counts toward `budget`, and the pass continues. When the handler refuses that settlement the pass ends at once, returning the count so far with the budget unspent, as if no claim were waiting, because the runtime keeps the unsettled claim the next one; the claims behind it wait until the handler can settle it (driftsys/ridl#569).
+It does not wait: it makes one pass over the claims the handler already has and returns. `budget` is decreased by one for each claim taken from `Handler::next_claim`, whether or not its settlement is accepted — except an oversized claim whose settlement the handler refused, below — and the pass stops when it reaches 0 without asking for another claim. With a buffer of at least `<Valve as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 means the handler has no claim waiting, or refused the settlement of an oversized claim that stays waiting; `Ok` with `budget` at 0 means claims may still be waiting; `Err` means `Handler::next_claim` failed, and every claim settled before the failure stays settled. `ReadError::ShortClaim` is not a failure: the claim's arguments do not fit `<Valve as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE`, the interface's largest argument or reply payload, so they are larger than any valid encoding of this interface's members, and the claim is settled `Transport::Corrupt` by its id without being read, whichever interface or member it names — a claim naming another interface may be validly larger, and is settled `Corrupt` too, because this step cannot read it; it counts toward `budget`, and the pass continues. When the handler refuses that settlement the pass ends at once, returning the count so far with the budget unspent, as if no claim were waiting, because the runtime keeps the unsettled claim the next one; the claims behind it wait until the handler can settle it (driftsys/ridl#569).
 
-`buf` must be at least `Valve::MAX_BUFFER_SIZE` bytes, because a reply is encoded into the same buffer as the arguments. A shorter buffer returns `Ok(0)` without consuming a claim or changing `budget`.
+`buf` must be at least `<Valve as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes, because a reply is encoded into the same buffer as the arguments. A shorter buffer returns `Ok(0)` without consuming a claim or changing `budget`.
 
 Every claim that is taken is settled, including one whose interface number or ordinal this interface does not recognise, which settles `Contract::UnknownInteraction`. A claim is counted only once `Handler::settle` has accepted it; a `SettleError` is left to the handler, which already owns that claim's settlement, and the pass continues with the next claim, except for an oversized claim, whose refused settlement ends the pass as stated above.
 
@@ -4137,7 +4099,11 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
         H: ::ridl_rt::port::Handler,
         P: Provider,
     {
-        if buf.len() < super::Valve::MAX_BUFFER_SIZE {
+        if buf.len()
+            < <super::Valve as ::ridl_rt::contract::Sizes<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_BUFFER_SIZE
+        {
             return Ok(0);
         }
         let mut settled = 0usize;
@@ -4365,11 +4331,13 @@ Panics when `h` is attached to a catalog other than the one this face was genera
         Serve {
             handler: h,
             provider: p,
-            buf: [0u8; super::Valve::MAX_BUFFER_SIZE],
+            buf: <super::Valve as ::ridl_rt::contract::Sizes<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::CLAIM_BUFFER,
             state,
         }
     }
-    ///The future `serve` returns over interface `Valve`. It holds the handler, the provider, and the claim buffer of `Valve::MAX_BUFFER_SIZE` bytes. It never resolves to `Ok`, and polling it again after it resolved panics.
+    ///The future `serve` returns over interface `Valve`. It holds the handler, the provider, and the claim buffer of `<Valve as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes. It never resolves to `Ok`, and polling it again after it resolved panics.
     #[must_use = "claims are served only while the future is polled"]
     pub struct Serve<
         'a,
@@ -4378,7 +4346,9 @@ Panics when `h` is attached to a catalog other than the one this face was genera
     > {
         handler: H,
         provider: &'a mut P,
-        buf: [u8; super::Valve::MAX_BUFFER_SIZE],
+        buf: <super::Valve as ::ridl_rt::contract::Sizes<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::ClaimBuffer,
         state: ServeState,
     }
     /// Where `serve` is, as its future's `poll` moves it.
@@ -4630,9 +4600,9 @@ pub mod wiper {
             ::ridl_rt::sample::Sample<super::Level>,
             ::ridl_rt::port::ReadError,
         > {
-            let mut buf = [0u8; <super::Level as ::ridl_rt::payload::Payload<
+            let mut buf = <super::Level as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE];
+            >>::BUFFER;
             let raw = self
                 .port
                 .read(
@@ -4712,9 +4682,9 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             &mut self,
             value: super::Level,
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
-            let mut buf = [0u8; <super::Level as ::ridl_rt::payload::Payload<
+            let mut buf = <super::Level as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE];
+            >>::BUFFER;
             let bytes = match ::ridl_rt::payload::Ref::<
                 super::Level,
                 ::ridl_rt::encoding::FlatBuffers,

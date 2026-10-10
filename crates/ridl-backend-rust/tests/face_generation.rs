@@ -605,7 +605,7 @@ fn serve_returns_a_future_over_the_internal_dispatch_step() {
     assert!(
         d.contains(&format!(
             "pubstructServe<'a,{bounds},>{{handler:H,provider:&'amutP,\
-             buf:[u8;super::Cabin::MAX_BUFFER_SIZE],state:ServeState,}}"
+             buf:<super::Cabinas::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers,>>::ClaimBuffer,state:ServeState,}}"
         )),
         "the serve future holds the handler by value, the provider by &mut, and the claim buffer inline",
     );

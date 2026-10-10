@@ -159,16 +159,13 @@ fn the_size_table_derives_from_max_size() {
         "the event buffer is zeroed over the table's maximum"
     );
 
-    // The descriptor's inherent constants are aliases of the table's, so the
-    // face compiles unchanged.
+    // The table is the only home of the two maxima: the descriptor has no
+    // inherent alias of them.
     for constant in ["MAX_BUFFER_SIZE", "EVENT_SOURCE_BUFFER_SIZE"] {
-        let alias = format!(
-            "pubconst{constant}:::core::primitive::usize=\
-             <Selfas::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers>>::{constant};"
-        );
+        let alias = format!("pubconst{constant}:");
         assert!(
-            without_trailing_commas(&d).contains(&alias),
-            "the inherent `{constant}` reads the table"
+            !without_trailing_commas(&d).contains(&alias),
+            "the descriptor has no inherent `{constant}`"
         );
     }
 }

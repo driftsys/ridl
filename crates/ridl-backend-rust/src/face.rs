@@ -1082,11 +1082,12 @@ fn ty(reference: &str) -> TokenStream {
     }
 }
 
-/// A stack buffer exactly as large as any legal value of `type_name`.
+/// A zeroed stack buffer of the payload's own type, exactly as large as any
+/// legal value of `type_name`: the codec's `Payload::BUFFER`.
 fn payload_buffer(type_name: &str) -> TokenStream {
     let path = ty(type_name);
     quote! {
-        [0u8; <#path as ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>>::MAX_SIZE]
+        <#path as ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>>::BUFFER
     }
 }
 

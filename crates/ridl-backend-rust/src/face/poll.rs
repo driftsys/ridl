@@ -185,7 +185,9 @@ fn poll_reply(call: &Call) -> TokenStream {
 /// The event read `NextEvent` polls: one occurrence of any subscribed event,
 /// routed to its variant by ordinal.
 fn poll_next_event(iface: &Ident, iface_name: &str, events: &[(Member, &str)]) -> TokenStream {
-    let buffer = quote! { [0u8; super::#iface::EVENT_SOURCE_BUFFER_SIZE] };
+    let buffer = quote! {
+        <super::#iface as ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers>>::EVENT_BUFFER
+    };
     let arms = events.iter().map(|(member, payload)| {
         let ordinal = &member.ordinal;
         let variant = ident(member.camel);
