@@ -399,19 +399,24 @@ both per encoding:
   whose reservation is unsized. A tombstone does not count, and an interface
   with no live member has a budget of zero bytes.
 
-These are the same two sums the runtime computes, over the interface's
-`Sizes<E>` table: `ridl_rt::contract::reservation::<X, E>()` for a member `X`,
-and `ridl_rt::contract::table_budget::<I, E>()` for an interface `I`. The model
-states them per wire encoding, so a plugin reads them without walking the
+The runtime computes the corresponding two sums over the interface's `Sizes<E>`
+table: `ridl_rt::contract::reservation::<X, E>()` for a member `X`, and
+`ridl_rt::contract::table_budget::<I, E>()` for an interface `I`. The model
+states its sums per wire encoding, so a plugin reads them without walking the
 members itself.
 
-The two sides agree only where the runtime holds the same per-payload sizes the
-model holds. Today the Rust backend emits a `Sizes<E>` table for FlatBuffers
-alone, so only that column has a runtime counterpart; the model's proto3 column
-can carry a byte count with no table to compare it with. The catalog descriptor
-this record describes is a different artifact, and it does write a proto3 row
-(`lower.rs` in `ridl-descriptor`). The FlatBuffers column is the one where the
-runtime table and the model read the same number.
+The two sides differ for a `fixed` member. The runtime row of a `fixed` is `0`,
+because a fixed value is never in flight, while the model's reservation counts
+the fixed member's payload, and so does its table budget. For an interface with
+a `fixed` member the model's numbers are therefore larger than the runtime's by
+the size of each fixed payload. For every other kind of member the two sides
+agree only where the runtime holds the same per-payload sizes the model holds.
+Today the Rust backend emits a `Sizes<E>` table for FlatBuffers alone, so only
+that column has a runtime counterpart; the model's proto3 column can carry a
+byte count with no table to compare it with. The catalog descriptor this record
+describes is a different artifact, and it does write a proto3 row (`lower.rs` in
+`ridl-descriptor`). The FlatBuffers column is the one where the runtime table
+and the model read the same number for a member that is not a `fixed`.
 
 ## Verification before access, and `ridl describe`
 

@@ -163,7 +163,7 @@ pub struct Member {
     pub kind: Kind,
     pub name: &'static str,
     pub timing: Option<Timing>,           // None: no Timing in the IR (a bare call, a fixed)
-    pub payloads: &'static [PayloadInfo], // one per payload; two for a query (request, then reply)
+    pub payloads: &'static [PayloadInfo], // one per payload; two for a query (request, then reply); a fixed has one, and its size-table row is 0
 }
 pub enum TimingMode { StrictPeriodic, Range }
 pub struct Timing { pub mode: TimingMode, pub min: Option<Duration>, pub max: Option<Duration> }
@@ -332,7 +332,10 @@ pub const fn table_budget<I: Sizes<E>, E: Encoding>() -> u64;
   (`Cabin: Sizes<Proto3>` is not satisfied), not a run-time error.
   `RESERVATIONS` is one row per member of `Interface::MEMBERS`, in order: the
   sum, as a `u64`, of `MAX_SIZE` over the member's payloads — the request then
-  the reply for a query, `0` for a fixed, which is never in flight.
+  the reply for a query, `0` for a fixed, which is never in flight. The codegen
+  model's `Interaction.reservation` and `Interface.table_budget` count a fixed
+  member's payload, so for an interface with a fixed member the model's numbers
+  are larger than this table's by the size of each fixed payload.
   `Interaction::ROW` is the index of the descriptor's `MEMBER` in `MEMBERS`,
   which is its row in every table of the interface, so `reservation::<X, E>()`
   reads an interaction's row without a scan, and `table_budget::<I, E>()` sums
