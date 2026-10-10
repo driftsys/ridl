@@ -1270,27 +1270,58 @@ fn a_workspace_with_imports_gets_a_note_beside_the_list() {
     );
 }
 
-/// With no baseline there is no list, so a workspace that names `[imports]`
-/// gets no note.
-#[test]
-fn a_workspace_with_imports_and_no_baseline_gets_no_note() {
-    let dir = TempDir::new("build-imports-no-baseline");
-    let out = TempDir::new("build-imports-no-baseline-out");
-    let root = set_source(&dir, BASE);
-    dir.write(
-        "ridl.toml",
-        &format!(
-            "{MANIFEST}\n[imports]\n\"other.dep\" = \"https://registry.example.com/other/dep@v1.0.0\"\n"
-        ),
-    );
-    let (_, _, stderr) = ridl(&[
+const IMPORTS: &str =
+    "\n[imports]\n\"other.dep\" = \"https://registry.example.com/other/dep@v1.0.0\"\n";
+
+/// Runs a frozen `ridl build --emit catalog` on `root`, returning
+/// `(exit_code, stderr)`.
+fn frozen_catalog_build(root: &Path, out: &Path) -> (i32, String) {
+    let (code, _, stderr) = ridl(&[
         "build".as_ref(),
         root.as_os_str(),
         "--out-dir".as_ref(),
-        out.path().as_os_str(),
+        out.as_os_str(),
         "--emit".as_ref(),
         "catalog".as_ref(),
         "--frozen".as_ref(),
     ]);
+    (code, stderr)
+}
+
+/// The note is printed once a list is computed, so a baseline that cannot be
+/// loaded fails the build before it.
+#[test]
+fn a_workspace_with_imports_and_an_unloadable_baseline_gets_no_note() {
+    let dir = TempDir::new("build-imports-bad-baseline");
+    let out = TempDir::new("build-imports-bad-baseline-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    std::fs::write(baseline_dir(&root).join(format!("{UNIT}.ir.json")), "{")
+        .expect("damage the snapshot");
+    dir.write("ridl.toml", &format!("{MANIFEST}{IMPORTS}"));
+    let (code, stderr) = frozen_catalog_build(&root, out.path());
+    assert_eq!(code, 2, "the baseline fails the build: {stderr}");
+    assert!(!stderr.contains("note: the workspace names"), "{stderr}");
+}
+
+/// A unit with no published package gets no list, so no list is computed and
+/// there is no note.
+#[test]
+fn a_workspace_with_imports_and_no_list_gets_no_note() {
+    let dir = TempDir::new("build-imports-no-list");
+    let out = TempDir::new("build-imports-no-list-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    dir.write(
+        "ridl.toml",
+        &format!("[package]\nname = \"veh.other\"\nversion = \"1.0.0\"\n{IMPORTS}"),
+    );
+    dir.write("cluster.ridl", &BASE.replace("veh.cluster", "veh.other"));
+    let (code, stderr) = frozen_catalog_build(&root, out.path());
+    assert_eq!(
+        code, 1,
+        "the missing lockfile entry fails the build: {stderr}"
+    );
+    assert!(stderr.contains("MANI-103"), "{stderr}");
     assert!(!stderr.contains("note: the workspace names"), "{stderr}");
 }

@@ -1,6 +1,6 @@
 //! `run_build_computing` computes the earlier catalogs from the build's own
 //! compile: the function is called once, with the build's checked packages,
-//! and never for a build with an error diagnostic.
+//! and never for a compile with an error diagnostic.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -118,4 +118,76 @@ fn imports_named_by_the_workspace_root_are_reported_to_the_function() {
         Ok(BTreeMap::new())
     });
     assert_eq!(flags, vec![true]);
+}
+
+const GIVEN_HASH: &str = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=";
+
+/// Builds the codegen model of `root` with `run_build_with` given a list for
+/// unit `unit`, and returns the model's `catalog.compatible` and the run.
+fn model_compatible_given(root: &Path, unit: &str) -> (Vec<String>, ridlc::CliRun) {
+    let out = tempfile::tempdir().expect("a temp dir");
+    let mut given = BTreeMap::new();
+    given.insert(unit.to_string(), vec![[1u8; 32]]);
+    let run = ridlc::run_build_with(
+        root,
+        out.path(),
+        &[Emit::CodegenModel],
+        &[],
+        Duration::from_secs(10),
+        Frozen::No,
+        ApplyLints::No,
+        None,
+        &given,
+    )
+    .expect("the build runs");
+    let text = std::fs::read_to_string(out.path().join(format!("{unit}.codegen.json")))
+        .expect("the model is written");
+    let json: serde_json::Value = serde_json::from_str(&text).expect("the model is JSON");
+    let hashes = json["catalog"]["compatible"]
+        .as_array()
+        .expect("the model's catalog has a compatible array")
+        .iter()
+        .map(|hash| hash.as_str().expect("a base64 string").to_string())
+        .collect();
+    (hashes, run)
+}
+
+#[test]
+fn run_build_with_writes_the_given_list() {
+    let root = workspace(SOURCE);
+    let (hashes, run) = model_compatible_given(root.path(), "demo");
+    assert!(!run.has_error(), "unexpected error: {:?}", run.diagnostics);
+    assert_eq!(hashes, vec![GIVEN_HASH.to_string()]);
+}
+
+/// An RSDL-7xx error still writes the package artifacts, and the given list
+/// is written with them.
+#[test]
+fn run_build_with_writes_the_given_list_beside_an_rsdl_7xx_error() {
+    let root = tempfile::tempdir().expect("a temp dir");
+    std::fs::write(
+        root.path().join("ridl.toml"),
+        "[package]\nname = \"veh.demo\"\nversion = \"1.0.0\"\n",
+    )
+    .expect("the manifest is written");
+    std::fs::write(
+        root.path().join("lane.ridl"),
+        "package veh.demo\n\ntype Flag: boolean\n\n\
+         interface LaneAssist {\n  signal active: Flag @[100ms..1s]\n}\n\n\
+         service veh.demo.lane : LaneAssist\n",
+    )
+    .expect("the source is written");
+    std::fs::write(
+        root.path().join("topology.rsdl"),
+        "package veh.demo\n\n\
+         component Lane { offers veh.demo.lane }\n\
+         component Panel { requires LaneAssist }\n\
+         system Vehicle { Lane, Panel }\n\
+         deployment Good for Vehicle { machine A { Lane, Panel } }\n\
+         deployment Bad for Vehicle { machine A { Lane } }\n",
+    )
+    .expect("the topology is written");
+    let (hashes, run) = model_compatible_given(root.path(), "veh.demo");
+    assert!(run.has_error(), "the placement error is reported");
+    assert_eq!(hashes, vec![GIVEN_HASH.to_string()]);
 }

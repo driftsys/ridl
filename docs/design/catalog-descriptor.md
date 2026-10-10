@@ -261,7 +261,7 @@ differing only in the list have the same hash. The rule is
   the recorded chain is not changed until the next publication. A baseline with
   at least one `<unit>.catalogs` file that cannot be loaded, and a file that
   cannot be read, are exit 2; a baseline with no such file is not loaded. A
-  build with an error diagnostic gets no list, and its baseline is not read.
+  compile with an error diagnostic gets no list, and its baseline is not read.
   When the workspace names `[imports]` and a list is computed, the build prints
   a note that a unit's list covers the workspace's own packages only.
 - **No runtime reads the list.** The generated face compares only its own

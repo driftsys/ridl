@@ -679,7 +679,7 @@ are equal the catalog did not change, and the list holds the file's other
 hashes whatever the verdict. The recorded file is not changed by the build. An
 IR dump reads no baseline. A baseline with at least one `<unit>.catalogs` file that cannot be loaded, or
 a `<unit>.catalogs` file that cannot be read, is exit 2; a baseline with no
-`<unit>.catalogs` file is not loaded. A build with an error diagnostic gets no
+`<unit>.catalogs` file is not loaded. A compile with an error diagnostic gets no
 list, and its baseline is not read. When the workspace names `[imports]` and a
 list is computed, the build prints a note on stderr that a unit's list covers
 the workspace's own packages only.
