@@ -234,3 +234,6 @@ Each ruling: what was decided — why — what it costs if wrong.
 - **R-20** R-17 changes ADR-0014 decision 15 and frame specification §6.1, so
   #810 carries a dated amendment of both, and three tests pass 2 found missing —
   a decision that changes is recorded in its record — if wrong, nothing.
+
+Lane H closed 2026-10-10: H1 #794, H2 #785, H3 #810, H4 #790, H5 #812;
+follow-ups #796, #798, #808, #811.

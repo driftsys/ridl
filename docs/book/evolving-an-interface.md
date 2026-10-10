@@ -118,7 +118,7 @@ compatible change still makes a new version.
 | A declaration is added that no interface reaches                                  | compatible | unchanged                                     | unchanged                                           |
 | A compatible change to an interface, or to a declaration that an interface reaches | compatible | changes                                       | the earlier hashes stay, and the previous one joins |
 | A breaking change to an interface, or to a declaration that an interface reaches  | breaking   | changes                                       | the list restarts with the new hash alone           |
-| A breaking change to a declaration of the unit that no interface reaches          | breaking   | unchanged                                     | the list restarts with the hash alone               |
+| A breaking change to a declaration of the unit that no interface reaches          | breaking   | unchanged                                     | unchanged: the hash did not change                  |
 
 The "compatible" and "breaking" rows cover the categories that `ridl diff`
 prints. The rules are in the
@@ -152,8 +152,9 @@ that an interface of the unit reaches, in the unit or in another one. A breaking
 change in a declaration of another unit that the unit does not reach leaves the
 unit's chain as it was, although `ridl diff` still exits 1 for the report as a
 whole. A breaking change in a declaration of the unit's own packages that no
-interface reaches is breaking for the unit, although the hash stays as it was:
-the list restarts with the same hash alone.
+interface reaches is breaking for the unit, although the hash stays as it was. The chain is then
+carried, because the catalog did not change and every listed hash stays
+compatible.
 
 ## The compatible catalogs
 
@@ -185,9 +186,10 @@ a5973898ecf39cce4b375906dfdbcafc795108832593b70dd49f3e75a90ca841
 The first hash is the catalog hash of the baseline being published, the same
 hash that `ridl build --emit catalog` computes. The hashes after it are the ones
 in the file that the publication replaces, copied as they are and never
-recomputed from a snapshot. They are copied only when the unit's verdict from
-the replaced snapshots to the new ones is compatible or identical. After a
-breaking change, the file holds the new hash alone, and a consumer built before
+recomputed from a snapshot. They are copied when the unit's verdict from
+the replaced snapshots to the new ones is compatible or identical, and also when
+the new hash equals the first hash of the replaced file. After a
+breaking change that changes the hash, the file holds the new hash alone, and a consumer built before
 the break is not on the list. A unit that had no published snapshot starts a
 chain in the same way.
 
@@ -202,7 +204,8 @@ the unit's chain again.
 code. For each unit that has an interface and a package in the baseline, it
 lists the hashes of the unit's `<unit>.catalogs` file, less the current catalog
 hash, when the unit's verdict from the baseline to the working tree is
-compatible or identical. It writes the list into the descriptor, which
+compatible or identical, or when the current hash equals the first hash of the
+file. It writes the list into the descriptor, which
 `ridl describe` prints as `compatible`, and into the `catalog.compatible` field
 of the codegen model that a plugin receives. The recorded file is not changed by
 a build; only `ridl baseline` changes it.
@@ -213,7 +216,9 @@ The list is empty in these cases:
   `.ir.json` snapshot;
 - the baseline holds no package of the unit;
 - the unit has no `<unit>.catalogs` file;
-- the unit's verdict from the baseline to the working tree is breaking.
+- the unit's verdict from the baseline to the working tree is breaking and the
+  current hash differs from the first hash of the file.
+- the build has an error diagnostic, so it writes no artifacts.
 
 `ridlc build` reads no baseline, so the descriptors and the codegen requests it
 writes carry an empty list. `ridl build` is the command that fills it.
