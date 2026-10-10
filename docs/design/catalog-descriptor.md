@@ -3,7 +3,8 @@
 The FlatBuffers file per unit that an engine reads without decoding the IR, as
 built. The binding choices are [ADR-0014](../decisions/ADR-0014-ir-encodings.md)
 decision 15 (the catalog hash: its input, its determinism rule, where it is
-computed, and its golden test),
+computed, and its golden test; and, as amended 2026-10-09, the compatible
+catalogs),
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 5 as amended 2026-10-03 (the toolchain may depend on planus; `ridl-rt`
 and every generated package must not),
@@ -37,24 +38,27 @@ Sebastien reviews the lane's delegated decisions in the driver's
 
 ## Where the code is
 
-| What                                                                             | Where                                                        |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| The schema                                                                       | `crates/ridl-descriptor/schema/catalog.fbs`                  |
-| The generated accessors (committed)                                              | `crates/ridl-descriptor/src/generated.rs`                    |
-| The generator and its drift test                                                 | `xtask/src/descriptor.rs` (`cargo xtask descriptor-codegen`) |
-| `finish`, `verify`, `SCHEMA_VERSION`, `FILE_IDENTIFIER`, `FILE_SUFFIX`           | `crates/ridl-descriptor/src/lib.rs`                          |
-| The lowering from the IR (`lower`, `LowerError`, the `type_name` spelling)       | `crates/ridl-descriptor/src/lower.rs`                        |
-| The interface numbers, copied from the IR                                        | `crates/ridl-descriptor/src/number.rs`                       |
-| The size states, the size context, the leaf model, the string byte capacity      | `crates/ridl-ir/src/projection/size.rs`                      |
-| The proto3 state                                                                 | `crates/ridl-ir/src/projection/size/proto3.rs`               |
-| The FlatBuffers state                                                            | `crates/ridl-ir/src/projection/size/flatbuffers.rs`          |
-| The JSON view                                                                    | `crates/ridl-descriptor/src/describe.rs`                     |
-| The catalog hash (re-exported as `ridl_descriptor::hash`)                        | `crates/ridl-ir/src/catalog_hash.rs`                         |
-| The proto3 scalar table and field-number limits both sides read                  | `crates/ridl-ir/src/projection/proto3.rs`                    |
-| `Emit::Catalog`, `write_emits`, `lower_workspace_system`, `embed_catalog_hashes` | `crates/ridlc/src/lib.rs`                                    |
-| `ridl describe` (`run_describe`)                                                 | `crates/ridl/src/main.rs`                                    |
-| The port's catalog check in the generated face                                   | `crates/ridl-backend-rust/src/face.rs`                       |
-| The planus boundary                                                              | `xtask/tests/oracle_boundary.rs`                             |
+| What                                                                             | Where                                                                                                          |
+| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| The schema                                                                       | `crates/ridl-descriptor/schema/catalog.fbs`                                                                    |
+| The generated accessors (committed)                                              | `crates/ridl-descriptor/src/generated.rs`                                                                      |
+| The generator and its drift test                                                 | `xtask/src/descriptor.rs` (`cargo xtask descriptor-codegen`)                                                   |
+| `finish`, `verify`, `SCHEMA_VERSION`, `FILE_IDENTIFIER`, `FILE_SUFFIX`           | `crates/ridl-descriptor/src/lib.rs`                                                                            |
+| The lowering from the IR (`lower`, `LowerError`, the `type_name` spelling)       | `crates/ridl-descriptor/src/lower.rs`                                                                          |
+| The interface numbers, copied from the IR                                        | `crates/ridl-descriptor/src/number.rs`                                                                         |
+| The size states, the size context, the leaf model, the string byte capacity      | `crates/ridl-ir/src/projection/size.rs`                                                                        |
+| The proto3 state                                                                 | `crates/ridl-ir/src/projection/size/proto3.rs`                                                                 |
+| The FlatBuffers state                                                            | `crates/ridl-ir/src/projection/size/flatbuffers.rs`                                                            |
+| The JSON view                                                                    | `crates/ridl-descriptor/src/describe.rs`                                                                       |
+| The catalog hash (re-exported as `ridl_descriptor::hash`)                        | `crates/ridl-ir/src/catalog_hash.rs`                                                                           |
+| The proto3 scalar table and field-number limits both sides read                  | `crates/ridl-ir/src/projection/proto3.rs`                                                                      |
+| `Emit::Catalog`, `write_emits`, `lower_workspace_system`, `embed_catalog_hashes` | `crates/ridlc/src/lib.rs`                                                                                      |
+| `ridl describe` (`run_describe`)                                                 | `crates/ridl/src/main.rs`                                                                                      |
+| `ridl baseline`'s chain (`write_catalog_histories`), `ridl build`'s list         | `crates/ridl/src/catalogs.rs`; `run_baseline`, `publish_baseline` and `run_build` in `crates/ridl/src/main.rs` |
+| The `<unit>.catalogs` file (`CatalogHistory`, `parse`, `render`)                 | `crates/ridl-core/src/catalog_history.rs`                                                                      |
+| The verdict restricted to one unit (`unit_verdict`)                              | `crates/ridl-diff/src/unit_verdict.rs`                                                                         |
+| The port's catalog check in the generated face                                   | `crates/ridl-backend-rust/src/face.rs`                                                                         |
+| The planus boundary                                                              | `xtask/tests/oracle_boundary.rs`                                                                               |
 
 ## The artifact
 
@@ -126,7 +130,7 @@ are those whose `unit` is the unit name (`ridl_ir::v2::unit_of`). It returns
 
 - **The catalog.** `version`; `name`, the unit name; `hash`, the 32-byte catalog
   hash; `toolchain`, the version of the crate that wrote the file; `interfaces`;
-  and `retired`.
+  `retired`; and `compatible`.
 - **The numbers are the IR's.** Each `Interface` carries its `name`, `number`
   and `provisional`, copied from the IR's `Interface.number` and
   `Interface.provisional`, which `ridl-sem` folds from `interfaces.lock`. The
@@ -147,6 +151,19 @@ are those whose `unit` is the unit name (`ridl_ir::v2::unit_of`). It returns
   peer that still speaks a retired interface. The IR spelling and the anchor
   package that carries an entry which names no source package of the unit are
   stated in ridl reference §11.
+- **The compatible list** is the `Catalog.compatible` vector of
+  `EarlierCatalog { hash }` tables, each hash 32 bytes, appended after `retired`
+  and not `required`: `SCHEMA_VERSION` stays 1, a file written before the field
+  existed verifies and reads as absent, and `verify` walks the field when it is
+  present. `lower` takes the unit's list as a parameter and writes it in the
+  order given; it computes none. The list holds the hashes of the earlier
+  catalogs of the unit that the toolchain judged compatible with this one,
+  newest first, and never this catalog's own hash. `ridl describe` prints it as
+  `compatible`, an array of 32-number arrays, empty when the field is absent or
+  the list is empty. The codegen model carries the same list as
+  `Catalog.compatible` (`repeated bytes`, field 4), for every request of every
+  source package of the unit. How the list is computed is stated under "The
+  catalog hash".
 - **Members.** One `Member` per interaction, in body order: `name`, `ordinal`
   (the position in the body, ridl §11), `kind` (`Signal`, `Event`, `Command`,
   `Query`, `Fixed`), `payloads`, and `timing` (`mode`, `min_us`, `max_us`) when
@@ -186,6 +203,61 @@ decision 15 is the full rule, with the determinism rule for the binary and the
 reason the canonical JSON is not the input. There is one identity: the schema
 hash driftsys/ridl#275 asked for is this hash, so it does not depend on which
 wire schema a build emits.
+
+**The compatible catalogs.** The hash identifies one catalog exactly. Beside it,
+the descriptor and the codegen model list the earlier hashes the toolchain
+judged compatible with the current catalog, so that a provider can accept an
+`attach` that names one of them (frame specification §6.1). The list is not an
+input of the hash, and a test checks that two builds differing only in the list
+have the same hash. The rule is
+[ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15, amended
+2026-10-09, as built:
+
+- **The chain file.** `ridl baseline` writes `<unit>.catalogs` beside the
+  snapshots, one per unit with an interface shape: a header line that starts
+  with `#`, then one lowercase hexadecimal hash per line, newest first, no hash
+  twice. The first line is the hash of the catalog being published, computed
+  over the build's scope (`catalog_scope`), so it equals the hash
+  `ridl build
+  --emit catalog` writes. The following lines are copied from the
+  file of the replaced baseline, as they are, when the unit's verdict from the
+  replaced snapshots to the fresh ones is `Compatible` or `Identical`. A
+  `Breaking` verdict, a unit with no snapshot in the replaced baseline, and a
+  replaced baseline with no file for the unit each write the one new hash. A
+  hash recorded at publication is never recomputed from a snapshot. A file that
+  cannot be read or parsed stops the publication, exit 2, naming the file and
+  the line.
+- **The verdict is per unit.** `ridl_diff::unit_verdict` takes the maximum
+  verdict over the changes of a `DiffReport` that concern the unit: a change in
+  one of the unit's source packages, on either side, or in a declaration that an
+  interface of the unit reaches (`reachable_decls`), on either side. A breaking
+  change in a declaration the unit does not reach leaves the unit's chain
+  intact. `ridl diff`'s own report and exit code are unchanged.
+- **Publication order.** `publish_baseline` removes every published `*.catalogs`
+  file, moves the fresh snapshots in, moves the fresh `*.catalogs` files in, and
+  then removes the stale snapshots. The histories are written to the staging
+  directory only after both publication gates have passed. After an
+  interruption, a unit has its fresh file or none, and a unit with none starts
+  its chain again, so a history is never read beside a snapshot of another
+  baseline.
+- **The build emits the list.** `ridl build` computes it when the build writes a
+  catalog descriptor or generates code, and passes it to
+  `ridlc::run_build_with`; `ridlc` reads no baseline (ADR-0008 decisions 9 and
+  14), and `ridlc build` writes an empty list. For each unit that has an
+  interface shape and a package in the baseline, `ridl build` reads the unit's
+  `<unit>.catalogs` file and lists its hashes, less the current catalog's hash,
+  when the unit's verdict from the baseline to the tree is `Compatible` or
+  `Identical`. The list is empty for a `Breaking` verdict, for a workspace with
+  no `.ridl/baseline/` directory or one holding no `.ir.json` snapshot, for a
+  unit with no package in the baseline (a file left under its name is not read),
+  and for a unit with no file. A tree that is breaking relative to the baseline
+  is built with an empty list, and the recorded chain is not changed until the
+  next publication. A baseline that is present and cannot be loaded, and a file
+  that cannot be read, are exit 2. A workspace that does not compile gets no
+  list.
+- **No runtime reads the list.** The generated face compares only its own
+  `CATALOG` (ADR-0023 decision 8), and no runtime in this workspace speaks the
+  frame, so nothing here accepts an `attach` on the strength of the list.
 
 It is computed in `ridl-ir`, not in `ridl-descriptor`, because three artifacts
 carry it and `ridl-ir` is below all of them:
@@ -404,21 +476,25 @@ inline shape, although the catalog descriptor carries that shape
 
 ## Tests
 
-| What                                                                                | Where                                                                            |
-| ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| The schema round trip, and the planus header behaviour `finish` works around        | `crates/ridl-descriptor/tests/round_trip.rs`                                     |
-| The verifier: short, foreign, wrong version, truncated, flipped, every walked field | `crates/ridl-descriptor/tests/verify.rs`                                         |
-| What the lowering writes, per kind and shape; stable bytes across runs              | `crates/ridl-descriptor/tests/lower.rs`                                          |
-| The pinned corpus hash                                                              | `crates/ridl-descriptor/tests/golden_hash.rs`                                    |
-| Every `MAX_SIZE` the Rust backend writes equals the descriptor's FlatBuffers bound  | `crates/ridl-descriptor/tests/codec_agreement.rs`                                |
-| The two size states, the leaf model, the string capacity                            | unit tests in `crates/ridl-ir/src/projection/size.rs` and `size/`                |
-| The JSON view                                                                       | unit tests in `crates/ridl-descriptor/src/describe.rs`                           |
-| The emit, the hash equal to the face's, and `ridl describe` (exit codes, snapshot)  | `crates/ridl/tests/describe_cli.rs`                                              |
-| The hash does not depend on which wire schema a build emits (driftsys/ridl#275)     | `crates/ridl/tests/facade.rs`                                                    |
-| Each region carries its catalog's hash, `ridl.std` included                         | `crates/ridlc/tests/cli.rs`                                                      |
-| The catalog check in the emitted face, and its panics                               | `crates/ridl-backend-rust/tests/face_generation.rs`, `tests/interaction_face.rs` |
-| The planus boundary                                                                 | `xtask/tests/oracle_boundary.rs`                                                 |
-| The accessors match the schema                                                      | `xtask/src/descriptor.rs`                                                        |
+| What                                                                                | Where                                                                                                 |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| The schema round trip, and the planus header behaviour `finish` works around        | `crates/ridl-descriptor/tests/round_trip.rs`                                                          |
+| The verifier: short, foreign, wrong version, truncated, flipped, every walked field | `crates/ridl-descriptor/tests/verify.rs`                                                              |
+| What the lowering writes, per kind and shape; stable bytes across runs              | `crates/ridl-descriptor/tests/lower.rs`                                                               |
+| The pinned corpus hash                                                              | `crates/ridl-descriptor/tests/golden_hash.rs`                                                         |
+| Every `MAX_SIZE` the Rust backend writes equals the descriptor's FlatBuffers bound  | `crates/ridl-descriptor/tests/codec_agreement.rs`                                                     |
+| The two size states, the leaf model, the string capacity                            | unit tests in `crates/ridl-ir/src/projection/size.rs` and `size/`                                     |
+| The JSON view                                                                       | unit tests in `crates/ridl-descriptor/src/describe.rs`                                                |
+| The emit, the hash equal to the face's, and `ridl describe` (exit codes, snapshot)  | `crates/ridl/tests/describe_cli.rs`                                                                   |
+| The hash does not depend on which wire schema a build emits (driftsys/ridl#275)     | `crates/ridl/tests/facade.rs`                                                                         |
+| Each region carries its catalog's hash, `ridl.std` included                         | `crates/ridlc/tests/cli.rs`                                                                           |
+| The catalog check in the emitted face, and its panics                               | `crates/ridl-backend-rust/tests/face_generation.rs`, `tests/interaction_face.rs`                      |
+| The planus boundary                                                                 | `xtask/tests/oracle_boundary.rs`                                                                      |
+| The `<unit>.catalogs` format: header, order, a bad line, a duplicate                | unit tests in `crates/ridl-core/src/catalog_history.rs`                                               |
+| The unit verdict: the unit's packages, a reached declaration, an unreached break    | unit tests in `crates/ridl-diff/src/unit_verdict.rs`                                                  |
+| The chain at publication, the publication order, the build's list, the empty cases  | `crates/ridl/tests/catalog_chain.rs`                                                                  |
+| The list in the descriptor, in the model, and the empty list `ridlc build` writes   | `crates/ridl-descriptor/tests/lower.rs`, `verify.rs`; `crates/ridlc/tests/cli.rs`, `codegen_model.rs` |
+| The accessors match the schema                                                      | `xtask/src/descriptor.rs`                                                                             |
 
 The FlatBuffers bound is also checked against an encoder: the round trip in
 `crates/ridl-backend-rust/tests/flatbuffers_roundtrip.rs` encodes the largest
@@ -436,7 +512,7 @@ the status in the code and the rejected alternatives in short form.
 | D-1 Two descriptors; the system descriptor is self-contained | Half built: a catalog descriptor for every unit with an interface shape. The system descriptor is not built.                                                                                                                                                                                                | A system descriptor that references catalogs by hash only; one file per machine.                                                                                              |
 | D-2 Descriptors are FlatBuffers; the IR stays protobuf       | Built. ADR-0014 is unchanged for the IR.                                                                                                                                                                                                                                                                    | Protobuf descriptors; JSON or TOML as the artifact; both encodings.                                                                                                           |
 | D-3 Hand-written, versioned, append-only schemas             | Built for the one schema, `catalog.fbs`. The CI check that compiles the schemas with both `flatc` and `flatcc` is not built; it waits for a C engine.                                                                                                                                                       | A descriptor schema generated from the IR schema.                                                                                                                             |
-| D-4 What the catalog descriptor contains                     | Built, as "What a catalog contains" states. Of the member's bounds and quality-of-service terms, only the timing is carried, because it is the only one the IR has for an interaction. No `stream` flag (driftsys/ridl#336).                                                                                | —                                                                                                                                                                             |
+| D-4 What the catalog descriptor contains                     | Built, as "What a catalog contains" states, including the `compatible` list appended to the catalog table. Of the member's bounds and quality-of-service terms, only the timing is carried, because it is the only one the IR has for an interaction. No `stream` flag (driftsys/ridl#336).                 | —                                                                                                                                                                             |
 | D-5 What the system descriptor contains                      | Not built.                                                                                                                                                                                                                                                                                                  | —                                                                                                                                                                             |
 | D-6 A size state per payload and encoding                    | Built for proto3 and FlatBuffers, as "The size states" states. `repr(C)` has no rows (driftsys/ridl#317). The max-size conformance test is built for FlatBuffers only.                                                                                                                                      | One number per payload; a number per type rather than per interaction; an induced message, request message or `ok`/`err` union for a payload that is not a struct or a union. |
 | D-7 Not in version 1                                         | Holds: no `.bfbs` payload layouts, no transport per crossing, no envelope or framing overhead.                                                                                                                                                                                                              | —                                                                                                                                                                             |

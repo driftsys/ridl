@@ -62,7 +62,7 @@ Usage: ridl <COMMAND>
 
 Commands:
   check     Type-check a file, package, or workspace (defaults to the current directory)
-  baseline  Publish the current workspace as a baseline: one `<pkg-name>.ir.json` snapshot per package, written to `.ridl/baseline/` at the workspace root
+  baseline  Publish the current workspace as a baseline: one `<pkg-name>.ir.json` snapshot per package and one `<unit>.catalogs` file per unit with an interface, written to `.ridl/baseline/` at the workspace root
   build     Compile to the selected artifacts (defaults to the current directory)
   test      Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a compile error
   fmt       Reformat `.typl`, `.ridl` and `.rsdl` files in place (defaults to the current directory)
@@ -373,7 +373,7 @@ ridl baseline --help
 ```
 
 ```text
-Publish the current workspace as a baseline: one `<pkg-name>.ir.json` snapshot per package, written to `.ridl/baseline/` at the workspace root
+Publish the current workspace as a baseline: one `<pkg-name>.ir.json` snapshot per package and one `<unit>.catalogs` file per unit with an interface, written to `.ridl/baseline/` at the workspace root
 
 Usage: ridl baseline [OPTIONS] [PATH]
 
@@ -381,7 +381,7 @@ Arguments:
   [PATH]  [default: .]
 
 Options:
-      --out <DIR>  Write the snapshots here instead of `.ridl/baseline/`
+      --out <DIR>  Write the snapshots and the catalog files here instead of `.ridl/baseline/`
   -h, --help       Print help
 ```
 
@@ -391,8 +391,10 @@ and, exactly like [`ridl check`](#ridl-check), `ridl.lock` at the workspace
 root when the manifest declares `[imports]` (`ridl baseline` builds through
 `ridlc build`, non-frozen, so the same materialization step runs). Publishing
 the snapshots is wholesale: the target directory ends up holding exactly the
-snapshots the workspace declares now, and nothing else in that directory is
-touched. The snapshots stay one per source package; `ridl diff` groups them by
+snapshots the workspace declares now. Nothing else in that directory is touched
+except the `*.catalogs` files, which publication replaces as
+[the catalog files](#the-catalog-files) below describes. The snapshots stay one
+per source package; `ridl diff` groups them by
 unit when it compares them. The workspace's interface numbers must be recorded first: a
 provisional number is refused (RIDL-411, under the publication gate below), so
 a package with interfaces runs plain [`ridl lock`](#ridl-lock) before its
@@ -407,6 +409,38 @@ ridl baseline && find .ridl/baseline -type f | sort
 .ridl/baseline/veh.cluster.ir.json
 .ridl/baseline/veh.common.ir.json
 ```
+
+**The catalog files.** Beside the snapshots, `ridl baseline` writes one
+`<unit>.catalogs` file per unit that has at least one interface shape, named
+after the unit's manifest `name`, in the same directory. A file is a text file:
+a first line that starts with `#`, then one catalog hash per line as 64
+lowercase hexadecimal characters, newest first. A blank line and a line that
+starts with `#` are skipped, and a hash is listed once. The first hash is the
+catalog hash of the baseline being published, computed as
+[`ridl build --emit catalog`](#ridl-build) computes it. The hashes that follow
+are the ones of the file being replaced, copied as they are and never
+recomputed from a snapshot. They are carried over only when `ridl diff`'s
+classifier, scoped to the unit, judges the change from the replaced snapshots to
+the fresh ones compatible or identical. The scope is the unit's own source
+packages and every declaration its interfaces reach, in the unit or in another
+one, so a breaking change in a package that the unit does not reach leaves the
+unit's chain as it was. A breaking change restarts the chain: the file then
+holds the one new hash. A unit with no published snapshot, or with no
+`<unit>.catalogs` file in the replaced baseline, also starts a chain with the
+one new hash, and a file left under the name of a unit that had no published
+snapshot is not carried. A file that cannot be read, or has a line that is
+neither a comment nor a hash, stops the publication with exit 2: the message
+names the file and the line, and says to repair the file or remove it to start
+the unit's chain again.
+
+Publication replaces the files in this order, so that an interrupted run never
+leaves a history beside a snapshot it does not describe: every published
+`*.catalogs` file is removed, then the fresh snapshots move in, then the fresh
+`*.catalogs` files move in, and last the snapshots of packages the workspace no
+longer declares are removed. A file left by a unit that no longer has an
+interface shape is removed by the first step and not written again. The
+histories are written only after the publication gate below has passed, so a
+refused run leaves every published file as it was.
 
 **The publication gate.** Before replacing the published snapshots,
 `ridl baseline` compares the snapshot it is about to publish against the one
@@ -623,6 +657,22 @@ When no name can be right, the message says which reason it is — the workspace
 declares no system, or the system declares no deployment. A deployment that an
 `RSDL-7xx` error removed from the system is not unknown either: the build
 reports that error and exits 1.
+
+**The compatible catalogs.** When the build writes a catalog descriptor or
+generates code, `ridl build` reads `.ridl/baseline/` at the workspace root, as
+[`ridl check`](#ridl-check) finds it, and writes into the unit's descriptor and
+into the `catalog.compatible` field of the unit's codegen model the earlier
+catalog hashes it judges compatible with the current catalog. The list comes from
+the unit's `<unit>.catalogs` file (see [`ridl baseline`](#ridl-baseline)), in the
+file's order, newest first, and it never holds the current catalog's own hash.
+It is empty when the workspace has no baseline directory or the directory holds
+no `.ir.json` snapshot, when the baseline holds no package of the unit, when
+the unit has no `<unit>.catalogs` file, and when `ridl diff`'s classifier, scoped
+to the unit, judges the change from the baseline to the tree breaking. The
+recorded file is not changed by the build. An IR dump reads no baseline. A
+baseline that is present and cannot be loaded, or a `<unit>.catalogs` file that
+cannot be read, is exit 2. A workspace that does not compile gets no list: the
+build reports its errors as it would without a baseline.
 
 **`rust` is a language backend**, and it writes the whole generated surface of
 a package in one file: the domain types (a struct, an enum, an enum set, a
@@ -1780,10 +1830,12 @@ whole with exit code 2.
 
 The transcript below is abridged: it is the output for the test corpus in
 `crates/ridl/tests/baseline-corpus`, with each `...` line standing for lines
-that were removed. The keys print in alphabetical order. The 32 bytes of the
-catalog hash come first, then one entry per interface, then the unit name,
-the retired numbers, the toolchain version that wrote the file, and the
-descriptor's schema version.
+that were removed. The keys print in alphabetical order. First comes
+`compatible`, the earlier catalog hashes the descriptor lists as compatible with
+this one, each as its 32 bytes; it is empty here, because the corpus's
+published baseline holds no `corpus.baseline.catalogs` file. Then come the 32 bytes of the catalog hash, one entry per
+interface, the unit name, the retired numbers, the toolchain version that wrote
+the file, and the descriptor's schema version.
 
 ```sh
 ridl build crates/ridl/tests/baseline-corpus --emit catalog
@@ -1792,6 +1844,7 @@ ridl describe out/corpus.baseline.catalog.binfb
 
 ```json
 {
+  "compatible": [],
   "hash": [
     105,
     123,
@@ -2001,7 +2054,9 @@ Options:
 **It writes** the same artifacts as `ridl build` — and `ridl.lock` under the
 same `[imports]` condition — under the `--out-dir` you must now name
 explicitly. `--plugin`, `--plugin-timeout` and `--deployment` are the same three
-flags as on [`ridl build`](#ridl-build), spelled and documented identically:
+flags as on [`ridl build`](#ridl-build), spelled and documented identically.
+`ridlc` reads no baseline, so its descriptors and codegen requests carry an
+empty `compatible` list; `ridl build` is the command that fills it:
 
 ```sh
 ridlc build . --out-dir out && find out -type f | sort

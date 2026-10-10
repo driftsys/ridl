@@ -68,6 +68,7 @@ with each release; the excerpt shows it as `<version>`:
 
 ```json
 {
+  "compatible": [],
   "hash": [ ... ],
   "interfaces": [
     {
@@ -122,9 +123,11 @@ does not read, makes `ridl describe` exit with code 2. The
 
 - **The catalog**: the unit `name`; the `hash`, which identifies this version
   of the unit (see below); `toolchain`, the version of `ridl` that wrote the
-  file; the schema `version`; the `interfaces`; and the `retired` interfaces,
+  file; the schema `version`; the `interfaces`; the `retired` interfaces,
   each with its name and number, so a reader can refuse a peer that still uses
-  one.
+  one; and `compatible`, the hashes of earlier catalogs of the unit that the
+  toolchain judged compatible with this one (see
+  [The compatible catalogs](#the-compatible-catalogs)).
 - **Each interface**: its `name`, qualified relative to the unit (`Cabin` for
   an interface of the root source package, `cluster.Speed` for one of the
   source package `cluster` below it); its `number`, which is one space per
@@ -156,6 +159,24 @@ The descriptor does not contain type layouts, field lists, constraints other
 than the ones that bound a payload's size, contract clauses, or initial values.
 A reader that needs a payload's shape reads the schema that the wire backend
 emits.
+
+## The compatible catalogs
+
+The `hash` identifies one version of the unit exactly. `compatible` lists, as
+32-byte hashes, the earlier versions of the unit that `ridl diff` judged
+compatible with this one, newest first; the current hash is never in it. A
+reader built for one of those versions can be accepted by a provider that serves
+this one, which is the use the frame specification makes of the list
+([section 6.1][attach]). No program in this repository reads the list yet.
+
+The list comes from the published baseline. `ridl baseline` records, for each
+unit with an interface, a `<unit>.catalogs` file beside the snapshots, and
+`ridl build` reads it. The list is empty when there is no baseline, when the
+unit has no file, and after a breaking change, which restarts the chain. A
+change in another unit counts for this unit only when an interface of this unit
+reaches the changed declaration. `ridlc build` reads no baseline and writes an
+empty list. The [CLI reference](cli-reference.md#ridl-baseline) states the file
+format and the rules.
 
 ## The catalog and the face
 
@@ -202,5 +223,6 @@ built; the
   input, the size states, and the verifier.
 
 [design]: https://github.com/driftsys/ridl/blob/main/docs/design/catalog-descriptor.md
+[attach]: reference/frame.md#61-attach-and-attached
 [hash]: https://github.com/driftsys/ridl/blob/main/docs/design/catalog-descriptor.md#the-catalog-hash
 [not-built]: https://github.com/driftsys/ridl/blob/main/docs/design/catalog-descriptor.md#not-built

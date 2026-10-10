@@ -103,12 +103,13 @@ enum Command {
         format: CheckFormat,
     },
     /// Publish the current workspace as a baseline: one `<pkg-name>.ir.json`
-    /// snapshot per package, written to `.ridl/baseline/` at the workspace
-    /// root.
+    /// snapshot per package and one `<unit>.catalogs` file per unit with an
+    /// interface, written to `.ridl/baseline/` at the workspace root.
     Baseline {
         #[arg(default_value = ".")]
         path: PathBuf,
-        /// Write the snapshots here instead of `.ridl/baseline/`.
+        /// Write the snapshots and the catalog files here instead of
+        /// `.ridl/baseline/`.
         #[arg(long, value_name = "DIR")]
         out: Option<PathBuf>,
     },

@@ -30,6 +30,9 @@ Version: 0.1.0 — Draft
 > the WebSocket transport (driftsys/ridl#265); the second is a runtime's own
 > binder contract on Android, outside this repository (§11.2, which reverses an
 > earlier AIDL binding generated per interface).
+>
+> The catalog descriptor carries the list of compatible earlier catalog hashes
+> that §6.1 names, and no runtime in this workspace reads it at `attach`.
 
 ---
 
@@ -523,10 +526,9 @@ recorded chain is left as it is until the next publication.
 2026-10-09, states the rule. The direction is fixed: an **older consumer**
 attaches to a **newer provider**. A newer consumer attaching to an older
 provider is refused `catalog_mismatch`, because no tool judges that direction
-and the provider is the authority on what it serves. **Not built yet:** the
-descriptor field, the chain file and the emit are driftsys/ridl#787; until it
-lands every descriptor carries no list, and the rule above with an empty list is
-the exact-match rule it replaces.
+and the provider is the authority on what it serves. The descriptor field, the
+chain file and the emit are built (driftsys/ridl#787). With an empty list the
+rule above is the exact-match rule.
 
 The catalog check is the peers' agreement on the contract, taken once. On a
 session whose `attach` named the provider's own hash, the two runtimes hold the
