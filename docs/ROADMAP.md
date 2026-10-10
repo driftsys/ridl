@@ -232,15 +232,27 @@ E10 value objects, E10.10 last ────────────────�
 
 E14.1 · E10, the typl debt ─→ Rust codegen finalized
       ─→ E11.7 FlatBuffers ─→ E4.5a IR stability ─→ E4.5b plugin protocol
-                                                 ─→ E11.8 proto3 · E11.12 repr(C)
+                                                 ─→ E11.8 proto3 · E11.12 repr(C), after #801
+#801 on-request encodings — depends on nothing ─→ E11.8 · E11.9 · E11.12
 
 E6 rsdl finalized and lowered to the IR — beside the lock; E6.17 last, landed
-E11.0 ridl-rt, landed ─┬─→ E11.1 frame spec ─→ E11.9 ridl-transport-ws
+E11.0 ridl-rt, landed ─┬─→ E11.1 frame spec ─→ (#801) ─→ E11.9 ridl-transport-ws
                        └─→ E11.15 ridl-loopback — no frame, no socket
 E11.13 interaction face MVP — deliberately out of sequence, before E11.1 and E11.9
       ─→ E11.14 the face and a codec reach ridl build — after E11.15 and one codec
 E3.1–E3.3 · E9.10 · E9.12 · E8 — a thread beside all of it
 ```
+
+**The on-request encodings change runs first among the three codec and transport
+stories (2026-10-09).** A new step, the manifest naming the encodings a build
+emits (driftsys/ridl#801), now sits before E11.8, E11.9 and E11.12. After it,
+those three are independent of each other. E11.9 lands over FlatBuffers, and
+`frame-specification.md` section 11.1 (the WebSocket fixed to proto3, encoding
+tag 2) is amended when E11.9 lands; the specification is unchanged until then.
+E11.8's conformance oracle is `prost` through `protox` instead of `protoc`
+(steering note decision D). E11.12 starts with its projection record. See
+[`2026-10-06-ws-and-payload-formats-steering.md`](wip/2026-10-06-ws-and-payload-formats-steering.md)
+sections 2 and 4.
 
 **The sequence changed on 2026-09-15.** It ran E6 before E11.0, and it had no
 place for the lock or for the catalog descriptor. E11.0 needed only the identity
@@ -484,11 +496,11 @@ unchanged; E11.9 keeps the transport. The two stories stay independent of each
 other: the loopback is not a degenerate transport, and the transport does not
 link it.
 
-| ID     | Story                                                                                                                     | Done when                                                                                                                                                                                                                                                                                                                                      | Size |
-| ------ | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| E11.1  | The frame specification — a logical frame with one binding per encoding; ordinal, kind, envelope, provenance, correlation | one document a second implementation could be written from                                                                                                                                                                                                                                                                                     | M    |
-| E11.9  | `ridl-transport-ws` — the WebSocket transport crate                                                                       | a contract reaches a second process over the transport, and E11.15's loopback runs the same tests with no socket                                                                                                                                                                                                                               | M    |
-| E11.15 | `ridl-loopback` — the in-process reference runtime: every port over a queue and a map, no IO                              | the loopback exposes one handle per port role with a `Sync` reader handle, plus the aggregate handle the generated face is built over, which ADR-0021 decision 12 permits a runtime to offer and this story requires; the interaction-face round trips run over the crate, and `crates/ridl-backend-rust/tests/support/loopback.rs` is deleted | M    |
+| ID     | Story                                                                                                                      | Done when                                                                                                                                                                                                                                                                                                                                      | Size |
+| ------ | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E11.1  | The frame specification — a logical frame with one binding per transport; ordinal, kind, envelope, provenance, correlation | one document a second implementation could be written from                                                                                                                                                                                                                                                                                     | M    |
+| E11.9  | `ridl-transport-ws` — the WebSocket transport crate                                                                        | a contract reaches a second process over the transport, and E11.15's loopback runs the same tests with no socket                                                                                                                                                                                                                               | M    |
+| E11.15 | `ridl-loopback` — the in-process reference runtime: every port over a queue and a map, no IO                               | the loopback exposes one handle per port role with a `Sync` reader handle, plus the aggregate handle the generated face is built over, which ADR-0021 decision 12 permits a runtime to offer and this story requires; the interaction-face round trips run over the crate, and `crates/ridl-backend-rust/tests/support/loopback.rs` is deleted | M    |
 
 **E11.1 landed** (driftsys/ridl#257). The frame specification is
 [`docs/specification/frame-specification.md`](specification/frame-specification.md):
@@ -735,7 +747,8 @@ discriminant question, not a naming one.
 three payload codecs. **Exit criteria:** a generated package links `ridl-rt`,
 constructs and validates its types, and round-trips a payload through
 FlatBuffers, through proto3 and through the `repr(C)` layout, with byte-level
-conformance against a `protoc`-generated implementation for proto3.
+conformance against a `prost`-generated implementation (through `protox`) for
+proto3.
 
 **E11.12 is a new identifier**, the next free one in Epic 11, for the `repr(C)`
 payload codec the 2026-09-12 note §3.3 adds. Its layout rules — the
@@ -746,11 +759,11 @@ decision 4 places them in a projection record of the shape of ADR-0017 and
 ADR-0019, written when the backend is — not in that record and not in the
 ADR-0018 amendments.
 
-| ID     | Story                                                                                                                                                                                                                                                                                               | Done when                                                                                                                                                                                                                   | Size |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| E11.7  | The FlatBuffers payload codec                                                                                                                                                                                                                                                                       | a payload round-trips through the library                                                                                                                                                                                   | L    |
-| E11.8  | The proto3 payload codec plus byte-level conformance against a `protoc`-generated implementation; it reads an absent non-optional scalar as its default, 0, as the FlatBuffers codec does (driftsys/ridl#472, ADR-0019 decision 9)                                                                  | our bytes parse there and its bytes parse here                                                                                                                                                                              | L    |
-| E11.12 | The `repr(C)` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type; also removes `#[repr(C)]` from the generated domain structs, which ADR-0020 decision 3 retires | a payload round-trips through the layout struct, the emitted header compiles as C, and no generated domain struct carries `#[repr(C)]` (a scalar newtype keeps `#[repr(transparent)]`, which ADR-0020 decision 3 preserves) | L    |
+| ID     | Story                                                                                                                                                                                                                                                                                                                                                                               | Done when                                                                                                                                                                                                                   | Size |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E11.7  | The FlatBuffers payload codec                                                                                                                                                                                                                                                                                                                                                       | a payload round-trips through the library                                                                                                                                                                                   | L    |
+| E11.8  | The proto3 payload codec plus byte-level conformance against a `prost`-generated implementation through `protox` (steering note decision D, [`2026-10-06-ws-and-payload-formats-steering.md`](wip/2026-10-06-ws-and-payload-formats-steering.md)); it reads an absent non-optional scalar as its default, 0, as the FlatBuffers codec does (driftsys/ridl#472, ADR-0019 decision 9) | our bytes parse there and its bytes parse here                                                                                                                                                                              | L    |
+| E11.12 | The `repr(C)` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type; also removes `#[repr(C)]` from the generated domain structs, which ADR-0020 decision 3 retires                                                                                 | a payload round-trips through the layout struct, the emitted header compiles as C, and no generated domain struct carries `#[repr(C)]` (a scalar newtype keeps `#[repr(transparent)]`, which ADR-0020 decision 3 preserves) | L    |
 
 **E11.7's `Done when` is met, and every decision of its design note is built.**
 A payload round-trips through the library, and the conformance obligation the
