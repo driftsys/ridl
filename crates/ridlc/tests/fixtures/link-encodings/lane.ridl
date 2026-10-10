@@ -1,0 +1,14 @@
+package veh.bench
+
+type Speed: km/h [0.0..250.0 step 0.5]
+
+interface LaneAssist {
+  command choose(speed: Speed) @[..50ms]
+}
+
+interface Horn {
+  command honk() @[..50ms]
+}
+
+service veh.bench.lane : LaneAssist
+service veh.bench.horn : Horn

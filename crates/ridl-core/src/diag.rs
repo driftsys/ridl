@@ -1230,6 +1230,20 @@ diag_codes! {
             "an event whose contract bound is not derivable is consumed by a link with no declared `depth`",
                 lint = "depth-underivable";
 
+        /// A consumer link of the selected deployment carries an encoding that
+        /// the emitted backend's `[backend.<name>] encodings` list does not
+        /// name. The link's encoding follows the encoding rule of
+        /// `docs/design/codegen-plugins.md`: a same-machine link carries
+        /// FlatBuffers, a different-machine or off-board link carries proto3
+        /// (`ridl_ir::codegen::encoding_of`). Warning: the build still writes
+        /// its artifacts, without a codec for that encoding. Raised by `ridlc`
+        /// on a build, once per emitted backend, because only a build knows
+        /// which backends are emitted.
+        RSDL_807 = "RSDL-807", Warning,
+            "a link of the selected deployment carries an encoding the emitted backend's `encodings` \
+             list does not name",
+                lint = "link-encoding-not-emitted";
+
         /// A `PLATFORM` distribution holds a component whose `requires` resolves
         /// into an `APPLICATION` distribution — tier inversion; a distribution
         /// without `tier` is exempt (rsdl §3.3, §16.1). Error. Raised by the
@@ -2155,6 +2169,7 @@ mod tests {
             ("RSDL-804", "unclaimed-backend-key"),
             ("RSDL-805", "depth-below-bound"),
             ("RSDL-806", "depth-underivable"),
+            ("RSDL-807", "link-encoding-not-emitted"),
             ("MANI-005", "unknown-manifest-key"),
             ("MANI-010", "unknown-lint"),
         ]

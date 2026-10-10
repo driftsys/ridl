@@ -157,6 +157,7 @@ MANI-010 is itself a lint, so the table can set its level.
 | `unclaimed-backend-key` | RSDL-804 | warn | a backend key whose namespace no configured backend claims |
 | `depth-below-bound` | RSDL-805 | warn | a declared `depth` is below `ceil(max / min)` for an event a covered link consumes |
 | `depth-underivable` | RSDL-806 | warn | an event whose contract bound is not derivable is consumed by a link with no declared `depth` |
+| `link-encoding-not-emitted` | RSDL-807 | warn | a link of the selected deployment carries an encoding the emitted backend's `encodings` list does not name |
 | `unknown-manifest-key` | MANI-005 | warn | unknown manifest key |
 | `unknown-lint` | MANI-010 | warn | `[lints]` entry names no lint, or its value is not a level |
 

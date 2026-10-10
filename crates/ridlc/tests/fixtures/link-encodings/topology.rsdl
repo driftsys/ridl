@@ -1,0 +1,17 @@
+package veh.bench
+
+component Lane { offers veh.bench.lane }
+component Klaxon { offers veh.bench.horn }
+component Panel { requires LaneAssist }
+component Telemetry { requires Horn }
+
+system Vehicle { Lane, Klaxon, Panel, Telemetry }
+
+deployment Bench for Vehicle {
+  machine Head { Lane, Klaxon, Panel }
+  machine Body { Telemetry }
+}
+
+deployment Lab for Vehicle {
+  machine Rig { Lane, Klaxon, Panel, Telemetry }
+}

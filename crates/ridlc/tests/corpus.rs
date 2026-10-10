@@ -855,6 +855,17 @@ const RSDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("RSDL-804", Showcase),
     ("RSDL-805", Showcase),
     ("RSDL-806", Showcase),
+    (
+        "RSDL-807",
+        Elsewhere {
+            fixture: "crates/ridlc/tests/fixtures/link-encodings/topology.rsdl",
+            reason: "the lint compares a link's encoding with the `encodings` list of each \
+                     backend a build emits, which only the build driver knows, so it is never a \
+                     compile diagnostic and `check` never raises it. Provoked by \
+                     `a_link_whose_encoding_is_not_emitted_warns_once` in \
+                     `crates/ridlc/tests/cli.rs`",
+        },
+    ),
     ("RSDL-901", Showcase),
     ("RSDL-903", Showcase),
     ("RSDL-904", Showcase),

@@ -46,6 +46,7 @@ use std::time::Duration;
 
 pub mod deps;
 mod design_lints;
+mod link_encodings;
 pub use design_lints::{check_design_lints, cohesion_groups};
 pub mod diff_side;
 pub use diff_side::{DiffSide, DiffSideError, load_diff_side};
@@ -653,6 +654,29 @@ impl Emit {
             .iter()
             .filter_map(|emit| emit.ir_dump_suffix().map(|suffix| (*emit, suffix)))
     }
+
+    /// The name of the `[backend.<name>]` table this emit reads, or `None`
+    /// for an emit that is not a backend: an IR dump, or the catalog
+    /// descriptor, which takes no option. An in-tree backend's table is named
+    /// after its language; the codegen model's is named `codegen-model`,
+    /// after its `--emit` value, although the backend itself reports the
+    /// language `model`.
+    pub(crate) fn backend_table(self) -> Option<&'static str> {
+        // The same discipline as `ir_dump_suffix`: a new emit must be
+        // classified here, or this crate's test targets do not build.
+        #[deny(
+            clippy::wildcard_enum_match_arm,
+            clippy::match_wildcard_for_single_variants
+        )]
+        match self {
+            Emit::Rust => Some("rust"),
+            Emit::TypeScript => Some("typescript"),
+            Emit::Proto => Some("proto"),
+            Emit::Flatbuffers => Some("flatbuffers"),
+            Emit::CodegenModel => Some("codegen-model"),
+            Emit::Catalog | Emit::IrJson | Emit::IrText | Emit::IrBinary => None,
+        }
+    }
 }
 
 /// The render-ready result of a [`run_check`] or [`run_build`] command, or of
@@ -909,7 +933,7 @@ fn run_build_inner<E: From<std::io::Error>>(
         checked,
         system,
         mut diagnostics,
-        sources,
+        mut sources,
         lints,
         codegen_header,
         backends,
@@ -983,6 +1007,31 @@ fn run_build_inner<E: From<std::io::Error>>(
                 FileId::DETACHED,
                 TextRange::default(),
             )),
+        }
+    }
+
+    // RSDL-807: a link of the selected deployment carries an encoding the
+    // emitted backend's `encodings` list does not name, once per backend the
+    // build emits — each code emit and each plugin. Raised here, before the
+    // levels are applied, so that `deny` makes it an error the emit gate
+    // below reads. The deployment is the one `select_deployment` selects
+    // below; a name no source declares draws nothing here and is reported
+    // there.
+    if let Some(selected) = requested_or_only(&declared_deployments(&system), deployment) {
+        let tables = emits.iter().filter_map(|emit| emit.backend_table()).chain(
+            resolved_plugins
+                .iter()
+                .map(|plugin| plugin.language.as_str()),
+        );
+        for table in tables {
+            diagnostics.extend(link_encodings::link_encoding_not_emitted(
+                &db,
+                &system,
+                selected,
+                table,
+                backends.get(table).map_or(&[], Vec::as_slice),
+                &mut sources,
+            ));
         }
     }
 
@@ -2055,10 +2104,20 @@ pub fn select_deployment(
                 has_system: system.is_some(),
             }
         }),
-        None => match declared {
-            [only] => Ok(lowered(only)),
-            _ => Ok(None),
-        },
+        None => Ok(requested_or_only(declared, None).and_then(lowered)),
+    }
+}
+
+/// The name of the deployment a build selects, before the lowering says
+/// whether it exists: the requested `name`, or, with none, the one deployment
+/// the source declares, and `None` for several declarations or none
+/// ([`select_deployment`] holds the rule in full). RSDL-807 reads this to
+/// know which deployment's links to compare, before the levels are applied.
+fn requested_or_only<'a>(declared: &'a [String], name: Option<&'a str>) -> Option<&'a str> {
+    match (name, declared) {
+        (Some(requested), _) => Some(requested),
+        (None, [only]) => Some(only.as_str()),
+        (None, _) => None,
     }
 }
 
@@ -2334,13 +2393,9 @@ fn write_emits(
                 continue;
             }
         };
-        // The manifest names the codegen model's table `codegen-model`, after
-        // its `--emit` value; the backend itself reports the language `model`.
-        let table = if matches!(emit, Emit::CodegenModel) {
-            "codegen-model"
-        } else {
-            backend.language()
-        };
+        let table = emit
+            .backend_table()
+            .expect("a code emit reads a backend table");
         let request = request_for(table).expect("a code emit builds the request");
         let response = backend.generate(&request);
         write_response(

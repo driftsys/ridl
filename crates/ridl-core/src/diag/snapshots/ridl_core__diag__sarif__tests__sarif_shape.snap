@@ -1317,6 +1317,16 @@ expression: log
               }
             },
             {
+              "id": "RSDL-807",
+              "name": "link-encoding-not-emitted",
+              "shortDescription": {
+                "text": "a link of the selected deployment carries an encoding the emitted backend's `encodings` list does not name"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
               "id": "RSDL-901",
               "shortDescription": {
                 "text": "a `PLATFORM` distribution holds a component whose `requires` resolves into an `APPLICATION` distribution"
@@ -1637,7 +1647,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 164,
+          "ruleIndex": 165,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"
