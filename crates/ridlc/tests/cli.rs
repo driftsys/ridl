@@ -1717,6 +1717,40 @@ fn a_plugin_receives_its_own_backend_table() {
     );
 }
 
+/// An in-tree emit receives the options of its own `[backend.<name>]` table.
+/// The codegen model backend takes no option, so a `[backend.codegen-model]`
+/// table with an `encodings` list makes `--emit codegen-model` fail naming the
+/// option; the same build without `--emit codegen-model` is not affected.
+#[test]
+fn an_in_tree_emit_receives_its_own_backend_table() {
+    let entry = Path::new("tests/fixtures/backend-table-model");
+    let out = TempDir::new("in-tree-own-table");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        entry.as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "codegen-model".as_ref(),
+    ]);
+    assert_eq!(code, 1, "stderr:\n{stderr}");
+    assert!(stderr.contains("encodings"), "stderr:\n{stderr}");
+
+    let out = TempDir::new("in-tree-other-table");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        entry.as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "proto".as_ref(),
+    ]);
+    assert_eq!(
+        code, 0,
+        "an emit with no table is handed no option, stderr:\n{stderr}"
+    );
+}
+
 /// Every request a build hands a plugin carries the selected deployment,
 /// whichever package the request is run for. Three cases: one deployment in
 /// the workspace and no flag, a flag that names one of two, and two
