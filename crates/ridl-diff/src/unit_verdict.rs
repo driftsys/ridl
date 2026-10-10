@@ -15,8 +15,9 @@ use crate::{DiffReport, Verdict};
 /// The function reads each change's [`Change::path`](crate::Change::path),
 /// which the walk builds as `<package>/<name>[/<member>...]`: the first
 /// `/`-separated segment is the dotted name of the package that holds the new
-/// side, or the old side when the package is gone, and the second, when present, is the bare name of a package-level
-/// declaration, interface or service of that package. A package name holds
+/// side, or the old side when the package is gone, and the second, when
+/// present, is the bare name of a package-level declaration, interface or
+/// service of that package. A package name holds
 /// dots and a declaration name holds none, so the first two segments joined
 /// by `.` are the declaration's canonical name, the key that
 /// [`reachable_decls`] uses.
@@ -231,9 +232,10 @@ mod tests {
         assert_eq!(unit_verdict(&report, "b", &old, &new), Verdict::Identical);
     }
 
-    // The mirror of `a_declaration_reached_only_on_the_new_side_concerns_the_unit`: the interaction that reached `c.T` is
-    // retired to a tombstone in its own slot, which is compatible, so only the
-    // old-side reach of `c.T` makes `a` breaking.
+    // The mirror of `a_declaration_reached_only_on_the_new_side_concerns_the_unit`:
+    // the interaction that reached `c.T` is retired to a tombstone in its own
+    // slot, which is compatible, so only the old-side reach of `c.T` makes `a`
+    // breaking.
     #[test]
     fn a_break_reached_only_through_a_retired_interaction_concerns_the_unit() {
         let mut a_old = unit_a("b.S");
@@ -253,6 +255,37 @@ mod tests {
         let report = diff_sets(&old, &new);
         assert_eq!(unit_verdict(&report, "a", &old, &new), Verdict::Breaking);
         assert_eq!(unit_verdict(&report, "b", &old, &new), Verdict::Identical);
+    }
+
+    /// Unit `b` where `struct S { t: c.T }`, so `b.S` reaches `c.T`.
+    fn unit_b_referencing_c() -> Package {
+        let mut s = one_field_struct("S", "t", IntWidth::I32);
+        if let Some(decl::Kind::StructDef(def)) = &mut s.kind
+            && let Some(struct_member::Member::Field(field)) = &mut def.members[0].member
+        {
+            field.r#type = Some(FieldType {
+                optional: false,
+                kind: Some(field_type::Kind::Named("c.T".to_owned())),
+            });
+        }
+        package("b", vec![s], Vec::new())
+    }
+
+    // `a` reaches `b.S`, which reaches `c.T`. The break is in `c.T` only, so
+    // it concerns `a` only through two hops. Unit `d` reaches nothing.
+    #[test]
+    fn a_break_reached_through_two_hops_concerns_the_unit() {
+        let old = vec![
+            unit_a("b.S"),
+            unit_b_referencing_c(),
+            unit_c(IntWidth::I32),
+            package("d", Vec::new(), Vec::new()),
+        ];
+        let mut new = old.clone();
+        new[2] = unit_c(IntWidth::I64);
+        let report = diff_sets(&old, &new);
+        assert_eq!(unit_verdict(&report, "a", &old, &new), Verdict::Breaking);
+        assert_eq!(unit_verdict(&report, "d", &old, &new), Verdict::Identical);
     }
 
     /// Package `a.sub` of unit `a`, holding `struct U { z: i32 }`.
