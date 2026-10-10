@@ -295,6 +295,24 @@ fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> Tok
         }
         FaceGap::Other => " No tracking issue owns this one: the reason above is the whole of it.",
     };
+    // An internal interface has no face, so its trailer cannot say that the
+    // face is built on the descriptor emitter.
+    let trailer = if internal {
+        quote! {
+            /// The refusal is raised by the descriptor emitter. The rest of
+            /// this package — its domain types, its codec, and every other
+            /// interface — is unaffected, which is why the build succeeded
+            /// (interaction-face design rule 2).
+        }
+    } else {
+        quote! {
+            /// Its descriptors are absent for the reason above: the refusal is
+            /// raised by the descriptor emitter, which the face is built on. The
+            /// rest of this package — its domain types, its codec, and every
+            /// other interface — is unaffected, which is why the build succeeded
+            /// (interaction-face design rule 2).
+        }
+    };
     quote! {
         #[doc = #headline]
         ///
@@ -302,11 +320,7 @@ fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> Tok
         ///
         #[doc = #owner]
         ///
-        /// Its descriptors are absent for the reason above: the refusal is
-        /// raised by the descriptor emitter, which the face is built on. The
-        /// rest of this package — its domain types, its codec, and every
-        /// other interface — is unaffected, which is why the build succeeded
-        /// (interaction-face design rule 2).
+        #trailer
         #[allow(dead_code, non_upper_case_globals)]
         const #name: () = ();
     }

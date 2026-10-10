@@ -169,8 +169,8 @@ fn an_internal_interface_gets_no_face_through_the_pipeline() {
         assert!(!source.contains(absent), "no `{absent}`:\n{source}");
     }
     assert!(
-        source.contains("pub(crate) struct Diagnostics;"),
-        "{source}"
+        source.contains("#[allow(dead_code)]\npub(crate) struct Diagnostics;"),
+        "the crate-visible descriptor allows dead code:\n{source}"
     );
     assert!(!source.contains("pub struct Diagnostics"), "{source}");
 }
@@ -202,6 +202,116 @@ interface Wide {
         .expect("owner line")..];
     assert!(owner.contains("driftsys/ridl#713"), "{text}");
     assert!(!text.contains("The interface is `internal`"), "{text}");
+}
+
+/// The skip note of a public interface whose query the face cannot carry
+/// names the call shape and its tracking issue. The command case above reaches
+/// the command arm of the owner match; this one reaches the query arm.
+#[test]
+fn a_public_interface_with_an_uncarried_query_leaves_the_call_shape_note() {
+    let source = r#"
+package face.query_shape
+
+type Level : integer [0..100]
+
+interface Wide {
+  query read(first: Level, second: Level): Level @[..50ms]
+}
+"#;
+    let output = ridlc::compile("query_shape.ridl", source);
+    let generated = generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+        .expect("generate_pipeline");
+    let text = generated.rust_source;
+    assert!(
+        text.contains("carries no generated interaction face"),
+        "{text}"
+    );
+    let owner = &text[text
+        .find("A call the face cannot carry")
+        .unwrap_or_else(|| panic!("the call-shape owner line:\n{text}"))..];
+    assert!(owner.contains("driftsys/ridl#713"), "{text}");
+}
+
+/// An internal interface whose descriptors are refused for a contract clause
+/// leaves the internal note: the descriptors headline, the clause reason, and
+/// the internal owner line in place of the clause owner. Its trailer does not
+/// say that a face is built on the descriptors, because the interface has no
+/// face.
+#[test]
+fn an_internal_interface_refused_for_a_clause_leaves_the_internal_note() {
+    let source = r#"
+package face.internal_clause
+
+type Level : integer [0..100]
+
+interface Summary {
+  signal level: Level @10ms
+}
+
+internal interface Guarded {
+  command set(arg: Level) [
+    require arg > 10 || arg < 5
+  ] @[..50ms]
+}
+"#;
+    let output = ridlc::compile("internal_clause.ridl", source);
+    let generated = generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+        .expect("generate_pipeline");
+    let text = generated.rust_source;
+    let note = text
+        .split("const __RIDL_NO_FACE_Guarded")
+        .next()
+        .expect("the note precedes its constant");
+    let note = &note[note
+        .rfind("Interface `Guarded`")
+        .unwrap_or_else(|| panic!("the note's headline:\n{text}"))..];
+    assert!(
+        note.contains("carries no generated interaction descriptors"),
+        "{note}"
+    );
+    assert!(note.contains("cannot translate contract clause"), "{note}");
+    assert!(
+        note.contains("The interface is `internal`, so it has no face in any case"),
+        "{note}"
+    );
+    for absent in [
+        "carries no generated interaction face",
+        "driftsys/ridl#704",
+        "which the face is built on",
+    ] {
+        assert!(!note.contains(absent), "no `{absent}`:\n{note}");
+    }
+    assert!(
+        note.contains("The refusal is raised by the descriptor emitter."),
+        "{note}"
+    );
+    assert!(text.contains("pub mod summary {"), "{text}");
+}
+
+/// An internal interface has no face module, but its descriptors are still
+/// emitted, so it still claims their names: a declaration named like one of
+/// them is refused, as it is for a public interface.
+#[test]
+fn an_internal_interface_still_claims_its_descriptor_names() {
+    let source = r#"
+package face.internal_claims
+
+type CabinTemperature : integer [-40..85]
+
+internal interface Cabin {
+  signal temperature: CabinTemperature @10ms
+}
+"#;
+    let output = ridlc::compile("internal_claims.ridl", source);
+    let err = generate_pipeline(&output.package, WireEncoding::FlatBuffers, &[])
+        .expect_err("the descriptor name collides with a declaration");
+    for part in [
+        "`CabinTemperature`",
+        "member `temperature`",
+        "interface `Cabin`",
+    ] {
+        assert!(err.message.contains(part), "no {part} in: {}", err.message);
+    }
 }
 
 /// An internal interface claims no face-module name, so its `snake_case` name
