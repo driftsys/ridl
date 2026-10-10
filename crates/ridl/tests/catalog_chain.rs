@@ -1339,7 +1339,7 @@ fn a_baseline_that_cannot_be_loaded_is_reported_before_a_deny_level_applies() {
         "ridl.toml",
         &format!("{MANIFEST}\n[lints]\nmissing-timing = \"deny\"\n"),
     );
-    let (code, stderr) = build(&root, out.path(), "ir-json");
+    let (code, stderr) = build(&root, out.path(), "catalog");
     assert_eq!(code, 1, "the lint at deny alone exits 1: {stderr}");
     assert!(stderr.contains("RIDL-100"), "{stderr}");
 
@@ -1353,5 +1353,6 @@ fn a_baseline_that_cannot_be_loaded_is_reported_before_a_deny_level_applies() {
     );
     let (code, stderr) = build(&root, out.path(), "catalog");
     assert_eq!(code, 2, "the baseline error wins over the lint: {stderr}");
-    assert!(stderr.contains("error: "), "{stderr}");
+    assert!(stderr.contains("ir.json"), "{stderr}");
+    assert!(!stderr.contains("RIDL-100"), "{stderr}");
 }
