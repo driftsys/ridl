@@ -70,7 +70,7 @@ Commands:
   lock      Allocate a number to every interface that has none and write each unit's `interfaces.lock`; with `--rename` or `--retire`, rewrite one unit's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for the file
   lsp       Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this. Stdio is the only transport
   mcp       Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
-  init      Scaffold a new unit in a directory that exists (defaults to the current directory): a package, or with `--workspace` a workspace and one member. Writes `ridl.toml` and one source file, and exits 2 without writing anything when a target file exists, the name is not a legal package name, or an existing manifest above the directory would claim it
+  init      Scaffold a new unit in a directory that exists (defaults to the current directory): a package, or with `--workspace` a workspace and one member. Writes `ridl.toml` and one source file, and exits 2 without writing anything when a target file exists, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the directory would make a manifest inside a unit (MANI-013)
   new       Create a directory, with its parents, and scaffold a new unit in it, as `ridl init` does. Exits 2 without writing anything when the path exists
   describe  Print a catalog descriptor as strict JSON, after verifying it
   help      Print this message or the help of the given subcommand(s)
@@ -1896,7 +1896,7 @@ ridl init --help
 ```
 
 ```text
-Scaffold a new unit in a directory that exists (defaults to the current directory): a package, or with `--workspace` a workspace and one member. Writes `ridl.toml` and one source file, and exits 2 without writing anything when a target file exists, the name is not a legal package name, or an existing manifest above the directory would claim it
+Scaffold a new unit in a directory that exists (defaults to the current directory): a package, or with `--workspace` a workspace and one member. Writes `ridl.toml` and one source file, and exits 2 without writing anything when a target file exists, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the directory would make a manifest inside a unit (MANI-013)
 
 Usage: ridl init [OPTIONS] [PATH]
 
@@ -1936,7 +1936,9 @@ stderr and nothing written, when a target file already exists, the path is not a
 directory, the name is not legal or holds a reserved word, or a `ridl.toml`
 above or below the package directory would make a manifest inside a unit
 (MANI-013): the directory sits inside another unit or inside a workspace, or it
-already holds a `ridl.toml` in a subdirectory. This command does not add a member
+already holds a `ridl.toml` in a subdirectory that `ridl check` would also
+reject. The search below is the loader's own: it skips directories whose name
+starts with a dot and does not follow symbolic links. This command does not add a member
 to an existing workspace. The search upward does not stop at a `.git` directory,
 because MANI-013 does not, and it follows symbolic links. Every target is
 checked before any file is written, the member files are written before the

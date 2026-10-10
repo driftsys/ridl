@@ -227,8 +227,8 @@ enum Command {
     /// directory): a package, or with `--workspace` a workspace and one
     /// member. Writes `ridl.toml` and one source file, and exits 2 without
     /// writing anything when a target file exists, the name is not a legal
-    /// package name, or an existing manifest above the directory would claim
-    /// it.
+    /// package name or holds a reserved word, or a `ridl.toml` above or below
+    /// the directory would make a manifest inside a unit (MANI-013).
     Init {
         /// The existing directory to scaffold into.
         #[arg(default_value = ".")]

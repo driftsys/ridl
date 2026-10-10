@@ -13,9 +13,11 @@
 //! `ridl.toml` at or above the target directory would claim it, or when a
 //! `ridl.toml` already sits below the package directory (a manifest inside a
 //! unit is MANI-013, ADR-0002 section 1). The search upward does not stop at
-//! a `.git` directory, because MANI-013 does not. It follows symbolic links,
-//! so the search sees the directory the operating system resolves the path
-//! to. Nothing is appended to an existing workspace, and nothing outside the
+//! a `.git` directory, because MANI-013 does not. It follows symbolic links
+//! in the path after `..` components are removed lexically, so it sees the
+//! directory the operating system resolves that path to. The search below is
+//! the loader's own, so the command refuses exactly where `ridl check` would
+//! raise MANI-013. Nothing is appended to an existing workspace, and nothing outside the
 //! target files is written. The member files are written before the root
 //! manifest, and a failed write removes the paths this command created, so a
 //! refusal leaves no partial scaffold. Exit codes follow ADR-0010 decision 1:
@@ -237,87 +239,69 @@ fn resolve(path: &Path) -> PathBuf {
     }
 }
 
-/// Refuses when a `ridl.toml` exists anywhere below `directory`, because the
-/// new manifest would then enclose it (MANI-013). Symbolic links and `.git`
-/// are not followed.
+/// Refuses when the loader would raise MANI-013 for a manifest below
+/// `directory`, because the new manifest would then enclose it. The search is
+/// the loader's own, [`ridl_core::workspace::find_nested_manifest`]. A
+/// directory that does not exist yet holds nothing.
 fn refuse_manifest_below(directory: &Path) -> Result<(), String> {
-    let mut stack = vec![directory.to_path_buf()];
-    while let Some(next) = stack.pop() {
-        let entries = match std::fs::read_dir(&next) {
-            Ok(entries) => entries,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(error) => return Err(format!("cannot read `{}`: {error}", next.display())),
-        };
-        for entry in entries {
-            let entry =
-                entry.map_err(|error| format!("cannot read `{}`: {error}", next.display()))?;
-            let path = entry.path();
-            let Ok(kind) = entry.file_type() else {
-                continue;
-            };
-            if kind.is_dir() {
-                if entry.file_name() != ".git" {
-                    stack.push(path);
-                }
-            } else if next != directory && entry.file_name() == "ridl.toml" {
-                return Err(format!(
-                    "`{}` holds a manifest below it, `{}`; a manifest inside a unit is an \
-                     error (MANI-013)",
-                    directory.display(),
-                    path.display()
-                ));
-            }
-        }
+    match ridl_core::workspace::find_nested_manifest(directory) {
+        Ok(None) => Ok(()),
+        Ok(Some(manifest)) => Err(format!(
+            "`{}` holds a manifest below it, `{}`; a manifest inside a unit is an \
+             error (MANI-013)",
+            directory.display(),
+            manifest.display()
+        )),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("cannot read `{}`: {error}", directory.display())),
     }
-    Ok(())
 }
 
 fn write(plan: Plan) -> Result<Plan, String> {
-    let first_missing = first_missing_ancestor(&plan.package_directory);
-    let mut created = Vec::new();
-    let result = write_files(&plan, &mut created);
+    let mut directories = Vec::new();
+    let mut files = Vec::new();
+    let result = write_all(&plan, &mut directories, &mut files);
     if result.is_err() {
-        for path in created.iter().rev() {
+        for path in files.iter().rev() {
             let _ = std::fs::remove_file(path);
         }
-        if let Some(directory) = first_missing {
-            let _ = std::fs::remove_dir_all(directory);
+        // `remove_dir` removes an empty directory only, so a directory that
+        // another process filled meanwhile is kept.
+        for path in directories.iter().rev() {
+            let _ = std::fs::remove_dir(path);
         }
     }
     result.map(|()| plan)
 }
 
-fn write_files(plan: &Plan, created: &mut Vec<PathBuf>) -> Result<(), String> {
-    std::fs::create_dir_all(&plan.package_directory).map_err(|error| {
-        format!(
-            "cannot create `{}`: {error}",
-            plan.package_directory.display()
-        )
-    })?;
+/// Creates the missing directories one by one, then the files. `directories`
+/// and `files` record what this call created, for the rollback.
+fn write_all(
+    plan: &Plan,
+    directories: &mut Vec<PathBuf>,
+    files: &mut Vec<PathBuf>,
+) -> Result<(), String> {
+    let missing: Vec<&Path> = plan
+        .package_directory
+        .ancestors()
+        .take_while(|ancestor| ancestor.symlink_metadata().is_err())
+        .collect();
+    for directory in missing.into_iter().rev() {
+        std::fs::create_dir(directory)
+            .map_err(|error| format!("cannot create `{}`: {error}", directory.display()))?;
+        directories.push(directory.to_path_buf());
+    }
     for (path, text) in &plan.files {
         let mut file = std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(path)
             .map_err(|error| format!("cannot write `{}`: {error}", path.display()))?;
-        created.push(path.clone());
+        files.push(path.clone());
         file.write_all(text.as_bytes())
             .map_err(|error| format!("cannot write `{}`: {error}", path.display()))?;
     }
     Ok(())
-}
-
-/// The shallowest ancestor of `directory` (or `directory` itself) that does
-/// not exist yet, which `create_dir_all` will create.
-fn first_missing_ancestor(directory: &Path) -> Option<PathBuf> {
-    let mut missing = None;
-    for ancestor in directory.ancestors() {
-        if ancestor.symlink_metadata().is_ok() {
-            break;
-        }
-        missing = Some(ancestor.to_path_buf());
-    }
-    missing
 }
 
 fn source(name: &str) -> String {
@@ -333,4 +317,26 @@ fn source(name: &str) -> String {
          \x20 signal speed: Speed @10ms\n\
          }}\n"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_workspace_root_manifest_is_written_last() {
+        let request = Request {
+            path: Path::new("/nonexistent-ridl-scaffold-test/proj"),
+            create: true,
+            workspace: true,
+            name: None,
+        };
+        let plan = plan(&request).expect("a plan for a path that does not exist");
+        let last = plan.files.last().expect("a planned file");
+        assert_eq!(
+            last.0,
+            Path::new("/nonexistent-ridl-scaffold-test/proj/ridl.toml")
+        );
+        assert!(last.1.starts_with("[workspace]"));
+    }
 }

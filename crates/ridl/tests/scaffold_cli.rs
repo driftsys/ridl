@@ -36,9 +36,27 @@ impl TempDir {
 
 impl Drop for TempDir {
     fn drop(&mut self) {
+        restore_permissions(&self.0);
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
+
+/// Makes every directory under `dir` writable again, so it can be removed.
+#[cfg(unix)]
+fn restore_permissions(dir: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o755));
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                restore_permissions(&entry.path());
+            }
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn restore_permissions(_dir: &Path) {}
 
 /// Runs `ridl` in `dir` with `args`, returning `(exit_code, stdout, stderr)`.
 fn ridl(dir: &Path, args: &[&str]) -> (i32, String, String) {
@@ -90,7 +108,7 @@ fn assert_clean(dir: &Path, args: &[&str]) {
 
 /// Asserts that `ridl args` run in `dir` refuses: exit 2, nothing on stdout,
 /// an `error:` line on stderr that holds `reason`, and `watched` unchanged.
-fn assert_refused(dir: &Path, args: &[&str], reason: &str, watched: &Path) {
+fn assert_refused(dir: &Path, args: &[&str], reason: &str, watched: &Path) -> String {
     let before = snapshot(watched);
     let (code, stdout, stderr) = ridl(dir, args);
     assert_eq!(code, 2, "{args:?} stderr:\n{stderr}");
@@ -98,6 +116,7 @@ fn assert_refused(dir: &Path, args: &[&str], reason: &str, watched: &Path) {
     assert!(stderr.starts_with("error: "), "stderr:\n{stderr}");
     assert!(stderr.contains(reason), "expected `{reason}` in:\n{stderr}");
     assert_eq!(snapshot(watched), before, "{args:?} must write nothing");
+    stderr
 }
 
 const PACKAGE_MANIFEST: &str = "[package]\nname = \"other\"\nversion = \"1.0.0\"\n";
@@ -454,20 +473,21 @@ fn an_illegal_basename_exits_2_and_asks_for_name() {
     for name in ["My-Dir", "MyDir", "1abc", "a..b", "a."] {
         let tmp = TempDir::new("basename");
         std::fs::create_dir(tmp.path().join(name)).expect("mkdir");
-        let (code, stdout, stderr) = ridl(&tmp.path().join(name), &["init"]);
-        assert_eq!(code, 2, "{name}: {stderr}");
-        assert_eq!(stdout, "", "{name}");
-        assert!(
-            stderr.contains("is not a legal package name"),
-            "{name}: {stderr}"
+        let stderr = assert_refused(
+            &tmp.path().join(name),
+            &["init"],
+            "is not a legal package name",
+            tmp.path(),
         );
         assert!(stderr.contains("--name"), "{name}: {stderr}");
-        assert!(!tmp.path().join(name).join("ridl.toml").exists(), "{name}");
 
-        let (code, _, stderr) = ridl(tmp.path(), &["new", &format!("{name}2")]);
-        assert_eq!(code, 2, "{name}2: {stderr}");
+        let stderr = assert_refused(
+            tmp.path(),
+            &["new", &format!("{name}2")],
+            "is not a legal package name",
+            tmp.path(),
+        );
         assert!(stderr.contains("--name"), "{name}2: {stderr}");
-        assert!(!tmp.path().join(format!("{name}2")).exists());
     }
 }
 
@@ -493,22 +513,36 @@ fn an_illegal_name_flag_exits_2_and_writes_nothing() {
 
 #[test]
 fn a_reserved_word_basename_exits_2_and_asks_for_name() {
-    for name in ["type", "system", "interface", "veh.type"] {
+    for name in [
+        "type",
+        "system",
+        "interface",
+        "veh.type",
+        "type.veh",
+        "veh.enum.body",
+    ] {
         let tmp = TempDir::new("keyword-basename");
         std::fs::create_dir(tmp.path().join(name)).expect("mkdir");
-        let dir = tmp.path().join(name);
-        let (code, stdout, stderr) = ridl(&dir, &["init"]);
-        assert_eq!(code, 2, "{name}: {stderr}");
-        assert_eq!(stdout, "", "{name}");
-        assert!(stderr.contains("reserved word"), "{name}: {stderr}");
+        let stderr = assert_refused(
+            &tmp.path().join(name),
+            &["init"],
+            "reserved word",
+            tmp.path(),
+        );
         assert!(stderr.contains("--name"), "{name}: {stderr}");
-        assert!(!dir.join("ridl.toml").exists(), "{name}");
     }
 }
 
 #[test]
+fn new_refuses_a_reserved_word_basename() {
+    let tmp = TempDir::new("keyword-new");
+    let stderr = assert_refused(tmp.path(), &["new", "type"], "reserved word", tmp.path());
+    assert!(stderr.contains("--name"), "{stderr}");
+}
+
+#[test]
 fn a_reserved_word_name_flag_exits_2_and_writes_nothing() {
-    for name in ["type", "package", "veh.signal"] {
+    for name in ["type", "package", "veh.signal", "type.veh", "veh.enum.body"] {
         let tmp = TempDir::new("keyword-name");
         std::fs::create_dir(tmp.path().join("demo")).expect("mkdir");
         assert_refused(
@@ -518,4 +552,71 @@ fn a_reserved_word_name_flag_exits_2_and_writes_nothing() {
             tmp.path(),
         );
     }
+}
+
+/// Makes `dir` hold the scaffold's target and runs `ridl init --name outer`.
+fn init_outer(tmp: &TempDir) -> (i32, String, String) {
+    ridl(&tmp.path().join("outer"), &["init", "--name", "outer"])
+}
+
+#[test]
+fn a_manifest_several_levels_below_exits_2() {
+    let tmp = TempDir::new("below-deep");
+    tmp.write("outer/a/b/ridl.toml", PACKAGE_MANIFEST);
+    assert_refused(
+        &tmp.path().join("outer"),
+        &["init", "--name", "outer"],
+        "holds a manifest below it",
+        tmp.path(),
+    );
+}
+
+#[test]
+fn a_manifest_in_a_dot_directory_below_is_not_a_conflict() {
+    let tmp = TempDir::new("below-dot");
+    tmp.write("outer/.git/x/ridl.toml", PACKAGE_MANIFEST);
+    tmp.write("outer/.cache/x/ridl.toml", PACKAGE_MANIFEST);
+    let (code, _, stderr) = init_outer(&tmp);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_clean(&tmp.path().join("outer"), &["check"]);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_manifest_below_a_symlink_or_behind_a_dangling_link_is_not_a_conflict() {
+    let tmp = TempDir::new("below-link");
+    tmp.write("elsewhere/ridl.toml", PACKAGE_MANIFEST);
+    std::fs::create_dir_all(tmp.path().join("outer/sub")).expect("mkdir");
+    std::os::unix::fs::symlink("../elsewhere", tmp.path().join("outer/link")).expect("symlink");
+    std::os::unix::fs::symlink("missing", tmp.path().join("outer/sub/ridl.toml")).expect("symlink");
+    let (code, _, stderr) = init_outer(&tmp);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_clean(&tmp.path().join("outer"), &["check"]);
+}
+
+#[test]
+fn new_beside_an_existing_unit_is_not_a_conflict() {
+    let tmp = TempDir::new("beside");
+    tmp.write("a/ridl.toml", PACKAGE_MANIFEST);
+    assert_clean(tmp.path(), &["new", "b"]);
+    assert!(tmp.path().join("b/ridl.toml").is_file());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_failed_write_removes_what_this_command_created() {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = TempDir::new("rollback");
+    tmp.write("proj/keep.txt", "keep");
+    std::fs::create_dir(tmp.path().join("proj/proj")).expect("mkdir");
+    let root = tmp.path().join("proj");
+    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o555)).expect("chmod");
+    if std::fs::File::create(root.join("probe")).is_ok() {
+        // The process ignores directory permissions (for example it runs as
+        // root), so the root manifest cannot be made to fail.
+        return;
+    }
+    // The member files are written, then the root manifest fails: the
+    // member files must be removed again.
+    assert_refused(&root, &["init", "--workspace"], "cannot write", tmp.path());
 }

@@ -212,7 +212,7 @@ the member still sees `veh.common`, and the root's settings apply to it. The
 check then reports only the diagnostics of files in `veh/cluster`.
 
 To start a project of your own, `ridl new` scaffolds one. Run it outside the
-tutorial workspace, for example after `cd ..`, because it refuses a directory
+tutorial workspace, for example from the directory that holds `tutorial/`, because it refuses a directory
 that sits inside an existing unit. It creates the directory and writes a
 `ridl.toml` and a small `.ridl` file that already checks:
 
