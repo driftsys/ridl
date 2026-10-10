@@ -157,12 +157,13 @@ semantics.)
 skipping absent slots:
 
 ```
-name → (params) → : Type → [shape] → wire W → @timing → during S → [ attrs ] → = value → { body }
+name → (params) → : Type → [shape] → wire W → = value → @timing → during S → [ attrs ] → { body }
 ```
 
-This order already held in every grammar of every reference before it was
-stated; it is now normative. New clauses must be slotted into this order
-explicitly.
+This order is normative. New clauses must be slotted into this order explicitly.
+The parser accepts `@timing` and `[ attrs ]` in either order, and `ridl fmt`
+writes the order above (maintainer decision D-4 of `fmt-ridl-rsdl-layout.md`).
+The position of `= value` before `@timing` follows decision 2 of ADR-0008.
 
 **R6 — Payloads are named types.** Interaction and behaviour layers never define
 shapes inline; they reference typl vocabulary. Contract lines read as domain

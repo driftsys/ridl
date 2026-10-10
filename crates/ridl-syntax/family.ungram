@@ -215,10 +215,10 @@ EventDef =
   'event' Name ':' payload:FieldType Timing?
 
 CommandDef =
-  'command' Name params:ParamList (':' return_type:ReturnType)? AttrBlock? Timing?
+  'command' Name params:ParamList (':' return_type:ReturnType)? Timing? AttrBlock?
 
 QueryDef =
-  'query' Name params:ParamList ':' return_type:ReturnType AttrBlock? Timing?
+  'query' Name params:ParamList ':' return_type:ReturnType Timing? AttrBlock?
 
 FixedDef =
   'fixed' Name ':' payload:FieldType Timing? AttrBlock?

@@ -2238,9 +2238,9 @@ event_def     = doc_comment? "event"   camelCase_id ":" type_ref timing? attr_bl
                  as RIDL-501 through RIDL-508 (§16.5). *)
 
 init_value    = "=" ( literal | SCREAMING_SNAKE_ID ) ;   (* bare init override — §4.4 *)
-command_def   = doc_comment? "command" camelCase_id "(" param_list ")" attr_block? timing? ;
+command_def   = doc_comment? "command" camelCase_id "(" param_list ")" timing? attr_block? ;
 query_def     = doc_comment? "query"   camelCase_id "(" param_list ")" ":" return_type
-                attr_block? timing? ;
+                timing? attr_block? ;
               (* range form only on command and query — a strict period is RIDL-103, §9.3 *)
 fixed_def     = doc_comment? "fixed"   camelCase_id ":" fixed_type ;
               (* no error syntax — a fallible_type return makes a query fallible, §10.1 *)

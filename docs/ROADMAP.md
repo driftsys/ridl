@@ -814,10 +814,10 @@ compatible.
 **Milestone:** the schema projections are complete and the general-form drift is
 removed. The projections themselves landed; see the landed record.
 
-| ID    | Story                                                                                                                                                                                                                                           | Done when                                                | Size |
-| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ---- |
-| E9.10 | The **schema hash over the IR**, not over the emitted schema                                                                                                                                                                                    | two targets of one IR agree on identity                  | M    |
-| E9.12 | Drift the design surfaced: general-form R5's postfix order contradicts the shipped grammar (`@timing` is last, not before attributes); `InterfaceDef`/`ServiceDef` gain the `AttrBlock` the deferred `labels`/`deprecated` promotion also needs | R5 matches `family.ungram`; one grammar edit serves both | S    |
+| ID    | Story                                                                                                                                                                                                                                                                 | Done when                                                | Size |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ---- |
+| E9.10 | The **schema hash over the IR**, not over the emitted schema                                                                                                                                                                                                          | two targets of one IR agree on identity                  | M    |
+| E9.12 | Drift the design surfaced: general-form R5 puts `@timing` before attributes (maintainer decision D-4), and `family.ungram` and ridl Appendix C now match it; `InterfaceDef`/`ServiceDef` gain the `AttrBlock` the deferred `labels`/`deprecated` promotion also needs | R5 matches `family.ungram`; one grammar edit serves both | S    |
 
 ## Epic 8 — agent enablement ([ADR-0005](decisions/ADR-0005-agent-enablement.md))
 
