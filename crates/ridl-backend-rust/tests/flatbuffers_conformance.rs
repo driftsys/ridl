@@ -1591,3 +1591,34 @@ fn the_generated_codec_checks_for_wasm32() {
          test when rustup is present"
     );
 }
+
+/// A payload's buffer is its own bound: `BUFFER` is zeroed and as long as the
+/// payload's `MAX_SIZE`, and two payloads with different bounds get buffers of
+/// different lengths, so one size shared by every payload fails.
+#[test]
+fn every_payload_buffer_is_its_own_max_size() {
+    let transcript = rustc::run_program_capturing_stdout(
+        "fb_conformance_buffer_sizes",
+        &program(
+            r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::Payload;
+
+fn check<T: Payload<FlatBuffers>>() -> usize {
+    let buffer = <T as Payload<FlatBuffers>>::BUFFER;
+    assert_eq!(buffer.as_ref().len(), T::MAX_SIZE);
+    assert!(buffer.as_ref().iter().all(|byte| *byte == 0));
+    T::MAX_SIZE
+}
+
+fn main() {
+    let report = check::<Report>();
+    let inner = check::<Inner>();
+    assert_ne!(report, inner, "the fixture needs two different bounds");
+    println!("ok");
+}
+"#,
+        ),
+    );
+    assert_eq!(transcript.trim(), "ok");
+}

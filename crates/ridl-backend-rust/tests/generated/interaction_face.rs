@@ -426,6 +426,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 43usize;
+    type Buffer = [::core::primitive::u8; 43usize];
+    const BUFFER: Self::Buffer = [0u8; 43usize];
     type View<'a> = TemperatureFbView<'a>;
     fn encode<'o>(
         &self,
@@ -571,6 +573,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Level {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 43usize;
+    type Buffer = [::core::primitive::u8; 43usize];
+    const BUFFER: Self::Buffer = [0u8; 43usize];
     type View<'a> = LevelFbView<'a>;
     fn encode<'o>(
         &self,
@@ -715,6 +719,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Window {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = WindowFbView<'a>;
     fn encode<'o>(
         &self,
@@ -859,6 +865,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Average {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 44usize;
+    type Buffer = [::core::primitive::u8; 44usize];
+    const BUFFER: Self::Buffer = [0u8; 44usize];
     type View<'a> = AverageFbView<'a>;
     fn encode<'o>(
         &self,
@@ -1000,6 +1008,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Health {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
+    type Buffer = [::core::primitive::u8; 50usize];
+    const BUFFER: Self::Buffer = [0u8; 50usize];
     type View<'a> = HealthFbView<'a>;
     fn encode<'o>(
         &self,
@@ -1217,6 +1227,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 60usize;
+    type Buffer = [::core::primitive::u8; 60usize];
+    const BUFFER: Self::Buffer = [0u8; 60usize];
     type View<'a> = WarningFbView<'a>;
     fn encode<'o>(
         &self,

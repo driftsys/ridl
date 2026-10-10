@@ -19,6 +19,14 @@ pub trait Payload<E: Encoding>: Sized {
     /// The largest encoded size of any legal value, in bytes.
     const MAX_SIZE: usize;
 
+    /// `[u8; Self::MAX_SIZE]`, stated as a type so that code generic over the
+    /// encoding can hold one on the stack (a generic array length is not
+    /// expressible on stable Rust).
+    type Buffer: AsRef<[u8]> + AsMut<[u8]> + Copy;
+
+    /// A zeroed [`Payload::Buffer`].
+    const BUFFER: Self::Buffer;
+
     /// What a successful check or encode leaves behind: the bytes, an
     /// accessor over the bytes, or a parsed value.
     type View<'a>;
@@ -270,6 +278,8 @@ mod tests {
 
     impl Payload<ReprC> for Raw {
         const MAX_SIZE: usize = 0;
+        type Buffer = [u8; 0];
+        const BUFFER: [u8; 0] = [];
         type View<'a> = &'a [u8];
 
         fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, &'o [u8]>, EncodeError> {

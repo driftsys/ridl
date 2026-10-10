@@ -54,6 +54,8 @@ struct Warning(u8);
 
 impl Payload<FlatBuffers> for Warning {
     const MAX_SIZE: usize = 8;
+    type Buffer = [u8; 8];
+    const BUFFER: [u8; 8] = [0; 8];
     type View<'a> = &'a [u8];
 
     fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, &'o [u8]>, EncodeError> {
@@ -76,6 +78,8 @@ struct Window(u8);
 
 impl Payload<FlatBuffers> for Window {
     const MAX_SIZE: usize = 24;
+    type Buffer = [u8; 24];
+    const BUFFER: [u8; 24] = [0; 24];
     type View<'a> = &'a [u8];
 
     fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, &'o [u8]>, EncodeError> {

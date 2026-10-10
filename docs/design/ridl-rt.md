@@ -392,6 +392,8 @@ pub struct ReprC;        // NAME = "repr-c"
 
 pub trait Payload<E: Encoding>: Sized {
     const MAX_SIZE: usize;
+    type Buffer: AsRef<[u8]> + AsMut<[u8]> + Copy; // [u8; MAX_SIZE], as a type so generic code can hold one
+    const BUFFER: Self::Buffer;                    // zeroed
     type View<'a>; // what a successful check leaves behind: bytes, an accessor, or a parsed value
     fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, Self::View<'o>>, EncodeError>;
     fn verify(buf: &[u8]) -> Result<Self::View<'_>, VerifyError>;

@@ -235,6 +235,12 @@ largest `Report` a probe could build is 1688 bytes against a bound of 2388 — a
 it is the alignment and vtable slack that keeps the bound sound under any write
 order.
 
+**`Buffer` and `BUFFER` come from the same literal.** The implementation also
+writes `type Buffer = [u8; <literal>]` and the zeroed constant
+`BUFFER = [0u8; <literal>]`, so a payload's buffer is exactly its own `MAX_SIZE`
+bytes long. Code generic over the encoding names the buffer type through
+`Payload`, because a generic array length is not expressible on stable Rust.
+
 **A type with no finite bound carries no codec**, per type rather than per
 package: `check_flatbuffers_bound` is called as each type's implementation is
 about to be emitted. Its refusal names the member, not only the declaration, by

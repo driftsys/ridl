@@ -39,6 +39,8 @@ pub struct Speed(pub u16);
 
 impl Payload<ReprC> for Speed {
     const MAX_SIZE: usize = 2;
+    type Buffer = [u8; 2];
+    const BUFFER: [u8; 2] = [0; 2];
     type View<'a> = &'a [u8];
 
     fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, &'o [u8]>, EncodeError> {
