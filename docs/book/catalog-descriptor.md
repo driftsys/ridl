@@ -163,16 +163,19 @@ emits.
 ## The compatible catalogs
 
 The `hash` identifies one version of the unit exactly. `compatible` lists, as
-32-byte hashes, the earlier versions of the unit that `ridl diff`'s classifier, scoped to the unit, judged
-compatible with this one, newest first; the current hash is never in it. A
-reader built for one of those versions can be accepted by a provider that serves
-this one, which is the use the frame specification makes of the list
-([section 6.1][attach]). No runtime in this repository accepts an `attach` on the strength of the list.
+32-byte hashes, the earlier versions of the unit that `ridl diff`'s classifier,
+scoped to the unit, judged compatible with this one, newest first; the current
+hash is never in it. A reader built for one of those versions can be accepted by
+a provider that serves this one, which is the use the frame specification makes
+of the list ([section 6.1][attach]). No runtime in this repository accepts an
+`attach` on the strength of the list.
 
 The list comes from the published baseline. `ridl baseline` records, for each
 unit with an interface, a `<unit>.catalogs` file beside the snapshots, and
 `ridl build` reads it. The list is empty when there is no baseline, when the
-unit has no file, and after a breaking change, which restarts the chain. A
+unit has no file, and after a breaking change that changes the catalog, which
+restarts the chain. A breaking change that leaves the catalog hash as it was,
+such as the removal of a declaration no interface reaches, keeps the chain. A
 change in another unit counts for this unit only when an interface of this unit
 reaches the changed declaration. `ridlc build` reads no baseline and writes an
 empty list. The [CLI reference](cli-reference.md#ridl-baseline) states the file

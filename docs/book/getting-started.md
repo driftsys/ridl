@@ -919,7 +919,7 @@ dataflow, not calls.
 | `ridl check`    | type-check a file, package, or workspace                                                 |
 | `ridl build`    | compile to the artifacts above                                                           |
 | `ridl fmt`      | rewrite `.typl`, `.ridl` and `.rsdl` files into one canonical form; `--check` reports without writing |
-| `ridl baseline` | publish the current workspace as `.ridl/baseline/<package>.ir.json` snapshots            |
+| `ridl baseline` | publish the current workspace as `.ridl/baseline/<package>.ir.json` snapshots and `<unit>.catalogs` files |
 | `ridl diff`     | compare two IR snapshots or source trees and classify the change                         |
 | `ridl lock`     | allocate interface numbers in each unit's `interfaces.lock`; `--rename` and `--retire` record a renamed or removed interface |
 | `ridl test`     | run the property suite: range self-corpora, and sampling of `require` clauses. `ensure` clauses are listed as observer stubs, never evaluated |

@@ -123,10 +123,11 @@ for `thumbv7em-none-eabihf`, a target with no standard library.
 
 ## What a catalog contains
 
-`ridl_descriptor::lower(unit, packages)` writes the whole file in one pass.
-`packages` is every checked package of the build, and the unit's own packages
-are those whose `unit` is the unit name (`ridl_ir::v2::unit_of`). It returns
-`Result<Vec<u8>, LowerError>`.
+`ridl_descriptor::lower(unit, packages, compatible)` writes the whole file in
+one pass. `packages` is every checked package of the build, and the unit's own
+packages are those whose `unit` is the unit name (`ridl_ir::v2::unit_of`).
+`compatible` is the list of earlier catalog hashes the descriptor carries, in
+the order given. It returns `Result<Vec<u8>, LowerError>`.
 
 - **The catalog.** `version`; `name`, the unit name; `hash`, the 32-byte catalog
   hash; `toolchain`, the version of the crate that wrote the file; `interfaces`;
@@ -216,17 +217,20 @@ have the same hash. The rule is
 - **The chain file.** `ridl baseline` writes `<unit>.catalogs` beside the
   snapshots, one per unit with an interface shape: a header line that starts
   with `#`, then one lowercase hexadecimal hash per line, newest first, no hash
-  twice. The first line is the hash of the catalog being published, computed
-  over the build's scope (`catalog_scope`), so it equals the hash
-  `ridl build
-  --emit catalog` writes. The following lines are copied from the
-  file of the replaced baseline, as they are, when the unit's verdict from the
-  replaced snapshots to the fresh ones is `Compatible` or `Identical`. A
+  twice. A line may end with CRLF, as a checkout with `core.autocrlf` writes it;
+  no other padding is accepted. The first line is the hash of the catalog being
+  published, computed over the build's scope (`catalog_scope`), so it equals the
+  hash `ridl build --emit catalog` writes. The following lines are copied from
+  the file of the replaced baseline, as they are, when the unit's verdict from
+  the replaced snapshots to the fresh ones is `Compatible` or `Identical`, or
+  when the new hash is the first line of that file: the catalog did not change,
+  so every hash the file lists still applies, whatever the verdict. Otherwise a
   `Breaking` verdict, a unit with no snapshot in the replaced baseline, and a
   replaced baseline with no file for the unit each write the one new hash. A
-  hash recorded at publication is never recomputed from a snapshot. A file that
-  cannot be read or parsed stops the publication, exit 2, naming the file and
-  the line.
+  hash recorded at publication is never recomputed from a snapshot. The file of
+  a unit with a snapshot in the replaced baseline is read, and one that cannot
+  be read or parsed stops the publication, exit 2, naming the file and the line;
+  the file of a unit with no such snapshot is not read.
 - **The verdict is per unit.** `ridl_diff::unit_verdict` takes the maximum
   verdict over the changes of a `DiffReport` that concern the unit: a change in
   one of the unit's source packages, on either side, or in a declaration that an
@@ -247,14 +251,15 @@ have the same hash. The rule is
   interface shape and a package in the baseline, `ridl build` reads the unit's
   `<unit>.catalogs` file and lists its hashes, less the current catalog's hash,
   when the unit's verdict from the baseline to the tree is `Compatible` or
-  `Identical`. The list is empty for a `Breaking` verdict, for a workspace with
-  no `.ridl/baseline/` directory or one holding no `.ir.json` snapshot, for a
-  unit with no package in the baseline (a file left under its name is not read),
-  and for a unit with no file. A tree that is breaking relative to the baseline
-  is built with an empty list, and the recorded chain is not changed until the
-  next publication. A baseline that is present and cannot be loaded, and a file
-  that cannot be read, are exit 2. A workspace that does not compile gets no
-  list.
+  `Identical`, or when the current catalog's hash is the file's first hash. The
+  list is empty for a `Breaking` verdict when the current hash is not the file's
+  first hash, for a workspace with no `.ridl/baseline/` directory or one holding
+  no `.ir.json` snapshot, for a unit with no package in the baseline (a file
+  left under its name is not read), and for a unit with no file. A tree whose
+  catalog changed and that is breaking relative to the baseline is built with an
+  empty list, and the recorded chain is not changed until the next publication.
+  A baseline that is present and cannot be loaded, and a file that cannot be
+  read, are exit 2. A build with an error diagnostic gets no list.
 - **No runtime reads the list.** The generated face compares only its own
   `CATALOG` (ADR-0023 decision 8), and no runtime in this workspace speaks the
   frame, so nothing here accepts an `attach` on the strength of the list.

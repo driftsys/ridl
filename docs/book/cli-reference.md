@@ -414,24 +414,29 @@ ridl baseline && find .ridl/baseline -type f | sort
 `<unit>.catalogs` file per unit that has at least one interface shape, named
 after the unit's manifest `name`, in the same directory. A file is a text file:
 a first line that starts with `#`, then one catalog hash per line as 64
-lowercase hexadecimal characters, newest first. A blank line and a line that
-starts with `#` are skipped, and a hash is listed once. The first hash is the
+lowercase hexadecimal characters, newest first. An empty line and a line that
+starts with `#` are skipped, and a hash is listed once. A line may end with
+CRLF, as a checkout with `core.autocrlf` writes it; a line with any other
+padding, such as a space, is refused. The first hash is the
 catalog hash of the baseline being published, computed as
 [`ridl build --emit catalog`](#ridl-build) computes it. The hashes that follow
 are the ones of the file being replaced, copied as they are and never
-recomputed from a snapshot. They are carried over only when `ridl diff`'s
+recomputed from a snapshot. They are carried over when `ridl diff`'s
 classifier, scoped to the unit, judges the change from the replaced snapshots to
-the fresh ones compatible or identical. The scope is the unit's own source
+the fresh ones compatible or identical, and when the new hash is the first hash
+of the replaced file: the catalog did not change, so every hash the file lists
+still applies, whatever the verdict. The scope is the unit's own source
 packages and every declaration its interfaces reach, in the unit or in another
 one, so a breaking change in a package that the unit does not reach leaves the
-unit's chain as it was. A breaking change restarts the chain: the file then
-holds the one new hash. A unit with no published snapshot, or with no
-`<unit>.catalogs` file in the replaced baseline, also starts a chain with the
-one new hash, and a file left under the name of a unit that had no published
-snapshot is not carried. A file that cannot be read, or has a line that is
-neither a comment nor a hash, or lists the same hash twice, stops the publication with exit 2: the message
-names the file and the line, and says to repair the file or remove it to start
-the unit's chain again.
+unit's chain as it was. A breaking change that changes the catalog restarts the
+chain: the file then holds the one new hash. A unit with no published snapshot,
+or with no `<unit>.catalogs` file in the replaced baseline, also starts a chain
+with the one new hash, and a file left under the name of a unit that had no
+published snapshot is not carried, nor read. The file of a unit with a published
+snapshot that cannot be read, or has a line that is neither a comment nor a
+hash, or lists the same hash twice, stops the publication with exit 2: the
+message names the file and the line, and says to repair the file or remove it
+to start the unit's chain again.
 
 Publication replaces the files in this order, so that an interrupted run never
 leaves a history beside a snapshot it does not describe: every published
@@ -662,17 +667,19 @@ reports that error and exits 1.
 generates code, `ridl build` reads `.ridl/baseline/` at the workspace root, as
 [`ridl check`](#ridl-check) finds it, and writes into the unit's descriptor and
 into the `catalog.compatible` field of the unit's codegen model the earlier
-catalog hashes it judges compatible with the current catalog. The list comes from
-the unit's `<unit>.catalogs` file (see [`ridl baseline`](#ridl-baseline)), in the
-file's order, newest first, and it never holds the current catalog's own hash.
-It is empty when the workspace has no baseline directory or the directory holds
-no `.ir.json` snapshot, when the baseline holds no package of the unit, when
-the unit has no `<unit>.catalogs` file, and when `ridl diff`'s classifier, scoped
-to the unit, judges the change from the baseline to the tree breaking. The
-recorded file is not changed by the build. An IR dump reads no baseline. A
-baseline that is present and cannot be loaded, or a `<unit>.catalogs` file that
-cannot be read, is exit 2. A workspace that does not compile gets no list: the
-build reports its errors as it would without a baseline.
+catalog hashes it judges compatible with the current catalog. The list comes
+from the unit's `<unit>.catalogs` file (see [`ridl baseline`](#ridl-baseline)),
+in the file's order, newest first, and it never holds the current catalog's own
+hash. It is empty when the workspace has no baseline directory or the directory
+holds no `.ir.json` snapshot, when the baseline holds no package of the unit,
+when the unit has no `<unit>.catalogs` file, and when `ridl diff`'s classifier,
+scoped to the unit, judges the change from the baseline to the tree breaking
+and the current catalog hash is not the file's first hash. When the two hashes
+are equal the catalog did not change, and the list holds the file's other
+hashes whatever the verdict. The recorded file is not changed by the build. An
+IR dump reads no baseline. A baseline that is present and cannot be loaded, or
+a `<unit>.catalogs` file that cannot be read, is exit 2. A build with an error
+diagnostic gets no list.
 
 **`rust` is a language backend**, and it writes the whole generated surface of
 a package in one file: the domain types (a struct, an enum, an enum set, a
@@ -1833,9 +1840,10 @@ The transcript below is abridged: it is the output for the test corpus in
 that were removed. The keys print in alphabetical order. First comes
 `compatible`, the earlier catalog hashes the descriptor lists as compatible with
 this one, each as its 32 bytes; it is empty here, because the corpus's
-published baseline holds no `corpus.baseline.catalogs` file. Then come the 32 bytes of the catalog hash, one entry per
-interface, the unit name, the retired numbers, the toolchain version that wrote
-the file, and the descriptor's schema version.
+published baseline holds no `corpus.baseline.catalogs` file. Then come the 32
+bytes of the catalog hash, one entry per interface, the unit name, the retired
+numbers, the toolchain version that wrote the file, and the descriptor's schema
+version.
 
 ```sh
 ridl build crates/ridl/tests/baseline-corpus --emit catalog
