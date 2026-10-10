@@ -139,13 +139,18 @@ common cases:
   scalar constraint widened (`constraint_changed`); a signal or event bound
   tightened (`timing_changed`); an interface joining or leaving a service's list
   (`service_interface_added`, `service_interface_removed`).
+- **Compatible, and the hash changes**: an enum body reordered with no number
+  changed (`enum_reordered`), and a provisional interface number frozen by
+  `ridl lock` (`interface_frozen`).
 - **Breaking**: an interaction inserted, removed without a tombstone or
   reordered (`interaction_inserted`, `interaction_removed`,
   `interaction_reordered`); a payload, a parameter list or a return shape
   changed (`payload_changed`, `params_changed`, `return_changed`); a scalar
   constraint narrowed or a width changed (`constraint_changed`,
   `width_changed`); a signal bound loosened or removed; a struct field, a union
-  arm or an enum value removed or moved (`decl_removed`, `member_reordered`).
+  arm or an enum value removed, an enum value renumbered, or an interface
+  number changed (`decl_removed`, `member_reordered`,
+  `interface_number_changed`).
 
 An interface that joins the list of a service with a named interface list, or
 leaves it, is not part of the hash input, because the list is not hashed. Such
