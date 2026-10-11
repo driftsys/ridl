@@ -280,28 +280,44 @@ wasm-check:
 # the only workspace crate it depends on, and the packaged manifest is built
 # unchanged apart from the appended tables, in three feature sets: the
 # defaults, none, and only `dedup`; the unit tests run with the
-# defaults (the integration tests need a dev-dependency the package drops). Its
+# defaults; the doctests and integration tests do not run at that version
+# (the integration tests need a dev-dependency the package drops; the pin runs
+# all of them in the workspace). Its
 # lockfile is resolved with the pin's cargo and
 # CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback, so that a dependency
 # release with a higher minimum is not selected, and the build is offline with
 # the older toolchain. The recipe also fails on: a ridl-descriptor manifest
-# without a rust-version line, or one that names a version the pin is older
-# than.
+# without a rust-version line, or one that names a version newer than the pin;
+# a new workspace dependency of ridl-ir or ridl-descriptor; or a packaged
+# ridl-descriptor that names ridl-backend-rust.
 compat-check: toolchain-check
     #!/usr/bin/env bash
     set -euo pipefail
     rm -rf "$PWD/target/compat-check"
+    # Reads and validates the rust-version line of a manifest.
+    read_minimum() {
+        local value
+        value="$(sed -n 's/^rust-version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$1")"
+        if [ -z "$value" ]; then
+            echo "compat-check: $1 names no rust-version." >&2
+            return 1
+        fi
+        if ! printf '%s' "$value" | grep -qE '^[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
+            echo "compat-check: $1 sets rust-version = \"$value\", which is not a" >&2
+            echo "compat-check: MAJOR.MINOR or MAJOR.MINOR.PATCH version." >&2
+            return 1
+        fi
+        printf '%s' "$value"
+    }
+    # Installs a toolchain when rustup does not have it.
+    ensure_toolchain() {
+        if ! rustup run "$1" rustc --version >/dev/null 2>&1; then
+            echo "compat-check: installing the $1 toolchain (not found locally)." >&2
+            rustup toolchain install "$1" --profile minimal
+        fi
+    }
     manifest="crates/ridl-rt/Cargo.toml"
-    minimum="$(sed -n 's/^rust-version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$manifest")"
-    if [ -z "$minimum" ]; then
-        echo "compat-check: $manifest names no rust-version." >&2
-        exit 1
-    fi
-    if ! printf '%s' "$minimum" | grep -qE '^[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
-        echo "compat-check: $manifest sets rust-version = \"$minimum\", which is not a" >&2
-        echo "compat-check: MAJOR.MINOR or MAJOR.MINOR.PATCH version." >&2
-        exit 1
-    fi
+    minimum="$(read_minimum "$manifest")" || exit 1
     pin="$(rustc --version | cut -d' ' -f2)"
 
     if ! command -v rustup >/dev/null 2>&1; then
@@ -309,10 +325,7 @@ compat-check: toolchain-check
         echo "compat-check: install it from https://rustup.rs." >&2
         exit 1
     fi
-    if ! rustup run "$minimum" rustc --version >/dev/null 2>&1; then
-        echo "compat-check: installing the $minimum toolchain (not found locally)." >&2
-        rustup toolchain install "$minimum" --profile minimal
-    fi
+    ensure_toolchain "$minimum"
 
     # Not a `sed` read of `$manifest`: `ridl-rt` shares the workspace version
     # (ADR-0007 decision 14's 2026-09-21 amendment) via `version.workspace =
@@ -406,19 +419,24 @@ compat-check: toolchain-check
     # reason as above: the version is not on the registry until the release
     # publishes it.
     descriptor_manifest="crates/ridl-descriptor/Cargo.toml"
-    descriptor_minimum="$(sed -n 's/^rust-version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$descriptor_manifest")"
-    if ! printf '%s' "$descriptor_minimum" | grep -qE '^[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
-        echo "compat-check: $descriptor_manifest sets rust-version = \"$descriptor_minimum\", which is not a" >&2
-        echo "compat-check: MAJOR.MINOR or MAJOR.MINOR.PATCH version." >&2
+    descriptor_minimum="$(read_minimum "$descriptor_manifest")" || exit 1
+    ensure_toolchain "$descriptor_minimum"
+    # The toolchain that resolves the lockfile and runs the other checks is the
+    # pin, so a minimum above it cannot be a minimum.
+    if [ "$(printf '%s\n%s\n' "$descriptor_minimum" "$pin" | sort -V | tail -n 1)" != "$pin" ]; then
+        echo "compat-check: $descriptor_manifest sets rust-version = \"$descriptor_minimum\", which is" >&2
+        echo "compat-check: newer than the pinned toolchain $pin." >&2
         exit 1
     fi
-    if ! rustup run "$descriptor_minimum" rustc --version >/dev/null 2>&1; then
-        echo "compat-check: installing the $descriptor_minimum toolchain (not found locally)." >&2
-        rustup toolchain install "$descriptor_minimum" --profile minimal
-    fi
-    if [ -n "$(grep -E '^ridl-[a-z-]+[[:space:]]*=' crates/ridl-ir/Cargo.toml || true)" ]; then
-        echo "compat-check: ridl-ir now depends on a workspace crate; add it to the" >&2
-        echo "compat-check: cargo package command for ridl-descriptor." >&2
+    # Only ridl-ir is packaged with ridl-descriptor. Any other workspace
+    # dependency of either crate must be added to the cargo package command.
+    # ridl-backend-rust is the dev-dependency the package drops.
+    extra="$(grep -hE '^ridl-[a-z-]+[[:space:]]*=' crates/ridl-ir/Cargo.toml "$descriptor_manifest" \
+        | grep -vE '^ridl-(ir|backend-rust)[[:space:]]*=' || true)"
+    if [ -n "$extra" ]; then
+        echo "compat-check: ridl-ir or ridl-descriptor now depends on another workspace crate;" >&2
+        echo "compat-check: add it to the cargo package command for ridl-descriptor:" >&2
+        echo "$extra" >&2
         exit 1
     fi
     echo "compat-check: packaging ridl-ir and ridl-descriptor $version"
@@ -428,6 +446,13 @@ compat-check: toolchain-check
     mkdir -p "$pkg_ir" "$pkg_descriptor"
     tar -xzf "${CARGO_TARGET_DIR:-target}/package/ridl-ir-$version.crate" -C "$pkg_ir" --strip-components=1
     tar -xzf "${CARGO_TARGET_DIR:-target}/package/ridl-descriptor-$version.crate" -C "$pkg_descriptor" --strip-components=1
+    # The integration tests need ridl-backend-rust, which the package drops, so
+    # only `--lib` runs below. If the package names it, that limit is stale.
+    if grep -q 'ridl-backend-rust' "$pkg_descriptor/Cargo.toml"; then
+        echo "compat-check: the packaged ridl-descriptor now names ridl-backend-rust; run its" >&2
+        echo "compat-check: integration tests too and drop the --lib limit." >&2
+        exit 1
+    fi
     printf '\n[workspace]\n\n[patch.crates-io]\nridl-ir = { path = "%s" }\n' "$pkg_ir" >> "$pkg_descriptor/Cargo.toml"
     # The lockfile is resolved with the pin's cargo, which knows the
     # rust-version-aware fallback; the build below runs with the older cargo.
