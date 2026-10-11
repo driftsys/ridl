@@ -15,8 +15,8 @@ generated code". Sebastien approved decisions D-1 to D-4 and the design's
 sections 1 to 3 in the brainstorming session of 2026-10-10. Writing the design
 required seven more choices, S-1 to S-7, which it lists for review. In this
 record decisions 1 to 4 are D-1 to D-4, decision 5 is section 1 with S-1 to S-4,
-decision 6 is section 2 with S-5 to S-7, and decision 7 is section 3. The design
-is
+decision 6 is section 2 with S-5 and S-6, and decision 7 is section 3; S-7 is
+part of decision 2. The design is
 [`docs/wip/2026-10-10-docs-in-generated-code-design.md`](../wip/2026-10-10-docs-in-generated-code-design.md).
 
 The `Model` fields of decision 5 are implemented, and the Rust and TypeScript
@@ -24,7 +24,7 @@ backends render them as decisions 6 and 7 state.
 [Documentation in the generated code](../book/generated-code.md#documentation-in-the-generated-code)
 records what each backend's generated code checks (decision 3).
 
-It amends three records in place, in the same change:
+It amends two records in place, in the same change:
 
 - [ADR-0026](ADR-0026-doc-comments.md) decision 4: the §4.7 promotion is
   declined (decision 4 below). Its decision 6: the codegen model now carries the
@@ -160,6 +160,7 @@ because the first consumer that would need it is generated deprecation metadata.
    | `@since`      | one `Available since X.` line per version       | `@since X`                                                                            | `@since X`           |
    | `@deprecated` | `#[deprecated(note = ...)]`                     | `@deprecated reason`                                                                  | `@Deprecated`        |
    | `@labels`     | not rendered                                    | not rendered                                                                          | not rendered         |
+
    - A backend replaces the `len` bytes at `offset` in `doc` with its link
      syntax, from the last link to the first, so that each earlier offset stays
      valid.
@@ -167,8 +168,10 @@ because the first consumer that would need it is generated deprecation metadata.
      a code span of the qualified name, never as a link that would not resolve.
    - Labels are metadata for tooling and are not rendered.
    - The rules of an interaction go on every public item a user calls or
-     implements for that interaction: the method of each of the two clients, and
-     the method of the `serve` trait.
+     implements for that interaction: the method of each of the two clients, the
+     method of the `Provider` trait that `serve` calls, and the method of the
+     `Publisher`. For an event, the method of each of the two clients is
+     `subscribe_<event>`.
    - In the Rust face, a call's method renders the doc and the rules of each
      parameter under a `# Parameters` section: one bullet with the parameter's
      name and doc text, and its rule lines as nested bullets (S-6). TypeScript
