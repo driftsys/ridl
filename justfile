@@ -493,6 +493,36 @@ compat-check: toolchain-check
     echo "compat-check: $minimum, edition 2021 (packaged ridl-loopback, suite! expanded)"
     cargo "+$minimum" test --no-run --offline --manifest-path "$pkg_loopback/Cargo.toml"
 
+    # The crate `ridl build` emits for the veh-cluster corpus, as edition 2021
+    # at the minimum with every feature on, so the regex dependency of
+    # `validate-pattern` is built too. The emitted manifest sets edition 2024
+    # and no rust-version; both are rewritten here. ridl-rt is the packaged
+    # copy. The lockfile is resolved with the pin's cargo and the fallback
+    # resolver, as for ridl-descriptor, and `cargo fetch` downloads the sources
+    # (the one network use of this cell) so that the build can run offline.
+    # There is no `--no-default-features` cell: that build fails at the
+    # minimum (driftsys/ridl#874).
+    corpus="$PWD/target/compat-check/veh-cluster"
+    mkdir -p "$corpus"
+    "$PWD/target/debug/ridl" build crates/ridlc/tests/corpus/veh-cluster --emit rust --out-dir "$corpus/generated"
+    awk -v minimum="$minimum" '
+        /^edition = "2024"$/ { print "edition = \"2021\""; print "rust-version = \"" minimum "\""; next }
+        { print }
+    ' "$corpus/generated/Cargo.toml" > "$corpus/Cargo.toml.new"
+    mv "$corpus/Cargo.toml.new" "$corpus/generated/Cargo.toml"
+    if ! grep -qx 'edition = "2021"' "$corpus/generated/Cargo.toml" \
+        || ! grep -qx "rust-version = \"$minimum\"" "$corpus/generated/Cargo.toml"; then
+        echo "compat-check: could not set edition 2021 and rust-version $minimum in the emitted" >&2
+        echo "compat-check: veh-cluster manifest; its edition line no longer has the form this recipe edits." >&2
+        exit 1
+    fi
+    printf '\n[workspace]\n\n[patch.crates-io]\nridl-rt = { path = "%s" }\n' "$pkg" >> "$corpus/generated/Cargo.toml"
+    CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback \
+        cargo "+$pin" generate-lockfile --manifest-path "$corpus/generated/Cargo.toml"
+    cargo "+$pin" fetch --locked --manifest-path "$corpus/generated/Cargo.toml"
+    echo "compat-check: $minimum, edition 2021 (the emitted veh-cluster crate, all features)"
+    cargo "+$minimum" build --all-features --offline --locked --manifest-path "$corpus/generated/Cargo.toml"
+
     # Edition 2024 requires rust-version >= 1.85 (cargo refuses to parse the
     # manifest otherwise); the pin already satisfies that, so this run's
     # rust-version becomes the pin rather than the minimum.
