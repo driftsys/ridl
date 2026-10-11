@@ -338,31 +338,42 @@ is empty:
 
 A link, or an `@see` target, whose target has no item in the same output is
 written as a code span of the target's qualified name, such as
-`veh.common.Speed`, so that no generated doc holds a link that does not
-resolve. Both backends link only to a declaration of the package itself or to a
-declaration of another package that this package reaches through a type. A
-target that this package does not reach through a type is written as a code
-span. In both languages, so is an `internal` declaration, and a member of a
-named scalar or of a constant, which has no member item. In Rust it is also the
-case for an event, a `fixed`, an interface with no face module, and a target
-whose path Rust spells with a raw identifier (`r#move`). In TypeScript it is
+`veh.common.Speed`, so that no doc in the crate or the module that `ridl build`
+emits holds a link that does not resolve. Both backends link only to a
+declaration of the package itself or to a declaration of another package that
+this package reaches through a type. A target that this package does not reach
+through a type is written as a code span. In both languages, so is an
+`internal` declaration, a constant the backend does not emit (such as a `bytes`
+constant), and a member of a named scalar or of a constant, which has no member
+item. In Rust it is also the case for an event, a `fixed`, an interface with no
+face module, a target whose path Rust spells with a raw identifier (`r#move`),
+and an item whose name the module of a child package takes, which a program
+reaches only through the hidden `__ridl_package` module. In TypeScript it is
 also the case for an interface, an interaction and a union arm, which the module
-holds no item for, for a constant the module does not emit (such as a `bytes`
-constant), and for a declaration of another package that the module does not
-import. `@labels` is not rendered.
+holds no item for, and for a declaration of another package that the module
+does not import. `@labels` is not rendered.
+
+A Rust link is an absolute path from the crate root, such as
+`crate::veh::common::Speed`, which resolves in the crate `ridl build` emits. A
+program that brings a generated file in with `include!` inside a module of its
+own moves the items away from those paths, so rustdoc reports each such link as
+unresolved.
 
 In the Rust face, the doc of an interaction goes on these methods: for a signal,
 the method of the async `Client`, of the blocking `Client` and of the
 `Publisher`; for a command or a query, the method of the async `Client`, of the
-blocking `Client` and of the `Provider` trait; for an event, the method of the
-`Publisher`. The `Client` and `Provider` methods also carry the interaction's
-`#[deprecated]`; a `Publisher` method carries the doc without `#[deprecated]`.
-The `Subscribe` method of an event and its variant of the `Event` enum carry
-only a sentence the backend writes. The interaction's doc comes first, then a
-sentence the backend writes about the method itself, then, for a command or a
-query, a `# Parameters` section: one bullet per parameter with its name and its
-doc, and the parameter's rules as nested bullets. The doc of an interface goes
-on its face module.
+blocking `Client` and of the `Provider` trait; for an event, the
+`subscribe_<event>` method of the async and of the blocking `Client`, and the
+method of the `Publisher`. The `Client` and `Provider` methods also carry the
+interaction's `#[deprecated]`; a `Publisher` method and a `subscribe_<event>`
+method carry the doc without `#[deprecated]`. The variant of an event in the
+`Event` enum carries only a sentence the backend writes. A method's doc is the
+interaction's doc text, then a sentence the backend writes about the method
+itself, then the `# Rules` section, then, for a command or a query, a
+`# Parameters` section (one bullet per parameter with its name and its doc, and
+the parameter's rules as nested bullets), then the `# See also` section and the
+`Available since` lines. The doc of an interface goes on its face module, in
+the same order around the module's own sentence.
 
 ### What the generated code checks
 
@@ -370,8 +381,9 @@ The rules lists state the contract, not what the code checks. On each item the
 backend emits, every rule the schema declares is listed, in the same words in
 both languages, whether or not the generated code checks it. The sentence the
 backend writes about a method describes what that method does, its checks
-included: the doc of a named scalar's `new` says that it enforces the type's
-typl constraints, the doc of a `Client` call method says what happens when a
+included: the doc of a named scalar's `new` says that it returns an error for a
+value that breaks a constraint the generated code checks, the doc of a `Client`
+call method says what happens when a
 `require` clause fails, and the doc of a query's `Provider` method says that
 `serve` discards a reply that breaks an `ensure` clause.
 
