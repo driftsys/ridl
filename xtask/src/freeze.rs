@@ -463,10 +463,11 @@ run `cargo xtask freeze update` and commit the result"
         }
     }
 
+    let has_checker = |name: &String| {
+        dumps.iter().any(|(dump, _)| dump == name) || apis.iter().any(|(api, _)| api.name == *name)
+    };
     for name in &surfaces.required {
-        if !dumps.iter().any(|(dump, _)| dump == name)
-            && !apis.iter().any(|(api, _)| api.name == *name)
-        {
+        if !has_checker(name) {
             failures.push(format!(
                 "surfaces.toml lists `{name}` in `required` but no dumper or API checker has \
 that name"
@@ -474,6 +475,11 @@ that name"
         }
     }
     for name in rows_missing(&surfaces.required, rows) {
+        // A name with no checker was reported above, and no row can be added
+        // for it.
+        if !has_checker(&name) {
+            continue;
+        }
         if options.release {
             failures.push(format!(
                 "surface `{name}` is required but has no row: a release cannot leave a frozen \
@@ -503,6 +509,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     };
     let options = parse_options(rest)?;
     match subcommand.as_str() {
+        "update" if options.release => Err(format!("--release applies to `check` only\n{USAGE}")),
         "update" => update(&options),
         "check" => check(&options),
         other => Err(format!("unknown subcommand `{other}`\n{USAGE}")),
@@ -772,14 +779,20 @@ mod tests {
 
     #[test]
     fn rows_missing_lists_required_surfaces_without_a_row() {
-        let rows = vec![Row {
-            surface: "keywords".into(),
+        let row = |name: &str| Row {
+            surface: name.into(),
             baseline: "v0.10.0".into(),
-        }];
-        let required = vec!["keywords".to_string(), "cli".to_string(), "mcp".to_string()];
+        };
+        let rows = vec![row("keywords"), row("cli")];
+        let required = vec![
+            "keywords".to_string(),
+            "cli".to_string(),
+            "mcp".to_string(),
+            "msrv".to_string(),
+        ];
         assert_eq!(
             rows_missing(&required, &rows),
-            vec!["cli".to_string(), "mcp".to_string()]
+            vec!["mcp".to_string(), "msrv".to_string()]
         );
     }
 }

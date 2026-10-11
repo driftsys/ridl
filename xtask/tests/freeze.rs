@@ -104,12 +104,16 @@ fn check_fails_on_a_row_without_a_dumper() {
     let repo = Repo::new("no-dumper");
     repo.write(
         "freeze/surfaces.toml",
-        "[[surface]]\nname = \"ghost\"\nbaseline = \"HEAD\"\n",
+        "required = [\"ghost\"]\n\n[[surface]]\nname = \"ghost\"\nbaseline = \"HEAD\"\n",
     );
     repo.commit();
     let output = repo.check(None);
     assert!(!output.status.success());
-    assert!(stderr(&output).contains("ghost"), "{}", stderr(&output));
+    let err = stderr(&output);
+    assert!(
+        err.contains("has a row for `ghost`") && err.contains("no dumper or API checker"),
+        "{err}"
+    );
 }
 
 /// A repository whose `surfaces.toml` holds `toml`, with the dump of the
@@ -130,7 +134,10 @@ fn check_notes_a_required_surface_without_a_row() {
     let output = repo.check(Some(("fixture", &fixture)));
     assert!(output.status.success(), "{}", stderr(&output));
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("is required but has no row"), "{stdout}");
+    assert!(
+        stdout.contains("surface `fixture` is required but has no row"),
+        "{stdout}"
+    );
 }
 
 #[test]
@@ -140,7 +147,7 @@ fn release_check_fails_on_a_required_surface_without_a_row() {
     assert!(!output.status.success());
     let err = stderr(&output);
     assert!(
-        err.contains("a release cannot leave a frozen surface without a baseline"),
+        err.contains("surface `fixture` is required but has no row: a release cannot leave a frozen surface without a baseline"),
         "{err}"
     );
 }
@@ -191,6 +198,25 @@ fn check_fails_on_an_unknown_name_in_required() {
         err.contains("lists `no-such` in `required` but no dumper"),
         "{err}"
     );
+    // The name has no surface, so no row can be added for it: the missing-row
+    // message would be wrong and is not printed.
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains("no-such"), "{stdout}");
+    assert!(!err.contains("has no row"), "{err}");
+    let output = repo.check_release(Some(("fixture", &fixture)));
+    assert!(
+        !stderr(&output).contains("has no row"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn update_rejects_the_release_flag() {
+    let repo = Repo::new("update-release");
+    let output = repo.run_with("update", &["--release"], None);
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("--release"), "{}", stderr(&output));
 }
 
 #[test]
