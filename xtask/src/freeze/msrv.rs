@@ -90,7 +90,7 @@ mod tests {
     }
 
     #[test]
-    fn msrv_dump_reads_ridl_rt() {
+    fn msrv_dump_reads_every_runtime_crate() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         let lines = dump(root).unwrap();
         assert!(
@@ -101,5 +101,13 @@ mod tests {
             lines.iter().any(|l| l == "ridl-rt edition=2021"),
             "{lines:?}"
         );
+        for name in RUNTIME_CRATES {
+            assert!(
+                lines
+                    .iter()
+                    .any(|l| l.starts_with(&format!("{name} edition="))),
+                "no edition line for `{name}`: {lines:?}"
+            );
+        }
     }
 }

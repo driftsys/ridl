@@ -608,6 +608,26 @@ ridl-rt = { version = \"0.8\", features = [\"flatbuffers\"] }\nregex = \"1\"\n";
         names.sort();
         assert_eq!(names, DENIED_LINTS.to_vec());
         assert!(lints.values().all(|v| v.as_str() == Some("deny")));
+        // The runtime crates are the crates that use the workspace's semver
+        // lints, so a crate dropped from `RUNTIME_CRATES` fails here.
+        let mut opted_in: Vec<String> = std::fs::read_dir(root.join("crates"))
+            .unwrap()
+            .flatten()
+            .filter(|entry| {
+                let path = entry.path().join("Cargo.toml");
+                path.is_file()
+                    && read(path)
+                        .get("package")
+                        .and_then(|p| p.get("metadata"))
+                        .and_then(|m| m.get("cargo-semver-checks"))
+                        .is_some()
+            })
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .collect();
+        opted_in.sort();
+        let mut expected: Vec<&str> = RUNTIME_CRATES.to_vec();
+        expected.sort();
+        assert_eq!(opted_in, expected);
         for name in RUNTIME_CRATES {
             let manifest = read(root.join("crates").join(name).join("Cargo.toml"));
             assert_eq!(

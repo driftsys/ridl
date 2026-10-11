@@ -1,9 +1,15 @@
 //! Behaviour of `cargo xtask freeze check`, run through the built binary
 //! against temporary git repositories.
 //!
-//! The `semver_check_*` tests run `cargo semver-checks` and are not
-//! `#[ignore]`d: `bootstrap` installs the tool, so it is a required tool of
-//! the workspace, and these tests fail when it is not on the `PATH`.
+//! The tests that compare a Rust API run `cargo semver-checks` and are not
+//! `#[ignore]`d: `bootstrap` requires the tool, and when it is missing,
+//! bootstrap prints the install command and exits with an error. These tests
+//! fail when the tool is not on the `PATH`: `semver_check_flags_a_removed_item`,
+//! `semver_check_passes_an_added_item`,
+//! `semver_check_flags_a_lint_that_warns_by_default`,
+//! `semver_check_flags_a_break_in_a_runtime_crate` and
+//! `semver_check_passes_runtime_crates_with_an_added_item`. The other tests
+//! stop before the tool starts.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -490,6 +496,54 @@ fn semver_check_flags_a_break_in_a_runtime_crate() {
             && err.contains("ridl_rt::removed"),
         "{err}"
     );
+    // The check compares every runtime crate, not only the broken one.
+    for name in RUNTIME_CRATES {
+        assert!(
+            err.lines()
+                .any(|l| l.trim_start().starts_with(&format!("Checking {name} v"))),
+            "`{name}` was not compared: {err}"
+        );
+    }
+}
+
+/// Makes `cargo fetch --locked` fail in `repo` without the network: the root
+/// manifest names a package version that its `Cargo.lock` does not hold, so
+/// the lock file would need an update.
+fn make_the_locked_fetch_fail(repo: &Repo) {
+    std::fs::create_dir_all(repo.dir.join("src")).unwrap();
+    repo.write("src/lib.rs", "");
+    repo.write(
+        "Cargo.toml",
+        "[package]\nname = \"stale\"\nversion = \"0.2.0\"\nedition = \"2021\"\n\n[workspace]\n",
+    );
+    repo.write(
+        "Cargo.lock",
+        "version = 3\n\n[[package]]\nname = \"stale\"\nversion = \"0.1.0\"\n",
+    );
+}
+
+#[test]
+fn runtime_check_fails_when_the_locked_fetch_fails() {
+    let repo = repo_with_runtime_baseline("runtime-fetch", &api_fixture("src/lib.rs"));
+    make_the_locked_fetch_fail(&repo);
+    let output = check_api_semver(&repo, "runtime-crates");
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(err.contains("`cargo fetch --locked` failed"), "{err}");
+}
+
+#[test]
+fn generated_check_fails_when_the_locked_fetch_fails() {
+    let repo = repo_with_api_baseline(
+        "generated-fetch",
+        &api_fixture("Cargo.toml"),
+        &api_fixture("src/lib.rs"),
+    );
+    make_the_locked_fetch_fail(&repo);
+    let output = check_generated_semver(&repo);
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(err.contains("`cargo fetch --locked` failed"), "{err}");
 }
 
 #[test]
