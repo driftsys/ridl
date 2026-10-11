@@ -2066,6 +2066,7 @@ dependencies = [
  "num-rational",
  "proptest",
  "pulldown-cmark",
+ "regex",
  "ridl-core",
  "ridl-descriptor",
  "ridl-diff",
