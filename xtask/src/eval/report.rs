@@ -72,18 +72,49 @@ fn side(runs: &[&Run], skill: bool) -> (f64, f64) {
     )
 }
 
+/// The number of runs of one side that have a rubric score.
+fn scored(runs: &[&Run], skill: bool) -> usize {
+    runs.iter()
+        .filter(|r| r.skill == skill && r.score.is_some())
+        .count()
+}
+
 pub struct HostGate {
     pub host: String,
     pub pass_with: f64,
     pub pass_without: f64,
     pub rubric_with: f64,
     pub rubric_without: f64,
+    /// Runs with the skill that have a rubric score.
+    pub scored_with: usize,
+    /// Runs without the skill that have a rubric score.
+    pub scored_without: usize,
 }
 
 impl HostGate {
-    /// The release gate: the skill is not worse on either score.
+    /// Whether both sides have at least one scored run. A mean over no run
+    /// is 0.0, which would let a side with no evidence pass the gate.
+    pub fn decided(&self) -> bool {
+        self.scored_with > 0 && self.scored_without > 0
+    }
+
+    /// The release gate: both sides have scored runs, and the skill is not
+    /// worse on either score.
     pub fn holds(&self) -> bool {
-        self.pass_with >= self.pass_without && self.rubric_with >= self.rubric_without
+        self.decided()
+            && self.pass_with >= self.pass_without
+            && self.rubric_with >= self.rubric_without
+    }
+
+    /// `holds`, `fails` or `undecided`, for the summary and the run's output.
+    pub fn verdict(&self) -> &'static str {
+        if !self.decided() {
+            "undecided (a side has no scored run)"
+        } else if self.holds() {
+            "holds"
+        } else {
+            "fails"
+        }
     }
 }
 
@@ -105,6 +136,8 @@ pub fn gate(out: &Path) -> Result<Vec<HostGate>, String> {
                 pass_without,
                 rubric_with,
                 rubric_without,
+                scored_with: scored(&runs, true),
+                scored_without: scored(&runs, false),
             }
         })
         .collect())
@@ -178,7 +211,7 @@ pub fn write_summary(out: &Path) -> Result<(), String> {
             gate.pass_without,
             gate.rubric_with,
             gate.rubric_without,
-            if gate.holds() { "holds" } else { "fails" }
+            gate.verdict()
         ));
     }
     let errors: Vec<&str> = runs
@@ -353,5 +386,24 @@ mod tests {
             agreement(&[(vec![], vec![true])]).unwrap_err(),
             "run 1 has 0 human labels for 1 rubric items"
         );
+    }
+
+    #[test]
+    fn the_gate_is_undecided_when_a_side_has_no_run() {
+        let out = out("one-side");
+        write(&out, "design-0001", "claude-with-1", true, true, Some(1.0));
+        let gates = gate(&out).unwrap();
+        assert!(!gates[0].decided());
+        assert!(!gates[0].holds());
+    }
+
+    #[test]
+    fn the_gate_is_undecided_when_no_run_of_a_side_was_scored() {
+        let out = out("unscored");
+        write(&out, "design-0001", "claude-with-1", true, true, Some(1.0));
+        write(&out, "design-0001", "claude-without-1", false, true, None);
+        let gates = gate(&out).unwrap();
+        assert!(!gates[0].decided());
+        assert!(!gates[0].holds());
     }
 }

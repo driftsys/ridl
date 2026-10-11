@@ -92,6 +92,11 @@ pub fn run(args: &[String]) -> Result<(), String> {
         .clone()
         .unwrap_or_else(|| root.join("evals/results").join(today()));
     let skill = root.join("skills/ridl-authoring");
+    let versions: Vec<(Host, String)> = options
+        .hosts
+        .iter()
+        .map(|&h| (h, host_version(h)))
+        .collect();
     for task in &tasks {
         let prompt =
             std::fs::read_to_string(task.dir.join("prompt.md")).map_err(|e| e.to_string())?;
@@ -124,6 +129,12 @@ pub fn run(args: &[String]) -> Result<(), String> {
                     result.insert("task".into(), task.id.clone().into());
                     result.insert("host".into(), host.name().into());
                     result.insert("model".into(), host.model(&models).into());
+                    let version = versions
+                        .iter()
+                        .find(|(h, _)| *h == host)
+                        .map(|(_, v)| v.clone())
+                        .unwrap_or_default();
+                    result.insert("host_version".into(), version.into());
                     result.insert("skill".into(), with_skill.into());
                     result.insert("run".into(), i64::from(n).into());
                     result.insert(
@@ -160,7 +171,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         eprintln!(
             "eval: gate {} {} (pass rate {:.2} with, {:.2} without; rubric {:.2} with, {:.2} without)",
             gate.host,
-            if gate.holds() { "holds" } else { "fails" },
+            gate.verdict(),
             gate.pass_with,
             gate.pass_without,
             gate.rubric_with,
@@ -168,6 +179,23 @@ pub fn run(args: &[String]) -> Result<(), String> {
         );
     }
     Ok(())
+}
+
+/// The first line `<host> --version` prints, recorded in each result file so
+/// a record says which build of the host produced it.
+fn host_version(host: Host) -> String {
+    std::process::Command::new(host.binary())
+        .arg("--version")
+        .stdin(std::process::Stdio::null())
+        .output()
+        .ok()
+        .and_then(|out| {
+            String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .next()
+                .map(|l| l.trim().to_owned())
+        })
+        .unwrap_or_else(|| "unknown".to_owned())
 }
 
 /// The agreement below which the judge's rubric marks are not trusted.
@@ -243,13 +271,22 @@ fn agreement_command(args: &[String]) -> Result<(), String> {
             .map(|a| a.iter().filter_map(toml::Value::as_bool).collect())
             .unwrap_or_default()
     };
-    let runs = labels["run"]
-        .as_array()
+    let runs = labels
+        .get("run")
+        .and_then(toml::Value::as_array)
         .ok_or("labels.toml has no [[run]]")?;
     let pairs: Vec<(Vec<bool>, Vec<bool>)> = runs
         .iter()
-        .map(|r| (flags(&r["human"]), flags(&r["judge"])))
-        .collect();
+        .enumerate()
+        .map(|(i, r)| {
+            let field = |key: &str| {
+                r.get(key)
+                    .map(flags)
+                    .ok_or_else(|| format!("run {} has no {key} array", i + 1))
+            };
+            Ok((field("human")?, field("judge")?))
+        })
+        .collect::<Result<_, String>>()?;
     let value = report::agreement(&pairs)?;
     let mut text = String::from(
         "# Judge check\n\n| Task | Run | Items agreed | Items |\n| --- | --- | --- | --- |\n",
@@ -258,8 +295,12 @@ fn agreement_command(args: &[String]) -> Result<(), String> {
         let agreed = human.iter().zip(judge).filter(|(h, j)| h == j).count();
         text.push_str(&format!(
             "| {} | {} | {agreed} | {} |\n",
-            run["task"].as_str().unwrap_or_default(),
-            run["label"].as_str().unwrap_or_default(),
+            run.get("task")
+                .and_then(toml::Value::as_str)
+                .unwrap_or_default(),
+            run.get("label")
+                .and_then(toml::Value::as_str)
+                .unwrap_or_default(),
             judge.len()
         ));
     }

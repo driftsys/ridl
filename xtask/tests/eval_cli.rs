@@ -27,7 +27,8 @@ struct Fakes {
 /// Reads the prompt from stdin and sets `$items` to a verdict entry marking
 /// every rubric item the prompt holds as met, so a fake host can act as the
 /// judge.
-const JUDGE_ITEMS: &str = r#"prompt=$(cat)
+const JUDGE_ITEMS: &str = r#"[ "$1" = --version ] && { echo "fake-host 1.0"; exit 0; }
+prompt=$(cat)
 items=$(printf '%s\n' "$prompt" | grep -E '^[0-9]+\. \*\*' | awk -F. '{printf "%s{\"n\":%s,\"met\":true,\"reason\":\"r\"}", (NR>1?",":""), $1}')"#;
 
 fn fakes_with(claude_body: Option<&str>) -> Fakes {
@@ -221,6 +222,7 @@ fn a_run_writes_its_mechanical_score() {
     );
     let result = result(&out, "evolve-0001", "claude-without-1");
     assert_eq!(result["task"].as_str(), Some("evolve-0001"));
+    assert_eq!(result["host_version"].as_str(), Some("fake-host 1.0"));
     assert_eq!(result["skill"].as_bool(), Some(false));
     let mechanical = &result["mechanical"];
     assert_eq!(mechanical["no_error"].as_bool(), Some(true));
@@ -387,4 +389,18 @@ fn agreement_at_the_floor_passes() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+#[test]
+fn a_labels_file_without_human_labels_is_an_input_error() {
+    let fakes = fakes_with(None);
+    let path = fakes.dir.join("labels.toml");
+    std::fs::write(
+        &path,
+        "[[run]]\ntask = \"design-0001\"\nlabel = \"claude-with-1\"\njudge = [true]\n",
+    )
+    .unwrap();
+    let output = eval(&fakes, &["agreement", path.to_str().unwrap()], true);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("has no human"));
 }
