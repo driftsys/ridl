@@ -834,7 +834,7 @@ encoding from `ridl_rt::encoding`.
 
 MANI-015 is an error when the `encodings` value is not an array of the known
 names or repeats a name, and MANI-016 is an error when the manifest of a
-workspace member holds a `[backend.<name>]` table: only the workspace root,
+workspace member holds a `backend` key or `[backend.<name>]` table: only the workspace root,
 or a standalone package, sets it. Any other key under `[backend.<name>]` is
 MANI-005. The table is not the `backend.` attribute namespace of an rsdl
 declaration. The lint RSDL-807 `link-encoding-not-emitted` warns when a link of

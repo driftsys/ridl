@@ -1379,9 +1379,9 @@ diag_codes! {
         MANI_015 = "MANI-015", Error,
             "`[backend.<name>] encodings` is not an array of encoding names, names an unknown encoding, or names one twice";
 
-        /// A workspace member's manifest holds a `[backend.<name>]` table. Only
-        /// the workspace root's manifest, or a standalone package's manifest,
-        /// may hold one.
+        /// A workspace member's manifest holds a `backend` key or a
+        /// `[backend.<name>]` table. Only the workspace root's manifest, or a
+        /// standalone package's manifest, may hold one.
         MANI_016 = "MANI-016", Error,
             "`[backend.<name>]` is set in a workspace member";
 

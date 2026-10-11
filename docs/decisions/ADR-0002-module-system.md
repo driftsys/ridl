@@ -304,11 +304,11 @@ workspace root's manifest, or a standalone package's manifest, may hold a
 `[backend.<name>]` table. MANI-015 (Error) is raised when `backend` or a
 `[backend.<name>]` is not a table, when `encodings` is not an array of strings,
 when an element is not a known name, and when an element repeats; MANI-016
-(Error) is raised when the manifest of a workspace member holds any such table;
-any other key under `[backend.<name>]` is MANI-005. These tables are not the
-`backend.key` attribute namespace of rsdl (RSDL-804, which annotates rsdl
-declarations): the two share the word and nothing else. Single-file mode has no
-manifest and so no encodings.
+(Error) is raised when the manifest of a workspace member holds a `backend` key
+or `[backend.<name>]` table; any other key under `[backend.<name>]` is MANI-005.
+These tables are not the `backend.key` attribute namespace of rsdl (RSDL-804,
+which annotates rsdl declarations): the two share the word and nothing else.
+Single-file mode has no manifest and so no encodings.
 
 **Rationale — one file shape.** A second file type for workspaces would double
 the file count and the file's semantic baggage for no real gain. A section-based

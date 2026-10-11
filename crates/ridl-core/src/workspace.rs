@@ -734,7 +734,7 @@ impl Loader {
                 file_id,
                 byte_range(range.start, range.end),
                 format!(
-                    "a `[backend.<name>]` table is set in workspace member `{member}`; set it in the workspace root's `ridl.toml`"
+                    "a `backend` key or `[backend.<name>]` table is set in workspace member `{member}`; set it in the workspace root's `ridl.toml`"
                 ),
             ));
         }
