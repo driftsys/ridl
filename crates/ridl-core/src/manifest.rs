@@ -1667,17 +1667,19 @@ version = \"1.0.0\"
         assert_eq!(codes(&diags), vec!["MANI-005"]);
     }
 
-    /// A value of each type of `KNOWN_KEYS`, and values of other types.
-    fn type_samples(value_type: &str) -> (&'static str, &'static [&'static str]) {
+    /// Values of each type of `KNOWN_KEYS`, and values of other types. A plain
+    /// `table` accepts a table that holds an integer, which each `table<T>` of
+    /// the list rejects, so the two are told apart.
+    fn type_samples(value_type: &str) -> (&'static [&'static str], &'static [&'static str]) {
         match value_type {
-            "string" => ("\"flatbuffers\"", &["1", "[]"]),
-            "table" => ("{}", &["1", "\"x\""]),
-            "array<string>" => ("[\"flatbuffers\"]", &["1", "[1]"]),
+            "string" => (&["\"flatbuffers\""], &["1", "[]"]),
+            "table" => (&["{}", "{ a = 1 }"], &["1", "\"x\""]),
+            "array<string>" => (&["[\"flatbuffers\"]"], &["1", "[1]"]),
             "table<string>" => (
-                "{ missing-docs = \"warn\" }",
+                &["{ missing-docs = \"warn\" }"],
                 &["1", "{ missing-docs = 1 }"],
             ),
-            "table<table>" => ("{ rust = {} }", &["1", "{ rust = 1 }"]),
+            "table<table>" => (&["{ rust = {} }"], &["1", "{ rust = 1 }"]),
             other => panic!("KNOWN_KEYS names the unknown value type `{other}`"),
         }
     }
@@ -1691,13 +1693,15 @@ version = \"1.0.0\"
         for (section, keys) in KNOWN_KEYS {
             for (key, value_type) in *keys {
                 let (right, wrong) = type_samples(value_type);
-                let text = manifest_with(section, key, right);
-                let (_, diags) = parse(&text);
-                assert!(
-                    !codes(&diags).iter().any(|c| TYPE_CODES.contains(c)),
-                    "`{section}` key `{key}` is `{value_type}`, but the reader rejects \
-                     {right}: {diags:?}\n{text}"
-                );
+                for value in right {
+                    let text = manifest_with(section, key, value);
+                    let (_, diags) = parse(&text);
+                    assert!(
+                        !codes(&diags).iter().any(|c| TYPE_CODES.contains(c)),
+                        "`{section}` key `{key}` is `{value_type}`, but the reader rejects \
+                         {value}: {diags:?}\n{text}"
+                    );
+                }
                 for value in wrong {
                     let text = manifest_with(section, key, value);
                     let (_, diags) = parse(&text);

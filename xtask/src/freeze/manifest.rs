@@ -31,6 +31,8 @@ mod tests {
         for line in [
             "backend.*.encodings array<string>",
             "package.name string",
+            "backend table<table>",
+            "lints table<string>",
             "imports table<string>",
         ] {
             assert!(
