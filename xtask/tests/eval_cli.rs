@@ -173,3 +173,100 @@ fn an_unknown_argument_is_an_error() {
     assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&output.stderr).contains("--runs takes a positive number"));
 }
+
+fn result(out: &Path, task: &str, label: &str) -> toml::Value {
+    let text = std::fs::read_to_string(out.join(task).join(format!("{label}.toml")))
+        .unwrap_or_else(|e| panic!("read the result of {task} {label}: {e}"));
+    toml::from_str(&text).unwrap()
+}
+
+#[test]
+fn a_run_writes_its_mechanical_score() {
+    let fakes = fakes_with(None);
+    let out = fakes.dir.join("results");
+    let output = eval(
+        &fakes,
+        &[
+            "--task",
+            "evolve-0001",
+            "--host",
+            "claude",
+            "--skill",
+            "without",
+            "--out",
+            out.to_str().unwrap(),
+        ],
+        true,
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result = result(&out, "evolve-0001", "claude-without-1");
+    assert_eq!(result["task"].as_str(), Some("evolve-0001"));
+    assert_eq!(result["skill"].as_bool(), Some(false));
+    let mechanical = &result["mechanical"];
+    assert_eq!(mechanical["no_error"].as_bool(), Some(true));
+    assert_eq!(mechanical["verify_loop"].as_bool(), Some(true));
+    assert_eq!(mechanical["diff_matches"].as_bool(), Some(true));
+    assert_eq!(mechanical["passed"].as_bool(), Some(true));
+}
+
+#[test]
+fn a_deleted_manifest_fails_the_check_with_a_note() {
+    let fakes = fakes_with(Some(
+        r#"cat > /dev/null; rm -f ridl.toml; echo '{"type":"tool_use","name":"mcp__ridl__ridl_check"}'"#,
+    ));
+    let out = fakes.dir.join("results");
+    let output = eval(
+        &fakes,
+        &[
+            "--task",
+            "evolve-0001",
+            "--host",
+            "claude",
+            "--skill",
+            "without",
+            "--out",
+            out.to_str().unwrap(),
+        ],
+        true,
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let mechanical = result(&out, "evolve-0001", "claude-without-1")["mechanical"].clone();
+    assert_eq!(mechanical["no_error"].as_bool(), Some(false));
+    assert_eq!(mechanical["passed"].as_bool(), Some(false));
+    let notes = mechanical["notes"].as_array().unwrap();
+    assert!(
+        notes
+            .iter()
+            .any(|n| n.as_str().unwrap().contains("ridl.toml")),
+        "{notes:?}"
+    );
+}
+
+#[test]
+fn a_with_run_whose_host_did_not_load_the_skill_is_a_setup_error() {
+    let fakes = fakes_with(None);
+    let output = eval(
+        &fakes,
+        &[
+            "--task",
+            "design-0001",
+            "--host",
+            "claude",
+            "--skill",
+            "with",
+            "--out",
+            fakes.dir.join("results").to_str().unwrap(),
+        ],
+        true,
+    );
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("did not load the skill"));
+}

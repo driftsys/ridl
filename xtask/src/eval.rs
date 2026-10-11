@@ -6,6 +6,7 @@
 //! [--skill with|without|both] [--out <dir>]`
 
 mod host;
+mod score;
 mod task;
 
 use host::Host;
@@ -104,6 +105,32 @@ pub fn run(args: &[String]) -> Result<(), String> {
                         host::agent_invocation(host, host.model(&models), &dirs, &prompt);
                     let status = host::run(&invocation, &dirs.transcript)?;
                     eprintln!("eval: {} {label}: agent exited {status}", task.id);
+                    let transcript = std::fs::read_to_string(&dirs.transcript).unwrap_or_default();
+                    if with_skill && !score::skill_was_loaded(host, &transcript) {
+                        return Err(format!(
+                            "{} {label}: the host did not load the skill; this is a setup error, not a result",
+                            task.id
+                        ));
+                    }
+                    let mechanical = score::score_mechanical(task, &dirs, &transcript);
+                    let mut result = toml::Table::new();
+                    result.insert("task".into(), task.id.clone().into());
+                    result.insert("host".into(), host.name().into());
+                    result.insert("model".into(), host.model(&models).into());
+                    result.insert("skill".into(), with_skill.into());
+                    result.insert("run".into(), i64::from(n).into());
+                    result.insert(
+                        "agent_exit".into(),
+                        i64::from(status.code().unwrap_or(-1)).into(),
+                    );
+                    result.insert("mechanical".into(), mechanical_table(&mechanical).into());
+                    let result_dir = out.join(&task.id);
+                    std::fs::create_dir_all(&result_dir).map_err(|e| e.to_string())?;
+                    std::fs::write(
+                        result_dir.join(format!("{label}.toml")),
+                        toml::to_string(&result).map_err(|e| e.to_string())?,
+                    )
+                    .map_err(|e| e.to_string())?;
                     let transcripts = out.join("transcripts").join(&task.id);
                     std::fs::create_dir_all(&transcripts).map_err(|e| e.to_string())?;
                     std::fs::copy(&dirs.transcript, transcripts.join(format!("{label}.jsonl")))
@@ -113,6 +140,22 @@ pub fn run(args: &[String]) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn mechanical_table(mechanical: &score::Mechanical) -> toml::Table {
+    let mut table = toml::Table::new();
+    table.insert("no_error".into(), mechanical.no_error.into());
+    table.insert("lints_match".into(), mechanical.lints_match.into());
+    if let Some(matches) = mechanical.diff_matches {
+        table.insert("diff_matches".into(), matches.into());
+    }
+    table.insert("verify_loop".into(), mechanical.verify_loop.into());
+    table.insert("passed".into(), mechanical.passed().into());
+    table.insert(
+        "notes".into(),
+        toml::Value::Array(mechanical.notes.iter().map(|n| n.clone().into()).collect()),
+    );
+    table
 }
 
 /// The judge of each host is the other host, so both keys are needed for any

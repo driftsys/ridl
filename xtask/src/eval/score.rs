@@ -1,0 +1,294 @@
+//! Mechanical scoring of one run: the final workspace checks without an
+//! error, its design lints match the task, an evolve task's diff verdict
+//! matches, and the agent called `ridl_check`.
+
+use super::host::{Host, RunDirs, ridl_binary};
+use super::task::{Kind, Task};
+use std::collections::BTreeSet;
+use std::process::Command;
+
+/// The shipped design lints, the only lints a task's `expect.lints` names.
+pub const DESIGN_LINTS: [&str; 3] = [
+    "inconsistent-unit",
+    "duplicate-shape",
+    "low-cohesion-interface",
+];
+
+#[derive(Clone, Debug)]
+pub struct Mechanical {
+    pub no_error: bool,
+    pub lints_match: bool,
+    /// `Some` only for an evolve task.
+    pub diff_matches: Option<bool>,
+    pub verify_loop: bool,
+    /// Why a check failed.
+    pub notes: Vec<String>,
+}
+
+impl Mechanical {
+    pub fn passed(&self) -> bool {
+        self.no_error && self.lints_match && self.diff_matches != Some(false) && self.verify_loop
+    }
+}
+
+fn json_lines(transcript: &str) -> impl Iterator<Item = serde_json::Value> + '_ {
+    transcript
+        .lines()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+}
+
+/// Every JSON object in `value`, at any depth, `value` itself included.
+fn objects(value: &serde_json::Value) -> Vec<&serde_json::Map<String, serde_json::Value>> {
+    let mut found = Vec::new();
+    let mut stack = vec![value];
+    while let Some(v) = stack.pop() {
+        match v {
+            serde_json::Value::Object(map) => {
+                found.push(map);
+                stack.extend(map.values());
+            }
+            serde_json::Value::Array(items) => stack.extend(items),
+            _ => {}
+        }
+    }
+    found
+}
+
+fn str_field<'a>(
+    map: &'a serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) -> Option<&'a str> {
+    map.get(key).and_then(serde_json::Value::as_str)
+}
+
+/// True when the transcript holds a tool call whose name is `ridl_check`, or
+/// ends with `__ridl_check` (Claude names an MCP tool `mcp__<server>__<tool>`).
+/// Text that only mentions the name does not count.
+pub fn used_ridl_check(transcript: &str) -> bool {
+    json_lines(transcript).any(|line| {
+        objects(&line).into_iter().any(|map| {
+            let is_call = matches!(str_field(map, "type"), Some("tool_use" | "mcp_tool_call"));
+            let named = ["name", "tool"]
+                .iter()
+                .filter_map(|key| str_field(map, key))
+                .any(|n| n == "ridl_check" || n.ends_with("__ridl_check"));
+            is_call && named
+        })
+    })
+}
+
+/// Whether the transcript shows that the host made the skill available.
+/// Claude: the `init` line lists `ridl-authoring` among its skills, or the
+/// agent called the `Skill` tool on it. Codex: the agent read a file of the
+/// skill's directory with a command. Text that only mentions the skill does
+/// not count.
+pub fn skill_was_loaded(host: Host, transcript: &str) -> bool {
+    json_lines(transcript).any(|line| {
+        objects(&line).into_iter().any(|map| match host {
+            Host::Claude => {
+                let listed = str_field(map, "subtype") == Some("init")
+                    && map
+                        .get("skills")
+                        .and_then(serde_json::Value::as_array)
+                        .is_some_and(|skills| skills.iter().any(|s| s == "ridl-authoring"));
+                let called = str_field(map, "type") == Some("tool_use")
+                    && str_field(map, "name") == Some("Skill")
+                    && map
+                        .get("input")
+                        .and_then(|input| input.get("skill"))
+                        .is_some_and(|s| s == "ridl-authoring");
+                listed || called
+            }
+            Host::Codex => {
+                str_field(map, "type") == Some("command_execution")
+                    && str_field(map, "command")
+                        .is_some_and(|c| c.contains("skills/ridl-authoring/"))
+            }
+        })
+    })
+}
+
+/// The number of Error diagnostics in `ridl check --format json` output, and
+/// the design lints it reports.
+pub fn errors_and_lints(check_json: &str) -> Result<(usize, BTreeSet<String>), String> {
+    let report: serde_json::Value = serde_json::from_str(check_json)
+        .map_err(|_| format!("ridl check printed no JSON: {}", check_json.trim()))?;
+    let items = report.as_array().ok_or("ridl check JSON is not an array")?;
+    let errors = items.iter().filter(|d| d["severity"] == "error").count();
+    let lints = items
+        .iter()
+        .filter_map(|d| d["lint"].as_str())
+        .filter(|l| DESIGN_LINTS.contains(l))
+        .map(str::to_owned)
+        .collect();
+    Ok((errors, lints))
+}
+
+pub fn score_mechanical(task: &Task, dirs: &RunDirs, transcript: &str) -> Mechanical {
+    let mut notes = Vec::new();
+    let check = Command::new(ridl_binary())
+        .args(["check", "--format", "json"])
+        .arg(&dirs.workspace)
+        .output();
+    let (no_error, lints_match) = match check {
+        Ok(out) => match errors_and_lints(&String::from_utf8_lossy(&out.stdout)) {
+            Ok((errors, lints)) => {
+                let expected: BTreeSet<String> = task.expect_lints.iter().cloned().collect();
+                if errors > 0 {
+                    notes.push(format!("ridl check reported {errors} error(s)"));
+                }
+                if lints != expected {
+                    notes.push(format!("design lints {lints:?}, expected {expected:?}"));
+                }
+                (errors == 0, lints == expected)
+            }
+            Err(e) => {
+                notes.push(format!(
+                    "{e} {}",
+                    String::from_utf8_lossy(&out.stderr).trim()
+                ));
+                (false, false)
+            }
+        },
+        Err(e) => {
+            notes.push(format!("ridl check did not run: {e}"));
+            (false, false)
+        }
+    };
+    let diff_matches = (task.kind == Kind::Evolve).then(|| {
+        let verdict = task.start.as_ref().and_then(|start| {
+            Command::new(ridl_binary())
+                .args(["diff", "--format", "json"])
+                .arg(start)
+                .arg(&dirs.workspace)
+                .output()
+                .ok()
+                .and_then(|o| serde_json::from_slice::<serde_json::Value>(&o.stdout).ok())
+                .and_then(|v| v["verdict"].as_str().map(str::to_owned))
+        });
+        let matches = verdict.is_some() && verdict.as_deref() == task.expect_diff.as_deref();
+        if !matches {
+            notes.push(format!(
+                "diff verdict {verdict:?}, expected {:?}",
+                task.expect_diff
+            ));
+        }
+        matches
+    });
+    let verify_loop = used_ridl_check(transcript);
+    if !verify_loop {
+        notes.push("the agent made no ridl_check call".to_owned());
+    }
+    Mechanical {
+        no_error,
+        lints_match,
+        diff_matches,
+        verify_loop,
+        notes,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const CLAUDE_CALL: &str = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"mcp__ridl__ridl_check","input":{"path":"."}}]}}"#;
+    const CODEX_CALL: &str = r#"{"type":"item.completed","item":{"id":"i1","type":"mcp_tool_call","server":"ridl","tool":"ridl_check","status":"completed"}}"#;
+    const TEXT_ONLY: &str = r#"{"type":"assistant","message":{"content":[{"type":"text","text":"I ran ridl_check and mcp__ridl__ridl_check"}]}}"#;
+    const CLAUDE_INIT_WITH: &str = r#"{"type":"system","subtype":"init","skills":["ridl-authoring"],"mcp_servers":[{"name":"ridl","status":"connected"}]}"#;
+    const CLAUDE_INIT_WITHOUT: &str = r#"{"type":"system","subtype":"init","skills":[],"mcp_servers":[{"name":"ridl","status":"connected"}]}"#;
+    const CLAUDE_SKILL_CALL: &str = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t2","name":"Skill","input":{"skill":"ridl-authoring"}}]}}"#;
+    const CODEX_SKILL_READ: &str = r#"{"type":"item.completed","item":{"id":"i2","type":"command_execution","command":"cat /h/skills/ridl-authoring/SKILL.md","status":"completed"}}"#;
+    const CODEX_TEXT_MENTION: &str = r#"{"type":"item.completed","item":{"id":"i3","type":"agent_message","text":"I would use ridl-authoring/SKILL.md if I had it"}}"#;
+
+    #[test]
+    fn a_tool_call_to_ridl_check_is_found_on_each_host() {
+        assert!(used_ridl_check(CLAUDE_CALL));
+        assert!(used_ridl_check(CODEX_CALL));
+    }
+
+    #[test]
+    fn a_transcript_that_only_mentions_ridl_check_fails_the_verify_loop() {
+        assert!(!used_ridl_check(TEXT_ONLY));
+        assert!(!used_ridl_check("not json at all ridl_check"));
+    }
+
+    #[test]
+    fn claude_skill_loading_is_told_apart() {
+        assert!(skill_was_loaded(Host::Claude, CLAUDE_INIT_WITH));
+        assert!(skill_was_loaded(Host::Claude, CLAUDE_SKILL_CALL));
+        assert!(!skill_was_loaded(Host::Claude, CLAUDE_INIT_WITHOUT));
+        assert!(!skill_was_loaded(Host::Claude, TEXT_ONLY));
+    }
+
+    #[test]
+    fn codex_skill_loading_is_told_apart() {
+        assert!(skill_was_loaded(Host::Codex, CODEX_SKILL_READ));
+        assert!(!skill_was_loaded(Host::Codex, CODEX_TEXT_MENTION));
+        assert!(!skill_was_loaded(Host::Codex, CODEX_CALL));
+    }
+
+    #[test]
+    fn errors_are_counted_and_only_design_lints_are_kept() {
+        let json = r#"[
+          {"code":"TYPL-101","severity":"error","message":"m","span":null,"labels":[],"fixes":[]},
+          {"code":"TYPL-406","severity":"warning","lint":"missing-docs","message":"m","span":null,"labels":[],"fixes":[]},
+          {"code":"TYPL-224","severity":"info","lint":"duplicate-shape","message":"m","span":null,"labels":[],"fixes":[]}
+        ]"#;
+        let (errors, lints) = errors_and_lints(json).unwrap();
+        assert_eq!(errors, 1);
+        assert_eq!(lints.into_iter().collect::<Vec<_>>(), ["duplicate-shape"]);
+    }
+
+    #[test]
+    fn output_that_is_not_json_is_an_error() {
+        assert!(errors_and_lints("error: no ridl.toml").is_err());
+    }
+
+    #[test]
+    fn a_run_passes_only_when_every_check_passes() {
+        let all = Mechanical {
+            no_error: true,
+            lints_match: true,
+            diff_matches: None,
+            verify_loop: true,
+            notes: vec![],
+        };
+        assert!(all.passed());
+        assert!(
+            !Mechanical {
+                diff_matches: Some(false),
+                ..all.clone()
+            }
+            .passed()
+        );
+        assert!(
+            Mechanical {
+                diff_matches: Some(true),
+                ..all.clone()
+            }
+            .passed()
+        );
+        assert!(
+            !Mechanical {
+                verify_loop: false,
+                ..all.clone()
+            }
+            .passed()
+        );
+        assert!(
+            !Mechanical {
+                no_error: false,
+                ..all.clone()
+            }
+            .passed()
+        );
+        assert!(
+            !Mechanical {
+                lints_match: false,
+                ..all
+            }
+            .passed()
+        );
+    }
+}
