@@ -6,6 +6,9 @@ ridl_check input /properties/overlays/items/properties/path string
 ridl_check input /properties/overlays/items/properties/source required
 ridl_check input /properties/overlays/items/properties/source string
 ridl_check input /properties/path null|string
+ridl_check input /properties/profile enum ridl
+ridl_check input /properties/profile enum rsdl
+ridl_check input /properties/profile enum typl
 ridl_check input /properties/profile null|string
 ridl_check input /properties/source null|string
 ridl_check output /properties/diagnostics array
@@ -112,6 +115,22 @@ ridl_diff input /properties/overlays/items/properties/source string
 ridl_explain
 ridl_explain input /properties/code required
 ridl_explain input /properties/code string
+ridl_explain output /properties/category required
+ridl_explain output /properties/category string
+ridl_explain output /properties/code required
+ridl_explain output /properties/code string
+ridl_explain output /properties/default_level null|string
+ridl_explain output /properties/kind const diagnostic
+ridl_explain output /properties/kind const diff_category
+ridl_explain output /properties/kind required
+ridl_explain output /properties/kind string
+ridl_explain output /properties/lint null|string
+ridl_explain output /properties/severity required
+ridl_explain output /properties/severity string
+ridl_explain output /properties/summary required
+ridl_explain output /properties/summary string
+ridl_explain output /properties/text required
+ridl_explain output /properties/text string
 ridl_list_interactions
 ridl_list_interactions input /properties/from null|string
 ridl_list_interactions input /properties/interface required
@@ -225,6 +244,10 @@ ridl_references output /properties/references/items object
 ridl_references output /properties/references/items/properties/declaration required
 ridl_references output /properties/references/items/properties/declaration string
 ridl_references output /properties/references/items/properties/interaction null|string
+ridl_references output /properties/references/items/properties/kind enum component
+ridl_references output /properties/references/items/properties/kind enum declaration
+ridl_references output /properties/references/items/properties/kind enum interface
+ridl_references output /properties/references/items/properties/kind enum service
 ridl_references output /properties/references/items/properties/kind required
 ridl_references output /properties/references/items/properties/kind string
 ridl_references output /properties/references/items/properties/location null|object
