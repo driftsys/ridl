@@ -1,14 +1,14 @@
 //! This backend behind the backend contract (ADR-0020 decision 9): the
 //! in-process face `ridlc` calls.
 //!
-//! **Transition.** [`generate`](crate::generate) still reads the raw IR, and
-//! this backend is ported onto the model in its own story, after the Rust
-//! backend (`docs/design/codegen-plugins.md`). Until then the backend value
-//! holds a [`RawIr`] and `generate` reads that in place of `request.model`.
+//! **Transition.** The backend reads its doc comments from `request.model`,
+//! and everything else from the raw IR: it is ported onto the model in steps,
+//! after the Rust backend (`docs/design/codegen-plugins.md`). Until the port
+//! is complete the backend value holds a [`RawIr`] as well.
 
 use ridl_ir::codegen::{self, RawIr, v1};
 
-use crate::{GenerateError, generate};
+use crate::{GenerateError, generate_with};
 
 /// The TypeScript backend as a [`codegen::Backend`]: one file,
 /// `<artifact_base>.ts`, from [`generate`]. It takes no option.
@@ -36,7 +36,17 @@ impl codegen::Backend for Backend<'_> {
             ));
         }
         let preamble = codegen::comment_preamble(&request.generated_marker, &request.header, "//");
-        match generate(self.raw.package) {
+        // A request built without a model is lowered here from the raw IR,
+        // the same lowering `ridlc` performs for the request.
+        let lowered;
+        let model = match &request.model {
+            Some(model) => model,
+            None => {
+                lowered = codegen::lower(self.raw.package, self.raw.others);
+                &lowered
+            }
+        };
+        match generate_with(self.raw.package, model) {
             Ok(generated) => v1::CodegenResponse {
                 files: vec![codegen::text_file(
                     format!("{}.ts", request.artifact_base),

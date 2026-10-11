@@ -1463,3 +1463,455 @@ pub(crate) fn discover_tsc() -> Option<(String, Vec<String>)> {
     }
     None
 }
+
+// ---------------------------------------------------------------------------
+// TSDoc blocks: links, rules, `see` and `since`, read from the model.
+// ---------------------------------------------------------------------------
+
+/// One resolved doc link of `doc`: the bytes of `written` at its first
+/// occurrence, with the text inside the brackets, pointing at `target`.
+fn doc_link(doc: &str, written: &str, target: &str) -> v2::DocLink {
+    let offset = doc.find(written).expect("the link is written in the doc");
+    v2::DocLink {
+        text: written
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .to_string(),
+        offset: offset as u32,
+        len: written.len() as u32,
+        target: target.to_string(),
+    }
+}
+
+/// One `@see` target: no offset and no length, as the checker stores it.
+fn see_link(text: &str, target: &str) -> v2::DocLink {
+    v2::DocLink {
+        text: text.to_string(),
+        offset: 0,
+        len: 0,
+        target: target.to_string(),
+    }
+}
+
+/// `type Vin : string [len 17] match <pattern>`.
+fn string_type(name: &str, pattern: &str) -> v2::Decl {
+    public_decl(
+        name,
+        v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::String as i32,
+                )),
+            }),
+            constraint: Some(v2::Constraint {
+                len_min: Some(17),
+                len_max: Some(17),
+                pattern: Some(pattern.to_string()),
+                ..constraint(None, None, None)
+            }),
+            declared_init: None,
+            init: Some(init_value(false, None)),
+            width: None,
+        }),
+    )
+}
+
+/// The declarations the doc-block tests share: `Speed` (range, step and
+/// unit), `Vin` (length and pattern), an internal `Hidden`, a `bytes`
+/// constant the backend does not emit, and a struct `Reading` whose doc links
+/// a local type, a type member, a type of a package outside the output, the
+/// internal type and the constant, and whose fields carry the rules of their
+/// types and a collection bound.
+fn documented_decls() -> Vec<v2::Decl> {
+    let reading_doc = "Combines [Speed] and [Reading.speed], \
+        from [other.pkg.Thing], [Hidden] and [BLOB].";
+    let speed_doc = "The speed of this reading.";
+    let samples = v2::Field {
+        r#type: Some(v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                element: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Named("Speed".to_string())),
+                })),
+                min: 1,
+                max: 8,
+            }))),
+        }),
+        doc: "The raw samples.".to_string(),
+        ..named_field("samples", 2, "Speed", false, init_value(false, None))
+    };
+    let reading = v2::StructDef {
+        members: vec![
+            field_member(v2::Field {
+                doc: speed_doc.to_string(),
+                see: vec![see_link("Vin", "veh.common.Vin")],
+                since: vec!["0.2".to_string()],
+                ..named_field("speed", 1, "Speed", false, init_value(true, None))
+            }),
+            field_member(samples),
+            field_member(v2::Field {
+                deprecated: Some("use the frame number".to_string()),
+                ..named_field("vin", 3, "Vin", false, init_value(false, None))
+            }),
+        ],
+        fixed_layout: false,
+    };
+    vec![
+        speed_decl(),
+        string_type("Vin", "/[A-HJ-NPR-Z0-9]{17}/"),
+        v2::Decl {
+            visibility: v2::Visibility::Internal as i32,
+            ..public_decl(
+                "Hidden",
+                primitive_type(
+                    v2::PrimitiveType::Integer,
+                    init_value(true, Some("0")),
+                    Some(v2::type_def::Width::IntWidth(v2::IntWidth::U16 as i32)),
+                ),
+            )
+        },
+        public_decl(
+            "BLOB",
+            v2::decl::Kind::ConstDef(v2::ConstDef {
+                type_ref: Some("bytes".to_string()),
+                value: "00".to_string(),
+                regex: None,
+            }),
+        ),
+        v2::Decl {
+            doc: reading_doc.to_string(),
+            links: vec![
+                doc_link(reading_doc, "[Speed]", "veh.common.Speed"),
+                doc_link(reading_doc, "[Reading.speed]", "veh.common.Reading.speed"),
+                doc_link(reading_doc, "[other.pkg.Thing]", "other.pkg.Thing"),
+                doc_link(reading_doc, "[Hidden]", "veh.common.Hidden"),
+                doc_link(reading_doc, "[BLOB]", "veh.common.BLOB"),
+            ],
+            see: vec![
+                see_link("Speed", "veh.common.Speed"),
+                see_link("other.pkg.Thing", "other.pkg.Thing"),
+            ],
+            since: vec!["0.3".to_string(), "0.4".to_string()],
+            deprecated: Some("use Frame".to_string()),
+            ..public_decl("Reading", v2::decl::Kind::StructDef(reading))
+        },
+    ]
+}
+
+/// An enum, an enum set and a union whose members carry docs: a link to an
+/// enum value, to an enum set bit, to a union arm (no TypeScript member, so a
+/// code span), `@see` and `@since`.
+fn documented_members() -> Vec<v2::Decl> {
+    let park_doc = "Held by [Gear.DRIVE] until released.";
+    let gear = public_decl(
+        "Gear",
+        v2::decl::Kind::EnumDef(v2::EnumDef {
+            values: vec![
+                v2::EnumValue {
+                    doc: park_doc.to_string(),
+                    links: vec![doc_link(park_doc, "[Gear.DRIVE]", "veh.common.Gear.DRIVE")],
+                    see: vec![see_link("Speed", "veh.common.Speed")],
+                    since: vec!["0.2".to_string(), "0.5".to_string()],
+                    ..enum_value("PARK", 0)
+                },
+                enum_value("DRIVE", 1),
+            ],
+            reserved: Vec::new(),
+        }),
+    );
+    let low_fuel_doc = "Raised with [Warnings.DOOR_OPEN] off.";
+    let mut bits = warning_bits();
+    bits[0] = v2::EnumValue {
+        doc: low_fuel_doc.to_string(),
+        links: vec![doc_link(
+            low_fuel_doc,
+            "[Warnings.DOOR_OPEN]",
+            "veh.common.Warnings.DOOR_OPEN",
+        )],
+        since: vec!["0.6".to_string()],
+        ..enum_value("LOW_FUEL", 0)
+    };
+    let warnings = public_decl(
+        "Warnings",
+        v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+            backing_enum: None,
+            bits,
+            width: v2::IntWidth::U8 as i32,
+        }),
+    );
+    let arm_doc = "A value in [Speed], see [Measurement.fault].";
+    let measurement = v2::UnionDef {
+        arms: vec![
+            v2::UnionArm {
+                name: "reading".to_string(),
+                ordinal: 1,
+                type_ref: "Speed".to_string(),
+                doc: arm_doc.to_string(),
+                links: vec![
+                    doc_link(arm_doc, "[Speed]", "veh.common.Speed"),
+                    doc_link(
+                        arm_doc,
+                        "[Measurement.fault]",
+                        "veh.common.Measurement.fault",
+                    ),
+                ],
+                see: vec![see_link("other.pkg.Thing", "other.pkg.Thing")],
+                since: vec!["0.3".to_string()],
+            },
+            v2::UnionArm {
+                name: "fault".to_string(),
+                ordinal: 2,
+                type_ref: "Counter".to_string(),
+                doc: String::new(),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
+            },
+        ],
+        is_result: false,
+        reserved: Vec::new(),
+    };
+    vec![
+        speed_decl(),
+        counter_decl(),
+        gear,
+        warnings,
+        public_decl("Measurement", v2::decl::Kind::UnionDef(measurement)),
+    ]
+}
+
+#[test]
+fn tsdoc_on_declarations_and_fields() {
+    insta::assert_snapshot!(ts_for(documented_decls()));
+}
+
+#[test]
+fn tsdoc_on_enum_values_enum_set_bits_and_union_arms() {
+    insta::assert_snapshot!(ts_for(documented_members()));
+}
+
+/// The two packages of the foreign-link test: `other.pkg` declares a public
+/// `Thing` and an internal `Secret`; `veh.common` holds a field of type
+/// `other.pkg.Thing`, so its module imports `other.pkg`, and a doc that links
+/// `Thing`, a member of it, and `Secret`.
+fn foreign_link_packages() -> (v2::Package, v2::Package) {
+    let thing = v2::StructDef {
+        members: vec![field_member(named_field(
+            "level",
+            1,
+            "Counter",
+            false,
+            init_value(true, None),
+        ))],
+        fixed_layout: false,
+    };
+    let other = package(
+        "other.pkg",
+        vec![
+            counter_decl(),
+            public_decl("Thing", v2::decl::Kind::StructDef(thing.clone())),
+            v2::Decl {
+                visibility: v2::Visibility::Internal as i32,
+                ..public_decl("Secret", v2::decl::Kind::StructDef(thing))
+            },
+        ],
+    );
+    let doc = "Wraps [other.pkg.Thing], reads [other.pkg.Thing.level], \
+        never [other.pkg.Secret].";
+    let holder = v2::StructDef {
+        members: vec![field_member(named_field(
+            "thing",
+            1,
+            "other.pkg.Thing",
+            false,
+            init_value(true, None),
+        ))],
+        fixed_layout: false,
+    };
+    let local = package(
+        "veh.common",
+        vec![v2::Decl {
+            doc: doc.to_string(),
+            links: vec![
+                doc_link(doc, "[other.pkg.Thing]", "other.pkg.Thing"),
+                doc_link(doc, "[other.pkg.Thing.level]", "other.pkg.Thing.level"),
+                doc_link(doc, "[other.pkg.Secret]", "other.pkg.Secret"),
+            ],
+            see: vec![see_link("other.pkg.Thing", "other.pkg.Thing")],
+            ..public_decl("Holder", v2::decl::Kind::StructDef(holder))
+        }],
+    );
+    (local, other)
+}
+
+/// A link to a declaration of an imported package renders with the import
+/// alias; one to an internal declaration of that package is a code span.
+#[test]
+fn tsdoc_link_to_a_foreign_declaration_uses_the_import_alias() {
+    let (local, other) = foreign_link_packages();
+    let model = ridl_ir::codegen::lower(&local, &[&other]);
+    let source = super::generate_with(&local, &model)
+        .expect("generation succeeds")
+        .source;
+    assert!(
+        source.contains("import * as other_pkg from './other.pkg';"),
+        "got:\n{source}"
+    );
+    assert!(
+        source.contains(
+            "Wraps {@link other_pkg.Thing}, reads {@link other_pkg.Thing.level}, \
+             never `other.pkg.Secret`."
+        ),
+        "got:\n{source}"
+    );
+    assert!(
+        source.contains(" * @see {@link other_pkg.Thing}\n"),
+        "got:\n{source}"
+    );
+}
+
+/// The public `generate` lowers the package alone, so a foreign declaration
+/// is not in its model and a link to it is a code span.
+#[test]
+fn tsdoc_link_to_a_foreign_declaration_without_its_package_is_a_code_span() {
+    let (local, _) = foreign_link_packages();
+    let source = generate(&local).expect("generation succeeds").source;
+    assert!(
+        source.contains("Wraps `other.pkg.Thing`, reads `other.pkg.Thing.level`"),
+        "got:\n{source}"
+    );
+    assert!(!source.contains("{@link other_pkg"), "got:\n{source}");
+}
+
+/// A link to an internal type, to a type of a package outside the output, to
+/// a constant the backend does not emit, and to a union arm render as code
+/// spans of the qualified name, never as `{@link}`.
+#[test]
+fn tsdoc_link_to_internal_or_absent_target_is_a_code_span() {
+    let source = ts_for(documented_decls());
+    for target in ["veh.common.Hidden", "other.pkg.Thing", "veh.common.BLOB"] {
+        assert!(source.contains(&format!("`{target}`")), "got:\n{source}");
+    }
+    for written in ["{@link Hidden", "{@link other", "{@link BLOB"] {
+        assert!(!source.contains(written), "got:\n{source}");
+    }
+    let members = ts_for(documented_members());
+    assert!(
+        members.contains("see `veh.common.Measurement.fault`."),
+        "got:\n{members}"
+    );
+}
+
+/// A link after a multi-byte character: the offsets are bytes, so a
+/// replacement that counted characters would land one byte early.
+#[test]
+fn tsdoc_link_after_multibyte_text() {
+    let doc = "Measured in °C, see [Speed].";
+    let source = ts_for(vec![
+        speed_decl(),
+        v2::Decl {
+            doc: doc.to_string(),
+            links: vec![doc_link(doc, "[Speed]", "veh.common.Speed")],
+            ..public_decl("Celsius", unit_type("Cel", "-40.0", "125.0", "0.5", "0.0"))
+        },
+    ]);
+    assert!(
+        source.contains(" * Measured in °C, see {@link Speed}.\n"),
+        "got:\n{source}"
+    );
+}
+
+/// An offset inside a multi-byte character, a range past the end, and a
+/// length that overflows leave the text as written, never a panic.
+#[test]
+fn tsdoc_link_off_a_character_boundary_or_out_of_range_leaves_the_text() {
+    let doc = "in °C [X]";
+    for (offset, len) in [(4, 2), (8, 9), (1, u32::MAX)] {
+        let source = ts_for(vec![v2::Decl {
+            doc: doc.to_string(),
+            links: vec![v2::DocLink {
+                text: "X".to_string(),
+                offset,
+                len,
+                target: "veh.common.X".to_string(),
+            }],
+            ..speed_decl()
+        }]);
+        assert!(source.contains(" * in °C [X]\n"), "got:\n{source}");
+    }
+}
+
+/// The comment blocks of `source`: each run of lines from a `/**` to the
+/// line that closes it.
+fn comment_blocks(source: &str) -> Vec<String> {
+    let mut blocks = Vec::new();
+    let mut open: Option<String> = None;
+    for line in source.lines() {
+        let trimmed = line.trim_start();
+        if open.is_none() && trimmed.starts_with("/**") {
+            open = Some(String::new());
+        }
+        if let Some(block) = open.as_mut() {
+            block.push_str(line);
+            block.push('\n');
+            if trimmed == "*/" {
+                blocks.extend(open.take());
+            }
+        }
+    }
+    assert!(open.is_none(), "a comment block is not closed:\n{source}");
+    blocks
+}
+
+/// A pattern rule whose regex holds `*/` is escaped like the doc body: each
+/// comment block holds exactly one `*/`, the one that closes it.
+#[test]
+fn pattern_rule_with_comment_close_is_escaped() {
+    let source = ts_for(vec![string_type("Code", "/a*/b/")]);
+    assert!(source.contains("a*\\/b"), "got:\n{source}");
+    let blocks = comment_blocks(&source);
+    assert!(!blocks.is_empty(), "got:\n{source}");
+    for block in blocks {
+        assert_eq!(block.matches("*/").count(), 1, "got:\n{block}");
+        assert!(block.trim_end().ends_with("*/"), "got:\n{block}");
+    }
+}
+
+/// No generated doc comment of any snapshot fixture carries an issue
+/// reference (`#` and a digit, or `driftsys/ridl`) or a URL. The snapshot
+/// files are read rather than the fixtures regenerated, so a new snapshot
+/// test is covered without editing this one. No fixture doc text written by
+/// a user contains a URL.
+#[test]
+fn ts_docs_carry_no_issue_reference() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/snapshots");
+    let mut read = 0usize;
+    for entry in std::fs::read_dir(&dir).expect("the snapshot directory is readable") {
+        let path = entry.expect("a directory entry").path();
+        if path.extension().is_none_or(|ext| ext != "snap") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path).expect("the snapshot is readable");
+        // The insta header is the snapshot file's metadata, not output.
+        let body = text.splitn(3, "---\n").nth(2).unwrap_or_default();
+        for line in body.lines() {
+            let trimmed = line.trim_start();
+            if !(trimmed.starts_with("/*") || trimmed.starts_with('*') || trimmed.starts_with("//"))
+            {
+                continue;
+            }
+            let issue = trimmed
+                .as_bytes()
+                .windows(2)
+                .any(|pair| pair[0] == b'#' && pair[1].is_ascii_digit());
+            assert!(
+                !issue && !trimmed.contains("driftsys/ridl") && !trimmed.contains("://"),
+                "{}: a doc comment line carries an issue reference or a URL: {line}",
+                path.display()
+            );
+        }
+        read += 1;
+    }
+    assert!(read > 0, "no snapshot was read from {}", dir.display());
+}

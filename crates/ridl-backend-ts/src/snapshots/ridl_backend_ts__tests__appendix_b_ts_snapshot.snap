@@ -7,6 +7,12 @@ import * as ridl_std from './ridl.std';
 /**
  * Vehicle speed over ground
  *
+ * @remarks
+ * Rules:
+ * - range 0.0 ..= 250.0
+ * - step 0.5
+ * - unit km/h
+ *
  * @unit km/h
  * @range [0.0..250.0 step 0.5]
  */
@@ -18,6 +24,12 @@ export function initSpeed(): Speed {
 
 /**
  * Coolant / ambient temperature
+ *
+ * @remarks
+ * Rules:
+ * - range -40.0 ..= 125.0
+ * - step 0.1
+ * - unit Cel
  *
  * @unit Cel
  * @range [-40.0..125.0 step 0.1]
@@ -31,6 +43,12 @@ export function initTemperature(): Temperature {
 /**
  * Engine crankshaft speed
  *
+ * @remarks
+ * Rules:
+ * - range 0.0 ..= 8000.0
+ * - step 10.0
+ * - unit /min
+ *
  * @unit /min
  * @range [0.0..8000.0 step 10.0]
  */
@@ -42,6 +60,12 @@ export function initRPM(): RPM {
 
 /**
  * Normalised ratio
+ *
+ * @remarks
+ * Rules:
+ * - range 0.0 ..= 100.0
+ * - step 0.1
+ * - unit %
  *
  * @unit %
  * @range [0.0..100.0 step 0.1]
@@ -59,6 +83,11 @@ export function initCounter(): Counter {
 }
 
 /**
+ * @remarks
+ * Rules:
+ * - range 0.0 ..= 1.0
+ * - step 0.01
+ *
  * @range [0.0..1.0 step 0.01]
  */
 export type Gain = number & { readonly __ridl: 'veh.common.Gain' };
@@ -111,7 +140,21 @@ export function initWarningFlags(): WarningFlags {
 }
 
 export interface SpeedLimitPayload {
+  /**
+   * @remarks
+   * Rules:
+   * - range 0.0 ..= 250.0
+   * - step 0.5
+   * - unit km/h
+   */
   limit: Speed;
+  /**
+   * @remarks
+   * Rules:
+   * - range 0.0 ..= 250.0
+   * - step 0.5
+   * - unit km/h
+   */
   actual: Speed;
 }
 
@@ -124,9 +167,27 @@ export function initSpeedLimitPayload(): SpeedLimitPayload {
 
 export interface DriverProfile {
   name: ridl_std.Name;
+  /**
+   * @remarks
+   * Rules:
+   * - range 0.0 ..= 250.0
+   * - step 0.5
+   * - unit km/h
+   */
   speed: Speed;
+  /**
+   * @remarks
+   * Rules:
+   * - range 0.0 ..= 250.0
+   * - step 0.5
+   * - unit km/h
+   */
   override?: Speed;
   /**
+   * @remarks
+   * Rules:
+   * - range 0 ..= 6
+   *
    * @range [0..6]
    */
   gears: number;
@@ -135,14 +196,26 @@ export interface DriverProfile {
 export interface SensorBounds {
   range: { min: Speed; max: Speed };
   /**
+   * @remarks
+   * Rules:
+   * - count 8
+   *
    * @bounds 8
    */
   readings: readonly Speed[];
   /**
+   * @remarks
+   * Rules:
+   * - count 1 ..= 16
+   *
    * @bounds 1..16
    */
   labels: readonly ridl_std.Label[];
   /**
+   * @remarks
+   * Rules:
+   * - count 0 ..= 32
+   *
    * @bounds 0..32
    */
   meta: ReadonlyArray<readonly [ridl_std.Label, ridl_std.Name]>;
@@ -157,6 +230,13 @@ export function initSensorResult(): SensorResult {
 }
 
 export interface SensorReading {
+  /**
+   * @remarks
+   * Rules:
+   * - range 0.0 ..= 250.0
+   * - step 0.5
+   * - unit km/h
+   */
   value: Speed;
   timestamp: ridl_std.Timestamp;
 }
@@ -175,5 +255,10 @@ export interface SensorFault {
 
 interface RawWheelFrame {
   ticks: Counter;
+  /**
+   * @remarks
+   * Rules:
+   * - length 8
+   */
   frame: Uint8Array;
 }

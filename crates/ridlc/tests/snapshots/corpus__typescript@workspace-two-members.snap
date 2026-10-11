@@ -7,6 +7,12 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
 /**
  * Vehicle speed over ground
  *
+ * @remarks
+ * Rules:
+ * - range 0 ..= 250
+ * - step 0.5
+ * - unit km/h
+ *
  * @unit km/h
  * @range [0..250 step 0.5]
  */
@@ -18,6 +24,12 @@ export function initSpeed(): Speed {
 
 /**
  * Coolant temperature
+ *
+ * @remarks
+ * Rules:
+ * - range -40 ..= 125
+ * - step 0.1
+ * - unit Cel
  *
  * @unit Cel
  * @range [-40..125 step 0.1]

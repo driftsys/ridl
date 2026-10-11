@@ -30,9 +30,12 @@
 //!   (the Rust `Vec<(K, V)>` decision carried over, typl §12.2).
 //! - **Bare `integer` primitive** in field position — `bigint`: it carries no
 //!   width, so there is no proof the value fits 2^53.
-//! - **Docs** — JSDoc with `@unit`, `@range`, `@bounds`, and `@deprecated`
-//!   tags (typl §14). `internal` declarations stay module-local — no
-//!   `export` (ADR-0002 §8).
+//! - **Docs** — TSDoc read from the codegen model (ADR-0028): the doc text
+//!   with each link as `{@link Name}`, or a code span of the qualified name
+//!   when the target is not an item of this module; the rules as a `Rules:`
+//!   list under `@remarks`; then the `@unit`, `@range` and `@bounds` tags,
+//!   `@see`, `@since` and `@deprecated` (typl §14). `internal` declarations
+//!   stay module-local — no `export` (ADR-0002 §8).
 //! - **Cross-package reference** `pkg.Name` — a namespace import
 //!   `import * as pkg_name from './pkg.name';`, one module per package.
 //!
@@ -50,6 +53,7 @@
 //! all-lowercase TypeScript reserved word collides with, and property names
 //! admit any identifier, reserved words included.
 
+use ridl_ir::codegen::v1;
 use ridl_ir::v2;
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -78,14 +82,33 @@ const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
 /// interaction faces reference the typl types above them, so the reading
 /// order matches the dependency order.
 ///
+/// The doc comments are read from the codegen model of `package` lowered
+/// alone, so a doc link to a declaration of another package renders as a
+/// code span; the backend contract hands [`generate_with`] the request's
+/// model, which holds the foreign declarations the package reaches.
+///
 /// The call is total: it returns [`GenerateError`] rather than panicking.
 pub fn generate(package: &v2::Package) -> Result<GeneratedTs, GenerateError> {
-    let ctx = Ctx::new(package);
+    generate_with(package, &ridl_ir::codegen::lower(package, &[]))
+}
 
-    let mut blocks: Vec<String> = Vec::new();
-    for decl in &package.decls {
-        emit_decl(&ctx, decl, &mut blocks)?;
-    }
+/// [`generate`] with the doc comments read from `model`, the codegen model of
+/// `package`.
+pub(crate) fn generate_with(
+    package: &v2::Package,
+    model: &v1::Model,
+) -> Result<GeneratedTs, GenerateError> {
+    // A doc link resolves only to an item this module emits or imports, and
+    // both sets are known only once every declaration is emitted. A first
+    // pass collects them, and its output is discarded.
+    let probe = Ctx::new(package, model, Output::default());
+    emit_all(&probe)?;
+    let output = Output {
+        imports: probe.imports.take(),
+        emitted: probe.emitted.take(),
+    };
+    let ctx = Ctx::new(package, model, output);
+    let blocks = emit_all(&ctx)?;
 
     let mut source = String::new();
     let imports = ctx.imports.borrow();
@@ -103,6 +126,23 @@ pub fn generate(package: &v2::Package) -> Result<GeneratedTs, GenerateError> {
     Ok(GeneratedTs { source })
 }
 
+/// The blocks of every declaration of the package, in declaration order.
+fn emit_all(ctx: &Ctx) -> Result<Vec<String>, GenerateError> {
+    let mut blocks: Vec<String> = Vec::new();
+    for decl in ctx.decls_in_order {
+        emit_decl(ctx, decl, &mut blocks)?;
+    }
+    Ok(blocks)
+}
+
+/// What the module holds, as a doc link needs it: the packages it imports and
+/// the names of the declarations it emits.
+#[derive(Default)]
+struct Output {
+    imports: BTreeSet<String>,
+    emitted: HashSet<String>,
+}
+
 // ---------------------------------------------------------------------------
 // Package context — same-package name lookups for the leaf-recursion rules.
 // ---------------------------------------------------------------------------
@@ -113,7 +153,18 @@ pub fn generate(package: &v2::Package) -> Result<GeneratedTs, GenerateError> {
 /// backend generates one package at a time).
 struct Ctx<'a> {
     package: &'a str,
+    decls_in_order: &'a [v2::Decl],
     decls: HashMap<&'a str, &'a v2::Decl>,
+    /// The codegen model of the package, which every doc fact is read from.
+    model: &'a v1::Model,
+    /// The model's declarations by declared name.
+    documented: HashMap<&'a str, &'a v1::Declaration>,
+    /// What a doc link may resolve to: the imports and the declarations of
+    /// the module, from the first pass of [`generate_with`].
+    output: Output,
+    /// The declarations emitted so far; [`generate_with`] reads it after its
+    /// first pass.
+    emitted: RefCell<HashSet<String>>,
     /// The set of declaration names currently being expanded by the
     /// init-derivation recursion. It guards against a cyclic IR: a
     /// same-package composite that reaches itself would otherwise recurse
@@ -126,15 +177,25 @@ struct Ctx<'a> {
 }
 
 impl<'a> Ctx<'a> {
-    fn new(package: &'a v2::Package) -> Self {
+    fn new(package: &'a v2::Package, model: &'a v1::Model, output: Output) -> Self {
         let decls = package
             .decls
             .iter()
             .map(|decl| (decl.name.as_str(), decl))
             .collect();
+        let documented = model
+            .declarations
+            .iter()
+            .map(|decl| (declared(decl.name.as_ref()), decl))
+            .collect();
         Ctx {
             package: &package.name,
+            decls_in_order: &package.decls,
             decls,
+            model,
+            documented,
+            output,
+            emitted: RefCell::new(HashSet::new()),
             visiting: RefCell::new(HashSet::new()),
             imports: RefCell::new(BTreeSet::new()),
         }
@@ -191,6 +252,7 @@ fn package_alias(package: &str) -> String {
 // ---------------------------------------------------------------------------
 
 fn emit_decl(ctx: &Ctx, decl: &v2::Decl, blocks: &mut Vec<String>) -> Result<(), GenerateError> {
+    let before = blocks.len();
     match &decl.kind {
         Some(v2::decl::Kind::TypeDef(td)) => blocks.push(emit_type_def(ctx, decl, td)),
         Some(v2::decl::Kind::ConstDef(cd)) => {
@@ -199,12 +261,15 @@ fn emit_decl(ctx: &Ctx, decl: &v2::Decl, blocks: &mut Vec<String>) -> Result<(),
             }
         }
         Some(v2::decl::Kind::StructDef(sd)) => blocks.push(emit_struct(ctx, decl, sd)?),
-        Some(v2::decl::Kind::EnumDef(ed)) => blocks.push(emit_enum(decl, ed)?),
+        Some(v2::decl::Kind::EnumDef(ed)) => blocks.push(emit_enum(ctx, decl, ed)?),
         Some(v2::decl::Kind::EnumSetDef(esd)) => blocks.push(emit_enum_set(ctx, decl, esd)?),
         Some(v2::decl::Kind::UnionDef(ud)) => blocks.push(emit_union(ctx, decl, ud)),
         // Interaction kinds and tombstones belong to the ridl layer inside
         // interfaces (task 14); at package level they carry nothing to emit.
         Some(_) | None => return Ok(()),
+    }
+    if blocks.len() > before {
+        ctx.emitted.borrow_mut().insert(decl.name.clone());
     }
 
     if let Some(init_fn) = init_function(ctx, decl) {
@@ -217,7 +282,7 @@ fn emit_decl(ctx: &Ctx, decl: &v2::Decl, blocks: &mut Vec<String>) -> Result<(),
 /// base intersected with a unique literal-typed marker property, so two
 /// scalars with the same base stay non-assignable.
 fn emit_type_def(ctx: &Ctx, decl: &v2::Decl, td: &v2::TypeDef) -> String {
-    let doc = jsdoc("", &decl.doc, &type_def_tags(decl, td));
+    let doc = jsdoc(ctx, "", &ctx.decl_parts(decl), &type_def_tags(td));
     let export = export_kw(decl.visibility);
     let base = scalar_base(td);
     let brand = ts_string(&format!("{}.{}", ctx.package, decl.name));
@@ -237,7 +302,7 @@ fn emit_const(
     decl: &v2::Decl,
     cd: &v2::ConstDef,
 ) -> Result<Option<String>, GenerateError> {
-    let doc = jsdoc("", &decl.doc, &deprecated_tags(decl.deprecated.as_deref()));
+    let doc = jsdoc(ctx, "", &ctx.decl_parts(decl), &[]);
     let export = export_kw(decl.visibility);
     let name = &decl.name;
 
@@ -304,7 +369,7 @@ fn emit_const(
 }
 
 fn emit_struct(ctx: &Ctx, decl: &v2::Decl, sd: &v2::StructDef) -> Result<String, GenerateError> {
-    let doc = jsdoc("", &decl.doc, &deprecated_tags(decl.deprecated.as_deref()));
+    let doc = jsdoc(ctx, "", &ctx.decl_parts(decl), &[]);
     let export = export_kw(decl.visibility);
     let name = &decl.name;
 
@@ -312,7 +377,7 @@ fn emit_struct(ctx: &Ctx, decl: &v2::Decl, sd: &v2::StructDef) -> Result<String,
     for member in &sd.members {
         match &member.member {
             Some(v2::struct_member::Member::Field(field)) => {
-                props.push_str(&emit_field(ctx, field)?);
+                props.push_str(&emit_field(ctx, decl, field)?);
             }
             // A reserved tombstone occupies an ordinal but emits no property
             // (typl §7.4).
@@ -327,7 +392,7 @@ fn emit_struct(ctx: &Ctx, decl: &v2::Decl, sd: &v2::StructDef) -> Result<String,
     }
 }
 
-fn emit_field(ctx: &Ctx, field: &v2::Field) -> Result<String, GenerateError> {
+fn emit_field(ctx: &Ctx, decl: &v2::Decl, field: &v2::Field) -> Result<String, GenerateError> {
     let mut tags = Vec::new();
     if let Some(v2::field_type::Kind::InlineScalar(td)) =
         field.r#type.as_ref().and_then(|ft| ft.kind.as_ref())
@@ -347,9 +412,8 @@ fn emit_field(ctx: &Ctx, field: &v2::Field) -> Result<String, GenerateError> {
     {
         tags.push(bounds);
     }
-    tags.extend(deprecated_tags(field.deprecated.as_deref()));
 
-    let doc = jsdoc("  ", &field.doc, &tags);
+    let doc = jsdoc(ctx, "  ", &ctx.field_parts(decl, field), &tags);
     let (optional, ty) = match field.r#type.as_ref() {
         // The property form `name?: T` carries the absence, so the top-level
         // optional flag is peeled here rather than rendered `T | undefined`.
@@ -362,8 +426,8 @@ fn emit_field(ctx: &Ctx, field: &v2::Field) -> Result<String, GenerateError> {
 
 /// An enum becomes a TypeScript `enum` with the declared discriminants
 /// (typl §8). Variant names keep their typl `SCREAMING_SNAKE` spelling.
-fn emit_enum(decl: &v2::Decl, ed: &v2::EnumDef) -> Result<String, GenerateError> {
-    let doc = jsdoc("", &decl.doc, &deprecated_tags(decl.deprecated.as_deref()));
+fn emit_enum(ctx: &Ctx, decl: &v2::Decl, ed: &v2::EnumDef) -> Result<String, GenerateError> {
+    let doc = jsdoc(ctx, "", &ctx.decl_parts(decl), &[]);
     let export = export_kw(decl.visibility);
     let name = &decl.name;
 
@@ -377,7 +441,7 @@ fn emit_enum(decl: &v2::Decl, ed: &v2::EnumDef) -> Result<String, GenerateError>
                 value = value.value
             )));
         }
-        members.push_str(&jsdoc("  ", &value.doc, &[]));
+        members.push_str(&jsdoc(ctx, "  ", &ctx.value_parts(decl, &value.name), &[]));
         members.push_str(&format!(
             "  {member} = {value},\n",
             member = value.name,
@@ -401,7 +465,7 @@ fn emit_enum_set(
     decl: &v2::Decl,
     esd: &v2::EnumSetDef,
 ) -> Result<String, GenerateError> {
-    let doc = jsdoc("", &decl.doc, &deprecated_tags(decl.deprecated.as_deref()));
+    let doc = jsdoc(ctx, "", &ctx.decl_parts(decl), &[]);
     let export = export_kw(decl.visibility);
     let name = &decl.name;
     let wide = matches!(
@@ -425,7 +489,7 @@ fn emit_enum_set(
             )));
         }
         let mask = 1u128 << bit.value;
-        bits.push_str(&jsdoc("  ", &bit.doc, &[]));
+        bits.push_str(&jsdoc(ctx, "  ", &ctx.value_parts(decl, &bit.name), &[]));
         bits.push_str(&format!("  {member}: {mask}{suffix},\n", member = bit.name));
     }
 
@@ -441,7 +505,7 @@ fn emit_enum_set(
 /// per arm, the arm name as the `kind` literal (typl §10). Reserved arms
 /// occupy an ordinal but emit no member.
 fn emit_union(ctx: &Ctx, decl: &v2::Decl, ud: &v2::UnionDef) -> String {
-    let doc = jsdoc("", &decl.doc, &deprecated_tags(decl.deprecated.as_deref()));
+    let doc = jsdoc(ctx, "", &ctx.decl_parts(decl), &[]);
     let export = export_kw(decl.visibility);
     let name = &decl.name;
 
@@ -451,7 +515,7 @@ fn emit_union(ctx: &Ctx, decl: &v2::Decl, ud: &v2::UnionDef) -> String {
 
     let mut members = String::new();
     for arm in &ud.arms {
-        members.push_str(&jsdoc("  ", &arm.doc, &[]));
+        members.push_str(&jsdoc(ctx, "  ", &ctx.arm_parts(decl, &arm.name), &[]));
         members.push_str(&format!(
             "  | {{ kind: {kind}; value: {ty} }}\n",
             kind = ts_string(&arm.name),
@@ -975,22 +1039,190 @@ fn union_init(ctx: &Ctx, ud: &v2::UnionDef) -> Option<String> {
 // Attributes: docs, deprecation, visibility.
 // ---------------------------------------------------------------------------
 
-/// A JSDoc block from a CommonMark doc body and structured tags, indented by
-/// `indent`; empty when there is nothing to say. A body and tags are
-/// separated by a blank line, JSDoc convention.
-fn jsdoc(indent: &str, body: &str, tags: &[String]) -> String {
-    let body_lines: Vec<&str> = if body.is_empty() {
-        Vec::new()
-    } else {
-        body.split('\n').collect()
+/// The doc fields of one carrier in the model. A carrier the model does not
+/// hold has no doc, which [`TsDocParts::EMPTY`] states.
+struct TsDocParts<'a> {
+    doc: &'a str,
+    links: &'a [v1::DocLink],
+    see: &'a [v1::DocLink],
+    since: &'a [String],
+    rules: &'a [v1::Rule],
+    /// The deprecation reason; `Some("")` is a deprecation with no reason.
+    deprecated: Option<&'a str>,
+}
+
+impl<'a> TsDocParts<'a> {
+    const EMPTY: TsDocParts<'static> = TsDocParts {
+        doc: "",
+        links: &[],
+        see: &[],
+        since: &[],
+        rules: &[],
+        deprecated: None,
     };
-    if body_lines.is_empty() && tags.is_empty() {
-        return String::new();
+
+    fn declaration(decl: &'a v1::Declaration) -> Self {
+        TsDocParts {
+            doc: &decl.doc,
+            links: &decl.links,
+            see: &decl.see,
+            since: &decl.since,
+            rules: &decl.rules,
+            deprecated: decl.deprecated.as_deref(),
+        }
     }
 
+    fn field(field: &'a v1::Field) -> Self {
+        TsDocParts {
+            doc: &field.doc,
+            links: &field.links,
+            see: &field.see,
+            since: &field.since,
+            rules: &field.rules,
+            deprecated: field.deprecated.as_deref(),
+        }
+    }
+
+    fn enum_value(value: &'a v1::EnumValue) -> Self {
+        TsDocParts {
+            doc: &value.doc,
+            links: &value.links,
+            see: &value.see,
+            since: &value.since,
+            rules: &value.rules,
+            deprecated: None,
+        }
+    }
+
+    fn arm(arm: &'a v1::Arm) -> Self {
+        TsDocParts {
+            doc: &arm.doc,
+            links: &arm.links,
+            see: &arm.see,
+            since: &arm.since,
+            rules: &arm.rules,
+            deprecated: None,
+        }
+    }
+}
+
+impl<'a> Ctx<'a> {
+    /// The model's declaration for `decl`.
+    fn documented(&self, decl: &v2::Decl) -> Option<&'a v1::Declaration> {
+        self.documented.get(decl.name.as_str()).copied()
+    }
+
+    fn decl_parts(&self, decl: &v2::Decl) -> TsDocParts<'a> {
+        self.documented(decl)
+            .map(TsDocParts::declaration)
+            .unwrap_or(TsDocParts::EMPTY)
+    }
+
+    /// The doc fields of the field `field` of the struct `decl`.
+    fn field_parts(&self, decl: &v2::Decl, field: &v2::Field) -> TsDocParts<'a> {
+        let Some(v1::declaration::Kind::Struct(st)) =
+            self.documented(decl).and_then(|decl| decl.kind.as_ref())
+        else {
+            return TsDocParts::EMPTY;
+        };
+        st.slots
+            .iter()
+            .find_map(|slot| match slot.occupant.as_ref() {
+                Some(v1::slot::Occupant::Field(found))
+                    if declared(found.name.as_ref()) == field.name =>
+                {
+                    Some(TsDocParts::field(found))
+                }
+                _ => None,
+            })
+            .unwrap_or(TsDocParts::EMPTY)
+    }
+
+    /// The doc fields of the value `name` of the enum or the enum set `decl`.
+    fn value_parts(&self, decl: &v2::Decl, name: &str) -> TsDocParts<'a> {
+        let values = match self.documented(decl).and_then(|decl| decl.kind.as_ref()) {
+            Some(v1::declaration::Kind::Enum(en)) => &en.values,
+            Some(v1::declaration::Kind::EnumSet(set)) => &set.bits,
+            _ => return TsDocParts::EMPTY,
+        };
+        values
+            .iter()
+            .find(|value| declared(value.name.as_ref()) == name)
+            .map(TsDocParts::enum_value)
+            .unwrap_or(TsDocParts::EMPTY)
+    }
+
+    /// The doc fields of the arm `name` of the union `decl`.
+    fn arm_parts(&self, decl: &v2::Decl, name: &str) -> TsDocParts<'a> {
+        let Some(v1::declaration::Kind::Union(union)) =
+            self.documented(decl).and_then(|decl| decl.kind.as_ref())
+        else {
+            return TsDocParts::EMPTY;
+        };
+        union
+            .arms
+            .iter()
+            .find(|arm| declared(arm.name.as_ref()) == name)
+            .map(TsDocParts::arm)
+            .unwrap_or(TsDocParts::EMPTY)
+    }
+}
+
+/// The declared spelling of a model name.
+fn declared(name: Option<&v1::Spellings>) -> &str {
+    name.map(|name| name.declared.as_str()).unwrap_or_default()
+}
+
+/// A TSDoc block, indented by `indent`; empty when there is nothing to say.
+/// The parts, in order, each omitted when empty:
+///
+/// 1. the doc, with each link replaced (see [`linked`]);
+/// 2. `@remarks`, `Rules:`, then one `- <text>` line per rule, the text
+///    verbatim, after a blank line when the doc precedes it;
+/// 3. after a blank line when anything precedes them, the block tags: `tags`
+///    (`@unit`, `@range`, `@bounds`), one `@see` per `see` target, one
+///    `@since` per version, and `@deprecated`.
+///
+/// Every line goes through the same escape of `*/`, which would otherwise
+/// close the comment.
+fn jsdoc(ctx: &Ctx, indent: &str, parts: &TsDocParts<'_>, tags: &[String]) -> String {
+    let mut body: Vec<String> = Vec::new();
+    if !parts.doc.is_empty() {
+        body.push(linked(ctx, parts.doc, parts.links));
+    }
+    if !parts.rules.is_empty() {
+        if !body.is_empty() {
+            body.push(String::new());
+        }
+        body.push("@remarks".to_string());
+        body.push("Rules:".to_string());
+        body.extend(parts.rules.iter().map(|rule| format!("- {}", rule.text)));
+    }
+    let mut block_tags: Vec<String> = tags.to_vec();
+    block_tags.extend(
+        parts
+            .see
+            .iter()
+            .map(|see| format!("@see {}", rendered_link(ctx, see))),
+    );
+    block_tags.extend(
+        parts
+            .since
+            .iter()
+            .map(|version| format!("@since {version}")),
+    );
+    block_tags.extend(deprecated_tags(parts.deprecated));
+
+    if body.is_empty() && block_tags.is_empty() {
+        return String::new();
+    }
+    if !body.is_empty() && !block_tags.is_empty() {
+        body.push(String::new());
+    }
+    body.extend(block_tags);
+
     let mut out = format!("{indent}/**\n");
-    for line in &body_lines {
-        // `*/` inside a doc body would terminate the comment; escape it.
+    for line in body.iter().flat_map(|text| text.split('\n')) {
         let line = line.replace("*/", "*\\/");
         if line.is_empty() {
             out.push_str(&format!("{indent} *\n"));
@@ -998,19 +1230,132 @@ fn jsdoc(indent: &str, body: &str, tags: &[String]) -> String {
             out.push_str(&format!("{indent} * {line}\n"));
         }
     }
-    if !body_lines.is_empty() && !tags.is_empty() {
-        out.push_str(&format!("{indent} *\n"));
-    }
-    for tag in tags {
-        out.push_str(&format!("{indent} * {tag}\n"));
-    }
     out.push_str(&format!("{indent} */\n"));
     out
 }
 
-/// The structured JSDoc tags of a named scalar declaration: unit, range,
-/// deprecation.
-fn type_def_tags(decl: &v2::Decl, td: &v2::TypeDef) -> Vec<String> {
+/// `doc` with the `len` bytes at each link's `offset` replaced by the link's
+/// rendering, from the last link to the first, so that each earlier offset
+/// stays valid. A link whose range is out of bounds, does not fall on a
+/// character boundary, or overlaps a link already replaced leaves the text
+/// unchanged rather than panicking.
+fn linked(ctx: &Ctx, doc: &str, links: &[v1::DocLink]) -> String {
+    let mut text = doc.to_string();
+    let mut ordered: Vec<&v1::DocLink> = links.iter().collect();
+    ordered.sort_by_key(|link| std::cmp::Reverse(link.offset));
+    let mut limit = doc.len();
+    for link in ordered {
+        let start = link.offset as usize;
+        let Some(end) = start.checked_add(link.len as usize) else {
+            continue;
+        };
+        if end > limit || text.get(start..end).is_none() {
+            continue;
+        }
+        text.replace_range(start..end, &rendered_link(ctx, link));
+        limit = start;
+    }
+    text
+}
+
+/// `{@link <name>}` when the target is an item of this module, and a code
+/// span of the qualified target name otherwise.
+fn rendered_link(ctx: &Ctx, link: &v1::DocLink) -> String {
+    match ts_link(ctx.model, &ctx.output, &link.target) {
+        Some(name) => format!("{{@link {name}}}"),
+        None => format!("`{}`", link.target),
+    }
+}
+
+/// The TypeScript name a doc link's `target` resolves to, or `None` when the
+/// target is not an item of this module: `target` is a canonical qualified
+/// name `pkg.Name` with an optional `.member`.
+///
+/// - A declaration of the package is its name, when the module emits it.
+/// - A foreign declaration is `<alias>.<Name>`, the alias of the namespace
+///   import, when the module imports its package.
+/// - A member is the declaration's name and the member's spelling: a struct
+///   field's declared name, an enum value's declared name, and an enum set
+///   bit under the `<Name>Bits` object that holds it. A union arm, and a
+///   member of a scalar or a constant, has no TypeScript member.
+/// - An `internal` declaration, an interface, an interaction, and anything
+///   else, is `None`.
+fn ts_link(model: &v1::Model, output: &Output, target: &str) -> Option<String> {
+    let package = model
+        .scope
+        .as_ref()
+        .map(|scope| scope.package.as_str())
+        .unwrap_or_default();
+    let local = model.declarations.iter().map(|decl| (package, decl, None));
+    let foreign = model.foreign.iter().filter_map(|foreign| {
+        let alias = package_alias(&foreign.package);
+        foreign
+            .declaration
+            .as_ref()
+            .map(|decl| (foreign.package.as_str(), decl, Some(alias)))
+    });
+    for (owner, decl, alias) in local.chain(foreign) {
+        let name = declared(decl.name.as_ref());
+        let qualified = format!("{owner}.{name}");
+        let Some(rest) = target.strip_prefix(qualified.as_str()) else {
+            continue;
+        };
+        if !rest.is_empty() && !rest.starts_with('.') {
+            continue;
+        }
+        if decl.visibility == v1::Visibility::Internal as i32 {
+            return None;
+        }
+        let in_output = match &alias {
+            Some(_) => output.imports.contains(owner),
+            None => output.emitted.contains(name),
+        };
+        if !in_output {
+            return None;
+        }
+        let prefix = alias.map(|alias| format!("{alias}.")).unwrap_or_default();
+        let Some(member) = rest.strip_prefix('.') else {
+            return Some(format!("{prefix}{name}"));
+        };
+        return ts_member(decl, member).map(|member| format!("{prefix}{member}"));
+    }
+    None
+}
+
+/// The TypeScript spelling of the member `member` (its declared name) of
+/// `decl`, qualified by the item that holds it, or `None` when `decl` has no
+/// such member in TypeScript.
+fn ts_member(decl: &v1::Declaration, member: &str) -> Option<String> {
+    use v1::declaration::Kind;
+    let name = declared(decl.name.as_ref());
+    let is = |spelled: Option<&v1::Spellings>| declared(spelled) == member;
+    match decl.kind.as_ref()? {
+        Kind::Struct(st) => st
+            .slots
+            .iter()
+            .any(|slot| {
+                matches!(
+                    slot.occupant.as_ref(),
+                    Some(v1::slot::Occupant::Field(field)) if is(field.name.as_ref())
+                )
+            })
+            .then(|| format!("{name}.{member}")),
+        Kind::Enum(en) => en
+            .values
+            .iter()
+            .any(|value| is(value.name.as_ref()))
+            .then(|| format!("{name}.{member}")),
+        Kind::EnumSet(set) => set
+            .bits
+            .iter()
+            .any(|bit| is(bit.name.as_ref()))
+            .then(|| format!("{name}Bits.{member}")),
+        Kind::Union(_) | Kind::Scalar(_) | Kind::Constant(_) => None,
+    }
+}
+
+/// The structured JSDoc tags of a named scalar declaration: unit and range.
+fn type_def_tags(td: &v2::TypeDef) -> Vec<String> {
     let mut tags = Vec::new();
     if let Some(unit) = unit_tag(td) {
         tags.push(unit);
@@ -1018,7 +1363,6 @@ fn type_def_tags(decl: &v2::Decl, td: &v2::TypeDef) -> Vec<String> {
     if let Some(range) = td.constraint.as_ref().and_then(range_tag) {
         tags.push(range);
     }
-    tags.extend(deprecated_tags(decl.deprecated.as_deref()));
     tags
 }
 
