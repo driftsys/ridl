@@ -278,7 +278,10 @@ fn the_client_subscribes_and_polls_events_through_the_event_source_port() {
     );
     // The implementation's method carries the event's doc, so the doc
     // comment sits between the impl header and the method.
-    let implemented = d
+    // The search stops at the blocking module, whose client has its own impl
+    // of the same trait.
+    let async_region = &d[..at(&d, "pubmodblocking{")];
+    let implemented = async_region
         .split_once("SubscribeforClient<P>{")
         .map(|(_, rest)| rest)
         .unwrap_or_default();

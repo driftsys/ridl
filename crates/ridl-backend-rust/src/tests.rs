@@ -6735,9 +6735,75 @@ fn doc_links_to_foreign_items_and_to_skipped_constants() {
     );
 }
 
-/// What `ridl build --emit rust` relies on: through the backend contract,
-/// over a model lowered with the other packages, a field of a foreign type
-/// carries that type's rules.
+/// A doc link to a constant is a path link only when the backend emits the
+/// constant ([`super::declaration_emitted`]): a constant of a named scalar of
+/// its own package, backed by anything but `bytes`, and a regex constant. It
+/// is a code span for a constant of a `bytes`-backed named scalar, one of a
+/// named scalar of another package, and one of a type no package declares.
+#[test]
+fn doc_links_to_constants_follow_how_each_is_typed() {
+    let other = package("other.pkg", vec![speed_decl()]);
+    let consts = [
+        ("OWN_SPEED", Some("Speed"), "10.0", None),
+        ("OWN_BLOB", Some("Blob"), "", None),
+        ("OTHER_SPEED", Some("other.pkg.Speed"), "10.0", None),
+        ("MISSING", Some("nowhere.Missing"), "1", None),
+        ("PATTERN", None, "", Some("/^[A-Z]{2}$/")),
+    ];
+    let doc = "See [OWN_SPEED], [OWN_BLOB], [OTHER_SPEED], [MISSING] and [PATTERN].";
+    let mut decls = vec![
+        speed_decl(),
+        public_decl("Blob", bounded_bytes_type(init_value(true, Some("")))),
+        struct_with_field("Foreign", "speed", "other.pkg.Speed"),
+        v2::Decl {
+            doc: doc.to_string(),
+            links: consts
+                .iter()
+                .map(|(name, ..)| {
+                    doc_link(doc, &format!("[{name}]"), &format!("veh.common.{name}"))
+                })
+                .collect(),
+            ..struct_with_field("Holder", "speed", "Speed")
+        },
+    ];
+    for (name, type_ref, value, regex) in consts {
+        decls.push(public_decl(
+            name,
+            v2::decl::Kind::ConstDef(v2::ConstDef {
+                type_ref: type_ref.map(str::to_string),
+                value: value.to_string(),
+                regex: regex.map(str::to_string),
+            }),
+        ));
+    }
+    let source = super::generate_with(&package("veh.common", decls), &[&other])
+        .expect("generation succeeds")
+        .rust_source;
+    assert!(
+        source.contains("const OWN_SPEED") && source.contains("const PATTERN"),
+        "the same-package scalar constant and the regex constant are emitted:\n{source}"
+    );
+    assert!(
+        !source.contains("const OWN_BLOB")
+            && !source.contains("const OTHER_SPEED")
+            && !source.contains("const MISSING"),
+        "the other three constants are not emitted:\n{source}"
+    );
+    assert!(
+        source.contains(
+            "See [OWN_SPEED](crate::veh::common::OWN_SPEED), `veh.common.OWN_BLOB`, \
+             `veh.common.OTHER_SPEED`, `veh.common.MISSING` and \
+             [PATTERN](crate::veh::common::PATTERN)."
+        ),
+        "got:\n{source}"
+    );
+}
+
+/// Through the backend contract, over a model that this test lowers with the
+/// other packages itself, a field of a foreign type carries that type's
+/// rules. That the build lowers with the other packages is pinned in
+/// `crates/ridlc/tests/rust_crate_emit.rs`, by
+/// `a_field_of_a_ranged_type_of_another_package_carries_its_rules_in_the_emitted_rust`.
 #[test]
 fn a_field_of_a_foreign_type_carries_its_rules_through_the_contract() {
     use ridl_ir::codegen::{Backend as _, v1};

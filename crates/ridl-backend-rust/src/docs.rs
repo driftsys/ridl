@@ -550,4 +550,75 @@ mod tests {
             ]
         );
     }
+
+    /// With a doc text, a generated sentence, a rule, a parameter, a `see`
+    /// target and a `since` version, the parts come in the documented
+    /// order: text, sentence, `# Rules`, `# Parameters`, `# See also`, then
+    /// the `Available since` line, one blank line between parts.
+    #[test]
+    fn the_parts_of_a_doc_come_in_the_documented_order() {
+        let model = v1::Model::default();
+        let faced = BTreeSet::new();
+        let links = Links::new(&model, &faced);
+        let rules = [v1::Rule {
+            text: "range 0 ..= 9".to_string(),
+            ..Default::default()
+        }];
+        let see = [link(0, 0, "a.X")];
+        let since = ["0.2".to_string()];
+        let parts = DocParts {
+            doc: "A doc.",
+            links: &[],
+            see: &see,
+            since: &since,
+            rules: &rules,
+        };
+        let params = vec![" - `level`".to_string()];
+        assert_eq!(
+            DocLines::new(&parts, &links).lines(Some("Generated."), &params),
+            [
+                " A doc.",
+                "",
+                "Generated.",
+                "",
+                " # Rules",
+                "",
+                " - range 0 ..= 9",
+                "",
+                " # Parameters",
+                "",
+                " - `level`",
+                "",
+                " # See also",
+                "",
+                " - `a.X`",
+                "",
+                " Available since 0.2."
+            ]
+        );
+    }
+
+    /// With no doc text, the generated sentence opens the doc: no blank line
+    /// precedes it. With a doc text, one does.
+    #[test]
+    fn a_generated_sentence_with_no_doc_text_has_no_blank_line_before_it() {
+        let model = v1::Model::default();
+        let faced = BTreeSet::new();
+        let links = Links::new(&model, &faced);
+        let parts = |doc| DocParts {
+            doc,
+            links: &[],
+            see: &[],
+            since: &[],
+            rules: &[],
+        };
+        assert_eq!(
+            DocLines::new(&parts(""), &links).lines(Some("Generated."), &[]),
+            ["Generated."]
+        );
+        assert_eq!(
+            DocLines::new(&parts("A doc."), &links).lines(Some("Generated."), &[]),
+            [" A doc.", "", "Generated."]
+        );
+    }
 }
