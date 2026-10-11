@@ -13,7 +13,8 @@ expression: "rust_with_codec(vec![speed_decl()])"
 #[repr(transparent)]
 pub struct Speed(::core::primitive::f64);
 impl Speed {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -190,7 +191,7 @@ impl ::core::default::Default for Speed {
         Speed::new_unchecked(0.0)
     }
 }
-/// An accessor over FlatBuffers bytes `Speed`'s `verify` accepted.
+/// A `Speed` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedFbView<'a> {

@@ -13,7 +13,8 @@ expression: "rust_for(vec![speed_decl(), counter_decl(), gear,\npublic_decl(\"Me
 #[repr(transparent)]
 pub struct Speed(::core::primitive::f64);
 impl Speed {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {

@@ -13,7 +13,8 @@ expression: rust_with_codec(decls)
 #[repr(transparent)]
 pub struct Speed(::core::primitive::f64);
 impl Speed {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -258,7 +259,7 @@ impl ::core::default::Default for SensorResult {
         SensorResult::Ok(<SensorReading as ::core::default::Default>::default())
     }
 }
-/// An accessor over FlatBuffers bytes `Speed`'s `verify` accepted.
+/// A `Speed` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedFbView<'a> {
@@ -387,7 +388,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
         __ridl_fb_decode_Speed(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Counter`'s `verify` accepted.
+/// A `Counter` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct CounterFbView<'a> {
@@ -514,7 +515,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
         __ridl_fb_decode_Counter(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `SensorReading`'s `verify` accepted.
+/// A `SensorReading` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -666,7 +667,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for SensorRea
         __ridl_fb_decode_SensorReading(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `SensorFault`'s `verify` accepted.
+/// A `SensorFault` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -813,7 +814,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for SensorFau
         __ridl_fb_decode_SensorFault(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `SensorResult`'s `verify` accepted.
+/// A `SensorResult` value in FlatBuffers bytes, read in place without copying it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SensorResultFbView<'a> {

@@ -3114,11 +3114,127 @@ fn face_call_carries_parameter_section() {
     });
     for (label, attrs) in call_methods("cabin", "average") {
         let lines = doc_lines(&attrs);
+        let bullets = [" - `window`".to_string(), format!("   - {window}")];
         assert!(
-            lines.ends_with(&[" - `window`".to_string(), format!("   - {window}")]),
+            lines.windows(2).any(|pair| pair == bullets),
             "{label}: the undocumented parameter, in {lines:#?}"
         );
     }
+}
+
+/// The position in `lines` of the first line that `matches`.
+fn position(lines: &[String], label: &str, matches: impl Fn(&str) -> bool) -> usize {
+    lines
+        .iter()
+        .position(|line| matches(line.trim()))
+        .unwrap_or_else(|| panic!("{label}: no such line in {lines:#?}"))
+}
+
+/// A method's doc is the interaction's doc text, then the face's generated
+/// sentence as its own paragraph, then the sections: `# Rules`,
+/// `# Parameters`, then the `Available since` line. A section never holds
+/// the generated sentence.
+#[test]
+fn face_method_doc_puts_the_sentence_before_the_sections() {
+    for (label, attrs) in call_methods("cabin", "average") {
+        let lines = doc_lines(&attrs);
+        let doc = position(&lines, label, |line| {
+            line == "The average cabin temperature over a window of samples."
+        });
+        let sentence = position(&lines, label, |line| {
+            line.starts_with("Sends query `average`") || line.starts_with("Serves query `average`")
+        });
+        let rules = position(&lines, label, |line| line == "# Rules");
+        let params = position(&lines, label, |line| line == "# Parameters");
+        let since = position(&lines, label, |line| line == "Available since 1.1.");
+        assert_eq!(doc, 0, "{label}: {lines:#?}");
+        assert!(
+            doc < sentence && sentence < rules && rules < params && params < since,
+            "{label}: doc {doc}, sentence {sentence}, rules {rules}, parameters \
+             {params}, since {since}, in {lines:#?}"
+        );
+        assert_eq!(lines[sentence - 1], "", "{label}: {lines:#?}");
+        assert_eq!(since, lines.len() - 1, "{label}: {lines:#?}");
+    }
+}
+
+/// `subscribe_<event>` of the async and the blocking client carries the
+/// event's doc and rules, in the order the other face methods use.
+#[test]
+fn subscribe_methods_carry_the_event_doc_and_rules() {
+    let file = syn::parse_file(FACE_SOURCE).expect("the checked-in face parses");
+    let cabin = module_items(&file.items, "cabin");
+    let blocking = module_items(cabin, "blocking");
+    let subscribe = |items: &[syn::Item]| -> Vec<syn::Attribute> {
+        items
+            .iter()
+            .filter_map(|item| match item {
+                syn::Item::Impl(block) => block.trait_.as_ref().and_then(|(_, path, _)| {
+                    path.segments
+                        .last()
+                        .is_some_and(|segment| segment.ident == "Subscribe")
+                        .then_some(block)
+                }),
+                _ => None,
+            })
+            .flat_map(|block| &block.items)
+            .find_map(|item| match item {
+                syn::ImplItem::Fn(function) if function.sig.ident == "subscribe_warning" => {
+                    Some(function.attrs.clone())
+                }
+                _ => None,
+            })
+            .expect("`subscribe_warning` is implemented")
+    };
+    for (label, attrs) in [
+        ("async client", subscribe(cabin)),
+        ("blocking client", subscribe(blocking)),
+    ] {
+        let lines = doc_lines(&attrs);
+        let label: &str = label;
+        let doc = position(&lines, label, |line| {
+            line == "A warning the controller raises."
+        });
+        let sentence = position(&lines, label, |line| {
+            line.starts_with("Starts delivery of event `warning`")
+        });
+        let rules = position(&lines, label, |line| line == "# Rules");
+        // The event's timing rule, `@[100ms..1s]`.
+        let rule = position(&lines, label, |line| {
+            line.starts_with("- ") && line.contains("100000") && line.contains("1000000")
+        });
+        assert!(
+            doc < sentence && sentence < rules && rules < rule,
+            "{label}: {lines:#?}"
+        );
+    }
+}
+
+/// The interface module's doc is the interface's doc text, then the module
+/// sentence, then the interface's sections.
+#[test]
+fn interface_module_doc_puts_the_sentence_before_the_sections() {
+    let file = syn::parse_file(FACE_SOURCE).expect("the checked-in face parses");
+    let attrs = file
+        .items
+        .iter()
+        .find_map(|item| match item {
+            syn::Item::Mod(module) if module.ident == "cabin" => Some(module.attrs.clone()),
+            _ => None,
+        })
+        .expect("module `cabin` is generated");
+    let lines = doc_lines(&attrs);
+    let label = "module cabin";
+    let sentence = position(&lines, label, |line| {
+        line == "The generated interaction face of interface `Cabin`."
+    });
+    let see = position(&lines, label, |line| line == "# See also");
+    let since = position(&lines, label, |line| line.starts_with("Available since"));
+    assert!(
+        sentence > 0,
+        "{label}: the doc text comes first, in {lines:#?}"
+    );
+    assert!(sentence < see && see < since, "{label}: {lines:#?}");
 }
 
 /// `Zone.level`, `Zone.setLevel` and `Zone.average` are `@deprecated`, so

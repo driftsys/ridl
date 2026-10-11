@@ -49,7 +49,7 @@ impl ::core::default::Default for Flags {
         }
     }
 }
-/// An accessor over FlatBuffers bytes `Engaged`'s `verify` accepted.
+/// A `Engaged` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct EngagedFbView<'a> {
@@ -170,7 +170,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Engaged {
         __ridl_fb_decode_Engaged(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `Flags`'s `verify` accepted.
+/// A `Flags` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection

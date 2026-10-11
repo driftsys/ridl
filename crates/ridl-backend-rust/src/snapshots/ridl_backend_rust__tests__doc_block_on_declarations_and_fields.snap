@@ -13,7 +13,8 @@ expression: rust_for(documented_decls())
 #[repr(transparent)]
 pub struct Speed(::core::primitive::f64);
 impl Speed {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -198,7 +199,8 @@ impl ::core::default::Default for Speed {
 #[repr(transparent)]
 pub struct Vin(::std::string::String);
 impl Vin {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {

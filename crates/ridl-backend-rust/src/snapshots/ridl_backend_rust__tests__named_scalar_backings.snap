@@ -13,7 +13,8 @@ expression: rust_with_codec(decls)
 #[repr(transparent)]
 pub struct Speed(::core::primitive::f64);
 impl Speed {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -253,7 +254,8 @@ impl ::core::default::Default for Enabled {
 #[repr(transparent)]
 pub struct Label(::std::string::String);
 impl Label {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -311,7 +313,8 @@ impl ::core::default::Default for Label {
 #[repr(transparent)]
 pub struct Blob(::std::vec::Vec<::core::primitive::u8>);
 impl Blob {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::vec::Vec<::core::primitive::u8>,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -362,7 +365,7 @@ impl ::core::default::Default for Blob {
         Blob::new_unchecked(::std::vec::Vec::new())
     }
 }
-/// An accessor over FlatBuffers bytes `Speed`'s `verify` accepted.
+/// A `Speed` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedFbView<'a> {
@@ -491,7 +494,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
         __ridl_fb_decode_Speed(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Counter`'s `verify` accepted.
+/// A `Counter` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct CounterFbView<'a> {
@@ -618,7 +621,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
         __ridl_fb_decode_Counter(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Enabled`'s `verify` accepted.
+/// A `Enabled` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct EnabledFbView<'a> {
@@ -739,7 +742,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Enabled {
         __ridl_fb_decode_Enabled(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Label`'s `verify` accepted.
+/// A `Label` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct LabelFbView<'a> {
@@ -868,7 +871,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Label {
         __ridl_fb_decode_Label(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Blob`'s `verify` accepted.
+/// A `Blob` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct BlobFbView<'a> {

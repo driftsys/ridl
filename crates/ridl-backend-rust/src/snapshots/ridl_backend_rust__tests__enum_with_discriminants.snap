@@ -39,7 +39,7 @@ impl ::core::default::Default for GearPosition {
         GearPosition::Park
     }
 }
-/// An accessor over FlatBuffers bytes `GearPosition`'s `verify` accepted.
+/// A `GearPosition` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct GearPositionFbView<'a> {

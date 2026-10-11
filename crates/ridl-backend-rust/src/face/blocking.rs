@@ -179,8 +179,9 @@ fn client(
                  `Subscribe::{method}` does.",
                 member.declared
             );
+            let doc = member_doc(member, &doc);
             quote! {
-                #[doc = #doc]
+                #doc
                 fn #method(
                     &mut self,
                 ) -> ::core::result::Result<(), ::ridl_rt::port::SubscribeError> {

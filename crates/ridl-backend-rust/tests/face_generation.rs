@@ -276,8 +276,17 @@ fn the_client_subscribes_and_polls_events_through_the_event_source_port() {
             ),
         "one subscribe method per event, declared by the per-interface trait",
     );
+    // The implementation's method carries the event's doc, so the doc
+    // comment sits between the impl header and the method.
+    let implemented = d
+        .split_once("SubscribeforClient<P>{")
+        .map(|(_, rest)| rest)
+        .unwrap_or_default();
     assert!(
-        d.contains("SubscribeforClient<P>{fnsubscribe_warning(&mutself,)"),
+        implemented.contains(
+            "fnsubscribe_warning(&mutself,)\
+             ->::core::result::Result<(),::ridl_rt::port::SubscribeError>{"
+        ),
         "the async client implements Subscribe",
     );
     assert!(

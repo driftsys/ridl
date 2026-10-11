@@ -36,7 +36,7 @@ impl ::core::default::Default for WarningFlags {
         WarningFlags(0)
     }
 }
-/// An accessor over FlatBuffers bytes `WarningFlags`'s `verify` accepted.
+/// A `WarningFlags` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WarningFlagsFbView<'a> {

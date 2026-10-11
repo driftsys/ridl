@@ -9,7 +9,8 @@ expression: rust_with_codec(decls)
 #[repr(transparent)]
 pub struct Name(::std::string::String);
 impl Name {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -68,7 +69,8 @@ impl ::core::convert::From<Name> for ::std::string::String {
 #[repr(transparent)]
 pub struct Digest(::std::vec::Vec<::core::primitive::u8>);
 impl Digest {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::vec::Vec<::core::primitive::u8>,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -126,7 +128,8 @@ impl ::core::default::Default for Digest {
 #[repr(transparent)]
 pub struct Ratio(::core::primitive::f64);
 impl Ratio {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -187,7 +190,7 @@ impl ::core::default::Default for Ratio {
         Ratio::new_unchecked(0.0)
     }
 }
-/// An accessor over FlatBuffers bytes `Name`'s `verify` accepted.
+/// A `Name` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct NameFbView<'a> {
@@ -316,7 +319,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Name {
         __ridl_fb_decode_Name(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Digest`'s `verify` accepted.
+/// A `Digest` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct DigestFbView<'a> {
@@ -449,7 +452,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Digest {
         __ridl_fb_decode_Digest(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Ratio`'s `verify` accepted.
+/// A `Ratio` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct RatioFbView<'a> {

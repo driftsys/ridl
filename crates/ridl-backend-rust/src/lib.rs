@@ -1120,7 +1120,8 @@ fn emit_type_def(
 
         #allow_deprecated
         impl #name {
-            /// Constructs the value, enforcing its typl constraints.
+            /// Constructs the value, or returns an error when the value breaks a
+            /// constraint that the generated code checks.
             #vis fn new(
                 value: #inner,
             ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -1522,6 +1523,45 @@ fn scalar_getter(sc: &v1::Scalar, vis: TokenStream, inner: TokenStream) -> Token
     }
 }
 
+/// Whether the generated module of package `owner` holds an item for its
+/// declaration `decl`, by the rule [`emit_const`] applies: every kind but a
+/// constant is emitted, and a constant is emitted when it is a regex, a
+/// primitive other than `bytes`, or of a named scalar of its own package
+/// that is not backed by `bytes`. `owner` is the model's own package for a
+/// local declaration and the declaring package for a foreign one, whose
+/// type references index the same model.
+pub(crate) fn declaration_emitted(model: &v1::Model, owner: &str, decl: &v1::Declaration) -> bool {
+    let Some(v1::declaration::Kind::Constant(constant)) = decl.kind.as_ref() else {
+        return true;
+    };
+    match constant.typed.as_ref() {
+        Some(v1::constant::Typed::RegexBody(_)) => true,
+        Some(v1::constant::Typed::Primitive(primitive)) => !matches!(
+            v1::PrimitiveType::try_from(*primitive),
+            Ok(v1::PrimitiveType::Bytes | v1::PrimitiveType::Unspecified) | Err(_)
+        ),
+        Some(v1::constant::Typed::Named(named)) => {
+            if !named.resolved || named.package != owner {
+                return false;
+            }
+            let target = if named.foreign {
+                model
+                    .foreign
+                    .get(named.index as usize)
+                    .and_then(|foreign| foreign.declaration.as_ref())
+            } else {
+                model.declarations.get(named.index as usize)
+            };
+            matches!(
+                target.and_then(|target| target.kind.as_ref()),
+                Some(v1::declaration::Kind::Scalar(scalar))
+                    if !matches!(class_backing(scalar.class), ScalarBacking::Bytes)
+            )
+        }
+        Some(v1::constant::Typed::Unresolved(_)) | None => false,
+    }
+}
+
 /// A constant becomes a `pub const`. A constant of a `String`-backed named type
 /// (or of the `string` primitive, or a regex constant) is realized as a
 /// `&'static str` rather than a value of the newtype: `String` cannot be
@@ -1769,7 +1809,8 @@ fn emit_enum_set(
     let bits = esd.bits.iter().map(|bit| {
         let bname = ident(declared(bit.name.as_ref()));
         let shift = int_tokens(bit.value);
-        quote! { #vis const #bname: #name = #name(1 << #shift); }
+        let bdoc = docs::doc_block(&docs::DocParts::enum_value(bit), &ctx.links());
+        quote! { #bdoc #vis const #bname: #name = #name(1 << #shift); }
     });
 
     // Refusing a value that carries an undeclared bit is this backend's

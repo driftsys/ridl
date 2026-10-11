@@ -13,7 +13,8 @@ expression: rust_source
 #[repr(transparent)]
 pub struct Speed(::core::primitive::f64);
 impl Speed {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -201,7 +202,8 @@ impl ::core::default::Default for Speed {
 #[repr(transparent)]
 pub struct Temperature(::core::primitive::f64);
 impl Temperature {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -389,7 +391,8 @@ impl ::core::default::Default for Temperature {
 #[repr(transparent)]
 pub struct RPM(::core::primitive::f64);
 impl RPM {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -577,7 +580,8 @@ impl ::core::default::Default for RPM {
 #[repr(transparent)]
 pub struct Ratio(::core::primitive::f64);
 impl Ratio {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -790,7 +794,8 @@ impl ::core::default::Default for Counter {
 #[repr(transparent)]
 pub struct Gain(::core::primitive::f64);
 impl Gain {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -1255,7 +1260,7 @@ const __RIDL_FB_NO_CODEC_SensorReading: () = ();
 /// value to size, are never resolvable by any caller.
 #[allow(dead_code, non_upper_case_globals)]
 const __RIDL_FB_NO_CODEC_SensorFault: () = ();
-/// An accessor over FlatBuffers bytes `Speed`'s `verify` accepted.
+/// A `Speed` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedFbView<'a> {
@@ -1384,7 +1389,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
         __ridl_fb_decode_Speed(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Temperature`'s `verify` accepted.
+/// A `Temperature` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct TemperatureFbView<'a> {
@@ -1516,7 +1521,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
         __ridl_fb_decode_Temperature(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `RPM`'s `verify` accepted.
+/// A `RPM` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct RPMFbView<'a> {
@@ -1645,7 +1650,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RPM {
         __ridl_fb_decode_RPM(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Ratio`'s `verify` accepted.
+/// A `Ratio` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct RatioFbView<'a> {
@@ -1774,7 +1779,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Ratio {
         __ridl_fb_decode_Ratio(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Counter`'s `verify` accepted.
+/// A `Counter` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct CounterFbView<'a> {
@@ -1901,7 +1906,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
         __ridl_fb_decode_Counter(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Gain`'s `verify` accepted.
+/// A `Gain` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct GainFbView<'a> {
@@ -2030,7 +2035,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Gain {
         __ridl_fb_decode_Gain(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `GearPosition`'s `verify` accepted.
+/// A `GearPosition` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct GearPositionFbView<'a> {
@@ -2164,7 +2169,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for GearPosit
         __ridl_fb_decode_GearPosition(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Warning`'s `verify` accepted.
+/// A `Warning` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WarningFbView<'a> {
@@ -2290,7 +2295,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
         __ridl_fb_decode_Warning(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `WarningFlags`'s `verify` accepted.
+/// A `WarningFlags` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WarningFlagsFbView<'a> {
@@ -2430,7 +2435,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for WarningFl
         __ridl_fb_decode_WarningFlags(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `SpeedLimitPayload`'s `verify` accepted.
+/// A `SpeedLimitPayload` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -2631,7 +2636,7 @@ for SpeedLimitPayload {
         __ridl_fb_decode_SpeedLimitPayload(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `RawWheelFrame`'s `verify` accepted.
+/// A `RawWheelFrame` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection

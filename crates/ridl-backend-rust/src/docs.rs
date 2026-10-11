@@ -115,7 +115,8 @@ impl<'a> Links<'a> {
 
     /// The rustdoc path of `target`, a canonical qualified name `pkg.Name`
     /// with an optional `.member`, or `None` when the target is not an item
-    /// of this output or is `internal`.
+    /// of this output or is `internal`. A constant the backend skips
+    /// ([`crate::declaration_emitted`]) is not an item of this output.
     ///
     /// A declaration of the package or a foreign declaration it reaches is
     /// its [`type_path`]; a member of one is that path followed by the
@@ -129,9 +130,14 @@ impl<'a> Links<'a> {
     /// [`package_prefix`] read the package names of the build from it.
     ///
     /// A path with a raw identifier segment (`r#move`) is `None` as well:
-    /// rustdoc cuts an intra-doc path at `#` and cannot resolve it.
+    /// rustdoc cuts an intra-doc path at `#` and cannot resolve it. So is a
+    /// path through `__ridl_package`, which [`package_prefix`] writes for an
+    /// item whose name a child package's module takes: that module is
+    /// `#[doc(hidden)]`, rustdoc writes no page for an item reached only
+    /// through it, and the item has no other public path.
     pub(crate) fn path(&self, target: &str) -> Option<String> {
-        self.resolve(target).filter(|path| !path.contains("r#"))
+        self.resolve(target)
+            .filter(|path| !path.contains("r#") && !path.contains("__ridl_package"))
     }
 
     fn resolve(&self, target: &str) -> Option<String> {
@@ -156,7 +162,9 @@ impl<'a> Links<'a> {
             if !rest.is_empty() && !rest.starts_with('.') {
                 continue;
             }
-            if decl.visibility == v1::Visibility::Internal as i32 {
+            if decl.visibility == v1::Visibility::Internal as i32
+                || !crate::declaration_emitted(self.model, owner, decl)
+            {
                 return None;
             }
             let Some(member) = rest.strip_prefix('.') else {
@@ -258,60 +266,106 @@ fn spelled(path: TokenStream) -> String {
     path.to_string().replace(' ', "")
 }
 
-/// The doc comment of one carrier, as `#[doc]` attributes, which prettyplease
-/// renders as `///` lines. Each part is omitted when it is empty, and the
-/// blank line before a section is omitted when nothing precedes it:
-///
-/// 1. `doc`, with each link rewritten (see [`linked`]);
-/// 2. `# Rules`, then one `- <text>` bullet per rule, the text verbatim;
-/// 3. `# See also`, then one bullet per `see` target, a link or a code span;
-/// 4. one `Available since <v>.` line per `since` version.
-pub(crate) fn doc_block(parts: &DocParts<'_>, links: &Links<'_>) -> TokenStream {
-    let mut lines: Vec<String> = Vec::new();
-    if !parts.doc.is_empty() {
-        let text = linked(parts.doc, parts.links, links);
-        lines.extend(text.split('\n').map(|line| format!(" {line}")));
-    }
-    if !parts.rules.is_empty() {
-        section(&mut lines, "# Rules");
-        lines.extend(parts.rules.iter().map(|rule| format!(" - {}", rule.text)));
-    }
-    if !parts.see.is_empty() {
-        section(&mut lines, "# See also");
-        lines.extend(
-            parts
-                .see
-                .iter()
-                .map(|see| format!(" - {}", rendered_link(see, links))),
-        );
-    }
-    if !parts.since.is_empty() {
-        if !lines.is_empty() {
-            lines.push(String::new());
-        }
-        lines.extend(
-            parts
-                .since
-                .iter()
-                .map(|version| format!(" Available since {version}.")),
-        );
-    }
-    quote! { #(#[doc = #lines])* }
+/// The rendered lines of one carrier's doc comment, kept apart so that a
+/// caller can put a generated sentence between the doc text and the
+/// sections, and a `# Parameters` section among them ([`DocLines::render`]).
+pub(crate) struct DocLines {
+    /// The doc text, each link rewritten (see [`linked`]).
+    body: Vec<String>,
+    /// One `- <text>` bullet per rule, the text verbatim.
+    rules: Vec<String>,
+    /// One bullet per `see` target, a link or a code span.
+    see: Vec<String>,
+    /// One `Available since <v>.` line per `since` version.
+    since: Vec<String>,
 }
 
-/// The `# Parameters` section of a call's method, as `#[doc]` attributes,
-/// or nothing for a call with no parameter. The section opens with a blank
-/// line, because it follows the method's own doc. Each parameter is one
-/// ``- `<snake name>`: <doc>`` bullet, its doc's links rewritten as
-/// [`doc_block`] rewrites them and a further line of the doc indented under
-/// the bullet; a parameter with no doc is ``- `<snake name>` `` alone. Each
-/// of the parameter's rules is a nested `- <text>` bullet under it, the text
-/// verbatim. A parameter's `see` and `since` are not rendered here.
-pub(crate) fn parameters(params: &[v1::Param], links: &Links<'_>) -> TokenStream {
-    if params.is_empty() {
-        return TokenStream::new();
+impl DocLines {
+    pub(crate) fn new(parts: &DocParts<'_>, links: &Links<'_>) -> Self {
+        let body = if parts.doc.is_empty() {
+            Vec::new()
+        } else {
+            linked(parts.doc, parts.links, links)
+                .split('\n')
+                .map(|line| format!(" {line}"))
+                .collect()
+        };
+        DocLines {
+            body,
+            rules: parts
+                .rules
+                .iter()
+                .map(|rule| format!(" - {}", rule.text))
+                .collect(),
+            see: parts
+                .see
+                .iter()
+                .map(|see| format!(" - {}", rendered_link(see, links)))
+                .collect(),
+            since: parts
+                .since
+                .iter()
+                .map(|version| format!(" Available since {version}."))
+                .collect(),
+        }
     }
-    let mut lines = vec![String::new(), " # Parameters".to_string(), String::new()];
+
+    /// The doc comment, as `#[doc]` attributes, which prettyplease renders
+    /// as `///` lines. Each part is omitted when it is empty, and the blank
+    /// line before a part is omitted when nothing precedes it:
+    ///
+    /// 1. the doc text;
+    /// 2. `sentence`, the generator's own text for the item, as its own
+    ///    paragraph;
+    /// 3. `# Rules`, then the rule bullets;
+    /// 4. `# Parameters`, then `params`, the bullets [`parameter_lines`]
+    ///    gives;
+    /// 5. `# See also`, then the `see` bullets;
+    /// 6. the `Available since` lines.
+    pub(crate) fn render(&self, sentence: Option<&str>, params: &[String]) -> TokenStream {
+        let lines = self.lines(sentence, params);
+        quote! { #(#[doc = #lines])* }
+    }
+
+    /// The lines [`DocLines::render`] emits, one per `#[doc]` attribute.
+    fn lines(&self, sentence: Option<&str>, params: &[String]) -> Vec<String> {
+        let mut lines: Vec<String> = self.body.clone();
+        if let Some(sentence) = sentence {
+            if !lines.is_empty() {
+                lines.push(String::new());
+            }
+            lines.push(sentence.to_string());
+        }
+        section(&mut lines, "# Rules", &self.rules);
+        section(&mut lines, "# Parameters", params);
+        section(&mut lines, "# See also", &self.see);
+        if !self.since.is_empty() {
+            if !lines.is_empty() {
+                lines.push(String::new());
+            }
+            lines.extend(self.since.iter().cloned());
+        }
+        lines
+    }
+}
+
+/// The doc comment of one carrier with no generated sentence: the doc text,
+/// `# Rules`, `# See also` and the `Available since` lines, as
+/// [`DocLines::render`] orders them.
+pub(crate) fn doc_block(parts: &DocParts<'_>, links: &Links<'_>) -> TokenStream {
+    DocLines::new(parts, links).render(None, &[])
+}
+
+/// The bullets of a call's `# Parameters` section, which
+/// [`DocLines::render`] puts under its heading, or none for a call with no
+/// parameter. Each parameter is one ``- `<snake name>`: <doc>`` bullet, its
+/// doc's links rewritten as the doc text's are and a further line of the doc
+/// indented under the bullet; a parameter with no doc is
+/// ``- `<snake name>` `` alone. Each of the parameter's rules is a nested
+/// `- <text>` bullet under it, the text verbatim. A parameter's `see` and
+/// `since` are not rendered here.
+pub(crate) fn parameter_lines(params: &[v1::Param], links: &Links<'_>) -> Vec<String> {
+    let mut lines = Vec::new();
     for param in params {
         let name = snake_of(param.name.as_ref());
         let parts = DocParts::param(param);
@@ -326,16 +380,21 @@ pub(crate) fn parameters(params: &[v1::Param], links: &Links<'_>) -> TokenStream
         }
         lines.extend(parts.rules.iter().map(|rule| format!("   - {}", rule.text)));
     }
-    quote! { #(#[doc = #lines])* }
+    lines
 }
 
-/// A blank line when something precedes, the heading, then a blank line.
-fn section(lines: &mut Vec<String>, heading: &str) {
+/// `heading` and `items` under it, or nothing when `items` is empty: a blank
+/// line when something precedes, the heading, a blank line, then the items.
+fn section(lines: &mut Vec<String>, heading: &str, items: &[String]) {
+    if items.is_empty() {
+        return;
+    }
     if !lines.is_empty() {
         lines.push(String::new());
     }
     lines.push(format!(" {heading}"));
     lines.push(String::new());
+    lines.extend(items.iter().cloned());
 }
 
 /// `doc` with the `len` bytes at each link's `offset` replaced by the link's
@@ -349,6 +408,11 @@ fn linked(doc: &str, doc_links: &[v1::DocLink], links: &Links<'_>) -> String {
     ordered.sort_by_key(|link| std::cmp::Reverse(link.offset));
     let mut limit = doc.len();
     for link in ordered {
+        // A zero-length link has no text to replace, and at the offset of a
+        // link already replaced it would insert a second rendering.
+        if link.len == 0 {
+            continue;
+        }
         let start = link.offset as usize;
         let Some(end) = start.checked_add(link.len as usize) else {
             continue;
@@ -400,5 +464,90 @@ mod tests {
             assert_eq!(linked(doc, &[bad], &links), doc);
         }
         assert_eq!(linked(doc, &[link(7, 3, "a.X")], &links), "in °C `a.X`");
+    }
+
+    /// A zero-length link has no text to replace: alone it leaves the text,
+    /// and at the offset of a link already replaced it inserts nothing.
+    #[test]
+    fn a_zero_length_link_inserts_nothing() {
+        let model = v1::Model::default();
+        let faced = BTreeSet::new();
+        let links = Links::new(&model, &faced);
+        let doc = "in °C [X]";
+        assert_eq!(linked(doc, &[link(7, 0, "a.X")], &links), doc);
+        assert_eq!(
+            linked(doc, &[link(7, 3, "a.X"), link(7, 0, "a.Y")], &links),
+            "in °C `a.X`"
+        );
+    }
+
+    /// A link that overlaps a link already replaced leaves the text that
+    /// replacement wrote.
+    #[test]
+    fn a_link_overlapping_a_replaced_link_is_skipped() {
+        let model = v1::Model::default();
+        let faced = BTreeSet::new();
+        let links = Links::new(&model, &faced);
+        let doc = "see [A.B] now";
+        assert_eq!(
+            linked(doc, &[link(4, 5, "a.Whole"), link(6, 3, "a.Tail")], &links),
+            "see [A`a.Tail` now"
+        );
+    }
+
+    fn param(name: &str, doc: &str) -> v1::Param {
+        v1::Param {
+            name: Some(v1::Spellings {
+                declared: name.to_string(),
+                snake: name.to_string(),
+                ..Default::default()
+            }),
+            doc: doc.to_string(),
+            ..Default::default()
+        }
+    }
+
+    /// A further line of a parameter's doc is indented under its bullet.
+    #[test]
+    fn a_multi_line_parameter_doc_is_indented_under_its_bullet() {
+        let model = v1::Model::default();
+        let faced = BTreeSet::new();
+        let links = Links::new(&model, &faced);
+        assert_eq!(
+            parameter_lines(&[param("level", "The level.\nIn percent.")], &links),
+            vec![
+                " - `level`: The level.".to_string(),
+                "   In percent.".to_string()
+            ]
+        );
+    }
+
+    /// An `Available since` line with nothing before it opens the doc: no
+    /// blank line precedes it. With a doc text before it, one does.
+    #[test]
+    fn a_lone_since_line_has_no_blank_line_before_it() {
+        let model = v1::Model::default();
+        let faced = BTreeSet::new();
+        let links = Links::new(&model, &faced);
+        let since = vec!["0.2".to_string()];
+        let parts = |doc| DocParts {
+            doc,
+            links: &[],
+            see: &[],
+            since: &since,
+            rules: &[],
+        };
+        assert_eq!(
+            DocLines::new(&parts(""), &links).lines(None, &[]),
+            vec![" Available since 0.2.".to_string()]
+        );
+        assert_eq!(
+            DocLines::new(&parts("A doc."), &links).lines(None, &[]),
+            vec![
+                " A doc.".to_string(),
+                String::new(),
+                " Available since 0.2.".to_string()
+            ]
+        );
     }
 }

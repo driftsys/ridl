@@ -1468,7 +1468,7 @@ impl<'a> Codec<'a> {
         let ty = ident(owner);
         let view = view_ident(owner);
         let doc =
-            format!(" A zero-copy accessor over FlatBuffers bytes `{owner}`'s `verify` accepted.");
+            format!(" A `{owner}` value in FlatBuffers bytes, read in place without copying it.");
 
         let mut accessors: Vec<TokenStream> = Vec::new();
         for slot in &table.slots {
@@ -2302,7 +2302,7 @@ impl<'a> Codec<'a> {
         };
 
         let doc =
-            format!(" A zero-copy accessor over FlatBuffers bytes `{owner}`'s `verify` accepted.");
+            format!(" A `{owner}` value in FlatBuffers bytes, read in place without copying it.");
         let value_doc = format!(
             " The value the bytes hold. A union's arms have no one view type, so this \
              decodes `{owner}` rather than borrowing it."
@@ -2629,7 +2629,7 @@ impl<'a> Codec<'a> {
         let verify_body = &bodies.verify;
         let decode_body = &bodies.decode;
 
-        let doc = format!(" An accessor over FlatBuffers bytes `{owner}`'s `verify` accepted.");
+        let doc = format!(" A `{owner}` value in FlatBuffers bytes.");
         // A box holds one value, and `value()` hands it over rather than
         // borrowing it: for a scalar and an enum that is a read, and nothing
         // a nested view would save; for a string or a bytes backing it is an

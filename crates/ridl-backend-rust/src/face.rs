@@ -86,7 +86,7 @@ use crate::descriptors::{
     declared_name, descriptor_ident, interactions, query_param_type, query_reply_type,
     single_param_type,
 };
-use crate::docs::{self, DocParts, Links};
+use crate::docs::{self, DocLines, DocParts, Links};
 use crate::{GenerateError, camel_of, declared, deprecated_attr, ident, snake_of, type_path};
 use proc_macro2::{Ident, Literal, TokenStream};
 use quote::quote;
@@ -140,9 +140,9 @@ struct Member<'a> {
     /// The pinned CamelCase of the declared name, which the correlation
     /// newtype and the event enum's variant are spelled with.
     camel: &'a str,
-    /// The interaction's own doc comment, as `docs::doc_block` renders it:
-    /// empty when the interaction has none.
-    doc: TokenStream,
+    /// The interaction's own doc comment, which [`member_doc`] renders
+    /// around the face's generated sentence.
+    doc: DocLines,
     /// The interaction's `@deprecated` reason, `Some("")` for one with no
     /// reason, and `None` when it is not deprecated.
     deprecated: Option<&'a str>,
@@ -159,33 +159,23 @@ struct Call<'a> {
     arg_type: &'a str,
     /// The reply type, present on a query and absent on a command.
     reply_type: Option<&'a str>,
-    /// The `# Parameters` section of the call's methods, as
-    /// `docs::parameters` renders it.
-    params_doc: TokenStream,
+    /// The bullets of the `# Parameters` section of the call's methods, as
+    /// `docs::parameter_lines` gives them.
+    params: Vec<String>,
 }
 
 /// The doc of a method a user calls or implements for `member`: the
-/// interaction's own doc, then `sentence`, the face's generated text, as its
-/// own paragraph.
+/// interaction's own doc text, then `sentence`, the face's generated text, as
+/// its own paragraph, then the interaction's sections (`# Rules`,
+/// `# See also`, `Available since`).
 fn member_doc(member: &Member, sentence: &str) -> TokenStream {
-    let doc = &member.doc;
-    let blank = (!doc.is_empty()).then(|| quote! { #[doc = ""] });
-    quote! {
-        #doc
-        #blank
-        #[doc = #sentence]
-    }
+    member.doc.render(Some(sentence), &[])
 }
 
-/// [`member_doc`] for a call's method, followed by the call's
-/// `# Parameters` section.
+/// [`member_doc`] for a call's method, with the call's `# Parameters`
+/// section after `# Rules`.
 fn call_doc(call: &Call, sentence: &str) -> TokenStream {
-    let doc = member_doc(&call.member, sentence);
-    let params = &call.params_doc;
-    quote! {
-        #doc
-        #params
-    }
+    call.member.doc.render(Some(sentence), &call.params)
 }
 
 /// `#[allow(deprecated)]` for a generated item that calls a method of one of
@@ -242,7 +232,7 @@ pub(crate) fn one_interface(
             },
             declared: name,
             camel: camel_of(interaction.name.as_ref()),
-            doc: docs::doc_block(&DocParts::interaction(interaction), links),
+            doc: DocLines::new(&DocParts::interaction(interaction), links),
             deprecated: interaction.deprecated.as_deref(),
         };
         match interaction.shape.as_ref() {
@@ -258,7 +248,7 @@ pub(crate) fn one_interface(
                     arg: single_param_name(&command.params),
                     member,
                     reply_type: None,
-                    params_doc: docs::parameters(&command.params, links),
+                    params: docs::parameter_lines(&command.params, links),
                 });
             }
             Some(v1::interaction::Shape::Query(query)) => {
@@ -267,7 +257,7 @@ pub(crate) fn one_interface(
                     arg: single_param_name(&query.params),
                     member,
                     reply_type: Some(query_reply_type(query, name)?),
-                    params_doc: docs::parameters(&query.params, links),
+                    params: docs::parameter_lines(&query.params, links),
                 });
             }
             // A `fixed` is provisioned, not interacted with, so the MVP's face
@@ -317,13 +307,11 @@ pub(crate) fn one_interface(
     body.push(prelude(iface_name, &signals, &events, blocking.is_some()));
     body.extend(blocking);
 
-    let interface_doc = docs::doc_block(&DocParts::interface(interface), links);
-    let blank = (!interface_doc.is_empty()).then(|| quote! { #[doc = ""] });
     let module_doc = format!("The generated interaction face of interface `{iface_name}`.");
+    let module_doc =
+        DocLines::new(&DocParts::interface(interface), links).render(Some(&module_doc), &[]);
     Ok(Some(quote! {
-        #interface_doc
-        #blank
-        #[doc = #module_doc]
+        #module_doc
         pub mod #module {
             #(#body)*
         }
@@ -491,7 +479,9 @@ fn client(
         let subscribes = events.iter().map(|(member, _)| {
             let method = ident(&format!("subscribe_{}", member.method));
             let ordinal = &member.ordinal;
+            let doc = member_doc(member, &subscribe_sentence(member));
             quote! {
+                #doc
                 fn #method(
                     &mut self,
                 ) -> ::core::result::Result<(), ::ridl_rt::port::SubscribeError> {
@@ -587,7 +577,7 @@ fn client(
 fn subscribe_trait(iface_name: &str, events: &[(Member, &str)]) -> TokenStream {
     let methods = events.iter().map(|(member, _)| {
         let method = ident(&format!("subscribe_{}", member.method));
-        let doc = format!("Starts delivery of event `{}`.", member.declared);
+        let doc = subscribe_sentence(member);
         quote! {
             #[doc = #doc]
             fn #method(
@@ -599,8 +589,8 @@ fn subscribe_trait(iface_name: &str, events: &[(Member, &str)]) -> TokenStream {
         "Starts delivery of one event of interface `{iface_name}`: one method \
          per event, implemented by `Client` and by `blocking::Client`. A trait \
          rather than inherent methods so that a member of the interface may be \
-         named `subscribe<Event>` (ADR-0023 decision 7); `prelude` brings it \
-         into scope anonymously."
+         named `subscribe<Event>`; `prelude` brings it into scope \
+         anonymously."
     );
     quote! {
         #[doc = #doc]
@@ -608,6 +598,11 @@ fn subscribe_trait(iface_name: &str, events: &[(Member, &str)]) -> TokenStream {
             #(#methods)*
         }
     }
+}
+
+/// The face's generated sentence for `subscribe_<event>` of `member`.
+fn subscribe_sentence(member: &Member) -> String {
+    format!("Starts delivery of event `{}`.", member.declared)
 }
 
 /// The per-interface `Invalidate` trait, one `invalidate_<signal>` per
@@ -632,8 +627,7 @@ fn invalidate_trait(iface_name: &str, signals: &[(Member, &str)]) -> TokenStream
         "Stages the invalid state of one signal of interface `{iface_name}`: \
          one method per signal, implemented by `Publisher`. A trait rather \
          than inherent methods so that a member of the interface may be named \
-         `invalidate<Signal>` (ADR-0023 decision 7); `prelude` brings it into \
-         scope anonymously."
+         `invalidate<Signal>`; `prelude` brings it into scope anonymously."
     );
     quote! {
         #[doc = #doc]

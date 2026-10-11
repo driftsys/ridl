@@ -7,7 +7,8 @@
 #[repr(transparent)]
 pub struct Temperature(::core::primitive::i64);
 impl Temperature {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -71,7 +72,8 @@ impl ::core::default::Default for Temperature {
 #[repr(transparent)]
 pub struct Level(::core::primitive::i64);
 impl Level {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -135,7 +137,8 @@ impl ::core::default::Default for Level {
 #[repr(transparent)]
 pub struct Window(::core::primitive::i64);
 impl Window {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -199,7 +202,8 @@ impl ::core::default::Default for Window {
 #[repr(transparent)]
 pub struct Average(::core::primitive::i64);
 impl Average {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -306,7 +310,7 @@ impl ::core::default::Default for Warning {
         }
     }
 }
-/// An accessor over FlatBuffers bytes `Temperature`'s `verify` accepted.
+/// A `Temperature` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct TemperatureFbView<'a> {
@@ -436,7 +440,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
         __ridl_fb_decode_Temperature(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Level`'s `verify` accepted.
+/// A `Level` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct LevelFbView<'a> {
@@ -563,7 +567,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Level {
         __ridl_fb_decode_Level(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Window`'s `verify` accepted.
+/// A `Window` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WindowFbView<'a> {
@@ -692,7 +696,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Window {
         __ridl_fb_decode_Window(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Average`'s `verify` accepted.
+/// A `Average` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct AverageFbView<'a> {
@@ -821,7 +825,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Average {
         __ridl_fb_decode_Average(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Health`'s `verify` accepted.
+/// A `Health` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct HealthFbView<'a> {
@@ -947,7 +951,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Health {
         __ridl_fb_decode_Health(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `Warning`'s `verify` accepted.
+/// A `Warning` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -1841,13 +1845,13 @@ impl ::ridl_rt::contract::Query for ZoneAverage {
 /// The cabin climate controller. It publishes the cabin [Temperature](crate::face::demo::Temperature) and
 /// takes a control [Level](crate::face::demo::Level).
 ///
+///The generated interaction face of interface `Cabin`.
+///
 /// # See also
 ///
 /// - [Horn](crate::face::demo::horn)
 ///
 /// Available since 1.0.
-///
-///The generated interaction face of interface `Cabin`.
 pub mod cabin {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     pub(crate) struct SetLevelCorrelation(pub ::ridl_rt::port::Correlation);
@@ -1863,7 +1867,7 @@ pub mod cabin {
             );
         }
     }
-    ///Starts delivery of one event of interface `Cabin`: one method per event, implemented by `Client` and by `blocking::Client`. A trait rather than inherent methods so that a member of the interface may be named `subscribe<Event>` (ADR-0023 decision 7); `prelude` brings it into scope anonymously.
+    ///Starts delivery of one event of interface `Cabin`: one method per event, implemented by `Client` and by `blocking::Client`. A trait rather than inherent methods so that a member of the interface may be named `subscribe<Event>`; `prelude` brings it into scope anonymously.
     pub trait Subscribe {
         ///Starts delivery of event `warning`.
         fn subscribe_warning(
@@ -1885,11 +1889,11 @@ pub mod cabin {
     > Client<P> {
         /// The cabin temperature, read from [Cabin.average](crate::face::demo::cabin::Client::average)'s source sensor.
         ///
+        ///Reads signal `temperature` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///
         /// # Rules
         ///
         /// - period 10000 us
-        ///
-        ///Reads signal `temperature` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         pub fn temperature(
             &self,
         ) -> ::core::result::Result<
@@ -1949,14 +1953,14 @@ pub mod cabin {
         }
         /// Sets the control level.
         ///
+        /**Sends command `setLevel` and returns its future. The call is sent when this method runs, not when the future is first polled, and the future resolves on the outcome. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
+
+The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.*/
+        ///
         /// # Rules
         ///
         /// - response within 50000 us
         /// - require `level < 100`
-        ///
-        /**Sends command `setLevel` and returns its future. The call is sent when this method runs, not when the future is first polled, and the future resolves on the outcome. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
-
-The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.*/
         ///
         /// # Parameters
         ///
@@ -1982,22 +1986,22 @@ The call's bound is the member's `max`, measured from the port's clock when this
         }
         /// The average cabin temperature over a window of samples.
         ///
+        /**Sends query `average` and returns its future. The call is sent when this method runs, not when the future is first polled, and the future resolves on the outcome. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
+
+The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.*/
+        ///
         /// # Rules
         ///
         /// - response within 200000 us
         /// - require `window > 0`
         /// - ensure `result >= 0`
         ///
-        /// Available since 1.1.
-        ///
-        /**Sends query `average` and returns its future. The call is sent when this method runs, not when the future is first polled, and the future resolves on the outcome. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
-
-The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.*/
-        ///
         /// # Parameters
         ///
         /// - `window`
         ///   - range 0 ..= 100000
+        ///
+        /// Available since 1.1.
         pub fn average(&mut self, window: super::Window) -> AverageCall<'_, P> {
             let __arg = window;
             let deadline = <super::CabinAverage as ::ridl_rt::contract::Interaction>::MEMBER
@@ -2052,6 +2056,13 @@ The interface number is checked before the ordinal, for the reason `serve` check
             + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
             + ::ridl_rt::port::Wakeable,
     > Subscribe for Client<P> {
+        /// A warning the controller raises.
+        ///
+        ///Starts delivery of event `warning`.
+        ///
+        /// # Rules
+        ///
+        /// - interval 100000 ..= 1000000 us
         fn subscribe_warning(
             &mut self,
         ) -> ::core::result::Result<(), ::ridl_rt::port::SubscribeError> {
@@ -2503,7 +2514,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
             }
         }
     }
-    ///Stages the invalid state of one signal of interface `Cabin`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>` (ADR-0023 decision 7); `prelude` brings it into scope anonymously.
+    ///Stages the invalid state of one signal of interface `Cabin`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>`; `prelude` brings it into scope anonymously.
     pub trait Invalidate {
         ///Stages the invalid state for signal `temperature`, with `Cause::Declared`. It is published by `commit`.
         fn invalidate_temperature(
@@ -2517,11 +2528,11 @@ The interface number is checked before the ordinal, for the reason `serve` check
     impl<W: ::ridl_rt::port::SignalWriter + ::ridl_rt::port::EventSink> Publisher<W> {
         /// The cabin temperature, read from [Cabin.average](crate::face::demo::cabin::Client::average)'s source sensor.
         ///
+        ///Stages a new value for signal `temperature`. It is published by `commit`.
+        ///
         /// # Rules
         ///
         /// - period 10000 us
-        ///
-        ///Stages a new value for signal `temperature`. It is published by `commit`.
         pub fn temperature(
             &mut self,
             value: super::Temperature,
@@ -2551,11 +2562,11 @@ The interface number is checked before the ordinal, for the reason `serve` check
         }
         /// A warning the controller raises.
         ///
+        ///Raises one occurrence of event `warning`.
+        ///
         /// # Rules
         ///
         /// - interval 100000 ..= 1000000 us
-        ///
-        ///Raises one occurrence of event `warning`.
         pub fn warning(
             &mut self,
             value: super::Warning,
@@ -2626,12 +2637,12 @@ An argument is taken by reference because `serve` reads it again when it evaluat
     pub trait Provider {
         /// Sets the control level.
         ///
+        ///Serves command `setLevel`. It returns nothing: a command has no failure the application reports (ridl §6.1). Arguments that break their typl constraints or the `require` clauses never reach it.
+        ///
         /// # Rules
         ///
         /// - response within 50000 us
         /// - require `level < 100`
-        ///
-        ///Serves command `setLevel`. It returns nothing: a command has no failure the application reports (ridl §6.1). Arguments that break their typl constraints or the `require` clauses never reach it.
         ///
         /// # Parameters
         ///
@@ -2640,20 +2651,20 @@ An argument is taken by reference because `serve` reads it again when it evaluat
         fn set_level(&mut self, level: &super::Level);
         /// The average cabin temperature over a window of samples.
         ///
+        ///Serves query `average`. A reply that breaks an `ensure` clause is discarded by `serve`, which settles `ContractBroken` instead.
+        ///
         /// # Rules
         ///
         /// - response within 200000 us
         /// - require `window > 0`
         /// - ensure `result >= 0`
         ///
-        /// Available since 1.1.
-        ///
-        ///Serves query `average`. A reply that breaks an `ensure` clause is discarded by `serve`, which settles `ContractBroken` instead.
-        ///
         /// # Parameters
         ///
         /// - `window`
         ///   - range 0 ..= 100000
+        ///
+        /// Available since 1.1.
         fn average(&mut self, window: &super::Window) -> super::Average;
     }
     pub(crate) fn dispatch<H, P>(
@@ -3017,11 +3028,11 @@ Panics when `h` is attached to a catalog other than the one this face was genera
         > Client<P> {
             /// The cabin temperature, read from [Cabin.average](crate::face::demo::cabin::Client::average)'s source sensor.
             ///
+            ///Reads signal `temperature`, as `Client::temperature` does: a read never waits.
+            ///
             /// # Rules
             ///
             /// - period 10000 us
-            ///
-            ///Reads signal `temperature`, as `Client::temperature` does: a read never waits.
             pub fn temperature(
                 &self,
             ) -> ::core::result::Result<
@@ -3032,12 +3043,12 @@ Panics when `h` is attached to a catalog other than the one this face was genera
             }
             /// Sets the control level.
             ///
+            ///Sends command `setLevel` and waits for its outcome, as `block_on` over `Client::set_level`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Undelivered`; either way nothing is left waiting at the port.
+            ///
             /// # Rules
             ///
             /// - response within 50000 us
             /// - require `level < 100`
-            ///
-            ///Sends command `setLevel` and waits for its outcome, as `block_on` over `Client::set_level`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Undelivered`; either way nothing is left waiting at the port.
             ///
             /// # Parameters
             ///
@@ -3071,20 +3082,20 @@ Panics when `h` is attached to a catalog other than the one this face was genera
             }
             /// The average cabin temperature over a window of samples.
             ///
+            ///Sends query `average` and waits for its outcome, as `block_on` over `Client::average`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Timeout`; either way nothing is left waiting at the port.
+            ///
             /// # Rules
             ///
             /// - response within 200000 us
             /// - require `window > 0`
             /// - ensure `result >= 0`
             ///
-            /// Available since 1.1.
-            ///
-            ///Sends query `average` and waits for its outcome, as `block_on` over `Client::average`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Timeout`; either way nothing is left waiting at the port.
-            ///
             /// # Parameters
             ///
             /// - `window`
             ///   - range 0 ..= 100000
+            ///
+            /// Available since 1.1.
             pub fn average(
                 &mut self,
                 window: super::super::Window,
@@ -3189,7 +3200,13 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                 + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
                 + ::ridl_rt::port::Wakeable,
         > super::Subscribe for Client<P> {
+            /// A warning the controller raises.
+            ///
             ///Starts delivery of event `warning`, as the async client's `Subscribe::subscribe_warning` does.
+            ///
+            /// # Rules
+            ///
+            /// - interval 100000 ..= 1000000 us
             fn subscribe_warning(
                 &mut self,
             ) -> ::core::result::Result<(), ::ridl_rt::port::SubscribeError> {
@@ -3238,11 +3255,11 @@ pub mod horn {
         port: P,
     }
     impl<P: ::ridl_rt::port::SignalReader> Client<P> {
+        ///Reads signal `active` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///
         /// # Rules
         ///
         /// - period 10000 us
-        ///
-        ///Reads signal `active` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         pub fn active(
             &self,
         ) -> ::core::result::Result<
@@ -3314,7 +3331,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             Client { port }
         }
     }
-    ///Stages the invalid state of one signal of interface `Horn`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>` (ADR-0023 decision 7); `prelude` brings it into scope anonymously.
+    ///Stages the invalid state of one signal of interface `Horn`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>`; `prelude` brings it into scope anonymously.
     pub trait Invalidate {
         ///Stages the invalid state for signal `active`, with `Cause::Declared`. It is published by `commit`.
         fn invalidate_active(
@@ -3326,11 +3343,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         port: W,
     }
     impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
+        ///Stages a new value for signal `active`. It is published by `commit`.
+        ///
         /// # Rules
         ///
         /// - period 10000 us
-        ///
-        ///Stages a new value for signal `active`. It is published by `commit`.
         pub fn active(
             &mut self,
             value: super::Health,
@@ -3408,7 +3425,7 @@ pub mod siren {
             );
         }
     }
-    ///Starts delivery of one event of interface `Siren`: one method per event, implemented by `Client` and by `blocking::Client`. A trait rather than inherent methods so that a member of the interface may be named `subscribe<Event>` (ADR-0023 decision 7); `prelude` brings it into scope anonymously.
+    ///Starts delivery of one event of interface `Siren`: one method per event, implemented by `Client` and by `blocking::Client`. A trait rather than inherent methods so that a member of the interface may be named `subscribe<Event>`; `prelude` brings it into scope anonymously.
     pub trait Subscribe {
         ///Starts delivery of event `tripped`.
         fn subscribe_tripped(
@@ -3447,6 +3464,11 @@ The interface number is checked before the ordinal, for the reason `serve` check
     }
     impl<P: ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable> Subscribe
     for Client<P> {
+        ///Starts delivery of event `tripped`.
+        ///
+        /// # Rules
+        ///
+        /// - interval 100000 ..= 1000000 us
         fn subscribe_tripped(
             &mut self,
         ) -> ::core::result::Result<(), ::ridl_rt::port::SubscribeError> {
@@ -3548,11 +3570,11 @@ The interface number is checked before the ordinal, for the reason `serve` check
         port: W,
     }
     impl<W: ::ridl_rt::port::EventSink> Publisher<W> {
+        ///Raises one occurrence of event `tripped`.
+        ///
         /// # Rules
         ///
         /// - interval 100000 ..= 1000000 us
-        ///
-        ///Raises one occurrence of event `tripped`.
         pub fn tripped(
             &mut self,
             value: super::Warning,
@@ -3683,6 +3705,10 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             P: ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable,
         > super::Subscribe for Client<P> {
             ///Starts delivery of event `tripped`, as the async client's `Subscribe::subscribe_tripped` does.
+            ///
+            /// # Rules
+            ///
+            /// - interval 100000 ..= 1000000 us
             fn subscribe_tripped(
                 &mut self,
             ) -> ::core::result::Result<(), ::ridl_rt::port::SubscribeError> {
@@ -3716,13 +3742,13 @@ pub mod valve {
     impl<
         P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
     > Client<P> {
-        /// # Rules
-        ///
-        /// - response within 1000000 us
-        ///
         /**Sends command `open` and returns its future. The call is sent when this method runs, not when the future is first polled, and the future resolves on the outcome. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
 
 The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.*/
+        ///
+        /// # Rules
+        ///
+        /// - response within 1000000 us
         ///
         /// # Parameters
         ///
@@ -3746,13 +3772,13 @@ The call's bound is the member's `max`, measured from the port's clock when this
                 deadline,
             }
         }
-        /// # Rules
-        ///
-        /// - response within 3000000 us
-        ///
         /**Sends query `pressure` and returns its future. The call is sent when this method runs, not when the future is first polled, and the future resolves on the outcome. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
 
 The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.*/
+        ///
+        /// # Rules
+        ///
+        /// - response within 3000000 us
         ///
         /// # Parameters
         ///
@@ -4148,22 +4174,22 @@ Panics when `port` is attached to a catalog other than the one this face was gen
 
 An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses, and the generated payload types implement neither `Copy` nor `Clone`.*/
     pub trait Provider {
+        ///Serves command `open`. It returns nothing: a command has no failure the application reports (ridl §6.1). Arguments that break their typl constraints or the `require` clauses never reach it.
+        ///
         /// # Rules
         ///
         /// - response within 1000000 us
-        ///
-        ///Serves command `open`. It returns nothing: a command has no failure the application reports (ridl §6.1). Arguments that break their typl constraints or the `require` clauses never reach it.
         ///
         /// # Parameters
         ///
         /// - `level`
         ///   - range 0 ..= 100
         fn open(&mut self, level: &super::Level);
+        ///Serves query `pressure`. A reply that breaks an `ensure` clause is discarded by `serve`, which settles `ContractBroken` instead.
+        ///
         /// # Rules
         ///
         /// - response within 3000000 us
-        ///
-        ///Serves query `pressure`. A reply that breaks an `ensure` clause is discarded by `serve`, which settles `ContractBroken` instead.
         ///
         /// # Parameters
         ///
@@ -4524,11 +4550,11 @@ Panics when `h` is attached to a catalog other than the one this face was genera
             P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
                 + ::ridl_rt::port::Wakeable,
         > Client<P> {
+            ///Sends command `open` and waits for its outcome, as `block_on` over `Client::open`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Undelivered`; either way nothing is left waiting at the port.
+            ///
             /// # Rules
             ///
             /// - response within 1000000 us
-            ///
-            ///Sends command `open` and waits for its outcome, as `block_on` over `Client::open`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Undelivered`; either way nothing is left waiting at the port.
             ///
             /// # Parameters
             ///
@@ -4560,11 +4586,11 @@ Panics when `h` is attached to a catalog other than the one this face was genera
                     }
                 }
             }
+            ///Sends query `pressure` and waits for its outcome, as `block_on` over `Client::pressure`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Timeout`; either way nothing is left waiting at the port.
+            ///
             /// # Rules
             ///
             /// - response within 3000000 us
-            ///
-            ///Sends query `pressure` and waits for its outcome, as `block_on` over `Client::pressure`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Timeout`; either way nothing is left waiting at the port.
             ///
             /// # Parameters
             ///
@@ -4682,11 +4708,11 @@ pub mod wiper {
         port: P,
     }
     impl<P: ::ridl_rt::port::SignalReader> Client<P> {
+        ///Reads signal `speed` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///
         /// # Rules
         ///
         /// - period 10000 us
-        ///
-        ///Reads signal `speed` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         pub fn speed(
             &self,
         ) -> ::core::result::Result<
@@ -4758,7 +4784,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             Client { port }
         }
     }
-    ///Stages the invalid state of one signal of interface `Wiper`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>` (ADR-0023 decision 7); `prelude` brings it into scope anonymously.
+    ///Stages the invalid state of one signal of interface `Wiper`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>`; `prelude` brings it into scope anonymously.
     pub trait Invalidate {
         ///Stages the invalid state for signal `speed`, with `Cause::Declared`. It is published by `commit`.
         fn invalidate_speed(
@@ -4770,11 +4796,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         port: W,
     }
     impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
+        ///Stages a new value for signal `speed`. It is published by `commit`.
+        ///
         /// # Rules
         ///
         /// - period 10000 us
-        ///
-        ///Stages a new value for signal `speed`. It is published by `commit`.
         pub fn speed(
             &mut self,
             value: super::Level,
@@ -4869,11 +4895,11 @@ pub mod zone {
     > Client<P> {
         /// The zone level.
         ///
+        ///Reads signal `level` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///
         /// # Rules
         ///
         /// - period 10000 us
-        ///
-        ///Reads signal `level` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         #[deprecated(note = "use Cabin.temperature")]
         pub fn level(
             &self,
@@ -4934,13 +4960,13 @@ pub mod zone {
         }
         /// Sets the zone level.
         ///
-        /// # Rules
-        ///
-        /// - response within 1000000 us
-        ///
         /**Sends command `setLevel` and returns its future. The call is sent when this method runs, not when the future is first polled, and the future resolves on the outcome. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
 
 The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.*/
+        ///
+        /// # Rules
+        ///
+        /// - response within 1000000 us
         ///
         /// # Parameters
         ///
@@ -4967,13 +4993,13 @@ The call's bound is the member's `max`, measured from the port's clock when this
         }
         /// The average zone level over a window of samples.
         ///
-        /// # Rules
-        ///
-        /// - response within 3000000 us
-        ///
         /**Sends query `average` and returns its future. The call is sent when this method runs, not when the future is first polled, and the future resolves on the outcome. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
 
 The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.*/
+        ///
+        /// # Rules
+        ///
+        /// - response within 3000000 us
         ///
         /// # Parameters
         ///
@@ -5370,7 +5396,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             }
         }
     }
-    ///Stages the invalid state of one signal of interface `Zone`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>` (ADR-0023 decision 7); `prelude` brings it into scope anonymously.
+    ///Stages the invalid state of one signal of interface `Zone`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>`; `prelude` brings it into scope anonymously.
     pub trait Invalidate {
         ///Stages the invalid state for signal `level`, with `Cause::Declared`. It is published by `commit`.
         fn invalidate_level(
@@ -5384,11 +5410,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
         /// The zone level.
         ///
+        ///Stages a new value for signal `level`. It is published by `commit`.
+        ///
         /// # Rules
         ///
         /// - period 10000 us
-        ///
-        ///Stages a new value for signal `level`. It is published by `commit`.
         pub fn level(
             &mut self,
             value: super::Level,
@@ -5453,11 +5479,11 @@ An argument is taken by reference because `serve` reads it again when it evaluat
     pub trait Provider {
         /// Sets the zone level.
         ///
+        ///Serves command `setLevel`. It returns nothing: a command has no failure the application reports (ridl §6.1). Arguments that break their typl constraints or the `require` clauses never reach it.
+        ///
         /// # Rules
         ///
         /// - response within 1000000 us
-        ///
-        ///Serves command `setLevel`. It returns nothing: a command has no failure the application reports (ridl §6.1). Arguments that break their typl constraints or the `require` clauses never reach it.
         ///
         /// # Parameters
         ///
@@ -5467,11 +5493,11 @@ An argument is taken by reference because `serve` reads it again when it evaluat
         fn set_level(&mut self, level: &super::Level);
         /// The average zone level over a window of samples.
         ///
+        ///Serves query `average`. A reply that breaks an `ensure` clause is discarded by `serve`, which settles `ContractBroken` instead.
+        ///
         /// # Rules
         ///
         /// - response within 3000000 us
-        ///
-        ///Serves query `average`. A reply that breaks an `ensure` clause is discarded by `serve`, which settles `ContractBroken` instead.
         ///
         /// # Parameters
         ///
@@ -5838,11 +5864,11 @@ Panics when `h` is attached to a catalog other than the one this face was genera
         > Client<P> {
             /// The zone level.
             ///
+            ///Reads signal `level`, as `Client::level` does: a read never waits.
+            ///
             /// # Rules
             ///
             /// - period 10000 us
-            ///
-            ///Reads signal `level`, as `Client::level` does: a read never waits.
             #[deprecated(note = "use Cabin.temperature")]
             #[allow(deprecated)]
             pub fn level(
@@ -5855,11 +5881,11 @@ Panics when `h` is attached to a catalog other than the one this face was genera
             }
             /// Sets the zone level.
             ///
+            ///Sends command `setLevel` and waits for its outcome, as `block_on` over `Client::set_level`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Undelivered`; either way nothing is left waiting at the port.
+            ///
             /// # Rules
             ///
             /// - response within 1000000 us
-            ///
-            ///Sends command `setLevel` and waits for its outcome, as `block_on` over `Client::set_level`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Undelivered`; either way nothing is left waiting at the port.
             ///
             /// # Parameters
             ///
@@ -5895,11 +5921,11 @@ Panics when `h` is attached to a catalog other than the one this face was genera
             }
             /// The average zone level over a window of samples.
             ///
+            ///Sends query `average` and waits for its outcome, as `block_on` over `Client::average`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Timeout`; either way nothing is left waiting at the port.
+            ///
             /// # Rules
             ///
             /// - response within 3000000 us
-            ///
-            ///Sends query `average` and waits for its outcome, as `block_on` over `Client::average`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Timeout`; either way nothing is left waiting at the port.
             ///
             /// # Parameters
             ///

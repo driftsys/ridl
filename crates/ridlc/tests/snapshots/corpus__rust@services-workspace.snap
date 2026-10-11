@@ -11,7 +11,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
 #[repr(transparent)]
 pub struct DoorId(::core::primitive::i64);
 impl DoorId {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -75,7 +76,8 @@ impl ::core::default::Default for DoorId {
 #[repr(transparent)]
 pub struct Percent(::core::primitive::f64);
 impl Percent {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -259,7 +261,8 @@ impl ::core::default::Default for Percent {
 #[repr(transparent)]
 pub struct Odometer(::core::primitive::i64);
 impl Odometer {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -397,7 +400,7 @@ impl ::core::default::Default for DoorFault {
         DoorFault::Jammed
     }
 }
-/// An accessor over FlatBuffers bytes `DoorId`'s `verify` accepted.
+/// A `DoorId` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct DoorIdFbView<'a> {
@@ -524,7 +527,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorId {
         __ridl_fb_decode_DoorId(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Percent`'s `verify` accepted.
+/// A `Percent` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct PercentFbView<'a> {
@@ -653,7 +656,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Percent {
         __ridl_fb_decode_Percent(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Odometer`'s `verify` accepted.
+/// A `Odometer` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct OdometerFbView<'a> {
@@ -785,7 +788,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Odometer 
         __ridl_fb_decode_Odometer(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `LockState`'s `verify` accepted.
+/// A `LockState` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct LockStateFbView<'a> {
@@ -914,7 +917,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for LockState
         __ridl_fb_decode_LockState(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `DoorReport`'s `verify` accepted.
+/// A `DoorReport` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -1108,7 +1111,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorRepor
         __ridl_fb_decode_DoorReport(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `DoorFault`'s `verify` accepted.
+/// A `DoorFault` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct DoorFaultFbView<'a> {
@@ -1300,7 +1303,7 @@ impl ::core::default::Default for DoorFault {
         DoorFault::Stuck
     }
 }
-/// An accessor over FlatBuffers bytes `DoorFault`'s `verify` accepted.
+/// A `DoorFault` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct DoorFaultFbView<'a> {

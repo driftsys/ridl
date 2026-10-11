@@ -13,7 +13,8 @@ expression: rust_with_codec(decls)
 #[repr(transparent)]
 pub struct Speed(::core::primitive::f64);
 impl Speed {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -199,7 +200,8 @@ pub const MAX_GEAR: ::core::primitive::i64 = 6;
 #[repr(transparent)]
 pub struct Greeting(::std::string::String);
 impl Greeting {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -252,7 +254,7 @@ impl ::core::default::Default for Greeting {
 }
 pub const BANNER: &::core::primitive::str = "hello";
 pub const VIN_PATTERN: &::core::primitive::str = "^[A-HJ-NPR-Z0-9]{17}$";
-/// An accessor over FlatBuffers bytes `Speed`'s `verify` accepted.
+/// A `Speed` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedFbView<'a> {
@@ -381,7 +383,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
         __ridl_fb_decode_Speed(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Greeting`'s `verify` accepted.
+/// A `Greeting` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct GreetingFbView<'a> {

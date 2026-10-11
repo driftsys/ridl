@@ -15,7 +15,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
 #[repr(transparent)]
 pub struct Speed(::core::primitive::f64);
 impl Speed {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -203,7 +204,8 @@ impl ::core::default::Default for Speed {
 #[repr(transparent)]
 pub struct Temperature(::core::primitive::f64);
 impl Temperature {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -391,7 +393,8 @@ impl ::core::default::Default for Temperature {
 #[repr(transparent)]
 pub struct RPM(::core::primitive::f64);
 impl RPM {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -579,7 +582,8 @@ impl ::core::default::Default for RPM {
 #[repr(transparent)]
 pub struct Ratio(::core::primitive::f64);
 impl Ratio {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -763,7 +767,8 @@ impl ::core::default::Default for Ratio {
 #[repr(transparent)]
 pub struct Counter(::core::primitive::i64);
 impl Counter {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -826,7 +831,8 @@ impl ::core::default::Default for Counter {
 #[repr(transparent)]
 pub struct Gain(::core::primitive::f64);
 impl Gain {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -1297,7 +1303,7 @@ const __RIDL_FB_NO_CODEC_SensorReading: () = ();
 /// value to size, are never resolvable by any caller.
 #[allow(dead_code, non_upper_case_globals)]
 const __RIDL_FB_NO_CODEC_SensorFault: () = ();
-/// An accessor over FlatBuffers bytes `Speed`'s `verify` accepted.
+/// A `Speed` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedFbView<'a> {
@@ -1426,7 +1432,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
         __ridl_fb_decode_Speed(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Temperature`'s `verify` accepted.
+/// A `Temperature` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct TemperatureFbView<'a> {
@@ -1558,7 +1564,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
         __ridl_fb_decode_Temperature(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `RPM`'s `verify` accepted.
+/// A `RPM` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct RPMFbView<'a> {
@@ -1687,7 +1693,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RPM {
         __ridl_fb_decode_RPM(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Ratio`'s `verify` accepted.
+/// A `Ratio` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct RatioFbView<'a> {
@@ -1816,7 +1822,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Ratio {
         __ridl_fb_decode_Ratio(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Counter`'s `verify` accepted.
+/// A `Counter` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct CounterFbView<'a> {
@@ -1945,7 +1951,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
         __ridl_fb_decode_Counter(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Gain`'s `verify` accepted.
+/// A `Gain` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct GainFbView<'a> {
@@ -2074,7 +2080,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Gain {
         __ridl_fb_decode_Gain(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `GearPosition`'s `verify` accepted.
+/// A `GearPosition` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct GearPositionFbView<'a> {
@@ -2208,7 +2214,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for GearPosit
         __ridl_fb_decode_GearPosition(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Warning`'s `verify` accepted.
+/// A `Warning` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WarningFbView<'a> {
@@ -2334,7 +2340,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
         __ridl_fb_decode_Warning(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `WarningFlags`'s `verify` accepted.
+/// A `WarningFlags` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WarningFlagsFbView<'a> {
@@ -2474,7 +2480,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for WarningFl
         __ridl_fb_decode_WarningFlags(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `SpeedLimitPayload`'s `verify` accepted.
+/// A `SpeedLimitPayload` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -2675,7 +2681,7 @@ for SpeedLimitPayload {
         __ridl_fb_decode_SpeedLimitPayload(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `RawWheelFrame`'s `verify` accepted.
+/// A `RawWheelFrame` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -3009,7 +3015,8 @@ impl ::core::default::Default for FaultPage {
 pub(crate) struct RawTickCount(::core::primitive::i64);
 #[allow(dead_code)]
 impl RawTickCount {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub(crate) fn new(
         value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -3094,7 +3101,8 @@ impl ::core::default::Default for RawWheelSpan {
 #[repr(transparent)]
 pub struct FanLevel(::core::primitive::i64);
 impl FanLevel {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -3235,7 +3243,8 @@ pub const FAN_LIMIT: FanLevel = FanLevel::new_unchecked(7);
 #[repr(transparent)]
 pub struct FanTag(::std::string::String);
 impl FanTag {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -3374,7 +3383,7 @@ const __RIDL_FB_NO_CODEC_FaultPage: () = ();
 /// value to size, are never resolvable by any caller.
 #[allow(dead_code, non_upper_case_globals)]
 const __RIDL_FB_NO_CODEC_ClimateReport: () = ();
-/// A zero-copy accessor over FlatBuffers bytes `DoorPayload`'s `verify` accepted.
+/// A `DoorPayload` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -3569,7 +3578,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorPaylo
         __ridl_fb_decode_DoorPayload(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `DiagError`'s `verify` accepted.
+/// A `DiagError` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct DiagErrorFbView<'a> {
@@ -3698,7 +3707,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DiagError
         __ridl_fb_decode_DiagError(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `RawTickCount`'s `verify` accepted.
+/// A `RawTickCount` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 #[allow(dead_code)]
@@ -3840,7 +3849,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawTickCo
         __ridl_fb_decode_RawTickCount(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `RawWheelSpan`'s `verify` accepted.
+/// A `RawWheelSpan` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -4081,7 +4090,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelS
         __ridl_fb_decode_RawWheelSpan(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `FanLevel`'s `verify` accepted.
+/// A `FanLevel` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct FanLevelFbView<'a> {
@@ -4211,7 +4220,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanLevel 
         __ridl_fb_decode_FanLevel(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `FilterState`'s `verify` accepted.
+/// A `FilterState` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -4406,7 +4415,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FilterSta
         __ridl_fb_decode_FilterState(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `HvacError`'s `verify` accepted.
+/// A `HvacError` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct HvacErrorFbView<'a> {
@@ -4535,7 +4544,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for HvacError
         __ridl_fb_decode_HvacError(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `FanTag`'s `verify` accepted.
+/// A `FanTag` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct FanTagFbView<'a> {
@@ -4664,7 +4673,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanTag {
         __ridl_fb_decode_FanTag(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `RawWheelSpanSpan`'s `verify` accepted.
+/// A `RawWheelSpanSpan` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -4812,7 +4821,7 @@ pub(crate) fn __ridl_fb_decode_RawWheelSpanSpan(
         },
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `RawWheelSpanBurstsElement`'s `verify` accepted.
+/// A `RawWheelSpanBurstsElement` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -5114,11 +5123,11 @@ pub mod wheel_history {
         port: P,
     }
     impl<P: ::ridl_rt::port::SignalReader> Client<P> {
+        ///Reads signal `wheelTicks` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///
         /// # Rules
         ///
         /// - interval 100000 ..= 1000000 us
-        ///
-        ///Reads signal `wheelTicks` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         pub fn wheel_ticks(
             &self,
         ) -> ::core::result::Result<
@@ -5176,11 +5185,11 @@ pub mod wheel_history {
                 envelope: raw.envelope,
             })
         }
+        ///Reads signal `wheelTemp` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///
         /// # Rules
         ///
         /// - interval 1000000 ..= 10000000 us
-        ///
-        ///Reads signal `wheelTemp` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         pub fn wheel_temp(
             &self,
         ) -> ::core::result::Result<
@@ -5238,11 +5247,11 @@ pub mod wheel_history {
                 envelope: raw.envelope,
             })
         }
+        ///Reads signal `wheelSlipRate` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///
         /// # Rules
         ///
         /// - interval 500000 ..= 5000000 us
-        ///
-        ///Reads signal `wheelSlipRate` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         pub fn wheel_slip_rate(
             &self,
         ) -> ::core::result::Result<
@@ -5314,7 +5323,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             Client { port }
         }
     }
-    ///Stages the invalid state of one signal of interface `WheelHistory`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>` (ADR-0023 decision 7); `prelude` brings it into scope anonymously.
+    ///Stages the invalid state of one signal of interface `WheelHistory`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>`; `prelude` brings it into scope anonymously.
     pub trait Invalidate {
         ///Stages the invalid state for signal `wheelTicks`, with `Cause::Declared`. It is published by `commit`.
         fn invalidate_wheel_ticks(
@@ -5334,11 +5343,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         port: W,
     }
     impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
+        ///Stages a new value for signal `wheelTicks`. It is published by `commit`.
+        ///
         /// # Rules
         ///
         /// - interval 100000 ..= 1000000 us
-        ///
-        ///Stages a new value for signal `wheelTicks`. It is published by `commit`.
         pub fn wheel_ticks(
             &mut self,
             value: super::FanLevel,
@@ -5366,11 +5375,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                     bytes,
                 )
         }
+        ///Stages a new value for signal `wheelTemp`. It is published by `commit`.
+        ///
         /// # Rules
         ///
         /// - interval 1000000 ..= 10000000 us
-        ///
-        ///Stages a new value for signal `wheelTemp`. It is published by `commit`.
         pub fn wheel_temp(
             &mut self,
             value: crate::veh::common::Temperature,
@@ -5398,11 +5407,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                     bytes,
                 )
         }
+        ///Stages a new value for signal `wheelSlipRate`. It is published by `commit`.
+        ///
         /// # Rules
         ///
         /// - interval 500000 ..= 5000000 us
-        ///
-        ///Stages a new value for signal `wheelSlipRate`. It is published by `commit`.
         pub fn wheel_slip_rate(
             &mut self,
             value: crate::veh::common::Ratio,
@@ -5577,11 +5586,11 @@ pub mod wheel_summary {
         port: P,
     }
     impl<P: ::ridl_rt::port::SignalReader> Client<P> {
+        ///Reads signal `wheelHealth` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///
         /// # Rules
         ///
         /// - interval 1000000 ..= 10000000 us
-        ///
-        ///Reads signal `wheelHealth` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         pub fn wheel_health(
             &self,
         ) -> ::core::result::Result<
@@ -5653,7 +5662,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             Client { port }
         }
     }
-    ///Stages the invalid state of one signal of interface `WheelSummary`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>` (ADR-0023 decision 7); `prelude` brings it into scope anonymously.
+    ///Stages the invalid state of one signal of interface `WheelSummary`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>`; `prelude` brings it into scope anonymously.
     pub trait Invalidate {
         ///Stages the invalid state for signal `wheelHealth`, with `Cause::Declared`. It is published by `commit`.
         fn invalidate_wheel_health(
@@ -5665,11 +5674,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         port: W,
     }
     impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
+        ///Stages a new value for signal `wheelHealth`. It is published by `commit`.
+        ///
         /// # Rules
         ///
         /// - interval 1000000 ..= 10000000 us
-        ///
-        ///Stages a new value for signal `wheelHealth`. It is published by `commit`.
         pub fn wheel_health(
             &mut self,
             value: super::FanLevel,
