@@ -55,6 +55,17 @@ reader handle this one does.
 packages a wasm consumer compiles — the compiler crates and `ridl-rt`, which
 generated code links — and a host runtime is not among them.
 
+**The loopback's default encoding is FlatBuffers.** `ridl-rt`'s `Encoded` trait
+has each port type state the encoding of the bytes it carries, and leaves the
+default to each transport, chosen from how coupled the transport's two ends are.
+The loopback's two ends are one process, and FlatBuffers is the codec that reads
+a payload in place, so `Loopback::new(catalog)` builds a runtime whose ports
+carry `FlatBuffers`. `Loopback::<E>::with_encoding(catalog)` names another
+encoding. The crate declares no cargo feature for the default: a feature must be
+additive, and a default is a choice between alternatives. The encoding is
+carried as a type and never applied, because the bytes are opaque to this
+runtime.
+
 ## One store, one lock
 
 **Every handle of one runtime holds the same `Arc<Mutex<Store>>`.** The store is
@@ -108,9 +119,10 @@ implemented on every handle rather than grouped, because each handle wakes its
 own waiters ("Waking", below).
 
 Every handle implements `Attached`, which every port trait but `Clock` and
-`Wakeable` carries as a supertrait. The table lists what each handle adds to it.
+`Wakeable` carries as a supertrait, and `Encoded`. The table lists what each
+handle adds to them.
 
-| Handle          | Port roles beside `Attached`                                                              | Threading     |
+| Handle          | Port roles beside `Attached` and `Encoded`                                                | Threading     |
 | --------------- | ----------------------------------------------------------------------------------------- | ------------- |
 | `ReaderHandle`  | `Clock`, `SignalReader`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `Wakeable` | `Send + Sync` |
 | `WriterHandle`  | `SignalWriter`, `Wakeable`                                                                | `Send`        |
@@ -147,9 +159,30 @@ role handle satisfies a multi-trait bound (ADR-0021 decision 12, second
 amendment). It reaches a face by value, or as `&mut` under the forwarding impls
 of ADR-0021 decision 11.
 
+**Every handle is typed by the encoding its ports carry.** `Loopback<E>`,
+`Handles<E>` and each of the six role handles take one type parameter
+`E: Encoding`, defaulting to `FlatBuffers`, and implement `Encoded` with
+`type Encoding = E`. The parameter is a `PhantomData` field on each handle and
+takes part in no method. All six role handles carry it, not only the aggregate,
+so that ADR-0021 decision 12's rule that a face may be built over a role handle
+stays true when the face reads its encoding from its port: a face that needs
+only `SignalReader` is built over a `ReaderHandle<E>` and reads `E` from it.
+Every way of obtaining a handle below preserves `E`: `split` hands out
+`Handles<E>`, `attach` returns `Loopback<E>`, and `reader()` to `handler()`
+return the `E`-typed handle, so one store has one encoding. `new` is defined in
+an `impl Loopback<FlatBuffers>` block, which is what lets
+`Loopback::new(catalog)` and `Loopback::SLOTS` resolve with no type argument;
+Rust ignores a type parameter's default in expression position, so a constructor
+in the generic block would need a turbofish on every call. `SLOTS` sits in that
+block for the same reason: the count is the store's and the same under every
+encoding. A program that names the types bare — `Loopback`, `HandlerHandle` —
+names the FlatBuffers runtime, and is unchanged by the parameter.
+
 Four ways to obtain handles, each with one purpose:
 
-- `Loopback::new(catalog)` — the aggregate, with its six handles inside.
+- `Loopback::new(catalog)` — the aggregate, with its six handles inside, typed
+  FlatBuffers; `Loopback::<E>::with_encoding(catalog)` is the same aggregate
+  typed `E`.
 - `Loopback::split(self)` — consumes the aggregate and hands out the six handles
   it holds, as a `Handles` struct with one named field per role. A struct rather
   than a six-element tuple, because a tuple of six values of six distinct types
