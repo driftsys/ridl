@@ -8,3 +8,7 @@
 # Without a row, a line-dump surface is only checked against its committed
 # dump, `generated-crate` is only checked for equality with a regeneration, and
 # `runtime-crates` is not checked.
+
+[[surface]]
+name = "mcp"
+baseline = "87dc60317319f1799b4a8d4f4389b93c81079fb7"
