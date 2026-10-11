@@ -44,8 +44,14 @@ impl Repo {
     }
 
     fn check(&self, fixture: Option<(&str, &Path)>) -> Output {
+        self.run("check", fixture)
+    }
+
+    fn run(&self, subcommand: &str, fixture: Option<(&str, &Path)>) -> Output {
         let mut command = Command::new(env!("CARGO_BIN_EXE_xtask"));
-        command.args(["freeze", "check", "--root"]).arg(&self.dir);
+        command
+            .args(["freeze", subcommand, "--root"])
+            .arg(&self.dir);
         if let Some((name, file)) = fixture {
             command
                 .arg("--dumper-fixture")
@@ -129,4 +135,93 @@ fn check_fails_when_the_baseline_ref_is_unknown() {
         "{}",
         stderr(&output)
     );
+}
+
+const ROW: &str = "[[surface]]\nname = \"fixture\"\nbaseline = \"base\"\n";
+
+/// A repository whose tag `base` holds freeze/fixture.txt = `baseline`; HEAD
+/// holds the row, the committed dump `committed` and the fixture lines `head`
+/// (returned as the path of the fixture file).
+fn repo_with_baseline(tag: &str, baseline: &str, committed: &str, head: &str) -> (Repo, PathBuf) {
+    let repo = Repo::new(tag);
+    repo.write("freeze/surfaces.toml", "");
+    repo.write("freeze/fixture.txt", baseline);
+    repo.commit();
+    repo.git(&["tag", "base"]);
+    repo.write("freeze/surfaces.toml", ROW);
+    repo.write("freeze/fixture.txt", committed);
+    repo.commit();
+    let fixture = repo.dir.join("fixture-lines.txt");
+    std::fs::write(&fixture, head).unwrap();
+    (repo, fixture)
+}
+
+#[test]
+fn check_fails_when_a_baseline_line_is_missing_at_head() {
+    let (repo, fixture) = repo_with_baseline("removed", "a\nb\n", "a\n", "a\n");
+    let output = repo.check(Some(("fixture", &fixture)));
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(err.contains("`b`") && err.contains("base"), "{err}");
+}
+
+#[test]
+fn check_passes_when_a_line_is_added_since_the_baseline() {
+    let (repo, fixture) = repo_with_baseline("added", "a\nb\n", "a\nb\nc\n", "a\nb\nc\n");
+    let output = repo.check(Some(("fixture", &fixture)));
+    assert!(output.status.success(), "{}", stderr(&output));
+}
+
+#[test]
+fn check_fails_when_the_committed_dump_is_stale() {
+    let (repo, fixture) = repo_with_baseline("stale", "a\n", "a\n", "a\nb\n");
+    let output = repo.check(Some(("fixture", &fixture)));
+    assert!(!output.status.success());
+    assert!(
+        stderr(&output).contains("cargo xtask freeze update"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn check_fails_when_the_committed_dump_is_absent() {
+    let (repo, fixture) = repo_with_baseline("absent", "a\n", "a\n", "a\n");
+    std::fs::remove_file(repo.dir.join("freeze/fixture.txt")).unwrap();
+    let output = repo.check(Some(("fixture", &fixture)));
+    assert!(!output.status.success());
+    assert!(
+        stderr(&output).contains("cargo xtask freeze update"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn check_fails_on_a_dump_no_dumper_produces() {
+    let (repo, fixture) = repo_with_baseline("orphan", "a\n", "a\n", "a\n");
+    repo.write("freeze/orphan.txt", "x\n");
+    let output = repo.check(Some(("fixture", &fixture)));
+    assert!(!output.status.success());
+    assert!(
+        stderr(&output).contains("freeze/orphan.txt"),
+        "{}",
+        stderr(&output)
+    );
+    // README.md is not a dump.
+    std::fs::remove_file(repo.dir.join("freeze/orphan.txt")).unwrap();
+    repo.write("freeze/README.md", "text\n");
+    let output = repo.check(Some(("fixture", &fixture)));
+    assert!(output.status.success(), "{}", stderr(&output));
+}
+
+#[test]
+fn update_writes_sorted_deduplicated_lines() {
+    let repo = Repo::new("update");
+    let fixture = repo.dir.join("fixture-lines.txt");
+    std::fs::write(&fixture, "b\na\nb\n\nc\n").unwrap();
+    let output = repo.run("update", Some(("fixture", &fixture)));
+    assert!(output.status.success(), "{}", stderr(&output));
+    let written = std::fs::read_to_string(repo.dir.join("freeze/fixture.txt")).unwrap();
+    assert_eq!(written, "a\nb\nc\n");
 }

@@ -19,12 +19,14 @@ pub struct Row {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawFile {
     #[serde(default)]
     surface: Vec<RawRow>,
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawRow {
     name: String,
     baseline: Option<String>,
@@ -33,19 +35,26 @@ struct RawRow {
 /// Reads the `[[surface]]` tables of `freeze/surfaces.toml`, in file order.
 pub fn parse_surfaces(toml: &str) -> Result<Vec<Row>, String> {
     let file: RawFile = toml::from_str(toml).map_err(|e| format!("surfaces.toml: {e}"))?;
-    file.surface
-        .into_iter()
-        .map(|row| match row.baseline {
-            Some(baseline) => Ok(Row {
-                surface: row.name,
-                baseline,
-            }),
-            None => Err(format!(
+    let mut rows: Vec<Row> = Vec::new();
+    for row in file.surface {
+        let Some(baseline) = row.baseline else {
+            return Err(format!(
                 "surfaces.toml: surface `{}` has no `baseline`",
                 row.name
-            )),
-        })
-        .collect()
+            ));
+        };
+        if rows.iter().any(|r| r.surface == row.name) {
+            return Err(format!(
+                "surfaces.toml: surface `{}` appears twice",
+                row.name
+            ));
+        }
+        rows.push(Row {
+            surface: row.name,
+            baseline,
+        });
+    }
+    Ok(rows)
 }
 
 /// The lines of `baseline` that are not in `head`, compared as sets of
@@ -194,6 +203,20 @@ fn check(options: &Options) -> Result<(), String> {
         }
     }
 
+    if let Ok(entries) = std::fs::read_dir(options.root.join("freeze")) {
+        for entry in entries.flatten() {
+            let file = entry.file_name().to_string_lossy().into_owned();
+            let Some(name) = file.strip_suffix(".txt") else {
+                continue;
+            };
+            if !dumps.iter().any(|(surface, _)| surface == name) {
+                failures.push(format!(
+                    "freeze/{file} is produced by no dumper: delete it, or register the dumper"
+                ));
+            }
+        }
+    }
+
     for (name, text) in &dumps {
         let path = dump_path(&options.root, name);
         match std::fs::read_to_string(&path) {
@@ -262,6 +285,27 @@ mod tests {
     #[test]
     fn missing_lines_ignores_duplicates() {
         assert!(missing_lines("a\na\n", "a\n").is_empty());
+    }
+
+    #[test]
+    fn missing_lines_ignores_empty_lines() {
+        assert!(missing_lines("a\n\n", "a\n").is_empty());
+    }
+
+    #[test]
+    fn parse_surfaces_rejects_unknown_names() {
+        assert!(parse_surfaces("[[surfaces]]\nname = \"x\"\nbaseline = \"v1\"\n").is_err());
+        assert!(parse_surfaces("[[surface]]\nname = \"x\"\nbaselnie = \"v1\"\n").is_err());
+    }
+
+    #[test]
+    fn parse_surfaces_rejects_a_duplicate_surface() {
+        let error = parse_surfaces(
+            "[[surface]]\nname = \"x\"\nbaseline = \"v1\"\n\
+             [[surface]]\nname = \"x\"\nbaseline = \"v2\"\n",
+        )
+        .unwrap_err();
+        assert!(error.contains("`x`"), "{error}");
     }
 
     #[test]
