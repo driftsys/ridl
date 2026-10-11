@@ -375,7 +375,8 @@ note's own history records.
 
 Amended 2026-10-11 by [ADR-0029](ADR-0029-stability-policy.md): the CLI flags
 and exit codes that decision 9 calls stable are a frozen surface from 0.10.0.
-The CLI dump of `just freeze-check` checks the flags and the exit codes of
+The CLI dump of `just freeze-check` records the flags of every `ridl` and
+`ridlc` subcommand; it records the exit codes and the report shape of
 `ridl check` only. ADR-0029 decision 3 states what it says of `ridl diff`.
 
 ## Context

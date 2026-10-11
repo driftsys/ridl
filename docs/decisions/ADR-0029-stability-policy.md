@@ -94,7 +94,10 @@ design in each:
    - Size and budget values, for example header sizes and size sums.
    - The text of a diagnostic message, of a doc comment and of generated docs.
    - Anything that is only added: a new subcommand, flag, key, lint, field,
-     tool, cargo feature or transport default.
+     tool, cargo feature or transport default. A new flag, argument or MCP
+     property passes only when it is optional: a new required CLI flag or
+     argument, or a new required MCP input property, fails the check, as does
+     one that becomes required.
    - A new lint, which starts at the `allow` or `info` level.
    - The crates that are not published: `xtask`, `ridlc-gen-model` and
      `ridlc-gen-rust`.
@@ -111,16 +114,16 @@ design in each:
      SARIF reports of `ridl check`), the codegen protocol fields with the
      reserved numbers and names and the whole value set of each enum, the MCP
      tool and schema paths with the type of each property, whether it is
-     required, each enum value and const, and each `additionalProperties`,
-     `minimum` and `format`, the wire mapping (encoding names, the `.proto` and
-     `.fbs` lines for the corpus, the catalog hash of the cabin example) and the
-     minimum Rust version and edition. The check fails when a committed dump
-     differs from a regeneration. For a surface with a row in
-     `freeze/surfaces.toml`, it also fails when a line of the dump at the row's
-     `baseline` ref is missing from the dump at `HEAD`. An added line passes. A
-     changed line is a removed line plus an added line, so it fails. The
-     accepted-sources and wire dumps read frozen copies of the packages under
-     `examples/` and `evals/corpus/`, kept under
+     required, the required set of each schema object, each enum value and
+     const, and each `additionalProperties`, `minimum` and `format`, the wire
+     mapping (encoding names, the `.proto` and `.fbs` lines for the corpus, the
+     catalog hash of the cabin example) and the minimum Rust version and
+     edition. The check fails when a committed dump differs from a regeneration.
+     For a surface with a row in `freeze/surfaces.toml`, it also fails when a
+     line of the dump at the row's `baseline` ref is missing from the dump at
+     `HEAD`. An added line passes. A changed line is a removed line plus an
+     added line, so it fails. The accepted-sources and wire dumps read frozen
+     copies of the packages under `examples/` and `evals/corpus/`, kept under
      `xtask/tests/freeze-fixtures/sources/` at the path of each original, and
      the catalog hash is read from the generated-crate copy of `examples/cabin`.
      An edit to an example or to the corpus therefore changes no dump. A copy is
@@ -131,9 +134,11 @@ design in each:
      set, or that makes a requirement looser, also removes a line and fails. A
      codegen-protocol enum gains a value only in a minor release, such as 0.11,
      and not in a 0.10.x release, because a plugin rejects an enum value that it
-     does not know. In the same way, a new reserved word, an MCP input property
-     or a CLI flag or argument that becomes optional, and any change of a value
-     in the `msrv` dump each need the approval of decision 4.
+     does not know. In the same way, a new reserved word, an MCP property or a
+     CLI flag or argument that becomes optional, and any change of a value in
+     the `msrv` dump each need the approval of decision 4. In the other
+     direction, a new required CLI flag or argument or MCP property, or one that
+     becomes required, fails the check; a new optional one passes.
    - _Rust API comparison._ The runtime crates and the generated crate are
      compared with `cargo semver-checks`, because a line dump cannot classify a
      Rust API change correctly, for example a new required method on a public
