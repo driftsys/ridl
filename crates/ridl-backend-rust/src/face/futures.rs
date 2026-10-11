@@ -115,11 +115,19 @@ fn call_future(call: &Call, kind: &str) -> TokenStream {
         "the {kind} was sent, or waits for a slot; its outcome is taken only when \
          the future is polled"
     );
-    let phase_doc = format!(
-        "Where {kind} `{}` is, as its future's `poll` moves it.",
-        member.declared
-    );
     let polled_after = format!("`{future}` polled after completion");
+    // The phase enum, its variants, `expired` and `sent` are private, so they
+    // carry no doc. The phase is where the call is, as its future's `poll`
+    // moves it: `Unsent` when the port answered `SendError::Busy` and the
+    // argument is kept for the retry; `Waiting` when sent, for the outcome
+    // under this correlation; `Failed` when the send failed before anything
+    // was sent, which the first poll reports; `Done` once the output was
+    // taken. `expired` says whether the call's bound has passed on the port's
+    // clock; a call with no bound never expires here. `sent` says whether the
+    // call was sent and waits for its outcome: the blocking client asks this
+    // when `block_on` gives up, to answer as the future would at its own
+    // deadline, and it is under `std` with that client, so a build without
+    // the feature has no unused item.
 
     quote! {
         #[doc = #doc]
@@ -130,32 +138,18 @@ fn call_future(call: &Call, kind: &str) -> TokenStream {
             deadline: ::core::option::Option<::ridl_rt::sample::Timestamp>,
         }
 
-        #[doc = #phase_doc]
         enum #phase {
-            /// The port answered `SendError::Busy`; the argument is kept for
-            /// the retry.
             Unsent(#arg_path),
-            /// Sent, and waiting for the outcome under this correlation.
             Waiting(#correlation),
-            /// The send failed before anything was sent; the first poll
-            /// reports it.
             Failed(::ridl_rt::port::SendError),
-            /// The output was taken.
             Done,
         }
 
         impl<P: #bounds> #future<'_, P> {
-            /// Whether the call's bound has passed on the port's clock. A
-            /// call with no bound never expires here.
             fn expired(&self) -> bool {
                 self.deadline.is_some_and(|deadline| self.port.now() > deadline)
             }
 
-            /// Whether the call was sent and waits for its outcome. The
-            /// blocking client asks this when `block_on` gives up, to answer
-            /// as the future would at its own deadline; it is under `std`
-            /// with that client, so a build without the feature has no
-            /// unused item.
             #[cfg(feature = "std")]
             fn sent(&self) -> bool {
                 matches!(self.phase, #phase::Waiting(_))

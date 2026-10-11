@@ -4,27 +4,21 @@ expression: compiled.rust
 input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
 ---
 // ===== package fleet.contracts =====
+/// # Rules
+///
+/// - range 0 ..= 7
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct DoorId(::core::primitive::i64);
 impl DoorId {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::i64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -73,27 +67,23 @@ impl ::core::default::Default for DoorId {
         DoorId::new_unchecked(0)
     }
 }
+/// # Rules
+///
+/// - range 0 ..= 100
+/// - step 0.5
+/// - unit %
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Percent(::core::primitive::f64);
 impl Percent {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::f64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -264,27 +254,21 @@ impl ::core::default::Default for Percent {
         Percent::new_unchecked(0.0)
     }
 }
+/// # Rules
+///
+/// - range 0 ..= 4294967295
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Odometer(::core::primitive::i64);
 impl Odometer {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::i64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -369,6 +353,9 @@ impl ::core::default::Default for LockState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct DoorReport {
+    /// # Rules
+    ///
+    /// - range 0 ..= 7
     pub door: DoorId,
     pub locked: LockState,
 }
@@ -413,13 +400,7 @@ impl ::core::default::Default for DoorFault {
         DoorFault::Jammed
     }
 }
-/// An accessor over FlatBuffers bytes `DoorId`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `DoorId` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct DoorIdFbView<'a> {
@@ -434,12 +415,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for DoorIdFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> DoorIdFbView<'a> {
-    /// The value the box carries. `DoorId` is one value, so this decodes it rather than borrowing it, which costs one read.
+    /// The value the bytes hold. `DoorId` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> DoorId {
         __ridl_fb_decode_DoorId(self.buf, self.table)
     }
 }
-/// Writes `DoorId` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_DoorId(
     value: &DoorId,
@@ -501,16 +481,6 @@ pub(crate) fn __ridl_fb_decode_DoorId(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorId {
     /// The largest FlatBuffers buffer any legal `DoorId` encodes to: 43 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 43usize;
     type Buffer = [::core::primitive::u8; 43usize];
     const BUFFER: Self::Buffer = [0u8; 43usize];
@@ -557,13 +527,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorId {
         __ridl_fb_decode_DoorId(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Percent`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Percent` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct PercentFbView<'a> {
@@ -578,12 +542,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for PercentFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> PercentFbView<'a> {
-    /// The value the box carries. `Percent` is one value, so this decodes it rather than borrowing it, which costs one read.
+    /// The value the bytes hold. `Percent` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Percent {
         __ridl_fb_decode_Percent(self.buf, self.table)
     }
 }
-/// Writes `Percent` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Percent(
     value: &Percent,
@@ -647,16 +610,6 @@ pub(crate) fn __ridl_fb_decode_Percent(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Percent {
     /// The largest FlatBuffers buffer any legal `Percent` encodes to: 46 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 46usize;
     type Buffer = [::core::primitive::u8; 46usize];
     const BUFFER: Self::Buffer = [0u8; 46usize];
@@ -703,13 +656,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Percent {
         __ridl_fb_decode_Percent(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Odometer`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Odometer` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct OdometerFbView<'a> {
@@ -724,12 +671,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for OdometerFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> OdometerFbView<'a> {
-    /// The value the box carries. `Odometer` is one value, so this decodes it rather than borrowing it, which costs one read.
+    /// The value the bytes hold. `Odometer` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Odometer {
         __ridl_fb_decode_Odometer(self.buf, self.table)
     }
 }
-/// Writes `Odometer` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Odometer(
     value: &Odometer,
@@ -793,16 +739,6 @@ pub(crate) fn __ridl_fb_decode_Odometer(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Odometer {
     /// The largest FlatBuffers buffer any legal `Odometer` encodes to: 46 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 46usize;
     type Buffer = [::core::primitive::u8; 46usize];
     const BUFFER: Self::Buffer = [0u8; 46usize];
@@ -852,13 +788,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Odometer 
         __ridl_fb_decode_Odometer(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `LockState`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `LockState` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct LockStateFbView<'a> {
@@ -873,12 +803,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for LockStateFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> LockStateFbView<'a> {
-    /// The value the box carries. `LockState` is one value, so this decodes it rather than borrowing it, which costs one read.
+    /// The value the bytes hold. `LockState` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> LockState {
         __ridl_fb_decode_LockState(self.buf, self.table)
     }
 }
-/// Writes `LockState` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_LockState(
     value: &LockState,
@@ -939,16 +868,6 @@ pub(crate) fn __ridl_fb_decode_LockState(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for LockState {
     /// The largest FlatBuffers buffer any legal `LockState` encodes to: 50 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
     type Buffer = [::core::primitive::u8; 50usize];
     const BUFFER: Self::Buffer = [0u8; 50usize];
@@ -998,7 +917,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for LockState
         __ridl_fb_decode_LockState(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `DoorReport`'s `verify` accepted.
+/// A `DoorReport` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -1046,7 +965,6 @@ impl<'a> DoorReportFbView<'a> {
         }
     }
 }
-/// Writes `DoorReport` as a FlatBuffers table and returns its position.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_DoorReport(
     value: &DoorReport,
@@ -1081,11 +999,6 @@ pub(crate) fn __ridl_fb_encode_DoorReport(
     __n += 1;
     builder.push_table(16usize, 8usize, 2u16, &__fields[..__n])
 }
-/// Checks the FlatBuffers table at `table` against `DoorReport`'s shape.
-///
-/// Checks the structure, enum discriminants, collection bounds,
-/// map key uniqueness, and named and anonymous scalar ranges,
-/// steps and lengths. Pattern checks require `validate-pattern`.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_DoorReport(
     buf: &[::core::primitive::u8],
@@ -1119,18 +1032,6 @@ pub(crate) fn __ridl_fb_verify_DoorReport(
     }
     ::core::result::Result::Ok(())
 }
-/// Builds `DoorReport` from the FlatBuffers table at `table`.
-///
-/// It cannot fail. An absent non-optional scalar or enum field
-/// reads as its FlatBuffers default — 0, or the enum's zero
-/// member — which is a value `verify` accepted
-/// (driftsys/ridl#472). Any other read that could fail is
-/// discharged with the neutral value of its own type — zero, the
-/// empty string or collection, the first declared enum variant —
-/// and `verify` is what makes those branches unreachable. A named scalar is
-/// built with its unchecked constructor (`new_unchecked`) over a
-/// value `verify` has already range-checked (`check`), so this
-/// never re-checks and never fails.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_DoorReport(
     buf: &[::core::primitive::u8],
@@ -1161,16 +1062,6 @@ pub(crate) fn __ridl_fb_decode_DoorReport(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorReport {
     /// The largest FlatBuffers buffer any legal `DoorReport` encodes to: 60 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 60usize;
     type Buffer = [::core::primitive::u8; 60usize];
     const BUFFER: Self::Buffer = [0u8; 60usize];
@@ -1220,13 +1111,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorRepor
         __ridl_fb_decode_DoorReport(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `DoorFault`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `DoorFault` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct DoorFaultFbView<'a> {
@@ -1241,12 +1126,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for DoorFaultFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> DoorFaultFbView<'a> {
-    /// The value the box carries. `DoorFault` is one value, so this decodes it rather than borrowing it, which costs one read.
+    /// The value the bytes hold. `DoorFault` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> DoorFault {
         __ridl_fb_decode_DoorFault(self.buf, self.table)
     }
 }
-/// Writes `DoorFault` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_DoorFault(
     value: &DoorFault,
@@ -1307,16 +1191,6 @@ pub(crate) fn __ridl_fb_decode_DoorFault(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorFault {
     /// The largest FlatBuffers buffer any legal `DoorFault` encodes to: 50 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
     type Buffer = [::core::primitive::u8; 50usize];
     const BUFFER: Self::Buffer = [0u8; 50usize];
@@ -1370,7 +1244,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorFault
 ///
 /// The emitter refused it: query `readDoor`'s reply must be a single declared type
 ///
-/// A call the face cannot carry — an interaction that does not declare exactly one named parameter, or a query whose reply is not a named type. driftsys/ridl#713 adds the induced argument struct that removes the first.
+/// A call the face cannot carry — an interaction that does not declare exactly one named parameter, or a query whose reply is not a named type. Declare each command and query with one parameter of a named type, and give each query a named reply type, to get a face.
 ///
 /// Its descriptors are absent for the reason above: the refusal is
 /// raised by the descriptor emitter, which the face is built on. The
@@ -1381,9 +1255,9 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorFault
 const __RIDL_NO_FACE_DoorControl: () = ();
 /// Interface `Telemetry` carries no generated interaction face.
 ///
-/// The emitter refused it: interaction `fuelLevel` must declare exactly one parameter (the face emits no induced argument struct, driftsys/ridl#713)
+/// The emitter refused it: interaction `fuelLevel` must declare exactly one parameter (the face emits no induced argument struct)
 ///
-/// A call the face cannot carry — an interaction that does not declare exactly one named parameter, or a query whose reply is not a named type. driftsys/ridl#713 adds the induced argument struct that removes the first.
+/// A call the face cannot carry — an interaction that does not declare exactly one named parameter, or a query whose reply is not a named type. Declare each command and query with one parameter of a named type, and give each query a named reply type, to get a face.
 ///
 /// Its descriptors are absent for the reason above: the refusal is
 /// raised by the descriptor emitter, which the face is built on. The
@@ -1429,13 +1303,7 @@ impl ::core::default::Default for DoorFault {
         DoorFault::Stuck
     }
 }
-/// An accessor over FlatBuffers bytes `DoorFault`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `DoorFault` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct DoorFaultFbView<'a> {
@@ -1450,12 +1318,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for DoorFaultFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> DoorFaultFbView<'a> {
-    /// The value the box carries. `DoorFault` is one value, so this decodes it rather than borrowing it, which costs one read.
+    /// The value the bytes hold. `DoorFault` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> DoorFault {
         __ridl_fb_decode_DoorFault(self.buf, self.table)
     }
 }
-/// Writes `DoorFault` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_DoorFault(
     value: &DoorFault,
@@ -1516,16 +1383,6 @@ pub(crate) fn __ridl_fb_decode_DoorFault(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorFault {
     /// The largest FlatBuffers buffer any legal `DoorFault` encodes to: 50 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
     type Buffer = [::core::primitive::u8; 50usize];
     const BUFFER: Self::Buffer = [0u8; 50usize];

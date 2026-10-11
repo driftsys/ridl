@@ -9,6 +9,12 @@ import * as ridl_std from './ridl.std';
 /**
  * Vehicle speed over ground
  *
+ * @remarks
+ * Rules:
+ * - range 0 ..= 250
+ * - step 0.5
+ * - unit km/h
+ *
  * @unit km/h
  * @range [0..250 step 0.5]
  */
@@ -20,6 +26,12 @@ export function initSpeed(): Speed {
 
 /**
  * Coolant / ambient temperature
+ *
+ * @remarks
+ * Rules:
+ * - range -40 ..= 125
+ * - step 0.1
+ * - unit Cel
  *
  * @unit Cel
  * @range [-40..125 step 0.1]
@@ -33,6 +45,12 @@ export function initTemperature(): Temperature {
 /**
  * Engine crankshaft speed
  *
+ * @remarks
+ * Rules:
+ * - range 0 ..= 8000
+ * - step 10
+ * - unit /min
+ *
  * @unit /min
  * @range [0..8000 step 10]
  */
@@ -45,6 +63,12 @@ export function initRPM(): RPM {
 /**
  * Normalised ratio
  *
+ * @remarks
+ * Rules:
+ * - range 0 ..= 100
+ * - step 0.1
+ * - unit %
+ *
  * @unit %
  * @range [0..100 step 0.1]
  */
@@ -55,6 +79,10 @@ export function initRatio(): Ratio {
 }
 
 /**
+ * @remarks
+ * Rules:
+ * - range 0 ..= 65535
+ *
  * @range [0..65535]
  */
 export type Counter = number & { readonly __ridl: 'veh.common.Counter' };
@@ -64,6 +92,11 @@ export function initCounter(): Counter {
 }
 
 /**
+ * @remarks
+ * Rules:
+ * - range 0 ..= 1
+ * - step 0.01
+ *
  * @range [0..1 step 0.01]
  */
 export type Gain = number & { readonly __ridl: 'veh.common.Gain' };
@@ -116,7 +149,21 @@ export function initWarningFlags(): WarningFlags {
 }
 
 export interface SpeedLimitPayload {
+  /**
+   * @remarks
+   * Rules:
+   * - range 0 ..= 250
+   * - step 0.5
+   * - unit km/h
+   */
   limit: Speed;
+  /**
+   * @remarks
+   * Rules:
+   * - range 0 ..= 250
+   * - step 0.5
+   * - unit km/h
+   */
   actual: Speed;
 }
 
@@ -129,9 +176,27 @@ export function initSpeedLimitPayload(): SpeedLimitPayload {
 
 export interface DriverProfile {
   name: ridl_std.Name;
+  /**
+   * @remarks
+   * Rules:
+   * - range 0 ..= 250
+   * - step 0.5
+   * - unit km/h
+   */
   speed: Speed;
+  /**
+   * @remarks
+   * Rules:
+   * - range 0 ..= 250
+   * - step 0.5
+   * - unit km/h
+   */
   override?: Speed;
   /**
+   * @remarks
+   * Rules:
+   * - range 0 ..= 6
+   *
    * @range [0..6]
    */
   gears: number;
@@ -140,14 +205,26 @@ export interface DriverProfile {
 export interface SensorBounds {
   range: { min: Speed; max: Speed };
   /**
+   * @remarks
+   * Rules:
+   * - count 8
+   *
    * @bounds 8
    */
   readings: readonly Speed[];
   /**
+   * @remarks
+   * Rules:
+   * - count 1 ..= 16
+   *
    * @bounds 1..16
    */
   labels: readonly ridl_std.Label[];
   /**
+   * @remarks
+   * Rules:
+   * - count 0 ..= 32
+   *
    * @bounds 0..32
    */
   meta: ReadonlyArray<readonly [ridl_std.Label, ridl_std.Name]>;
@@ -162,6 +239,13 @@ export function initSensorResult(): SensorResult {
 }
 
 export interface SensorReading {
+  /**
+   * @remarks
+   * Rules:
+   * - range 0 ..= 250
+   * - step 0.5
+   * - unit km/h
+   */
   value: Speed;
   timestamp: ridl_std.Timestamp;
 }
@@ -174,12 +258,27 @@ export function initSensorReading(): SensorReading {
 }
 
 export interface SensorFault {
+  /**
+   * @remarks
+   * Rules:
+   * - range 0 ..= 65535
+   */
   code: Counter;
   message: ridl_std.Message;
 }
 
 interface RawWheelFrame {
+  /**
+   * @remarks
+   * Rules:
+   * - range 0 ..= 65535
+   */
   ticks: Counter;
+  /**
+   * @remarks
+   * Rules:
+   * - length 8
+   */
   frame: Uint8Array;
 }
 
@@ -190,6 +289,10 @@ import * as veh_common from './veh.common';
 
 export interface DoorPayload {
   /**
+   * @remarks
+   * Rules:
+   * - range 0 ..= 15
+   *
    * @range [0..15]
    */
   sensorId: number;
@@ -205,6 +308,10 @@ export function initDoorPayload(): DoorPayload {
 
 export interface DiagFilter {
   /**
+   * @remarks
+   * Rules:
+   * - range 0 ..= 5
+   *
    * @range [0..5]
    */
   severity: number;
@@ -219,6 +326,10 @@ export function initDiagFilter(): DiagFilter {
 
 export interface FaultEvent {
   /**
+   * @remarks
+   * Rules:
+   * - range 0 ..= 65535
+   *
    * @range [0..65535]
    */
   code: number;
@@ -238,6 +349,10 @@ export function initDiagError(): DiagError {
 
 export interface FaultPage {
   /**
+   * @remarks
+   * Rules:
+   * - count 0 ..= 64
+   *
    * @bounds 0..64
    */
   faults: readonly FaultEvent[];
@@ -255,6 +370,10 @@ export function initFaultPage(): FaultPage {
  * cross-package counterpart is impossible by construction: a foreign
  * `internal` name never resolves (typl §3.3).
  *
+ * @remarks
+ * Rules:
+ * - range 0 ..= 65535
+ *
  * @range [0..65535]
  */
 type RawTickCount = number & { readonly __ridl: 'veh.cluster.RawTickCount' };
@@ -269,6 +388,10 @@ function initRawTickCount(): RawTickCount {
 interface RawWheelSpan {
   span: { first: RawTickCount; latest: RawTickCount };
   /**
+   * @remarks
+   * Rules:
+   * - count 2
+   *
    * @bounds 2
    */
   bursts: readonly { first: RawTickCount; latest: RawTickCount }[];
@@ -282,6 +405,10 @@ function initRawWheelSpan(): RawWheelSpan {
 }
 
 /**
+ * @remarks
+ * Rules:
+ * - range 0 ..= 7
+ *
  * @range [0..7]
  */
 export type FanLevel = number & { readonly __ridl: 'veh.cluster.FanLevel' };
@@ -292,6 +419,10 @@ export function initFanLevel(): FanLevel {
 
 export interface FilterState {
   /**
+   * @remarks
+   * Rules:
+   * - range 0 ..= 65535
+   *
    * @range [0..65535]
    */
   hoursRun: number;
@@ -308,6 +439,11 @@ export function initFilterState(): FilterState {
 export interface ClimateReport {
   cabin: veh_common.Temperature;
   setpoint: veh_common.Temperature;
+  /**
+   * @remarks
+   * Rules:
+   * - range 0 ..= 7
+   */
   fan: FanLevel;
 }
 
@@ -347,6 +483,10 @@ export const FAN_LIMIT = 7;
 
 /**
  * The label a cabin fan reports itself under.
+ *
+ * @remarks
+ * Rules:
+ * - length 1 ..= 32
  */
 export type FanTag = string & { readonly __ridl: 'veh.cluster.FanTag' };
 

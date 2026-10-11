@@ -153,6 +153,18 @@ reads these two fields and does not add the payload sizes itself. The sums and
 the states they read are described in
 [the catalog descriptor](catalog-descriptor.md#the-size-states).
 
+**Documentation fields.** Every doc carrier of the model (`Declaration`,
+`Field`, `EnumValue`, `Arm`, `Interface`, `Interaction`, `Service` and `Param`)
+carries `links`, `see`, `since` and `rules` beside its `doc`, and `Param`
+carries a `doc` of its own
+([ADR-0028](../decisions/ADR-0028-docs-in-generated-code.md) decision 5).
+`DocLink.target` is a qualified name that a plugin maps with its own name
+transform. Each `Rule` carries `text`, `ridl_ir::rules::render`'s line for it,
+beside a `oneof kind` of structured fields. A new rule kind is a new `oneof`
+member, which is additive, and a plugin renders `Rule.text` for a member it does
+not know. What each field holds is in
+[the book's chapter](../book/codegen-plugins.md#the-documentation-fields).
+
 **The path rule** every host applies before it writes a file
 (`ridl_ir::codegen::check_path`): `/`-separated components, none empty, none `.`
 or `..`, no leading `/`, no drive letter, no backslash, no NUL. A response with

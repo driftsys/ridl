@@ -835,12 +835,12 @@ fn a_range_without_a_step_names_nothing_unchecked() {
     );
 }
 
-/// An unresolved `pattern_const` names the pattern as unchecked, because no
-/// check is emitted for it (design, "Not validated, and documented as such"
-/// still applies to that case). A length bound alone leaves nothing unchecked
-/// to name.
+/// A type's doc states its contract, not what `new` checks (the generated-code
+/// documentation design, D-3): an unresolved `pattern_const`, for which no
+/// check is emitted, adds no doc line saying so. The book's chapter on
+/// generated code records which rules the Rust backend checks.
 #[test]
-fn an_unresolved_pattern_const_is_named_on_the_type() {
+fn an_unresolved_pattern_const_adds_no_enforcement_doc() {
     let with_pattern = |pattern_const: Option<&str>| {
         rust_for(vec![public_decl(
             "Handle",
@@ -863,23 +863,23 @@ fn an_unresolved_pattern_const_is_named_on_the_type() {
             }),
         )])
     };
-    let source = with_pattern(Some("HANDLE_PATTERN"));
-    assert!(
-        source.contains("/// The `match` pattern is not checked by `new`."),
-        "an unresolved pattern constant must be named as unchecked, got:\n{source}"
-    );
-    let source = with_pattern(None);
-    assert!(
-        !source.contains("is not checked by `new`"),
-        "a length bound alone leaves nothing unchecked to name, got:\n{source}"
-    );
+    for source in [with_pattern(Some("HANDLE_PATTERN")), with_pattern(None)] {
+        assert!(
+            !source.contains("checked by `new`"),
+            "a type's doc must not state what `new` checks, got:\n{source}"
+        );
+        assert!(
+            source.contains("Rule::Length"),
+            "the length bound is still checked, got:\n{source}"
+        );
+    }
 }
 
-/// A literal pattern is checked by `new` under `validate-pattern`, so the
-/// type names that condition instead of claiming the pattern goes unchecked
-/// outright.
+/// A literal pattern is checked by `new` under `validate-pattern`, and the
+/// type's doc does not say so (D-3): the check is emitted, the enforcement
+/// sentence is not.
 #[test]
-fn a_literal_pattern_is_named_as_feature_gated() {
+fn a_literal_pattern_check_carries_no_enforcement_doc() {
     let source = rust_for(vec![public_decl(
         "Handle",
         v2::decl::Kind::TypeDef(v2::TypeDef {
@@ -901,25 +901,20 @@ fn a_literal_pattern_is_named_as_feature_gated() {
         }),
     )]);
     assert!(
-        !source.contains("The `match` pattern is not checked by `new`."),
-        "a literal pattern is checked by `new` under the feature, got:\n{source}"
+        !source.contains("checked by `new`"),
+        "a type's doc must not state what `new` checks, got:\n{source}"
     );
-    // The assertion names the doc line itself. A bare `contains`
-    // ("validate-pattern") is satisfied by the `#[cfg(feature =
-    // "validate-pattern")]` attribute in the constructor body, so deleting
-    // the doc line entirely would leave it green.
     assert!(
-        source.contains(
-            "/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature."
-        ),
-        "the type must name the condition its pattern guarantee depends on, got:\n{source}"
+        source.contains("#[cfg(feature = \"validate-pattern\")]"),
+        "the pattern check is still emitted under the feature, got:\n{source}"
     );
 }
 
-/// A pattern on a string carries the feature condition. A malformed numeric
-/// step on a string in hand-built IR cannot emit a numeric check.
+/// A pattern on a string adds no enforcement sentence to the type's doc
+/// (D-3). A malformed numeric step on a string in hand-built IR cannot emit a
+/// numeric check.
 #[test]
-fn a_string_pattern_names_the_feature_condition() {
+fn a_string_pattern_adds_no_enforcement_doc() {
     let source = rust_for(vec![public_decl(
         "Stepped",
         v2::decl::Kind::TypeDef(v2::TypeDef {
@@ -941,12 +936,7 @@ fn a_string_pattern_names_the_feature_condition() {
         }),
     )]);
     assert!(!source.contains("Quantization (`step`) is not checked"));
-    assert!(!source.contains("The `match` pattern is not checked by `new`."));
-    // The doc line itself, not the `cfg` attribute that also carries the
-    // feature name.
-    assert!(source.contains(
-        "/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature."
-    ));
+    assert!(!source.contains("checked by `new`"));
 }
 
 /// The pattern check is emitted only under `validate-pattern`; the range and
@@ -1353,23 +1343,19 @@ fn bytes_backed_pattern_emits_no_pattern_check() {
     );
 }
 
-/// The doc for a bytes-backed pattern must not claim the feature-gated
-/// guarantee it does not implement: since `constraint_checks` emits no
-/// pattern branch for this backing, the type must carry the plain "not
-/// checked" line instead.
+/// A pattern arriving on a bytes backing, which `constraint_checks` emits no
+/// pattern branch for, is neither checked nor described: the type's doc
+/// states no enforcement (D-3), and nothing names the feature.
 ///
 /// This is about an IR the backend did not lower, not about a typl source.
 /// A bytes type written with a `match` reaches the backend with no pattern
-/// at all, so `unchecked_doc` emits no line for it whatsoever; see
-/// [`bytes_pattern_decl`]. The behaviour pinned here is that a pattern
-/// arriving on a backing the check cannot cover is described accurately
-/// rather than advertised as gated.
+/// at all; see [`bytes_pattern_decl`].
 #[test]
-fn bytes_backed_pattern_is_named_as_unchecked_not_feature_gated() {
+fn bytes_backed_pattern_is_neither_checked_nor_described() {
     let source = rust_for(vec![bytes_pattern_decl()]);
     assert!(
-        source.contains(" The `match` pattern is not checked by `new`."),
-        "a bytes-backed pattern must be named plainly unchecked, got:\n{source}"
+        !source.contains("checked by `new`"),
+        "a type's doc must not state what `new` checks, got:\n{source}"
     );
     assert!(
         !source.contains("validate-pattern"),
@@ -6257,8 +6243,8 @@ fn a_withheld_declaration_claims_no_view_name() {
 }
 
 /// The owner line of a skipped-interface note for a refusal that no owner
-/// claims names the reason and no tracking issue, and cites neither of the
-/// two issues that own the other gaps.
+/// claims points to the reason and mentions no tracking issue, and cites
+/// neither of the two issues that own the other gaps.
 #[test]
 fn a_skipped_interface_note_without_an_owner_names_no_issue() {
     use crate::{GenerateError, skipped_interface_note};
@@ -6272,12 +6258,49 @@ fn a_skipped_interface_note_without_an_owner_names_no_issue() {
     )
     .to_string();
     assert!(
-        note.contains("No tracking issue owns this one"),
+        note.contains("The reason above is the whole of it."),
         "got: {note}"
     );
+    assert!(!note.contains("tracking issue"), "got: {note}");
     assert!(
         !note.contains("driftsys/ridl#713") && !note.contains("driftsys/ridl#704"),
         "got: {note}"
+    );
+}
+
+/// A face refused for an interface that the doc links already treat as faced
+/// is an internal error that refuses the model, not a skip note: the links
+/// would point at a face module the output does not hold. A face refused for
+/// an interface the links do not treat as faced is skipped as before.
+#[test]
+fn a_face_refused_after_linking_is_an_internal_error() {
+    use crate::{GenerateError, face_refused_after_linking};
+    use ridl_ir::codegen::v1;
+    use std::collections::BTreeSet;
+
+    let interface = v1::Interface {
+        identity: Some(v1::interface::Identity::Declared(v1::Spellings {
+            declared: "Cabin".to_string(),
+            ..Default::default()
+        })),
+        ..Default::default()
+    };
+    let err = GenerateError {
+        message: "a refusal".to_string(),
+    };
+    let faced = BTreeSet::from([2_u32]);
+    let refused = face_refused_after_linking(&faced, 2, &interface, &err)
+        .expect_err("a linked interface whose face is refused must refuse the model");
+    assert!(
+        refused.message.starts_with("internal error:")
+            && refused.message.contains("`Cabin`")
+            && refused.message.ends_with("a refusal"),
+        "got: {}",
+        refused.message
+    );
+    assert!(
+        face_refused_after_linking(&faced, 1, &interface, &err).is_ok(),
+        "an interface no link treats as faced is skipped, not refused"
     );
 }
 
@@ -6392,8 +6415,14 @@ mod skipped_interface_note {
         let call_shape = note(&interface(vec![bare_command()], false));
         let other = note(&interface(Vec::new(), false));
         let internal = note(&interface(Vec::new(), true));
-        assert!(call_shape.contains("driftsys/ridl#713"), "{call_shape}");
-        assert!(other.contains("No tracking issue owns this one"), "{other}");
+        assert!(call_shape.contains("to get a face"), "{call_shape}");
+        assert!(!call_shape.contains("driftsys/ridl"), "{call_shape}");
+        assert!(
+            other.contains("The reason above is the whole of it."),
+            "{other}"
+        );
+        assert!(!other.contains("tracking issue"), "{other}");
+        assert!(!other.contains("driftsys/ridl"), "{other}");
         for text in [&call_shape, &other] {
             assert!(text.contains("which the face is built on"), "{text}");
             assert!(text.contains("design rule 2"), "{text}");
@@ -6407,4 +6436,513 @@ mod skipped_interface_note {
             assert!(!text.contains("     "), "a run of spaces:\n{text}");
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Doc blocks: links, rules, `see` and `since` on generated types.
+// ---------------------------------------------------------------------------
+
+/// One resolved doc link of `doc`: the bytes of `written` at its first
+/// occurrence, with the text inside the brackets, pointing at `target`.
+fn doc_link(doc: &str, written: &str, target: &str) -> v2::DocLink {
+    let offset = doc.find(written).expect("the link is written in the doc");
+    v2::DocLink {
+        text: written
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .to_string(),
+        offset: offset as u32,
+        len: written.len() as u32,
+        target: target.to_string(),
+    }
+}
+
+/// One `@see` target: no offset and no length, as the checker stores it.
+fn see_link(text: &str, target: &str) -> v2::DocLink {
+    v2::DocLink {
+        text: text.to_string(),
+        offset: 0,
+        len: 0,
+        target: target.to_string(),
+    }
+}
+
+/// The declarations the doc-block tests share: `Speed` (range, step and
+/// unit), `Vin` (length and pattern), an internal `Hidden`, and a struct
+/// `Reading` whose doc links a local type, a type member, a type of a package
+/// outside the output and the internal type, and whose fields carry the rules
+/// of their types and a collection bound.
+fn documented_decls() -> Vec<v2::Decl> {
+    let reading_doc = "Combines [Speed] and [Reading.speed], \
+        from [other.pkg.Thing] and [Hidden].";
+    let speed_doc = "The speed of this reading.";
+    let samples = v2::Field {
+        r#type: Some(v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                element: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Named("Speed".to_string())),
+                })),
+                min: 1,
+                max: 8,
+            }))),
+        }),
+        doc: "The raw samples.".to_string(),
+        ..named_field("samples", 2, "Speed", false, init_value(false, None))
+    };
+    let reading = v2::StructDef {
+        members: vec![
+            field_member(v2::Field {
+                doc: speed_doc.to_string(),
+                see: vec![see_link("Vin", "veh.common.Vin")],
+                since: vec!["0.2".to_string()],
+                ..named_field("speed", 1, "Speed", false, init_value(true, None))
+            }),
+            field_member(samples),
+            field_member(v2::Field {
+                deprecated: Some("use the frame number".to_string()),
+                ..named_field("vin", 3, "Vin", false, init_value(false, None))
+            }),
+        ],
+        fixed_layout: false,
+    };
+    vec![
+        speed_decl(),
+        vin_decl(),
+        v2::Decl {
+            visibility: v2::Visibility::Internal as i32,
+            ..public_decl(
+                "Hidden",
+                primitive_type(
+                    v2::PrimitiveType::Integer,
+                    init_value(true, Some("0")),
+                    derived_int_width(),
+                ),
+            )
+        },
+        v2::Decl {
+            doc: reading_doc.to_string(),
+            links: vec![
+                doc_link(reading_doc, "[Speed]", "veh.common.Speed"),
+                doc_link(reading_doc, "[Reading.speed]", "veh.common.Reading.speed"),
+                doc_link(reading_doc, "[other.pkg.Thing]", "other.pkg.Thing"),
+                doc_link(reading_doc, "[Hidden]", "veh.common.Hidden"),
+            ],
+            see: vec![
+                see_link("Speed", "veh.common.Speed"),
+                see_link("other.pkg.Thing", "other.pkg.Thing"),
+            ],
+            since: vec!["0.3".to_string(), "0.4".to_string()],
+            deprecated: Some("use Frame".to_string()),
+            ..public_decl("Reading", v2::decl::Kind::StructDef(reading))
+        },
+    ]
+}
+
+#[test]
+fn doc_block_on_declarations_and_fields() {
+    insta::assert_snapshot!(rust_for(documented_decls()));
+}
+
+#[test]
+fn doc_block_on_enum_values_and_union_arms() {
+    let park_doc = "Held by [Gear.DRIVE] until released.";
+    let gear = public_decl(
+        "Gear",
+        v2::decl::Kind::EnumDef(v2::EnumDef {
+            values: vec![
+                v2::EnumValue {
+                    doc: park_doc.to_string(),
+                    links: vec![doc_link(park_doc, "[Gear.DRIVE]", "veh.common.Gear.DRIVE")],
+                    see: vec![see_link("Speed", "veh.common.Speed")],
+                    since: vec!["0.2".to_string(), "0.5".to_string()],
+                    ..enum_value("PARK", 0)
+                },
+                enum_value("DRIVE", 1),
+            ],
+            reserved: Vec::new(),
+        }),
+    );
+    let arm_doc = "A value in [Speed], see [Measurement.fault].";
+    let measurement = v2::UnionDef {
+        arms: vec![
+            v2::UnionArm {
+                name: "reading".to_string(),
+                ordinal: 1,
+                type_ref: "Speed".to_string(),
+                doc: arm_doc.to_string(),
+                links: vec![
+                    doc_link(arm_doc, "[Speed]", "veh.common.Speed"),
+                    doc_link(
+                        arm_doc,
+                        "[Measurement.fault]",
+                        "veh.common.Measurement.fault",
+                    ),
+                ],
+                see: vec![see_link("other.pkg.Thing", "other.pkg.Thing")],
+                since: vec!["0.3".to_string()],
+            },
+            v2::UnionArm {
+                name: "fault".to_string(),
+                ordinal: 2,
+                type_ref: "Counter".to_string(),
+                doc: String::new(),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
+            },
+        ],
+        is_result: false,
+        reserved: Vec::new(),
+    };
+    insta::assert_snapshot!(rust_for(vec![
+        speed_decl(),
+        counter_decl(),
+        gear,
+        public_decl("Measurement", v2::decl::Kind::UnionDef(measurement)),
+    ]));
+}
+
+/// A link after a multi-byte character: the offsets are bytes, so a
+/// replacement that counted characters would land one byte early.
+#[test]
+fn doc_link_after_multibyte_text() {
+    let doc = "Measured in °C, see [Speed].";
+    let source = rust_for(vec![
+        speed_decl(),
+        v2::Decl {
+            doc: doc.to_string(),
+            links: vec![doc_link(doc, "[Speed]", "veh.common.Speed")],
+            ..public_decl("Celsius", unit_type("Cel", "-40.0", "125.0", "0.5", "0.0"))
+        },
+    ]);
+    assert!(
+        source.contains("see [Speed](crate::veh::common::Speed)."),
+        "got:\n{source}"
+    );
+}
+
+/// A link to an internal type and a link to a type of a package outside the
+/// output render as code spans of the qualified name, never as a link.
+#[test]
+fn doc_link_to_internal_or_absent_target_is_a_code_span() {
+    let source = rust_for(documented_decls());
+    for target in ["veh.common.Hidden", "other.pkg.Thing"] {
+        assert!(source.contains(&format!("`{target}`")), "got:\n{source}");
+        assert!(!source.contains(&format!("`{target}`](")), "got:\n{source}");
+    }
+    for written in ["[Hidden](", "[other.pkg.Thing]("] {
+        assert!(!source.contains(written), "got:\n{source}");
+    }
+}
+
+/// A constant declaration of `type_ref` holding `value`.
+fn const_decl(name: &str, type_ref: &str, value: &str) -> v2::Decl {
+    public_decl(
+        name,
+        v2::decl::Kind::ConstDef(v2::ConstDef {
+            type_ref: Some(type_ref.to_string()),
+            value: value.to_string(),
+            regex: None,
+        }),
+    )
+}
+
+/// The two packages of the foreign-link tests. `other.pkg` declares a struct
+/// `Thing`, a ranged scalar `Speed`, a `bytes` constant `BLOB`, which the
+/// backend does not emit, and a string constant `GREETING`, which it does.
+/// `veh.common` declares the same two constants and a struct `Holder` with a
+/// field of each foreign item, so that the model's foreign declarations
+/// hold all four, and a doc that links each constant and `Thing`.
+fn foreign_link_packages() -> (v2::Package, v2::Package) {
+    let other = package(
+        "other.pkg",
+        vec![
+            struct_with_field("Thing", "level", "Speed"),
+            speed_decl(),
+            const_decl("BLOB", "bytes", "00"),
+            const_decl("GREETING", "string", "hello"),
+        ],
+    );
+    let doc = "Not [BLOB] nor [other.pkg.BLOB], but [GREETING], \
+        [other.pkg.GREETING] and [other.pkg.Thing].";
+    let field = |name: &str, ordinal: u32, type_ref: &str| {
+        field_member(named_field(
+            name,
+            ordinal,
+            type_ref,
+            false,
+            init_value(false, None),
+        ))
+    };
+    let holder = v2::StructDef {
+        members: vec![
+            field("thing", 1, "other.pkg.Thing"),
+            field("speed", 2, "other.pkg.Speed"),
+            field("blob", 3, "other.pkg.BLOB"),
+            field("greeting", 4, "other.pkg.GREETING"),
+        ],
+        fixed_layout: false,
+    };
+    let local = package(
+        "veh.common",
+        vec![
+            const_decl("BLOB", "bytes", "00"),
+            const_decl("GREETING", "string", "hi"),
+            v2::Decl {
+                doc: doc.to_string(),
+                links: vec![
+                    doc_link(doc, "[BLOB]", "veh.common.BLOB"),
+                    doc_link(doc, "[other.pkg.BLOB]", "other.pkg.BLOB"),
+                    doc_link(doc, "[GREETING]", "veh.common.GREETING"),
+                    doc_link(doc, "[other.pkg.GREETING]", "other.pkg.GREETING"),
+                    doc_link(doc, "[other.pkg.Thing]", "other.pkg.Thing"),
+                ],
+                ..public_decl("Holder", v2::decl::Kind::StructDef(holder))
+            },
+        ],
+    );
+    (local, other)
+}
+
+/// A link to a foreign declaration is its path through the module tree; a
+/// link to a constant the backend does not emit, local or foreign, is a
+/// code span, as rustdoc could not resolve a path to it.
+#[test]
+fn doc_links_to_foreign_items_and_to_skipped_constants() {
+    let (local, other) = foreign_link_packages();
+    let source = super::generate_with(&local, &[&other])
+        .expect("generation succeeds")
+        .rust_source;
+    assert!(
+        !source.contains("const BLOB"),
+        "the bytes constant must not be emitted, or this test proves nothing:\n{source}"
+    );
+    assert!(
+        source.contains(
+            "Not `veh.common.BLOB` nor `other.pkg.BLOB`, but \
+             [GREETING](crate::veh::common::GREETING),"
+        ),
+        "got:\n{source}"
+    );
+    assert!(
+        source.contains(
+            "[other.pkg.GREETING](crate::other::pkg::GREETING) and \
+             [other.pkg.Thing](crate::other::pkg::Thing)."
+        ),
+        "got:\n{source}"
+    );
+}
+
+/// A doc link to a constant is a path link only when the backend emits the
+/// constant ([`super::declaration_emitted`]): a constant of a named scalar of
+/// its own package, backed by anything but `bytes`, and a regex constant. It
+/// is a code span for a constant of a `bytes`-backed named scalar, one of a
+/// named scalar of another package, and one of a type no package declares.
+#[test]
+fn doc_links_to_constants_follow_how_each_is_typed() {
+    let other = package("other.pkg", vec![speed_decl()]);
+    let consts = [
+        ("OWN_SPEED", Some("Speed"), "10.0", None),
+        ("OWN_BLOB", Some("Blob"), "", None),
+        ("OTHER_SPEED", Some("other.pkg.Speed"), "10.0", None),
+        ("MISSING", Some("nowhere.Missing"), "1", None),
+        ("PATTERN", None, "", Some("/^[A-Z]{2}$/")),
+    ];
+    let doc = "See [OWN_SPEED], [OWN_BLOB], [OTHER_SPEED], [MISSING] and [PATTERN].";
+    let mut decls = vec![
+        speed_decl(),
+        public_decl("Blob", bounded_bytes_type(init_value(true, Some("")))),
+        struct_with_field("Foreign", "speed", "other.pkg.Speed"),
+        v2::Decl {
+            doc: doc.to_string(),
+            links: consts
+                .iter()
+                .map(|(name, ..)| {
+                    doc_link(doc, &format!("[{name}]"), &format!("veh.common.{name}"))
+                })
+                .collect(),
+            ..struct_with_field("Holder", "speed", "Speed")
+        },
+    ];
+    for (name, type_ref, value, regex) in consts {
+        decls.push(public_decl(
+            name,
+            v2::decl::Kind::ConstDef(v2::ConstDef {
+                type_ref: type_ref.map(str::to_string),
+                value: value.to_string(),
+                regex: regex.map(str::to_string),
+            }),
+        ));
+    }
+    let source = super::generate_with(&package("veh.common", decls), &[&other])
+        .expect("generation succeeds")
+        .rust_source;
+    assert!(
+        source.contains("const OWN_SPEED") && source.contains("const PATTERN"),
+        "the same-package scalar constant and the regex constant are emitted:\n{source}"
+    );
+    assert!(
+        !source.contains("const OWN_BLOB")
+            && !source.contains("const OTHER_SPEED")
+            && !source.contains("const MISSING"),
+        "the other three constants are not emitted:\n{source}"
+    );
+    assert!(
+        source.contains(
+            "See [OWN_SPEED](crate::veh::common::OWN_SPEED), `veh.common.OWN_BLOB`, \
+             `veh.common.OTHER_SPEED`, `veh.common.MISSING` and \
+             [PATTERN](crate::veh::common::PATTERN)."
+        ),
+        "got:\n{source}"
+    );
+}
+
+/// A doc link to a constant another package declares follows the same rule
+/// as one to a local constant, read through the model's foreign
+/// declarations: a constant of a scalar of that package is a path link, and
+/// one of a `bytes`-backed scalar of that package stays a code span.
+#[test]
+fn doc_links_to_foreign_constants_follow_how_each_is_typed() {
+    let other = package(
+        "other.pkg",
+        vec![
+            speed_decl(),
+            public_decl("Blob", bounded_bytes_type(init_value(true, Some("")))),
+            const_decl("LIMIT", "Speed", "10.0"),
+            const_decl("RAW", "Blob", ""),
+        ],
+    );
+    let doc = "See [other.pkg.LIMIT] and [other.pkg.RAW].";
+    let holder = v2::StructDef {
+        members: ["LIMIT", "RAW"]
+            .iter()
+            .zip(1..)
+            .map(|(name, ordinal)| {
+                field_member(named_field(
+                    &name.to_lowercase(),
+                    ordinal,
+                    &format!("other.pkg.{name}"),
+                    false,
+                    init_value(false, None),
+                ))
+            })
+            .collect(),
+        fixed_layout: false,
+    };
+    let local = package(
+        "veh.common",
+        vec![v2::Decl {
+            doc: doc.to_string(),
+            links: vec![
+                doc_link(doc, "[other.pkg.LIMIT]", "other.pkg.LIMIT"),
+                doc_link(doc, "[other.pkg.RAW]", "other.pkg.RAW"),
+            ],
+            ..public_decl("Holder", v2::decl::Kind::StructDef(holder))
+        }],
+    );
+    let source = super::generate_with(&local, &[&other])
+        .expect("generation succeeds")
+        .rust_source;
+    assert!(
+        source.contains("See [other.pkg.LIMIT](crate::other::pkg::LIMIT) and `other.pkg.RAW`."),
+        "got:\n{source}"
+    );
+}
+
+/// Through the backend contract, over a model that this test lowers with the
+/// other packages itself, a field of a foreign type carries that type's
+/// rules. That the build lowers with the other packages is pinned in
+/// `crates/ridlc/tests/rust_crate_emit.rs`, by
+/// `a_field_of_a_ranged_type_of_another_package_carries_its_rules_in_the_emitted_rust`.
+#[test]
+fn a_field_of_a_foreign_type_carries_its_rules_through_the_contract() {
+    use ridl_ir::codegen::{Backend as _, v1};
+
+    let (local, other) = foreign_link_packages();
+    let request = v1::CodegenRequest {
+        model: Some(ridl_ir::codegen::lower(&local, &[&other])),
+        artifact_base: "veh.common".to_string(),
+        ..Default::default()
+    };
+    let response = crate::Backend.generate(&request);
+    assert!(
+        response.diagnostics.is_empty(),
+        "{:?}",
+        response.diagnostics
+    );
+    let source = response
+        .files
+        .iter()
+        .find_map(|file| match &file.content {
+            Some(v1::generated_file::Content::Text(text)) => Some(text.clone()),
+            _ => None,
+        })
+        .expect("the backend writes one text file");
+    let field = source
+        .split_once("pub struct Holder")
+        .map(|(_, rest)| rest)
+        .and_then(|rest| rest.split_once("pub speed:"))
+        .map(|(doc, _)| doc.rsplit_once("pub thing:").map_or(doc, |(_, doc)| doc))
+        .expect("`Holder.speed` is generated");
+    assert!(
+        field.contains("/// # Rules") && field.contains("/// - range 0.0 ..= 250.0"),
+        "the field's rules, got:\n{field}"
+    );
+}
+
+/// A link to an item whose name a child package's module takes is a code
+/// span: the item is reached only through `__ridl_package`, which is
+/// `#[doc(hidden)]`, so rustdoc writes no page for it.
+#[test]
+fn doc_link_to_an_item_a_child_package_hides_is_a_code_span() {
+    let child = package("veh.common.gauge", vec![speed_decl()]);
+    let doc = "Shown on [gauge], next to [Speed].";
+    let local = package(
+        "veh.common",
+        vec![
+            speed_decl(),
+            struct_with_field("gauge", "speed", "Speed"),
+            v2::Decl {
+                doc: doc.to_string(),
+                links: vec![
+                    doc_link(doc, "[gauge]", "veh.common.gauge"),
+                    doc_link(doc, "[Speed]", "veh.common.Speed"),
+                ],
+                ..struct_with_field("Dial", "speed", "Speed")
+            },
+        ],
+    );
+    let source = super::generate_with(&local, &[&child])
+        .expect("generation succeeds")
+        .rust_source;
+    assert!(
+        source.contains("Shown on `veh.common.gauge`, next to [Speed](crate::veh::common::Speed)."),
+        "got:\n{source}"
+    );
+    assert!(!source.contains("__ridl_package::gauge)"), "got:\n{source}");
+}
+
+/// An enum set bit carries its doc on its constant.
+#[test]
+fn an_enum_set_bit_carries_its_doc() {
+    let mut bits = warning_bits();
+    bits[1].doc = "The engine needs a check.".to_string();
+    bits[1].since = vec!["0.2".to_string()];
+    let source = rust_for(vec![public_decl(
+        "Warnings",
+        v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+            backing_enum: None,
+            bits,
+            width: v2::IntWidth::U8 as i32,
+        }),
+    )]);
+    assert!(
+        source.contains(
+            "    /// The engine needs a check.\n    ///\n    /// Available since 0.2.\n    \
+             pub const CHECK_ENGINE: Warnings"
+        ),
+        "got:\n{source}"
+    );
 }

@@ -553,3 +553,14 @@ provenance. Nothing here is normative — the current references live in
   [the `ridl-rt` design record](../design/ridl-rt.md),
   [the interaction-face design record](../design/interaction-face.md) and
   [the codegen plugins design record](../design/codegen-plugins.md).
+- **2026-10-10-docs-in-generated-code-design.md**,
+  **2026-10-11-docs-in-generated-code-plan.md** and
+  **2026-10-10-docs-in-generated-code-handoff.md** — documentation in the
+  generated code (spec 2b): the doc fields of the codegen model, the Rust and
+  TypeScript rendering, link resolution and the doc lints' reach into generated
+  output. The three files are archived verbatim; the handoff is the brainstorm
+  note the design was written from. The as-built behaviour and the rationale of
+  decisions 1 to 7 are in
+  [ADR-0028](../decisions/ADR-0028-docs-in-generated-code.md), the amendment of
+  [ADR-0026](../decisions/ADR-0026-doc-comments.md), and
+  [the codegen plugins design record](../design/codegen-plugins.md).

@@ -21,7 +21,13 @@ recorded in decisions 4 (`@deprecated` accepted on every carrier, stored on
 five), 5 (remote packages) and 10 (a member build that fails on another member's
 error) while it implemented the design.
 
-It amends three records in place, in the same change:
+Amended 2026-10-11 by [ADR-0028](ADR-0028-docs-in-generated-code.md)
+(documentation in generated code): the general form §4.7 promotion is declined,
+and `@labels` and `@deprecated` stay doc tags (decision 4); the codegen model
+carries the doc links, `see` and `since` (decision 6); the codegen model carries
+the rules, and the shape of `Rule` is no longer provisional (decision 9).
+
+This record amends three records in place, in the same change:
 
 - [ADR-0002](ADR-0002-module-system.md) §4 gains root discovery (decision 10).
 - [ADR-0024](ADR-0024-lint-registry-and-levels.md) decisions 1, 8, 12 and 15
@@ -128,15 +134,16 @@ decision 9 recorded as a limitation.
    take their labels from `@labels`.
 
    **The general form §4.7 promotion of `deprecated` and `labels` to attribute
-   keys is deferred to spec 2b.** An attribute block exists on the interactions
-   `signal`, `event`, `command` and `query` (RIDL-106 rejects one on `fixed`)
-   and on the rsdl declarations and body lines. `type`, `const`, `struct`,
-   `enum`, `enumset`, `union`, `interface`, `service`, fields and enum values
-   have none, so removing the doc tags would leave them, and `fixed`, with no
-   way to be deprecated. No output of this record changes when the tags change.
-   The first consumer that would need the promotion is generated deprecation
-   metadata, and spec 2b decides between adding the attribute block to the
-   grammar and reading the fact from the doc tag.
+   keys is declined by [ADR-0028](ADR-0028-docs-in-generated-code.md) decision
+   4** (amended 2026-10-11; this record first deferred it to spec 2b). An
+   attribute block exists on the interactions `signal`, `event`, `command` and
+   `query` (RIDL-106 rejects one on `fixed`) and on the rsdl declarations and
+   body lines. `type`, `const`, `struct`, `enum`, `enumset`, `union`,
+   `interface`, `service`, fields and enum values have none, so removing the doc
+   tags would leave them, and `fixed`, with no way to be deprecated. Generated
+   deprecation metadata, the first consumer that would have needed the
+   promotion, reads the fact from the `@deprecated` doc tag, and the grammar
+   does not change.
 
 5. **A link resolves in the scope of the file that holds it, by the rules of a
    type reference, and the IR stores each resolved target** (design D-5).
@@ -175,8 +182,10 @@ decision 9 recorded as a limitation.
    deletes every doc comment of a fixture workspace and checks that the hash is
    unchanged. `ridl diff` classifies a change to any of these fields as
    `DocOnly`, and `diff_systems` ignores the system doc fields. The codegen
-   model of the plugin protocol (`codegen/v1/model.proto`) gains none of them:
-   rendering links, `@see` and `@since` in generated code is spec 2b.
+   model of the plugin protocol (`codegen/v1/model.proto`) gained none of them
+   in this record. Amended 2026-10-11: ADR-0028 decision 5 adds `links`, `see`
+   and `since` to every doc carrier of the codegen model, and `doc` to its
+   `Param`.
 
 7. **The doc lints are `TYPL-` codes, all Warning** (design D-2 and the reviewed
    lint table). Doc comments are typl §14, shared by every language of the
@@ -235,9 +244,11 @@ decision 9 recorded as a limitation.
    source text). For a field or parameter whose type is a named declaration, the
    function returns that declaration's rules, looked up in `pkg` or in `deps`.
    It adds nothing to the IR. There is no `Scale` variant, because the IR holds
-   no scale. The shape of `Rule` is provisional: it is an input to spec 2b,
-   which decides whether the IR stores the list or each backend calls the
-   function, and may change the shape. Until then, hover is its only consumer.
+   no scale. Amended 2026-10-11 by ADR-0028 decisions 1 and 5: the codegen
+   `Model` carries the list as `Rule` messages, each with its `rules::render`
+   line as `text`, and the IR does not store it. The shape of `Rule` is no
+   longer provisional: a change to `Rule` or to `render` is a change to
+   `ridl.codegen.v1`. Hover and the codegen lowering are its consumers.
 
 10. **Root discovery walks from a workspace member to its workspace, for every
     entry point** (design D-1, #529). `ridl_core::find_root` implements the rule

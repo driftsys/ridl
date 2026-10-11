@@ -418,7 +418,9 @@ other entry below is Accepted.
   provisional shape. An entry inside a workspace member loads the member's
   workspace for every entry point (#529). Amends ADR-0002 §4, ADR-0024 decisions
   1, 8, 12 and 15 and ADR-0025 decision 2 in place, and replaces ADR-0024
-  decision 9.
+  decision 9. Amended 2026-10-11 by ADR-0028: the §4.7 promotion is declined
+  (decision 4), and the codegen model carries the doc links, `see`, `since` and
+  the rules, whose shape is no longer provisional (decisions 6 and 9).
 
 - **ADR-0027 — Workspace design lints.** Twelve decisions: the design's D-1 to
   D-9, agreed in the brainstorming session of piece 1b, its placement and code
@@ -441,6 +443,21 @@ other entry below is Accepted.
   their numbers TYPL-223 and RIDL-415 are not reused. Amends ADR-0024 decision 1
   and ADR-0025 decision 9 in place. The as-built description is
   [the design lints design record](../design/design-lints.md).
+
+- **ADR-0028 — Documentation in generated code.** Seven decisions: the design's
+  D-1 to D-4, agreed in the brainstorming session of spec 2b, and its sections 1
+  to 3 with the choices S-1 to S-7. The rules of an item live in the codegen
+  `Model`, not in IR v2: `lower` calls `ridl_ir::rules::rules` and writes each
+  rule with its structured fields and its `rules::render` line as `text`, which
+  every backend places verbatim. Every doc carrier of the `Model`, `Param` and
+  `Service` included, carries `links`, `see`, `since` and `rules`, and `Param`
+  gains `doc`. The docs state the contract, not what a backend checks. Rust
+  renders rustdoc, TypeScript renders TSDoc from the `Model`, and the Kotlin
+  plugin is given a KDoc column; only facade items, and the Rust notes left
+  where a face or a codec was not emitted, carry docs, and no generated doc
+  cites an issue. The general form §4.7 promotion of `labels` and `deprecated`
+  is declined: both stay doc tags. Amends ADR-0026 decisions 4, 6 and 9 in
+  place.
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

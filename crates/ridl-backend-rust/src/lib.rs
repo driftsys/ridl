@@ -28,7 +28,7 @@ use quote::{format_ident, quote};
 use ridl_ir::codegen::v1;
 use ridl_ir::v2;
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 mod claims;
 mod clauses;
@@ -37,6 +37,7 @@ mod contract;
 mod defaults;
 mod derives;
 mod descriptors;
+mod docs;
 mod face;
 mod scalar_step;
 
@@ -122,17 +123,28 @@ pub fn generate_face_with(
     encodings: &[WireEncoding],
 ) -> Result<Generated, GenerateError> {
     let model = ridl_ir::codegen::lower(package, &[]);
-    let ctx = Ctx::new(package, &model);
+    let mut ctx = Ctx::new(package, &model);
     if encodings.is_empty() {
         return render(package_items(&ctx, &[], encodings)?);
     }
     // This entry point refuses rather than skips, so every named interface's
     // descriptors are emitted, and the face of every interface that has one,
-    // and each one claims its names.
+    // and each one claims its names. A refusal returns before any output, so
+    // the faced interfaces are every named one that emits a module.
     let interfaces: Vec<&v1::Interface> = model.interfaces.iter().collect();
+    ctx.faced = faced_indices(
+        interfaces
+            .iter()
+            .copied()
+            .enumerate()
+            .filter(|(_, interface)| {
+                descriptors::declared_name(interface).is_some() && face::emits_module(interface)
+            })
+            .map(|(index, _)| index),
+    );
     let mut items = package_items(&ctx, &interfaces, encodings)?;
     items.extend(descriptors::interface_items(&ctx)?);
-    items.extend(face::interface_items(&model)?);
+    items.extend(face::interface_items(&model, &ctx.links())?);
     render(items)
 }
 
@@ -208,7 +220,7 @@ pub(crate) fn generate_pipeline_over(
     model: &v1::Model,
     encodings: &[WireEncoding],
 ) -> Result<Generated, GenerateError> {
-    let ctx = Ctx::over(model);
+    let mut ctx = Ctx::over(model);
     if encodings.is_empty() {
         // Types only: no descriptor reads the catalog hash and no interface
         // is walked, so nothing below applies and nothing is refused.
@@ -217,22 +229,49 @@ pub(crate) fn generate_pipeline_over(
     // A malformed catalog hash refuses the whole model here; inside the
     // per-interface walk below it would only skip each interface.
     descriptors::catalog_hash(&ctx)?;
-    // Each interface is built before the package's own items, so that the
-    // claim table, which runs before the codec, knows which interfaces are
-    // emitted and which are skipped: a skipped one claims nothing (the
-    // `docs/technotes/rust-backend-name-collisions.md`, decision 13).
+    // Each interface's descriptors are built before the package's own items,
+    // so that the claim table, which runs before the codec, knows which
+    // interfaces are emitted and which are skipped: a skipped one claims
+    // nothing (the `docs/technotes/rust-backend-name-collisions.md`,
+    // decision 13).
+    let built: Vec<_> = model
+        .interfaces
+        .iter()
+        .enumerate()
+        .filter(|(_, interface)| descriptors::declared_name(interface).is_some())
+        .map(|(index, interface)| {
+            let produced = descriptors::one_interface_items(&ctx, interface);
+            (index, interface, produced)
+        })
+        .collect();
+    // The face is built once every skipped interface is known, so that a doc
+    // link resolves to a face module only when this output holds it. The
+    // face refuses nothing the descriptors accept (both read the parameter
+    // and the reply through the same functions), so an interface whose
+    // descriptors were built is faced. `face_refused_after_linking` checks
+    // that claim in the loop below.
+    ctx.faced = faced_indices(
+        built
+            .iter()
+            .filter(|(_, interface, produced)| produced.is_ok() && face::emits_module(interface))
+            .map(|(index, _, _)| *index),
+    );
     let mut faced: Vec<&v1::Interface> = Vec::new();
     let mut interface_items: Vec<TokenStream> = Vec::new();
-    for interface in &model.interfaces {
-        if descriptors::declared_name(interface).is_none() {
-            continue;
-        }
-        match faced_interface(&ctx, interface) {
+    for (index, interface, produced) in built {
+        let produced = produced.and_then(|mut items| {
+            items.extend(face::one_interface(interface, &ctx.links())?);
+            Ok(items)
+        });
+        match produced {
             Ok(produced) => {
                 faced.push(interface);
                 interface_items.extend(produced);
             }
-            Err(err) => interface_items.push(skipped_interface_note(interface, &err)),
+            Err(err) => {
+                face_refused_after_linking(&ctx.faced, index, interface, &err)?;
+                interface_items.push(skipped_interface_note(interface, &err));
+            }
         }
     }
     let mut items = package_items(&ctx, &faced, encodings)?;
@@ -240,17 +279,41 @@ pub(crate) fn generate_pipeline_over(
     render(items)
 }
 
-/// The descriptors and the face of one interface, which stand or fall
-/// together for the reason [`generate_pipeline`] records.
-fn faced_interface(
-    ctx: &Ctx,
+/// `indices`, positions in `model.interfaces`, as the `u32`s [`docs::Links`]
+/// reads. The model's interface list is far shorter than `u32::MAX`; an index
+/// past it is left out, so a link to that interface renders as a code span.
+fn faced_indices(indices: impl Iterator<Item = usize>) -> BTreeSet<u32> {
+    indices
+        .filter_map(|index| u32::try_from(index).ok())
+        .collect()
+}
+
+/// The internal error returned when the face of the interface at `index` is
+/// refused although `faced` names it.
+///
+/// `faced` is decided before the faces are built, on the claim that the face
+/// refuses nothing the descriptors accept. Doc links to a faced interface
+/// render as links to its face module, so a face refused after that point
+/// would leave links to a module the output does not hold. The whole model
+/// is refused instead, with a message that names the broken claim.
+fn face_refused_after_linking(
+    faced: &BTreeSet<u32>,
+    index: usize,
     interface: &v1::Interface,
-) -> Result<Vec<TokenStream>, GenerateError> {
-    let mut items = descriptors::one_interface_items(ctx, interface)?;
-    if let Some(module) = face::one_interface(interface)? {
-        items.push(module);
+    err: &GenerateError,
+) -> Result<(), GenerateError> {
+    let linked = u32::try_from(index).is_ok_and(|index| faced.contains(&index));
+    if !linked {
+        return Ok(());
     }
-    Ok(items)
+    let name = descriptors::declared_name(interface).unwrap_or_default();
+    Err(GenerateError {
+        message: format!(
+            "internal error: the face of interface `{name}` was refused after its \
+             descriptors were accepted, and doc links to it were already rendered: {}",
+            err.message
+        ),
+    })
 }
 
 /// The note left where an interface's face was skipped (design rule 2), or,
@@ -282,18 +345,24 @@ fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> Tok
             " The interface is `internal`, so it has no face in any case; only its \
              descriptors are absent, for the reason above."
         }
+        // The owner lines say what was refused and what the source can change
+        // to get a face. They cite no issue: a generated doc names none
+        // (the generated-code documentation design, "Maintainer notes"). The
+        // induced argument struct of driftsys/ridl#713 removes the first
+        // call-shape gap, and the translator of driftsys/ridl#704 removes the
+        // clause gap.
         FaceGap::CallShape => {
             " A call the face cannot carry — an interaction that does not declare \
              exactly one named parameter, or a query whose reply is not a named \
-             type. driftsys/ridl#713 adds the induced argument struct that removes \
-             the first."
+             type. Declare each command and query with one parameter of a named \
+             type, and give each query a named reply type, to get a face."
         }
         FaceGap::Clause => {
             " A contract clause outside the form the narrow translator accepts — \
              `<subject> <comparison> <numeric literal>`, conjoined with `&&`. \
-             driftsys/ridl#704 replaces the translator and removes this."
+             Write each `require` and `ensure` clause in that form to get a face."
         }
-        FaceGap::Other => " No tracking issue owns this one: the reason above is the whole of it.",
+        FaceGap::Other => " The reason above is the whole of it.",
     };
     // An internal interface has no face, so its trailer cannot say that the
     // face is built on the descriptor emitter, and its owner line already says
@@ -677,6 +746,11 @@ pub(crate) struct Ctx<'a> {
     /// Makes this model's package names what [`type_path`] reads while the
     /// context lives (driftsys/ridl#416).
     _build_packages: BuildPackages,
+    /// The indices into `model.interfaces` of the interfaces whose face
+    /// module this output holds, which a doc link may point at
+    /// ([`docs::Links`]). Empty unless the entry point emits a face: it sets
+    /// the set before it renders any doc.
+    faced: BTreeSet<u32>,
 }
 
 impl<'a> Ctx<'a> {
@@ -707,7 +781,13 @@ impl<'a> Ctx<'a> {
             model,
             visiting: RefCell::new(HashSet::new()),
             _build_packages: BuildPackages::install(model),
+            faced: BTreeSet::new(),
         }
+    }
+
+    /// The doc-link resolver over this model.
+    pub(crate) fn links(&self) -> docs::Links<'_> {
+        docs::Links::new(self.model, &self.faced)
     }
 
     /// The name of the package this model was lowered for.
@@ -951,14 +1031,14 @@ fn emit_decl(ctx: &Ctx, decl: &v1::Declaration) -> TokenStream {
     // never among the traits (`derives`, design decision 8).
     let derived = derives::derive_attr(ctx, decl);
     let item = match decl.kind.as_ref() {
-        Some(v1::declaration::Kind::Scalar(sc)) => emit_type_def(decl, sc, &derived),
+        Some(v1::declaration::Kind::Scalar(sc)) => emit_type_def(ctx, decl, sc, &derived),
         Some(v1::declaration::Kind::Constant(cd)) => {
             return allow_dead_code_if_internal(decl.visibility, emit_const(ctx, decl, cd));
         }
         Some(v1::declaration::Kind::Struct(sd)) => emit_struct(ctx, decl, sd, &derived),
-        Some(v1::declaration::Kind::Enum(ed)) => emit_enum(decl, ed, &derived),
-        Some(v1::declaration::Kind::EnumSet(esd)) => emit_enum_set(decl, esd, &derived),
-        Some(v1::declaration::Kind::Union(ud)) => emit_union(decl, ud, &derived),
+        Some(v1::declaration::Kind::Enum(ed)) => emit_enum(ctx, decl, ed, &derived),
+        Some(v1::declaration::Kind::EnumSet(esd)) => emit_enum_set(ctx, decl, esd, &derived),
+        Some(v1::declaration::Kind::Union(ud)) => emit_union(ctx, decl, ud, &derived),
         // An interaction rides `Interface.interactions`, never a package
         // declaration, so the lowering leaves the kind unset for one and
         // nothing emits them today.
@@ -999,18 +1079,20 @@ fn emit_decl(ctx: &Ctx, decl: &v1::Declaration) -> TokenStream {
 /// Each covered impl block uses the deprecated type, and without the allow
 /// the consumer's build draws the `deprecated` lint on code the consumer did
 /// not write.
-fn emit_type_def(decl: &v1::Declaration, sc: &v1::Scalar, derived: &TokenStream) -> TokenStream {
+fn emit_type_def(
+    ctx: &Ctx,
+    decl: &v1::Declaration,
+    sc: &v1::Scalar,
+    derived: &TokenStream,
+) -> TokenStream {
     let name = ident(declared(decl.name.as_ref()));
     let inner = newtype_inner(sc);
-    let doc = doc_attrs(&decl.doc);
-    let unchecked = unchecked_doc(sc);
-    // A blank doc line keeps the unchecked note out of the declaration's own
-    // doc paragraph.
-    let separator = if decl.doc.is_empty() || unchecked.is_empty() {
-        quote! {}
-    } else {
-        quote! { #[doc = ""] }
-    };
+    let doc = docs::doc_block(&docs::DocParts::declaration(decl), &ctx.links());
+    // The type's doc states the contract only (the generated-code
+    // documentation design, D-3). Whether `new` checks a `match` pattern is
+    // not written here: `constraint_checks` emits the pattern check only on a
+    // `String` backing and only under the `validate-pattern` feature, and the
+    // book's chapter on generated code records that, per backend.
     let deprecated = deprecated_attr(decl.deprecated.as_deref());
     let allow_deprecated = if decl.deprecated.is_some() {
         quote! { #[allow(deprecated)] }
@@ -1021,7 +1103,7 @@ fn emit_type_def(decl: &v1::Declaration, sc: &v1::Scalar, derived: &TokenStream)
     let type_name = declared(decl.name.as_ref());
 
     if sc.vacuous {
-        return emit_vacuous_type_def(decl, sc, derived);
+        return emit_vacuous_type_def(ctx, decl, sc, derived);
     }
 
     let check_param_ty = check_param_type(sc);
@@ -1031,8 +1113,6 @@ fn emit_type_def(decl: &v1::Declaration, sc: &v1::Scalar, derived: &TokenStream)
 
     quote! {
         #doc
-        #separator
-        #unchecked
         #derived
         #deprecated
         #[repr(transparent)]
@@ -1040,7 +1120,8 @@ fn emit_type_def(decl: &v1::Declaration, sc: &v1::Scalar, derived: &TokenStream)
 
         #allow_deprecated
         impl #name {
-            /// Constructs the value, enforcing its typl constraints.
+            /// Constructs the value, or returns an error when the value breaks a
+            /// constraint that the generated code checks.
             #vis fn new(
                 value: #inner,
             ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
@@ -1048,16 +1129,17 @@ fn emit_type_def(decl: &v1::Declaration, sc: &v1::Scalar, derived: &TokenStream)
                 ::core::result::Result::Ok(Self::new_unchecked(value))
             }
 
-            /// Checks `value` against this type's typl constraints, without
-            /// constructing it. `pub(crate)` rather than `pub`: a caller
-            /// outside `new` is a function generated into this crate — since
-            /// driftsys/ridl#467 that includes the codec of *another* package
-            /// of the same build, which reaches this type through the module
-            /// tree and so cannot see a private item here. The emitted crate
-            /// is one crate per build, so `pub(crate)` reaches every such
-            /// caller while adding nothing to the crate's public surface.
-            /// Whether this becomes `pub` is an open question of the public API surface.
-            /// `new` is the composition of this and `new_unchecked`.
+            // Checks `value` against this type's typl constraints, without
+            // constructing it. It is an internal and carries no doc.
+            // `pub(crate)` rather than `pub`: a caller outside `new` is a
+            // function generated into this crate — since driftsys/ridl#467
+            // that includes the codec of *another* package of the same build,
+            // which reaches this type through the module tree and so cannot
+            // see a private item here. The emitted crate is one crate per
+            // build, so `pub(crate)` reaches every such caller while adding
+            // nothing to the crate's public surface. Whether this becomes
+            // `pub` is an open question of the public API surface. `new` is
+            // the composition of this and `new_unchecked`.
             pub(crate) fn check(
                 value: #check_param_ty,
             ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -1114,19 +1196,14 @@ fn emit_type_def(decl: &v1::Declaration, sc: &v1::Scalar, derived: &TokenStream)
 /// typl package may declare `type From`, and that declaration shadows the
 /// prelude in the module the generated impl shares with it.
 fn emit_vacuous_type_def(
+    ctx: &Ctx,
     decl: &v1::Declaration,
     sc: &v1::Scalar,
     derived: &TokenStream,
 ) -> TokenStream {
     let name = ident(declared(decl.name.as_ref()));
     let inner = newtype_inner(sc);
-    let doc = doc_attrs(&decl.doc);
-    let unchecked = unchecked_doc(sc);
-    let separator = if decl.doc.is_empty() || unchecked.is_empty() {
-        quote! {}
-    } else {
-        quote! { #[doc = ""] }
-    };
+    let doc = docs::doc_block(&docs::DocParts::declaration(decl), &ctx.links());
     let deprecated = deprecated_attr(decl.deprecated.as_deref());
     let allow_deprecated = if decl.deprecated.is_some() {
         quote! { #[allow(deprecated)] }
@@ -1138,8 +1215,6 @@ fn emit_vacuous_type_def(
 
     quote! {
         #doc
-        #separator
-        #unchecked
         #derived
         #deprecated
         #[repr(transparent)]
@@ -1448,32 +1523,43 @@ fn scalar_getter(sc: &v1::Scalar, vis: TokenStream, inner: TokenStream) -> Token
     }
 }
 
-/// The gaps a generated constructor does not close, named on the type itself
-/// rather than left silent. A literal `match` pattern on a `String` backing is checked by `new`, but only under
-/// the `validate-pattern` feature, so the type names that condition rather
-/// than leaving the guarantee silently variable. On any other backing
-/// `constraint_checks` emits no pattern branch at all (a `regex::Regex`
-/// matches `&str`, and only a `String` backing's value coerces to one), so
-/// the plain "not checked" line applies there instead. `pattern_const` is
-/// read as well as `pattern`, because a pattern constant that did not resolve
-/// leaves `pattern` absent while the type still carries a match constraint,
-/// and no check is emitted for that case either, so it keeps the plain "not
-/// checked" line.
-fn unchecked_doc(sc: &v1::Scalar) -> TokenStream {
-    let Some(c) = sc.constraint.as_ref() else {
-        return quote! {};
+/// Whether the generated module of package `owner` holds an item for its
+/// declaration `decl`, by the rule [`emit_const`] applies: every kind but a
+/// constant is emitted, and a constant is emitted when it is a regex, a
+/// primitive other than `bytes`, or of a named scalar of its own package
+/// that is not backed by `bytes`. `owner` is the model's own package for a
+/// local declaration and the declaring package for a foreign one, whose
+/// type references index the same model.
+pub(crate) fn declaration_emitted(model: &v1::Model, owner: &str, decl: &v1::Declaration) -> bool {
+    let Some(v1::declaration::Kind::Constant(constant)) = decl.kind.as_ref() else {
+        return true;
     };
-    let mut lines = Vec::new();
-    if c.pattern.is_some() && class_backing(sc.class) == ScalarBacking::String {
-        lines.push(
-            " The `match` pattern is checked by `new` only when the crate is built with \
-              the `validate-pattern` feature."
-                .to_string(),
-        );
-    } else if c.pattern.is_some() || c.pattern_const.is_some() {
-        lines.push(" The `match` pattern is not checked by `new`.".to_string());
+    match constant.typed.as_ref() {
+        Some(v1::constant::Typed::RegexBody(_)) => true,
+        Some(v1::constant::Typed::Primitive(primitive)) => !matches!(
+            v1::PrimitiveType::try_from(*primitive),
+            Ok(v1::PrimitiveType::Bytes | v1::PrimitiveType::Unspecified) | Err(_)
+        ),
+        Some(v1::constant::Typed::Named(named)) => {
+            if !named.resolved || named.package != owner {
+                return false;
+            }
+            let target = if named.foreign {
+                model
+                    .foreign
+                    .get(named.index as usize)
+                    .and_then(|foreign| foreign.declaration.as_ref())
+            } else {
+                model.declarations.get(named.index as usize)
+            };
+            matches!(
+                target.and_then(|target| target.kind.as_ref()),
+                Some(v1::declaration::Kind::Scalar(scalar))
+                    if !matches!(class_backing(scalar.class), ScalarBacking::Bytes)
+            )
+        }
+        Some(v1::constant::Typed::Unresolved(_)) | None => false,
     }
-    quote! { #(#[doc = #lines])* }
 }
 
 /// A constant becomes a `pub const`. A constant of a `String`-backed named type
@@ -1483,7 +1569,7 @@ fn unchecked_doc(sc: &v1::Scalar) -> TokenStream {
 /// header and here.
 fn emit_const(ctx: &Ctx, decl: &v1::Declaration, cd: &v1::Constant) -> TokenStream {
     // A constant is a value, not a type: there is nothing to derive on it.
-    let attrs = decl_attrs(decl, &quote! {});
+    let attrs = decl_attrs(ctx, decl, &quote! {});
     let vis = vis_tokens(decl.visibility);
     let name = ident(declared(decl.name.as_ref()));
 
@@ -1572,7 +1658,7 @@ fn emit_struct(
     derived: &TokenStream,
 ) -> TokenStream {
     let name = ident(declared(decl.name.as_ref()));
-    let attrs = decl_attrs(decl, derived);
+    let attrs = decl_attrs(ctx, decl, derived);
     let vis = vis_tokens(decl.visibility);
     let repr = if sd.fixed_layout {
         quote! { #[repr(C)] }
@@ -1614,7 +1700,7 @@ fn emit_struct(
 /// (`claims::check`).
 fn emit_field(ctx: &Ctx, field: &v1::Field) -> TokenStream {
     let field_name = ident(snake_of(field.name.as_ref()));
-    let attrs = field_attrs(field);
+    let attrs = field_attrs(ctx, field);
     let ty = field
         .r#type
         .as_ref()
@@ -1626,15 +1712,20 @@ fn emit_field(ctx: &Ctx, field: &v1::Field) -> TokenStream {
 /// An enum becomes `#[repr(i64)]` with the declared discriminants (typl §8).
 /// Variant names are the pinned `pascal_case` of the typl name (ADR-0016,
 /// 2026-09-26 amendment), so `CHECK_ENGINE` becomes `CheckEngine`.
-fn emit_enum(decl: &v1::Declaration, ed: &v1::Enum, derived: &TokenStream) -> TokenStream {
+fn emit_enum(
+    ctx: &Ctx,
+    decl: &v1::Declaration,
+    ed: &v1::Enum,
+    derived: &TokenStream,
+) -> TokenStream {
     let name = ident(declared(decl.name.as_ref()));
-    let attrs = decl_attrs(decl, derived);
+    let attrs = decl_attrs(ctx, decl, derived);
     let vis = vis_tokens(decl.visibility);
 
     let variants = ed.values.iter().map(|value| {
         let vname = ident(&pascal_of(value.name.as_ref()));
         let disc = int_tokens(value.value);
-        let vdoc = doc_attrs(&value.doc);
+        let vdoc = docs::doc_block(&docs::DocParts::enum_value(value), &ctx.links());
         quote! { #vdoc #vname = #disc }
     });
 
@@ -1705,15 +1796,21 @@ fn emit_enum(decl: &v1::Declaration, ed: &v1::Enum, derived: &TokenStream) -> To
 /// consumer's build draws the `deprecated` lint on code the consumer did not
 /// write — which is what driftsys/ridl#420 settled for a named scalar's impl
 /// blocks.
-fn emit_enum_set(decl: &v1::Declaration, esd: &v1::EnumSet, derived: &TokenStream) -> TokenStream {
+fn emit_enum_set(
+    ctx: &Ctx,
+    decl: &v1::Declaration,
+    esd: &v1::EnumSet,
+    derived: &TokenStream,
+) -> TokenStream {
     let name = ident(declared(decl.name.as_ref()));
-    let attrs = decl_attrs(decl, derived);
+    let attrs = decl_attrs(ctx, decl, derived);
     let vis = vis_tokens(decl.visibility);
 
     let bits = esd.bits.iter().map(|bit| {
         let bname = ident(declared(bit.name.as_ref()));
         let shift = int_tokens(bit.value);
-        quote! { #vis const #bname: #name = #name(1 << #shift); }
+        let bdoc = docs::doc_block(&docs::DocParts::enum_value(bit), &ctx.links());
+        quote! { #bdoc #vis const #bname: #name = #name(1 << #shift); }
     });
 
     // Refusing a value that carries an undeclared bit is this backend's
@@ -1789,15 +1886,20 @@ fn emit_enum_set(decl: &v1::Declaration, esd: &v1::EnumSet, derived: &TokenStrea
 
 /// A union becomes a `pub enum` with one variant per arm; arm names are
 /// CamelCased (typl §10). Reserved arms are skipped.
-fn emit_union(decl: &v1::Declaration, ud: &v1::Union, derived: &TokenStream) -> TokenStream {
+fn emit_union(
+    ctx: &Ctx,
+    decl: &v1::Declaration,
+    ud: &v1::Union,
+    derived: &TokenStream,
+) -> TokenStream {
     let name = ident(declared(decl.name.as_ref()));
-    let attrs = decl_attrs(decl, derived);
+    let attrs = decl_attrs(ctx, decl, derived);
     let vis = vis_tokens(decl.visibility);
 
     let variants = ud.arms.iter().map(|arm| {
         let vname = ident(camel_of(arm.name.as_ref()));
         let ty = type_path(arm_reference(arm));
-        let vdoc = doc_attrs(&arm.doc);
+        let vdoc = docs::doc_block(&docs::DocParts::arm(arm), &ctx.links());
         quote! { #vdoc #vname(#ty) }
     });
 
@@ -2039,29 +2141,16 @@ pub(crate) enum ScalarBacking {
 /// comment because that is where Rust is conventionally written; it sits above
 /// `#[deprecated]` and the `#[repr(...)]` each emitter adds because a reader
 /// looks for the trait list first.
-fn decl_attrs(decl: &v1::Declaration, derived: &TokenStream) -> TokenStream {
-    let doc = doc_attrs(&decl.doc);
+fn decl_attrs(ctx: &Ctx, decl: &v1::Declaration, derived: &TokenStream) -> TokenStream {
+    let doc = docs::doc_block(&docs::DocParts::declaration(decl), &ctx.links());
     let deprecated = deprecated_attr(decl.deprecated.as_deref());
     quote! { #doc #derived #deprecated }
 }
 
-fn field_attrs(field: &v1::Field) -> TokenStream {
-    let doc = doc_attrs(&field.doc);
+fn field_attrs(ctx: &Ctx, field: &v1::Field) -> TokenStream {
+    let doc = docs::doc_block(&docs::DocParts::field(field), &ctx.links());
     let deprecated = deprecated_attr(field.deprecated.as_deref());
     quote! { #doc #deprecated }
-}
-
-/// One `#[doc]` attribute per line; prettyplease renders these as `///`
-/// comments. A leading space makes the rendered comment read `/// text`.
-pub(crate) fn doc_attrs(doc: &str) -> TokenStream {
-    if doc.is_empty() {
-        return quote! {};
-    }
-    let lines = doc.split('\n').map(|line| {
-        let text = format!(" {line}");
-        quote! { #[doc = #text] }
-    });
-    quote! { #(#lines)* }
 }
 
 /// `@deprecated` maps to `#[deprecated]`; a present-but-empty reason (the IR's

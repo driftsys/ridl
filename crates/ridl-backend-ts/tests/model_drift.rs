@@ -1,9 +1,9 @@
 //! The fact-level drift test (the codegen model design note §8.1).
 //!
-//! No backend reads the lowered codegen model yet: this one derives the
-//! scalar classes, the widths, the init rule and the import aliases from the
-//! raw IR, and `ridl_ir::codegen::lower` derives the same facts again for the
-//! model a plugin will read. Two derivations of one fact drift, and the pull
+//! This backend reads only its doc comments from the lowered codegen model:
+//! it derives the scalar classes, the widths, the init rule and the import
+//! aliases from the raw IR, and `ridl_ir::codegen::lower` derives the same
+//! facts again for the model a plugin will read. Two derivations of one fact drift, and the pull
 //! request that introduces the divergence is where it has to fail — so the
 //! generated TypeScript is read back line by line, in the style this crate's
 //! own tests use, and each fact the model also states is asserted equal to

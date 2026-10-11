@@ -784,7 +784,9 @@ clippy with `-D warnings` on the generated crate for `examples/cabin`, so a new
 lint, or a listed lint that no longer fires on it, fails that check. Single-file
 mode writes no `lib.rs`. A consumer that includes the generated file with
 `include!` puts `#[allow(clippy::derivable_impls, clippy::module_inception)]` on
-the `mod` that wraps the `include!`.
+the `mod` that wraps the `include!`, and gets unresolved intra-doc links from
+rustdoc, because the generated docs link by paths from the crate root
+([Documentation in the generated code](generated-code.md#documentation-in-the-generated-code)).
 
 **Two things it may leave out, each with a note in the source it writes.** A
 type whose size the compiler cannot bound — one that reaches itself, or a

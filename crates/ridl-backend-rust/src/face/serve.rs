@@ -65,16 +65,20 @@ pub(super) fn serve(
          polling it again after it resolved panics."
     );
 
-    let budget_doc = format!(
-        "The most claims one poll of `Serve` takes (driftsys/ridl#568). A \
-         future that holds one poll for an unbounded time blocks every other \
-         task on a single-threaded executor; {SERVE_BUDGET} bounds one poll \
-         and keeps the cost of registering the claim interest, paid once per \
-         poll, small beside the claims the poll settles."
-    );
-
+    // `SERVE_BUDGET` is the most claims one poll of `Serve` takes
+    // (driftsys/ridl#568). A future that holds one poll for an unbounded time
+    // blocks every other task on a single-threaded executor; the budget bounds
+    // one poll and keeps the cost of registering the claim interest, paid once
+    // per poll, small beside the claims the poll settles. It, `ServeState` and
+    // its variants are internals, so they carry no doc; `serve`'s own doc
+    // states the bound for the user.
+    //
+    // `ServeState` is where `serve` is, as its future's `poll` moves it:
+    // `Refused` when `Handler::serve` refused the members, which the first poll
+    // reports; `Serving`, where each poll registers the claim interest and
+    // settles at most `SERVE_BUDGET` claims; `Done` once the failure was
+    // reported.
     quote! {
-        #[doc = #budget_doc]
         const SERVE_BUDGET: usize = #budget;
 
         #[doc = #serve_doc]
@@ -109,16 +113,10 @@ pub(super) fn serve(
             state: ServeState,
         }
 
-        /// Where `serve` is, as its future's `poll` moves it.
         #[derive(Clone, Copy)]
         enum ServeState {
-            /// `Handler::serve` refused the members; the first poll reports
-            /// it.
             Refused(::ridl_rt::port::ServeError),
-            /// Each poll registers the claim interest and settles at most
-            /// `SERVE_BUDGET` claims.
             Serving,
-            /// The failure was reported.
             Done,
         }
 

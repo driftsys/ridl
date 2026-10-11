@@ -924,6 +924,10 @@ impl<'a> Codec<'a> {
             )
         };
         let headline = format!(" `{owner}` carries no `Payload<FlatBuffers>` implementation.");
+        // Withholding the codec is a silent omission in the sense ADR-0016
+        // decision 6 and ADR-0017 decision 4 rule out, and it is deliberate
+        // for now. That is a maintainer's fact, so it stays here rather than
+        // in the generated doc.
         Ok(quote! {
             #[doc = #headline]
             ///
@@ -935,9 +939,6 @@ impl<'a> Codec<'a> {
             /// tree. The causes above are the ones this call could meet.
             /// A type that reaches itself, and a stream, which has no single
             /// value to size, are never resolvable by any caller.
-            ///
-            /// This is a silent omission in the sense ADR-0016 decision 6 and
-            /// ADR-0017 decision 4 rule out, and it is deliberate for now.
             #[allow(dead_code, non_upper_case_globals)]
             const #name: () = ();
         })
@@ -1467,7 +1468,7 @@ impl<'a> Codec<'a> {
         let ty = ident(owner);
         let view = view_ident(owner);
         let doc =
-            format!(" A zero-copy accessor over FlatBuffers bytes `{owner}`'s `verify` accepted.");
+            format!(" A `{owner}` value in FlatBuffers bytes, read in place without copying it.");
 
         let mut accessors: Vec<TokenStream> = Vec::new();
         for slot in &table.slots {
@@ -1631,9 +1632,9 @@ impl<'a> Codec<'a> {
     ) -> Result<TokenStream, GenerateError> {
         let name = encode_ident(owner);
         let body = self.table_encode_body(table, &quote! { value })?;
-        let doc = format!(" Writes `{owner}` as a FlatBuffers table and returns its position.");
+        // Writes the value as a FlatBuffers table and returns its position.
+        // An internal: no doc.
         Ok(quote! {
-            #[doc = #doc]
             #[allow(deprecated, non_snake_case)]
             pub(crate) fn #name(
                 value: &#ty,
@@ -1831,13 +1832,12 @@ impl<'a> Codec<'a> {
     fn table_verify_fn(&self, owner: &str, table: &Table) -> Result<TokenStream, GenerateError> {
         let name = verify_ident(owner);
         let body = self.table_verify_body(owner, table)?;
-        let doc = format!(" Checks the FlatBuffers table at `table` against `{owner}`'s shape.");
+        // Checks the FlatBuffers table at `table` against the declaration's
+        // shape: the structure, enum discriminants, collection bounds, map key
+        // uniqueness, and named and anonymous scalar ranges, steps and
+        // lengths. Pattern checks require `validate-pattern`. An internal: no
+        // doc.
         Ok(quote! {
-            #[doc = #doc]
-            ///
-            /// Checks the structure, enum discriminants, collection bounds,
-            /// map key uniqueness, and named and anonymous scalar ranges,
-            /// steps and lengths. Pattern checks require `validate-pattern`.
             #[allow(deprecated, non_snake_case)]
             pub(crate) fn #name(
                 buf: &[::core::primitive::u8],
@@ -2079,20 +2079,17 @@ impl<'a> Codec<'a> {
             let value = self.slot_decode_expr(slot, &quote! { buf }, &quote! { table })?;
             fields.push(quote! { #field: #value });
         }
-        let doc = format!(" Builds `{owner}` from the FlatBuffers table at `table`.");
+        // Builds the value from the FlatBuffers table at `table`. An
+        // internal: no doc. It cannot fail. An absent non-optional scalar or
+        // enum field reads as its FlatBuffers default — 0, or the enum's zero
+        // member — which is a value `verify` accepted (driftsys/ridl#472). Any
+        // other read that could fail is discharged with the neutral value of
+        // its own type — zero, the empty string or collection, the first
+        // declared enum variant — and `verify` is what makes those branches
+        // unreachable. A named scalar is built with its unchecked constructor
+        // (`new_unchecked`) over a value `verify` has already range-checked
+        // (`check`), so this never re-checks and never fails.
         Ok(quote! {
-            #[doc = #doc]
-            ///
-            /// It cannot fail. An absent non-optional scalar or enum field
-            /// reads as its FlatBuffers default — 0, or the enum's zero
-            /// member — which is a value `verify` accepted
-            /// (driftsys/ridl#472). Any other read that could fail is
-            /// discharged with the neutral value of its own type — zero, the
-            /// empty string or collection, the first declared enum variant —
-            /// and `verify` is what makes those branches unreachable. A named scalar is
-            /// built with its unchecked constructor (`new_unchecked`) over a
-            /// value `verify` has already range-checked (`check`), so this
-            /// never re-checks and never fails.
             #[allow(deprecated, non_snake_case)]
             pub(crate) fn #name(buf: &[::core::primitive::u8], table: ::core::primitive::usize) -> #ty {
                 #ty { #(#fields),* }
@@ -2305,9 +2302,9 @@ impl<'a> Codec<'a> {
         };
 
         let doc =
-            format!(" A zero-copy accessor over FlatBuffers bytes `{owner}`'s `verify` accepted.");
+            format!(" A `{owner}` value in FlatBuffers bytes, read in place without copying it.");
         let value_doc = format!(
-            " The value the buffer carries. A union's arms have no one view type, so this \
+            " The value the bytes hold. A union's arms have no one view type, so this \
              decodes `{owner}` rather than borrowing it."
         );
 
@@ -2632,7 +2629,7 @@ impl<'a> Codec<'a> {
         let verify_body = &bodies.verify;
         let decode_body = &bodies.decode;
 
-        let doc = format!(" An accessor over FlatBuffers bytes `{owner}`'s `verify` accepted.");
+        let doc = format!(" A `{owner}` value in FlatBuffers bytes.");
         // A box holds one value, and `value()` hands it over rather than
         // borrowing it: for a scalar and an enum that is a read, and nothing
         // a nested view would save; for a string or a bytes backing it is an
@@ -2641,28 +2638,25 @@ impl<'a> Codec<'a> {
         // know.
         let value_doc = if matches!(wire, Wire::Text(_, _) | Wire::Bytes(_, _)) {
             format!(
-                " The value the box carries. `{owner}` owns its bytes, so this allocates — \
+                " The value the bytes hold. `{owner}` owns its bytes, so this allocates — \
                  unlike a struct field of the same type, which a view borrows in place."
             )
         } else {
             format!(
-                " The value the box carries. `{owner}` is one value, so this decodes it rather \
+                " The value the bytes hold. `{owner}` is one value, so this decodes it rather \
                  than borrowing it, which costs one read."
             )
         };
-        let encode_doc = format!(
-            " Writes `{owner}` as its box table and returns its position (ADR-0019 decision 8)."
-        );
 
+        // The view's doc states what it is for its user. How the bytes are
+        // laid out is an encoding internal and stays here: the buffer's root
+        // is the box table ADR-0019 decision 8 gives this declaration, one
+        // non-optional `value` field. A buffer carrying no slot for it holds
+        // the FlatBuffers default, 0, when 0 is a legal value of this type,
+        // and is `MissingRequired` when it is not.
         Ok(vec![
             quote! {
                 #[doc = #doc]
-                ///
-                /// The buffer's root is the box table ADR-0019 decision 8
-                /// gives this declaration: one non-optional `value` field. A
-                /// buffer carrying no slot for it holds the FlatBuffers
-                /// default, 0, when 0 is a legal value of this type, and is
-                /// `MissingRequired` when it is not.
                 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
                 #[allow(deprecated)]
                 #vis struct #view<'a> {
@@ -2690,8 +2684,9 @@ impl<'a> Codec<'a> {
                     }
                 }
             },
+            // Writes the value as its box table (ADR-0019 decision 8) and
+            // returns its position. An internal: no doc.
             quote! {
-                #[doc = #encode_doc]
                 #[allow(deprecated, non_snake_case)]
                 pub(crate) fn #encode_name(
                     value: &#ty,
@@ -2749,17 +2744,16 @@ impl<'a> Codec<'a> {
         Ok(quote! {
             #[allow(deprecated)]
             impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for #ty {
+                // `ridl_ir::projection::flatbuffers::max_size` computed the
+                // bound, which is the one implementation of it (design note
+                // D-6): each table is charged its `soffset`, its inline
+                // fields, its vtable and one alignment event per slot; a
+                // string four bytes per declared character plus a
+                // terminator; a collection its declared maximum. It is a
+                // literal rather than an expression over the field types
+                // because that slack is not expressible in Rust's type
+                // system. The doc states the bound, not how it is computed.
                 #[doc = #max_doc]
-                ///
-                /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-                /// which is the one implementation of the bound (design note
-                /// D-6): each table is charged its `soffset`, its inline
-                /// fields, its vtable and one alignment event per slot; a
-                /// string four bytes per declared character plus a
-                /// terminator; a collection its declared maximum. It is a
-                /// literal rather than an expression over the field types
-                /// because that slack is not expressible in Rust's type
-                /// system.
                 const MAX_SIZE: ::core::primitive::usize = #max;
 
                 type Buffer = [::core::primitive::u8; #max];

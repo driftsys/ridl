@@ -16,9 +16,13 @@ completion. The doc lints of this chapter are reported by `ridl check`,
 `ridl build`, the language server and the MCP tool `ridl_check`, with the levels
 of the project's `[lints]` table.
 
-**What is not built.** Generated code carries the doc text where a backend
-emitted it before, but no backend renders a link, a `@see` or a `@since`. There
-is no `ridl doc` command that writes a documentation site.
+The Rust and TypeScript backends write the docs, their links, the `@see`,
+`@since` and `@deprecated` tags and the item's rules into the generated code, as
+[Using the generated Rust code](generated-code.md#documentation-in-the-generated-code)
+describes.
+
+**What is not built.** There is no `ridl doc` command that writes a
+documentation site.
 
 ## A documented package
 

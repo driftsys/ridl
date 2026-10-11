@@ -475,9 +475,15 @@ compat-check: toolchain-check
 # its `lib.rs` does not allow, or an allow that no longer fires; a `lib.rs`
 # with no `#![allow(` line to rewrite; the crate emitted for the veh-cluster
 # corpus drawing a clippy diagnostic, with default features or without them, or
-# cargo finishing no build there; a planus crate in the resolved graph of `examples/cabin`; the
-# planus check running no test or more than one, which is what a renamed test
-# or a changed filter does.
+# cargo finishing no build there; `cargo doc` on either generated crate drawing
+# a broken or private intra-doc link; a planus crate in the resolved graph of
+# `examples/cabin`; the planus check running no test or more than one, which is
+# what a renamed test or a changed filter does.
+#
+# The generated rustdoc of both crates is built with `cargo doc` and the flags
+# `-D rustdoc::broken_intra_doc_links -D rustdoc::private_intra_doc_links`, so a
+# doc link that renders as a path rustdoc cannot resolve, or that points at a
+# private item, fails the run.
 #
 # The planus check is `xtask/tests/oracle_boundary.rs`'s
 # `the_generated_crate_reaches_no_planus_crate`, which is ignored for a plain
@@ -527,6 +533,13 @@ demo:
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p veh_cabin --locked --no-deps -- -D warnings
     mv examples/cabin/generated/lib.rs.bak examples/cabin/generated/lib.rs
     trap - EXIT
+    # The rustdoc of both generated crates, with a broken or private intra-doc
+    # link denied: the backend renders a doc link as a rustdoc path, and only
+    # rustdoc can say whether that path resolves.
+    for crate in veh_cabin ridl_generated; do
+        RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links -D rustdoc::private_intra_doc_links" \
+            cargo doc --locked --no-deps --manifest-path examples/cabin/Cargo.toml -p "$crate"
+    done
     # The generated crate with its default features off, for a target that
     # has no standard library, which is the proof that it links none: a target
     # that has one, `wasm32-unknown-unknown` included, builds a crate that is

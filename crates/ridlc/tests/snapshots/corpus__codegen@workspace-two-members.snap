@@ -49,6 +49,26 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": true
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [
+        {
+          "text": "range 0 ..= 250",
+          "range": {
+            "min": "0",
+            "max": "250"
+          }
+        },
+        {
+          "text": "step 0.5",
+          "step": "0.5"
+        },
+        {
+          "text": "unit km/h",
+          "unit": "km/h"
+        }
+      ],
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
         "unit": "km/h",
@@ -88,6 +108,26 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": true
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [
+        {
+          "text": "range -40 ..= 125",
+          "range": {
+            "min": "-40",
+            "max": "125"
+          }
+        },
+        {
+          "text": "step 0.1",
+          "step": "0.1"
+        },
+        {
+          "text": "unit Cel",
+          "unit": "Cel"
+        }
+      ],
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
         "unit": "Cel",
@@ -211,6 +251,10 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "struct": {
         "slots": [
           {
@@ -241,7 +285,27 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
                 "oneLevel": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "range 0 ..= 250",
+                  "range": {
+                    "min": "0",
+                    "max": "250"
+                  }
+                },
+                {
+                  "text": "step 0.5",
+                  "step": "0.5"
+                },
+                {
+                  "text": "unit km/h",
+                  "unit": "km/h"
+                }
+              ]
             }
           }
         ],
@@ -317,6 +381,26 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
           "source": "INIT_SOURCE_DERIVED",
           "oneLevel": true
         },
+        "links": [],
+        "see": [],
+        "since": [],
+        "rules": [
+          {
+            "text": "range 0 ..= 250",
+            "range": {
+              "min": "0",
+              "max": "250"
+            }
+          },
+          {
+            "text": "step 0.5",
+            "step": "0.5"
+          },
+          {
+            "text": "unit km/h",
+            "unit": "km/h"
+          }
+        ],
         "scalar": {
           "class": "SCALAR_CLASS_FLOAT",
           "unit": "km/h",

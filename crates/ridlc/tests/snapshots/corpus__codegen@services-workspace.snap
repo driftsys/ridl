@@ -50,6 +50,18 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": true
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [
+        {
+          "text": "range 0 ..= 7",
+          "range": {
+            "min": "0",
+            "max": "7"
+          }
+        }
+      ],
       "scalar": {
         "class": "SCALAR_CLASS_INTEGER",
         "constraint": {
@@ -87,6 +99,26 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": true
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [
+        {
+          "text": "range 0 ..= 100",
+          "range": {
+            "min": "0",
+            "max": "100"
+          }
+        },
+        {
+          "text": "step 0.5",
+          "step": "0.5"
+        },
+        {
+          "text": "unit %",
+          "unit": "%"
+        }
+      ],
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
         "unit": "%",
@@ -126,6 +158,18 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": true
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [
+        {
+          "text": "range 0 ..= 4294967295",
+          "range": {
+            "min": "0",
+            "max": "4294967295"
+          }
+        }
+      ],
       "scalar": {
         "class": "SCALAR_CLASS_INTEGER",
         "constraint": {
@@ -162,6 +206,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "enum": {
         "values": [
           {
@@ -173,7 +221,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "pascal": "Unlocked"
             },
             "value": "0",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           },
           {
             "name": {
@@ -184,7 +236,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "pascal": "Locked"
             },
             "value": "1",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           }
         ],
         "retired": [],
@@ -218,6 +274,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "struct": {
         "slots": [
           {
@@ -248,7 +308,19 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "oneLevel": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "range 0 ..= 7",
+                  "range": {
+                    "min": "0",
+                    "max": "7"
+                  }
+                }
+              ]
             }
           },
           {
@@ -279,7 +351,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "oneLevel": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": []
             }
           }
         ],
@@ -312,6 +388,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "enum": {
         "values": [
           {
@@ -323,7 +403,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "pascal": "Jammed"
             },
             "value": "0",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           },
           {
             "name": {
@@ -334,7 +418,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "pascal": "Unpowered"
             },
             "value": "1",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           }
         ],
         "retired": [],
@@ -380,6 +468,19 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "50"
               }
             },
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "interval 100000 ..= 1000000 us",
+                "timing": {
+                  "mode": "TIMING_MODE_RANGE",
+                  "minUs": "100000",
+                  "maxUs": "1000000"
+                }
+              }
+            ],
             "signal": {
               "payload": {
                 "type": {
@@ -439,6 +540,19 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "60"
               }
             },
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "interval 50000 ..= 500000 us",
+                "timing": {
+                  "mode": "TIMING_MODE_RANGE",
+                  "minUs": "50000",
+                  "maxUs": "500000"
+                }
+              }
+            ],
             "event": {
               "payload": {
                 "type": {
@@ -489,6 +603,17 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "43"
               }
             },
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 50000 us",
+                "responseBound": {
+                  "maxUs": "50000"
+                }
+              }
+            ],
             "command": {
               "params": [
                 {
@@ -509,7 +634,20 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                       "index": 0,
                       "kind": "DECL_KIND_SCALAR"
                     }
-                  }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": [
+                    {
+                      "text": "range 0 ..= 7",
+                      "range": {
+                        "min": "0",
+                        "max": "7"
+                      }
+                    }
+                  ]
                 }
               ],
               "request": {
@@ -574,6 +712,25 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "unsized": "readDoor.reply: DoorReport | DoorFault"
               }
             },
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 50000 us",
+                "responseBound": {
+                  "maxUs": "50000"
+                }
+              },
+              {
+                "text": "errors fleet.contracts.DoorFault",
+                "errors": {
+                  "names": [
+                    "fleet.contracts.DoorFault"
+                  ]
+                }
+              }
+            ],
             "query": {
               "params": [
                 {
@@ -594,7 +751,20 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                       "index": 0,
                       "kind": "DECL_KIND_SCALAR"
                     }
-                  }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": [
+                    {
+                      "text": "range 0 ..= 7",
+                      "range": {
+                        "min": "0",
+                        "max": "7"
+                      }
+                    }
+                  ]
                 }
               ],
               "request": {
@@ -686,6 +856,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "43"
               }
             },
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [],
             "fixed": {
               "payload": {
                 "optional": false,
@@ -731,6 +905,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "unsized": "readDoor"
         }
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "declared": {
         "declared": "DoorControl",
         "snake": "door_control",
@@ -774,6 +952,19 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "46"
               }
             },
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "interval 1000000 ..= 10000000 us",
+                "timing": {
+                  "mode": "TIMING_MODE_RANGE",
+                  "minUs": "1000000",
+                  "maxUs": "10000000"
+                }
+              }
+            ],
             "signal": {
               "payload": {
                 "type": {
@@ -832,6 +1023,24 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "unsized": "fuelLevel.request: ()"
               }
             },
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 50000 us",
+                "responseBound": {
+                  "maxUs": "50000"
+                }
+              },
+              {
+                "text": "ensure `result >= 0.0`",
+                "contract": {
+                  "kind": "CONTRACT_KIND_ENSURE",
+                  "source": "result >= 0.0"
+                }
+              }
+            ],
             "query": {
               "params": [],
               "reply": {
@@ -918,6 +1127,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "unsized": "fuelLevel"
         }
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "declared": {
         "declared": "Telemetry",
         "snake": "telemetry",
@@ -1160,6 +1373,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "enum": {
         "values": [
           {
@@ -1171,7 +1388,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "pascal": "Stuck"
             },
             "value": "0",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           },
           {
             "name": {
@@ -1182,7 +1403,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "pascal": "NoPower"
             },
             "value": "1",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           }
         ],
         "retired": [],
@@ -1297,6 +1522,19 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "46"
               }
             },
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "interval 200000 ..= 2000000 us",
+                "timing": {
+                  "mode": "TIMING_MODE_RANGE",
+                  "minUs": "200000",
+                  "maxUs": "2000000"
+                }
+              }
+            ],
             "signal": {
               "payload": {
                 "type": {
@@ -1355,6 +1593,17 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "43"
               }
             },
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 50000 us",
+                "responseBound": {
+                  "maxUs": "50000"
+                }
+              }
+            ],
             "command": {
               "params": [
                 {
@@ -1375,7 +1624,20 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                       "index": 1,
                       "kind": "DECL_KIND_SCALAR"
                     }
-                  }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": [
+                    {
+                      "text": "range 0 ..= 7",
+                      "range": {
+                        "min": "0",
+                        "max": "7"
+                      }
+                    }
+                  ]
                 }
               ],
               "request": {
@@ -1440,6 +1702,31 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "89"
               }
             },
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 50000 us",
+                "responseBound": {
+                  "maxUs": "50000"
+                }
+              },
+              {
+                "text": "require `door <= 7`",
+                "contract": {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "door <= 7"
+                }
+              },
+              {
+                "text": "ensure `result >= 0.0`",
+                "contract": {
+                  "kind": "CONTRACT_KIND_ENSURE",
+                  "source": "result >= 0.0"
+                }
+              }
+            ],
             "query": {
               "params": [
                 {
@@ -1460,7 +1747,20 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                       "index": 1,
                       "kind": "DECL_KIND_SCALAR"
                     }
-                  }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": [
+                    {
+                      "text": "range 0 ..= 7",
+                      "range": {
+                        "min": "0",
+                        "max": "7"
+                      }
+                    }
+                  ]
                 }
               ],
               "request": {
@@ -1595,6 +1895,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "43"
               }
             },
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [],
             "fixed": {
               "payload": {
                 "optional": false,
@@ -1658,6 +1962,25 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "unsized": "readDoor.reply: fleet.contracts.DoorReport | fleet.contracts.DoorFault"
               }
             },
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 50000 us",
+                "responseBound": {
+                  "maxUs": "50000"
+                }
+              },
+              {
+                "text": "errors fleet.contracts.DoorFault",
+                "errors": {
+                  "names": [
+                    "fleet.contracts.DoorFault"
+                  ]
+                }
+              }
+            ],
             "query": {
               "params": [
                 {
@@ -1678,7 +2001,20 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                       "index": 1,
                       "kind": "DECL_KIND_SCALAR"
                     }
-                  }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": [
+                    {
+                      "text": "range 0 ..= 7",
+                      "range": {
+                        "min": "0",
+                        "max": "7"
+                      }
+                    }
+                  ]
                 }
               ],
               "request": {
@@ -1775,6 +2111,25 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "unsized": "readLegacyDoor.reply: fleet.contracts.DoorReport | fleet.legacy.DoorFault"
               }
             },
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 50000 us",
+                "responseBound": {
+                  "maxUs": "50000"
+                }
+              },
+              {
+                "text": "errors fleet.legacy.DoorFault",
+                "errors": {
+                  "names": [
+                    "fleet.legacy.DoorFault"
+                  ]
+                }
+              }
+            ],
             "query": {
               "params": [
                 {
@@ -1795,7 +2150,20 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                       "index": 1,
                       "kind": "DECL_KIND_SCALAR"
                     }
-                  }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": [
+                    {
+                      "text": "range 0 ..= 7",
+                      "range": {
+                        "min": "0",
+                        "max": "7"
+                      }
+                    }
+                  ]
                 }
               ],
               "request": {
@@ -1875,6 +2243,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "unsized": "readDoor"
         }
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "service": {
         "dotted": "fleet.vehicle.mirrors",
         "segments": [
@@ -1905,7 +2277,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "labels": [],
       "interfaceRefs": [
         "fleet.contracts.DoorControl"
-      ]
+      ],
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": []
     },
     {
       "name": {
@@ -1924,7 +2300,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "labels": [],
       "interfaceRefs": [
         "fleet.contracts.DoorControl"
-      ]
+      ],
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": []
     },
     {
       "name": {
@@ -1942,7 +2322,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "labels": [],
       "interfaceRefs": [
         "fleet.contracts.Telemetry"
-      ]
+      ],
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": []
     },
     {
       "name": {
@@ -1961,7 +2345,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "interfaceRefs": [
         "fleet.contracts.DoorControl",
         "fleet.contracts.Telemetry"
-      ]
+      ],
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": []
     },
     {
       "name": {
@@ -1978,7 +2366,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "doc": "An inline shape in a package that owns none of its vocabulary: every\npayload, parameter and return type here is a cross-package reference\nresolved through the workspace members above.",
       "labels": [],
       "interfaceRefs": [],
-      "inlineShape": 0
+      "inlineShape": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": []
     }
   ],
   "catalog": {
@@ -2021,6 +2413,26 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "source": "INIT_SOURCE_DERIVED",
           "oneLevel": true
         },
+        "links": [],
+        "see": [],
+        "since": [],
+        "rules": [
+          {
+            "text": "range 0 ..= 100",
+            "range": {
+              "min": "0",
+              "max": "100"
+            }
+          },
+          {
+            "text": "step 0.5",
+            "step": "0.5"
+          },
+          {
+            "text": "unit %",
+            "unit": "%"
+          }
+        ],
         "scalar": {
           "class": "SCALAR_CLASS_FLOAT",
           "unit": "%",
@@ -2063,6 +2475,18 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "source": "INIT_SOURCE_DERIVED",
           "oneLevel": true
         },
+        "links": [],
+        "see": [],
+        "since": [],
+        "rules": [
+          {
+            "text": "range 0 ..= 7",
+            "range": {
+              "min": "0",
+              "max": "7"
+            }
+          }
+        ],
         "scalar": {
           "class": "SCALAR_CLASS_INTEGER",
           "constraint": {
@@ -2102,6 +2526,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "source": "INIT_SOURCE_DERIVED",
           "oneLevel": false
         },
+        "links": [],
+        "see": [],
+        "since": [],
+        "rules": [],
         "struct": {
           "slots": [
             {
@@ -2132,7 +2560,19 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   "oneLevel": true
                 },
                 "doc": "",
-                "labels": []
+                "labels": [],
+                "links": [],
+                "see": [],
+                "since": [],
+                "rules": [
+                  {
+                    "text": "range 0 ..= 7",
+                    "range": {
+                      "min": "0",
+                      "max": "7"
+                    }
+                  }
+                ]
               }
             },
             {
@@ -2163,7 +2603,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   "oneLevel": true
                 },
                 "doc": "",
-                "labels": []
+                "labels": [],
+                "links": [],
+                "see": [],
+                "since": [],
+                "rules": []
               }
             }
           ],
@@ -2199,6 +2643,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "source": "INIT_SOURCE_DERIVED",
           "oneLevel": false
         },
+        "links": [],
+        "see": [],
+        "since": [],
+        "rules": [],
         "enum": {
           "values": [
             {
@@ -2210,7 +2658,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "pascal": "Unlocked"
               },
               "value": "0",
-              "doc": ""
+              "doc": "",
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": []
             },
             {
               "name": {
@@ -2221,7 +2673,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "pascal": "Locked"
               },
               "value": "1",
-              "doc": ""
+              "doc": "",
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": []
             }
           ],
           "retired": [],
@@ -2258,6 +2714,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "source": "INIT_SOURCE_DERIVED",
           "oneLevel": false
         },
+        "links": [],
+        "see": [],
+        "since": [],
+        "rules": [],
         "enum": {
           "values": [
             {
@@ -2269,7 +2729,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "pascal": "Jammed"
               },
               "value": "0",
-              "doc": ""
+              "doc": "",
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": []
             },
             {
               "name": {
@@ -2280,7 +2744,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "pascal": "Unpowered"
               },
               "value": "1",
-              "doc": ""
+              "doc": "",
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": []
             }
           ],
           "retired": [],
@@ -2317,6 +2785,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "source": "INIT_SOURCE_DERIVED",
           "oneLevel": false
         },
+        "links": [],
+        "see": [],
+        "since": [],
+        "rules": [],
         "enum": {
           "values": [
             {
@@ -2328,7 +2800,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "pascal": "Stuck"
               },
               "value": "0",
-              "doc": ""
+              "doc": "",
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": []
             },
             {
               "name": {
@@ -2339,7 +2815,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "pascal": "NoPower"
               },
               "value": "1",
-              "doc": ""
+              "doc": "",
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": []
             }
           ],
           "retired": [],

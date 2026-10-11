@@ -9,10 +9,12 @@
 //! named declaration, the rules are that declaration's rules. [`render`] gives
 //! each rule as one short line of text, for a Markdown list in an editor hover.
 //!
-//! The function reads the IR and adds nothing to it. The shape of [`Rule`] is
-//! provisional: it is an input to spec 2b, which decides whether the IR stores
-//! the list or each backend calls this function, and may change the shape when
-//! it does. Until then, hover in the language server is its only consumer.
+//! The function reads the IR and adds nothing to it. The IR does not store the
+//! list: the codegen lowering calls this function and writes each rule into
+//! the codegen model, with its [`render`] line as the rule's text, and the
+//! language server's hover calls it too (ADR-0028). The model carries the
+//! shape of [`Rule`], so a change to [`Rule`] or to [`render`] is a change to
+//! `ridl.codegen.v1` (ADR-0026 decision 9).
 
 use crate::v2;
 

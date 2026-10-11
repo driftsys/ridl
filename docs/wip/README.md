@@ -50,7 +50,13 @@ durable records. The on-request encodings design and plan
 (`2026-10-10-on-request-encodings-{design,plan}.md`) were archived on
 2026-10-10, when sub-stage 1a was complete; the 2026-10-10 amendments of
 ADR-0002, ADR-0018, ADR-0020, ADR-0021 and ADR-0023 are their durable records,
-and the unbuilt sub-stage 1b stays here (below).
+and the unbuilt sub-stage 1b stays here (below). The docs-in-generated-code
+design, plan and brainstorm handoff
+(`2026-10-10-docs-in-generated-code-{design,handoff}.md` and
+`2026-10-11-docs-in-generated-code-plan.md`) were archived on 2026-10-11, once
+the work landed; [ADR-0028](../decisions/ADR-0028-docs-in-generated-code.md) and
+the amendment of [ADR-0026](../decisions/ADR-0026-doc-comments.md) are their
+durable records.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the

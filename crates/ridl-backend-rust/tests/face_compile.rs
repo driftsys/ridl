@@ -176,7 +176,7 @@ fn an_internal_interface_gets_no_face_through_the_pipeline() {
 }
 
 /// The skip note of a public interface whose call the face cannot carry names
-/// the call shape and its tracking issue.
+/// the call shape and what the source can change to get a face.
 #[test]
 fn a_public_interface_with_an_uncarried_call_leaves_the_call_shape_note() {
     let source = r#"
@@ -200,7 +200,8 @@ interface Wide {
     let owner = &text[text
         .find("A call the face cannot carry")
         .expect("owner line")..];
-    assert!(owner.contains("driftsys/ridl#713"), "{text}");
+    assert!(owner.contains("to get a face"), "{text}");
+    assert!(!text.contains("driftsys/ridl"), "{text}");
     assert!(!text.contains("The interface is `internal`"), "{text}");
     assert!(
         owner.contains("which the face is built on"),
@@ -209,7 +210,7 @@ interface Wide {
 }
 
 /// The skip note of a public interface whose query the face cannot carry
-/// names the call shape and its tracking issue. The command case above reaches
+/// names the call shape and what the source can change to get a face. The command case above reaches
 /// the command arm of `face_gap`'s match; this one reaches the query arm
 /// through its parameter operand (two parameters), and the next one through
 /// its reply operand.
@@ -235,7 +236,8 @@ interface Wide {
     let owner = &text[text
         .find("A call the face cannot carry")
         .unwrap_or_else(|| panic!("the call-shape owner line:\n{text}"))..];
-    assert!(owner.contains("driftsys/ridl#713"), "{text}");
+    assert!(owner.contains("to get a face"), "{text}");
+    assert!(!text.contains("driftsys/ridl"), "{text}");
 }
 
 /// A public query with one named parameter and an inline tuple reply reaches
@@ -263,7 +265,8 @@ interface Wide {
     let owner = &text[text
         .find("A call the face cannot carry")
         .unwrap_or_else(|| panic!("the call-shape owner line:\n{text}"))..];
-    assert!(owner.contains("driftsys/ridl#713"), "{text}");
+    assert!(owner.contains("to get a face"), "{text}");
+    assert!(!text.contains("driftsys/ridl"), "{text}");
     assert!(!text.contains("No tracking issue owns this one"), "{text}");
 }
 

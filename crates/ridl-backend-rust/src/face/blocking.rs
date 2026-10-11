@@ -25,7 +25,10 @@
 //! waits — an event, a command or a query; a signal-only interface's `Client`
 //! never blocks, so it gets no `blocking` module.
 
-use super::{Call, Member, catalog_panics_doc, client_bounds, ident, type_path};
+use super::{
+    Call, Member, allow_deprecated, call_doc, catalog_panics_doc, client_bounds, deprecated_attr,
+    ident, member_doc, type_path,
+};
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 
@@ -87,10 +90,11 @@ pub(super) fn blocking(
 /// represented, and the call future's own deadline saturates for the same
 /// reason; a timeout that large is a wait with no bound.
 fn deadline_after() -> TokenStream {
+    // The emitted function returns the instant `timeout` ends for a wait that
+    // starts now: `None` with no timeout, and with a timeout so large that the
+    // instant cannot be represented, which is then a wait with no bound. It
+    // is private, so it carries no doc.
     quote! {
-        /// The instant `timeout` ends for a wait that starts now. `None`
-        /// with no timeout, and with a timeout so large that the instant
-        /// cannot be represented, which is then a wait with no bound.
         fn __deadline_after(
             timeout: ::core::option::Option<::std::time::Duration>,
         ) -> ::core::option::Option<::std::time::Instant> {
@@ -126,8 +130,13 @@ fn client(
             "Reads signal `{}`, as `Client::{method}` does: a read never waits.",
             member.declared
         );
+        let doc = member_doc(member, &doc);
+        let deprecated = deprecated_attr(member.deprecated);
+        let allow = allow_deprecated(std::iter::once(member));
         methods.push(quote! {
-            #[doc = #doc]
+            #doc
+            #deprecated
+            #allow
             pub fn #method(
                 &self,
             ) -> ::core::result::Result<
@@ -170,8 +179,9 @@ fn client(
                  `Subscribe::{method}` does.",
                 member.declared
             );
+            let doc = member_doc(member, &doc);
             quote! {
-                #[doc = #doc]
+                #doc
                 fn #method(
                     &mut self,
                 ) -> ::core::result::Result<(), ::ridl_rt::port::SubscribeError> {
@@ -322,10 +332,15 @@ fn call_method(call: &Call, kind: &str, output: TokenStream, expired: &str) -> T
          `Transport::{expired}`; either way nothing is left waiting at the port.",
         member.declared,
     );
+    let doc = call_doc(call, &doc);
+    let deprecated = deprecated_attr(member.deprecated);
+    let allow = allow_deprecated(std::iter::once(member));
     let expired = ident(expired);
     let expired = quote! { ::ridl_rt::error::Transport::#expired };
     quote! {
-        #[doc = #doc]
+        #doc
+        #deprecated
+        #allow
         pub fn #method(
             &mut self,
             #arg: #path,

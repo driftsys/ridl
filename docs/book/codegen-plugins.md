@@ -192,6 +192,40 @@ hold a comment, such as JSON, carries neither. Where the key comes from, and
 how a project sets the header, is in the
 [CLI reference](cli-reference.md#ridl-build).
 
+### The documentation fields
+
+Every message of the model that carries a `doc` carries four more fields beside
+it: `Declaration`, `Field`, `EnumValue`, `Arm`, `Interface`, `Interaction`,
+`Service` and `Param`. A plugin that writes doc comments reads them there:
+
+- **`links`** — the resolved links of `doc`, in source order. Each is a
+  `DocLink`: `text` is the link text as written, `offset` and `len` are the
+  link's byte position in `doc`, and `target` is the item it names. Replace the
+  `len` bytes at each `offset` with the plugin's link syntax, from the last link
+  to the first, so that each earlier offset stays valid.
+- **`see`** — the `@see` targets, in source order, as `DocLink`s whose `offset`
+  and `len` are 0.
+- **`since`** — the `@since` versions, in source order.
+- **`rules`** — the rules of the item. A `Rule` has a `text`, the line the
+  editor's hover shows for it, and a `kind`, a `oneof` of the structured fields:
+  `range`, `step`, `unit`, `length`, `pattern`, `collection_bound`, `timing`,
+  `response_bound`, `errors` or `contract` (a `require` or an `ensure`
+  clause). `rules` is filled on a `Declaration`, an `Interaction`, a `Field` and
+  a `Param`, and is empty on the other carriers.
+
+`DocLink.target` is a qualified name, `pkg.Name` with an optional `.member`,
+not a spelling in any target language. A plugin maps it to its own path with
+its own name transform ([ADR-0016][adr-0016]). The in-tree backends write a
+target that has no item in their output as a code span of the qualified name,
+so that the output holds no link that does not resolve.
+
+A new kind of rule is a new `oneof` member, which is an additive change. A
+plugin renders `Rule.text` for a `kind` it does not know, so its docs stay
+complete: `ridl_ir::codegen::request_from_json` drops a member it does not
+know and keeps `text`. `Param` carries the parameter's own `doc` as well. How
+the in-tree backends render these fields is in
+[Documentation in the generated code](generated-code.md#documentation-in-the-generated-code).
+
 ### The deployment section
 
 The deployment section holds the facts of one deployment of the workspace's

@@ -177,6 +177,37 @@ fn rust_emit_writes_a_compiling_crate() {
     assert!(lib.contains("pub mod veh"), "lib.rs was:\n{lib}");
 }
 
+/// What `ridl build --emit rust` relies on for a field whose type another
+/// package declares: the build lowers each package with the other packages in
+/// scope, so the field's doc carries that type's `# Rules`. `veh.common`'s
+/// `Reading.speed` is of `veh.Speed`, a ranged type declared in `veh`.
+#[test]
+fn a_field_of_a_ranged_type_of_another_package_carries_its_rules_in_the_emitted_rust() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let root = write_prefix_package_workspace(dir.path());
+    let out = tempfile::tempdir().expect("temp dir");
+    let run = ridlc::run_build(&root, out.path(), &[Emit::Rust], false.into()).expect("build runs");
+    assert!(
+        !run.has_error(),
+        "expected no error, got: {:?}",
+        run.diagnostics
+    );
+    let source = std::fs::read_to_string(out.path().join("veh.common.rs"))
+        .expect("the build writes veh.common.rs");
+    let reading = source
+        .split_once("pub struct Reading")
+        .map(|(_, rest)| rest)
+        .expect("`Reading` is generated");
+    let field = reading
+        .split_once("pub speed:")
+        .map(|(doc, _)| doc)
+        .expect("`Reading.speed` is generated");
+    assert!(
+        field.contains("/// # Rules") && field.contains("/// - range 0 ..= 250"),
+        "the field's rules, got:\n{field}"
+    );
+}
+
 /// Both generated files begin with their own generated-by marker. The two
 /// lines are load-bearing rather than decorative: a build refuses to overwrite
 /// a `lib.rs` or a `Cargo.toml` that does not begin with them
@@ -1600,8 +1631,8 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
         source.contains("Interface `VehicleStatus` carries no generated interaction face."),
         "the note names the interface in prose, got:\n{source}"
     );
-    // It carries a reason and the story that removes the limit, which is what
-    // makes it a note rather than a silent omission.
+    // It carries a reason and what the source can change to get a face,
+    // which is what makes it a note rather than a silent omission.
     assert!(
         source.contains("The emitter refused it:"),
         "the note carries the refusal's own reason, got:\n{source}"
@@ -1609,8 +1640,8 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
     // The owner line must match the reason above it. `VehicleStatus` has a
     // call-shape gap *and* an untranslatable clause, and the refusal that
     // stopped it is the clause — so a note that reads the interface instead
-    // of the refusal names the multi-parameter story under a clause reason,
-    // which is what this pins.
+    // of the refusal names the call-shape gap under a clause reason, which is
+    // what this pins.
     let note = source
         .split("const __RIDL_NO_FACE_VehicleStatus")
         .next()
@@ -1627,10 +1658,14 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
         "a public note's trailer names the face, got:\n{note}"
     );
     assert!(
-        note.contains("driftsys/ridl#704") && !note.contains("driftsys/ridl#713"),
-        "the owner line must name the clause issue, not the multi-parameter \
-         one, got:\n{note}"
+        note.contains("Write each `require` and `ensure` clause in that form")
+            && !note.contains("A call the face cannot carry"),
+        "the owner line must name the clause gap, not the call-shape one, \
+         got:\n{note}"
     );
+    // A generated doc cites no issue (the generated-code documentation
+    // design, "Maintainer notes").
+    assert!(!note.contains("driftsys/ridl"), "{note}");
     // A run of literal spaces inside a note is a broken line continuation in
     // the emitter's string, which reaches the reader's source. Both notes are
     // checked: `VehicleStatus` carries the clause owner line, and
@@ -1654,8 +1689,9 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
         "the internal interface's note names its descriptors, got:\n{internal_note}"
     );
     assert!(
-        internal_note.contains("driftsys/ridl#713"),
-        "the refusal reason names the argument-struct issue, got:\n{internal_note}"
+        internal_note.contains("must declare exactly one parameter")
+            && !internal_note.contains("driftsys/ridl"),
+        "the refusal reason names the call shape and no issue, got:\n{internal_note}"
     );
     assert!(
         internal_note.contains("The interface is `internal`, so it has no face in any case"),

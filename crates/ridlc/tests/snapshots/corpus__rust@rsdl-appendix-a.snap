@@ -4,9 +4,9 @@ expression: compiled.rust
 input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
 ---
 // ===== package veh.adas =====
-/**Descriptor for interface `CruiseControl`.
+/**Descriptor for interface `CruiseControl`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
 
-Its size table in FlatBuffers is `<CruiseControl as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound. The face holds the table's claim and event buffers.*/
+Its size table in FlatBuffers is `<CruiseControl as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.*/
 pub struct CruiseControl;
 impl ::ridl_rt::contract::Interface for CruiseControl {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -101,6 +101,7 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for CruiseCont
     const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
     const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
 }
+#[doc(hidden)]
 pub struct CruiseControlEngaged;
 impl ::ridl_rt::contract::Interaction for CruiseControlEngaged {
     type Iface = CruiseControl;
@@ -113,6 +114,7 @@ impl ::ridl_rt::contract::Signal for CruiseControlEngaged {
         <crate::veh::common::Engaged as ::core::default::Default>::default()
     }
 }
+#[doc(hidden)]
 pub struct CruiseControlTarget;
 impl ::ridl_rt::contract::Interaction for CruiseControlTarget {
     type Iface = CruiseControl;
@@ -125,6 +127,7 @@ impl ::ridl_rt::contract::Signal for CruiseControlTarget {
         <crate::veh::common::Speed as ::core::default::Default>::default()
     }
 }
+#[doc(hidden)]
 pub struct CruiseControlSetLever;
 impl ::ridl_rt::contract::Interaction for CruiseControlSetLever {
     type Iface = CruiseControl;
@@ -133,17 +136,14 @@ impl ::ridl_rt::contract::Interaction for CruiseControlSetLever {
 }
 impl ::ridl_rt::contract::Command for CruiseControlSetLever {
     type Args = crate::veh::common::LeverCmd;
-    ///Evaluates the `require` clauses. This translation covers one clause form — `<subject> <comparison> <numeric literal>` — and driftsys/ridl#704 replaces it with one driven by the structured expression tree.
     fn require(_args: &Self::Args) -> ::core::result::Result<(), ()> {
         ::core::result::Result::Ok(())
     }
 }
 ///The generated interaction face of interface `CruiseControl`.
 pub mod cruise_control {
-    ///Identifies one sent command `setLever` to its caller. It is returned by the internal send and accepted by that call's own outcome read, and by no other.
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     pub(crate) struct SetLeverCorrelation(pub ::ridl_rt::port::Correlation);
-    ///Panics unless `found` is the catalog the face of interface `CruiseControl` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new` of the face, and `serve` where the interface emits one, call it once, before they store or use the port.
     #[track_caller]
     fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
         let expected = <super::CruiseControl as ::ridl_rt::contract::Interface>::CATALOG;
@@ -166,6 +166,10 @@ pub mod cruise_control {
             + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
     > Client<P> {
         ///Reads signal `engaged` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///
+        /// # Rules
+        ///
+        /// - interval 100000 ..= 1000000 us
         pub fn engaged(
             &self,
         ) -> ::core::result::Result<
@@ -224,6 +228,10 @@ pub mod cruise_control {
             })
         }
         ///Reads signal `target` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///
+        /// # Rules
+        ///
+        /// - interval 100000 ..= 1000000 us
         pub fn target(
             &self,
         ) -> ::core::result::Result<
@@ -284,6 +292,14 @@ pub mod cruise_control {
         /**Sends command `setLever` and returns its future. The call is sent when this method runs, not when the future is first polled, and the future resolves on the outcome. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
 
 The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.*/
+        ///
+        /// # Rules
+        ///
+        /// - response within 50000 us
+        ///
+        /// # Parameters
+        ///
+        /// - `cmd`
         pub fn set_lever(
             &mut self,
             cmd: crate::veh::common::LeverCmd,
@@ -332,32 +348,18 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         phase: SetLeverPhase,
         deadline: ::core::option::Option<::ridl_rt::sample::Timestamp>,
     }
-    ///Where command `setLever` is, as its future's `poll` moves it.
     enum SetLeverPhase {
-        /// The port answered `SendError::Busy`; the argument is kept for
-        /// the retry.
         Unsent(crate::veh::common::LeverCmd),
-        /// Sent, and waiting for the outcome under this correlation.
         Waiting(SetLeverCorrelation),
-        /// The send failed before anything was sent; the first poll
-        /// reports it.
         Failed(::ridl_rt::port::SendError),
-        /// The output was taken.
         Done,
     }
     impl<
         P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
     > SetLeverCall<'_, P> {
-        /// Whether the call's bound has passed on the port's clock. A
-        /// call with no bound never expires here.
         fn expired(&self) -> bool {
             self.deadline.is_some_and(|deadline| self.port.now() > deadline)
         }
-        /// Whether the call was sent and waits for its outcome. The
-        /// blocking client asks this when `block_on` gives up, to answer
-        /// as the future would at its own deadline; it is under `std`
-        /// with that client, so a build without the feature has no
-        /// unused item.
         #[cfg(feature = "std")]
         fn sent(&self) -> bool {
             matches!(self.phase, SetLeverPhase::Waiting(_))
@@ -451,7 +453,6 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             }
         }
     }
-    ///Sends command `setLever` once and returns the correlation of its outcome, or the send's failure. A `require` clause that fails is `SendError::Contract(Contract::PreconditionFailed)` and nothing is sent. `Client::set_lever` calls it when the method runs, and `SetLeverCall` calls it again on each poll while the port answers `SendError::Busy`.
     pub(crate) fn send_set_lever<P: ::ridl_rt::port::Caller>(
         __port: &mut P,
         cmd: &crate::veh::common::LeverCmd,
@@ -488,7 +489,6 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             )
             .map(SetLeverCorrelation)
     }
-    ///Reads command `setLever`'s delivery acknowledgment: `Some` once it is known, `None` while it is not. It does not wait; `SetLeverCall` polls it.
     pub(crate) fn poll_set_lever_ack<P: ::ridl_rt::port::Caller>(
         port: &mut P,
         correlation: SetLeverCorrelation,
@@ -497,7 +497,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     > {
         port.ack(correlation.0)
     }
-    ///Stages the invalid state of one signal of interface `CruiseControl`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>` (ADR-0023 decision 7); `prelude` brings it into scope anonymously.
+    ///Stages the invalid state of one signal of interface `CruiseControl`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>`; `prelude` brings it into scope anonymously.
     pub trait Invalidate {
         ///Stages the invalid state for signal `engaged`, with `Cause::Declared`. It is published by `commit`.
         fn invalidate_engaged(
@@ -514,6 +514,10 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     }
     impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
         ///Stages a new value for signal `engaged`. It is published by `commit`.
+        ///
+        /// # Rules
+        ///
+        /// - interval 100000 ..= 1000000 us
         pub fn engaged(
             &mut self,
             value: crate::veh::common::Engaged,
@@ -542,6 +546,10 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                 )
         }
         ///Stages a new value for signal `target`. It is published by `commit`.
+        ///
+        /// # Rules
+        ///
+        /// - interval 100000 ..= 1000000 us
         pub fn target(
             &mut self,
             value: crate::veh::common::Speed,
@@ -614,17 +622,16 @@ Panics when `port` is attached to a catalog other than the one this face was gen
 An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses, and the generated payload types implement neither `Copy` nor `Clone`.*/
     pub trait Provider {
         ///Serves command `setLever`. It returns nothing: a command has no failure the application reports (ridl §6.1). Arguments that break their typl constraints or the `require` clauses never reach it.
+        ///
+        /// # Rules
+        ///
+        /// - response within 50000 us
+        ///
+        /// # Parameters
+        ///
+        /// - `cmd`
         fn set_lever(&mut self, cmd: &crate::veh::common::LeverCmd);
     }
-    /**Settles the claims of interface `CruiseControl` that are waiting, up to `budget` of them, and returns how many were settled, or the handler port's failure. It is the one-pass step `serve` calls on each poll.
-
-It does not wait: it makes one pass over the claims the handler already has and returns. `budget` is decreased by one for each claim taken from `Handler::next_claim`, whether or not its settlement is accepted — except an oversized claim whose settlement the handler refused, below — and the pass stops when it reaches 0 without asking for another claim. With a buffer of at least `<CruiseControl as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 means the handler has no claim waiting, or refused the settlement of an oversized claim that stays waiting; `Ok` with `budget` at 0 means claims may still be waiting; `Err` means `Handler::next_claim` failed, and every claim settled before the failure stays settled. `ReadError::ShortClaim` is not a failure: the claim's arguments do not fit `<CruiseControl as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE`, the interface's largest argument or reply payload, so they are larger than any valid encoding of this interface's members, and the claim is settled `Transport::Corrupt` by its id without being read, whichever interface or member it names — a claim naming another interface may be validly larger, and is settled `Corrupt` too, because this step cannot read it; it counts toward `budget`, and the pass continues. When the handler refuses that settlement the pass ends at once, returning the count so far with the budget unspent, as if no claim were waiting, because the runtime keeps the unsettled claim the next one; the claims behind it wait until the handler can settle it (driftsys/ridl#569).
-
-`buf` must be at least `<CruiseControl as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes, because a reply is encoded into the same buffer as the arguments. A shorter buffer returns `Ok(0)` without consuming a claim or changing `budget`.
-
-Every claim that is taken is settled, including one whose interface number or ordinal this interface does not recognise, which settles `Contract::UnknownInteraction`. A claim is counted only once `Handler::settle` has accepted it; a `SettleError` is left to the handler, which already owns that claim's settlement, and the pass continues with the next claim, except for an oversized claim, whose refused settlement ends the pass as stated above.
-
-A command is settled `Ok(&[])` once its arguments and its `require` clauses pass and **before** the application's method runs, because a command's acknowledgment is a delivery acknowledgment and not a completion one (ridl §6.1, and `Handler`'s own contract). A query is settled after the application returns, because its settlement carries the reply.*/
     pub(crate) fn dispatch<H, P>(
         h: &mut H,
         p: &mut P,
@@ -752,7 +759,6 @@ A command is settled `Ok(&[])` once its arguments and its `require` clauses pass
         }
         Ok(settled)
     }
-    ///The most claims one poll of `Serve` takes (driftsys/ridl#568). A future that holds one poll for an unbounded time blocks every other task on a single-threaded executor; 32 bounds one poll and keeps the cost of registering the claim interest, paid once per poll, small beside the claims the poll settles.
     const SERVE_BUDGET: usize = 32;
     /**Serves interface `CruiseControl`'s commands and queries with `p`, over the handler port `h`, and returns the future that does the serving. `Handler::serve` is called with the interface's command and query ordinals when this function runs; a refusal is a future that is ready with `ProviderError::Serve`. Each poll of the future registers its interest in the interface's claims, then takes and settles the claims the handler has, at most 32 in one poll, so that one poll does not hold a single-threaded executor while callers keep sending. A poll that took 32 claims wakes the future's waker and is `Pending`, so the executor polls it again after other tasks have run; a poll that found no claim left before 32 is `Pending` without waking it. Under `ridl_rt::task::noop_waker` that wake is discarded, so a frame loop that polls the future once per frame settles at most 32 claims per frame; a frame loop that polls with `ridl_rt::task::flag_waker` polls again while its flag was set, up to the loop's own limit of polls per frame. The future resolves only when the handler port fails, to `ProviderError::Claim`; every claim settled before the failure stays settled. `h` is held by value and `p` by `&mut` until the future is dropped.
 
@@ -798,16 +804,10 @@ Panics when `h` is attached to a catalog other than the one this face was genera
         >>::ClaimBuffer,
         state: ServeState,
     }
-    /// Where `serve` is, as its future's `poll` moves it.
     #[derive(Clone, Copy)]
     enum ServeState {
-        /// `Handler::serve` refused the members; the first poll reports
-        /// it.
         Refused(::ridl_rt::port::ServeError),
-        /// Each poll registers the claim interest and settles at most
-        /// `SERVE_BUDGET` claims.
         Serving,
-        /// The failure was reported.
         Done,
     }
     /// `Unpin` whatever `H` is: nothing in the future is pinned, and a
@@ -881,9 +881,6 @@ Panics when `h` is attached to a catalog other than the one this face was genera
     ///The blocking face of interface `CruiseControl`, under the crate's `std` feature: `Client`, and `serve` when the interface declares a command or a query, as `ridl_rt::task::block_on` over the async face's futures, each bounded by a timeout. What a call does is the future's; this module adds the thread's wait and the timeout.
     #[cfg(feature = "std")]
     pub mod blocking {
-        /// The instant `timeout` ends for a wait that starts now. `None`
-        /// with no timeout, and with a timeout so large that the instant
-        /// cannot be represented, which is then a wait with no bound.
         fn __deadline_after(
             timeout: ::core::option::Option<::std::time::Duration>,
         ) -> ::core::option::Option<::std::time::Instant> {
@@ -902,6 +899,10 @@ Panics when `h` is attached to a catalog other than the one this face was genera
                 + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
         > Client<P> {
             ///Reads signal `engaged`, as `Client::engaged` does: a read never waits.
+            ///
+            /// # Rules
+            ///
+            /// - interval 100000 ..= 1000000 us
             pub fn engaged(
                 &self,
             ) -> ::core::result::Result<
@@ -911,6 +912,10 @@ Panics when `h` is attached to a catalog other than the one this face was genera
                 self.inner.engaged()
             }
             ///Reads signal `target`, as `Client::target` does: a read never waits.
+            ///
+            /// # Rules
+            ///
+            /// - interval 100000 ..= 1000000 us
             pub fn target(
                 &self,
             ) -> ::core::result::Result<
@@ -920,6 +925,14 @@ Panics when `h` is attached to a catalog other than the one this face was genera
                 self.inner.target()
             }
             ///Sends command `setLever` and waits for its outcome, as `block_on` over `Client::set_lever`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Undelivered`; either way nothing is left waiting at the port.
+            ///
+            /// # Rules
+            ///
+            /// - response within 50000 us
+            ///
+            /// # Parameters
+            ///
+            /// - `cmd`
             pub fn set_lever(
                 &mut self,
                 cmd: crate::veh::common::LeverCmd,
@@ -1012,9 +1025,9 @@ Panics when `h` is attached to a catalog other than the one this face was genera
         }
     }
 }
-/**Descriptor for interface `LaneAssist`.
+/**Descriptor for interface `LaneAssist`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
 
-Its size table in FlatBuffers is `<LaneAssist as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound. The face holds the table's claim and event buffers.*/
+Its size table in FlatBuffers is `<LaneAssist as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.*/
 pub struct LaneAssist;
 impl ::ridl_rt::contract::Interface for LaneAssist {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -1058,6 +1071,7 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for LaneAssist
     const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
     const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
 }
+#[doc(hidden)]
 pub struct LaneAssistActive;
 impl ::ridl_rt::contract::Interaction for LaneAssistActive {
     type Iface = LaneAssist;
@@ -1072,7 +1086,6 @@ impl ::ridl_rt::contract::Signal for LaneAssistActive {
 }
 ///The generated interaction face of interface `LaneAssist`.
 pub mod lane_assist {
-    ///Panics unless `found` is the catalog the face of interface `LaneAssist` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new` of the face, and `serve` where the interface emits one, call it once, before they store or use the port.
     #[track_caller]
     fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
         let expected = <super::LaneAssist as ::ridl_rt::contract::Interface>::CATALOG;
@@ -1089,6 +1102,10 @@ pub mod lane_assist {
     }
     impl<P: ::ridl_rt::port::SignalReader> Client<P> {
         ///Reads signal `active` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///
+        /// # Rules
+        ///
+        /// - interval 100000 ..= 1000000 us
         pub fn active(
             &self,
         ) -> ::core::result::Result<
@@ -1160,7 +1177,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             Client { port }
         }
     }
-    ///Stages the invalid state of one signal of interface `LaneAssist`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>` (ADR-0023 decision 7); `prelude` brings it into scope anonymously.
+    ///Stages the invalid state of one signal of interface `LaneAssist`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>`; `prelude` brings it into scope anonymously.
     pub trait Invalidate {
         ///Stages the invalid state for signal `active`, with `Cause::Declared`. It is published by `commit`.
         fn invalidate_active(
@@ -1173,6 +1190,10 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     }
     impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
         ///Stages a new value for signal `active`. It is published by `commit`.
+        ///
+        /// # Rules
+        ///
+        /// - interval 100000 ..= 1000000 us
         pub fn active(
             &mut self,
             value: crate::veh::common::Engaged,
@@ -1241,27 +1262,23 @@ Panics when `port` is attached to a catalog other than the one this face was gen
 
 
 // ===== package veh.common =====
+/// # Rules
+///
+/// - range 0 ..= 250
+/// - step 0.5
+/// - unit km/h
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Speed(::core::primitive::f64);
 impl Speed {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::f64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -1498,6 +1515,9 @@ impl ::core::default::Default for LeverCmd {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct FaultReport {
+    /// # Rules
+    ///
+    /// - range 0 ..= 255
     pub count: ::core::primitive::i64,
 }
 impl ::core::default::Default for FaultReport {
@@ -1505,13 +1525,7 @@ impl ::core::default::Default for FaultReport {
         FaultReport { count: 0 }
     }
 }
-/// An accessor over FlatBuffers bytes `Speed`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Speed` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedFbView<'a> {
@@ -1526,12 +1540,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for SpeedFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> SpeedFbView<'a> {
-    /// The value the box carries. `Speed` is one value, so this decodes it rather than borrowing it, which costs one read.
+    /// The value the bytes hold. `Speed` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Speed {
         __ridl_fb_decode_Speed(self.buf, self.table)
     }
 }
-/// Writes `Speed` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Speed(
     value: &Speed,
@@ -1595,16 +1608,6 @@ pub(crate) fn __ridl_fb_decode_Speed(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
     /// The largest FlatBuffers buffer any legal `Speed` encodes to: 46 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 46usize;
     type Buffer = [::core::primitive::u8; 46usize];
     const BUFFER: Self::Buffer = [0u8; 46usize];
@@ -1651,13 +1654,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
         __ridl_fb_decode_Speed(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Engaged`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Engaged` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct EngagedFbView<'a> {
@@ -1672,12 +1669,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for EngagedFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> EngagedFbView<'a> {
-    /// The value the box carries. `Engaged` is one value, so this decodes it rather than borrowing it, which costs one read.
+    /// The value the bytes hold. `Engaged` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Engaged {
         __ridl_fb_decode_Engaged(self.buf, self.table)
     }
 }
-/// Writes `Engaged` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Engaged(
     value: &Engaged,
@@ -1733,16 +1729,6 @@ pub(crate) fn __ridl_fb_decode_Engaged(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Engaged {
     /// The largest FlatBuffers buffer any legal `Engaged` encodes to: 43 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 43usize;
     type Buffer = [::core::primitive::u8; 43usize];
     const BUFFER: Self::Buffer = [0u8; 43usize];
@@ -1789,13 +1775,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Engaged {
         __ridl_fb_decode_Engaged(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `LeverCmd`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `LeverCmd` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct LeverCmdFbView<'a> {
@@ -1810,12 +1790,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for LeverCmdFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> LeverCmdFbView<'a> {
-    /// The value the box carries. `LeverCmd` is one value, so this decodes it rather than borrowing it, which costs one read.
+    /// The value the bytes hold. `LeverCmd` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> LeverCmd {
         __ridl_fb_decode_LeverCmd(self.buf, self.table)
     }
 }
-/// Writes `LeverCmd` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_LeverCmd(
     value: &LeverCmd,
@@ -1882,16 +1861,6 @@ pub(crate) fn __ridl_fb_decode_LeverCmd(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for LeverCmd {
     /// The largest FlatBuffers buffer any legal `LeverCmd` encodes to: 50 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
     type Buffer = [::core::primitive::u8; 50usize];
     const BUFFER: Self::Buffer = [0u8; 50usize];
@@ -1941,7 +1910,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for LeverCmd 
         __ridl_fb_decode_LeverCmd(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `FaultReport`'s `verify` accepted.
+/// A `FaultReport` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -1973,7 +1942,6 @@ impl<'a> FaultReportFbView<'a> {
         }
     }
 }
-/// Writes `FaultReport` as a FlatBuffers table and returns its position.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_FaultReport(
     value: &FaultReport,
@@ -1999,11 +1967,6 @@ pub(crate) fn __ridl_fb_encode_FaultReport(
     __n += 1;
     builder.push_table(5usize, 4usize, 1u16, &__fields[..__n])
 }
-/// Checks the FlatBuffers table at `table` against `FaultReport`'s shape.
-///
-/// Checks the structure, enum discriminants, collection bounds,
-/// map key uniqueness, and named and anonymous scalar ranges,
-/// steps and lengths. Pattern checks require `validate-pattern`.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_FaultReport(
     buf: &[::core::primitive::u8],
@@ -2039,18 +2002,6 @@ pub(crate) fn __ridl_fb_verify_FaultReport(
     }
     ::core::result::Result::Ok(())
 }
-/// Builds `FaultReport` from the FlatBuffers table at `table`.
-///
-/// It cannot fail. An absent non-optional scalar or enum field
-/// reads as its FlatBuffers default — 0, or the enum's zero
-/// member — which is a value `verify` accepted
-/// (driftsys/ridl#472). Any other read that could fail is
-/// discharged with the neutral value of its own type — zero, the
-/// empty string or collection, the first declared enum variant —
-/// and `verify` is what makes those branches unreachable. A named scalar is
-/// built with its unchecked constructor (`new_unchecked`) over a
-/// value `verify` has already range-checked (`check`), so this
-/// never re-checks and never fails.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_FaultReport(
     buf: &[::core::primitive::u8],
@@ -2070,16 +2021,6 @@ pub(crate) fn __ridl_fb_decode_FaultReport(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FaultReport {
     /// The largest FlatBuffers buffer any legal `FaultReport` encodes to: 43 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 43usize;
     type Buffer = [::core::primitive::u8; 43usize];
     const BUFFER: Self::Buffer = [0u8; 43usize];

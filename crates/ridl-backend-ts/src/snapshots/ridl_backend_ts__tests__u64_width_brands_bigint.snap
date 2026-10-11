@@ -3,6 +3,10 @@ source: crates/ridl-backend-ts/src/tests.rs
 expression: source
 ---
 /**
+ * @remarks
+ * Rules:
+ * - range 0 ..= 18446744073709551615
+ *
  * @range [0..18446744073709551615]
  */
 export type Odometer = bigint & { readonly __ridl: 'veh.common.Odometer' };

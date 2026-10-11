@@ -315,6 +315,129 @@ descriptor](catalog-descriptor.md).
 and init functions. It emits no face, no codec and no feature selection, so
 there is no async or blocking API to choose between.
 
+## Documentation in the generated code
+
+The doc comment of a declaration or a member (see
+[Documenting your API](documenting.md)) becomes the doc comment of the item
+generated from it: rustdoc in the Rust crate, TSDoc in the TypeScript module.
+The generated doc also lists the item's _rules_: the facts the schema states
+about the values the item admits and the way it is used. They are the same
+lines the editor's hover shows in its **Contract** list.
+
+A generated doc holds these parts, in this order, and leaves out each part that
+is empty:
+
+| Part          | Rust                                       | TypeScript                                   |
+| ------------- | ------------------------------------------ | -------------------------------------------- |
+| doc text      | `///` lines; each link an intra-doc link   | the comment's text; each link `{@link Name}` |
+| rules         | a `# Rules` section, one bullet per rule   | `@remarks`, then a `Rules:` list             |
+| typl tags     | none                                       | `@unit`, `@range`, `@bounds`                 |
+| `@see`        | a `# See also` section, one bullet each    | one `@see` tag each                          |
+| `@since`      | one `Available since <version>.` line each | one `@since` tag each                        |
+| `@deprecated` | the `#[deprecated]` attribute              | one `@deprecated` tag                        |
+
+A link, or an `@see` target, whose target has no item in the same output is
+written as a code span of the target's qualified name, such as
+`veh.common.Speed`, so that no doc in the crate or the module that `ridl build`
+emits holds a link that does not resolve. Both backends link only to a
+declaration of the package itself or to a declaration of another package that
+this package reaches through a type. A target that this package does not reach
+through a type is written as a code span. In both languages, so is an
+`internal` declaration, a constant the backend does not emit (such as a `bytes`
+constant), and a member of a named scalar or of a constant, which has no member
+item. In Rust it is also the case for an event, a `fixed`, an interface with no
+face module, a target whose path Rust spells with a raw identifier (`r#move`),
+and an item whose name the module of a child package takes, which a program
+reaches only through the hidden `__ridl_package` module. In TypeScript it is
+also the case for an interface, an interaction and a union arm, which the module
+holds no item for, and for a declaration of another package that the module
+does not import. `@labels` is not rendered.
+
+A Rust link is an absolute path from the crate root, such as
+`crate::veh::common::Speed`, which resolves in the crate `ridl build` emits. A
+program that brings a generated file in with `include!` inside a module of its
+own moves the items away from those paths, so rustdoc reports each such link as
+unresolved.
+
+In the Rust face, the doc of an interaction goes on these methods: for a signal,
+the method of the async `Client`, of the blocking `Client` and of the
+`Publisher`; for a command or a query, the method of the async `Client`, of the
+blocking `Client` and of the `Provider` trait; for an event, the
+`subscribe_<event>` method of the async and of the blocking `Client`, and the
+method of the `Publisher`. The `Client` and `Provider` methods also carry the
+interaction's `#[deprecated]`; a `Publisher` method and a `subscribe_<event>`
+method carry the doc without `#[deprecated]`. The variant of an event in the
+`Event` enum carries only a sentence the backend writes. A method's doc is the
+interaction's doc text, then a sentence the backend writes about the method
+itself, then the `# Rules` section, then, for a command or a query, a
+`# Parameters` section (one bullet per parameter with its name and its doc, and
+the parameter's rules as nested bullets), then the `# See also` section and the
+`Available since` lines. The doc of an interface goes on its face module, in
+the same order around the module's own sentence.
+
+### What the generated code checks
+
+The rules lists state the contract, not what the code checks. On each item the
+backend emits, every rule the schema declares is listed, in the same words in
+both languages, whether or not the generated code checks it. The sentence the
+backend writes about a method describes what that method does, its checks
+included: the doc of a named scalar's `new` says that it returns an error for a
+value that breaks a constraint the generated code checks, the doc of a `Client`
+call method says what happens when a
+`require` clause fails, and the doc of a query's `Provider` method says that
+`serve` discards a reply that breaks an `ensure` clause.
+
+This table records, for each kind of rule, the generated item that checks it:
+
+| Rule             | Rust                                                      | TypeScript  |
+| ---------------- | --------------------------------------------------------- | ----------- |
+| range            | checked by `new`, `TryFrom` and `verify`                  | not checked |
+| step             | checked by `new`, `TryFrom` and `verify`                  | not checked |
+| unit             | not checked                                               | not checked |
+| length           | checked by `new`, `TryFrom` and `verify`                  | not checked |
+| pattern          | checked by `new`, `TryFrom` and `verify`, under a feature | not checked |
+| collection bound | checked by `verify`                                       | not checked |
+| timing           | not checked                                               | not checked |
+| response bound   | `max` checked by the future of a `Client` call            | not checked |
+| errors           | not checked                                               | not checked |
+| `require`        | checked by the call methods of `Client` and by `serve`    | not checked |
+| `ensure`         | checked by `serve`                                        | not checked |
+
+In the Rust column:
+
+- `new` and `TryFrom` are the constructors of a named scalar. `verify` is the
+  FlatBuffers codec's check of a received payload. It also checks a field whose
+  type is written inline, which has no constructor. A struct, a variable-length
+  array or a map that the program builds itself is not checked until it is
+  received.
+- The pattern is checked only when the crate is built with the
+  `validate-pattern` feature (see [Cargo features](#cargo-features)).
+- A call's future, in the async and in the blocking `Client`, resolves to a
+  failure when the response bound's `max` passes (see [Failures](#failures)).
+  Its `min` is not checked.
+- A query that declares an error type gets no face, so no generated item
+  carries the errors rule.
+- A `Client` call method evaluates the `require` clauses before it sends.
+  `serve` evaluates them before it calls the `Provider`, and evaluates the
+  `ensure` clauses on the reply before it sends the reply. The `Client` does not
+  evaluate `ensure`.
+- `verify` and the face exist only when the manifest names `flatbuffers` under
+  `[backend.rust] encodings` (see
+  [What the crate contains](#what-the-crate-contains)).
+
+The TypeScript module holds types, constants, the `<Name>Bits` objects and init
+functions only, and none of them checks a value.
+
+An item that the generated code needs but a program does not name carries no
+doc. In Rust it is `pub(crate)`, such as the constraint check behind `new` and
+the codec's functions for each table, or `pub` under `#[doc(hidden)]` where code
+outside the crate must reach it, such as the descriptor of each interaction,
+which a runtime reads. Two private Rust constants are notes rather than such
+items: `__RIDL_NO_FACE_<NAME>`, left where an interface's face was not emitted,
+and `__RIDL_FB_NO_CODEC_<Name>`, left where a declaration's FlatBuffers codec
+was not emitted. Each carries a doc that says what was not emitted and why, for
+a reader of the generated source; rustdoc does not show them.
+
 ## Further reading
 
 - [The interaction face][face] — the design record of everything the Rust

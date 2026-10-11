@@ -102,6 +102,14 @@ const ALLOWED: &[Allowed] = &[
               identity",
     },
     Allowed {
+        path: "crates/ridl-backend-rust/src/docs.rs",
+        lines: 1,
+        why: "the read is of `ridl_ir::codegen::v1::Model::interfaces`, for \
+              the reason the descriptor layer's is: a doc link to an \
+              interface resolves against the lowered model's list, and an \
+              inline shape, which has no declared identity, is skipped",
+    },
+    Allowed {
         path: "crates/ridl-backend-rust/src/face.rs",
         lines: 1,
         why: "the read is of `ridl_ir::codegen::v1::Model::interfaces`, for \

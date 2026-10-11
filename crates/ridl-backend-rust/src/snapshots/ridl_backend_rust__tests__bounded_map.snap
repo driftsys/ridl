@@ -3,27 +3,24 @@ source: crates/ridl-backend-rust/src/tests.rs
 expression: rust_with_codec(decls)
 ---
 /// Vehicle speed over ground
+///
+/// # Rules
+///
+/// - range 0.0 ..= 250.0
+/// - step 0.5
+/// - unit km/h
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Speed(::core::primitive::f64);
 impl Speed {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::f64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -224,6 +221,9 @@ impl ::core::default::Default for Counter {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct Table {
+    /// # Rules
+    ///
+    /// - count 0 ..= 32
     pub meta: ::std::vec::Vec<(Counter, Speed)>,
 }
 impl ::core::default::Default for Table {
@@ -233,13 +233,7 @@ impl ::core::default::Default for Table {
         }
     }
 }
-/// An accessor over FlatBuffers bytes `Speed`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Speed` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SpeedFbView<'a> {
@@ -254,12 +248,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for SpeedFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> SpeedFbView<'a> {
-    /// The value the box carries. `Speed` is one value, so this decodes it rather than borrowing it, which costs one read.
+    /// The value the bytes hold. `Speed` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Speed {
         __ridl_fb_decode_Speed(self.buf, self.table)
     }
 }
-/// Writes `Speed` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Speed(
     value: &Speed,
@@ -323,16 +316,6 @@ pub(crate) fn __ridl_fb_decode_Speed(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
     /// The largest FlatBuffers buffer any legal `Speed` encodes to: 46 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 46usize;
     type Buffer = [::core::primitive::u8; 46usize];
     const BUFFER: Self::Buffer = [0u8; 46usize];
@@ -379,13 +362,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
         __ridl_fb_decode_Speed(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Counter`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Counter` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct CounterFbView<'a> {
@@ -400,12 +377,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for CounterFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> CounterFbView<'a> {
-    /// The value the box carries. `Counter` is one value, so this decodes it rather than borrowing it, which costs one read.
+    /// The value the bytes hold. `Counter` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Counter {
         __ridl_fb_decode_Counter(self.buf, self.table)
     }
 }
-/// Writes `Counter` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Counter(
     value: &Counter,
@@ -467,16 +443,6 @@ pub(crate) fn __ridl_fb_decode_Counter(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
     /// The largest FlatBuffers buffer any legal `Counter` encodes to: 44 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 44usize;
     type Buffer = [::core::primitive::u8; 44usize];
     const BUFFER: Self::Buffer = [0u8; 44usize];
@@ -523,7 +489,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
         __ridl_fb_decode_Counter(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `Table`'s `verify` accepted.
+/// A `Table` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -605,7 +571,6 @@ impl<'a> TableFbView<'a> {
         }
     }
 }
-/// Writes `Table` as a FlatBuffers table and returns its position.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Table(
     value: &Table,
@@ -670,11 +635,6 @@ pub(crate) fn __ridl_fb_encode_Table(
     __n += 1;
     builder.push_table(8usize, 4usize, 1u16, &__fields[..__n])
 }
-/// Checks the FlatBuffers table at `table` against `Table`'s shape.
-///
-/// Checks the structure, enum discriminants, collection bounds,
-/// map key uniqueness, and named and anonymous scalar ranges,
-/// steps and lengths. Pattern checks require `validate-pattern`.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Table(
     buf: &[::core::primitive::u8],
@@ -768,18 +728,6 @@ pub(crate) fn __ridl_fb_verify_Table(
     }
     ::core::result::Result::Ok(())
 }
-/// Builds `Table` from the FlatBuffers table at `table`.
-///
-/// It cannot fail. An absent non-optional scalar or enum field
-/// reads as its FlatBuffers default — 0, or the enum's zero
-/// member — which is a value `verify` accepted
-/// (driftsys/ridl#472). Any other read that could fail is
-/// discharged with the neutral value of its own type — zero, the
-/// empty string or collection, the first declared enum variant —
-/// and `verify` is what makes those branches unreachable. A named scalar is
-/// built with its unchecked constructor (`new_unchecked`) over a
-/// value `verify` has already range-checked (`check`), so this
-/// never re-checks and never fails.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Table(
     buf: &[::core::primitive::u8],
@@ -839,16 +787,6 @@ pub(crate) fn __ridl_fb_decode_Table(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Table {
     /// The largest FlatBuffers buffer any legal `Table` encodes to: 1657 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 1657usize;
     type Buffer = [::core::primitive::u8; 1657usize];
     const BUFFER: Self::Buffer = [0u8; 1657usize];
