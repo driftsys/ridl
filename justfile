@@ -273,7 +273,14 @@ wasm-check:
 #
 # ridl-loopback is held to the same terms: its manifest must set the same
 # rust-version as ridl-rt and edition 2021, and the packaged crate, unchanged
-# apart from the appended tables, must build with the minimum toolchain.
+# apart from the appended tables, must build with the minimum toolchain, with
+# the `suite!` test compiled.
+#
+# The crate emitted for the veh-cluster corpus is built the same way as the
+# cabin crate, with every cargo feature on. With the default features off it
+# does not build on the minimum (driftsys/ridl#874), so that cell is not here.
+#
+# ADR-0029 owns the policy; the minimums are frozen by its decisions 1 and 5.
 #
 # ridl-descriptor has its own minimum, the rust-version in its manifest
 # (1.88, the minimum of planus 1.3.0). It is packaged together with ridl-ir,
