@@ -6,6 +6,8 @@
 //! [--skill with|without|both] [--out <dir>]`
 
 mod host;
+mod judge;
+mod report;
 mod score;
 mod task;
 
@@ -124,6 +126,15 @@ pub fn run(args: &[String]) -> Result<(), String> {
                         i64::from(status.code().unwrap_or(-1)).into(),
                     );
                     result.insert("mechanical".into(), mechanical_table(&mechanical).into());
+                    let rubric = if mechanical.passed() {
+                        judge_run(task, host, &models, &dirs, &transcript, &label)?
+                    } else {
+                        let mut skipped = toml::Table::new();
+                        skipped.insert("score".into(), 0.0.into());
+                        skipped.insert("skipped".into(), "mechanical checks failed".into());
+                        skipped
+                    };
+                    result.insert("rubric".into(), rubric.into());
                     let result_dir = out.join(&task.id);
                     std::fs::create_dir_all(&result_dir).map_err(|e| e.to_string())?;
                     std::fs::write(
@@ -139,7 +150,70 @@ pub fn run(args: &[String]) -> Result<(), String> {
             }
         }
     }
+    report::write_summary(&out)?;
+    for gate in report::gate(&out)? {
+        eprintln!(
+            "eval: gate {} {} (pass rate {:.2} with, {:.2} without; rubric {:.2} with, {:.2} without)",
+            gate.host,
+            if gate.holds() { "holds" } else { "fails" },
+            gate.pass_with,
+            gate.pass_without,
+            gate.rubric_with,
+            gate.rubric_without
+        );
+    }
     Ok(())
+}
+
+/// Has the other host's model mark the rubric of a run. A reply that cannot
+/// be read becomes an `error` entry with no score, never a partial score.
+fn judge_run(
+    task: &task::Task,
+    host: Host,
+    models: &host::Models,
+    dirs: &host::RunDirs,
+    transcript: &str,
+    label: &str,
+) -> Result<toml::Table, String> {
+    let judge = host.other();
+    let read = |path: &Path| std::fs::read_to_string(path).map_err(|e| e.to_string());
+    let rubric = read(&task.dir.join("rubric.md"))?;
+    let items = judge::rubric_items(&rubric)?;
+    let text = judge::judge_prompt(
+        &read(&task.dir.join("prompt.md"))?,
+        &rubric,
+        &judge::workspace_files(&dirs.workspace),
+        &judge::final_message(host, transcript, dirs),
+    );
+    let dir = scratch_dir(&task.id, &format!("{label}-judge"))?;
+    std::fs::create_dir_all(dir.join("home")).map_err(|e| e.to_string())?;
+    judge::write_schema(&dir)?;
+    if judge == Host::Codex {
+        codex_login(&dir.join("home"))?;
+    }
+    let invocation = judge::judge_invocation(judge, judge.model(models), &dir, &text);
+    let stdout = dir.join("stdout.json");
+    host::run(&invocation, &stdout)?;
+    let reply = match judge {
+        Host::Claude => read(&stdout).and_then(|out| judge::claude_reply(&out)),
+        Host::Codex => read(&dir.join("verdict.json")),
+    };
+    let mut table = toml::Table::new();
+    table.insert("judge_host".into(), judge.name().into());
+    table.insert("judge_model".into(), judge.model(models).into());
+    match reply.and_then(|reply| judge::parse_verdict(&reply, &items)) {
+        Ok(met) => {
+            table.insert(
+                "met".into(),
+                toml::Value::Array(met.iter().map(|m| (*m).into()).collect()),
+            );
+            table.insert("score".into(), judge::weighted_score(&items, &met).into());
+        }
+        Err(error) => {
+            table.insert("error".into(), error.into());
+        }
+    }
+    Ok(table)
 }
 
 fn mechanical_table(mechanical: &score::Mechanical) -> toml::Table {

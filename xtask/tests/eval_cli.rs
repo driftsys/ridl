@@ -14,7 +14,8 @@ fn script(dir: &Path, name: &str, body: &str) -> PathBuf {
 }
 
 /// A fresh directory with fake `claude`, `codex` and `ridl` scripts. The fake
-/// agents print one tool-call line naming `ridl_check`; `claude_body` replaces
+/// agents write a `ridl.toml` when the workspace has none and print one
+/// tool-call line naming `ridl_check`; `claude_body` replaces
 /// the fake Claude agent's script when given.
 struct Fakes {
     dir: PathBuf,
@@ -22,6 +23,12 @@ struct Fakes {
     codex: PathBuf,
     ridl: PathBuf,
 }
+
+/// Reads the prompt from stdin and sets `$items` to a verdict entry marking
+/// every rubric item the prompt holds as met, so a fake host can act as the
+/// judge.
+const JUDGE_ITEMS: &str = r#"prompt=$(cat)
+items=$(printf '%s\n' "$prompt" | grep -E '^[0-9]+\. \*\*' | awk -F. '{printf "%s{\"n\":%s,\"met\":true,\"reason\":\"r\"}", (NR>1?",":""), $1}')"#;
 
 fn fakes_with(claude_body: Option<&str>) -> Fakes {
     static NEXT: AtomicUsize = AtomicUsize::new(0);
@@ -34,14 +41,26 @@ fn fakes_with(claude_body: Option<&str>) -> Fakes {
     let claude = script(
         &dir,
         "claude",
-        claude_body.unwrap_or(
-            r#"cat > /dev/null; echo '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__ridl__ridl_check","input":{}}]}}'"#,
+        &format!(
+            "{JUDGE_ITEMS}\ncase \"$*\" in *--json-schema*) echo \"{{\\\"type\\\":\\\"result\\\",\\\"structured_output\\\":{{\\\"items\\\":[$items]}}}}\"; exit 0;; esac\n{}",
+            claude_body.unwrap_or(
+                r#"[ -f ridl.toml ] || printf '[package]\n' > ridl.toml; echo '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__ridl__ridl_check","input":{}}]}}'; echo '{"type":"result","result":"Done."}'"#,
+            )
         ),
     );
     let codex = script(
         &dir,
         "codex",
-        r#"cat > /dev/null; [ "$1" = login ] && exit 0; echo '{"type":"item.completed","item":{"type":"mcp_tool_call","server":"ridl","tool":"ridl_check"}}'"#,
+        &format!(
+            "{JUDGE_ITEMS}\n{}",
+            r#"[ "$1" = login ] && exit 0
+case "$*" in *--output-schema*)
+  out=""; prev=""; for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done
+  echo "{\"items\":[$items]}" > "$out"; exit 0;;
+esac
+[ -f ridl.toml ] || printf '[package]\n' > ridl.toml
+echo '{"type":"item.completed","item":{"type":"mcp_tool_call","server":"ridl","tool":"ridl_check"}}'"#
+        ),
     );
     let ridl = script(
         &dir,
@@ -137,10 +156,7 @@ fn a_codex_run_copies_its_transcript() {
 #[test]
 fn an_unset_key_stops_the_run_before_any_host_is_called() {
     let marker_dir = fakes_with(None).dir;
-    let fakes = fakes_with(Some(&format!(
-        "touch {}/called; cat > /dev/null",
-        marker_dir.display()
-    )));
+    let fakes = fakes_with(Some(&format!("touch {}/called", marker_dir.display())));
     let output = eval(
         &fakes,
         &[
@@ -216,7 +232,7 @@ fn a_run_writes_its_mechanical_score() {
 #[test]
 fn a_deleted_manifest_fails_the_check_with_a_note() {
     let fakes = fakes_with(Some(
-        r#"cat > /dev/null; rm -f ridl.toml; echo '{"type":"tool_use","name":"mcp__ridl__ridl_check"}'"#,
+        r#"rm -f ridl.toml; echo '{"type":"tool_use","name":"mcp__ridl__ridl_check"}'"#,
     ));
     let out = fakes.dir.join("results");
     let output = eval(
@@ -269,4 +285,63 @@ fn a_with_run_whose_host_did_not_load_the_skill_is_a_setup_error() {
     );
     assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&output.stderr).contains("did not load the skill"));
+}
+
+#[test]
+fn a_passed_run_is_judged_by_the_other_host_and_summarised() {
+    let fakes = fakes_with(None);
+    let out = fakes.dir.join("results");
+    for host in ["claude", "codex"] {
+        let output = eval(
+            &fakes,
+            &[
+                "--task",
+                "design-0001",
+                "--host",
+                host,
+                "--skill",
+                "without",
+                "--out",
+                out.to_str().unwrap(),
+            ],
+            true,
+        );
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let claude = result(&out, "design-0001", "claude-without-1");
+    assert_eq!(claude["rubric"]["judge_host"].as_str(), Some("codex"));
+    assert_eq!(claude["rubric"]["score"].as_float(), Some(1.0));
+    let codex = result(&out, "design-0001", "codex-without-1");
+    assert_eq!(codex["rubric"]["judge_host"].as_str(), Some("claude"));
+    assert_eq!(codex["rubric"]["score"].as_float(), Some(1.0));
+    let summary = std::fs::read_to_string(out.join("summary.md")).unwrap();
+    assert!(summary.contains("## claude") && summary.contains("## codex"));
+}
+
+#[test]
+fn a_failed_run_is_not_judged() {
+    let fakes = fakes_with(Some(r#"echo '{"type":"result","result":"no tools used"}'"#));
+    let out = fakes.dir.join("results");
+    let output = eval(
+        &fakes,
+        &[
+            "--task",
+            "design-0001",
+            "--host",
+            "claude",
+            "--skill",
+            "without",
+            "--out",
+            out.to_str().unwrap(),
+        ],
+        true,
+    );
+    assert!(output.status.success());
+    let rubric = result(&out, "design-0001", "claude-without-1")["rubric"].clone();
+    assert_eq!(rubric["score"].as_float(), Some(0.0));
+    assert_eq!(rubric["skipped"].as_str(), Some("mechanical checks failed"));
 }
