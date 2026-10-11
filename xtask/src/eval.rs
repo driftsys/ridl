@@ -78,6 +78,11 @@ pub fn run(args: &[String]) -> Result<(), String> {
         .parent()
         .expect("the repository root")
         .to_owned();
+    match args.first().map(String::as_str) {
+        Some("sample") => return sample_command(&root, &args[1..]),
+        Some("agreement") => return agreement_command(&args[1..]),
+        _ => {}
+    }
     let options = parse(args)?;
     let tasks = task::load_tasks(&root, &options.tasks)?;
     let models = host::load_models(&root)?;
@@ -161,6 +166,113 @@ pub fn run(args: &[String]) -> Result<(), String> {
             gate.rubric_with,
             gate.rubric_without
         );
+    }
+    Ok(())
+}
+
+/// The agreement below which the judge's rubric marks are not trusted.
+const AGREEMENT_FLOOR: f64 = 0.8;
+
+/// `cargo xtask eval sample --from <dir> [--size <n>]`: writes
+/// `<dir>/judge-check/labels.toml`, one `[[run]]` per sampled judged run,
+/// with the rubric items, the judge's marks and an empty `human` array for
+/// the maintainer to fill.
+fn sample_command(root: &Path, args: &[String]) -> Result<(), String> {
+    let (mut from, mut size) = (None, 20usize);
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        let value = iter.next().ok_or_else(|| format!("{arg} needs a value"))?;
+        match arg.as_str() {
+            "--from" => from = Some(PathBuf::from(value)),
+            "--size" => {
+                size = value
+                    .parse()
+                    .map_err(|_| "--size takes a positive number".to_owned())?
+            }
+            other => return Err(format!("unknown argument: {other}")),
+        }
+    }
+    let from = from.ok_or("sample needs --from <results dir>")?;
+    let mut runs = Vec::new();
+    for key in report::sample(&report::judged_runs(&from)?, size) {
+        let (task, label) = key.split_once('/').expect("a run key is task/label");
+        let result: toml::Value = toml::from_str(
+            &std::fs::read_to_string(from.join(task).join(format!("{label}.toml")))
+                .map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+        let rubric = std::fs::read_to_string(root.join("evals/tasks").join(task).join("rubric.md"))
+            .map_err(|e| e.to_string())?;
+        let items: Vec<toml::Value> = judge::rubric_items(&rubric)?
+            .into_iter()
+            .map(|i| i.text.into())
+            .collect();
+        let mut run = toml::Table::new();
+        run.insert("task".into(), task.into());
+        run.insert("label".into(), label.into());
+        run.insert("items".into(), toml::Value::Array(items));
+        run.insert("judge".into(), result["rubric"]["met"].clone());
+        run.insert("human".into(), toml::Value::Array(Vec::new()));
+        runs.push(toml::Value::Table(run));
+    }
+    let mut labels = toml::Table::new();
+    labels.insert("run".into(), toml::Value::Array(runs));
+    let dir = from.join("judge-check");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join("labels.toml");
+    std::fs::write(&path, toml::to_string(&labels).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    println!("{}", path.display());
+    Ok(())
+}
+
+/// `cargo xtask eval agreement <labels.toml>`: compares the maintainer's
+/// labels with the judge's marks, writes `agreement.md` next to the labels
+/// file, prints the agreement, and exits 1 when it is below the floor.
+fn agreement_command(args: &[String]) -> Result<(), String> {
+    let [path] = args else {
+        return Err("agreement takes one labels.toml path".to_owned());
+    };
+    let path = Path::new(path);
+    let labels: toml::Value = toml::from_str(
+        &std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?,
+    )
+    .map_err(|e| e.to_string())?;
+    let flags = |v: &toml::Value| -> Vec<bool> {
+        v.as_array()
+            .map(|a| a.iter().filter_map(toml::Value::as_bool).collect())
+            .unwrap_or_default()
+    };
+    let runs = labels["run"]
+        .as_array()
+        .ok_or("labels.toml has no [[run]]")?;
+    let pairs: Vec<(Vec<bool>, Vec<bool>)> = runs
+        .iter()
+        .map(|r| (flags(&r["human"]), flags(&r["judge"])))
+        .collect();
+    let value = report::agreement(&pairs)?;
+    let mut text = String::from(
+        "# Judge check\n\n| Task | Run | Items agreed | Items |\n| --- | --- | --- | --- |\n",
+    );
+    for (run, (human, judge)) in runs.iter().zip(&pairs) {
+        let agreed = human.iter().zip(judge).filter(|(h, j)| h == j).count();
+        text.push_str(&format!(
+            "| {} | {} | {agreed} | {} |\n",
+            run["task"].as_str().unwrap_or_default(),
+            run["label"].as_str().unwrap_or_default(),
+            judge.len()
+        ));
+    }
+    let percent = (value * 100.0).round();
+    text.push_str(&format!(
+        "\nAgreement: {percent}% (floor {}%).\n",
+        AGREEMENT_FLOOR * 100.0
+    ));
+    let dir = path.parent().unwrap_or(Path::new("."));
+    std::fs::write(dir.join("agreement.md"), text).map_err(|e| e.to_string())?;
+    println!("eval: judge agreement {percent}%");
+    if value < AGREEMENT_FLOOR {
+        std::process::exit(1);
     }
     Ok(())
 }

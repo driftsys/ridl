@@ -345,3 +345,46 @@ fn a_failed_run_is_not_judged() {
     assert_eq!(rubric["score"].as_float(), Some(0.0));
     assert_eq!(rubric["skipped"].as_str(), Some("mechanical checks failed"));
 }
+
+fn labels(fakes: &Fakes, human: &str, judge: &str) -> PathBuf {
+    let path = fakes.dir.join("labels.toml");
+    std::fs::write(
+        &path,
+        format!(
+            "[[run]]\ntask = \"design-0001\"\nlabel = \"claude-with-1\"\nitems = [\"a\", \"b\"]\njudge = {judge}\nhuman = {human}\n"
+        ),
+    )
+    .unwrap();
+    path
+}
+
+#[test]
+fn an_unlabelled_run_is_an_input_error() {
+    let fakes = fakes_with(None);
+    let path = labels(&fakes, "[]", "[true, true]");
+    let output = eval(&fakes, &["agreement", path.to_str().unwrap()], true);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("0 human labels"));
+}
+
+#[test]
+fn agreement_below_the_floor_fails() {
+    let fakes = fakes_with(None);
+    let path = labels(&fakes, "[true, false]", "[true, true]");
+    let output = eval(&fakes, &["agreement", path.to_str().unwrap()], true);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("50%"));
+}
+
+#[test]
+fn agreement_at_the_floor_passes() {
+    let fakes = fakes_with(None);
+    let path = labels(&fakes, "[true, true]", "[true, true]");
+    let output = eval(&fakes, &["agreement", path.to_str().unwrap()], true);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}

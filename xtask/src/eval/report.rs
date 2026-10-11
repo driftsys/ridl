@@ -110,6 +110,46 @@ pub fn gate(out: &Path) -> Result<Vec<HostGate>, String> {
         .collect())
 }
 
+/// Every k-th run in sorted order, k = max(1, count / size), until `size`
+/// are taken. Deterministic, so a reviewer can reproduce the sample.
+pub fn sample(runs: &[String], size: usize) -> Vec<String> {
+    let mut sorted = runs.to_vec();
+    sorted.sort();
+    let k = (sorted.len() / size.max(1)).max(1);
+    sorted.into_iter().step_by(k).take(size).collect()
+}
+
+/// The fraction of rubric items on which the maintainer and the judge agree,
+/// over all runs. Each pair is (human, judge).
+pub fn agreement(runs: &[(Vec<bool>, Vec<bool>)]) -> Result<f64, String> {
+    let (mut same, mut total) = (0usize, 0usize);
+    for (i, (human, judge)) in runs.iter().enumerate() {
+        if human.len() != judge.len() {
+            return Err(format!(
+                "run {} has {} human labels for {} rubric items",
+                i + 1,
+                human.len(),
+                judge.len()
+            ));
+        }
+        same += human.iter().zip(judge).filter(|(h, j)| h == j).count();
+        total += judge.len();
+    }
+    if total == 0 {
+        return Err("no labelled item".to_owned());
+    }
+    Ok(same as f64 / total as f64)
+}
+
+/// The keys (`<task>/<label>`) of the runs the judge marked.
+pub fn judged_runs(out: &Path) -> Result<Vec<String>, String> {
+    Ok(runs(out)?
+        .into_iter()
+        .filter(|r| r.score.is_some() && r.passed)
+        .map(|r| r.key)
+        .collect())
+}
+
 /// Writes `out/summary.md`: per host, one row per task with the pass rates
 /// and the mean rubric scores with and without the skill, a row of means,
 /// and the runs whose judge reply was an error.
@@ -282,6 +322,36 @@ mod tests {
         assert!(
             summary.contains("| design-0001 | 1.00 | 0.00 | 1.00 | 0.00 |"),
             "{summary}"
+        );
+    }
+
+    #[test]
+    fn the_sample_takes_every_kth_run_in_order() {
+        let runs: Vec<String> = (0..40).map(|i| format!("t/{i:02}")).collect();
+        let picked = sample(&runs, 20);
+        assert_eq!(picked.len(), 20);
+        assert_eq!(picked[0], "t/00");
+        assert_eq!(picked[1], "t/02");
+        assert_eq!(sample(&runs[..10], 20).len(), 10);
+    }
+
+    #[test]
+    fn agreement_counts_items_not_runs() {
+        assert_eq!(
+            agreement(&[(vec![true, false], vec![true, true])]).unwrap(),
+            0.5
+        );
+        assert_eq!(
+            agreement(&[(vec![true], vec![true]), (vec![false], vec![false])]).unwrap(),
+            1.0
+        );
+    }
+
+    #[test]
+    fn an_unlabelled_run_is_an_error() {
+        assert_eq!(
+            agreement(&[(vec![], vec![true])]).unwrap_err(),
+            "run 1 has 0 human labels for 1 rubric items"
         );
     }
 }
