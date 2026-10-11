@@ -3,6 +3,7 @@
 //! Appendix B example, and the best-effort tsc strict-compile check.
 
 use super::{GenerateError, generate};
+use ridl_ir::codegen::v1;
 use ridl_ir::v2;
 
 // ---------------------------------------------------------------------------
@@ -2016,6 +2017,148 @@ fn tsdoc_link_to_a_foreign_constant_the_foreign_module_skips_is_a_code_span() {
         .source;
     assert!(
         source.contains("Not `other.pkg.BLOB`, but {@link other_pkg.GREETING}."),
+        "got:\n{source}"
+    );
+}
+
+/// The packages of the contract tests: `other.pkg` declares a public `Thing`
+/// and a ranged scalar `Speed`; `veh.common` holds a field of each type, and
+/// a doc that links `Thing`.
+fn contract_packages() -> (v2::Package, v2::Package) {
+    let (local, mut other) = foreign_link_packages();
+    other.decls.push(speed_decl());
+    let mut local = local;
+    if let Some(v2::decl::Kind::StructDef(holder)) = local.decls[0].kind.as_mut() {
+        holder.members.push(field_member(named_field(
+            "speed",
+            2,
+            "other.pkg.Speed",
+            false,
+            init_value(true, None),
+        )));
+    }
+    (local, other)
+}
+
+/// The one file `Backend::generate` writes for `request`.
+fn contract_source(raw: ridl_ir::codegen::RawIr<'_>, request: &v1::CodegenRequest) -> String {
+    use ridl_ir::codegen::Backend as _;
+
+    let response = crate::Backend::new(raw).generate(request);
+    assert!(
+        response.diagnostics.is_empty(),
+        "{:?}",
+        response.diagnostics
+    );
+    response
+        .files
+        .iter()
+        .find_map(|file| match &file.content {
+            Some(v1::generated_file::Content::Text(text)) => Some(text.clone()),
+            _ => None,
+        })
+        .expect("the backend writes one text file")
+}
+
+/// What `ridl build --emit typescript` relies on: through the backend
+/// contract, a foreign link resolves and a field of a foreign type carries
+/// that type's rules. The request's model is lowered with the other package
+/// while the raw IR holds none, so a backend that lowered the raw IR itself
+/// would render a code span and no rule.
+#[test]
+fn the_contract_reads_the_doc_comments_from_the_request_model() {
+    let (local, other) = contract_packages();
+    let request = v1::CodegenRequest {
+        model: Some(ridl_ir::codegen::lower(&local, &[&other])),
+        artifact_base: "veh.common".to_string(),
+        ..Default::default()
+    };
+    let raw = ridl_ir::codegen::RawIr {
+        package: &local,
+        others: &[],
+    };
+    let source = contract_source(raw, &request);
+    assert!(
+        source.contains("Wraps {@link other_pkg.Thing}"),
+        "got:\n{source}"
+    );
+    assert!(
+        source.contains(" * - range 0.0 ..= 250.0\n"),
+        "got:\n{source}"
+    );
+}
+
+/// A request with no model is lowered from the raw IR with the other
+/// packages, so the foreign link and the foreign type's rules are there as
+/// well.
+#[test]
+fn the_contract_lowers_a_request_without_a_model_with_the_other_packages() {
+    let (local, other) = contract_packages();
+    let request = v1::CodegenRequest {
+        model: None,
+        artifact_base: "veh.common".to_string(),
+        ..Default::default()
+    };
+    let others = [&other];
+    let raw = ridl_ir::codegen::RawIr {
+        package: &local,
+        others: &others,
+    };
+    let source = contract_source(raw, &request);
+    assert!(
+        source.contains("Wraps {@link other_pkg.Thing}"),
+        "got:\n{source}"
+    );
+    assert!(
+        source.contains(" * - range 0.0 ..= 250.0\n"),
+        "got:\n{source}"
+    );
+}
+
+/// A target whose name begins with the name of another declaration resolves
+/// to its own declaration: `[SpeedLimit]` is not `Speed`.
+#[test]
+fn tsdoc_link_to_a_name_that_extends_another_resolves_to_its_own_declaration() {
+    let doc = "Capped by [SpeedLimit].";
+    let source = ts_for(vec![
+        speed_decl(),
+        public_decl(
+            "SpeedLimit",
+            unit_type("km/h", "0.0", "250.0", "0.5", "0.0"),
+        ),
+        v2::Decl {
+            doc: doc.to_string(),
+            links: vec![doc_link(doc, "[SpeedLimit]", "veh.common.SpeedLimit")],
+            ..public_decl("Cap", unit_type("km/h", "0.0", "250.0", "0.5", "0.0"))
+        },
+    ]);
+    assert!(
+        source.contains(" * Capped by {@link SpeedLimit}.\n"),
+        "got:\n{source}"
+    );
+}
+
+/// A link that overlaps a link already replaced leaves the text that
+/// replacement wrote.
+#[test]
+fn tsdoc_link_overlapping_a_replaced_link_is_skipped() {
+    let doc = "see [A.B] now";
+    let link = |offset, len, target: &str| v2::DocLink {
+        text: "X".to_string(),
+        offset,
+        len,
+        target: target.to_string(),
+    };
+    let source = ts_for(vec![v2::Decl {
+        doc: doc.to_string(),
+        links: vec![
+            link(4, 5, "veh.common.Whole"),
+            link(6, 3, "veh.common.Tail"),
+        ],
+        ..speed_decl()
+    }]);
+    assert!(
+        source.contains(" * see [A`veh.common.Tail` now\n"),
         "got:\n{source}"
     );
 }
