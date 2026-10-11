@@ -50,7 +50,7 @@ impl Repo {
     fn run(&self, subcommand: &str, fixture: Option<(&str, &Path)>) -> Output {
         let mut command = Command::new(env!("CARGO_BIN_EXE_xtask"));
         command
-            .args(["freeze", subcommand, "--root"])
+            .args(["freeze", subcommand, "--fixtures-only", "--root"])
             .arg(&self.dir);
         if let Some((name, file)) = fixture {
             command

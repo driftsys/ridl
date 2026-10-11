@@ -1,0 +1,169 @@
+FORM-001 error
+FORM-002 error
+FORM-003 error
+FORM-004 error
+FORM-005 error
+FORM-101 error
+FORM-102 error
+FORM-103 error
+FORM-104 error
+FORM-105 error
+FORM-106 error
+FORM-107 error
+FORM-108 error
+MANI-001 error
+MANI-002 error
+MANI-003 error
+MANI-004 error
+MANI-005 warning lint=unknown-manifest-key default=warn
+MANI-006 error
+MANI-007 error
+MANI-008 error
+MANI-009 error
+MANI-010 warning lint=unknown-lint default=warn
+MANI-011 error
+MANI-012 error
+MANI-013 error
+MANI-014 error
+MANI-015 error
+MANI-016 error
+MANI-101 error
+MANI-102 error
+MANI-103 error
+MANI-104 error
+RIDL-100 warning lint=missing-timing default=warn
+RIDL-101 error
+RIDL-102 error
+RIDL-103 error
+RIDL-104 error
+RIDL-105 error
+RIDL-106 error
+RIDL-107 error
+RIDL-108 warning lint=degenerate-timing-range default=warn
+RIDL-109 error
+RIDL-110 error
+RIDL-112 warning lint=missing-response-bound default=warn
+RIDL-140 error
+RIDL-141 error
+RIDL-143 error
+RIDL-144 error
+RIDL-145 error
+RIDL-149 error
+RIDL-201 error
+RIDL-202 error
+RIDL-301 error
+RIDL-302 error
+RIDL-303 error
+RIDL-304 warning lint=error-typed-parameter default=warn
+RIDL-305 warning lint=ensure-without-result default=warn
+RIDL-306 error
+RIDL-307 warning lint=contract-error-name-in-enum default=warn
+RIDL-308 warning lint=named-result-union-in-query default=warn
+RIDL-401 error
+RIDL-402 error
+RIDL-403 error
+RIDL-404 warning lint=query-named-like-mutation default=warn
+RIDL-405 info lint=shared-error-type default=info
+RIDL-406 info lint=redeclared-envelope-metadata default=info
+RIDL-407 warning lint=ordinal-changed default=warn
+RIDL-408 error
+RIDL-409 error
+RIDL-410 error
+RIDL-411 error
+RIDL-412 error
+RIDL-413 error
+RIDL-414 info lint=low-cohesion-interface default=info
+RIDL-416 warning lint=lock-in-subdirectory default=warn
+RIDL-417 warning lint=unsupported-source-file default=warn
+RSDL-305 error
+RSDL-306 error
+RSDL-307 error
+RSDL-308 error
+RSDL-309 error
+RSDL-310 error
+RSDL-311 error
+RSDL-312 error
+RSDL-313 error
+RSDL-403 error
+RSDL-408 error
+RSDL-409 warning lint=redundant-provider-set default=warn
+RSDL-502 error
+RSDL-504 error
+RSDL-601 error
+RSDL-602 error
+RSDL-603 error
+RSDL-604 error
+RSDL-701 error
+RSDL-702 error
+RSDL-704 error
+RSDL-705 error
+RSDL-706 error
+RSDL-707 error
+RSDL-708 error
+RSDL-709 error
+RSDL-804 warning lint=unclaimed-backend-key default=warn
+RSDL-805 warning lint=depth-below-bound default=warn
+RSDL-806 warning lint=depth-underivable default=warn
+RSDL-807 warning lint=link-encoding-not-emitted default=warn
+RSDL-901 error
+RSDL-903 error
+RSDL-904 error
+RSDL-905 error
+RSDL-906 error
+RSDL-907 error
+RSDL-908 error
+TYPL-001 error
+TYPL-002 error
+TYPL-003 error
+TYPL-004 error
+TYPL-005 error
+TYPL-006 error
+TYPL-007 warning lint=unused-import default=warn
+TYPL-008 warning lint=unneeded-import-alias default=warn
+TYPL-009 error
+TYPL-010 error
+TYPL-011 error
+TYPL-101 warning lint=unbounded-integer default=warn
+TYPL-102 warning lint=unbounded-float default=warn
+TYPL-103 warning lint=unbounded-length default=warn
+TYPL-104 error
+TYPL-105 error
+TYPL-106 error
+TYPL-108 error
+TYPL-109 error
+TYPL-110 error
+TYPL-111 error
+TYPL-115 info lint=no-init-value default=info
+TYPL-201 error
+TYPL-202 error
+TYPL-203 error
+TYPL-204 error
+TYPL-206 error
+TYPL-207 error
+TYPL-208 error
+TYPL-209 error
+TYPL-210 error
+TYPL-211 warning lint=duplicate-reserved default=warn
+TYPL-212 error
+TYPL-213 error
+TYPL-214 error
+TYPL-215 error
+TYPL-216 error
+TYPL-217 error
+TYPL-218 error
+TYPL-219 error
+TYPL-220 error
+TYPL-222 info lint=inconsistent-unit default=info
+TYPL-224 info lint=duplicate-shape default=info
+TYPL-301 error
+TYPL-302 error
+TYPL-303 error
+TYPL-304 error
+TYPL-401 warning lint=broken-doc-link default=warn
+TYPL-404 warning lint=detached-doc-comment default=warn
+TYPL-405 warning lint=deprecated-without-reason default=warn
+TYPL-406 warning lint=missing-docs default=warn
+TYPL-407 warning lint=misplaced-doc-comment default=warn
+TYPL-408 warning lint=unknown-doc-tag default=warn
+TYPL-409 warning lint=malformed-doc-tag default=warn
+TYPL-410 warning lint=doc-comment-style default=allow

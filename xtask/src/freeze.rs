@@ -6,6 +6,12 @@
 //! and fails when a line of a surface's dump at its baseline ref is missing
 //! from the dump at HEAD. A line that was added passes.
 
+mod diagnostics;
+mod keywords;
+mod mcp;
+mod msrv;
+mod protocol;
+
 use serde::Deserialize;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -75,18 +81,27 @@ pub type Dumper = fn(&Path) -> Result<Vec<String>, String>;
 
 /// The registry of frozen surfaces.
 pub fn dumpers() -> &'static [(&'static str, Dumper)] {
-    &[]
+    &[
+        ("codegen-protocol", protocol::dump),
+        ("diagnostics", diagnostics::dump),
+        ("keywords", keywords::dump),
+        ("mcp", mcp::dump),
+        ("msrv", msrv::dump),
+    ]
 }
 
 const USAGE: &str = "usage: cargo xtask freeze <update|check> [--root <dir>] \
-[--dumper-fixture <name>=<file>]\n\
+[--dumper-fixture <name>=<file>] [--fixtures-only]\n\
   --root <dir>                      repository root (default: the workspace root)\n\
   --dumper-fixture <name>=<file>    test-only: register a surface whose lines \
-are read from <file>";
+are read from <file>\n\
+  --fixtures-only                   test-only: skip the registered dumpers, which \
+read the real repository";
 
 struct Options {
     root: PathBuf,
     fixtures: Vec<(String, PathBuf)>,
+    fixtures_only: bool,
 }
 
 fn parse_options(args: &[String]) -> Result<Options, String> {
@@ -95,6 +110,7 @@ fn parse_options(args: &[String]) -> Result<Options, String> {
         .map(Path::to_path_buf)
         .ok_or("cannot find the workspace root")?;
     let mut fixtures = Vec::new();
+    let mut fixtures_only = false;
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
         let value = |iter: &mut std::slice::Iter<String>| {
@@ -111,10 +127,15 @@ fn parse_options(args: &[String]) -> Result<Options, String> {
                 })?;
                 fixtures.push((name.to_string(), PathBuf::from(file)));
             }
+            "--fixtures-only" => fixtures_only = true,
             other => return Err(format!("unknown argument `{other}`\n{USAGE}")),
         }
     }
-    Ok(Options { root, fixtures })
+    Ok(Options {
+        root,
+        fixtures,
+        fixtures_only,
+    })
 }
 
 fn normalise(mut lines: Vec<String>) -> String {
@@ -127,7 +148,12 @@ fn normalise(mut lines: Vec<String>) -> String {
 /// Every surface name with its dump, from the registry then the fixtures.
 fn dump_all(options: &Options) -> Result<Vec<(String, String)>, String> {
     let mut dumps = Vec::new();
-    for (name, dumper) in dumpers() {
+    let registered: &[(&str, Dumper)] = if options.fixtures_only {
+        &[]
+    } else {
+        dumpers()
+    };
+    for (name, dumper) in registered {
         let lines = dumper(&options.root).map_err(|e| format!("surface `{name}`: {e}"))?;
         dumps.push((name.to_string(), normalise(lines)));
     }
@@ -266,6 +292,26 @@ pub fn run(args: &[String]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dumps_are_sorted_and_relative() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let root_text = root.to_string_lossy().into_owned();
+        for (name, dumper) in dumpers() {
+            let text = normalise(dumper(root).unwrap());
+            let lines: Vec<&str> = text.lines().collect();
+            assert!(!lines.is_empty(), "surface `{name}` is empty");
+            assert!(
+                lines.windows(2).all(|w| w[0] < w[1]),
+                "surface `{name}` is not sorted and unique"
+            );
+            assert!(
+                !text.contains(&root_text),
+                "surface `{name}` has an absolute path"
+            );
+            assert!(!text.contains('\\'), "surface `{name}` has a backslash");
+        }
+    }
 
     #[test]
     fn missing_lines_reports_a_removed_line() {

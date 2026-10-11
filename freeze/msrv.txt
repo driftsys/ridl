@@ -1,0 +1,4 @@
+ridl-descriptor rust-version=none edition=2024
+ridl-loopback rust-version=none edition=2024
+ridl-rt rust-version=1.83 edition=2021
+ridl-rt-conformance rust-version=1.83 edition=2021
