@@ -30,68 +30,145 @@ json /*/span/start/column
 json /*/span/start/line
 ridl --help switch
 ridl --version switch
+ridl -V switch
+ridl -h switch
 ridl baseline
 ridl baseline --help switch
 ridl baseline --out <DIR>
+ridl baseline -h switch
+ridl baseline arg 1 <PATH> optional
+ridl baseline arg 1 default .
 ridl build
 ridl build --deployment <NAME>
 ridl build --emit <EMIT>
+ridl build --emit default rust
+ridl build --emit value catalog
+ridl build --emit value codegen-model
+ridl build --emit value flatbuffers
+ridl build --emit value ir-binary
+ridl build --emit value ir-json
+ridl build --emit value ir-text
+ridl build --emit value proto
+ridl build --emit value rust
+ridl build --emit value typescript
 ridl build --frozen switch
 ridl build --help switch
 ridl build --out-dir <OUT_DIR>
+ridl build --out-dir default out
 ridl build --plugin <LANGUAGE[=PATH]>
 ridl build --plugin-timeout <SECONDS>
+ridl build --plugin-timeout default 60
+ridl build -h switch
+ridl build arg 1 <PATH> optional
+ridl build arg 1 default .
 ridl check
 ridl check --baseline <DIR|FILE>
 ridl check --format <FORMAT>
+ridl check --format default text
+ridl check --format value json
+ridl check --format value sarif
+ridl check --format value text
 ridl check --frozen switch
 ridl check --help switch
+ridl check -h switch
+ridl check arg 1 <PATH> optional
+ridl check arg 1 default .
 ridl describe
 ridl describe --help switch
+ridl describe -h switch
+ridl describe arg 1 <PATH> required
 ridl diff
 ridl diff --explain <CATEGORY>
 ridl diff --format <FORMAT>
+ridl diff --format default text
+ridl diff --format value json
+ridl diff --format value text
 ridl diff --help switch
+ridl diff -h switch
+ridl diff arg 1 <OLD> optional
+ridl diff arg 2 <NEW> optional
 ridl fmt
 ridl fmt --check switch
 ridl fmt --help switch
+ridl fmt -h switch
+ridl fmt arg 1 <PATH> optional
+ridl fmt arg 1 default .
 ridl init
 ridl init --help switch
 ridl init --name <NAME>
 ridl init --workspace switch
+ridl init -h switch
+ridl init arg 1 <PATH> optional
+ridl init arg 1 default .
 ridl lock
 ridl lock --help switch
 ridl lock --rename <OLD=NEW>
 ridl lock --retire <NAME>
+ridl lock -h switch
+ridl lock arg 1 <PATH> optional
+ridl lock arg 1 default .
 ridl lock merge
 ridl lock merge --help switch
+ridl lock merge -h switch
+ridl lock merge arg 1 <BASE> required
+ridl lock merge arg 2 <OURS> required
+ridl lock merge arg 3 <THEIRS> required
+ridl lock merge arg 4 <MARKER_SIZE> required
 ridl lsp
 ridl lsp --clientProcessId <PID>
 ridl lsp --help switch
 ridl lsp --stdio switch
+ridl lsp -h switch
 ridl mcp
 ridl mcp --help switch
+ridl mcp -h switch
 ridl new
 ridl new --help switch
 ridl new --name <NAME>
 ridl new --workspace switch
+ridl new -h switch
+ridl new arg 1 <PATH> required
 ridl test
 ridl test --format <FORMAT>
+ridl test --format default text
+ridl test --format value json
+ridl test --format value text
 ridl test --help switch
 ridl test --samples <SAMPLES>
+ridl test --samples default 256
+ridl test -h switch
+ridl test arg 1 <PATH> optional
+ridl test arg 1 default .
 ridlc --help switch
 ridlc --version switch
+ridlc -V switch
+ridlc -h switch
 ridlc build
 ridlc build --deployment <NAME>
 ridlc build --emit <EMIT>
+ridlc build --emit default rust
+ridlc build --emit value catalog
+ridlc build --emit value codegen-model
+ridlc build --emit value flatbuffers
+ridlc build --emit value ir-binary
+ridlc build --emit value ir-json
+ridlc build --emit value ir-text
+ridlc build --emit value proto
+ridlc build --emit value rust
+ridlc build --emit value typescript
 ridlc build --frozen switch
 ridlc build --help switch
 ridlc build --out-dir <OUT_DIR>
 ridlc build --plugin <LANGUAGE[=PATH]>
 ridlc build --plugin-timeout <SECONDS>
+ridlc build --plugin-timeout default 60
+ridlc build -h switch
+ridlc build arg 1 <PATH> required
 ridlc check
 ridlc check --frozen switch
 ridlc check --help switch
+ridlc check -h switch
+ridlc check arg 1 <PATH> required
 sarif /$schema
 sarif /runs
 sarif /runs/*

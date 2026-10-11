@@ -29,14 +29,19 @@ fn listed_commands(help: &str) -> Vec<String> {
     out
 }
 
-/// The flags a help text lists under `Options:`, as `(flag, value kind)`. The
-/// value kind is the placeholder clap prints, or `switch`. A flag with a long
-/// name is written by that name; a flag with only a short name by the short.
-fn listed_flags(help: &str) -> Vec<(String, String)> {
-    let mut out = Vec::new();
+/// One entry of the `Options:` or `Arguments:` section: the head (the text
+/// before the first run of two spaces) and everything the entry prints after
+/// it, on the same line and on the lines below.
+struct Entry {
+    head: String,
+    body: String,
+}
+
+fn entries(help: &str, section: &str, is_head: fn(usize, &str) -> bool) -> Vec<Entry> {
+    let mut out: Vec<Entry> = Vec::new();
     let mut in_section = false;
     for line in help.lines() {
-        if line == "Options:" {
+        if line == section {
             in_section = true;
             continue;
         }
@@ -46,25 +51,97 @@ fn listed_flags(help: &str) -> Vec<(String, String)> {
         if !line.is_empty() && !line.starts_with("  ") {
             break;
         }
-        // A flag line is indented by two spaces (with a short name) or six
-        // (without); description lines are indented deeper.
         let indent = line.len() - line.trim_start().len();
         let text = line.trim_start();
-        if indent > 6 || !text.starts_with('-') {
-            continue;
+        if is_head(indent, text) {
+            let (head, rest) = text.split_once("  ").unwrap_or((text, ""));
+            out.push(Entry {
+                head: head.to_string(),
+                body: rest.to_string(),
+            });
+        } else if let Some(entry) = out.last_mut() {
+            entry.body.push('\n');
+            entry.body.push_str(text);
         }
-        let mut names = text.split("  ").next().unwrap_or("").split(", ");
-        let first = names.next().unwrap_or("");
-        let flag = names.next().unwrap_or(first);
-        let mut words = flag.split_whitespace();
-        let Some(name) = words.next() else { continue };
+    }
+    out
+}
+
+/// The text of every `[<tag>: ...]` in `body`.
+fn tagged<'a>(body: &'a str, tag: &str) -> Vec<&'a str> {
+    let open = format!("[{tag}: ");
+    body.match_indices(&open)
+        .filter_map(|(at, _)| {
+            let rest = &body[at + open.len()..];
+            rest.find(']').map(|end| &rest[..end])
+        })
+        .collect()
+}
+
+/// The values an entry lists as possible, from `[possible values: a, b]` and
+/// from the `- name: text` lines under `Possible values:`.
+fn possible_values(body: &str) -> Vec<String> {
+    let mut out: Vec<String> = tagged(body, "possible values")
+        .iter()
+        .flat_map(|list| list.split(", "))
+        .map(str::to_string)
+        .collect();
+    out.extend(
+        body.lines()
+            .filter_map(|line| line.strip_prefix("- "))
+            .map(|rest| rest.split(':').next().unwrap_or(rest).to_string()),
+    );
+    out
+}
+
+/// `<label> value <v>` for each possible value and `<label> default <v>` for
+/// each default of `body`.
+fn value_lines(label: &str, body: &str, lines: &mut Vec<String>) {
+    for value in possible_values(body) {
+        lines.push(format!("{label} value {value}"));
+    }
+    for default in tagged(body, "default") {
+        lines.push(format!("{label} default {default}"));
+    }
+}
+
+/// The lines of one command: its flags (long and short names, each with the
+/// placeholder clap prints or `switch`), the possible values and defaults of
+/// each, and its positional arguments in order, each `required` (`<NAME>`) or
+/// `optional` (`[NAME]`).
+fn command_lines(path: &str, help: &str, lines: &mut Vec<String>) {
+    let flags = entries(help, "Options:", |indent, text| {
+        indent <= 6 && text.starts_with('-')
+    });
+    for entry in flags {
+        let names: Vec<&str> = entry.head.split(", ").collect();
+        let long = names.last().copied().unwrap_or("");
+        let mut words = long.split_whitespace();
+        let long_name = words.next().unwrap_or("");
         let kind = match words.next() {
             Some(placeholder) if placeholder.starts_with('<') => placeholder,
             _ => "switch",
         };
-        out.push((name.to_string(), kind.to_string()));
+        for name in &names {
+            let name = name.split_whitespace().next().unwrap_or("");
+            lines.push(format!("{path} {name} {kind}"));
+        }
+        value_lines(&format!("{path} {long_name}"), &entry.body, lines);
     }
-    out
+    let arguments = entries(help, "Arguments:", |indent, text| {
+        indent == 2 && (text.starts_with('<') || text.starts_with('['))
+    });
+    for (index, entry) in arguments.iter().enumerate() {
+        let requirement = if entry.head.starts_with('<') {
+            "required"
+        } else {
+            "optional"
+        };
+        let name = entry.head.trim_matches(|c| "<>[]".contains(c));
+        let label = format!("{path} arg {}", index + 1);
+        lines.push(format!("{label} <{name}> {requirement}"));
+        value_lines(&label, &entry.body, lines);
+    }
 }
 
 fn walk(
@@ -88,9 +165,7 @@ fn walk(
         .chain(prefix.iter().cloned())
         .collect::<Vec<_>>()
         .join(" ");
-    for (flag, kind) in listed_flags(&run.stdout) {
-        lines.push(format!("{path} {flag} {kind}"));
-    }
+    command_lines(&path, &run.stdout, lines);
     for name in listed_commands(&run.stdout) {
         lines.push(format!("{path} {name}"));
         let mut next = prefix.to_vec();
@@ -140,8 +215,28 @@ fn report_pointers(root: &Path, kind: &str) -> Result<Vec<String>, String> {
     Ok(out.into_iter().map(|p| format!("{kind} {p}")).collect())
 }
 
-/// The exit codes ADR-0010 decision 1 lists: 0, 1 and 2.
-const EXIT_CODES: [u8; 3] = [0, 1, 2];
+/// The exit codes ADR-0010 decision 1 lists, each with a command line that
+/// produces it: an accepted package, a package with an error, and an unknown
+/// flag.
+const EXIT_CASES: [(i32, &[&str], &str); 3] = [
+    (0, &["check", "."], "warn"),
+    (1, &["check", "."], "error"),
+    (2, &["check", "--freeze-no-such-flag"], "warn"),
+];
+
+/// `exit <n>` for each code of [`EXIT_CASES`] that `ridl` returns for its case.
+fn exit_lines(root: &Path) -> Result<Vec<String>, String> {
+    let ridl = bin::binary(root, "ridl")?;
+    let mut lines = Vec::new();
+    for (code, args, fixture) in EXIT_CASES {
+        let dir = root.join("xtask/tests/freeze-fixtures").join(fixture);
+        let run = bin::run(&ridl, &dir, args)?;
+        if run.code == code {
+            lines.push(format!("exit {code}"));
+        }
+    }
+    Ok(lines)
+}
 
 pub fn dump(root: &Path) -> Result<Vec<String>, String> {
     let mut lines = Vec::new();
@@ -149,9 +244,7 @@ pub fn dump(root: &Path) -> Result<Vec<String>, String> {
         let exe = bin::binary(root, program)?;
         walk(&exe, root, program, &[], &mut lines)?;
     }
-    for code in EXIT_CODES {
-        lines.push(format!("exit {code}"));
-    }
+    lines.extend(exit_lines(root)?);
     for kind in ["json", "sarif"] {
         lines.extend(report_pointers(root, kind)?);
     }
@@ -187,17 +280,49 @@ mod tests {
         );
     }
 
+    fn has(lines: &[String], line: &str) -> bool {
+        lines.iter().any(|l| l == line)
+    }
+
     #[test]
-    fn flags_carry_their_value_kind() {
-        let help = "Options:\n      --out-dir <OUT_DIR>\n          [default: out]\n\n      --frozen\n          Verify\n\n  -h, --help     Print help\n  -V, --version  Print version\n";
-        assert_eq!(
-            listed_flags(help),
-            vec![
-                ("--out-dir".to_string(), "<OUT_DIR>".to_string()),
-                ("--frozen".to_string(), "switch".to_string()),
-                ("--help".to_string(), "switch".to_string()),
-                ("--version".to_string(), "switch".to_string()),
-            ]
-        );
+    fn cli_dump_lists_arguments_values_defaults_and_exits() {
+        let lines = lines();
+        for line in [
+            "ridl lock merge arg 1 <BASE> required",
+            "ridl lock merge arg 4 <MARKER_SIZE> required",
+            "ridl check arg 1 <PATH> optional",
+            "ridl check arg 1 default .",
+            "ridl build --emit value rust",
+            "ridl build --emit default rust",
+            "ridl check --format value sarif",
+            "ridl check --format default text",
+            "ridl build -h switch",
+            "exit 0",
+            "exit 1",
+            "exit 2",
+        ] {
+            assert!(has(&lines, line), "missing `{line}`");
+        }
+    }
+
+    #[test]
+    fn arguments_values_defaults_and_short_flags_are_parsed() {
+        let help = "Usage: x\n\nArguments:\n  <A>  First\n  [B]  Second [default: .]\n\nOptions:\n  -f, --format <FORMAT>  Output [default: text] [possible values: text, json]\n      --emit <EMIT>\n          Possible values:\n          - rust:  Rust\n          - proto: Proto\n          \n          [default: rust]\n  -h, --help  Print help\n";
+        let mut lines = Vec::new();
+        command_lines("x", help, &mut lines);
+        for line in [
+            "x arg 1 <A> required",
+            "x arg 2 <B> optional",
+            "x arg 2 default .",
+            "x -f <FORMAT>",
+            "x --format <FORMAT>",
+            "x --format value json",
+            "x --format default text",
+            "x --emit value proto",
+            "x --emit default rust",
+            "x -h switch",
+        ] {
+            assert!(has(&lines, line), "missing `{line}` in {lines:?}");
+        }
     }
 }

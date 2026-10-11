@@ -55,10 +55,26 @@ fn files_below(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
     Ok(())
 }
 
+/// The one build failure that is expected: the FlatBuffers backend rejects the
+/// ros2 corpus because a message holds an array of byte arrays, and a
+/// FlatBuffers vector cannot hold a vector. The backend reports it as an
+/// error with no diagnostic code, so the text is the marker.
+const KNOWN_REJECTION: (&str, &str, &str) = (
+    "ros2",
+    "flatbuffers",
+    "a vector's element cannot be a vector",
+);
+
+/// Whether a failed build of `corpus` with `emit` is the expected rejection.
+fn is_known_rejection(corpus: &str, emit: &str, stderr: &str) -> bool {
+    let (known_corpus, known_emit, marker) = KNOWN_REJECTION;
+    corpus == known_corpus && emit == known_emit && stderr.contains(marker)
+}
+
 /// `<ext> <corpus>/<file> <line>` for each non-blank, non-comment line of the
 /// schemas that `ridl build --emit <emit>` writes for the corpus workspace.
-/// A corpus the emit rejects (exit 1) contributes no line: its schemas do not
-/// exist.
+/// A corpus the emit rejects in the one known way (`KNOWN_REJECTION`)
+/// contributes no line; any other failure is an error.
 fn schema_lines(
     root: &Path,
     ridl: &Path,
@@ -87,10 +103,14 @@ fn schema_lines(
                 &out_dir.to_string_lossy(),
             ],
         )?;
-        match run.code {
-            0 => {}
-            1 => continue,
-            code => return Err(format!("`ridl build {source} --emit {emit}` exited {code}")),
+        if run.code != 0 {
+            if is_known_rejection(&name, emit, &run.stderr) {
+                continue;
+            }
+            return Err(format!(
+                "`ridl build {source} --emit {emit}` exited {}",
+                run.code
+            ));
         }
         let mut files = Vec::new();
         files_below(&out_dir, &mut files)?;
@@ -203,6 +223,15 @@ mod tests {
         );
         assert!(lines.iter().any(|l| l.starts_with("proto ")));
         assert!(lines.iter().any(|l| l.starts_with("fbs ")));
+    }
+
+    #[test]
+    fn only_the_known_rejection_is_skipped() {
+        let message = "error: X.data is an array — a vector's element cannot be a vector.";
+        assert!(is_known_rejection("ros2", "flatbuffers", message));
+        assert!(!is_known_rejection("ros2", "flatbuffers", "error: other"));
+        assert!(!is_known_rejection("mavlink", "flatbuffers", message));
+        assert!(!is_known_rejection("ros2", "proto", message));
     }
 
     #[test]
