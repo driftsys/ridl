@@ -1,4 +1,8 @@
 /// Cabin temperature, in degrees.
+///
+/// # Rules
+///
+/// - range -40 ..= 85
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Temperature(::core::primitive::i64);
@@ -69,6 +73,10 @@ impl ::core::default::Default for Temperature {
     }
 }
 /// A control level.
+///
+/// # Rules
+///
+/// - range 0 ..= 100
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Level(::core::primitive::i64);
@@ -139,6 +147,10 @@ impl ::core::default::Default for Level {
     }
 }
 /// A window length, in samples.
+///
+/// # Rules
+///
+/// - range 0 ..= 100000
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Window(::core::primitive::i64);
@@ -209,6 +221,10 @@ impl ::core::default::Default for Window {
     }
 }
 /// An averaged reading.
+///
+/// # Rules
+///
+/// - range 0 ..= 1000
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Average(::core::primitive::i64);
@@ -316,6 +332,9 @@ impl ::core::default::Default for Health {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct Warning {
+    /// # Rules
+    ///
+    /// - range 0 ..= 100
     pub code: Level,
     pub health: Health,
 }

@@ -1241,6 +1241,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
 
 
 // ===== package veh.common =====
+/// # Rules
+///
+/// - range 0 ..= 250
+/// - step 0.5
+/// - unit km/h
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Speed(::core::primitive::f64);
@@ -1498,6 +1503,9 @@ impl ::core::default::Default for LeverCmd {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct FaultReport {
+    /// # Rules
+    ///
+    /// - range 0 ..= 255
     pub count: ::core::primitive::i64,
 }
 impl ::core::default::Default for FaultReport {

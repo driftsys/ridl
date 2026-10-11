@@ -4,6 +4,9 @@ expression: compiled.rust
 input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
 ---
 // ===== package fleet.contracts =====
+/// # Rules
+///
+/// - range 0 ..= 7
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct DoorId(::core::primitive::i64);
@@ -73,6 +76,11 @@ impl ::core::default::Default for DoorId {
         DoorId::new_unchecked(0)
     }
 }
+/// # Rules
+///
+/// - range 0 ..= 100
+/// - step 0.5
+/// - unit %
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Percent(::core::primitive::f64);
@@ -264,6 +272,9 @@ impl ::core::default::Default for Percent {
         Percent::new_unchecked(0.0)
     }
 }
+/// # Rules
+///
+/// - range 0 ..= 4294967295
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Odometer(::core::primitive::i64);
@@ -369,6 +380,9 @@ impl ::core::default::Default for LockState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct DoorReport {
+    /// # Rules
+    ///
+    /// - range 0 ..= 7
     pub door: DoorId,
     pub locked: LockState,
 }

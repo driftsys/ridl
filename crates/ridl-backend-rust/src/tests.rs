@@ -6408,3 +6408,202 @@ mod skipped_interface_note {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Doc blocks: links, rules, `see` and `since` on generated types.
+// ---------------------------------------------------------------------------
+
+/// One resolved doc link of `doc`: the bytes of `written` at its first
+/// occurrence, with the text inside the brackets, pointing at `target`.
+fn doc_link(doc: &str, written: &str, target: &str) -> v2::DocLink {
+    let offset = doc.find(written).expect("the link is written in the doc");
+    v2::DocLink {
+        text: written
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .to_string(),
+        offset: offset as u32,
+        len: written.len() as u32,
+        target: target.to_string(),
+    }
+}
+
+/// One `@see` target: no offset and no length, as the checker stores it.
+fn see_link(text: &str, target: &str) -> v2::DocLink {
+    v2::DocLink {
+        text: text.to_string(),
+        offset: 0,
+        len: 0,
+        target: target.to_string(),
+    }
+}
+
+/// The declarations the doc-block tests share: `Speed` (range, step and
+/// unit), `Vin` (length and pattern), an internal `Hidden`, and a struct
+/// `Reading` whose doc links a local type, a type member, a type of a package
+/// outside the output and the internal type, and whose fields carry the rules
+/// of their types and a collection bound.
+fn documented_decls() -> Vec<v2::Decl> {
+    let reading_doc = "Combines [Speed] and [Reading.speed], \
+        from [other.pkg.Thing] and [Hidden].";
+    let speed_doc = "The speed of this reading.";
+    let samples = v2::Field {
+        r#type: Some(v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                element: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Named("Speed".to_string())),
+                })),
+                min: 1,
+                max: 8,
+            }))),
+        }),
+        doc: "The raw samples.".to_string(),
+        ..named_field("samples", 2, "Speed", false, init_value(false, None))
+    };
+    let reading = v2::StructDef {
+        members: vec![
+            field_member(v2::Field {
+                doc: speed_doc.to_string(),
+                see: vec![see_link("Vin", "veh.common.Vin")],
+                since: vec!["0.2".to_string()],
+                ..named_field("speed", 1, "Speed", false, init_value(true, None))
+            }),
+            field_member(samples),
+            field_member(v2::Field {
+                deprecated: Some("use the frame number".to_string()),
+                ..named_field("vin", 3, "Vin", false, init_value(false, None))
+            }),
+        ],
+        fixed_layout: false,
+    };
+    vec![
+        speed_decl(),
+        vin_decl(),
+        v2::Decl {
+            visibility: v2::Visibility::Internal as i32,
+            ..public_decl(
+                "Hidden",
+                primitive_type(
+                    v2::PrimitiveType::Integer,
+                    init_value(true, Some("0")),
+                    derived_int_width(),
+                ),
+            )
+        },
+        v2::Decl {
+            doc: reading_doc.to_string(),
+            links: vec![
+                doc_link(reading_doc, "[Speed]", "veh.common.Speed"),
+                doc_link(reading_doc, "[Reading.speed]", "veh.common.Reading.speed"),
+                doc_link(reading_doc, "[other.pkg.Thing]", "other.pkg.Thing"),
+                doc_link(reading_doc, "[Hidden]", "veh.common.Hidden"),
+            ],
+            see: vec![
+                see_link("Speed", "veh.common.Speed"),
+                see_link("other.pkg.Thing", "other.pkg.Thing"),
+            ],
+            since: vec!["0.3".to_string(), "0.4".to_string()],
+            deprecated: Some("use Frame".to_string()),
+            ..public_decl("Reading", v2::decl::Kind::StructDef(reading))
+        },
+    ]
+}
+
+#[test]
+fn doc_block_on_declarations_and_fields() {
+    insta::assert_snapshot!(rust_for(documented_decls()));
+}
+
+#[test]
+fn doc_block_on_enum_values_and_union_arms() {
+    let park_doc = "Held by [Gear.DRIVE] until released.";
+    let gear = public_decl(
+        "Gear",
+        v2::decl::Kind::EnumDef(v2::EnumDef {
+            values: vec![
+                v2::EnumValue {
+                    doc: park_doc.to_string(),
+                    links: vec![doc_link(park_doc, "[Gear.DRIVE]", "veh.common.Gear.DRIVE")],
+                    see: vec![see_link("Speed", "veh.common.Speed")],
+                    since: vec!["0.2".to_string(), "0.5".to_string()],
+                    ..enum_value("PARK", 0)
+                },
+                enum_value("DRIVE", 1),
+            ],
+            reserved: Vec::new(),
+        }),
+    );
+    let arm_doc = "A value in [Speed], see [Measurement.fault].";
+    let measurement = v2::UnionDef {
+        arms: vec![
+            v2::UnionArm {
+                name: "reading".to_string(),
+                ordinal: 1,
+                type_ref: "Speed".to_string(),
+                doc: arm_doc.to_string(),
+                links: vec![
+                    doc_link(arm_doc, "[Speed]", "veh.common.Speed"),
+                    doc_link(
+                        arm_doc,
+                        "[Measurement.fault]",
+                        "veh.common.Measurement.fault",
+                    ),
+                ],
+                see: vec![see_link("other.pkg.Thing", "other.pkg.Thing")],
+                since: vec!["0.3".to_string()],
+            },
+            v2::UnionArm {
+                name: "fault".to_string(),
+                ordinal: 2,
+                type_ref: "Counter".to_string(),
+                doc: String::new(),
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
+            },
+        ],
+        is_result: false,
+        reserved: Vec::new(),
+    };
+    insta::assert_snapshot!(rust_for(vec![
+        speed_decl(),
+        counter_decl(),
+        gear,
+        public_decl("Measurement", v2::decl::Kind::UnionDef(measurement)),
+    ]));
+}
+
+/// A link after a multi-byte character: the offsets are bytes, so a
+/// replacement that counted characters would land one byte early.
+#[test]
+fn doc_link_after_multibyte_text() {
+    let doc = "Measured in °C, see [Speed].";
+    let source = rust_for(vec![
+        speed_decl(),
+        v2::Decl {
+            doc: doc.to_string(),
+            links: vec![doc_link(doc, "[Speed]", "veh.common.Speed")],
+            ..public_decl("Celsius", unit_type("Cel", "-40.0", "125.0", "0.5", "0.0"))
+        },
+    ]);
+    assert!(
+        source.contains("see [Speed](crate::veh::common::Speed)."),
+        "got:\n{source}"
+    );
+}
+
+/// A link to an internal type and a link to a type of a package outside the
+/// output render as code spans of the qualified name, never as a link.
+#[test]
+fn doc_link_to_internal_or_absent_target_is_a_code_span() {
+    let source = rust_for(documented_decls());
+    for target in ["veh.common.Hidden", "other.pkg.Thing"] {
+        assert!(source.contains(&format!("`{target}`")), "got:\n{source}");
+        assert!(!source.contains(&format!("`{target}`](")), "got:\n{source}");
+    }
+    for written in ["[Hidden](", "[other.pkg.Thing]("] {
+        assert!(!source.contains(written), "got:\n{source}");
+    }
+}

@@ -32,7 +32,13 @@ impl ::core::default::Default for Engaged {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Flags {
+    /// # Rules
+    ///
+    /// - count 0 ..= 4
     pub values: ::std::vec::Vec<::core::primitive::bool>,
+    /// # Rules
+    ///
+    /// - count 0 ..= 4
     pub engaged: ::std::vec::Vec<Engaged>,
 }
 impl ::core::default::Default for Flags {

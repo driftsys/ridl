@@ -5,6 +5,12 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
 ---
 // ===== package veh.common =====
 /// Vehicle speed over ground
+///
+/// # Rules
+///
+/// - range 0 ..= 250
+/// - step 0.5
+/// - unit km/h
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Speed(::core::primitive::f64);
@@ -197,6 +203,12 @@ impl ::core::default::Default for Speed {
     }
 }
 /// Coolant / ambient temperature
+///
+/// # Rules
+///
+/// - range -40 ..= 125
+/// - step 0.1
+/// - unit Cel
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Temperature(::core::primitive::f64);
@@ -389,6 +401,12 @@ impl ::core::default::Default for Temperature {
     }
 }
 /// Engine crankshaft speed
+///
+/// # Rules
+///
+/// - range 0 ..= 8000
+/// - step 10
+/// - unit /min
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct RPM(::core::primitive::f64);
@@ -581,6 +599,12 @@ impl ::core::default::Default for RPM {
     }
 }
 /// Normalised ratio
+///
+/// # Rules
+///
+/// - range 0 ..= 100
+/// - step 0.1
+/// - unit %
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Ratio(::core::primitive::f64);
@@ -772,6 +796,9 @@ impl ::core::default::Default for Ratio {
         Ratio::new_unchecked(0.0)
     }
 }
+/// # Rules
+///
+/// - range 0 ..= 65535
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Counter(::core::primitive::i64);
@@ -841,6 +868,10 @@ impl ::core::default::Default for Counter {
         Counter::new_unchecked(0)
     }
 }
+/// # Rules
+///
+/// - range 0 ..= 1
+/// - step 0.01
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Gain(::core::primitive::f64);
@@ -1147,7 +1178,17 @@ impl ::core::default::Default for WarningFlags {
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(C)]
 pub struct SpeedLimitPayload {
+    /// # Rules
+    ///
+    /// - range 0 ..= 250
+    /// - step 0.5
+    /// - unit km/h
     pub limit: Speed,
+    /// # Rules
+    ///
+    /// - range 0 ..= 250
+    /// - step 0.5
+    /// - unit km/h
     pub actual: Speed,
 }
 impl ::core::default::Default for SpeedLimitPayload {
@@ -1161,15 +1202,37 @@ impl ::core::default::Default for SpeedLimitPayload {
 #[derive(Debug, Clone, PartialEq)]
 pub struct DriverProfile {
     pub name: crate::ridl::std::Name,
+    /// # Rules
+    ///
+    /// - range 0 ..= 250
+    /// - step 0.5
+    /// - unit km/h
     pub speed: Speed,
+    /// # Rules
+    ///
+    /// - range 0 ..= 250
+    /// - step 0.5
+    /// - unit km/h
     pub r#override: ::core::option::Option<Speed>,
+    /// # Rules
+    ///
+    /// - range 0 ..= 6
     pub gears: ::core::primitive::i64,
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct SensorBounds {
     pub range: SensorBoundsRange,
+    /// # Rules
+    ///
+    /// - count 8
     pub readings: [Speed; 8],
+    /// # Rules
+    ///
+    /// - count 1 ..= 16
     pub labels: ::std::vec::Vec<crate::ridl::std::Label>,
+    /// # Rules
+    ///
+    /// - count 0 ..= 32
     pub meta: ::std::vec::Vec<(crate::ridl::std::Label, crate::ridl::std::Name)>,
 }
 #[derive(Debug, Clone, PartialEq)]
@@ -1185,6 +1248,11 @@ impl ::core::default::Default for SensorResult {
 #[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
 pub struct SensorReading {
+    /// # Rules
+    ///
+    /// - range 0 ..= 250
+    /// - step 0.5
+    /// - unit km/h
     pub value: Speed,
     pub timestamp: crate::ridl::std::Timestamp,
 }
@@ -1198,13 +1266,22 @@ impl ::core::default::Default for SensorReading {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct SensorFault {
+    /// # Rules
+    ///
+    /// - range 0 ..= 65535
     pub code: Counter,
     pub message: crate::ridl::std::Message,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[allow(dead_code)]
 pub(crate) struct RawWheelFrame {
+    /// # Rules
+    ///
+    /// - range 0 ..= 65535
     pub ticks: Counter,
+    /// # Rules
+    ///
+    /// - length 8
     pub frame: ::std::vec::Vec<::core::primitive::u8>,
 }
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -3114,6 +3191,9 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelF
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct DoorPayload {
+    /// # Rules
+    ///
+    /// - range 0 ..= 15
     pub sensor_id: ::core::primitive::i64,
     pub is_open: ::core::primitive::bool,
 }
@@ -3127,6 +3207,9 @@ impl ::core::default::Default for DoorPayload {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct DiagFilter {
+    /// # Rules
+    ///
+    /// - range 0 ..= 5
     pub severity: ::core::primitive::i64,
     pub category: ::core::option::Option<crate::ridl::std::Label>,
 }
@@ -3140,6 +3223,9 @@ impl ::core::default::Default for DiagFilter {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct FaultEvent {
+    /// # Rules
+    ///
+    /// - range 0 ..= 65535
     pub code: ::core::primitive::i64,
     pub message: crate::ridl::std::Message,
     pub timestamp: crate::ridl::std::Timestamp,
@@ -3181,6 +3267,9 @@ impl ::core::default::Default for DiagError {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct FaultPage {
+    /// # Rules
+    ///
+    /// - count 0 ..= 64
     pub faults: ::std::vec::Vec<FaultEvent>,
 }
 impl ::core::default::Default for FaultPage {
@@ -3194,6 +3283,10 @@ impl ::core::default::Default for FaultPage {
 /// `internal`-over-`internal` case is exercised inside one package. The
 /// cross-package counterpart is impossible by construction: a foreign
 /// `internal` name never resolves (typl §3.3).
+///
+/// # Rules
+///
+/// - range 0 ..= 65535
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 #[allow(dead_code)]
@@ -3274,6 +3367,9 @@ impl ::core::default::Default for RawTickCount {
 #[allow(dead_code)]
 pub(crate) struct RawWheelSpan {
     pub span: RawWheelSpanSpan,
+    /// # Rules
+    ///
+    /// - count 2
     pub bursts: [RawWheelSpanBurstsElement; 2],
 }
 #[allow(dead_code)]
@@ -3285,6 +3381,9 @@ impl ::core::default::Default for RawWheelSpan {
         }
     }
 }
+/// # Rules
+///
+/// - range 0 ..= 7
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct FanLevel(::core::primitive::i64);
@@ -3357,6 +3456,9 @@ impl ::core::default::Default for FanLevel {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct FilterState {
+    /// # Rules
+    ///
+    /// - range 0 ..= 65535
     pub hours_run: ::core::primitive::i64,
     pub clogged: ::core::primitive::bool,
 }
@@ -3373,6 +3475,9 @@ impl ::core::default::Default for FilterState {
 pub struct ClimateReport {
     pub cabin: crate::veh::common::Temperature,
     pub setpoint: crate::veh::common::Temperature,
+    /// # Rules
+    ///
+    /// - range 0 ..= 7
     pub fan: FanLevel,
 }
 impl ::core::default::Default for ClimateReport {
@@ -3426,6 +3531,10 @@ pub const FAN_CEILING: FanLevel = FanLevel::new_unchecked(7);
 /// The same ceiling, one hop further along the chain.
 pub const FAN_LIMIT: FanLevel = FanLevel::new_unchecked(7);
 /// The label a cabin fan reports itself under.
+///
+/// # Rules
+///
+/// - length 1 ..= 32
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct FanTag(::std::string::String);

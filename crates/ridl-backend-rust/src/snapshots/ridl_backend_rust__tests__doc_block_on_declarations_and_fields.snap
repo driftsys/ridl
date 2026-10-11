@@ -1,0 +1,360 @@
+---
+source: crates/ridl-backend-rust/src/tests.rs
+expression: rust_for(documented_decls())
+---
+/// Vehicle speed over ground
+///
+/// # Rules
+///
+/// - range 0.0 ..= 250.0
+/// - step 0.5
+/// - unit km/h
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[repr(transparent)]
+pub struct Speed(::core::primitive::f64);
+impl Speed {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(
+        value: ::core::primitive::f64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        Self::check(&value)?;
+        ::core::result::Result::Ok(Self::new_unchecked(value))
+    }
+    /// Checks `value` against this type's typl constraints, without
+    /// constructing it. `pub(crate)` rather than `pub`: a caller
+    /// outside `new` is a function generated into this crate — since
+    /// driftsys/ridl#467 that includes the codec of *another* package
+    /// of the same build, which reaches this type through the module
+    /// tree and so cannot see a private item here. The emitted crate
+    /// is one crate per build, so `pub(crate)` reaches every such
+    /// caller while adding nothing to the crate's public surface.
+    /// Whether this becomes `pub` is an open question of the public API surface.
+    /// `new` is the composition of this and `new_unchecked`.
+    pub(crate) fn check(
+        value: &::core::primitive::f64,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+        let value = *value;
+        if !value.is_finite() {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Speed",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if value < 0.0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Speed",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if value > 250.0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Speed",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        {
+            let __step_invalid: ::core::primitive::bool = {
+                let __checked: ::core::primitive::f64 = value as ::core::primitive::f32
+                    as ::core::primitive::f64;
+                {
+                    let __factor: ::core::primitive::f64 = 1f64;
+                    let __original_step: ::core::primitive::f64 = 0.5f64;
+                    let __step: ::core::primitive::f64 = 0.5f64;
+                    let __step_low: ::core::primitive::f64 = 0f64;
+                    let __phase: ::core::primitive::f64 = 0f64;
+                    let __phase_low: ::core::primitive::f64 = 0f64;
+                    if !__checked.is_finite() {
+                        true
+                    } else {
+                        let __represented = (__checked as ::core::primitive::f32).abs();
+                        let __bits = __represented.to_bits();
+                        let __below = if __bits == 0 {
+                            -::core::primitive::f32::from_bits(1)
+                        } else {
+                            ::core::primitive::f32::from_bits(__bits - 1)
+                        };
+                        let __above = ::core::primitive::f32::from_bits(__bits + 1);
+                        let __lower_gap = (__represented - __below)
+                            as ::core::primitive::f64;
+                        let __upper_gap = if __above.is_finite() {
+                            (__above - __represented) as ::core::primitive::f64
+                        } else {
+                            __lower_gap
+                        };
+                        let __cell = (__lower_gap + __upper_gap) / 2.0;
+                        if __original_step < __cell {
+                            false
+                        } else {
+                            let __scaled_value = __checked * __factor;
+                            let __delta = __scaled_value - __phase;
+                            let __quotient = if __delta.is_finite() {
+                                __delta / __step
+                            } else {
+                                __scaled_value / __step - __phase / __step
+                            };
+                            let __fraction = __quotient % 1.0;
+                            let __index = __quotient - __fraction
+                                + if __fraction >= 0.5 {
+                                    1.0
+                                } else if __fraction <= -0.5 {
+                                    -1.0
+                                } else {
+                                    0.0
+                                };
+                            let __scale = __checked
+                                .abs()
+                                .max((__phase / __factor).abs())
+                                .max(__original_step.abs());
+                            let __tolerance = (4.0
+                                * (::core::primitive::f32::EPSILON
+                                    as ::core::primitive::f64) * __scale)
+                                .min(__original_step / 4.0);
+                            let mut __distance = ::core::primitive::f64::INFINITY;
+                            let __rescale = if __scaled_value
+                                .abs()
+                                .max(__phase.abs())
+                                .max(__step.abs()) > ::core::primitive::f64::MAX / 4.0
+                            {
+                                0.25
+                            } else {
+                                1.0
+                            };
+                            let __product_with_error = |
+                                __left: ::core::primitive::f64,
+                                __right: ::core::primitive::f64|
+                            {
+                                let __product = __left * __right;
+                                let __left_high = ::core::primitive::f64::from_bits(
+                                    __left.to_bits() & !((1u64 << 27) - 1),
+                                );
+                                let __right_high = ::core::primitive::f64::from_bits(
+                                    __right.to_bits() & !((1u64 << 27) - 1),
+                                );
+                                let __left_low = __left - __left_high;
+                                let __right_low = __right - __right_high;
+                                let __error = ((__left_high * __right_high - __product)
+                                    + __left_high * __right_low + __left_low * __right_high)
+                                    + __left_low * __right_low;
+                                (__product, __error)
+                            };
+                            for __candidate in [__index - 1.0, __index, __index + 1.0] {
+                                let (__product, __product_error) = __product_with_error(
+                                    __candidate,
+                                    __step * __rescale,
+                                );
+                                let __scaled_phase = __phase * __rescale;
+                                let __sum = __product + __scaled_phase;
+                                let __part = __sum - __product;
+                                let __sum_error = (__product - (__sum - __part))
+                                    + (__scaled_phase - __part);
+                                let __low = __candidate * (__step_low * __rescale)
+                                    + __phase_low * __rescale + __product_error + __sum_error;
+                                let __nearest = __sum + __low;
+                                let __nearest = (__nearest / __factor / __rescale)
+                                    as ::core::primitive::f32 as ::core::primitive::f64;
+                                if __nearest.is_finite() {
+                                    __distance = __distance.min((__checked - __nearest).abs());
+                                }
+                            }
+                            !__quotient.is_finite() || __distance > __tolerance
+                        }
+                    }
+                }
+            };
+            if __step_invalid {
+                return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                    type_name: "Speed",
+                    rule: ::ridl_rt::payload::Rule::Step,
+                });
+            }
+        }
+        ::core::result::Result::Ok(())
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: ::core::primitive::f64) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> ::core::primitive::f64 {
+        self.0
+    }
+}
+impl ::core::convert::TryFrom<::core::primitive::f64> for Speed {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(
+        value: ::core::primitive::f64,
+    ) -> ::core::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl ::core::convert::From<Speed> for ::core::primitive::f64 {
+    fn from(value: Speed) -> Self {
+        value.0
+    }
+}
+impl ::core::default::Default for Speed {
+    fn default() -> Self {
+        Speed::new_unchecked(0.0)
+    }
+}
+/// # Rules
+///
+/// - length 17
+/// - pattern `/[A-HJ-NPR-Z0-9]{17}/`
+///
+/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct Vin(::std::string::String);
+impl Vin {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(
+        value: ::std::string::String,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        Self::check(&value)?;
+        ::core::result::Result::Ok(Self::new_unchecked(value))
+    }
+    /// Checks `value` against this type's typl constraints, without
+    /// constructing it. `pub(crate)` rather than `pub`: a caller
+    /// outside `new` is a function generated into this crate — since
+    /// driftsys/ridl#467 that includes the codec of *another* package
+    /// of the same build, which reaches this type through the module
+    /// tree and so cannot see a private item here. The emitted crate
+    /// is one crate per build, so `pub(crate)` reaches every such
+    /// caller while adding nothing to the crate's public surface.
+    /// Whether this becomes `pub` is an open question of the public API surface.
+    /// `new` is the composition of this and `new_unchecked`.
+    pub(crate) fn check(
+        value: &::core::primitive::str,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+        if (value.chars().count() as ::core::primitive::u64) < 17 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Vin",
+                rule: ::ridl_rt::payload::Rule::Length,
+            });
+        }
+        if (value.chars().count() as ::core::primitive::u64) > 17 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Vin",
+                rule: ::ridl_rt::payload::Rule::Length,
+            });
+        }
+        #[cfg(feature = "validate-pattern")]
+        {
+            static PATTERN: ::std::sync::LazyLock<::regex::Regex> = ::std::sync::LazyLock::new(||
+            {
+                ::regex::Regex::new("[A-HJ-NPR-Z0-9]{17}")
+                    .expect("ridlc emitted an invalid pattern")
+            });
+            if !PATTERN.is_match(value) {
+                return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                    type_name: "Vin",
+                    rule: ::ridl_rt::payload::Rule::Pattern,
+                });
+            }
+        }
+        ::core::result::Result::Ok(())
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: ::std::string::String) -> Self {
+        Self(value)
+    }
+    pub fn get(&self) -> &::core::primitive::str {
+        &self.0
+    }
+    pub fn into_inner(self) -> ::std::string::String {
+        self.0
+    }
+}
+impl ::core::convert::TryFrom<::std::string::String> for Vin {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::core::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl ::core::convert::From<Vin> for ::std::string::String {
+    fn from(value: Vin) -> Self {
+        value.0
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
+#[allow(dead_code)]
+pub(crate) struct Hidden(::core::primitive::i64);
+#[allow(dead_code)]
+impl Hidden {
+    /// Constructs the value. This type declares no constraint, so
+    /// construction cannot fail.
+    pub(crate) const fn new(value: ::core::primitive::i64) -> Self {
+        Self(value)
+    }
+    pub(crate) const fn get(self) -> ::core::primitive::i64 {
+        self.0
+    }
+}
+#[allow(dead_code)]
+impl ::core::convert::From<::core::primitive::i64> for Hidden {
+    fn from(value: ::core::primitive::i64) -> Self {
+        Self(value)
+    }
+}
+#[allow(dead_code)]
+impl ::core::convert::From<Hidden> for ::core::primitive::i64 {
+    fn from(value: Hidden) -> Self {
+        value.0
+    }
+}
+#[allow(dead_code)]
+impl ::core::default::Default for Hidden {
+    fn default() -> Self {
+        Hidden::new(0)
+    }
+}
+/// Combines [Speed](crate::veh::common::Speed) and [Reading.speed](crate::veh::common::Reading::speed), from `other.pkg.Thing` and `veh.common.Hidden`.
+///
+/// # See also
+///
+/// - [Speed](crate::veh::common::Speed)
+/// - `other.pkg.Thing`
+///
+/// Available since 0.3.
+/// Available since 0.4.
+#[derive(Debug, Clone, PartialEq)]
+#[deprecated(note = "use Frame")]
+pub struct Reading {
+    /// The speed of this reading.
+    ///
+    /// # Rules
+    ///
+    /// - range 0.0 ..= 250.0
+    /// - step 0.5
+    /// - unit km/h
+    ///
+    /// # See also
+    ///
+    /// - [Vin](crate::veh::common::Vin)
+    ///
+    /// Available since 0.2.
+    pub speed: Speed,
+    /// The raw samples.
+    ///
+    /// # Rules
+    ///
+    /// - count 1 ..= 8
+    pub samples: ::std::vec::Vec<Speed>,
+    /// # Rules
+    ///
+    /// - length 17
+    /// - pattern `/[A-HJ-NPR-Z0-9]{17}/`
+    #[deprecated(note = "use the frame number")]
+    pub vin: Vin,
+}

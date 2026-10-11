@@ -28,7 +28,7 @@ use quote::{format_ident, quote};
 use ridl_ir::codegen::v1;
 use ridl_ir::v2;
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 mod claims;
 mod clauses;
@@ -37,6 +37,7 @@ mod contract;
 mod defaults;
 mod derives;
 mod descriptors;
+mod docs;
 mod face;
 mod scalar_step;
 
@@ -677,6 +678,10 @@ pub(crate) struct Ctx<'a> {
     /// Makes this model's package names what [`type_path`] reads while the
     /// context lives (driftsys/ridl#416).
     _build_packages: BuildPackages,
+    /// The indices into `model.interfaces` of the interfaces whose face
+    /// module this output holds, which a doc link may point at
+    /// ([`docs::Links`]). Empty: no doc block is rendered beside a face.
+    faced: BTreeSet<u32>,
 }
 
 impl<'a> Ctx<'a> {
@@ -707,7 +712,13 @@ impl<'a> Ctx<'a> {
             model,
             visiting: RefCell::new(HashSet::new()),
             _build_packages: BuildPackages::install(model),
+            faced: BTreeSet::new(),
         }
+    }
+
+    /// The doc-link resolver over this model.
+    pub(crate) fn links(&self) -> docs::Links<'_> {
+        docs::Links::new(self.model, &self.faced)
     }
 
     /// The name of the package this model was lowered for.
@@ -951,14 +962,14 @@ fn emit_decl(ctx: &Ctx, decl: &v1::Declaration) -> TokenStream {
     // never among the traits (`derives`, design decision 8).
     let derived = derives::derive_attr(ctx, decl);
     let item = match decl.kind.as_ref() {
-        Some(v1::declaration::Kind::Scalar(sc)) => emit_type_def(decl, sc, &derived),
+        Some(v1::declaration::Kind::Scalar(sc)) => emit_type_def(ctx, decl, sc, &derived),
         Some(v1::declaration::Kind::Constant(cd)) => {
             return allow_dead_code_if_internal(decl.visibility, emit_const(ctx, decl, cd));
         }
         Some(v1::declaration::Kind::Struct(sd)) => emit_struct(ctx, decl, sd, &derived),
-        Some(v1::declaration::Kind::Enum(ed)) => emit_enum(decl, ed, &derived),
-        Some(v1::declaration::Kind::EnumSet(esd)) => emit_enum_set(decl, esd, &derived),
-        Some(v1::declaration::Kind::Union(ud)) => emit_union(decl, ud, &derived),
+        Some(v1::declaration::Kind::Enum(ed)) => emit_enum(ctx, decl, ed, &derived),
+        Some(v1::declaration::Kind::EnumSet(esd)) => emit_enum_set(ctx, decl, esd, &derived),
+        Some(v1::declaration::Kind::Union(ud)) => emit_union(ctx, decl, ud, &derived),
         // An interaction rides `Interface.interactions`, never a package
         // declaration, so the lowering leaves the kind unset for one and
         // nothing emits them today.
@@ -999,14 +1010,19 @@ fn emit_decl(ctx: &Ctx, decl: &v1::Declaration) -> TokenStream {
 /// Each covered impl block uses the deprecated type, and without the allow
 /// the consumer's build draws the `deprecated` lint on code the consumer did
 /// not write.
-fn emit_type_def(decl: &v1::Declaration, sc: &v1::Scalar, derived: &TokenStream) -> TokenStream {
+fn emit_type_def(
+    ctx: &Ctx,
+    decl: &v1::Declaration,
+    sc: &v1::Scalar,
+    derived: &TokenStream,
+) -> TokenStream {
     let name = ident(declared(decl.name.as_ref()));
     let inner = newtype_inner(sc);
-    let doc = doc_attrs(&decl.doc);
+    let doc = docs::doc_block(&docs::DocParts::declaration(decl), &ctx.links());
     let unchecked = unchecked_doc(sc);
     // A blank doc line keeps the unchecked note out of the declaration's own
     // doc paragraph.
-    let separator = if decl.doc.is_empty() || unchecked.is_empty() {
+    let separator = if doc.is_empty() || unchecked.is_empty() {
         quote! {}
     } else {
         quote! { #[doc = ""] }
@@ -1021,7 +1037,7 @@ fn emit_type_def(decl: &v1::Declaration, sc: &v1::Scalar, derived: &TokenStream)
     let type_name = declared(decl.name.as_ref());
 
     if sc.vacuous {
-        return emit_vacuous_type_def(decl, sc, derived);
+        return emit_vacuous_type_def(ctx, decl, sc, derived);
     }
 
     let check_param_ty = check_param_type(sc);
@@ -1114,15 +1130,16 @@ fn emit_type_def(decl: &v1::Declaration, sc: &v1::Scalar, derived: &TokenStream)
 /// typl package may declare `type From`, and that declaration shadows the
 /// prelude in the module the generated impl shares with it.
 fn emit_vacuous_type_def(
+    ctx: &Ctx,
     decl: &v1::Declaration,
     sc: &v1::Scalar,
     derived: &TokenStream,
 ) -> TokenStream {
     let name = ident(declared(decl.name.as_ref()));
     let inner = newtype_inner(sc);
-    let doc = doc_attrs(&decl.doc);
+    let doc = docs::doc_block(&docs::DocParts::declaration(decl), &ctx.links());
     let unchecked = unchecked_doc(sc);
-    let separator = if decl.doc.is_empty() || unchecked.is_empty() {
+    let separator = if doc.is_empty() || unchecked.is_empty() {
         quote! {}
     } else {
         quote! { #[doc = ""] }
@@ -1483,7 +1500,7 @@ fn unchecked_doc(sc: &v1::Scalar) -> TokenStream {
 /// header and here.
 fn emit_const(ctx: &Ctx, decl: &v1::Declaration, cd: &v1::Constant) -> TokenStream {
     // A constant is a value, not a type: there is nothing to derive on it.
-    let attrs = decl_attrs(decl, &quote! {});
+    let attrs = decl_attrs(ctx, decl, &quote! {});
     let vis = vis_tokens(decl.visibility);
     let name = ident(declared(decl.name.as_ref()));
 
@@ -1572,7 +1589,7 @@ fn emit_struct(
     derived: &TokenStream,
 ) -> TokenStream {
     let name = ident(declared(decl.name.as_ref()));
-    let attrs = decl_attrs(decl, derived);
+    let attrs = decl_attrs(ctx, decl, derived);
     let vis = vis_tokens(decl.visibility);
     let repr = if sd.fixed_layout {
         quote! { #[repr(C)] }
@@ -1614,7 +1631,7 @@ fn emit_struct(
 /// (`claims::check`).
 fn emit_field(ctx: &Ctx, field: &v1::Field) -> TokenStream {
     let field_name = ident(snake_of(field.name.as_ref()));
-    let attrs = field_attrs(field);
+    let attrs = field_attrs(ctx, field);
     let ty = field
         .r#type
         .as_ref()
@@ -1626,15 +1643,20 @@ fn emit_field(ctx: &Ctx, field: &v1::Field) -> TokenStream {
 /// An enum becomes `#[repr(i64)]` with the declared discriminants (typl §8).
 /// Variant names are the pinned `pascal_case` of the typl name (ADR-0016,
 /// 2026-09-26 amendment), so `CHECK_ENGINE` becomes `CheckEngine`.
-fn emit_enum(decl: &v1::Declaration, ed: &v1::Enum, derived: &TokenStream) -> TokenStream {
+fn emit_enum(
+    ctx: &Ctx,
+    decl: &v1::Declaration,
+    ed: &v1::Enum,
+    derived: &TokenStream,
+) -> TokenStream {
     let name = ident(declared(decl.name.as_ref()));
-    let attrs = decl_attrs(decl, derived);
+    let attrs = decl_attrs(ctx, decl, derived);
     let vis = vis_tokens(decl.visibility);
 
     let variants = ed.values.iter().map(|value| {
         let vname = ident(&pascal_of(value.name.as_ref()));
         let disc = int_tokens(value.value);
-        let vdoc = doc_attrs(&value.doc);
+        let vdoc = docs::doc_block(&docs::DocParts::enum_value(value), &ctx.links());
         quote! { #vdoc #vname = #disc }
     });
 
@@ -1705,9 +1727,14 @@ fn emit_enum(decl: &v1::Declaration, ed: &v1::Enum, derived: &TokenStream) -> To
 /// consumer's build draws the `deprecated` lint on code the consumer did not
 /// write — which is what driftsys/ridl#420 settled for a named scalar's impl
 /// blocks.
-fn emit_enum_set(decl: &v1::Declaration, esd: &v1::EnumSet, derived: &TokenStream) -> TokenStream {
+fn emit_enum_set(
+    ctx: &Ctx,
+    decl: &v1::Declaration,
+    esd: &v1::EnumSet,
+    derived: &TokenStream,
+) -> TokenStream {
     let name = ident(declared(decl.name.as_ref()));
-    let attrs = decl_attrs(decl, derived);
+    let attrs = decl_attrs(ctx, decl, derived);
     let vis = vis_tokens(decl.visibility);
 
     let bits = esd.bits.iter().map(|bit| {
@@ -1789,15 +1816,20 @@ fn emit_enum_set(decl: &v1::Declaration, esd: &v1::EnumSet, derived: &TokenStrea
 
 /// A union becomes a `pub enum` with one variant per arm; arm names are
 /// CamelCased (typl §10). Reserved arms are skipped.
-fn emit_union(decl: &v1::Declaration, ud: &v1::Union, derived: &TokenStream) -> TokenStream {
+fn emit_union(
+    ctx: &Ctx,
+    decl: &v1::Declaration,
+    ud: &v1::Union,
+    derived: &TokenStream,
+) -> TokenStream {
     let name = ident(declared(decl.name.as_ref()));
-    let attrs = decl_attrs(decl, derived);
+    let attrs = decl_attrs(ctx, decl, derived);
     let vis = vis_tokens(decl.visibility);
 
     let variants = ud.arms.iter().map(|arm| {
         let vname = ident(camel_of(arm.name.as_ref()));
         let ty = type_path(arm_reference(arm));
-        let vdoc = doc_attrs(&arm.doc);
+        let vdoc = docs::doc_block(&docs::DocParts::arm(arm), &ctx.links());
         quote! { #vdoc #vname(#ty) }
     });
 
@@ -2039,29 +2071,16 @@ pub(crate) enum ScalarBacking {
 /// comment because that is where Rust is conventionally written; it sits above
 /// `#[deprecated]` and the `#[repr(...)]` each emitter adds because a reader
 /// looks for the trait list first.
-fn decl_attrs(decl: &v1::Declaration, derived: &TokenStream) -> TokenStream {
-    let doc = doc_attrs(&decl.doc);
+fn decl_attrs(ctx: &Ctx, decl: &v1::Declaration, derived: &TokenStream) -> TokenStream {
+    let doc = docs::doc_block(&docs::DocParts::declaration(decl), &ctx.links());
     let deprecated = deprecated_attr(decl.deprecated.as_deref());
     quote! { #doc #derived #deprecated }
 }
 
-fn field_attrs(field: &v1::Field) -> TokenStream {
-    let doc = doc_attrs(&field.doc);
+fn field_attrs(ctx: &Ctx, field: &v1::Field) -> TokenStream {
+    let doc = docs::doc_block(&docs::DocParts::field(field), &ctx.links());
     let deprecated = deprecated_attr(field.deprecated.as_deref());
     quote! { #doc #deprecated }
-}
-
-/// One `#[doc]` attribute per line; prettyplease renders these as `///`
-/// comments. A leading space makes the rendered comment read `/// text`.
-pub(crate) fn doc_attrs(doc: &str) -> TokenStream {
-    if doc.is_empty() {
-        return quote! {};
-    }
-    let lines = doc.split('\n').map(|line| {
-        let text = format!(" {line}");
-        quote! { #[doc = #text] }
-    });
-    quote! { #(#lines)* }
 }
 
 /// `@deprecated` maps to `#[deprecated]`; a present-but-empty reason (the IR's

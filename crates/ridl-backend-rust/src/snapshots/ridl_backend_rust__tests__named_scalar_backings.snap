@@ -3,6 +3,12 @@ source: crates/ridl-backend-rust/src/tests.rs
 expression: rust_with_codec(decls)
 ---
 /// Vehicle speed over ground
+///
+/// # Rules
+///
+/// - range 0.0 ..= 250.0
+/// - step 0.5
+/// - unit km/h
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Speed(::core::primitive::f64);
@@ -250,6 +256,9 @@ impl ::core::default::Default for Enabled {
         Enabled::new(false)
     }
 }
+/// # Rules
+///
+/// - length ..= 256
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Label(::std::string::String);
@@ -315,6 +324,9 @@ impl ::core::default::Default for Label {
         Label::new_unchecked(::std::string::String::new())
     }
 }
+/// # Rules
+///
+/// - length ..= 256
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Blob(::std::vec::Vec<::core::primitive::u8>);

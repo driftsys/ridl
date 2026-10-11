@@ -2,6 +2,11 @@
 source: crates/ridlc/tests/golden.rs
 expression: output.rust_source
 ---
+/// # Rules
+///
+/// - range 0 ..= 250
+/// - step 0.5
+/// - unit km/h
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Speed(::core::primitive::f64);

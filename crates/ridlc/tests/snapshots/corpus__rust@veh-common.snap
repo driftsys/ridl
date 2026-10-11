@@ -5,6 +5,12 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
 ---
 // ===== package veh.common =====
 /// Vehicle speed over ground
+///
+/// # Rules
+///
+/// - range 0 ..= 250
+/// - step 0.5
+/// - unit km/h
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Speed(::core::primitive::f64);
@@ -197,6 +203,12 @@ impl ::core::default::Default for Speed {
     }
 }
 /// Coolant / ambient temperature
+///
+/// # Rules
+///
+/// - range -40 ..= 125
+/// - step 0.1
+/// - unit Cel
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Temperature(::core::primitive::f64);
@@ -389,6 +401,12 @@ impl ::core::default::Default for Temperature {
     }
 }
 /// Engine crankshaft speed
+///
+/// # Rules
+///
+/// - range 0 ..= 8000
+/// - step 10
+/// - unit /min
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct RPM(::core::primitive::f64);
@@ -581,6 +599,12 @@ impl ::core::default::Default for RPM {
     }
 }
 /// Normalised ratio
+///
+/// # Rules
+///
+/// - range 0 ..= 100
+/// - step 0.1
+/// - unit %
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Ratio(::core::primitive::f64);
@@ -772,6 +796,9 @@ impl ::core::default::Default for Ratio {
         Ratio::new_unchecked(0.0)
     }
 }
+/// # Rules
+///
+/// - range 0 ..= 65535
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Counter(::core::primitive::i64);
@@ -841,6 +868,10 @@ impl ::core::default::Default for Counter {
         Counter::new_unchecked(0)
     }
 }
+/// # Rules
+///
+/// - range 0 ..= 1
+/// - step 0.01
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Gain(::core::primitive::f64);
@@ -1147,7 +1178,17 @@ impl ::core::default::Default for WarningFlags {
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(C)]
 pub struct SpeedLimitPayload {
+    /// # Rules
+    ///
+    /// - range 0 ..= 250
+    /// - step 0.5
+    /// - unit km/h
     pub limit: Speed,
+    /// # Rules
+    ///
+    /// - range 0 ..= 250
+    /// - step 0.5
+    /// - unit km/h
     pub actual: Speed,
 }
 impl ::core::default::Default for SpeedLimitPayload {
@@ -1161,15 +1202,37 @@ impl ::core::default::Default for SpeedLimitPayload {
 #[derive(Debug, Clone, PartialEq)]
 pub struct DriverProfile {
     pub name: crate::ridl::std::Name,
+    /// # Rules
+    ///
+    /// - range 0 ..= 250
+    /// - step 0.5
+    /// - unit km/h
     pub speed: Speed,
+    /// # Rules
+    ///
+    /// - range 0 ..= 250
+    /// - step 0.5
+    /// - unit km/h
     pub r#override: ::core::option::Option<Speed>,
+    /// # Rules
+    ///
+    /// - range 0 ..= 6
     pub gears: ::core::primitive::i64,
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct SensorBounds {
     pub range: SensorBoundsRange,
+    /// # Rules
+    ///
+    /// - count 8
     pub readings: [Speed; 8],
+    /// # Rules
+    ///
+    /// - count 1 ..= 16
     pub labels: ::std::vec::Vec<crate::ridl::std::Label>,
+    /// # Rules
+    ///
+    /// - count 0 ..= 32
     pub meta: ::std::vec::Vec<(crate::ridl::std::Label, crate::ridl::std::Name)>,
 }
 #[derive(Debug, Clone, PartialEq)]
@@ -1185,6 +1248,11 @@ impl ::core::default::Default for SensorResult {
 #[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
 pub struct SensorReading {
+    /// # Rules
+    ///
+    /// - range 0 ..= 250
+    /// - step 0.5
+    /// - unit km/h
     pub value: Speed,
     pub timestamp: crate::ridl::std::Timestamp,
 }
@@ -1198,13 +1266,22 @@ impl ::core::default::Default for SensorReading {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct SensorFault {
+    /// # Rules
+    ///
+    /// - range 0 ..= 65535
     pub code: Counter,
     pub message: crate::ridl::std::Message,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[allow(dead_code)]
 pub(crate) struct RawWheelFrame {
+    /// # Rules
+    ///
+    /// - range 0 ..= 65535
     pub ticks: Counter,
+    /// # Rules
+    ///
+    /// - length 8
     pub frame: ::std::vec::Vec<::core::primitive::u8>,
 }
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -2,6 +2,9 @@
 source: crates/ridl-backend-rust/src/tests.rs
 expression: rust_with_codec(decls)
 ---
+/// # Rules
+///
+/// - length 1 ..= 64
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Name(::std::string::String);
@@ -68,6 +71,9 @@ impl ::core::convert::From<Name> for ::std::string::String {
         value.0
     }
 }
+/// # Rules
+///
+/// - length 0 ..= 32
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Digest(::std::vec::Vec<::core::primitive::u8>);
@@ -133,6 +139,9 @@ impl ::core::default::Default for Digest {
         Digest::new_unchecked(::std::vec::Vec::new())
     }
 }
+/// # Rules
+///
+/// - range 0.0 ..= 1.0
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Ratio(::core::primitive::f64);
