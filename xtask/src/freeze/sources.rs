@@ -24,9 +24,15 @@ fn packages(root: &Path) -> Result<Vec<(String, String)>, String> {
 /// `<path> ok` for each package copy on which `ridl check` exits 0, where
 /// `<path>` is the path of the original, for example `examples/cabin`.
 pub fn dump(root: &Path) -> Result<Vec<String>, String> {
+    accepted(root, packages(root)?)
+}
+
+/// `<label> ok` for each `(label, directory)` of `packages` on which
+/// `ridl check` exits 0.
+fn accepted(root: &Path, packages: Vec<(String, String)>) -> Result<Vec<String>, String> {
     let ridl = bin::binary(root, "ridl")?;
     let mut lines = Vec::new();
-    for (label, dir) in packages(root)? {
+    for (label, dir) in packages {
         if bin::run(&ridl, root, &["check", &dir])?.code == 0 {
             lines.push(format!("{label} ok"));
         }
@@ -46,6 +52,26 @@ mod tests {
     fn sources_dump_accepts_cabin() {
         let lines = dump(root()).unwrap();
         assert!(lines.iter().any(|l| l == "examples/cabin ok"), "{lines:?}");
+    }
+
+    #[test]
+    fn a_package_that_ridl_check_rejects_has_no_line() {
+        // `xtask/tests/freeze-fixtures/error` draws an error, so `ridl check`
+        // exits 1 on it.
+        let packages = vec![
+            (
+                "examples/cabin".to_string(),
+                format!("{}/examples/cabin", bin::SOURCE_COPIES),
+            ),
+            (
+                "rejected".to_string(),
+                "xtask/tests/freeze-fixtures/error".to_string(),
+            ),
+        ];
+        assert_eq!(
+            accepted(root(), packages).unwrap(),
+            vec!["examples/cabin ok"]
+        );
     }
 
     #[test]
