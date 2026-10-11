@@ -86,7 +86,8 @@ use crate::descriptors::{
     declared_name, descriptor_ident, interactions, query_param_type, query_reply_type,
     single_param_type,
 };
-use crate::{GenerateError, camel_of, declared, ident, snake_of, type_path};
+use crate::docs::{self, DocParts, Links};
+use crate::{GenerateError, camel_of, declared, deprecated_attr, ident, snake_of, type_path};
 use proc_macro2::{Ident, Literal, TokenStream};
 use quote::quote;
 use ridl_ir::codegen::v1;
@@ -104,18 +105,21 @@ use self::poll::plumbing;
 use self::serve::serve;
 
 /// The face module for every named interface of the lowered model, in source
-/// order.
+/// order, with doc links resolved by `links`.
 ///
 /// The model's `interfaces` list is `Package::shapes()` order, and a service's
 /// inline shape is skipped, for the same two reasons the descriptor layer
 /// gives.
-pub(crate) fn interface_items(model: &v1::Model) -> Result<Vec<TokenStream>, GenerateError> {
+pub(crate) fn interface_items(
+    model: &v1::Model,
+    links: &Links<'_>,
+) -> Result<Vec<TokenStream>, GenerateError> {
     let mut items = Vec::new();
     for interface in &model.interfaces {
         if declared_name(interface).is_none() {
             continue;
         }
-        if let Some(module) = one_interface(interface)? {
+        if let Some(module) = one_interface(interface, links)? {
             items.push(module);
         }
     }
@@ -136,6 +140,12 @@ struct Member<'a> {
     /// The pinned CamelCase of the declared name, which the correlation
     /// newtype and the event enum's variant are spelled with.
     camel: &'a str,
+    /// The interaction's own doc comment, as `docs::doc_block` renders it:
+    /// empty when the interaction has none.
+    doc: TokenStream,
+    /// The interaction's `@deprecated` reason, `Some("")` for one with no
+    /// reason, and `None` when it is not deprecated.
+    deprecated: Option<&'a str>,
 }
 
 /// One command or query, with the declared argument name and type the face
@@ -149,6 +159,44 @@ struct Call<'a> {
     arg_type: &'a str,
     /// The reply type, present on a query and absent on a command.
     reply_type: Option<&'a str>,
+    /// The `# Parameters` section of the call's methods, as
+    /// `docs::parameters` renders it.
+    params_doc: TokenStream,
+}
+
+/// The doc of a method a user calls or implements for `member`: the
+/// interaction's own doc, then `sentence`, the face's generated text, as its
+/// own paragraph.
+fn member_doc(member: &Member, sentence: &str) -> TokenStream {
+    let doc = &member.doc;
+    let blank = (!doc.is_empty()).then(|| quote! { #[doc = ""] });
+    quote! {
+        #doc
+        #blank
+        #[doc = #sentence]
+    }
+}
+
+/// [`member_doc`] for a call's method, followed by the call's
+/// `# Parameters` section.
+fn call_doc(call: &Call, sentence: &str) -> TokenStream {
+    let doc = member_doc(&call.member, sentence);
+    let params = &call.params_doc;
+    quote! {
+        #doc
+        #params
+    }
+}
+
+/// `#[allow(deprecated)]` for a generated item that calls a method of one of
+/// `members`, when one of them is deprecated, so that the generated code
+/// draws no `deprecated` warning of its own; nothing otherwise.
+fn allow_deprecated<'a>(mut members: impl Iterator<Item = &'a Member<'a>>) -> TokenStream {
+    if members.any(|member| member.deprecated.is_some()) {
+        quote! { #[allow(deprecated)] }
+    } else {
+        TokenStream::new()
+    }
 }
 
 /// The face module of one interface, or `None` when the interface is `internal`
@@ -164,6 +212,7 @@ struct Call<'a> {
 /// `veh::__ridl_package::climate`.
 pub(crate) fn one_interface(
     interface: &v1::Interface,
+    links: &Links<'_>,
 ) -> Result<Option<TokenStream>, GenerateError> {
     if is_internal(interface) {
         return Ok(None);
@@ -193,6 +242,8 @@ pub(crate) fn one_interface(
             },
             declared: name,
             camel: camel_of(interaction.name.as_ref()),
+            doc: docs::doc_block(&DocParts::interaction(interaction), links),
+            deprecated: interaction.deprecated.as_deref(),
         };
         match interaction.shape.as_ref() {
             Some(v1::interaction::Shape::Signal(signal)) => {
@@ -207,6 +258,7 @@ pub(crate) fn one_interface(
                     arg: single_param_name(&command.params),
                     member,
                     reply_type: None,
+                    params_doc: docs::parameters(&command.params, links),
                 });
             }
             Some(v1::interaction::Shape::Query(query)) => {
@@ -215,6 +267,7 @@ pub(crate) fn one_interface(
                     arg: single_param_name(&query.params),
                     member,
                     reply_type: Some(query_reply_type(query, name)?),
+                    params_doc: docs::parameters(&query.params, links),
                 });
             }
             // A `fixed` is provisioned, not interacted with, so the MVP's face
@@ -264,8 +317,12 @@ pub(crate) fn one_interface(
     body.push(prelude(iface_name, &signals, &events, blocking.is_some()));
     body.extend(blocking);
 
+    let interface_doc = docs::doc_block(&DocParts::interface(interface), links);
+    let blank = (!interface_doc.is_empty()).then(|| quote! { #[doc = ""] });
     let module_doc = format!("The generated interaction face of interface `{iface_name}`.");
     Ok(Some(quote! {
+        #interface_doc
+        #blank
         #[doc = #module_doc]
         pub mod #module {
             #(#body)*
@@ -378,8 +435,11 @@ fn client(
              channel's init value.",
             member.declared
         );
+        let doc = member_doc(member, &doc);
+        let deprecated = deprecated_attr(member.deprecated);
         methods.push(quote! {
-            #[doc = #doc]
+            #doc
+            #deprecated
             pub fn #method(
                 &self,
             ) -> ::core::result::Result<
@@ -761,8 +821,11 @@ fn call_method(call: &Call, kind: &str) -> TokenStream {
          future holds this client's port until it is dropped.",
         member.declared
     );
+    let doc = call_doc(call, &doc);
+    let deprecated = deprecated_attr(member.deprecated);
     quote! {
-        #[doc = #doc]
+        #doc
+        #deprecated
         pub fn #method(&mut self, #arg: #path) -> #future<'_, P> {
             let __arg = #arg;
             let deadline = <#descriptor as ::ridl_rt::contract::Interaction>::MEMBER
@@ -840,8 +903,9 @@ fn publisher(
             "Stages a new value for signal `{}`. It is published by `commit`.",
             member.declared
         );
+        let set_doc = member_doc(member, &set_doc);
         methods.push(quote! {
-            #[doc = #set_doc]
+            #set_doc
             pub fn #method(
                 &mut self,
                 value: #path,
@@ -865,8 +929,9 @@ fn publisher(
             "the payload buffer",
         );
         let doc = format!("Raises one occurrence of event `{}`.", member.declared);
+        let doc = member_doc(member, &doc);
         methods.push(quote! {
-            #[doc = #doc]
+            #doc
             pub fn #method(
                 &mut self,
                 value: #path,
@@ -958,8 +1023,11 @@ fn provider(iface_name: &str, commands: &[Call], queries: &[Call]) -> TokenStrea
              typl constraints or the `require` clauses never reach it.",
             member.declared
         );
+        let doc = call_doc(call, &doc);
+        let deprecated = deprecated_attr(member.deprecated);
         quote! {
-            #[doc = #doc]
+            #doc
+            #deprecated
             fn #method(&mut self, #arg: &#path);
         }
     });
@@ -974,8 +1042,11 @@ fn provider(iface_name: &str, commands: &[Call], queries: &[Call]) -> TokenStrea
              discarded by `serve`, which settles `ContractBroken` instead.",
             member.declared
         );
+        let doc = call_doc(call, &doc);
+        let deprecated = deprecated_attr(member.deprecated);
         quote! {
-            #[doc = #doc]
+            #doc
+            #deprecated
             fn #method(&mut self, #arg: &#path) -> #reply_path;
         }
     });

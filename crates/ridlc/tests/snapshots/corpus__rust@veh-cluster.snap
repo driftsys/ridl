@@ -5622,6 +5622,9 @@ impl ::ridl_rt::contract::Signal for WheelHistoryWheelSlipRate {
         <crate::veh::common::Ratio as ::core::default::Default>::default()
     }
 }
+/// Retired members in a named interface. Ordinals 2 and 4 can never be
+/// reissued; `wheelSlipRate` is ordinal 5, not ordinal 3.
+///
 ///The generated interaction face of interface `WheelHistory`.
 pub mod wheel_history {
     ///Panics unless `found` is the catalog the face of interface `WheelHistory` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new` of the face, and `serve` where the interface emits one, call it once, before they store or use the port.
@@ -5640,6 +5643,10 @@ pub mod wheel_history {
         port: P,
     }
     impl<P: ::ridl_rt::port::SignalReader> Client<P> {
+        /// # Rules
+        ///
+        /// - interval 100000 ..= 1000000 us
+        ///
         ///Reads signal `wheelTicks` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         pub fn wheel_ticks(
             &self,
@@ -5698,6 +5705,10 @@ pub mod wheel_history {
                 envelope: raw.envelope,
             })
         }
+        /// # Rules
+        ///
+        /// - interval 1000000 ..= 10000000 us
+        ///
         ///Reads signal `wheelTemp` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         pub fn wheel_temp(
             &self,
@@ -5756,6 +5767,10 @@ pub mod wheel_history {
                 envelope: raw.envelope,
             })
         }
+        /// # Rules
+        ///
+        /// - interval 500000 ..= 5000000 us
+        ///
         ///Reads signal `wheelSlipRate` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         pub fn wheel_slip_rate(
             &self,
@@ -5848,6 +5863,10 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         port: W,
     }
     impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
+        /// # Rules
+        ///
+        /// - interval 100000 ..= 1000000 us
+        ///
         ///Stages a new value for signal `wheelTicks`. It is published by `commit`.
         pub fn wheel_ticks(
             &mut self,
@@ -5876,6 +5895,10 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                     bytes,
                 )
         }
+        /// # Rules
+        ///
+        /// - interval 1000000 ..= 10000000 us
+        ///
         ///Stages a new value for signal `wheelTemp`. It is published by `commit`.
         pub fn wheel_temp(
             &mut self,
@@ -5904,6 +5927,10 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                     bytes,
                 )
         }
+        /// # Rules
+        ///
+        /// - interval 500000 ..= 5000000 us
+        ///
         ///Stages a new value for signal `wheelSlipRate`. It is published by `commit`.
         pub fn wheel_slip_rate(
             &mut self,
@@ -6058,6 +6085,9 @@ impl ::ridl_rt::contract::Signal for WheelSummaryWheelHealth {
         <FanLevel as ::core::default::Default>::default()
     }
 }
+/// A public shape beside it, so the generated output shows the two side by
+/// side and the difference is readable in one snapshot.
+///
 ///The generated interaction face of interface `WheelSummary`.
 pub mod wheel_summary {
     ///Panics unless `found` is the catalog the face of interface `WheelSummary` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new` of the face, and `serve` where the interface emits one, call it once, before they store or use the port.
@@ -6076,6 +6106,10 @@ pub mod wheel_summary {
         port: P,
     }
     impl<P: ::ridl_rt::port::SignalReader> Client<P> {
+        /// # Rules
+        ///
+        /// - interval 1000000 ..= 10000000 us
+        ///
         ///Reads signal `wheelHealth` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         pub fn wheel_health(
             &self,
@@ -6160,6 +6194,10 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         port: W,
     }
     impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
+        /// # Rules
+        ///
+        /// - interval 1000000 ..= 10000000 us
+        ///
         ///Stages a new value for signal `wheelHealth`. It is published by `commit`.
         pub fn wheel_health(
             &mut self,

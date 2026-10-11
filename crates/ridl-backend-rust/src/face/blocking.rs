@@ -25,7 +25,10 @@
 //! waits — an event, a command or a query; a signal-only interface's `Client`
 //! never blocks, so it gets no `blocking` module.
 
-use super::{Call, Member, catalog_panics_doc, client_bounds, ident, type_path};
+use super::{
+    Call, Member, allow_deprecated, call_doc, catalog_panics_doc, client_bounds, deprecated_attr,
+    ident, member_doc, type_path,
+};
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 
@@ -126,8 +129,13 @@ fn client(
             "Reads signal `{}`, as `Client::{method}` does: a read never waits.",
             member.declared
         );
+        let doc = member_doc(member, &doc);
+        let deprecated = deprecated_attr(member.deprecated);
+        let allow = allow_deprecated(std::iter::once(member));
         methods.push(quote! {
-            #[doc = #doc]
+            #doc
+            #deprecated
+            #allow
             pub fn #method(
                 &self,
             ) -> ::core::result::Result<
@@ -322,10 +330,15 @@ fn call_method(call: &Call, kind: &str, output: TokenStream, expired: &str) -> T
          `Transport::{expired}`; either way nothing is left waiting at the port.",
         member.declared,
     );
+    let doc = call_doc(call, &doc);
+    let deprecated = deprecated_attr(member.deprecated);
+    let allow = allow_deprecated(std::iter::once(member));
     let expired = ident(expired);
     let expired = quote! { ::ridl_rt::error::Transport::#expired };
     quote! {
-        #[doc = #doc]
+        #doc
+        #deprecated
+        #allow
         pub fn #method(
             &mut self,
             #arg: #path,

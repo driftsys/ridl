@@ -66,10 +66,6 @@ impl<'a> DocParts<'a> {
         }
     }
 
-    #[expect(
-        dead_code,
-        reason = "no emitter renders an interface doc through `doc_block` yet"
-    )]
     pub(crate) fn interface(interface: &'a v1::Interface) -> Self {
         DocParts {
             doc: &interface.doc,
@@ -80,10 +76,6 @@ impl<'a> DocParts<'a> {
         }
     }
 
-    #[expect(
-        dead_code,
-        reason = "no emitter renders an interaction doc through `doc_block` yet"
-    )]
     pub(crate) fn interaction(interaction: &'a v1::Interaction) -> Self {
         DocParts {
             doc: &interaction.doc,
@@ -94,10 +86,6 @@ impl<'a> DocParts<'a> {
         }
     }
 
-    #[expect(
-        dead_code,
-        reason = "no emitter renders a parameter doc through `doc_block` yet"
-    )]
     pub(crate) fn param(param: &'a v1::Param) -> Self {
         DocParts {
             doc: &param.doc,
@@ -294,6 +282,36 @@ pub(crate) fn doc_block(parts: &DocParts<'_>, links: &Links<'_>) -> TokenStream 
                 .iter()
                 .map(|version| format!(" Available since {version}.")),
         );
+    }
+    quote! { #(#[doc = #lines])* }
+}
+
+/// The `# Parameters` section of a call's method, as `#[doc]` attributes,
+/// or nothing for a call with no parameter. The section opens with a blank
+/// line, because it follows the method's own doc. Each parameter is one
+/// ``- `<snake name>`: <doc>`` bullet, its doc's links rewritten as
+/// [`doc_block`] rewrites them and a further line of the doc indented under
+/// the bullet; a parameter with no doc is ``- `<snake name>` `` alone. Each
+/// of the parameter's rules is a nested `- <text>` bullet under it, the text
+/// verbatim. A parameter's `see` and `since` are not rendered here.
+pub(crate) fn parameters(params: &[v1::Param], links: &Links<'_>) -> TokenStream {
+    if params.is_empty() {
+        return TokenStream::new();
+    }
+    let mut lines = vec![String::new(), " # Parameters".to_string(), String::new()];
+    for param in params {
+        let name = snake_of(param.name.as_ref());
+        let parts = DocParts::param(param);
+        if parts.doc.is_empty() {
+            lines.push(format!(" - `{name}`"));
+        } else {
+            let text = linked(parts.doc, parts.links, links);
+            let mut doc_lines = text.split('\n');
+            let first = doc_lines.next().unwrap_or_default();
+            lines.push(format!(" - `{name}`: {first}"));
+            lines.extend(doc_lines.map(|line| format!("   {line}")));
+        }
+        lines.extend(parts.rules.iter().map(|rule| format!("   - {}", rule.text)));
     }
     quote! { #(#[doc = #lines])* }
 }

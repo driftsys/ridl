@@ -165,6 +165,10 @@ pub mod cruise_control {
         P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::Caller
             + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
     > Client<P> {
+        /// # Rules
+        ///
+        /// - interval 100000 ..= 1000000 us
+        ///
         ///Reads signal `engaged` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         pub fn engaged(
             &self,
@@ -223,6 +227,10 @@ pub mod cruise_control {
                 envelope: raw.envelope,
             })
         }
+        /// # Rules
+        ///
+        /// - interval 100000 ..= 1000000 us
+        ///
         ///Reads signal `target` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         pub fn target(
             &self,
@@ -281,9 +289,17 @@ pub mod cruise_control {
                 envelope: raw.envelope,
             })
         }
+        /// # Rules
+        ///
+        /// - response within 50000 us
+        ///
         /**Sends command `setLever` and returns its future. The call is sent when this method runs, not when the future is first polled, and the future resolves on the outcome. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
 
 The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.*/
+        ///
+        /// # Parameters
+        ///
+        /// - `cmd`
         pub fn set_lever(
             &mut self,
             cmd: crate::veh::common::LeverCmd,
@@ -513,6 +529,10 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         port: W,
     }
     impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
+        /// # Rules
+        ///
+        /// - interval 100000 ..= 1000000 us
+        ///
         ///Stages a new value for signal `engaged`. It is published by `commit`.
         pub fn engaged(
             &mut self,
@@ -541,6 +561,10 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                     bytes,
                 )
         }
+        /// # Rules
+        ///
+        /// - interval 100000 ..= 1000000 us
+        ///
         ///Stages a new value for signal `target`. It is published by `commit`.
         pub fn target(
             &mut self,
@@ -613,7 +637,15 @@ Panics when `port` is attached to a catalog other than the one this face was gen
 
 An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses, and the generated payload types implement neither `Copy` nor `Clone`.*/
     pub trait Provider {
+        /// # Rules
+        ///
+        /// - response within 50000 us
+        ///
         ///Serves command `setLever`. It returns nothing: a command has no failure the application reports (ridl §6.1). Arguments that break their typl constraints or the `require` clauses never reach it.
+        ///
+        /// # Parameters
+        ///
+        /// - `cmd`
         fn set_lever(&mut self, cmd: &crate::veh::common::LeverCmd);
     }
     /**Settles the claims of interface `CruiseControl` that are waiting, up to `budget` of them, and returns how many were settled, or the handler port's failure. It is the one-pass step `serve` calls on each poll.
@@ -901,6 +933,10 @@ Panics when `h` is attached to a catalog other than the one this face was genera
             P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::Caller
                 + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
         > Client<P> {
+            /// # Rules
+            ///
+            /// - interval 100000 ..= 1000000 us
+            ///
             ///Reads signal `engaged`, as `Client::engaged` does: a read never waits.
             pub fn engaged(
                 &self,
@@ -910,6 +946,10 @@ Panics when `h` is attached to a catalog other than the one this face was genera
             > {
                 self.inner.engaged()
             }
+            /// # Rules
+            ///
+            /// - interval 100000 ..= 1000000 us
+            ///
             ///Reads signal `target`, as `Client::target` does: a read never waits.
             pub fn target(
                 &self,
@@ -919,7 +959,15 @@ Panics when `h` is attached to a catalog other than the one this face was genera
             > {
                 self.inner.target()
             }
+            /// # Rules
+            ///
+            /// - response within 50000 us
+            ///
             ///Sends command `setLever` and waits for its outcome, as `block_on` over `Client::set_lever`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Undelivered`; either way nothing is left waiting at the port.
+            ///
+            /// # Parameters
+            ///
+            /// - `cmd`
             pub fn set_lever(
                 &mut self,
                 cmd: crate::veh::common::LeverCmd,
@@ -1088,6 +1136,10 @@ pub mod lane_assist {
         port: P,
     }
     impl<P: ::ridl_rt::port::SignalReader> Client<P> {
+        /// # Rules
+        ///
+        /// - interval 100000 ..= 1000000 us
+        ///
         ///Reads signal `active` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         pub fn active(
             &self,
@@ -1172,6 +1224,10 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         port: W,
     }
     impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
+        /// # Rules
+        ///
+        /// - interval 100000 ..= 1000000 us
+        ///
         ///Stages a new value for signal `active`. It is published by `commit`.
         pub fn active(
             &mut self,

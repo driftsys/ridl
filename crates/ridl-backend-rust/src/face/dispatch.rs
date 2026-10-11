@@ -3,7 +3,7 @@
 //! provider, evaluates a query's `ensure`, and settles. The face as a whole is
 //! described in the documentation of the parent module, `face.rs`.
 
-use super::{Call, decode_args, encode_into, interface_number};
+use super::{Call, allow_deprecated, decode_args, encode_into, interface_number};
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 
@@ -155,8 +155,12 @@ pub(super) fn dispatch(
          returns, because its settlement carries the reply."
     );
 
+    // `dispatch` calls every `Provider` method, so it allows the lint when
+    // one of them is deprecated.
+    let allow = allow_deprecated(commands.iter().chain(queries).map(|call| &call.member));
     quote! {
         #[doc = #doc]
+        #allow
         pub(crate) fn dispatch<H, P>(
             h: &mut H,
             p: &mut P,

@@ -144,6 +144,11 @@ fn send_level_raw(port: &mut Loopback, level: i64) -> Correlation {
               consumer shares, not face- or descriptor-specific."
 )]
 mod generated {
+    // The fixture's `Zone.setLevel` is `@deprecated`. The generated code that
+    // calls its methods allows the lint, so the face draws no `deprecated`
+    // warning of its own; this attribute turns one into a build failure
+    // (`deprecated_interaction_does_not_warn_inside_the_generated_crate`).
+    #![deny(deprecated)]
     include!("generated/interaction_face.rs");
 }
 
@@ -2917,4 +2922,222 @@ fn a_program_can_make_the_comparison_before_it_binds() {
     let mut own = loopback();
     assert!(own.catalog() == <generated::Cabin as ridl_rt::contract::Interface>::CATALOG);
     let _ = generated::cabin::Client::new(&mut own);
+}
+
+// ---------------------------------------------------------------------------
+// The face's documentation, read from the checked-in generated file.
+// ---------------------------------------------------------------------------
+
+/// The checked-in face, as the source text `include!` above reads.
+const FACE_SOURCE: &str = include_str!("generated/interaction_face.rs");
+
+/// The `#[doc]` text of `attrs`, one entry per line, each with its trailing
+/// whitespace removed. An empty attribute, a blank doc line, is one empty
+/// entry.
+fn doc_lines(attrs: &[syn::Attribute]) -> Vec<String> {
+    attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("doc"))
+        .filter_map(|attr| match &attr.meta {
+            syn::Meta::NameValue(syn::MetaNameValue {
+                value:
+                    syn::Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Str(text),
+                        ..
+                    }),
+                ..
+            }) => Some(text.value()),
+            _ => None,
+        })
+        .flat_map(|text| {
+            text.split('\n')
+                .map(|line| line.trim_end().to_string())
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// The items of the module `name` among `items`.
+fn module_items<'a>(items: &'a [syn::Item], name: &str) -> &'a [syn::Item] {
+    items
+        .iter()
+        .find_map(|item| match item {
+            syn::Item::Mod(module) if module.ident == name => {
+                module.content.as_ref().map(|(_, items)| items.as_slice())
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("module `{name}` is generated"))
+}
+
+/// The inherent method `method` of `Client` among `items`.
+fn client_method<'a>(items: &'a [syn::Item], method: &str) -> &'a syn::ImplItemFn {
+    items
+        .iter()
+        .filter_map(|item| match item {
+            syn::Item::Impl(block) if block.trait_.is_none() => Some(block),
+            _ => None,
+        })
+        .filter(|block| {
+            quote::ToTokens::to_token_stream(&block.self_ty)
+                .to_string()
+                .starts_with("Client")
+        })
+        .flat_map(|block| &block.items)
+        .find_map(|item| match item {
+            syn::ImplItem::Fn(function) if function.sig.ident == method => Some(function),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("`Client::{method}` is generated"))
+}
+
+/// The method `method` of the `Provider` trait among `items`.
+fn provider_method<'a>(items: &'a [syn::Item], method: &str) -> &'a syn::TraitItemFn {
+    items
+        .iter()
+        .find_map(|item| match item {
+            syn::Item::Trait(provider) if provider.ident == "Provider" => {
+                provider.items.iter().find_map(|item| match item {
+                    syn::TraitItem::Fn(function) if function.sig.ident == method => Some(function),
+                    _ => None,
+                })
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("`Provider::{method}` is generated"))
+}
+
+/// The attributes of the three methods a user calls or implements for the
+/// call `method` of the interface module `module`: the async client's, the
+/// blocking client's and the `Provider` trait's, with a label for each.
+fn call_methods(module: &str, method: &str) -> Vec<(&'static str, Vec<syn::Attribute>)> {
+    let file = syn::parse_file(FACE_SOURCE).expect("the checked-in face parses");
+    let items = module_items(&file.items, module);
+    let blocking = module_items(items, "blocking");
+    vec![
+        ("async client", client_method(items, method).attrs.clone()),
+        (
+            "blocking client",
+            client_method(blocking, method).attrs.clone(),
+        ),
+        ("Provider", provider_method(items, method).attrs.clone()),
+    ]
+}
+
+fn response_bound(max_us: &str) -> String {
+    ridl_ir::rules::render(&ridl_ir::rules::Rule::ResponseBound {
+        min_us: None,
+        max_us: Some(max_us.to_string()),
+    })
+}
+
+fn contract(kind: ridl_ir::v2::ContractKind, source: &str) -> String {
+    ridl_ir::rules::render(&ridl_ir::rules::Rule::Contract {
+        kind,
+        source: source.to_string(),
+    })
+}
+
+/// A query's methods carry its doc, then its rules under `# Rules`, each as
+/// `rules::render` gives it: the response bound, the `require` and the
+/// `ensure`. The face carries no fallible query (it refuses an inline
+/// `T | E` reply), so no `errors` rule reaches a face method.
+#[test]
+fn face_methods_carry_interaction_rules() {
+    for (label, attrs) in call_methods("cabin", "average") {
+        let lines = doc_lines(&attrs);
+        let rules = [
+            "# Rules".to_string(),
+            String::new(),
+            format!("- {}", response_bound("200000")),
+            format!(
+                "- {}",
+                contract(ridl_ir::v2::ContractKind::Require, "window > 0")
+            ),
+            format!(
+                "- {}",
+                contract(ridl_ir::v2::ContractKind::Ensure, "result >= 0")
+            ),
+        ];
+        let trimmed: Vec<&str> = lines.iter().map(|line| line.trim()).collect();
+        let start = trimmed
+            .iter()
+            .position(|line| *line == "# Rules")
+            .unwrap_or_else(|| panic!("{label}: `# Rules` in {lines:#?}"));
+        assert_eq!(
+            &trimmed[start..start + rules.len()],
+            rules
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .as_slice(),
+            "{label}: the rules in order, in {lines:#?}"
+        );
+        assert_eq!(
+            trimmed.first().copied(),
+            Some("The average cabin temperature over a window of samples."),
+            "{label}: the interaction's doc comes first"
+        );
+        assert!(
+            trimmed.contains(&"Available since 1.1."),
+            "{label}: the `@since` line, in {lines:#?}"
+        );
+    }
+}
+
+/// A call's methods carry a `# Parameters` section: the parameter's name and
+/// doc, then its type's rules as nested bullets.
+#[test]
+fn face_call_carries_parameter_section() {
+    let range = ridl_ir::rules::render(&ridl_ir::rules::Rule::Range {
+        min: Some("0".to_string()),
+        max: Some("100".to_string()),
+    });
+    for (label, attrs) in call_methods("cabin", "set_level") {
+        let lines = doc_lines(&attrs);
+        let tail = [
+            String::new(),
+            " # Parameters".to_string(),
+            String::new(),
+            " - `level`: The level to hold.".to_string(),
+            format!("   - {range}"),
+        ];
+        assert!(
+            lines.ends_with(&tail),
+            "{label}: the section ends the doc, in {lines:#?}"
+        );
+    }
+    // A parameter with no doc is its name alone, with its rules under it.
+    let window = ridl_ir::rules::render(&ridl_ir::rules::Rule::Range {
+        min: Some("0".to_string()),
+        max: Some("100000".to_string()),
+    });
+    for (label, attrs) in call_methods("cabin", "average") {
+        let lines = doc_lines(&attrs);
+        assert!(
+            lines.ends_with(&[" - `window`".to_string(), format!("   - {window}")]),
+            "{label}: the undocumented parameter, in {lines:#?}"
+        );
+    }
+}
+
+/// `Zone.setLevel` is `@deprecated`, so its client methods and its
+/// `Provider` method carry `#[deprecated]`. The test that matters is the
+/// build of this file: `mod generated` above denies the `deprecated` lint,
+/// and the generated `dispatch` and the blocking client call those methods,
+/// so the build fails unless each of them allows the lint.
+#[test]
+fn deprecated_interaction_does_not_warn_inside_the_generated_crate() {
+    for (label, attrs) in call_methods("zone", "set_level") {
+        let deprecated: Vec<String> = attrs
+            .iter()
+            .filter(|attr| attr.path().is_ident("deprecated"))
+            .map(|attr| quote::ToTokens::to_token_stream(attr).to_string())
+            .collect();
+        assert_eq!(
+            deprecated,
+            vec![r#"# [deprecated (note = "use Cabin.setLevel")]"#.to_string()],
+            "{label}"
+        );
+    }
 }

@@ -44,12 +44,27 @@ struct Warning {
 
 // ---------- The interface the round trip runs against ----------
 
+// The interface and its members carry doc comments, a link, an `@see` and an
+// `@since`, which the face renders on its module and its methods.
+
+/// The cabin climate controller. It publishes the cabin [Temperature] and
+/// takes a control [Level].
+/// @see Horn
+/// @since 1.0
 interface Cabin {
+  /// The cabin temperature, read from [Cabin.average]'s source sensor.
   signal  temperature : Temperature @10ms
+  /// A warning the controller raises.
   event   warning      : Warning @[100ms..1s]
-  command setLevel(level: Level) @[..50ms] [
+  /// Sets the control level.
+  command setLevel(
+    /// The level to hold.
+    level: Level
+  ) @[..50ms] [
     require level < 100
   ]
+  /// The average cabin temperature over a window of samples.
+  /// @since 1.1
   query   average(window: Window): Average @[..200ms] [
     require window > 0
     ensure  result >= 0
@@ -97,4 +112,18 @@ interface Valve {
 interface Wiper {
   fixed  blades : Level
   signal speed  : Level @10ms
+}
+
+// ------ An interface with a deprecated command, for the deprecation guard ------
+//
+// The face marks the command's client methods and its `Provider` method
+// `#[deprecated]`, and every generated item that calls one of them allows the
+// lint, so the include site in `tests/interaction_face.rs` compiles under
+// `deny(deprecated)`. No test calls the command. Named to sort after `Wiper`,
+// for the reason `Siren` gives.
+
+interface Zone {
+  /// Sets the zone level.
+  /// @deprecated "use Cabin.setLevel"
+  command setLevel(level: Level)
 }

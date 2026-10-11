@@ -123,17 +123,28 @@ pub fn generate_face_with(
     encodings: &[WireEncoding],
 ) -> Result<Generated, GenerateError> {
     let model = ridl_ir::codegen::lower(package, &[]);
-    let ctx = Ctx::new(package, &model);
+    let mut ctx = Ctx::new(package, &model);
     if encodings.is_empty() {
         return render(package_items(&ctx, &[], encodings)?);
     }
     // This entry point refuses rather than skips, so every named interface's
     // descriptors are emitted, and the face of every interface that has one,
-    // and each one claims its names.
+    // and each one claims its names. A refusal returns before any output, so
+    // the faced interfaces are every named one that emits a module.
     let interfaces: Vec<&v1::Interface> = model.interfaces.iter().collect();
+    ctx.faced = faced_indices(
+        interfaces
+            .iter()
+            .copied()
+            .enumerate()
+            .filter(|(_, interface)| {
+                descriptors::declared_name(interface).is_some() && face::emits_module(interface)
+            })
+            .map(|(index, _)| index),
+    );
     let mut items = package_items(&ctx, &interfaces, encodings)?;
     items.extend(descriptors::interface_items(&ctx)?);
-    items.extend(face::interface_items(&model)?);
+    items.extend(face::interface_items(&model, &ctx.links())?);
     render(items)
 }
 
@@ -209,7 +220,7 @@ pub(crate) fn generate_pipeline_over(
     model: &v1::Model,
     encodings: &[WireEncoding],
 ) -> Result<Generated, GenerateError> {
-    let ctx = Ctx::over(model);
+    let mut ctx = Ctx::over(model);
     if encodings.is_empty() {
         // Types only: no descriptor reads the catalog hash and no interface
         // is walked, so nothing below applies and nothing is refused.
@@ -218,17 +229,40 @@ pub(crate) fn generate_pipeline_over(
     // A malformed catalog hash refuses the whole model here; inside the
     // per-interface walk below it would only skip each interface.
     descriptors::catalog_hash(&ctx)?;
-    // Each interface is built before the package's own items, so that the
-    // claim table, which runs before the codec, knows which interfaces are
-    // emitted and which are skipped: a skipped one claims nothing (the
-    // `docs/technotes/rust-backend-name-collisions.md`, decision 13).
+    // Each interface's descriptors are built before the package's own items,
+    // so that the claim table, which runs before the codec, knows which
+    // interfaces are emitted and which are skipped: a skipped one claims
+    // nothing (the `docs/technotes/rust-backend-name-collisions.md`,
+    // decision 13).
+    let built: Vec<_> = model
+        .interfaces
+        .iter()
+        .enumerate()
+        .filter(|(_, interface)| descriptors::declared_name(interface).is_some())
+        .map(|(index, interface)| {
+            let produced = descriptors::one_interface_items(&ctx, interface);
+            (index, interface, produced)
+        })
+        .collect();
+    // The face is built once every skipped interface is known, so that a doc
+    // link resolves to a face module only when this output holds it. The
+    // face refuses nothing the descriptors accept (both read the parameter
+    // and the reply through the same functions), so an interface whose
+    // descriptors were built is faced.
+    ctx.faced = faced_indices(
+        built
+            .iter()
+            .filter(|(_, interface, produced)| produced.is_ok() && face::emits_module(interface))
+            .map(|(index, _, _)| *index),
+    );
     let mut faced: Vec<&v1::Interface> = Vec::new();
     let mut interface_items: Vec<TokenStream> = Vec::new();
-    for interface in &model.interfaces {
-        if descriptors::declared_name(interface).is_none() {
-            continue;
-        }
-        match faced_interface(&ctx, interface) {
+    for (_, interface, produced) in built {
+        let produced = produced.and_then(|mut items| {
+            items.extend(face::one_interface(interface, &ctx.links())?);
+            Ok(items)
+        });
+        match produced {
             Ok(produced) => {
                 faced.push(interface);
                 interface_items.extend(produced);
@@ -241,17 +275,14 @@ pub(crate) fn generate_pipeline_over(
     render(items)
 }
 
-/// The descriptors and the face of one interface, which stand or fall
-/// together for the reason [`generate_pipeline`] records.
-fn faced_interface(
-    ctx: &Ctx,
-    interface: &v1::Interface,
-) -> Result<Vec<TokenStream>, GenerateError> {
-    let mut items = descriptors::one_interface_items(ctx, interface)?;
-    if let Some(module) = face::one_interface(interface)? {
-        items.push(module);
-    }
-    Ok(items)
+/// `indices`, positions in `model.interfaces`, as the `u32`s [`docs::Links`]
+/// reads. The
+/// model's interface list is far shorter than `u32::MAX`; an index past it
+/// is left out, so a link to that interface renders as a code span.
+fn faced_indices(indices: impl Iterator<Item = usize>) -> BTreeSet<u32> {
+    indices
+        .filter_map(|index| u32::try_from(index).ok())
+        .collect()
 }
 
 /// The note left where an interface's face was skipped (design rule 2), or,
@@ -680,7 +711,8 @@ pub(crate) struct Ctx<'a> {
     _build_packages: BuildPackages,
     /// The indices into `model.interfaces` of the interfaces whose face
     /// module this output holds, which a doc link may point at
-    /// ([`docs::Links`]). Empty: no doc block is rendered beside a face.
+    /// ([`docs::Links`]). Empty unless the entry point emits a face: it sets
+    /// the set before it renders any doc.
     faced: BTreeSet<u32>,
 }
 
