@@ -1460,6 +1460,14 @@ fn showcase_pins_every_severity() {
 #[test]
 fn veh_common_generated_rust_compiles_with_rustc() {
     let source = composed_source(Path::new("tests/corpus/veh-common"));
+    // The codec, which the source holds only because it is generated with the
+    // FlatBuffers encoding; types-only output fails here.
+    assert!(
+        source.contains(
+            "impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {"
+        ),
+        "the composed source must carry the FlatBuffers codec, or this proof checks types only",
+    );
 
     // A unique temp directory (removed at the end), mirroring the golden CLI
     // test rather than adding a `tempfile` dev-dependency.
@@ -1520,6 +1528,8 @@ fn veh_common_generated_rust_compiles_with_rustc() {
 /// interaction-face descriptors and face. The corpus snapshots and the rustc
 /// proofs below go through this rather than `generate`, which emits the domain
 /// types only, so that the codec and the face stay covered over the corpus.
+/// The `others` list is empty, so a type that reaches another package gets no
+/// codec; the snapshots carry a `__RIDL_FB_NO_CODEC_*` note for each such type.
 fn generate_rust(
     ir: &ridl_ir::v2::Package,
 ) -> Result<ridl_backend_rust::Generated, ridl_backend_rust::GenerateError> {
@@ -1604,6 +1614,14 @@ fn workspace_two_members_composed_compiles_with_rustc() {
     }
     let mut source = String::new();
     tree.render(&mut source);
+    // The codec, which the source holds only because it is generated with the
+    // FlatBuffers encoding; types-only output fails here.
+    assert!(
+        source.contains(
+            "impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {"
+        ),
+        "the composed source must carry the FlatBuffers codec, or this proof checks types only",
+    );
 
     let dir = std::env::temp_dir().join(format!(
         "ridlc_corpus_composed_{}_{}",
@@ -1746,8 +1764,8 @@ fn composed_source(entry: &Path) -> String {
 ///
 /// `veh-cluster` is the entry that exercises the interaction layer. Its source
 /// is composed through [`generate_rust`], so rustc checks the domain types, the
-/// FlatBuffers codec over them, and the descriptors and face of each interface
-/// the face can carry (`WheelHistory`, `WheelSummary`). A text snapshot records
+/// FlatBuffers codec over the types that reach no other package, and the
+/// descriptors and face of each interface the face can carry (`WheelHistory`, `WheelSummary`). A text snapshot records
 /// what was emitted; this proof checks that it is valid Rust.
 ///
 /// It also carries a **tuple under an `internal` declaration**, in both layers
