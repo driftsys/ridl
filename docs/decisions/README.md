@@ -81,7 +81,10 @@ other entry below is Accepted.
   cross-checks the four obligations against the International Vocabulary of
   Metrology with no decision change, and the `.rxdl` profile is given decision
   7's extensions, absorbing both the layer and the domain readings of the
-  wildcard.
+  wildcard. Amended 2026-10-11: the domain spellings are not reserved words — a
+  spelling is a keyword only as the first token of an interface member, in a
+  profile that implements it (the member-start rule), and the retired uxdl words
+  leave the implemented registry.
 
 - **ADR-0013 — Codegen backend scope.** _Proposed._ Classifies a backend by what
   its target can faithfully represent: a **wire** backend (proto3, FlatBuffers,

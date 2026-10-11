@@ -38,6 +38,20 @@ is that `.rxdl` becomes a production file kind rather than only an adoption one,
 which weakens "which files contain executable behaviour?" as a filesystem query;
 per-package restriction is the mitigation the concept note already prescribes.
 
+**Amendment, 2026-10-11 — the spellings are not reserved words (decision 4).**
+Decision 4 names the keyword per (kind, family) combination; typl §1.4 read that
+as a family-wide reservation of every spelling. The reservation is replaced by
+the member-start rule: a spelling is a keyword only as the first token of an
+interface member, in a profile that implements it, and an identifier everywhere
+else. An interface member line never starts with an identifier, so a profile
+that gains a spelling invalidates no source that compiled before, and the
+`keywords` freeze dump only gains a line (ADR-0029). The ROS 2 corpus, which
+maps a published interface set, names a field `present` and a query `trigger`: a
+family-wide reservation would have broken it. In the same amendment the uxdl
+words this record retired leave the implemented registry, except `states` and
+`during`, which the general form (§4.8) names as ridl clauses; the rmdl words
+stay reserved. Recorded under decision 4. Issue driftsys/ridl#370.
+
 The exploration that produced it is recorded in
 `docs/archive/ridl-boundary-model-review.md`; where that record and this ADR
 disagree, this ADR is authoritative.
@@ -254,6 +268,11 @@ review and retracted for exactly this reason (decision 10).
    hence control; **control has no occurrence** because nothing leaves the
    system uninvited; and **control has no query** because effect is observed by
    measuring back, never returned.
+
+   _Amended 2026-10-11:_ none of these spellings is a reserved word. A spelling
+   is a keyword only as the first token of an interface member, in a profile
+   that implements it (typl §1.4, the member-start rule). The retired uxdl words
+   are identifiers; `states` and `during` stay reserved as ridl clause words.
 
 5. **The intent operation set is closed, with no generic.** A person performs
    one act at a time; a multi-parameter operation is a function call, not a
