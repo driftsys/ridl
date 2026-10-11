@@ -113,3 +113,27 @@ pub fn package_dirs(root: &Path, paths: &[&str]) -> Result<Vec<String>, String> 
     dirs.sort();
     Ok(dirs)
 }
+
+/// Every file below `dir`, at any depth, sorted.
+pub fn files_below(dir: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut files = Vec::new();
+    collect_files(dir, &mut files)?;
+    files.sort();
+    Ok(files)
+}
+
+fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+    let entries =
+        std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
+    for entry in entries {
+        let path = entry
+            .map_err(|e| format!("cannot read {}: {e}", dir.display()))?
+            .path();
+        if path.is_dir() {
+            collect_files(&path, out)?;
+        } else {
+            out.push(path);
+        }
+    }
+    Ok(())
+}

@@ -51,20 +51,6 @@ impl Drop for Scratch {
     }
 }
 
-fn files_below(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
-    let entries =
-        std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            files_below(&path, out)?;
-        } else {
-            out.push(path);
-        }
-    }
-    Ok(())
-}
-
 /// The one build failure that is expected: the FlatBuffers backend rejects the
 /// ros2 corpus because a message holds an array of byte arrays, and a
 /// FlatBuffers vector cannot hold a vector. The backend reports it as an
@@ -162,9 +148,7 @@ fn schema_lines(
                 run.code
             ));
         }
-        let mut files = Vec::new();
-        files_below(&out_dir, &mut files)?;
-        for file in files {
+        for file in bin::files_below(&out_dir)? {
             if file.extension().and_then(|e| e.to_str()) != Some(extension) {
                 continue;
             }
@@ -210,10 +194,8 @@ fn catalog_hashes(root: &Path, ridl: &Path, scratch: &Path) -> Result<Vec<String
             run.code
         ));
     }
-    let mut files = Vec::new();
-    files_below(&out_dir, &mut files)?;
     let mut lines = Vec::new();
-    for file in files {
+    for file in bin::files_below(&out_dir)? {
         let described = bin::run(ridl, root, &["describe", &file.to_string_lossy()])?;
         if described.code != 0 {
             return Err(format!("`ridl describe` exited {}", described.code));
@@ -261,10 +243,18 @@ pub fn dump(root: &Path) -> Result<Vec<String>, String> {
 mod tests {
     use super::*;
 
+    /// The dump, computed once for the tests of this module.
+    fn lines() -> &'static [String] {
+        static LINES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        LINES.get_or_init(|| {
+            let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+            dump(root).unwrap()
+        })
+    }
+
     #[test]
     fn wire_dump_lists_encodings() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-        let lines = dump(root).unwrap();
+        let lines = lines();
         assert!(
             lines.iter().any(|l| l == "encoding flatbuffers"),
             "{lines:?}"

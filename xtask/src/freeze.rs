@@ -447,6 +447,14 @@ mod tests {
     fn dumps_are_sorted_and_relative() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         let root_text = root.to_string_lossy().into_owned();
+        let temp = std::env::temp_dir();
+        let mut scratch_dirs = vec![
+            temp.to_string_lossy().trim_end_matches('/').to_string(),
+            bin::target_dir(root).to_string_lossy().into_owned(),
+        ];
+        if let Ok(canonical) = temp.canonicalize() {
+            scratch_dirs.push(canonical.to_string_lossy().into_owned());
+        }
         for (name, dumper) in dumpers() {
             let text = normalise(dumper(root).unwrap());
             let lines: Vec<&str> = text.lines().collect();
@@ -459,6 +467,14 @@ mod tests {
                 !text.contains(&root_text),
                 "surface `{name}` has an absolute path"
             );
+            // The scratch directories of the dumpers are absolute paths
+            // outside the repository.
+            for scratch in &scratch_dirs {
+                assert!(
+                    !text.contains(scratch.as_str()),
+                    "surface `{name}` has the path of a scratch directory, {scratch}"
+                );
+            }
             assert!(!text.contains('\\'), "surface `{name}` has a backslash");
         }
     }

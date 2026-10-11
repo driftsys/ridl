@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 /// The crates of the `runtime-crates` surface.
-const RUNTIME_CRATES: [&str; 4] = [
+pub const RUNTIME_CRATES: [&str; 4] = [
     "ridl-rt",
     "ridl-rt-conformance",
     "ridl-loopback",
@@ -188,32 +188,20 @@ fn scratch_dir(root: &Path, name: &str) -> Result<PathBuf, String> {
 /// separators. A missing `dir` is an empty tree.
 fn read_tree(dir: &Path) -> Result<BTreeMap<String, Vec<u8>>, String> {
     let mut files = BTreeMap::new();
-    if dir.exists() {
-        read_tree_into(dir, "", &mut files)?;
+    if !dir.exists() {
+        return Ok(files);
+    }
+    for path in bin::files_below(dir)? {
+        let name = path
+            .strip_prefix(dir)
+            .map_err(|e| e.to_string())?
+            .to_string_lossy()
+            .replace('\\', "/");
+        let bytes =
+            std::fs::read(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+        files.insert(name, bytes);
     }
     Ok(files)
-}
-
-fn read_tree_into(
-    dir: &Path,
-    prefix: &str,
-    files: &mut BTreeMap<String, Vec<u8>>,
-) -> Result<(), String> {
-    let entries =
-        std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
-    for entry in entries {
-        let entry = entry.map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
-        let path = entry.path();
-        let name = format!("{prefix}{}", entry.file_name().to_string_lossy());
-        if path.is_dir() {
-            read_tree_into(&path, &format!("{name}/"), files)?;
-        } else {
-            let bytes =
-                std::fs::read(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
-            files.insert(name, bytes);
-        }
-    }
-    Ok(())
 }
 
 /// One line per file that is missing from, extra in, or different in

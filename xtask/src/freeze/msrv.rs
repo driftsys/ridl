@@ -1,15 +1,9 @@
 //! The minimum supported Rust version and edition of the published runtime
 //! crates, with workspace values resolved.
 
+use super::rust_api::RUNTIME_CRATES;
 use std::path::Path;
 use toml::Value;
-
-const CRATES: [&str; 4] = [
-    "ridl-rt",
-    "ridl-rt-conformance",
-    "ridl-loopback",
-    "ridl-descriptor",
-];
 
 fn read_toml(path: &Path) -> Result<Value, String> {
     let text = std::fs::read_to_string(path)
@@ -45,11 +39,11 @@ fn crate_lines(name: &str, package: &Value, workspace: &Value) -> Result<Vec<Str
     Ok(lines)
 }
 
-/// The lines of [`crate_lines`] for each crate of [`CRATES`].
+/// The lines of [`crate_lines`] for each crate of [`RUNTIME_CRATES`].
 pub fn dump(root: &Path) -> Result<Vec<String>, String> {
     let workspace = read_toml(&root.join("Cargo.toml"))?;
     let mut lines = Vec::new();
-    for name in CRATES {
+    for name in RUNTIME_CRATES {
         let manifest = read_toml(&root.join("crates").join(name).join("Cargo.toml"))?;
         let package = manifest
             .get("package")

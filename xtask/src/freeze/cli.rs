@@ -275,9 +275,13 @@ pub fn dump(root: &Path) -> Result<Vec<String>, String> {
 mod tests {
     use super::*;
 
-    fn lines() -> Vec<String> {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-        dump(root).unwrap()
+    /// The dump, computed once for the tests of this module.
+    fn lines() -> &'static [String] {
+        static LINES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        LINES.get_or_init(|| {
+            let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+            dump(root).unwrap()
+        })
     }
 
     #[test]
@@ -321,7 +325,7 @@ mod tests {
             "exit 1",
             "exit 2",
         ] {
-            assert!(has(&lines, line), "missing `{line}`");
+            assert!(has(lines, line), "missing `{line}`");
         }
     }
 
@@ -347,7 +351,7 @@ mod tests {
             "json /*/fixes/*/replacement",
             "sarif /runs/*/results/*/relatedLocations/*/message/text",
         ] {
-            assert!(has(&lines, line), "missing `{line}`");
+            assert!(has(lines, line), "missing `{line}`");
         }
     }
 
