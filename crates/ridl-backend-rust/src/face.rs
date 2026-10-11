@@ -294,7 +294,7 @@ pub(crate) fn one_interface(
         body.push(event_enum(iface_name, &events));
     }
     body.extend(futures(&iface, iface_name, &events, &commands, &queries));
-    body.extend(plumbing(&iface, iface_name, &events, &commands, &queries));
+    body.extend(plumbing(&iface, &events, &commands, &queries));
     if !signals.is_empty() || !events.is_empty() {
         if !signals.is_empty() {
             body.push(invalidate_trait(iface_name, &signals));
@@ -303,7 +303,7 @@ pub(crate) fn one_interface(
     }
     if !commands.is_empty() || !queries.is_empty() {
         body.push(provider(iface_name, &commands, &queries));
-        body.push(dispatch(&iface, iface_name, &commands, &queries));
+        body.push(dispatch(&iface, &commands, &queries));
         body.push(serve(&iface, iface_name, &commands, &queries));
     }
 
@@ -351,20 +351,12 @@ fn correlation_type(call: &Call) -> Ident {
 /// `poll_<name>_reply`.
 fn correlations(commands: &[Call], queries: &[Call]) -> Vec<TokenStream> {
     let mut items = Vec::new();
-    for (call, kind) in commands
-        .iter()
-        .map(|c| (c, "command"))
-        .chain(queries.iter().map(|q| (q, "query")))
-    {
+    for call in commands.iter().chain(queries) {
         let name = correlation_type(call);
-        let doc = format!(
-            "Identifies one sent {kind} `{}` to its caller. It is returned by \
-             the internal send and accepted by that call's own outcome read, \
-             and by no other.",
-            call.member.declared
-        );
+        // The correlation identifies one sent call to its caller. It is
+        // returned by the internal send and accepted by that call's own
+        // outcome read, and by no other. It is an internal: no doc.
         items.push(quote! {
-            #[doc = #doc]
             #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
             pub(crate) struct #name(pub ::ridl_rt::port::Correlation);
         });
@@ -1083,15 +1075,9 @@ fn check_catalog(iface: &Ident, iface_name: &str) -> TokenStream {
         "the face of interface `{iface_name}` was generated from catalog {{:?}}, \
          but the port is attached to catalog {{:?}}"
     );
-    let doc = format!(
-        "Panics unless `found` is the catalog the face of interface \
-         `{iface_name}` was generated from, the interface's `CATALOG` \
-         (ADR-0023 decision 8). Every `Bind::new` of the face, and `serve` where \
-         the interface emits one, call it once, before they store or use the \
-         port."
-    );
+    // Private, so no doc: every `Bind::new` of the face, and `serve` where the
+    // interface emits one, call it once, before they store or use the port.
     quote! {
-        #[doc = #doc]
         #[track_caller]
         fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
             let expected = <super::#iface as ::ridl_rt::contract::Interface>::CATALOG;

@@ -6392,7 +6392,8 @@ mod skipped_interface_note {
         let call_shape = note(&interface(vec![bare_command()], false));
         let other = note(&interface(Vec::new(), false));
         let internal = note(&interface(Vec::new(), true));
-        assert!(call_shape.contains("driftsys/ridl#713"), "{call_shape}");
+        assert!(call_shape.contains("to get a face"), "{call_shape}");
+        assert!(!call_shape.contains("driftsys/ridl"), "{call_shape}");
         assert!(other.contains("No tracking issue owns this one"), "{other}");
         for text in [&call_shape, &other] {
             assert!(text.contains("which the face is built on"), "{text}");

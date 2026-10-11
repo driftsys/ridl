@@ -1600,8 +1600,8 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
         source.contains("Interface `VehicleStatus` carries no generated interaction face."),
         "the note names the interface in prose, got:\n{source}"
     );
-    // It carries a reason and the story that removes the limit, which is what
-    // makes it a note rather than a silent omission.
+    // It carries a reason and what the source can change to get a face,
+    // which is what makes it a note rather than a silent omission.
     assert!(
         source.contains("The emitter refused it:"),
         "the note carries the refusal's own reason, got:\n{source}"
@@ -1609,8 +1609,8 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
     // The owner line must match the reason above it. `VehicleStatus` has a
     // call-shape gap *and* an untranslatable clause, and the refusal that
     // stopped it is the clause — so a note that reads the interface instead
-    // of the refusal names the multi-parameter story under a clause reason,
-    // which is what this pins.
+    // of the refusal names the call-shape gap under a clause reason, which is
+    // what this pins.
     let note = source
         .split("const __RIDL_NO_FACE_VehicleStatus")
         .next()
@@ -1627,10 +1627,14 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
         "a public note's trailer names the face, got:\n{note}"
     );
     assert!(
-        note.contains("driftsys/ridl#704") && !note.contains("driftsys/ridl#713"),
-        "the owner line must name the clause issue, not the multi-parameter \
-         one, got:\n{note}"
+        note.contains("Write each `require` and `ensure` clause in that form")
+            && !note.contains("A call the face cannot carry"),
+        "the owner line must name the clause gap, not the call-shape one, \
+         got:\n{note}"
     );
+    // A generated doc cites no issue (the generated-code documentation
+    // design, "Maintainer notes").
+    assert!(!note.contains("driftsys/ridl"), "{note}");
     // A run of literal spaces inside a note is a broken line continuation in
     // the emitter's string, which reaches the reader's source. Both notes are
     // checked: `VehicleStatus` carries the clause owner line, and
@@ -1654,8 +1658,9 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
         "the internal interface's note names its descriptors, got:\n{internal_note}"
     );
     assert!(
-        internal_note.contains("driftsys/ridl#713"),
-        "the refusal reason names the argument-struct issue, got:\n{internal_note}"
+        internal_note.contains("must declare exactly one parameter")
+            && !internal_note.contains("driftsys/ridl"),
+        "the refusal reason names the call shape and no issue, got:\n{internal_note}"
     );
     assert!(
         internal_note.contains("The interface is `internal`, so it has no face in any case"),

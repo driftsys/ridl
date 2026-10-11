@@ -50,12 +50,6 @@ impl ::core::default::Default for Flags {
     }
 }
 /// An accessor over FlatBuffers bytes `Engaged`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct EngagedFbView<'a> {
@@ -70,12 +64,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for EngagedFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> EngagedFbView<'a> {
-    /// The value the box carries. `Engaged` is one value, so this decodes it rather than borrowing it, which costs one read.
+    /// The value the bytes hold. `Engaged` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Engaged {
         __ridl_fb_decode_Engaged(self.buf, self.table)
     }
 }
-/// Writes `Engaged` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Engaged(
     value: &Engaged,
@@ -131,16 +124,6 @@ pub(crate) fn __ridl_fb_decode_Engaged(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Engaged {
     /// The largest FlatBuffers buffer any legal `Engaged` encodes to: 43 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 43usize;
     type Buffer = [::core::primitive::u8; 43usize];
     const BUFFER: Self::Buffer = [0u8; 43usize];
@@ -256,7 +239,6 @@ impl<'a> FlagsFbView<'a> {
         }
     }
 }
-/// Writes `Flags` as a FlatBuffers table and returns its position.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Flags(
     value: &Flags,
@@ -307,11 +289,6 @@ pub(crate) fn __ridl_fb_encode_Flags(
     __n += 1;
     builder.push_table(12usize, 4usize, 2u16, &__fields[..__n])
 }
-/// Checks the FlatBuffers table at `table` against `Flags`'s shape.
-///
-/// Checks the structure, enum discriminants, collection bounds,
-/// map key uniqueness, and named and anonymous scalar ranges,
-/// steps and lengths. Pattern checks require `validate-pattern`.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Flags(
     buf: &[::core::primitive::u8],
@@ -375,18 +352,6 @@ pub(crate) fn __ridl_fb_verify_Flags(
     }
     ::core::result::Result::Ok(())
 }
-/// Builds `Flags` from the FlatBuffers table at `table`.
-///
-/// It cannot fail. An absent non-optional scalar or enum field
-/// reads as its FlatBuffers default — 0, or the enum's zero
-/// member — which is a value `verify` accepted
-/// (driftsys/ridl#472). Any other read that could fail is
-/// discharged with the neutral value of its own type — zero, the
-/// empty string or collection, the first declared enum variant —
-/// and `verify` is what makes those branches unreachable. A named scalar is
-/// built with its unchecked constructor (`new_unchecked`) over a
-/// value `verify` has already range-checked (`check`), so this
-/// never re-checks and never fails.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_Flags(
     buf: &[::core::primitive::u8],
@@ -443,16 +408,6 @@ pub(crate) fn __ridl_fb_decode_Flags(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Flags {
     /// The largest FlatBuffers buffer any legal `Flags` encodes to: 89 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 89usize;
     type Buffer = [::core::primitive::u8; 89usize];
     const BUFFER: Self::Buffer = [0u8; 89usize];

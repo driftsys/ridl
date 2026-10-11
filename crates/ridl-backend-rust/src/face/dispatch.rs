@@ -14,12 +14,7 @@ use quote::quote;
 /// shadowed them or was shadowed by them. A ridl identifier cannot start with an
 /// underscore (`ridl check` refuses one), so `__arg` cannot be a parameter's
 /// name, as in the call method and the call futures.
-pub(super) fn dispatch(
-    iface: &Ident,
-    iface_name: &str,
-    commands: &[Call],
-    queries: &[Call],
-) -> TokenStream {
+pub(super) fn dispatch(iface: &Ident, commands: &[Call], queries: &[Call]) -> TokenStream {
     let number = interface_number(iface);
 
     let command_arms = commands.iter().map(|call| {
@@ -108,58 +103,61 @@ pub(super) fn dispatch(
         }
     });
 
-    let doc = format!(
-        "Settles the claims of interface `{iface_name}` that are waiting, up \
-         to `budget` of them, and returns how many were settled, or the \
-         handler port's failure. It is the one-pass step `serve` calls on \
-         each poll.\n\nIt does not wait: it makes one pass over the claims \
-         the handler already has and returns. `budget` is decreased by one \
-         for each claim taken from `Handler::next_claim`, whether or not its \
-         settlement is accepted — except an oversized claim whose settlement \
-         the handler refused, below — and the pass stops when it reaches 0 \
-         without asking for another claim. With a buffer of at least \
-         `<{iface_name} as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 \
-         means the handler has no claim waiting, or refused the settlement \
-         of an oversized claim that stays waiting; `Ok` with `budget` at 0 means claims \
-         may still be waiting; `Err` means `Handler::next_claim` failed, and \
-         every claim settled before the failure stays settled. \
-         `ReadError::ShortClaim` is not a failure: the claim's arguments do \
-         not fit `<{iface_name} as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE`, the interface's largest \
-         argument or reply payload, so they are larger than any valid \
-         encoding of this interface's members, and the claim is settled \
-         `Transport::Corrupt` by its id without being read, whichever \
-         interface or member it names — a claim naming another interface may \
-         be validly larger, and is settled `Corrupt` too, because this step \
-         cannot read it; it counts toward `budget`, and the pass continues. \
-         When the handler \
-         refuses that settlement the pass ends at once, returning the count \
-         so far with the budget unspent, as if no claim were waiting, because \
-         the runtime keeps the unsettled claim the next one; the claims \
-         behind it wait until the handler can settle it \
-         (driftsys/ridl#569).\n\n`buf` must \
-         be at least `<{iface_name} as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes, because a reply is \
-         encoded into the same buffer as the arguments. A shorter buffer \
-         returns `Ok(0)` without consuming a claim or changing \
-         `budget`.\n\nEvery claim that is taken is \
-         settled, including one whose interface number or ordinal this \
-         interface does not recognise, which settles \
-         `Contract::UnknownInteraction`. A claim is counted only once \
-         `Handler::settle` has accepted it; a `SettleError` is left to the \
-         handler, which already owns that claim's settlement, and the pass \
-         continues with the next claim, except for an oversized claim, whose \
-         refused settlement ends the pass as stated above.\n\nA command is settled `Ok(&[])` \
-         once its arguments and its `require` clauses pass and **before** the \
-         application's method runs, because a command's acknowledgment is a \
-         delivery acknowledgment and not a completion one (ridl §6.1, and \
-         `Handler`'s own contract). A query is settled after the application \
-         returns, because its settlement carries the reply."
-    );
+    // The step `serve` calls on each poll. It is an internal and carries
+    // no doc; what it does, with `<Iface>` for the interface descriptor:
+    //
+    // Settles the claims of interface `<Iface>` that are waiting, up to
+    // `budget` of them, and returns how many were settled, or the handler
+    // port's failure. It is the one-pass step `serve` calls on each poll.
+    //
+    // It does not wait: it makes one pass over the claims the handler already
+    // has and returns. `budget` is decreased by one for each claim taken from
+    // `Handler::next_claim`, whether or not its settlement is accepted —
+    // except an oversized claim whose settlement the handler refused, below —
+    // and the pass stops when it reaches 0 without asking for another claim.
+    // With a buffer of at least `<<Iface> as
+    // Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0
+    // means the handler has no claim waiting, or refused the settlement of an
+    // oversized claim that stays waiting; `Ok` with `budget` at 0 means claims
+    // may still be waiting; `Err` means `Handler::next_claim` failed, and
+    // every claim settled before the failure stays settled.
+    // `ReadError::ShortClaim` is not a failure: the claim's arguments do not
+    // fit `<<Iface> as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE`, the interface's
+    // largest argument or reply payload, so they are larger than any valid
+    // encoding of this interface's members, and the claim is settled
+    // `Transport::Corrupt` by its id without being read, whichever interface
+    // or member it names — a claim naming another interface may be validly
+    // larger, and is settled `Corrupt` too, because this step cannot read it;
+    // it counts toward `budget`, and the pass continues. When the handler
+    // refuses that settlement the pass ends at once, returning the count so
+    // far with the budget unspent, as if no claim were waiting, because the
+    // runtime keeps the unsettled claim the next one; the claims behind it
+    // wait until the handler can settle it (driftsys/ridl#569).
+    //
+    // `buf` must be at least `<<Iface> as
+    // Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes, because a reply is encoded
+    // into the same buffer as the arguments. A shorter buffer returns `Ok(0)`
+    // without consuming a claim or changing `budget`.
+    //
+    // Every claim that is taken is settled, including one whose interface
+    // number or ordinal this interface does not recognise, which settles
+    // `Contract::UnknownInteraction`. A claim is counted only once
+    // `Handler::settle` has accepted it; a `SettleError` is left to the
+    // handler, which already owns that claim's settlement, and the pass
+    // continues with the next claim, except for an oversized claim, whose
+    // refused settlement ends the pass as stated above.
+    //
+    // A command is settled `Ok(&[])` once its arguments and its `require`
+    // clauses pass and **before** the application's method runs, because a
+    // command's acknowledgment is a delivery acknowledgment and not a
+    // completion one (ridl §6.1, and `Handler`'s own contract). A query is
+    // settled after the application returns, because its settlement carries
+    // the reply.
 
     // `dispatch` calls every `Provider` method, so it allows the lint when
     // one of them is deprecated.
     let allow = allow_deprecated(commands.iter().chain(queries).map(|call| &call.member));
     quote! {
-        #[doc = #doc]
         #allow
         pub(crate) fn dispatch<H, P>(
             h: &mut H,

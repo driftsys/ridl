@@ -314,16 +314,22 @@ fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> Tok
             " The interface is `internal`, so it has no face in any case; only its \
              descriptors are absent, for the reason above."
         }
+        // The owner lines say what was refused and what the source can change
+        // to get a face. They cite no issue: a generated doc names none
+        // (the generated-code documentation design, "Maintainer notes"). The
+        // induced argument struct of driftsys/ridl#713 removes the first
+        // call-shape gap, and the translator of driftsys/ridl#704 removes the
+        // clause gap.
         FaceGap::CallShape => {
             " A call the face cannot carry — an interaction that does not declare \
              exactly one named parameter, or a query whose reply is not a named \
-             type. driftsys/ridl#713 adds the induced argument struct that removes \
-             the first."
+             type. Declare each command and query with one parameter of a named \
+             type, and give each query a named reply type, to get a face."
         }
         FaceGap::Clause => {
             " A contract clause outside the form the narrow translator accepts — \
              `<subject> <comparison> <numeric literal>`, conjoined with `&&`. \
-             driftsys/ridl#704 replaces the translator and removes this."
+             Write each `require` and `ensure` clause in that form to get a face."
         }
         FaceGap::Other => " No tracking issue owns this one: the reason above is the whole of it.",
     };
@@ -1096,16 +1102,17 @@ fn emit_type_def(
                 ::core::result::Result::Ok(Self::new_unchecked(value))
             }
 
-            /// Checks `value` against this type's typl constraints, without
-            /// constructing it. `pub(crate)` rather than `pub`: a caller
-            /// outside `new` is a function generated into this crate — since
-            /// driftsys/ridl#467 that includes the codec of *another* package
-            /// of the same build, which reaches this type through the module
-            /// tree and so cannot see a private item here. The emitted crate
-            /// is one crate per build, so `pub(crate)` reaches every such
-            /// caller while adding nothing to the crate's public surface.
-            /// Whether this becomes `pub` is an open question of the public API surface.
-            /// `new` is the composition of this and `new_unchecked`.
+            // Checks `value` against this type's typl constraints, without
+            // constructing it. It is an internal and carries no doc.
+            // `pub(crate)` rather than `pub`: a caller outside `new` is a
+            // function generated into this crate — since driftsys/ridl#467
+            // that includes the codec of *another* package of the same build,
+            // which reaches this type through the module tree and so cannot
+            // see a private item here. The emitted crate is one crate per
+            // build, so `pub(crate)` reaches every such caller while adding
+            // nothing to the crate's public surface. Whether this becomes
+            // `pub` is an open question of the public API surface. `new` is
+            // the composition of this and `new_unchecked`.
             pub(crate) fn check(
                 value: #check_param_ty,
             ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {

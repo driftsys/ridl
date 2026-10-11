@@ -117,6 +117,9 @@ fn package_private_structs(items: TokenStream) -> TokenStream {
     for item in &mut file.items {
         if let syn::Item::Struct(item) = item {
             item.vis = syn::parse_quote! { pub(crate) };
+            // A crate-visible descriptor is an internal, so it carries no
+            // doc and needs no `#[doc(hidden)]`.
+            item.attrs.retain(|attr| !attr.path().is_ident("doc"));
         }
     }
     quote! { #file }
@@ -162,13 +165,17 @@ fn one_interface_public(
     let max_buffer = max_size_const(&call_sizes);
     let event_buffer = max_size_const(&event_sizes);
 
+    // The size table is one reservation row per member of `MEMBERS`, in
+    // order, and the two buffer sizes, every one a const expression over
+    // `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound; the face
+    // holds the table's claim and event buffers. The doc states what the
+    // descriptor is for its user, not how the table is computed.
     let interface_doc = format!(
-        "Descriptor for interface `{iface_name}`.\n\n\
+        "Descriptor for interface `{iface_name}`: its catalog, number, name and \
+         members, as `ridl_rt::contract::Interface`.\n\n\
          Its size table in FlatBuffers is `<{iface_name} as Sizes<FlatBuffers>>`: \
-         one reservation row per member of `MEMBERS`, in order, and the two \
-         buffer sizes, every one a const expression over \
-         `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound. The \
-         face holds the table's claim and event buffers."
+         the space each member reserves, and the largest buffer a call or an \
+         event of this interface needs."
     );
 
     items.push(quote! {
@@ -351,11 +358,12 @@ fn interaction_item(
             )?;
             let args_param = binding("args", require.uses_args);
             let require_expr = require.expr;
-            let require_doc = clause_doc("require");
+            // `require` evaluates the `require` clauses. It is a method of a
+            // hidden descriptor, so it carries no doc: see `clauses.rs` for
+            // the one clause form the translation covers.
             quote! {
                 impl ::ridl_rt::contract::Command for #struct_ident {
                     type Args = #args;
-                    #[doc = #require_doc]
                     fn require(#args_param: &Self::Args) -> ::core::result::Result<(), ()> {
                         #require_expr
                     }
@@ -397,17 +405,15 @@ fn interaction_item(
             let ensure_reply = binding("reply", ensure.uses_reply);
             let require_expr = require.expr;
             let ensure_expr = ensure.expr;
-            let require_doc = clause_doc("require");
-            let ensure_doc = clause_doc("ensure");
+            // `require` and `ensure` evaluate the clauses of their kind, and
+            // carry no doc for the reason the command arm gives.
             quote! {
                 impl ::ridl_rt::contract::Query for #struct_ident {
                     type Args = #args;
                     type Reply = #reply;
-                    #[doc = #require_doc]
                     fn require(#require_param: &Self::Args) -> ::core::result::Result<(), ()> {
                         #require_expr
                     }
-                    #[doc = #ensure_doc]
                     fn ensure(
                         #ensure_args: &Self::Args,
                         #ensure_reply: &Self::Reply,
@@ -420,7 +426,15 @@ fn interaction_item(
         None => return Err(not_an_interaction(member)),
     };
 
+    // A member descriptor is an internal: a user's code names the interface
+    // descriptor and the face, not this. It stays `pub`, under
+    // `#[doc(hidden)]`, because it implements the `ridl_rt::contract`
+    // traits whose `MEMBER` a runtime or a test outside the crate reads, and
+    // because an event's descriptor is named by nothing in the crate, so
+    // `pub(crate)` would draw `dead_code`. The descriptors of an `internal`
+    // interface are `pub(crate)` instead (`package_private_structs`).
     Ok(quote! {
+        #[doc(hidden)]
         pub struct #struct_ident;
 
         impl ::ridl_rt::contract::Interaction for #struct_ident {
@@ -547,14 +561,6 @@ fn binding(name: &str, used: bool) -> TokenStream {
     quote! { #ident }
 }
 
-fn clause_doc(kind: &str) -> String {
-    format!(
-        "Evaluates the `{kind}` clauses. This translation covers one clause \
-         form — `<subject> <comparison> <numeric literal>` — and driftsys/ridl#704 replaces \
-         it with one driven by the structured expression tree."
-    )
-}
-
 /// The canonical IR text of the type one payload names.
 fn payload_reference(payload: Option<&v1::Payload>) -> &str {
     payload
@@ -647,10 +653,12 @@ pub(crate) fn catalog_hash(ctx: &Ctx) -> Result<Vec<Literal>, GenerateError> {
 /// Which of the two reasons a call has no request payload.
 fn no_single_param(params: &[v1::Param], member: &str) -> GenerateError {
     if params.len() != 1 {
+        // The message reaches the skip note's doc, so it cites no issue; the
+        // induced argument struct is driftsys/ridl#713.
         return GenerateError {
             message: format!(
                 "interaction `{member}` must declare exactly one parameter (the face emits no \
-                 induced argument struct, driftsys/ridl#713)"
+                 induced argument struct)"
             ),
         };
     }

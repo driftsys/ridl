@@ -90,10 +90,11 @@ pub(super) fn blocking(
 /// represented, and the call future's own deadline saturates for the same
 /// reason; a timeout that large is a wait with no bound.
 fn deadline_after() -> TokenStream {
+    // The emitted function returns the instant `timeout` ends for a wait that
+    // starts now: `None` with no timeout, and with a timeout so large that the
+    // instant cannot be represented, which is then a wait with no bound. It
+    // is private, so it carries no doc.
     quote! {
-        /// The instant `timeout` ends for a wait that starts now. `None`
-        /// with no timeout, and with a timeout so large that the instant
-        /// cannot be represented, which is then a wait with no bound.
         fn __deadline_after(
             timeout: ::core::option::Option<::std::time::Duration>,
         ) -> ::core::option::Option<::std::time::Instant> {

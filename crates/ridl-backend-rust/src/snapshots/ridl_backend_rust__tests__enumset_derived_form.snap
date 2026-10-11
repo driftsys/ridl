@@ -74,12 +74,6 @@ impl ::core::default::Default for WarningFlags {
     }
 }
 /// An accessor over FlatBuffers bytes `Warning`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WarningFbView<'a> {
@@ -94,12 +88,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for WarningFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> WarningFbView<'a> {
-    /// The value the box carries. `Warning` is one value, so this decodes it rather than borrowing it, which costs one read.
+    /// The value the bytes hold. `Warning` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Warning {
         __ridl_fb_decode_Warning(self.buf, self.table)
     }
 }
-/// Writes `Warning` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Warning(
     value: &Warning,
@@ -160,16 +153,6 @@ pub(crate) fn __ridl_fb_decode_Warning(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
     /// The largest FlatBuffers buffer any legal `Warning` encodes to: 50 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
     type Buffer = [::core::primitive::u8; 50usize];
     const BUFFER: Self::Buffer = [0u8; 50usize];
@@ -217,12 +200,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
     }
 }
 /// An accessor over FlatBuffers bytes `WarningFlags`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct WarningFlagsFbView<'a> {
@@ -237,12 +214,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for WarningFlagsFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> WarningFlagsFbView<'a> {
-    /// The value the box carries. `WarningFlags` is one value, so this decodes it rather than borrowing it, which costs one read.
+    /// The value the bytes hold. `WarningFlags` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> WarningFlags {
         __ridl_fb_decode_WarningFlags(self.buf, self.table)
     }
 }
-/// Writes `WarningFlags` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_WarningFlags(
     value: &WarningFlags,
@@ -311,16 +287,6 @@ pub(crate) fn __ridl_fb_decode_WarningFlags(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for WarningFlags {
     /// The largest FlatBuffers buffer any legal `WarningFlags` encodes to: 43 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 43usize;
     type Buffer = [::core::primitive::u8; 43usize];
     const BUFFER: Self::Buffer = [0u8; 43usize];
