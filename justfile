@@ -266,10 +266,14 @@ wasm-check:
 # packaged LICENSE of either crate that differs from the root LICENSE; its
 # tests failing to pass as edition 2021 with the minimum toolchain or as
 # edition 2024 with the pin; or `suite!`, expanded with every extension flag
-# over the source of ridl-loopback as edition 2021 (tests/conformance.rs),
-# failing to compile with the minimum toolchain (which also holds that source
-# to the minimum). The last one is needed
-# because the crate's own tests never expand the macro.
+# over the packaged ridl-loopback (tests/conformance.rs, which the package
+# excludes and the recipe copies in), failing to compile with the minimum
+# toolchain. The last one is needed because the crate's own tests never expand
+# the macro.
+#
+# ridl-loopback is held to the same terms: its manifest must set the same
+# rust-version as ridl-rt and edition 2021, and the packaged crate, unchanged
+# apart from the appended tables, must build with the minimum toolchain.
 compat-check: toolchain-check
     #!/usr/bin/env bash
     set -euo pipefail
@@ -318,18 +322,29 @@ compat-check: toolchain-check
         exit 1
     fi
 
-    # Both crates in one command: the packaged ridl-rt-conformance depends on
-    # ridl-rt at this version, which is not on the registry until the release
-    # publishes it, so the single-crate form fails while the version is
-    # unpublished.
-    echo "compat-check: packaging ridl-rt and ridl-rt-conformance $version"
-    cargo package -p ridl-rt -p ridl-rt-conformance --no-verify --allow-dirty
+    # ridl-loopback is held to the same minimum and edition.
+    loopback_manifest="crates/ridl-loopback/Cargo.toml"
+    if ! grep -qx "rust-version = \"$minimum\"" "$loopback_manifest" \
+        || ! grep -qx 'edition = "2021"' "$loopback_manifest"; then
+        echo "compat-check: $loopback_manifest must set edition = \"2021\" and" >&2
+        echo "compat-check: rust-version = \"$minimum\", the same as $manifest." >&2
+        exit 1
+    fi
+
+    # All three crates in one command: the packaged ridl-rt-conformance and
+    # ridl-loopback depend on ridl-rt at this version, which is not on the
+    # registry until the release publishes it, so the single-crate form fails
+    # while the version is unpublished.
+    echo "compat-check: packaging ridl-rt, ridl-rt-conformance and ridl-loopback $version"
+    cargo package -p ridl-rt -p ridl-rt-conformance -p ridl-loopback --no-verify --allow-dirty
 
     pkg="$PWD/target/compat-check/pkg"
     pkg_conformance="$PWD/target/compat-check/pkg-conformance"
-    mkdir -p "$pkg" "$pkg_conformance"
+    pkg_loopback="$PWD/target/compat-check/pkg-loopback"
+    mkdir -p "$pkg" "$pkg_conformance" "$pkg_loopback"
     tar -xzf "${CARGO_TARGET_DIR:-target}/package/ridl-rt-$version.crate" -C "$pkg" --strip-components=1
     tar -xzf "${CARGO_TARGET_DIR:-target}/package/ridl-rt-conformance-$version.crate" -C "$pkg_conformance" --strip-components=1
+    tar -xzf "${CARGO_TARGET_DIR:-target}/package/ridl-loopback-$version.crate" -C "$pkg_loopback" --strip-components=1
 
     for dir in "$pkg" "$pkg_conformance"; do
         if ! cmp -s "$dir/LICENSE" LICENSE; then
@@ -382,24 +397,30 @@ compat-check: toolchain-check
     cargo "+$minimum" test --all-features --offline --manifest-path "$pkg_conformance/Cargo.toml"
 
     # The crate's own tests never expand `suite!`, so the macro is compiled
-    # here: ridl-loopback's source and its tests/conformance.rs, which expand
-    # it with every extension flag, as edition 2021 against the two packaged
-    # crates. Compile only: the pin runs this test in the workspace. The
-    # loopback source therefore has to build as edition 2021 with the minimum
-    # toolchain, so it uses no let chain.
-    loopback="$PWD/target/compat-check/loopback"
-    mkdir -p "$loopback/tests"
-    cp -R crates/ridl-loopback/src "$loopback/src"
-    cp crates/ridl-loopback/tests/conformance.rs "$loopback/tests/conformance.rs"
-    {
-        printf '[package]\nname = "ridl-loopback"\nversion = "0.0.0"\nedition = "2021"\n'
-        printf 'rust-version = "%s"\n\n' "$minimum"
-        printf '[dependencies]\nridl-rt = { path = "%s" }\n\n' "$pkg"
-        printf '[dev-dependencies]\nridl-rt-conformance = { path = "%s" }\n\n' "$pkg_conformance"
-        printf '[patch.crates-io]\nridl-rt = { path = "%s" }\n\n[workspace]\n' "$pkg"
-    } > "$loopback/Cargo.toml"
-    echo "compat-check: $minimum, edition 2021 (suite! expanded over ridl-loopback)"
-    cargo "+$minimum" test --no-run --offline --manifest-path "$loopback/Cargo.toml"
+    # here over the packaged ridl-loopback, which builds as published: only the
+    # tables below are appended. The package excludes tests/conformance.rs (its
+    # dev-dependency has no version, so packaging drops it), so the test is
+    # copied in from the source tree and the packaged ridl-rt-conformance is
+    # added as a path dev-dependency, with a test target for the copy. The test
+    # expands `suite!` with every extension flag. Compile only: the pin runs
+    # this test in the workspace.
+    # `cargo package` leaves an empty [dev-dependencies] table as the last
+    # table of the manifest, where the dropped dependency was. The dependency
+    # line goes under it. The manifest sets autotests = false, so the copied
+    # test also needs its own [[test]] target.
+    if [ "$(grep -c '^\[dev-dependencies\]' "$pkg_loopback/Cargo.toml")" != 1 ] \
+        || [ "$(tail -n 1 "$pkg_loopback/Cargo.toml")" != "[dev-dependencies]" ]; then
+        echo "compat-check: the packaged ridl-loopback manifest no longer ends with an" >&2
+        echo "compat-check: empty [dev-dependencies] table, which this recipe appends to." >&2
+        exit 1
+    fi
+    mkdir -p "$pkg_loopback/tests"
+    cp crates/ridl-loopback/tests/conformance.rs "$pkg_loopback/tests/conformance.rs"
+    printf 'ridl-rt-conformance = { path = "%s" }\n' "$pkg_conformance" >> "$pkg_loopback/Cargo.toml"
+    printf '\n[[test]]\nname = "conformance"\npath = "tests/conformance.rs"\n' >> "$pkg_loopback/Cargo.toml"
+    printf '\n[workspace]\n\n[patch.crates-io]\nridl-rt = { path = "%s" }\n' "$pkg" >> "$pkg_loopback/Cargo.toml"
+    echo "compat-check: $minimum, edition 2021 (packaged ridl-loopback, suite! expanded)"
+    cargo "+$minimum" test --no-run --offline --manifest-path "$pkg_loopback/Cargo.toml"
 
     # Edition 2024 requires rust-version >= 1.85 (cargo refuses to parse the
     # manifest otherwise); the pin already satisfies that, so this run's
