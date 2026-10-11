@@ -205,7 +205,7 @@ design in each:
    | Generated Rust crate    | `generated-crate` (`cargo semver-checks`)                                                   | the codegen lane                     |          |
    | Runtime crates          | `runtime-crates` (`cargo semver-checks`)                                                    | the wire and runtime lane            |          |
    | Codegen plugin protocol | `codegen-protocol`                                                                          | the codegen lane                     |          |
-   | MCP tools               | `mcp`                                                                                       | the release and policy lane, at once |          |
+   | MCP tools               | `mcp`                                                                                       | the release and policy lane, at once | 87dc6031 |
    | Wire format             | `wire`: encoding names, `.proto` and `.fbs` lines, catalog hash; frames are policy only now | the wire and runtime lane            |          |
    | Minimum Rust version    | `msrv`                                                                                      | the wire and runtime lane            |          |
 
