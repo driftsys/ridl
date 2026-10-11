@@ -174,7 +174,10 @@ member; rsdl is the apex.
                          with its default features and with them off for that
                          target, under -D warnings, so any diagnostic fails
                          it, dead_code included; the lints that its lib.rs
-                         allows stay allowed.
+                         allows stay allowed; both generated crates are also
+                         built with cargo doc, denying
+                         rustdoc::broken_intra_doc_links and
+                         rustdoc::private_intra_doc_links.
                          examples/cabin is its own
                          cargo workspace, outside this one, and carries the fmt
                          and clippy checks for its consumer, which --all over
