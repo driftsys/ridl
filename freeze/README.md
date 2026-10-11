@@ -43,7 +43,16 @@ committed dump differs from the regenerated one.
 
 ## Approve a break
 
-A removed or changed line is a break of the frozen surface. To accept it, change
-the `baseline` of that surface in `surfaces.toml` to a newer ref, in the same
-pull request and with the reason in the pull request description. The change to
-`surfaces.toml` is the visible record of the approval.
+A removed or changed line, or a Rust API break, is a break of the frozen
+surface. The baseline copy is read with
+`git show <baseline>:freeze/<surface>.txt`, so a new baseline must be a commit
+that already holds the changed dump, and a branch commit disappears after a
+squash merge. To accept a break:
+
+1. In the pull request that makes the break, delete that surface's row from
+   `surfaces.toml`, and state the approval and the reason in the pull request
+   description. The deleted row is the visible record of the approval.
+2. After that pull request merges, add the row again in a follow-up pull
+   request, with the merge commit of the first as the `baseline`.
+
+The surface is unchecked between the two pull requests.

@@ -9,9 +9,10 @@ Amended 2026-10-03 by the workspace-aware MCP tools (piece 1a,
 path with optional unsaved overlays, `ridl_references` and `ridl_dependencies`
 are added, and the tool surface becomes a fourth contract surface in §7.
 
-Amended 2026-10-11 by [ADR-0029](ADR-0029-stability-policy.md): the contract
-surfaces named here are frozen surfaces from 0.10.0, checked by
-`just freeze-check`.
+Amended 2026-10-11 by [ADR-0029](ADR-0029-stability-policy.md): the diagnostic
+codes, the IR protocol and the MCP tool names and schemas named here are frozen
+surfaces from 0.10.0, checked by `just freeze-check`. The `ridl-diff` categories
+are not frozen by that record.
 
 Assumes ADR-0002 (module system) as accepted and ADR-0004 (implementation
 sequencing and stack) as the direction of record, and depends on the concept

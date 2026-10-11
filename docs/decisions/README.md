@@ -449,8 +449,7 @@ other entry below is Accepted.
   tools, the wire format and the minimum Rust version); size and budget values,
   message text, additions, new lints and the unpublished crates are not; the
   gate is `just freeze-check`, with line dumps under `freeze/` and
-  `cargo
-  semver-checks` for the Rust APIs, compared against a baseline git ref
+  `cargo-semver-checks` for the Rust APIs, compared against a baseline git ref
   per surface in `freeze/surfaces.toml`; a break is approved by moving that
   baseline, and no break lands in 0.10.x except a security fix; and a table says
   which gate covers which surface. It owns the stability statements of the IR

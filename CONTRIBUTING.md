@@ -66,10 +66,12 @@ baseline of each surface is in `freeze/surfaces.toml`.
 1. Run `cargo xtask freeze update` after a change that touches a surface, and
    commit the changed dumps. An added line is not a break.
 2. If `just freeze-check` reports a missing line or a Rust API break, the change
-   breaks the surface. Before 0.10.0, move the `baseline` of that surface to a
-   newer ref in the same pull request, put `!` in the title, and state the
-   reason in the description. The pull request merges only on the maintainer's
-   explicit approval.
+   breaks the surface. Before 0.10.0, delete that surface's row from
+   `freeze/surfaces.toml` in the same pull request, put `!` in the title, and
+   state the approval and the reason in the description. The pull request merges
+   only on the maintainer's explicit approval. A follow-up pull request adds the
+   row again with the merge commit of the first as the `baseline`. The surface
+   is unchecked between the two pull requests.
 3. During 0.10.x, do not break a frozen surface. A security fix is the one
    exception, and its reason is recorded in ADR-0029.
 4. To start checking a new surface, add its dump in one pull request. Add its

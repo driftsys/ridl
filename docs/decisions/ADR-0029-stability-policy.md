@@ -35,14 +35,14 @@ pull request can rewrite any of them with `cargo insta accept` in the same
 change that breaks the surface. A freeze check must therefore compare against a
 version that the pull request cannot edit: a git ref.
 
-The check as built differs from the design in four ways. This record refines the
+The check as built differs from the design in five ways. This record refines the
 design in each:
 
 - The generated-crate inputs are frozen copies of `examples/cabin` and of the
   `veh-cluster` corpus under `xtask/tests/freeze-fixtures/generated/`, so an
   edit to `examples/` or to the corpus is not a break of that surface.
-- The generated crate names the FlatBuffers wire backend only; the proto3 and
-  `repr(C)` codecs are not part of it.
+- The fixture manifests name only `flatbuffers`, the one codec the Rust backend
+  emits today.
 - The dumps are committed under `freeze/`, and the baseline copy of a dump is
   read with `git show <baseline>:freeze/<surface>.txt`. A new row therefore
   starts in a follow-up pull request that names the merge commit of the pull
@@ -50,97 +50,33 @@ design in each:
 - The accepted-sources dump covers the packages under `examples/` and
   `evals/corpus/`; it does not include the fences of `docs/book/`, which a test
   already compiles.
+- The wire dump holds the encoding names, the `.proto` and `.fbs` lines for the
+  corpus and the catalog hash of the cabin example. It holds no frame vectors
+  and no `attach` handshake vectors, so the frame envelope and the handshake are
+  frozen by policy with no automated check until the wire dump gains them.
+- The minimum Rust version is checked for `ridl-rt` and `ridl-rt-conformance`
+  only. `ridl-loopback` and `ridl-descriptor` are edition 2024 today, so the
+  minimum does not cover them yet. The generated crate compiles as edition 2021
+  with Rust 1.83, which `just compat-check` checks and `just freeze-check` does
+  not.
 
 ## Decision
 
 1. **Ten surfaces are frozen from 0.10.0.** A change that removes or alters what
    a user depends on in one of them is a break.
 
-   | Surface                 | What a user depends on                                                                                                                  |
-   | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-   | Language                | typl, ridl and rsdl syntax and keywords; the set of sources that compile without an error                                               |
-   | Manifest                | `ridl.toml` keys and their value types, `interfaces.lock`, `.ridl/baseline`                                                             |
-   | Diagnostics and lints   | diagnostic codes, lint names, lint default levels                                                                                       |
-   | CLI                     | subcommands, flags, exit codes, the `--format json` and `--format sarif` output shapes                                                  |
-   | Generated Rust crate    | the domain types and the interaction face (`Client`, `Provider`, `Publisher`, `Event`, `serve`, `Bind`)                                 |
-   | Runtime crates          | the public API of `ridl-rt`, `ridl-rt-conformance`, `ridl-loopback` and `ridl-descriptor`, and their cargo feature names                |
-   | Codegen plugin protocol | `ridl.ir.v2` and `ridl.codegen.v1`, the request and response of a plugin                                                                |
-   | MCP tools               | tool names, input schemas and output schemas                                                                                            |
-   | Wire format             | the frame envelope, the `attach` handshake, the inputs of the catalog hash, the emitted `.proto` and `.fbs` mapping, the encoding names |
-   | Minimum Rust version    | Rust 1.83 and edition 2021 for the runtime crates and the generated crate                                                               |
-
-2. **These are not frozen.**
-   - Size and budget values, for example header sizes and size sums.
-   - The text of a diagnostic message, of a doc comment and of generated docs.
-   - Anything that is only added: a new subcommand, flag, key, lint, field,
-     tool, cargo feature or transport default.
-   - A new lint, which starts at the `allow` or `info` level.
-   - The crates that are not published: `xtask`, `ridlc-gen-model` and
-     `ridlc-gen-rust`.
-
-3. **The gate is one recipe, `just freeze-check`, with two kinds of check.** The
-   recipe runs `cargo xtask freeze check`. It is a member of `just build`, of
-   the `expected` list of `gate-parity` and of the CI workflow (ADR-0009).
-   - _Line dumps._ `freeze/<surface>.txt` is the sorted, deduplicated dump of
-     one surface, one fact per line. The dumps are: keywords, accepted sources,
-     manifest keys, diagnostic codes with lint names and default levels, the CLI
-     (subcommands, flags with value kinds, exit codes, the key paths of the JSON
-     and SARIF reports), the codegen protocol fields, the MCP tool and schema
-     paths, the wire mapping (encoding names, the `.proto` and `.fbs` lines for
-     the corpus, the catalog hash of the cabin example) and the minimum Rust
-     version and edition. The check fails when a committed dump differs from a
-     regeneration. For a surface with a row in `freeze/surfaces.toml`, it also
-     fails when a line of the dump at the row's `baseline` ref is missing from
-     the dump at `HEAD`. An added line passes. A changed line is a removed line
-     plus an added line, so it fails.
-   - _Rust API comparison._ The runtime crates and the generated crate are
-     compared with `cargo semver-checks`, because a line dump cannot classify a
-     Rust API change correctly, for example a new required method on a public
-     trait. The runtime crates are compared with the same crates at the baseline
-     ref. The generated crates are committed under `freeze/generated/` from the
-     frozen fixtures named in the Context, and each is compared with the same
-     crate in the baseline's `freeze/generated/`. The comparison runs offline
-     and with the release type `minor`. Ten lints of `cargo semver-checks` that
-     require a major version but report only a warning are raised to `deny`, so
-     the break they find fails the check.
-
-   `freeze/surfaces.toml` is the authoritative baseline record: one row per
-   surface with a `name` and a `baseline`. A surface with no row is checked only
-   against its committed dump.
-
-4. **A break of a frozen surface is approved by moving its baseline.**
-   - Before 0.10.0, a pull request moves the `baseline` ref of one surface. Its
-     title carries `!`, and it merges only on the maintainer's explicit
-     approval.
-   - At 0.10.0, the release pull request moves every baseline to `v0.10.0`.
-   - During 0.10.x, no break lands. The one exception is a security fix; its
-     reason is recorded in this record, in the same pull request that makes the
-     fix.
-   - 0.11 starts with a pull request that moves the baselines on purpose.
-
-5. **The minimum supported Rust version is a frozen surface.** Raising the
-   `rust-version` of `ridl-rt` or `ridl-rt-conformance`, or dropping edition
-   2021 for the runtime crates and the generated crate, is a break. This
-   restates ADR-0021 decision 10 as a frozen surface and adds the check.
-
-6. **The gate table says which gate covers which surface.** The `baseline`
-   column is empty on the day this record is accepted. `freeze/surfaces.toml` is
-   the authoritative record of every baseline; this table lists the coverage and
-   the work that switches each gate on, and a gate is on when its surface has a
-   row there.
-
-   | Surface                 | Check                      | Switched on by                          | Baseline |
-   | ----------------------- | -------------------------- | --------------------------------------- | -------- |
-   | Language                | keywords, accepted sources | the language lane                       |          |
-   | Manifest                | manifest keys              | the language lane                       |          |
-   | Diagnostics and lints   | diagnostic codes and lints | the language lane                       |          |
-   | CLI                     | CLI dump                   | the developer-experience lane           |          |
-   | Generated Rust crate    | `cargo semver-checks`      | the codegen lane                        |          |
-   | Runtime crates          | `cargo semver-checks`      | the wire and runtime lane               |          |
-   | Codegen plugin protocol | codegen protocol dump      | the codegen lane with the language lane |          |
-   | MCP tools               | MCP dump                   | the bug lane                            |          |
-   | Wire format             | wire dump                  | the wire and runtime lane               |          |
-   | Minimum Rust version    | minimum Rust version dump  | the wire and runtime lane               |          |
+   | Surface                 | Check (row name in `surfaces.toml`)                                                              | Switched on by                       | Baseline |
+   | ----------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------ | -------- |
+   | Language                | `keywords`, `accepted-sources` dumps                                                             | the language lane                    |          |
+   | Manifest                | `manifest` dump                                                                                  | the language lane                    |          |
+   | Diagnostics and lints   | `diagnostics` dump                                                                               | the language lane                    |          |
+   | CLI                     | `cli` dump                                                                                       | the developer-experience lane        |          |
+   | Generated Rust crate    | `generated-crate`, `cargo-semver-checks`                                                         | the codegen lane                     |          |
+   | Runtime crates          | `runtime-crates`, `cargo-semver-checks`                                                          | the wire and runtime lane            |          |
+   | Codegen plugin protocol | `codegen-protocol` dump                                                                          | the codegen lane                     |          |
+   | MCP tools               | `mcp` dump                                                                                       | the release and policy lane, at once |          |
+   | Wire format             | `wire` dump: encoding names, `.proto` and `.fbs` lines, catalog hash; frames are policy only now | the wire and runtime lane            |          |
+   | Minimum Rust version    | `msrv` dump                                                                                      | the wire and runtime lane            |          |
 
 ## Alternatives considered
 
@@ -163,6 +99,8 @@ design in each:
 - A pull request that breaks a frozen surface fails `just freeze-check` unless
   it also moves the baseline of that surface, so the approval is visible in the
   diff.
+- A break needs two pull requests: the first removes the row and makes the
+  break, and the second adds the row again at the first one's merge commit.
 - Adding a row for a new surface needs two pull requests: the first adds the
   dump, and the second adds the row with the first one's merge commit as its
   baseline.

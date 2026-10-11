@@ -26,8 +26,9 @@ effect now; release 0.10.0 is not published yet.
 - **The wire format.** The frame envelope, the `attach` handshake, the inputs of
   the catalog hash, the emitted `.proto` and `.fbs` mapping and the encoding
   names.
-- **The minimum Rust version.** Rust 1.83 and edition 2021 for the runtime
-  crates and the generated crate. A 0.10.x release does not raise either.
+- **The minimum Rust version.** Rust 1.83 and edition 2021 for `ridl-rt` and
+  `ridl-rt-conformance`, and the generated crate compiles as edition 2021 with
+  that Rust version. A 0.10.x release does not raise either.
 
 ## What may change in 0.10.x
 
@@ -47,14 +48,12 @@ Its reason is recorded in the stability policy.
 
 ## When a break can happen
 
-A break of a frozen surface waits for a release that says so, which is 0.11 or
-later, and 0.11 starts with the break stated on purpose. The releases of 0.9.x
+A break can only land in 0.11 or a later release, and that release states it. The releases of 0.9.x
 and earlier are not covered by this promise.
 
 ## How the promise is checked
 
-The repository compares each frozen surface with the same surface at a released
-version, and a change that removes or alters something a user depends on fails
+The repository compares each frozen surface with a fixed earlier version of that surface, and a change that removes or alters something a user depends on fails
 the build. A contributor who must change a frozen surface follows the steps in
 `CONTRIBUTING.md`, "Changing a frozen surface". The full policy, with the
 checked surfaces and the rules for approving a break, is

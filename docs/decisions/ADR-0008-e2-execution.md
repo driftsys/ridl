@@ -373,9 +373,10 @@ it is exempt in whole, the same way the evidence sentences above are.
 `## Status` and `## Consequences` carry no such exemption and are swept, as this
 note's own history records.
 
-Amended 2026-10-11 by [ADR-0029](ADR-0029-stability-policy.md): the stability of
-`ridl diff`'s flags, output and exit codes in decision 9 is a frozen surface
-from 0.10.0, checked by `just freeze-check`.
+Amended 2026-10-11 by [ADR-0029](ADR-0029-stability-policy.md): the CLI flags
+and exit codes that decision 9 calls stable are a frozen surface from 0.10.0,
+checked by the CLI dump of `just freeze-check`. The output of `ridl diff` is not
+dumped.
 
 ## Context
 
