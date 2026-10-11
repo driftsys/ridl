@@ -1,5 +1,86 @@
 # Changelog
 
+## [0.9.0] (2026-10-11)
+
+### Features
+
+- **ridl-backend-rust:** emit payload codecs only when the manifest names them
+  ([#851]) ([bc58189])
+- **ridl-lsp:** rsdl-aware find-references, rename and completion ([#835])
+  ([ff29e08])
+- **ridl:** add ridl init and ridl new ([#834]) ([7162331])
+- **ci:** check slash-terminated directory citations in doc-path-check ([#836])
+  ([e621356]), refs [#428], [#428], [#428]
+
+### Refactoring
+
+- **ridl-ir:** move the .ir.json snapshot loader out of ridl-diff ([#839])
+  ([843bb87]), fixes [#786], refs [#786], [#786]
+
+### Bug Fixes
+
+- **ridl-backend-rust:** give an internal interface no face and crate-visible
+  descriptors ([#832]) ([f7efbdc]), fixes [#824]
+- bare file name in ridl check, regex verdict eviction at the bound ([#827])
+  ([68237d2]), fixes [#795], [#648]
+- **ridl-sem:** draw no RIDL-101 or RIDL-108 from a bound that drew FORM-102
+  ([#826]) ([db081b3]), fixes [#799]
+
+### Documentation
+
+- **ridl:** close the residual Minors from the review of [#828] ([#837])
+  ([f457a5b]), refs [#831], [#831], [#831], [#831]
+- correct stale statements; put @timing before attributes in R5 and the grammar
+  ([#828]) ([249ffc9]), fixes [#688], [#751], [#647], [#649], refs [#276],
+  [#276], [#276]
+- **docs:** spec and plan for the on-request encodings (stage 1) ([#804])
+  ([67e1854])
+- **docs:** record the WebSocket and payload format steering note ([#803])
+  ([8c064c8])
+
+### BREAKING CHANGES
+
+- every hand-written `impl Payload<E>` must add `type Buffer`
+and `const BUFFER`.
+
+[0.9.0]: https://github.com/driftsys/ridl/compare/v0.8.0...v0.9.0
+[bc58189]: https://github.com/driftsys/ridl/commit/bc58189
+[#851]: https://github.com/driftsys/ridl/issues/851
+[ff29e08]: https://github.com/driftsys/ridl/commit/ff29e08
+[#835]: https://github.com/driftsys/ridl/issues/835
+[7162331]: https://github.com/driftsys/ridl/commit/7162331
+[#834]: https://github.com/driftsys/ridl/issues/834
+[e621356]: https://github.com/driftsys/ridl/commit/e621356
+[#836]: https://github.com/driftsys/ridl/issues/836
+[#428]: https://github.com/driftsys/ridl/issues/428
+[843bb87]: https://github.com/driftsys/ridl/commit/843bb87
+[#839]: https://github.com/driftsys/ridl/issues/839
+[#786]: https://github.com/driftsys/ridl/issues/786
+[f7efbdc]: https://github.com/driftsys/ridl/commit/f7efbdc
+[#832]: https://github.com/driftsys/ridl/issues/832
+[#824]: https://github.com/driftsys/ridl/issues/824
+[68237d2]: https://github.com/driftsys/ridl/commit/68237d2
+[#827]: https://github.com/driftsys/ridl/issues/827
+[#795]: https://github.com/driftsys/ridl/issues/795
+[#648]: https://github.com/driftsys/ridl/issues/648
+[db081b3]: https://github.com/driftsys/ridl/commit/db081b3
+[#826]: https://github.com/driftsys/ridl/issues/826
+[#799]: https://github.com/driftsys/ridl/issues/799
+[f457a5b]: https://github.com/driftsys/ridl/commit/f457a5b
+[#828]: https://github.com/driftsys/ridl/issues/828
+[#837]: https://github.com/driftsys/ridl/issues/837
+[#831]: https://github.com/driftsys/ridl/issues/831
+[249ffc9]: https://github.com/driftsys/ridl/commit/249ffc9
+[#688]: https://github.com/driftsys/ridl/issues/688
+[#751]: https://github.com/driftsys/ridl/issues/751
+[#647]: https://github.com/driftsys/ridl/issues/647
+[#649]: https://github.com/driftsys/ridl/issues/649
+[#276]: https://github.com/driftsys/ridl/issues/276
+[67e1854]: https://github.com/driftsys/ridl/commit/67e1854
+[#804]: https://github.com/driftsys/ridl/issues/804
+[8c064c8]: https://github.com/driftsys/ridl/commit/8c064c8
+[#803]: https://github.com/driftsys/ridl/issues/803
+
 ## [0.8.0] (2026-10-10)
 
 ### Refactoring
