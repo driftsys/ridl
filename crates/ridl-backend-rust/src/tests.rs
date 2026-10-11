@@ -357,7 +357,7 @@ fn counter_decl() -> v2::Decl {
 /// A declaration named `Wire`, the collision #476 reported.
 ///
 /// The **width** is load-bearing, not a range: a named scalar with no declared
-/// width has no finite FlatBuffers bound, and both entry points then refuse it
+/// width has no finite FlatBuffers bound, and the entry points that size a type then refuse it
 /// for that reason (the D-7 refusal), which would make the face test below
 /// pass for the wrong reason. This carries `Counter`'s width for that reason.
 fn wire_named_decl() -> v2::Decl {

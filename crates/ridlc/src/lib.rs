@@ -2310,8 +2310,9 @@ fn write_catalogs(
 /// and no artifact is written; `ir-binary` has no failure path (decision 7).
 ///
 /// Each plugin runs after the emits, over a copy of the same request with the
-/// `options` of its own `[backend.<name>]` table, through the process host ([`plugin::run`]); a host failure is an error diagnostic
-/// naming the plugin, and a response is written as an in-tree backend's is.
+/// `options` of its own `[backend.<name>]` table, through the process host
+/// ([`plugin::run`]); a host failure is an error diagnostic naming the plugin,
+/// and a response is written as an in-tree backend's is.
 ///
 /// `compatible` is the list of earlier catalog hashes of the package's unit,
 /// carried into the request's `catalog.compatible` as given.

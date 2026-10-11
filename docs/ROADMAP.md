@@ -560,17 +560,17 @@ those change in this step, and closing the gap is its own story, **E11.14**
 by a consumer who runs the compiler rather than a test in this workspace, and
 the first of the three codecs to land is what unblocks it.
 
-| ID     | Story                                                                                                                                            | Done when                                                                                                                                                                               | Size |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| E11.14 | The face reaches `ridl build` — `--emit rust` writes the descriptors and the face beside the domain types and the codec `generate` already emits | a package built by `ridl build --emit rust` writes a crate that compiles against `ridl-rt`, round-trips a payload through its generated codec, and needs no hand-written implementation | M    |
+| ID     | Story                                                                                                                                           | Done when                                                                                                                                                                               | Size |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E11.14 | The face reaches `ridl build` — `--emit rust` writes the descriptors and the face beside the domain types and the codec `generate` emitted then | a package built by `ridl build --emit rust` writes a crate that compiles against `ridl-rt`, round-trips a payload through its generated codec, and needs no hand-written implementation | M    |
 
 **E11.7 moved two of that row's clauses out of it, 2026-09-21.** The row above
 said `--emit rust` had still to learn to write "a codec's `Payload`
 implementations" and a `Cargo.toml` naming the encoding's `ridl-rt` feature.
 Both are already true. E11.7's design note D-1, as its disposition amended it,
 puts the `Payload<FlatBuffers>` implementations in `generate`'s own output
-rather than behind a third entry point, and `ridlc::run_build` calls `generate`
-— so `ridl build --emit rust` carried the codec from stage K5
+rather than behind a third entry point, and `ridlc::run_build` then called
+`generate` — so `ridl build --emit rust` carried the codec from stage K5
 (driftsys/ridl#465), and `crates/ridlc/src/lib.rs` rendered
 `ridl-rt = { version = "<major>.<minor>", features = ["flatbuffers"] }` from the
 same stage, where the version is the crate's own at the time — `"0.3"` since the
