@@ -47,9 +47,9 @@ design in each:
   read with `git show <baseline>:freeze/<surface>.txt`. A new row therefore
   starts in a follow-up pull request that names the merge commit of the pull
   request which added the dump as its baseline.
-- The accepted-sources dump covers the packages under `examples/` and
-  `evals/corpus/`; it does not include the fences of `docs/book/`, which a test
-  already compiles.
+- The accepted-sources dump covers frozen copies of the packages under
+  `examples/` and `evals/corpus/`; it does not include the fences of
+  `docs/book/`, which a test already compiles.
 - The wire dump holds the encoding names, the `.proto` and `.fbs` lines for the
   corpus and the catalog hash of the cabin example. It holds no frame vectors
   and no `attach` handshake vectors, so the frame envelope and the handshake are
@@ -76,7 +76,7 @@ design in each:
    | Codegen plugin protocol | `ridl.ir.v2` and `ridl.codegen.v1`, the request and response of a plugin                                                                |
    | MCP tools               | tool names, input schemas and output schemas                                                                                            |
    | Wire format             | the frame envelope, the `attach` handshake, the inputs of the catalog hash, the emitted `.proto` and `.fbs` mapping, the encoding names |
-   | Minimum Rust version    | Rust 1.83 and edition 2021 for the runtime crates and the generated crate                                                               |
+   | Minimum Rust version    | Rust 1.83 and edition 2021 for `ridl-rt` and `ridl-rt-conformance`; the generated crate compiles with them (`just compat-check`)        |
 
    The frozen minimum of the last row is Rust 1.83 and edition 2021 for
    `ridl-rt` and `ridl-rt-conformance`, checked by the `msrv` dump. The
@@ -100,14 +100,21 @@ design in each:
      one surface, one fact per line. The dumps are: keywords, accepted sources,
      manifest keys, diagnostic codes with lint names and default levels, the CLI
      (subcommands, flags with value kinds, exit codes, the key paths of the JSON
-     and SARIF reports), the codegen protocol fields, the MCP tool and schema
-     paths, the wire mapping (encoding names, the `.proto` and `.fbs` lines for
-     the corpus, the catalog hash of the cabin example) and the minimum Rust
-     version and edition. The check fails when a committed dump differs from a
+     and SARIF reports), the codegen protocol fields with the reserved numbers
+     and names, the MCP tool and schema paths with each enum value and const,
+     the wire mapping (encoding names, the `.proto` and `.fbs` lines for the
+     corpus, the catalog hash of the cabin example) and the minimum Rust version
+     and edition. The check fails when a committed dump differs from a
      regeneration. For a surface with a row in `freeze/surfaces.toml`, it also
      fails when a line of the dump at the row's `baseline` ref is missing from
      the dump at `HEAD`. An added line passes. A changed line is a removed line
-     plus an added line, so it fails.
+     plus an added line, so it fails. The accepted-sources and wire dumps read
+     frozen copies of the packages under `examples/` and `evals/corpus/`, kept
+     under `xtask/tests/freeze-fixtures/sources/` at the path of each original,
+     and the catalog hash is read from the generated-crate copy of
+     `examples/cabin`. An edit to an example or to the corpus therefore changes
+     no dump. A copy is refreshed on purpose: adding a copy adds lines, and
+     replacing a copy so that a line is removed is a break.
    - _Rust API comparison._ The runtime crates and the generated crate are
      compared with `cargo semver-checks`, because a line dump cannot classify a
      Rust API change correctly, for example a new required method on a public
