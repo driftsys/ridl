@@ -99,10 +99,20 @@ pub fn generated_update(root: &Path) -> Result<(), String> {
 /// Regenerates the crates into a temporary directory and reports every file
 /// that differs from `freeze/generated/`.
 pub fn generated_current(root: &Path) -> Result<Vec<String>, String> {
-    let scratch = scratch_dir(root, "regenerated")?;
+    differences_from_regeneration(root, &root.join(GENERATED_DIR), "regenerated")
+}
+
+/// Regenerates the crates into the scratch directory `scratch` and reports
+/// every file of `committed` that differs from the regeneration.
+fn differences_from_regeneration(
+    root: &Path,
+    committed: &Path,
+    scratch: &str,
+) -> Result<Vec<String>, String> {
+    let scratch = scratch_dir(root, scratch)?;
     generate(root, &scratch)?;
     let fresh = read_tree(&scratch)?;
-    let committed = read_tree(&root.join(GENERATED_DIR))?;
+    let committed = read_tree(committed)?;
     Ok(tree_differences(&committed, &fresh)
         .into_iter()
         .map(|d| format!("{d}: run `cargo xtask freeze update` and commit the result"))
@@ -424,6 +434,28 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         let differences = generated_current(root).unwrap();
         assert!(differences.is_empty(), "{differences:#?}");
+    }
+
+    #[test]
+    fn a_generated_crate_that_differs_from_a_regeneration_fails() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let committed = scratch_dir(root, "edited-copy").unwrap();
+        copy_tree(&root.join(GENERATED_DIR), &committed).unwrap();
+        let lib = committed.join("cabin/lib.rs");
+        let text = std::fs::read_to_string(&lib).unwrap();
+        std::fs::write(&lib, format!("{text}\npub fn edited() {{}}\n")).unwrap();
+        std::fs::remove_file(committed.join("veh-cluster/veh.common.rs")).unwrap();
+        let differences =
+            differences_from_regeneration(root, &committed, "regenerated-edited").unwrap();
+        assert_eq!(
+            differences,
+            vec![
+                "freeze/generated/cabin/lib.rs differs from the regenerated file: run `cargo \
+xtask freeze update` and commit the result",
+                "freeze/generated/veh-cluster/veh.common.rs is missing: run `cargo xtask \
+freeze update` and commit the result",
+            ]
+        );
     }
 
     #[test]
