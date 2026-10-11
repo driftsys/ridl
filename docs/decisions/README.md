@@ -453,10 +453,11 @@ other entry below is Accepted.
   `Service` included, carries `links`, `see`, `since` and `rules`, and `Param`
   gains `doc`. The docs state the contract, not what a backend checks. Rust
   renders rustdoc, TypeScript renders TSDoc from the `Model`, and the Kotlin
-  plugin is given a KDoc column; only facade items carry docs, and no generated
-  doc cites an issue. The general form §4.7 promotion of `labels` and
-  `deprecated` is declined: both stay doc tags. Amends ADR-0026 decisions 4, 6
-  and 9 in place.
+  plugin is given a KDoc column; only facade items, and the Rust notes left
+  where a face or a codec was not emitted, carry docs, and no generated doc
+  cites an issue. The general form §4.7 promotion of `labels` and `deprecated`
+  is declined: both stay doc tags. Amends ADR-0026 decisions 4, 6 and 9 in
+  place.
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

@@ -182,16 +182,26 @@ because the first consumer that would need it is generated deprecation metadata.
 
 7. **The facade, the internals and maintainer notes** (design section 3). The
    facade is every generated item that a user names in their own code: the
-   declared types, their fields, enum values and union arms; the interface
-   module; the two clients, `serve`, `prelude` and `blocking`. Only facade items
-   carry doc text and rules. Every other generated item is an internal: in Rust
-   it is `pub(crate)` where the crate compiles with it, and `#[doc(hidden)]`
-   where it must stay `pub`; in TypeScript it is not exported, or is exported
-   with `@internal` where another generated module imports it. Internals carry
-   no doc text; the explanation they carry today moves to `//` comments in the
-   generator source. A generated doc cites no issue and no repository URL. A
-   refusal's own error message is not a doc comment and is outside this rule.
-   The book's chapter on generated code records what each backend checks.
+   declared types and constants, their fields, enum values and union arms; the
+   interface module; the two clients, `serve`, `prelude` and `blocking`. Facade
+   items carry doc text and rules. Every other generated item is an internal,
+   and carries no doc text; the explanation it carried moves to `//` comments in
+   the generator source. In Rust an internal is `pub(crate)` where the crate
+   compiles with it, and `#[doc(hidden)]` where it must stay `pub`. The
+   TypeScript backend emits no internal: each item it emits is a declaration's
+   type, constant, `<Name>Bits` object or `init<Name>` function, a declaration
+   marked `internal` is not exported, and no item carries `@internal`.
+
+   Two kinds of Rust item are notes rather than facade or internals: the private
+   constants `__RIDL_NO_FACE_<NAME>`, left where an interface's face was not
+   emitted, and `__RIDL_FB_NO_CODEC_<Name>`, left where a declaration's
+   FlatBuffers codec was not emitted. A user reads one in the generated source
+   to learn why that item is absent, so each carries doc text that states what
+   was not emitted and why. Being private, neither appears in rustdoc.
+
+   A generated doc cites no issue and no repository URL. A refusal's own error
+   message is not a doc comment and is outside this rule. The book's chapter on
+   generated code records what each backend checks.
 
 ## Alternatives considered
 
