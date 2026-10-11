@@ -17,7 +17,7 @@ required seven more choices, S-1 to S-7, which it lists for review. In this
 record decisions 1 to 4 are D-1 to D-4, decision 5 is section 1 with S-1 to S-4,
 decision 6 is section 2 with S-5 and S-6, and decision 7 is section 3; S-7 is
 part of decision 2. The design is
-[`docs/wip/2026-10-10-docs-in-generated-code-design.md`](../wip/2026-10-10-docs-in-generated-code-design.md).
+[`docs/archive/2026-10-10-docs-in-generated-code-design.md`](../archive/2026-10-10-docs-in-generated-code-design.md).
 
 The `Model` fields of decision 5 are implemented, and the Rust and TypeScript
 backends render them as decisions 6 and 7 state.
@@ -262,4 +262,5 @@ From the design. The numbers are the decisions that reject them.
   changes.
 - [The general form](../wip/family-general-form.md) §4.7 — the declined
   promotion.
-- [The design](../wip/2026-10-10-docs-in-generated-code-design.md) — spec 2b.
+- [The design](../archive/2026-10-10-docs-in-generated-code-design.md) — spec
+  2b.

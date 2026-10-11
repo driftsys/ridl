@@ -1,7 +1,7 @@
 # Documentation in generated code — design
 
 Status: draft for review, 2026-10-10. Spec 2b of the
-[devex and agent tracks brief](2026-10-03-devex-and-agent-tracks-brief.md).
+[devex and agent tracks brief](../wip/2026-10-03-devex-and-agent-tracks-brief.md).
 Written from the brainstorm handoff
 [`2026-10-10-docs-in-generated-code-handoff.md`](2026-10-10-docs-in-generated-code-handoff.md),
 whose decisions D-1 to D-4 and sections 1 to 3 the maintainer approved on
@@ -385,7 +385,7 @@ The Kotlin heads-up issue is filed when the `Model` change merges, not before.
 ## Trace
 
 - Satisfies: the brief's spec 2b
-  ([`2026-10-03-devex-and-agent-tracks-brief.md`](2026-10-03-devex-and-agent-tracks-brief.md)).
+  ([`2026-10-03-devex-and-agent-tracks-brief.md`](../wip/2026-10-03-devex-and-agent-tracks-brief.md)).
 - Amends: ADR-0026 decisions 4 and 9; the general form §4.7.
 - Bound by: ADR-0016 (name transform, for link targets), ADR-0020 (the codegen
   plugin protocol), `docs/specification/ir-specification.md` §6 (additive

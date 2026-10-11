@@ -8,7 +8,7 @@ then the maintainer reviews the written spec, then `superpowers:writing-plans`).
 **Do not ask the decisions below again.** They are settled.
 
 Inputs: the scope brief
-[`2026-10-03-devex-and-agent-tracks-brief.md`](2026-10-03-devex-and-agent-tracks-brief.md)
+[`2026-10-03-devex-and-agent-tracks-brief.md`](../wip/2026-10-03-devex-and-agent-tracks-brief.md)
 (section "Spec 2b"), [ADR-0026](../decisions/ADR-0026-doc-comments.md) (decision
 9 and the deferral of the general form §4.7 promotion), and
 `crates/ridl-ir/src/rules.rs`.
