@@ -177,6 +177,37 @@ fn rust_emit_writes_a_compiling_crate() {
     assert!(lib.contains("pub mod veh"), "lib.rs was:\n{lib}");
 }
 
+/// What `ridl build --emit rust` relies on for a field whose type another
+/// package declares: the build lowers each package with the other packages in
+/// scope, so the field's doc carries that type's `# Rules`. `veh.common`'s
+/// `Reading.speed` is of `veh.Speed`, a ranged type declared in `veh`.
+#[test]
+fn a_field_of_a_ranged_type_of_another_package_carries_its_rules_in_the_emitted_rust() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let root = write_prefix_package_workspace(dir.path());
+    let out = tempfile::tempdir().expect("temp dir");
+    let run = ridlc::run_build(&root, out.path(), &[Emit::Rust], false.into()).expect("build runs");
+    assert!(
+        !run.has_error(),
+        "expected no error, got: {:?}",
+        run.diagnostics
+    );
+    let source = std::fs::read_to_string(out.path().join("veh.common.rs"))
+        .expect("the build writes veh.common.rs");
+    let reading = source
+        .split_once("pub struct Reading")
+        .map(|(_, rest)| rest)
+        .expect("`Reading` is generated");
+    let field = reading
+        .split_once("pub speed:")
+        .map(|(doc, _)| doc)
+        .expect("`Reading.speed` is generated");
+    assert!(
+        field.contains("/// # Rules") && field.contains("/// - range 0 ..= 250"),
+        "the field's rules, got:\n{field}"
+    );
+}
+
 /// Both generated files begin with their own generated-by marker. The two
 /// lines are load-bearing rather than decorative: a build refuses to overwrite
 /// a `lib.rs` or a `Cargo.toml` that does not begin with them
