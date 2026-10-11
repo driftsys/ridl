@@ -6,6 +6,7 @@ use super::bin;
 use ridl_core::manifest::ENCODING_NAMES;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The `--emit` values of `ridl build --help` whose description names a
 /// schema, as `(emit name, file extension)`. `Possible values` lines read
@@ -23,11 +24,18 @@ fn schema_emits(build_help: &str, schema: &str) -> Vec<(String, String)> {
         .collect()
 }
 
+/// A temporary directory that is removed on drop. Its name holds the process
+/// id and a counter, so two dumps that run at the same time in one process
+/// each get their own directory.
 struct Scratch(PathBuf);
+
+static SCRATCH_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 impl Scratch {
     fn new() -> Result<Scratch, String> {
-        let dir = std::env::temp_dir().join(format!("xtask-freeze-wire-{}", std::process::id()));
+        let count = SCRATCH_COUNT.fetch_add(1, Ordering::SeqCst);
+        let dir =
+            std::env::temp_dir().join(format!("xtask-freeze-wire-{}-{count}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir)
             .map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
@@ -223,6 +231,16 @@ mod tests {
         );
         assert!(lines.iter().any(|l| l.starts_with("proto ")));
         assert!(lines.iter().any(|l| l.starts_with("fbs ")));
+    }
+
+    #[test]
+    fn two_scratch_directories_in_one_process_are_distinct() {
+        // Two tests of one process can run `dump` at the same time.
+        let first = Scratch::new().unwrap();
+        std::fs::write(first.0.join("marker"), "first").unwrap();
+        let second = Scratch::new().unwrap();
+        assert_ne!(first.0, second.0);
+        assert!(first.0.join("marker").is_file());
     }
 
     #[test]
