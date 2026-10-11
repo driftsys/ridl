@@ -154,9 +154,16 @@ command = "ridl"
 args = ["mcp"]
 ```
 
-The command `ridl` must be on the `PATH` the host uses. On VS Code 1.101 or
-newer, the RIDL extension registers `ridl mcp` automatically, so GitHub Copilot
-in VS Code needs no configuration.
+The command `ridl` must be on the `PATH` the host uses. The RIDL extension
+needs VS Code 1.109 or newer, and registers `ridl mcp` automatically, so GitHub
+Copilot in VS Code needs no configuration.
+
+**The authoring skill.** Each editor release attaches
+`ridl-authoring-<version>.zip`, a skill that teaches an agent to write and
+review RIDL and to check its work with the `ridl` MCP server. For Claude Code,
+unpack it into `~/.claude/skills/` or into a project's `.claude/skills/`; for
+Codex, into `~/.codex/skills/`. The VS Code extension already contains the
+skill for GitHub Copilot.
 
 [`ridl mcp`](cli-reference.md#ridl-mcp) lists the tools, and the
 [`ridl-mcp` README](https://github.com/driftsys/ridl/blob/main/crates/ridl-mcp/README.md)

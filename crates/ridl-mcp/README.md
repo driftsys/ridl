@@ -201,6 +201,10 @@ Add to the project's `.mcp.json` (or run `claude mcp add ridl -- ridl mcp`):
 }
 ```
 
+The `ridl-authoring` skill is attached to each editor release as
+`ridl-authoring-<version>.zip`; unpack it into `~/.claude/skills/` or into a
+project's `.claude/skills/`.
+
 ### Codex
 
 Add to `~/.codex/config.toml`:
@@ -211,12 +215,15 @@ command = "ridl"
 args = ["mcp"]
 ```
 
+Unpack the `ridl-authoring-<version>.zip` skill of an editor release into
+`~/.codex/skills/`.
+
 ### GitHub Copilot in VS Code
 
 Installing the RIDL VS Code extension registers `ridl mcp` with VS Code
-automatically, on VS Code 1.101 or newer, through
-`vscode.lm.registerMcpServerDefinitionProvider`. No manual configuration is
-needed.
+automatically, through `vscode.lm.registerMcpServerDefinitionProvider`. The
+extension needs VS Code 1.109 or newer. No manual configuration is needed. The
+extension also contributes the `ridl-authoring` skill to GitHub Copilot.
 
 A user who is not using the extension configures it manually instead: install
 `ridl` on `PATH` as above, then add it as a server the same way the Claude Code

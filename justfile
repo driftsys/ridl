@@ -2556,6 +2556,12 @@ vscode-verify:
             echo "vscode-verify: a compiled test file would ship in the VSIX — check .vscodeignore" >&2
             exit 1
         fi
+        for f in SKILL.md rules.md typl.md ridl.md rsdl.md; do
+            if ! grep -qx "extension/skills/ridl-authoring/$f" <<<"$listing"; then
+                echo "vscode-verify: $archive lacks skills/ridl-authoring/$f" >&2
+                exit 1
+            fi
+        done
     done
     echo "vscode-verify: packaged ok"
 
@@ -2572,6 +2578,10 @@ package-vsix vsce-target="" output="":
     set -euo pipefail
     mkdir -p editors/vscode/bin
     cp THIRD-PARTY-NOTICES.txt editors/vscode/bin/
+    # The ridl-authoring skill ships in the extension for GitHub Copilot.
+    rm -rf editors/vscode/skills
+    mkdir -p editors/vscode/skills
+    cp -R skills/ridl-authoring editors/vscode/skills/ridl-authoring
     cd editors/vscode
     npm ci
     npm run compile
@@ -2583,6 +2593,24 @@ package-vsix vsce-target="" output="":
         set -- "$@" --out "ridl-lang-{{ vsce-target }}.vsix"
     fi
     npx vsce package "$@"
+
+# Zip the ridl-authoring skill for a release asset:
+# <out>/ridl-authoring-<version>.zip, whose top-level directory is
+# ridl-authoring/, with the version SKILL.md's metadata names. Not a member of
+# `build`.
+package-skill out:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version="$(sed -n 's/^  version: "\(.*\)"$/\1/p' skills/ridl-authoring/SKILL.md)"
+    if [ -z "$version" ]; then
+        echo "package-skill: no metadata.version in skills/ridl-authoring/SKILL.md" >&2
+        exit 1
+    fi
+    mkdir -p "{{ out }}"
+    out="$(cd "{{ out }}" && pwd)"
+    rm -f "$out/ridl-authoring-$version.zip"
+    (cd skills && zip -qr "$out/ridl-authoring-$version.zip" ridl-authoring)
+    echo "$out/ridl-authoring-$version.zip"
 
 # Build the extension for this machine: a release build of ridl copied into
 # editors/vscode/bin/, then `just package-vsix` for the packaging half. Local
