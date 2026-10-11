@@ -54,11 +54,11 @@ error[FORM-101]: a return type must be a named type, a named-field tuple `(a: A,
 17 │   query listLevels(): [Level; 0..8] @[..50ms]
    │                       ^
 
-error[RIDL-403]: `view` is reserved by another profile of the family, so it cannot start a declaration here — a `.ridl` file declares `interface` and `service`. Move the declaration to the profile that owns the word, or, if `view` was meant as a name, choose one the family does not reserve (ridl reference §16.4)
+error[RIDL-403]: `automaton` is reserved by another profile of the family, so it cannot start a declaration here — a `.ridl` file declares `interface` and `service`. Move the declaration to the profile that owns the word, or, if `automaton` was meant as a name, choose one the family does not reserve (ridl reference §16.4)
   ┌─ tests/corpus/ridl-diag-showcase/main/profile_boundary.ridl:7:1
   │
-7 │ view MediaHome {
-  │ ^^^^
+7 │ automaton MediaHome {
+  │ ^^^^^^^^^
 
 error[TYPL-304]: interaction declaration in typl context: `signal`
    ┌─ tests/corpus/ridl-diag-showcase/main/profile_boundary.typl:10:1
