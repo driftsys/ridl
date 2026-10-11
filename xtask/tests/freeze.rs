@@ -1,5 +1,9 @@
 //! Behaviour of `cargo xtask freeze check`, run through the built binary
 //! against temporary git repositories.
+//!
+//! The `semver_check_*` tests run `cargo semver-checks` and are not
+//! `#[ignore]`d: `bootstrap` installs the tool, so it is a required tool of
+//! the workspace, and these tests fail when it is not on the `PATH`.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -274,9 +278,15 @@ fn repo_with_api_baseline(tag: &str, cargo_toml: &str, lib_rs: &str) -> Repo {
 /// `generated-crate` surface, and a cargo target directory of the repository's
 /// own, so that tests running at the same time do not share one.
 fn check_generated_semver(repo: &Repo) -> Output {
+    check_api_semver(repo, "generated-crate")
+}
+
+/// `cargo xtask freeze check` with only the semver comparison of the API
+/// surface `surface`, as [`check_generated_semver`] runs it.
+fn check_api_semver(repo: &Repo, surface: &str) -> Output {
     Command::new(env!("CARGO_BIN_EXE_xtask"))
         .args(["freeze", "check", "--fixtures-only", "--api-semver"])
-        .arg("generated-crate")
+        .arg(surface)
         .arg("--root")
         .arg(&repo.dir)
         .env("CARGO_TARGET_DIR", repo.dir.join("target"))
@@ -407,4 +417,88 @@ fn check_fails_when_the_semver_tool_fails() {
         err.contains("cargo semver-checks failed") && !err.contains("finds a break"),
         "{err}"
     );
+}
+
+/// The crates of the `runtime-crates` surface.
+const RUNTIME_CRATES: [&str; 4] = [
+    "ridl-rt",
+    "ridl-rt-conformance",
+    "ridl-loopback",
+    "ridl-descriptor",
+];
+
+/// A repository that holds a workspace of four crates with the names of the
+/// runtime crates, each with the fixture crate's source and no dependency.
+/// Its tag `base` holds the crates as they are; HEAD holds the row for
+/// `runtime-crates`, and the working tree holds `ridl-rt` with `lib_rs` as its
+/// source.
+fn repo_with_runtime_baseline(tag: &str, lib_rs: &str) -> Repo {
+    let repo = Repo::new(tag);
+    let members: Vec<String> = RUNTIME_CRATES
+        .iter()
+        .map(|name| format!("\"crates/{name}\""))
+        .collect();
+    repo.write(
+        "Cargo.toml",
+        &format!(
+            "[workspace]\nresolver = \"2\"\nmembers = [{}]\n",
+            members.join(", ")
+        ),
+    );
+    for name in RUNTIME_CRATES {
+        std::fs::create_dir_all(repo.dir.join("crates").join(name).join("src")).unwrap();
+        repo.write(
+            &format!("crates/{name}/Cargo.toml"),
+            &format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2021\"\n"),
+        );
+        repo.write(
+            &format!("crates/{name}/src/lib.rs"),
+            &api_fixture("src/lib.rs"),
+        );
+    }
+    let status = Command::new("cargo")
+        .args(["generate-lockfile", "--offline", "--manifest-path"])
+        .arg(repo.dir.join("Cargo.toml"))
+        .status()
+        .unwrap();
+    assert!(status.success(), "cargo generate-lockfile failed");
+    repo.write("freeze/surfaces.toml", "");
+    repo.write(".gitignore", "/target\n");
+    repo.commit();
+    repo.git(&["tag", "base"]);
+    repo.write(
+        "freeze/surfaces.toml",
+        "[[surface]]\nname = \"runtime-crates\"\nbaseline = \"base\"\n",
+    );
+    repo.commit();
+    repo.write("crates/ridl-rt/src/lib.rs", lib_rs);
+    repo
+}
+
+#[test]
+fn semver_check_flags_a_break_in_a_runtime_crate() {
+    let lib_rs = api_fixture("src/lib.rs").replace("pub fn removed() {}", "");
+    let repo = repo_with_runtime_baseline("runtime-removed", &lib_rs);
+    let output = check_api_semver(&repo, "runtime-crates");
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(
+        err.contains("surface `runtime-crates`")
+            && err.contains("finds a break in the crates ridl-rt")
+            && err.contains("the baseline `base`")
+            && err.contains("function_missing")
+            && err.contains("ridl_rt::removed"),
+        "{err}"
+    );
+}
+
+#[test]
+fn semver_check_passes_runtime_crates_with_an_added_item() {
+    let lib_rs = format!(
+        "{}\n/// Added.\npub fn added() {{}}\n",
+        api_fixture("src/lib.rs")
+    );
+    let repo = repo_with_runtime_baseline("runtime-added", &lib_rs);
+    let output = check_api_semver(&repo, "runtime-crates");
+    assert!(output.status.success(), "{}", stderr(&output));
 }
