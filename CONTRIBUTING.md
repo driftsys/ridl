@@ -77,6 +77,12 @@ baseline of each surface is in `freeze/surfaces.toml`.
 4. To start checking a new surface, add its dump in one pull request. Add its
    row to `freeze/surfaces.toml` in a follow-up pull request, with the merge
    commit of the first as the `baseline`.
+5. The accepted-sources and wire dumps read frozen copies of the packages under
+   `examples/` and `evals/corpus/`, in `xtask/tests/freeze-fixtures/sources/`,
+   so an edit to an example or to the corpus changes no dump. To refresh a copy
+   on purpose, copy the package's files over it and run
+   `cargo xtask freeze update`. A new copy adds lines; a replaced copy that
+   removes a line is a break, handled as in step 2.
 
 ## Writing examples in the book
 

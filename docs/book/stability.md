@@ -48,13 +48,15 @@ Its reason is recorded in the stability policy.
 
 ## When a break can happen
 
-A break can only land in 0.11 or a later release, and that release states it. The releases of 0.9.x
-and earlier are not covered by this promise.
+A break can only land in 0.11 or a later release, and that release states it.
+The releases of 0.9.x and earlier are not covered by this promise.
 
 ## How the promise is checked
 
-The repository compares each frozen surface with a fixed earlier version of that surface, and a change that removes or alters something a user depends on fails
-the build. A contributor who must change a frozen surface follows the steps in
-`CONTRIBUTING.md`, "Changing a frozen surface". The full policy, with the
-checked surfaces and the rules for approving a break, is
-[ADR-0029](../decisions/ADR-0029-stability-policy.md).
+The repository checks each frozen surface that has a recorded baseline against
+that baseline, and a change that removes or alters something a user depends on
+fails the build. The frame envelope and the `attach` handshake are promised by
+policy and not yet checked by a tool. A contributor who must change a frozen
+surface follows the steps in `CONTRIBUTING.md`, "Changing a frozen surface". The
+full policy, with the gate that checks each surface and the rules for approving
+a break, is [ADR-0029](../decisions/ADR-0029-stability-policy.md).

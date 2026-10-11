@@ -9,6 +9,22 @@ which release each surface is frozen against (ADR-0029).
   and a `baseline` (a git ref). The check fails when a line of the dump at the
   baseline is missing from the dump at HEAD. An added line passes.
 
+## The frozen source copies
+
+The `accepted-sources` and `wire` dumps read frozen copies of the packages under
+`examples/` and `evals/corpus/`, not the packages themselves. The copies are in
+`xtask/tests/freeze-fixtures/sources/`, each at the path of its original (for
+example `xtask/tests/freeze-fixtures/sources/examples/cabin`), and each holds
+the package's `ridl.toml` and its `.typl`, `.ridl` and `.rsdl` files. A dump
+line names the path of the original. The catalog hash of the `wire` dump is read
+from `xtask/tests/freeze-fixtures/generated/cabin`, the copy of `examples/cabin`
+that the `generated-crate` surface reads. An edit to `examples/` or to
+`evals/corpus/` therefore changes no dump.
+
+To refresh a copy on purpose, copy the package's files over it and run
+`cargo xtask freeze update`. A new copy adds lines and passes. A replaced copy
+that removes a line is a break of the surface (see "Approve a break").
+
 ## The Rust API surfaces
 
 Two surfaces are Rust APIs, compared with `cargo semver-checks` and not as
@@ -29,16 +45,17 @@ cargo-semver-checks reports some lints that require a major version only as
 warnings. The check denies each of them (`DENIED_LINTS` in
 `xtask/src/freeze/rust_api.rs`, and
 `[workspace.metadata.cargo-semver-checks.lints]` in the root `Cargo.toml`), so
-the break they find fails the check.
+the break they find fails the check. The list was read from cargo-semver-checks
+0.51.0, and must be checked again when the version pinned in `bootstrap` and in
+`.github/workflows/ci.yml` changes.
 
 The comparison runs without the network, so the dependencies must already be in
 the local cargo cache. A build of the workspace puts them there.
 
 ## Update a dump
 
-Run `cargo xtask freeze update` and commit the changed files.
-`just
-freeze-check` runs `cargo xtask freeze check`, which fails when a
+Run `cargo xtask freeze update` and commit the changed files. The recipe
+`just freeze-check` runs `cargo xtask freeze check`, which fails when a
 committed dump differs from the regenerated one.
 
 ## Approve a break
