@@ -37,8 +37,12 @@ fn type_name(kind: &Kind) -> String {
 
 /// `<pkg>.<Message>.<field> = <number> <label> <type>` (with ` oneof=<name>`
 /// for a member of a declared oneof) and `<pkg>.<Enum>.<VALUE> = <number>`,
-/// for the messages and enums of `files`, and the reserved numbers and names
-/// of each message and enum (see [`reserved_lines`]).
+/// for the messages and enums of `files`, one `<pkg>.<Enum> values <names>`
+/// line per enum that holds all its value names, sorted, and the reserved
+/// numbers and names of each message and enum (see [`reserved_lines`]). A new
+/// enum value removes the `values` line: `request_from_json` rejects an enum
+/// name it does not know, so a plugin built against the older schema cannot
+/// read a request that holds the new value.
 /// The label is `repeated`, `required`, `optional` (explicit presence) or
 /// `singular` (implicit presence).
 fn pool_lines(pool: &DescriptorPool, files: &[&str]) -> Vec<String> {
@@ -85,6 +89,9 @@ fn pool_lines(pool: &DescriptorPool, files: &[&str]) -> Vec<String> {
             .reserved_ranges()
             .map(|r| (*r.start() as i64, *r.end() as i64));
         reserved_lines(en.full_name(), ranges, en.reserved_names(), &mut lines);
+        let mut names: Vec<String> = en.values().map(|v| v.name().to_string()).collect();
+        names.sort();
+        lines.push(format!("{} values {}", en.full_name(), names.join(" ")));
         for value in en.values() {
             lines.push(format!(
                 "{}.{} = {}",
@@ -178,6 +185,18 @@ mod tests {
             missing_lines(&text(BASELINE), &text(&head)),
             vec!["p.M reserved 11"]
         );
+    }
+
+    #[test]
+    fn a_new_enum_value_removes_the_value_set_line() {
+        // A reader that rejects an unknown enum name cannot read a message
+        // that holds the new value.
+        let head = BASELINE.replace("E_ZERO = 0;", "E_ZERO = 0;\n  E_ONE = 1;");
+        assert_eq!(
+            missing_lines(&text(BASELINE), &text(&head)),
+            vec!["p.E values E_ZERO"]
+        );
+        assert!(text(&head).contains("p.E values E_ONE E_ZERO\n"));
     }
 
     #[test]

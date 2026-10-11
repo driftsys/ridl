@@ -70,6 +70,7 @@ reserved type
 reserved union
 reserved view
 reserved when
+reserved-set action activate adjust agent as automaton boolean bytes case command component const current deployment dismiss display distribution drag during else emit ensure enum enumset error event false fetch fixed float for function if import init input integer interface internal last let machine match merge model navigate observe offers package query require requires reserved scroll select service signal state states step string struct surface system then toggle transition true type union view when
 ridl as
 ridl boolean
 ridl bytes

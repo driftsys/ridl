@@ -9,12 +9,21 @@ const PROFILES: [(&str, Profile); 3] = [
     ("rsdl", Profile::Rsdl),
 ];
 
-/// `reserved <word>` for each of the reserved `words`, and `<profile> <word>`
-/// for each one that `active(profile, word)` says is an active keyword of
-/// `profile`. A profile that adopts a reserved word therefore only adds a
-/// line.
+/// `reserved <word>` for each of the reserved `words`, one
+/// `reserved-set <words>` line that holds every reserved word, sorted, and
+/// `<profile> <word>` for each one that `active(profile, word)` says is an
+/// active keyword of `profile`. A profile that adopts a reserved word
+/// therefore only adds a line, and a word that is reserved or no longer
+/// reserved removes the `reserved-set` line.
 fn lines(words: &[&str], active: impl Fn(Profile, &str) -> bool) -> Vec<String> {
-    let mut lines = Vec::new();
+    let mut sorted = words.to_vec();
+    sorted.sort_unstable();
+    let mut lines = vec![
+        std::iter::once("reserved-set")
+            .chain(sorted)
+            .collect::<Vec<_>>()
+            .join(" "),
+    ];
     for word in words {
         lines.push(format!("reserved {word}"));
         for (name, profile) in PROFILES {
@@ -26,8 +35,7 @@ fn lines(words: &[&str], active: impl Fn(Profile, &str) -> bool) -> Vec<String> 
     lines
 }
 
-/// `reserved <word>` for each word of `FAMILY_RESERVED`, and
-/// `<profile> <word>` for each active keyword.
+/// The lines of [`lines`] for the words of `FAMILY_RESERVED`.
 pub fn dump(_root: &Path) -> Result<Vec<String>, String> {
     Ok(lines(FAMILY_RESERVED, |profile, word| {
         keyword_in(profile, word).is_some()
@@ -62,8 +70,24 @@ mod tests {
 
     #[test]
     fn a_word_that_is_no_longer_reserved_removes_a_line() {
-        let baseline = text(lines(&["model"], |_, _| false));
-        let head = text(lines(&[], |_, _| false));
-        assert_eq!(missing_lines(&baseline, &head).len(), 1, "{baseline}");
+        let baseline = text(lines(&["model", "unit"], |_, _| false));
+        let head = text(lines(&["unit"], |_, _| false));
+        assert_eq!(
+            missing_lines(&baseline, &head),
+            vec!["reserved model", "reserved-set model unit"],
+            "{baseline}"
+        );
+    }
+
+    #[test]
+    fn a_new_reserved_word_removes_the_set_line() {
+        // A source that uses the word as a name stops compiling.
+        let baseline = text(lines(&["unit"], |_, _| false));
+        let head = text(lines(&["model", "unit"], |_, _| false));
+        assert_eq!(
+            missing_lines(&baseline, &head),
+            vec!["reserved-set unit"],
+            "{head}"
+        );
     }
 }

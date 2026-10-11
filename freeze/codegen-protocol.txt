@@ -1,3 +1,4 @@
+ridl.codegen.v1.AbsentCause values ABSENT_CAUSE_ENCODING_UNDEFINED ABSENT_CAUSE_NO_BOUND ABSENT_CAUSE_NO_MESSAGE ABSENT_CAUSE_OVERFLOW ABSENT_CAUSE_REFUSED_MEMBER ABSENT_CAUSE_UNRESOLVED ABSENT_CAUSE_UNSPECIFIED
 ridl.codegen.v1.AbsentCause.ABSENT_CAUSE_ENCODING_UNDEFINED = 1
 ridl.codegen.v1.AbsentCause.ABSENT_CAUSE_NO_BOUND = 4
 ridl.codegen.v1.AbsentCause.ABSENT_CAUSE_NO_MESSAGE = 2
@@ -70,6 +71,7 @@ ridl.codegen.v1.Comparison.literal_class = 3 singular ridl.codegen.v1.ScalarClas
 ridl.codegen.v1.Comparison.op = 1 singular ridl.codegen.v1.ComparisonOp
 ridl.codegen.v1.Comparison.param = 10 singular uint32 oneof=subject
 ridl.codegen.v1.Comparison.result = 11 singular bool oneof=subject
+ridl.codegen.v1.ComparisonOp values COMPARISON_OP_EQ COMPARISON_OP_GE COMPARISON_OP_GT COMPARISON_OP_LE COMPARISON_OP_LT COMPARISON_OP_NE COMPARISON_OP_UNSPECIFIED
 ridl.codegen.v1.ComparisonOp.COMPARISON_OP_EQ = 5
 ridl.codegen.v1.ComparisonOp.COMPARISON_OP_GE = 4
 ridl.codegen.v1.ComparisonOp.COMPARISON_OP_GT = 3
@@ -99,13 +101,16 @@ ridl.codegen.v1.Consumer.instance = 2 singular string
 ridl.codegen.v1.Consumer.machine = 3 singular string
 ridl.codegen.v1.Consumer.slots = 7 optional uint32
 ridl.codegen.v1.Consumer.slots_source = 8 singular ridl.codegen.v1.ValueSource
+ridl.codegen.v1.ContractKind values CONTRACT_KIND_ENSURE CONTRACT_KIND_REQUIRE CONTRACT_KIND_UNSPECIFIED
 ridl.codegen.v1.ContractKind.CONTRACT_KIND_ENSURE = 2
 ridl.codegen.v1.ContractKind.CONTRACT_KIND_REQUIRE = 1
 ridl.codegen.v1.ContractKind.CONTRACT_KIND_UNSPECIFIED = 0
+ridl.codegen.v1.Crossing values CROSSING_DIFFERENT_MACHINE CROSSING_OFF_BOARD CROSSING_SAME_MACHINE CROSSING_UNSPECIFIED
 ridl.codegen.v1.Crossing.CROSSING_DIFFERENT_MACHINE = 2
 ridl.codegen.v1.Crossing.CROSSING_OFF_BOARD = 3
 ridl.codegen.v1.Crossing.CROSSING_SAME_MACHINE = 1
 ridl.codegen.v1.Crossing.CROSSING_UNSPECIFIED = 0
+ridl.codegen.v1.DeclKind values DECL_KIND_CONSTANT DECL_KIND_ENUM DECL_KIND_ENUM_SET DECL_KIND_SCALAR DECL_KIND_STRUCT DECL_KIND_UNION DECL_KIND_UNSPECIFIED
 ridl.codegen.v1.DeclKind.DECL_KIND_CONSTANT = 2
 ridl.codegen.v1.DeclKind.DECL_KIND_ENUM = 4
 ridl.codegen.v1.DeclKind.DECL_KIND_ENUM_SET = 5
@@ -137,6 +142,7 @@ ridl.codegen.v1.Depth.source = 2 singular ridl.codegen.v1.ValueSource
 ridl.codegen.v1.Depth.value = 1 optional uint32
 ridl.codegen.v1.Diagnostic.message = 2 singular string
 ridl.codegen.v1.Diagnostic.severity = 1 singular ridl.codegen.v1.DiagnosticSeverity
+ridl.codegen.v1.DiagnosticSeverity values DIAGNOSTIC_SEVERITY_ERROR DIAGNOSTIC_SEVERITY_INFO DIAGNOSTIC_SEVERITY_UNSPECIFIED DIAGNOSTIC_SEVERITY_WARNING
 ridl.codegen.v1.DiagnosticSeverity.DIAGNOSTIC_SEVERITY_ERROR = 1
 ridl.codegen.v1.DiagnosticSeverity.DIAGNOSTIC_SEVERITY_INFO = 3
 ridl.codegen.v1.DiagnosticSeverity.DIAGNOSTIC_SEVERITY_UNSPECIFIED = 0
@@ -145,6 +151,7 @@ ridl.codegen.v1.DottedName.dotted = 1 singular string
 ridl.codegen.v1.DottedName.joined_camel = 3 singular string
 ridl.codegen.v1.DottedName.segments = 2 repeated string
 ridl.codegen.v1.DottedName.underscored = 4 singular string
+ridl.codegen.v1.Encoding values ENCODING_FLATBUFFERS ENCODING_PROTO3 ENCODING_REPR_C ENCODING_UNSPECIFIED
 ridl.codegen.v1.Encoding.ENCODING_FLATBUFFERS = 2
 ridl.codegen.v1.Encoding.ENCODING_PROTO3 = 1
 ridl.codegen.v1.Encoding.ENCODING_REPR_C = 3
@@ -175,12 +182,14 @@ ridl.codegen.v1.FbRoot.declaration = 1 singular uint32
 ridl.codegen.v1.FbRoot.max_size = 10 singular uint32 oneof=bound
 ridl.codegen.v1.FbRoot.root = 2 singular ridl.codegen.v1.FbRootKind
 ridl.codegen.v1.FbRoot.unbounded = 11 singular ridl.codegen.v1.FbUnbounded oneof=bound
+ridl.codegen.v1.FbRootKind values FB_ROOT_KIND_BOX FB_ROOT_KIND_OWN FB_ROOT_KIND_UNION_WRAPPER FB_ROOT_KIND_UNSPECIFIED
 ridl.codegen.v1.FbRootKind.FB_ROOT_KIND_BOX = 3
 ridl.codegen.v1.FbRootKind.FB_ROOT_KIND_OWN = 1
 ridl.codegen.v1.FbRootKind.FB_ROOT_KIND_UNION_WRAPPER = 2
 ridl.codegen.v1.FbRootKind.FB_ROOT_KIND_UNSPECIFIED = 0
 ridl.codegen.v1.FbScalar.type = 1 singular ridl.codegen.v1.FbScalarType
 ridl.codegen.v1.FbScalar.width_bytes = 2 singular uint32
+ridl.codegen.v1.FbScalarType values FB_SCALAR_TYPE_BOOL FB_SCALAR_TYPE_BYTE FB_SCALAR_TYPE_DOUBLE FB_SCALAR_TYPE_FLOAT FB_SCALAR_TYPE_INT FB_SCALAR_TYPE_LONG FB_SCALAR_TYPE_SHORT FB_SCALAR_TYPE_UBYTE FB_SCALAR_TYPE_UINT FB_SCALAR_TYPE_ULONG FB_SCALAR_TYPE_UNSPECIFIED FB_SCALAR_TYPE_USHORT
 ridl.codegen.v1.FbScalarType.FB_SCALAR_TYPE_BOOL = 1
 ridl.codegen.v1.FbScalarType.FB_SCALAR_TYPE_BYTE = 2
 ridl.codegen.v1.FbScalarType.FB_SCALAR_TYPE_DOUBLE = 11
@@ -215,6 +224,7 @@ ridl.codegen.v1.FbUnbounded.cause = 1 singular ridl.codegen.v1.FbUnboundedCause
 ridl.codegen.v1.FbUnbounded.layout_message = 3 optional string
 ridl.codegen.v1.FbUnbounded.member = 2 optional string
 ridl.codegen.v1.FbUnbounded.unjudgeable_members = 4 repeated string
+ridl.codegen.v1.FbUnboundedCause values FB_UNBOUNDED_CAUSE_AGGREGATE FB_UNBOUNDED_CAUSE_EXEMPT FB_UNBOUNDED_CAUSE_LAYOUT FB_UNBOUNDED_CAUSE_MEMBER FB_UNBOUNDED_CAUSE_UNSPECIFIED FB_UNBOUNDED_CAUSE_UNTYPED
 ridl.codegen.v1.FbUnboundedCause.FB_UNBOUNDED_CAUSE_AGGREGATE = 4
 ridl.codegen.v1.FbUnboundedCause.FB_UNBOUNDED_CAUSE_EXEMPT = 5
 ridl.codegen.v1.FbUnboundedCause.FB_UNBOUNDED_CAUSE_LAYOUT = 3
@@ -243,6 +253,7 @@ ridl.codegen.v1.FixedShape.named = 2 singular ridl.codegen.v1.Payload
 ridl.codegen.v1.FixedShape.payload = 1 singular ridl.codegen.v1.Type
 ridl.codegen.v1.FlatBuffersProjection.roots = 1 repeated ridl.codegen.v1.FbRoot
 ridl.codegen.v1.FlatBuffersProjection.tables = 2 repeated ridl.codegen.v1.FbTable
+ridl.codegen.v1.FloatWidth values FLOAT_WIDTH_F32 FLOAT_WIDTH_F64 FLOAT_WIDTH_UNSPECIFIED
 ridl.codegen.v1.FloatWidth.FLOAT_WIDTH_F32 = 1
 ridl.codegen.v1.FloatWidth.FLOAT_WIDTH_F64 = 2
 ridl.codegen.v1.FloatWidth.FLOAT_WIDTH_UNSPECIFIED = 0
@@ -265,6 +276,7 @@ ridl.codegen.v1.Init.derivable = 1 singular bool
 ridl.codegen.v1.Init.one_level = 4 singular bool
 ridl.codegen.v1.Init.source = 3 singular ridl.codegen.v1.InitSource
 ridl.codegen.v1.Init.value = 2 optional string
+ridl.codegen.v1.InitSource values INIT_SOURCE_DECLARED INIT_SOURCE_DERIVED INIT_SOURCE_NONE INIT_SOURCE_UNSPECIFIED
 ridl.codegen.v1.InitSource.INIT_SOURCE_DECLARED = 1
 ridl.codegen.v1.InitSource.INIT_SOURCE_DERIVED = 2
 ridl.codegen.v1.InitSource.INIT_SOURCE_NONE = 3
@@ -275,6 +287,7 @@ ridl.codegen.v1.Instance.instance = 2 singular string
 ridl.codegen.v1.Instance.machine = 3 singular string
 ridl.codegen.v1.Instance.maps = 6 repeated string
 ridl.codegen.v1.Instance.offers = 5 repeated ridl.codegen.v1.InterfaceKey
+ridl.codegen.v1.IntWidth values INT_WIDTH_I16 INT_WIDTH_I32 INT_WIDTH_I64 INT_WIDTH_I8 INT_WIDTH_U16 INT_WIDTH_U32 INT_WIDTH_U64 INT_WIDTH_U8 INT_WIDTH_UNSPECIFIED
 ridl.codegen.v1.IntWidth.INT_WIDTH_I16 = 4
 ridl.codegen.v1.IntWidth.INT_WIDTH_I32 = 6
 ridl.codegen.v1.IntWidth.INT_WIDTH_I64 = 8
@@ -318,6 +331,7 @@ ridl.codegen.v1.InterfaceKey.catalog = 1 singular string
 ridl.codegen.v1.InterfaceKey.inline = 4 singular bool
 ridl.codegen.v1.InterfaceKey.name = 3 singular string
 ridl.codegen.v1.InterfaceKey.number = 2 singular uint32
+ridl.codegen.v1.Kind values KIND_COMMAND KIND_EVENT KIND_FIXED KIND_QUERY KIND_SIGNAL KIND_UNSPECIFIED
 ridl.codegen.v1.Kind.KIND_COMMAND = 3
 ridl.codegen.v1.Kind.KIND_EVENT = 2
 ridl.codegen.v1.Kind.KIND_FIXED = 5
@@ -347,6 +361,7 @@ ridl.codegen.v1.Payload.sizes = 3 singular ridl.codegen.v1.PayloadSizes
 ridl.codegen.v1.Payload.type = 1 singular ridl.codegen.v1.TypeRef
 ridl.codegen.v1.PayloadSizes.flatbuffers = 2 singular ridl.codegen.v1.SizeState
 ridl.codegen.v1.PayloadSizes.proto3 = 1 singular ridl.codegen.v1.SizeState
+ridl.codegen.v1.PrimitiveType values PRIMITIVE_TYPE_BOOLEAN PRIMITIVE_TYPE_BYTES PRIMITIVE_TYPE_FLOAT PRIMITIVE_TYPE_INTEGER PRIMITIVE_TYPE_STRING PRIMITIVE_TYPE_UNSPECIFIED
 ridl.codegen.v1.PrimitiveType.PRIMITIVE_TYPE_BOOLEAN = 1
 ridl.codegen.v1.PrimitiveType.PRIMITIVE_TYPE_BYTES = 5
 ridl.codegen.v1.PrimitiveType.PRIMITIVE_TYPE_FLOAT = 3
@@ -385,6 +400,7 @@ ridl.codegen.v1.Scalar.float_width = 11 singular ridl.codegen.v1.FloatWidth oneo
 ridl.codegen.v1.Scalar.int_width = 10 singular ridl.codegen.v1.IntWidth oneof=width
 ridl.codegen.v1.Scalar.unit = 2 optional string
 ridl.codegen.v1.Scalar.vacuous = 4 singular bool
+ridl.codegen.v1.ScalarClass values SCALAR_CLASS_BOOLEAN SCALAR_CLASS_BYTES SCALAR_CLASS_FLOAT SCALAR_CLASS_INTEGER SCALAR_CLASS_STRING SCALAR_CLASS_UNSPECIFIED
 ridl.codegen.v1.ScalarClass.SCALAR_CLASS_BOOLEAN = 3
 ridl.codegen.v1.ScalarClass.SCALAR_CLASS_BYTES = 5
 ridl.codegen.v1.ScalarClass.SCALAR_CLASS_FLOAT = 1
@@ -424,6 +440,7 @@ ridl.codegen.v1.Timing.default_applied = 4 singular bool
 ridl.codegen.v1.Timing.max_us = 3 optional string
 ridl.codegen.v1.Timing.min_us = 2 optional string
 ridl.codegen.v1.Timing.mode = 1 singular ridl.codegen.v1.TimingMode
+ridl.codegen.v1.TimingMode values TIMING_MODE_RANGE TIMING_MODE_STRICT_PERIODIC TIMING_MODE_UNSPECIFIED
 ridl.codegen.v1.TimingMode.TIMING_MODE_RANGE = 2
 ridl.codegen.v1.TimingMode.TIMING_MODE_STRICT_PERIODIC = 1
 ridl.codegen.v1.TimingMode.TIMING_MODE_UNSPECIFIED = 0
@@ -450,11 +467,13 @@ ridl.codegen.v1.TypeRef.resolved = 2 singular bool
 ridl.codegen.v1.Union.arms = 1 repeated ridl.codegen.v1.Arm
 ridl.codegen.v1.Union.is_result = 3 singular bool
 ridl.codegen.v1.Union.retired = 2 repeated ridl.codegen.v1.Retired
+ridl.codegen.v1.ValueSource values VALUE_SOURCE_DECLARED VALUE_SOURCE_DEFAULT VALUE_SOURCE_DERIVED VALUE_SOURCE_UNDERIVABLE VALUE_SOURCE_UNSPECIFIED
 ridl.codegen.v1.ValueSource.VALUE_SOURCE_DECLARED = 2
 ridl.codegen.v1.ValueSource.VALUE_SOURCE_DEFAULT = 3
 ridl.codegen.v1.ValueSource.VALUE_SOURCE_DERIVED = 1
 ridl.codegen.v1.ValueSource.VALUE_SOURCE_UNDERIVABLE = 4
 ridl.codegen.v1.ValueSource.VALUE_SOURCE_UNSPECIFIED = 0
+ridl.codegen.v1.Visibility values VISIBILITY_INTERNAL VISIBILITY_PUBLIC VISIBILITY_UNSPECIFIED
 ridl.codegen.v1.Visibility.VISIBILITY_INTERNAL = 2
 ridl.codegen.v1.Visibility.VISIBILITY_PUBLIC = 1
 ridl.codegen.v1.Visibility.VISIBILITY_UNSPECIFIED = 0
@@ -501,9 +520,11 @@ ridl.ir.v2.Contract.param_refs = 4 repeated string
 ridl.ir.v2.Contract.signal_refs = 3 repeated string
 ridl.ir.v2.Contract.source = 2 singular string
 ridl.ir.v2.Contract.uses_result = 5 singular bool
+ridl.ir.v2.ContractKind values CONTRACT_KIND_ENSURE CONTRACT_KIND_REQUIRE CONTRACT_KIND_UNSPECIFIED
 ridl.ir.v2.ContractKind.CONTRACT_KIND_ENSURE = 2
 ridl.ir.v2.ContractKind.CONTRACT_KIND_REQUIRE = 1
 ridl.ir.v2.ContractKind.CONTRACT_KIND_UNSPECIFIED = 0
+ridl.ir.v2.Crossing values CROSSING_DIFFERENT_MACHINE CROSSING_OFF_BOARD CROSSING_SAME_MACHINE CROSSING_UNSPECIFIED
 ridl.ir.v2.Crossing.CROSSING_DIFFERENT_MACHINE = 2
 ridl.ir.v2.Crossing.CROSSING_OFF_BOARD = 3
 ridl.ir.v2.Crossing.CROSSING_SAME_MACHINE = 1
@@ -597,6 +618,7 @@ ridl.ir.v2.FieldType.primitive = 11 singular ridl.ir.v2.PrimitiveType oneof=kind
 ridl.ir.v2.FieldType.stream = 16 singular ridl.ir.v2.StreamType oneof=kind
 ridl.ir.v2.FieldType.tuple = 13 singular ridl.ir.v2.TupleType oneof=kind
 ridl.ir.v2.FixedDef.payload = 1 singular ridl.ir.v2.FieldType
+ridl.ir.v2.FloatWidth values FLOAT_WIDTH_F32 FLOAT_WIDTH_F64 FLOAT_WIDTH_UNSPECIFIED
 ridl.ir.v2.FloatWidth.FLOAT_WIDTH_F32 = 1
 ridl.ir.v2.FloatWidth.FLOAT_WIDTH_F64 = 2
 ridl.ir.v2.FloatWidth.FLOAT_WIDTH_UNSPECIFIED = 0
@@ -607,6 +629,7 @@ ridl.ir.v2.InitValue.derivable = 1 singular bool
 ridl.ir.v2.InitValue.value = 2 optional string
 ridl.ir.v2.Installation.distribution = 1 singular string
 ridl.ir.v2.Installation.machines = 2 repeated string
+ridl.ir.v2.IntWidth values INT_WIDTH_I16 INT_WIDTH_I32 INT_WIDTH_I64 INT_WIDTH_I8 INT_WIDTH_U16 INT_WIDTH_U32 INT_WIDTH_U64 INT_WIDTH_U8 INT_WIDTH_UNSPECIFIED
 ridl.ir.v2.IntWidth.INT_WIDTH_I16 = 4
 ridl.ir.v2.IntWidth.INT_WIDTH_I32 = 6
 ridl.ir.v2.IntWidth.INT_WIDTH_I64 = 8
@@ -676,6 +699,7 @@ ridl.ir.v2.Placement.component = 1 singular string
 ridl.ir.v2.Placement.instance = 2 singular string
 ridl.ir.v2.Placement.machine = 3 singular string
 ridl.ir.v2.Placement.sizing = 5 optional ridl.ir.v2.Sizing
+ridl.ir.v2.PrimitiveType values PRIMITIVE_TYPE_BOOLEAN PRIMITIVE_TYPE_BYTES PRIMITIVE_TYPE_FLOAT PRIMITIVE_TYPE_INTEGER PRIMITIVE_TYPE_STRING PRIMITIVE_TYPE_UNSPECIFIED
 ridl.ir.v2.PrimitiveType.PRIMITIVE_TYPE_BOOLEAN = 1
 ridl.ir.v2.PrimitiveType.PRIMITIVE_TYPE_BYTES = 5
 ridl.ir.v2.PrimitiveType.PRIMITIVE_TYPE_FLOAT = 3
@@ -750,6 +774,7 @@ ridl.ir.v2.StructMember.field = 10 singular ridl.ir.v2.Field oneof=member
 ridl.ir.v2.StructMember.reserved = 11 singular ridl.ir.v2.Reserved oneof=member
 ridl.ir.v2.Surface.direction = 2 singular ridl.ir.v2.SurfaceDirection
 ridl.ir.v2.Surface.link = 1 singular ridl.ir.v2.Link
+ridl.ir.v2.SurfaceDirection values SURFACE_DIRECTION_EXTERNAL_CONSUMES SURFACE_DIRECTION_EXTERNAL_OFFERS SURFACE_DIRECTION_UNSPECIFIED
 ridl.ir.v2.SurfaceDirection.SURFACE_DIRECTION_EXTERNAL_CONSUMES = 1
 ridl.ir.v2.SurfaceDirection.SURFACE_DIRECTION_EXTERNAL_OFFERS = 2
 ridl.ir.v2.SurfaceDirection.SURFACE_DIRECTION_UNSPECIFIED = 0
@@ -772,6 +797,7 @@ ridl.ir.v2.Timing.default_applied = 4 singular bool
 ridl.ir.v2.Timing.max_us = 3 optional string
 ridl.ir.v2.Timing.min_us = 2 optional string
 ridl.ir.v2.Timing.mode = 1 singular ridl.ir.v2.TimingMode
+ridl.ir.v2.TimingMode values TIMING_MODE_RANGE TIMING_MODE_STRICT_PERIODIC TIMING_MODE_UNSPECIFIED
 ridl.ir.v2.TimingMode.TIMING_MODE_RANGE = 2
 ridl.ir.v2.TimingMode.TIMING_MODE_STRICT_PERIODIC = 1
 ridl.ir.v2.TimingMode.TIMING_MODE_UNSPECIFIED = 0
@@ -794,6 +820,7 @@ ridl.ir.v2.UnionArm.type_ref = 3 singular string
 ridl.ir.v2.UnionDef.arms = 1 repeated ridl.ir.v2.UnionArm
 ridl.ir.v2.UnionDef.is_result = 2 singular bool
 ridl.ir.v2.UnionDef.reserved = 3 repeated ridl.ir.v2.Reserved
+ridl.ir.v2.Visibility values VISIBILITY_INTERNAL VISIBILITY_PUBLIC VISIBILITY_UNSPECIFIED
 ridl.ir.v2.Visibility.VISIBILITY_INTERNAL = 2
 ridl.ir.v2.Visibility.VISIBILITY_PUBLIC = 1
 ridl.ir.v2.Visibility.VISIBILITY_UNSPECIFIED = 0
