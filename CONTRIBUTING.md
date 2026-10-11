@@ -64,7 +64,8 @@ each one with a baseline git ref (ADR-0029). The dumps are in `freeze/`, and the
 baseline of each surface is in `freeze/surfaces.toml`. Some parts of the frozen
 surfaces are frozen by policy and checked by no tool: the formats of
 `interfaces.lock` and `.ridl/baseline`, the exit codes of every subcommand other
-than `ridl check`, the frame envelope and the `attach` handshake.
+than `ridl check`, the output of `ridl diff` and the `ridl-diff` categories, the
+frame envelope and the `attach` handshake.
 
 1. Run `cargo xtask freeze update` after a change that touches a surface, and
    commit the changed dumps. An added line is not a break.

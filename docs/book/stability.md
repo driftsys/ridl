@@ -36,7 +36,9 @@ effect now; release 0.10.0 is not published yet.
 
 - **Additions.** A new subcommand, flag, manifest key, field, tool, cargo
   feature or transport default. A program that does not use an addition is not
-  affected by it.
+  affected by it. A new flag, command-line argument or MCP tool input is always
+  optional: a 0.10.x release does not add a required one, and does not make an
+  optional one required.
 - **New lints.** A new lint starts at the `allow` or `info` level, so it does not
   fail a build that passed before.
 - **Message text.** The text of a diagnostic message, of a doc comment and of
@@ -59,8 +61,9 @@ The repository checks each frozen surface that has a recorded baseline against
 that baseline, and a change that removes or alters something a user depends on
 fails the build. Some parts are promised by policy and not yet checked by a
 tool: the frame envelope, the `attach` handshake, the formats of
-`interfaces.lock` and `.ridl/baseline`, and the exit codes of every subcommand
-other than `ridl check`. A contributor who must change a frozen
+`interfaces.lock` and `.ridl/baseline`, the exit codes of every subcommand
+other than `ridl check`, the output of `ridl diff`, and the categories that
+`ridl diff` reports. A contributor who must change a frozen
 surface follows the steps in `CONTRIBUTING.md`, "Changing a frozen surface". The
 full policy, with the gate that checks each surface and the rules for approving
 a break, is [ADR-0029](../decisions/ADR-0029-stability-policy.md).

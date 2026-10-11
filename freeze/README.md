@@ -63,13 +63,16 @@ Some lines record a whole set or whether something is required. A change that a
 user or a reader can accept therefore still removes a line, fails the check, and
 needs the steps of "Approve a break":
 
-- `mcp`: each schema property has a `required` or an `optional` line, so an
-  input property that becomes optional removes a line, as does one that becomes
-  required.
+- `mcp`: each schema property has a `required` or an `optional` line, and each
+  schema object has one `required-set` line that holds its required names. A
+  property that becomes optional removes a line. A new required property, or one
+  that becomes required, also removes a line and fails. A new optional property
+  only adds lines and passes.
 - `cli`: each flag has a `required` or an `optional` line, and each command has
   one `<path> requires <words>` line that holds every required flag and
-  argument. A flag or an argument that becomes optional removes a line, as does
-  a new required one.
+  argument. A flag or an argument that becomes optional removes a line. A new
+  required flag or argument, or one that becomes required, also removes a line
+  and fails. A new optional flag or argument only adds lines and passes.
 - `keywords`: the `reserved-set` line holds every reserved word, so a new
   reserved word and a word that is no longer reserved each remove it.
 - `codegen-protocol`: the `<enum> values` line holds every value name of an
