@@ -110,8 +110,12 @@ squash merge. To accept a break:
 
 1. In the pull request that makes the break, delete that surface's row from
    `surfaces.toml`, and state the approval and the reason in the pull request
-   description. The deleted row is the visible record of the approval.
+   description. The deleted row is the visible record of the approval. Leave the
+   surface's name in the `required` list of `surfaces.toml`, so that the missing
+   row stays visible.
 2. After that pull request merges, add the row again in a follow-up pull
    request, with the merge commit of the first as the `baseline`.
 
-The surface is unchecked between the two pull requests.
+The surface is unchecked between the two pull requests. While its name is in
+`required` and it has no row, `just freeze-check` prints a notice, and
+`just release` fails.

@@ -73,9 +73,11 @@ frame envelope and the `attach` handshake.
    breaks the surface. Before 0.10.0, delete that surface's row from
    `freeze/surfaces.toml` in the same pull request, put `!` in the title, and
    state the approval and the reason in the description. The pull request merges
-   only on the maintainer's explicit approval. A follow-up pull request adds the
-   row again with the merge commit of the first as the `baseline`. The surface
-   is unchecked between the two pull requests.
+   only on the maintainer's explicit approval. Leave the surface's name in the
+   `required` list. A follow-up pull request adds the row again with the merge
+   commit of the first as the `baseline`. The surface is unchecked between the
+   two pull requests, `just freeze-check` prints a notice while the row is
+   missing, and `just release` fails.
 3. During 0.10.x, do not break a frozen surface. A security fix is the one
    exception, and its reason is recorded in ADR-0029.
 4. To start checking a new surface, add its dump in one pull request. Add its

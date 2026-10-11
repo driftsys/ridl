@@ -171,9 +171,11 @@ design in each:
    - Before 0.10.0, the pull request that breaks a surface deletes that
      surface's row from `freeze/surfaces.toml`, carries `!` in its title, states
      the approval in its description, and merges only on the maintainer's
-     explicit approval. A follow-up pull request adds the row again with that
-     merge commit as its `baseline`. The surface is unchecked between the two
-     pull requests.
+     explicit approval. The name of the surface stays in the `required` list of
+     `freeze/surfaces.toml`. A follow-up pull request adds the row again with
+     that merge commit as its `baseline`. The surface is unchecked between the
+     two pull requests. While its name is in `required` and it has no row,
+     `just freeze-check` prints a notice, and `just release` fails.
    - At 0.10.0, the release pull request moves every baseline to `v0.10.0`.
    - During 0.10.x, no break lands. The one exception is a security fix; its
      reason is recorded in this record, in the same pull request that makes the
@@ -229,8 +231,9 @@ design in each:
 
 - A pull request that breaks a frozen surface fails `just freeze-check` while
   the surface has a row. The pull request deletes the row, and the deleted row
-  is the visible approval. A follow-up pull request adds the row again at the
-  merge commit of the first.
+  is the visible approval, and the name stays in the `required` list. A
+  follow-up pull request adds the row again at the merge commit of the first.
+  `just release` fails while a name in `required` has no row.
 - Adding a row for a new surface needs two pull requests: the first adds the
   dump, and the second adds the row with the first one's merge commit as its
   baseline.

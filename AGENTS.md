@@ -217,7 +217,8 @@ member; rsdl is the apex.
                          vsce-target)
     just package-vscode  build ridl for this machine and package the extension
                          (local testing)
-    just release         git std bump — version, changelog, tag
+    just release         freeze check --release, then git std bump — version,
+                         changelog, tag
     just install         ./bootstrap — toolchain, git hooks, gate requirements
 
 Full recipe set: `justfile`. The toolchain conventions come from
