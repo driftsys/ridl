@@ -1,6 +1,8 @@
 //! The wire mapping: the encoding names the manifest accepts, the proto3 and
 //! FlatBuffers schemas that `ridl build` writes for the corpus, and the catalog
-//! hash of the cabin example.
+//! hash of the cabin example. The corpus and the cabin example are read from
+//! frozen copies, so an edit to `examples/` or to `evals/corpus/` does not
+//! change the dump.
 
 use super::bin;
 use ridl_core::manifest::ENCODING_NAMES;
@@ -79,8 +81,26 @@ fn is_known_rejection(corpus: &str, emit: &str, stderr: &str) -> bool {
     corpus == known_corpus && emit == known_emit && stderr.contains(marker)
 }
 
+/// Each corpus workspace the schema lines are built from, as `(name,
+/// directory)`: the name is the one the dump lines carry, the directory is
+/// the frozen copy that `ridl build` reads, relative to the repository root.
+fn corpora(root: &Path) -> Result<Vec<(String, String)>, String> {
+    let dir = format!("{}/evals/corpus", bin::SOURCE_COPIES);
+    let entries =
+        std::fs::read_dir(root.join(&dir)).map_err(|e| format!("cannot read {dir}: {e}"))?;
+    let mut out = Vec::new();
+    for corpus in entries.flatten() {
+        if corpus.path().join("ridl.toml").is_file() {
+            let name = corpus.file_name().to_string_lossy().into_owned();
+            out.push((name.clone(), format!("{dir}/{name}")));
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
 /// `<ext> <corpus>/<file> <line>` for each non-blank, non-comment line of the
-/// schemas that `ridl build --emit <emit>` writes for the corpus workspace.
+/// schemas that `ridl build --emit <emit>` writes for each corpus workspace.
 /// A corpus the emit rejects in the one known way (`KNOWN_REJECTION`)
 /// contributes no line; any other failure is an error.
 fn schema_lines(
@@ -90,14 +110,7 @@ fn schema_lines(
     (emit, extension): &(String, String),
     out: &mut Vec<String>,
 ) -> Result<(), String> {
-    let corpora = std::fs::read_dir(root.join("evals/corpus"))
-        .map_err(|e| format!("cannot read evals/corpus: {e}"))?;
-    for corpus in corpora.flatten() {
-        let name = corpus.file_name().to_string_lossy().into_owned();
-        if !corpus.path().join("ridl.toml").is_file() {
-            continue;
-        }
-        let source = format!("evals/corpus/{name}");
+    for (name, source) in corpora(root)? {
         let out_dir = scratch.join(emit).join(&name);
         let run = bin::run(
             ridl,
@@ -143,8 +156,13 @@ fn schema_lines(
     Ok(())
 }
 
+/// The package whose catalogs give the catalog hashes, relative to the
+/// repository root: the frozen copy of `examples/cabin` that the
+/// generated-crate surface also reads.
+const CATALOG_SOURCE: &str = "xtask/tests/freeze-fixtures/generated/cabin";
+
 /// `catalog-hash <unit> <hex>` for each catalog `ridl build --emit catalog`
-/// writes for `examples/cabin`, read from `ridl describe`.
+/// writes for [`CATALOG_SOURCE`], read from `ridl describe`.
 fn catalog_hashes(root: &Path, ridl: &Path, scratch: &Path) -> Result<Vec<String>, String> {
     let out_dir = scratch.join("catalog");
     let run = bin::run(
@@ -152,7 +170,7 @@ fn catalog_hashes(root: &Path, ridl: &Path, scratch: &Path) -> Result<Vec<String
         root,
         &[
             "build",
-            "examples/cabin",
+            CATALOG_SOURCE,
             "--emit",
             "catalog",
             "--out-dir",
@@ -161,7 +179,7 @@ fn catalog_hashes(root: &Path, ridl: &Path, scratch: &Path) -> Result<Vec<String
     )?;
     if run.code != 0 {
         return Err(format!(
-            "`ridl build examples/cabin --emit catalog` exited {}",
+            "`ridl build {CATALOG_SOURCE} --emit catalog` exited {}",
             run.code
         ));
     }
@@ -231,6 +249,26 @@ mod tests {
         );
         assert!(lines.iter().any(|l| l.starts_with("proto ")));
         assert!(lines.iter().any(|l| l.starts_with("fbs ")));
+    }
+
+    #[test]
+    fn wire_dump_reads_the_frozen_copies() {
+        // An edit to `examples/` or to `evals/corpus/` must not change the
+        // dump, so the corpus and the catalog source are frozen copies.
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let corpora = corpora(root).unwrap();
+        let names: Vec<&str> = corpora.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(names, vec!["mavlink", "ros2", "vss"]);
+        for (name, dir) in &corpora {
+            assert_eq!(
+                *dir,
+                format!("xtask/tests/freeze-fixtures/sources/evals/corpus/{name}")
+            );
+        }
+        assert!(
+            CATALOG_SOURCE.starts_with("xtask/tests/freeze-fixtures/"),
+            "{CATALOG_SOURCE}"
+        );
     }
 
     #[test]

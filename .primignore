@@ -8,6 +8,7 @@ CHANGELOG.md
 # Upstream licence text is carried without reformatting.
 THIRD-PARTY-NOTICES.txt
 evals/corpus/*/LICENSE
+xtask/tests/freeze-fixtures/sources/evals/corpus/*/LICENSE
 
 # mdBook build output.
 book/

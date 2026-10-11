@@ -1,0 +1,879 @@
+// Modified ROS 2-to-RIDL translation. Inputs and pinned revisions: PROVENANCE.md.
+package sensormsgs
+import builtininterfaces.Time
+import geometrymsgs.Point32
+import geometrymsgs.Quaternion
+import geometrymsgs.Transform
+import geometrymsgs.Twist
+import geometrymsgs.Vector3
+import geometrymsgs.Wrench
+import stdmsgs.Header
+type RosAmpereHours : A.h
+type RosAmperes : A
+type RosBoolean : boolean
+type RosCelsius : Cel
+type RosFloat32 : float
+type RosFloat64 : float
+type RosInt32 : integer [-2147483648..2147483647]
+type RosInt8 : integer [-128..127]
+type RosLux : lx
+type RosMetres : m
+type RosPascals : Pa
+type RosSeconds : s
+type RosSquareMetres : m2
+type RosString : string [0..18446744073709551615]
+type RosUInt16 : integer [0..65535]
+type RosUInt32 : integer [0..4294967295]
+type RosUInt8 : integer [0..255]
+type RosVolts : V
+// Upstream: sensor_msgs/msg/BatteryState.msg
+struct BatteryState {
+
+// Constants are chosen to match the enums in the linux kernel
+// defined in include/linux/power_supply.h as of version 3.7
+// The one difference is for style reasons the constants are
+// all uppercase not mixed case.
+
+// Power supply status constants
+  // ROS constant POWER_SUPPLY_STATUS_UNKNOWN = 0; package constant BATTERY_STATE_POWER_SUPPLY_STATUS_UNKNOWN
+  // ROS constant POWER_SUPPLY_STATUS_CHARGING = 1; package constant BATTERY_STATE_POWER_SUPPLY_STATUS_CHARGING
+  // ROS constant POWER_SUPPLY_STATUS_DISCHARGING = 2; package constant BATTERY_STATE_POWER_SUPPLY_STATUS_DISCHARGING
+  // ROS constant POWER_SUPPLY_STATUS_NOT_CHARGING = 3; package constant BATTERY_STATE_POWER_SUPPLY_STATUS_NOT_CHARGING
+  // ROS constant POWER_SUPPLY_STATUS_FULL = 4; package constant BATTERY_STATE_POWER_SUPPLY_STATUS_FULL
+
+// Power supply health constants
+  // ROS constant POWER_SUPPLY_HEALTH_UNKNOWN = 0; package constant BATTERY_STATE_POWER_SUPPLY_HEALTH_UNKNOWN
+  // ROS constant POWER_SUPPLY_HEALTH_GOOD = 1; package constant BATTERY_STATE_POWER_SUPPLY_HEALTH_GOOD
+  // ROS constant POWER_SUPPLY_HEALTH_OVERHEAT = 2; package constant BATTERY_STATE_POWER_SUPPLY_HEALTH_OVERHEAT
+  // ROS constant POWER_SUPPLY_HEALTH_DEAD = 3; package constant BATTERY_STATE_POWER_SUPPLY_HEALTH_DEAD
+  // ROS constant POWER_SUPPLY_HEALTH_OVERVOLTAGE = 4; package constant BATTERY_STATE_POWER_SUPPLY_HEALTH_OVERVOLTAGE
+  // ROS constant POWER_SUPPLY_HEALTH_UNSPEC_FAILURE = 5; package constant BATTERY_STATE_POWER_SUPPLY_HEALTH_UNSPEC_FAILURE
+  // ROS constant POWER_SUPPLY_HEALTH_COLD = 6; package constant BATTERY_STATE_POWER_SUPPLY_HEALTH_COLD
+  // ROS constant POWER_SUPPLY_HEALTH_WATCHDOG_TIMER_EXPIRE = 7; package constant BATTERY_STATE_POWER_SUPPLY_HEALTH_WATCHDOG_TIMER_EXPIRE
+  // ROS constant POWER_SUPPLY_HEALTH_SAFETY_TIMER_EXPIRE = 8; package constant BATTERY_STATE_POWER_SUPPLY_HEALTH_SAFETY_TIMER_EXPIRE
+
+// Power supply technology (chemistry) constants
+  // ROS constant POWER_SUPPLY_TECHNOLOGY_UNKNOWN = 0; package constant BATTERY_STATE_POWER_SUPPLY_TECHNOLOGY_UNKNOWN // Unknown battery technology
+  // ROS constant POWER_SUPPLY_TECHNOLOGY_NIMH = 1; package constant BATTERY_STATE_POWER_SUPPLY_TECHNOLOGY_NIMH // Nickel-Metal Hydride battery
+  // ROS constant POWER_SUPPLY_TECHNOLOGY_LION = 2; package constant BATTERY_STATE_POWER_SUPPLY_TECHNOLOGY_LION // Lithium-ion battery
+  // ROS constant POWER_SUPPLY_TECHNOLOGY_LIPO = 3; package constant BATTERY_STATE_POWER_SUPPLY_TECHNOLOGY_LIPO // Lithium Polymer battery
+  // ROS constant POWER_SUPPLY_TECHNOLOGY_LIFE = 4; package constant BATTERY_STATE_POWER_SUPPLY_TECHNOLOGY_LIFE // Lithium Iron Phosphate battery
+  // ROS constant POWER_SUPPLY_TECHNOLOGY_NICD = 5; package constant BATTERY_STATE_POWER_SUPPLY_TECHNOLOGY_NICD // Nickel-Cadmium battery
+  // ROS constant POWER_SUPPLY_TECHNOLOGY_LIMN = 6; package constant BATTERY_STATE_POWER_SUPPLY_TECHNOLOGY_LIMN // Lithium Manganese Dioxide battery
+  // ROS constant POWER_SUPPLY_TECHNOLOGY_TERNARY = 7; package constant BATTERY_STATE_POWER_SUPPLY_TECHNOLOGY_TERNARY // Ternary Lithium battery
+  // ROS constant POWER_SUPPLY_TECHNOLOGY_VRLA = 8; package constant BATTERY_STATE_POWER_SUPPLY_TECHNOLOGY_VRLA // Valve Regulated Lead-Acid battery
+
+  header : Header
+  voltage : RosVolts // Voltage in Volts (Mandatory)
+  temperature : RosCelsius // Temperature in Degrees Celsius (If unmeasured NaN)
+  currentValue : RosAmperes // Negative when discharging (A)  (If unmeasured NaN)
+  charge : RosAmpereHours // Current charge in Ah  (If unmeasured NaN)
+  capacity : RosAmpereHours // Capacity in Ah (last full capacity)  (If unmeasured NaN)
+  designCapacity : RosAmpereHours // Capacity in Ah (design capacity)  (If unmeasured NaN)
+  percentage : RosFloat32 // Charge percentage on 0 to 1 range  (If unmeasured NaN)
+  powerSupplyStatus : RosUInt8 // The charging status as reported. Values defined above
+  powerSupplyHealth : RosUInt8 // The battery health metric. Values defined above
+  powerSupplyTechnology : RosUInt8 // The battery chemistry. Values defined above
+  present : RosBoolean // True if the battery is present
+
+  cellVoltage : [RosFloat32; 0..18446744073709551615] // An array of individual cell voltages for each cell in the pack
+                         // If individual voltages unknown but number of cells known set each to NaN
+  cellTemperature : [RosFloat32; 0..18446744073709551615] // An array of individual cell temperatures for each cell in the pack
+                           // If individual temperatures unknown but number of cells known set each to NaN
+  location : RosString // The location into which the battery is inserted. (slot number or plug)
+  serialNumber : RosString // The best approximation of the battery serial number
+}
+const BATTERY_STATE_POWER_SUPPLY_STATUS_UNKNOWN : RosUInt8 = 0
+const BATTERY_STATE_POWER_SUPPLY_STATUS_CHARGING : RosUInt8 = 1
+const BATTERY_STATE_POWER_SUPPLY_STATUS_DISCHARGING : RosUInt8 = 2
+const BATTERY_STATE_POWER_SUPPLY_STATUS_NOT_CHARGING : RosUInt8 = 3
+const BATTERY_STATE_POWER_SUPPLY_STATUS_FULL : RosUInt8 = 4
+const BATTERY_STATE_POWER_SUPPLY_HEALTH_UNKNOWN : RosUInt8 = 0
+const BATTERY_STATE_POWER_SUPPLY_HEALTH_GOOD : RosUInt8 = 1
+const BATTERY_STATE_POWER_SUPPLY_HEALTH_OVERHEAT : RosUInt8 = 2
+const BATTERY_STATE_POWER_SUPPLY_HEALTH_DEAD : RosUInt8 = 3
+const BATTERY_STATE_POWER_SUPPLY_HEALTH_OVERVOLTAGE : RosUInt8 = 4
+const BATTERY_STATE_POWER_SUPPLY_HEALTH_UNSPEC_FAILURE : RosUInt8 = 5
+const BATTERY_STATE_POWER_SUPPLY_HEALTH_COLD : RosUInt8 = 6
+const BATTERY_STATE_POWER_SUPPLY_HEALTH_WATCHDOG_TIMER_EXPIRE : RosUInt8 = 7
+const BATTERY_STATE_POWER_SUPPLY_HEALTH_SAFETY_TIMER_EXPIRE : RosUInt8 = 8
+const BATTERY_STATE_POWER_SUPPLY_TECHNOLOGY_UNKNOWN : RosUInt8 = 0 // Unknown battery technology
+const BATTERY_STATE_POWER_SUPPLY_TECHNOLOGY_NIMH : RosUInt8 = 1 // Nickel-Metal Hydride battery
+const BATTERY_STATE_POWER_SUPPLY_TECHNOLOGY_LION : RosUInt8 = 2 // Lithium-ion battery
+const BATTERY_STATE_POWER_SUPPLY_TECHNOLOGY_LIPO : RosUInt8 = 3 // Lithium Polymer battery
+const BATTERY_STATE_POWER_SUPPLY_TECHNOLOGY_LIFE : RosUInt8 = 4 // Lithium Iron Phosphate battery
+const BATTERY_STATE_POWER_SUPPLY_TECHNOLOGY_NICD : RosUInt8 = 5 // Nickel-Cadmium battery
+const BATTERY_STATE_POWER_SUPPLY_TECHNOLOGY_LIMN : RosUInt8 = 6 // Lithium Manganese Dioxide battery
+const BATTERY_STATE_POWER_SUPPLY_TECHNOLOGY_TERNARY : RosUInt8 = 7 // Ternary Lithium battery
+const BATTERY_STATE_POWER_SUPPLY_TECHNOLOGY_VRLA : RosUInt8 = 8 // Valve Regulated Lead-Acid battery
+// Upstream: sensor_msgs/msg/CameraInfo.msg
+struct CameraInfo {
+// This message defines meta information for a camera. It should be in a
+// camera namespace on topic "camera_info" and accompanied by up to five
+// image topics named:
+//
+//   image_raw - raw data from the camera driver, possibly Bayer encoded
+//   image            - monochrome, distorted
+//   image_color      - color, distorted
+//   image_rect       - monochrome, rectified
+//   image_rect_color - color, rectified
+//
+// The image_pipeline contains packages (image_proc, stereo_image_proc)
+// for producing the four processed image topics from image_raw and
+// camera_info. The meaning of the camera parameters are described in
+// detail at http://www.ros.org/wiki/image_pipeline/CameraInfo.
+//
+// The image_geometry package provides a user-friendly interface to
+// common operations using this meta information. If you want to, e.g.,
+// project a 3d point into image coordinates, we strongly recommend
+// using image_geometry.
+//
+// If the camera is uncalibrated, the matrices D, K, R, P should be left
+// zeroed out. In particular, clients may assume that K[0] == 0.0
+// indicates an uncalibrated camera.
+
+//######################################################################
+//                     Image acquisition info                          #
+//######################################################################
+
+// Time of image acquisition, camera coordinate frame ID
+  header : Header // Header timestamp should be acquisition time of image
+                       // Header frame_id should be optical frame of camera
+                       // origin of frame should be optical center of camera
+                       // +x should point to the right in the image
+                       // +y should point down in the image
+                       // +z should point into the plane of the image
+
+
+//######################################################################
+//                      Calibration Parameters                         #
+//######################################################################
+// These are fixed during camera calibration. Their values will be the #
+// same in all messages until the camera is recalibrated. Note that    #
+// self-calibrating systems may "recalibrate" frequently.              #
+//                                                                     #
+// The internal parameters can be used to warp a raw (distorted) image #
+// to:                                                                 #
+//   1. An undistorted image (requires D and K)                        #
+//   2. A rectified image (requires D, K, R)                           #
+// The projection matrix P projects 3D points into the rectified image.#
+//######################################################################
+
+// The image dimensions with which the camera was calibrated.
+// Normally this will be the full camera resolution in pixels.
+  height : RosUInt32
+  width : RosUInt32
+
+// The distortion model used. Supported models are listed in
+// sensor_msgs/distortion_models.hpp. For most cameras, "plumb_bob" - a
+// simple model of radial and tangential distortion - is sufficent.
+  distortionModel : RosString
+
+// The distortion parameters, size depending on the distortion model.
+// For "plumb_bob", the 5 parameters are: (k1, k2, t1, t2, k3).
+  d : [RosFloat64; 0..18446744073709551615]
+
+// Intrinsic camera matrix for the raw (distorted) images.
+//     [fx  0 cx]
+// K = [ 0 fy cy]
+//     [ 0  0  1]
+// Projects 3D points in the camera coordinate frame to 2D pixel
+// coordinates using the focal lengths (fx, fy) and principal point
+// (cx, cy).
+  k : [RosFloat64; 9] // 3x3 row-major matrix
+
+// Rectification matrix (stereo cameras only)
+// A rotation matrix aligning the camera coordinate system to the ideal
+// stereo image plane so that epipolar lines in both stereo images are
+// parallel.
+  r : [RosFloat64; 9] // 3x3 row-major matrix
+
+// Projection/camera matrix
+//     [fx'  0  cx' Tx]
+// P = [ 0  fy' cy' Ty]
+//     [ 0   0   1   0]
+// By convention, this matrix specifies the intrinsic (camera) matrix
+//  of the processed (rectified) image. That is, the left 3x3 portion
+//  is the normal camera intrinsic matrix for the rectified image.
+// It projects 3D points in the camera coordinate frame to 2D pixel
+//  coordinates using the focal lengths (fx', fy') and principal point
+//  (cx', cy') - these may differ from the values in K.
+// For monocular cameras, Tx = Ty = 0. Normally, monocular cameras will
+//  also have R = the identity and P[1:3,1:3] = K.
+// For a stereo pair, the fourth column [Tx Ty 0]' is related to the
+//  position of the optical center of the second camera in the first
+//  camera's frame. We assume Tz = 0 so both cameras are in the same
+//  stereo image plane. The first camera always has Tx = Ty = 0. For
+//  the right (second) camera of a horizontal stereo pair, Ty = 0 and
+//  Tx = -fx' * B, where B is the baseline between the cameras.
+// Given a 3D point [X Y Z]', the projection (x, y) of the point onto
+//  the rectified image is given by:
+//  [u v w]' = P * [X Y Z 1]'
+//         x = u / w
+//         y = v / w
+//  This holds for both images of a stereo pair.
+  p : [RosFloat64; 12] // 3x4 row-major matrix
+
+
+//######################################################################
+//                      Operational Parameters                         #
+//######################################################################
+// These define the image region actually captured by the camera       #
+// driver. Although they affect the geometry of the output image, they #
+// may be changed freely without recalibrating the camera.             #
+//######################################################################
+
+// Binning refers here to any camera setting which combines rectangular
+//  neighborhoods of pixels into larger "super-pixels." It reduces the
+//  resolution of the output image to
+//  (width / binning_x) x (height / binning_y).
+// The default values binning_x = binning_y = 0 is considered the same
+//  as binning_x = binning_y = 1 (no subsampling).
+  binningX : RosUInt32
+  binningY : RosUInt32
+
+// Region of interest (subwindow of full camera resolution), given in
+//  full resolution (unbinned) image coordinates. A particular ROI
+//  always denotes the same window of pixels on the camera sensor,
+//  regardless of binning settings.
+// The default setting of roi (all values 0) is considered the same as
+//  full resolution (roi.width = width, roi.height = height).
+  roi : RegionOfInterest
+}
+// Upstream: sensor_msgs/msg/ChannelFloat32.msg
+struct ChannelFloat32 {
+// This message is used by the PointCloud message to hold optional data
+// associated with each point in the cloud. The length of the values
+// array should be the same as the length of the points array in the
+// PointCloud, and each value should be associated with the corresponding
+// point.
+//
+// Channel names in existing practice include:
+//   "u", "v" - row and column (respectively) in the left stereo image.
+//              This is opposite to usual conventions but remains for
+//              historical reasons. The newer PointCloud2 message has no
+//              such problem.
+//   "rgb" - For point clouds produced by color stereo cameras. uint8
+//           (R,G,B) values packed into the least significant 24 bits,
+//           in order.
+//   "intensity" - laser or pixel intensity.
+//   "distance"
+
+// The channel name should give semantics of the channel (e.g.
+// "intensity" instead of "value").
+  name : RosString
+
+// The values array should be 1-1 with the elements of the associated
+// PointCloud.
+  values : [RosFloat32; 0..18446744073709551615]
+}
+// Upstream: sensor_msgs/msg/CompressedImage.msg
+struct CompressedImage {
+// This message contains a compressed image.
+
+  header : Header // Header timestamp should be acquisition time of image
+                       // Header frame_id should be optical frame of camera
+                       // origin of frame should be optical center of cameara
+                       // +x should point to the right in the image
+                       // +y should point down in the image
+                       // +z should point into to plane of the image
+
+  format : RosString // Specifies the format of the data
+                       // Acceptable values differ by the image transport used:
+                       // - compressed_image_transport:
+                       //     ORIG_PIXFMT; CODEC compressed [COMPRESSED_PIXFMT]
+                       //   where:
+                       //   - ORIG_PIXFMT is pixel format of the raw image, i.e.
+                       //     the content of sensor_msgs/Image/encoding with
+                       //     values from include/sensor_msgs/image_encodings.h
+                       //   - CODEC is one of [jpeg, png, tiff]
+                       //   - COMPRESSED_PIXFMT is only appended for color images
+                       //     and is the pixel format used by the compression
+                       //     algorithm. Valid values for jpeg encoding are:
+                       //     [bgr8, rgb8]. Valid values for png encoding are:
+                       //     [bgr8, rgb8, bgr16, rgb16].
+                       //   If the field is empty or does not correspond to the
+                       //   above pattern, the image is treated as bgr8 or mono8
+                       //   jpeg image (depending on the number of channels).
+                       // - compressed_depth_image_transport:
+                       //     ORIG_PIXFMT; compressedDepth CODEC
+                       //   where:
+                       //   - ORIG_PIXFMT is pixel format of the raw image, i.e.
+                       //     the content of sensor_msgs/Image/encoding with
+                       //     values from include/sensor_msgs/image_encodings.h
+                       //     It is usually one of [16UC1, 32FC1].
+                       //   - CODEC is one of [png, rvl]
+                       //   If the field is empty or does not correspond to the
+                       //   above pattern, the image is treated as png image.
+                       // - Other image transports can store whatever values they
+                       //   need for successful decoding of the image. Refer to
+                       //   documentation of the other transports for details.
+
+  data : [RosUInt8; 0..18446744073709551615] // Compressed image buffer
+}
+// Upstream: sensor_msgs/msg/FluidPressure.msg
+struct FluidPressure {
+// Single pressure reading.  This message is appropriate for measuring the
+// pressure inside of a fluid (air, water, etc).  This also includes
+// atmospheric or barometric pressure.
+//
+// This message is not appropriate for force/pressure contact sensors.
+
+  header : Header // timestamp of the measurement
+                             // frame_id is the location of the pressure sensor
+
+  fluidPressure : RosPascals // Absolute pressure reading in Pascals.
+
+  variance : RosFloat64 // 0 is interpreted as variance unknown
+}
+// Upstream: sensor_msgs/msg/Illuminance.msg
+struct Illuminance {
+// Single photometric illuminance measurement.  Light should be assumed to be
+// measured along the sensor's x-axis (the area of detection is the y-z plane).
+// The illuminance should have a 0 or positive value and be received with
+// the sensor's +X axis pointing toward the light source.
+//
+// Photometric illuminance is the measure of the human eye's sensitivity of the
+// intensity of light encountering or passing through a surface.
+//
+// All other Photometric and Radiometric measurements should not use this message.
+// This message cannot represent:
+//  - Luminous intensity (candela/light source output)
+//  - Luminance (nits/light output per area)
+//  - Irradiance (watt/area), etc.
+
+  header : Header // timestamp is the time the illuminance was measured
+                             // frame_id is the location and direction of the reading
+
+  illuminance : RosLux // Measurement of the Photometric Illuminance in Lux.
+
+  variance : RosFloat64 // 0 is interpreted as variance unknown
+}
+// Upstream: sensor_msgs/msg/Image.msg
+struct Image {
+// This message contains an uncompressed image
+// (0, 0) is at top-left corner of image
+
+  header : Header // Header timestamp should be acquisition time of image
+                       // Header frame_id should be optical frame of camera
+                       // origin of frame should be optical center of cameara
+                       // +x should point to the right in the image
+                       // +y should point down in the image
+                       // +z should point into to plane of the image
+                       // If the frame_id here and the frame_id of the CameraInfo
+                       // message associated with the image conflict
+                       // the behavior is undefined
+
+  height : RosUInt32 // image height, that is, number of rows
+  width : RosUInt32 // image width, that is, number of columns
+
+// The legal values for encoding are in file include/sensor_msgs/image_encodings.hpp
+// If you want to standardize a new string format, join
+// ros-users@lists.ros.org and send an email proposing a new encoding.
+
+  encoding : RosString // Encoding of pixels -- channel meaning, ordering, size
+                       // taken from the list of strings in include/sensor_msgs/image_encodings.hpp
+
+  isBigendian : RosUInt8 // is this data bigendian?
+  stepValue : RosUInt32 // Full row length in bytes
+  data : [RosUInt8; 0..18446744073709551615] // actual matrix data, size is (step * rows)
+}
+// Upstream: sensor_msgs/msg/Imu.msg
+struct Imu {
+// This is a message to hold data from an IMU (Inertial Measurement Unit)
+//
+// Accelerations should be in m/s^2 (not in g's), and rotational velocity should be in rad/sec
+//
+// If the covariance of the measurement is known, it should be filled in (if all you know is the
+// variance of each measurement, e.g. from the datasheet, just put those along the diagonal)
+// A covariance matrix of all zeros will be interpreted as "covariance unknown", and to use the
+// data a covariance will have to be assumed or gotten from some other source
+//
+// If you have no estimate for one of the data elements (e.g. your IMU doesn't produce an
+// orientation estimate), please set element 0 of the associated covariance matrix to -1
+// If you are interpreting this message, please check for a value of -1 in the first element of each
+// covariance matrix, and disregard the associated estimate.
+
+  header : Header
+
+  orientation : Quaternion
+  orientationCovariance : [RosFloat64; 9] // Row major about x, y, z axes
+
+  angularVelocity : Vector3
+  angularVelocityCovariance : [RosFloat64; 9] // Row major about x, y, z axes
+
+  linearAcceleration : Vector3
+  linearAccelerationCovariance : [RosFloat64; 9] // Row major x, y z
+}
+// Upstream: sensor_msgs/msg/JointState.msg
+struct JointState {
+// This is a message that holds data to describe the state of a set of torque controlled joints.
+//
+// The state of each joint (revolute or prismatic) is defined by:
+//  * the position of the joint (rad or m),
+//  * the velocity of the joint (rad/s or m/s) and
+//  * the effort that is applied in the joint (Nm or N).
+//
+// Each joint is uniquely identified by its name
+// The header specifies the time at which the joint states were recorded. All the joint states
+// in one message have to be recorded at the same time.
+//
+// This message consists of a multiple arrays, one for each part of the joint state.
+// The goal is to make each of the fields optional. When e.g. your joints have no
+// effort associated with them, you can leave the effort array empty.
+//
+// All arrays in this message should have the same size, or be empty.
+// This is the only way to uniquely associate the joint name with the correct
+// states.
+
+  header : Header
+
+  name : [RosString; 0..18446744073709551615]
+  position : [RosFloat64; 0..18446744073709551615]
+  velocity : [RosFloat64; 0..18446744073709551615]
+  effort : [RosFloat64; 0..18446744073709551615]
+}
+// Upstream: sensor_msgs/msg/Joy.msg
+struct Joy {
+// Reports the state of a joystick's axes and buttons.
+
+// The timestamp is the time at which data is received from the joystick.
+  header : Header
+
+// The axes measurements from a joystick.
+  axes : [RosFloat32; 0..18446744073709551615]
+
+// The buttons measurements from a joystick.
+  buttons : [RosInt32; 0..18446744073709551615]
+}
+// Upstream: sensor_msgs/msg/JoyFeedback.msg
+struct JoyFeedback {
+// Declare of the type of feedback
+  // ROS constant TYPE_LED = 0; package constant JOY_FEEDBACK_TYPE_LED
+  // ROS constant TYPE_RUMBLE = 1; package constant JOY_FEEDBACK_TYPE_RUMBLE
+  // ROS constant TYPE_BUZZER = 2; package constant JOY_FEEDBACK_TYPE_BUZZER
+
+  typeValue : RosUInt8
+
+// This will hold an id number for each type of each feedback.
+// Example, the first led would be id=0, the second would be id=1
+  id : RosUInt8
+
+// Intensity of the feedback, from 0.0 to 1.0, inclusive.  If device is
+// actually binary, driver should treat 0<=x<0.5 as off, 0.5<=x<=1 as on.
+  intensity : RosFloat32
+}
+const JOY_FEEDBACK_TYPE_LED : RosUInt8 = 0
+const JOY_FEEDBACK_TYPE_RUMBLE : RosUInt8 = 1
+const JOY_FEEDBACK_TYPE_BUZZER : RosUInt8 = 2
+// Upstream: sensor_msgs/msg/JoyFeedbackArray.msg
+struct JoyFeedbackArray {
+// This message publishes values for multiple feedback at once.
+  array : [JoyFeedback; 0..18446744073709551615]
+}
+// Upstream: sensor_msgs/msg/LaserEcho.msg
+struct LaserEcho {
+// This message is a submessage of MultiEchoLaserScan and is not intended
+// to be used separately.
+
+  echoes : [RosFloat32; 0..18446744073709551615] // Multiple values of ranges or intensities.
+                  // Each array represents data from the same angle increment.
+}
+// Upstream: sensor_msgs/msg/LaserScan.msg
+struct LaserScan {
+// Single scan from a planar laser range-finder
+//
+// If you have another ranging device with different behavior (e.g. a sonar
+// array), please find or create a different message, since applications
+// will make fairly laser-specific assumptions about this data
+
+  header : Header // timestamp in the header is the acquisition time of
+                             // the first ray in the scan.
+                             //
+                             // in frame frame_id, angles are measured around
+                             // the positive Z axis (counterclockwise, if Z is up)
+                             // with zero angle being forward along the x axis
+
+  angleMin : RosFloat32 // start angle of the scan [rad]
+  angleMax : RosFloat32 // end angle of the scan [rad]
+  angleIncrement : RosFloat32 // angular distance between measurements [rad]
+
+  timeIncrement : RosSeconds // time between measurements [seconds] - if your scanner
+                             // is moving, this will be used in interpolating position
+                             // of 3d points
+  scanTime : RosSeconds // time between scans [seconds]
+
+  rangeMin : RosMetres // minimum range value [m]
+  rangeMax : RosMetres // maximum range value [m]
+
+  ranges : [RosMetres; 0..18446744073709551615] // range data [m]
+                             // (Note: values < range_min or > range_max should be discarded)
+  intensities : [RosFloat32; 0..18446744073709551615] // intensity data [device-specific units].  If your
+                             // device does not provide intensities, please leave
+                             // the array empty.
+}
+// Upstream: sensor_msgs/msg/MagneticField.msg
+struct MagneticField {
+// Measurement of the Magnetic Field vector at a specific location.
+//
+// If the covariance of the measurement is known, it should be filled in.
+// If all you know is the variance of each measurement, e.g. from the datasheet,
+// just put those along the diagonal.
+// A covariance matrix of all zeros will be interpreted as "covariance unknown",
+// and to use the data a covariance will have to be assumed or gotten from some
+// other source.
+
+  header : Header // timestamp is the time the
+                                           // field was measured
+                                           // frame_id is the location and orientation
+                                           // of the field measurement
+
+  magneticField : Vector3 // x, y, and z components of the
+                                           // field vector in Tesla
+                                           // If your sensor does not output 3 axes,
+                                           // put NaNs in the components not reported.
+
+  magneticFieldCovariance : [RosFloat64; 9] // Row major about x, y, z axes
+                                           // 0 is interpreted as variance unknown
+}
+// Upstream: sensor_msgs/msg/MultiDOFJointState.msg
+struct MultiDOFJointState {
+// Representation of state for joints with multiple degrees of freedom,
+// following the structure of JointState which can only represent a single degree of freedom.
+//
+// It is assumed that a joint in a system corresponds to a transform that gets applied
+// along the kinematic chain. For example, a planar joint (as in URDF) is 3DOF (x, y, yaw)
+// and those 3DOF can be expressed as a transformation matrix, and that transformation
+// matrix can be converted back to (x, y, yaw)
+//
+// Each joint is uniquely identified by its name
+// The header specifies the time at which the joint states were recorded. All the joint states
+// in one message have to be recorded at the same time.
+//
+// This message consists of a multiple arrays, one for each part of the joint state.
+// The goal is to make each of the fields optional. When e.g. your joints have no
+// wrench associated with them, you can leave the wrench array empty.
+//
+// All arrays in this message should have the same size, or be empty.
+// This is the only way to uniquely associate the joint name with the correct
+// states.
+
+  header : Header
+
+  jointNames : [RosString; 0..18446744073709551615]
+  transforms : [Transform; 0..18446744073709551615]
+  twist : [Twist; 0..18446744073709551615]
+  wrench : [Wrench; 0..18446744073709551615]
+}
+// Upstream: sensor_msgs/msg/MultiEchoLaserScan.msg
+struct MultiEchoLaserScan {
+// Single scan from a multi-echo planar laser range-finder
+//
+// If you have another ranging device with different behavior (e.g. a sonar
+// array), please find or create a different message, since applications
+// will make fairly laser-specific assumptions about this data
+
+  header : Header // timestamp in the header is the acquisition time of
+                             // the first ray in the scan.
+                             //
+                             // in frame frame_id, angles are measured around
+                             // the positive Z axis (counterclockwise, if Z is up)
+                             // with zero angle being forward along the x axis
+
+  angleMin : RosFloat32 // start angle of the scan [rad]
+  angleMax : RosFloat32 // end angle of the scan [rad]
+  angleIncrement : RosFloat32 // angular distance between measurements [rad]
+
+  timeIncrement : RosSeconds // time between measurements [seconds] - if your scanner
+                             // is moving, this will be used in interpolating position
+                             // of 3d points
+  scanTime : RosSeconds // time between scans [seconds]
+
+  rangeMin : RosMetres // minimum range value [m]
+  rangeMax : RosMetres // maximum range value [m]
+
+  ranges : [LaserEcho; 0..18446744073709551615] // range data [m]
+                             // (Note: NaNs, values < range_min or > range_max should be discarded)
+                             // +Inf measurements are out of range
+                             // -Inf measurements are too close to determine exact distance.
+  intensities : [LaserEcho; 0..18446744073709551615] // intensity data [device-specific units].  If your
+                             // device does not provide intensities, please leave
+                             // the array empty.
+}
+// Upstream: sensor_msgs/msg/NavSatFix.msg
+struct NavSatFix {
+// Navigation Satellite fix for any Global Navigation Satellite System
+//
+// Specified using the WGS 84 reference ellipsoid
+
+// header.stamp specifies the ROS time for this measurement (the
+//        corresponding satellite time may be reported using the
+//        sensor_msgs/TimeReference message).
+//
+// header.frame_id is the frame of reference reported by the satellite
+//        receiver, usually the location of the antenna.  This is a
+//        Euclidean frame relative to the vehicle, not a reference
+//        ellipsoid.
+  header : Header
+
+// Satellite fix status information.
+  status : NavSatStatus
+
+// Latitude [degrees]. Positive is north of equator; negative is south.
+  latitude : RosFloat64
+
+// Longitude [degrees]. Positive is east of prime meridian; negative is west.
+  longitude : RosFloat64
+
+// Altitude [m]. Positive is above the WGS 84 ellipsoid
+// (quiet NaN if no altitude is available).
+  altitude : RosMetres
+
+// Position covariance [m^2] defined relative to a tangential plane
+// through the reported position. The components are East, North, and
+// Up (ENU), in row-major order.
+//
+// Beware: this coordinate system exhibits singularities at the poles.
+  positionCovariance : [RosSquareMetres; 9]
+
+// If the covariance of the fix is known, fill it in completely. If the
+// GPS receiver provides the variance of each measurement, put them
+// along the diagonal. If only Dilution of Precision is available,
+// estimate an approximate covariance from that.
+
+  // ROS constant COVARIANCE_TYPE_UNKNOWN = 0; package constant NAV_SAT_FIX_COVARIANCE_TYPE_UNKNOWN
+  // ROS constant COVARIANCE_TYPE_APPROXIMATED = 1; package constant NAV_SAT_FIX_COVARIANCE_TYPE_APPROXIMATED
+  // ROS constant COVARIANCE_TYPE_DIAGONAL_KNOWN = 2; package constant NAV_SAT_FIX_COVARIANCE_TYPE_DIAGONAL_KNOWN
+  // ROS constant COVARIANCE_TYPE_KNOWN = 3; package constant NAV_SAT_FIX_COVARIANCE_TYPE_KNOWN
+
+  positionCovarianceType : RosUInt8
+}
+const NAV_SAT_FIX_COVARIANCE_TYPE_UNKNOWN : RosUInt8 = 0
+const NAV_SAT_FIX_COVARIANCE_TYPE_APPROXIMATED : RosUInt8 = 1
+const NAV_SAT_FIX_COVARIANCE_TYPE_DIAGONAL_KNOWN : RosUInt8 = 2
+const NAV_SAT_FIX_COVARIANCE_TYPE_KNOWN : RosUInt8 = 3
+// Upstream: sensor_msgs/msg/NavSatStatus.msg
+struct NavSatStatus {
+// Navigation Satellite fix status for any Global Navigation Satellite System.
+//
+// Whether to output an augmented fix is determined by both the fix
+// type and the last time differential corrections were received.  A
+// fix is valid when status >= STATUS_FIX.
+
+  // ROS constant STATUS_UNKNOWN = -2; package constant NAV_SAT_STATUS_STATUS_UNKNOWN // status is not yet set
+  // ROS constant STATUS_NO_FIX = -1; package constant NAV_SAT_STATUS_STATUS_NO_FIX // unable to fix position
+  // ROS constant STATUS_FIX = 0; package constant NAV_SAT_STATUS_STATUS_FIX // unaugmented fix
+  // ROS constant STATUS_SBAS_FIX = 1; package constant NAV_SAT_STATUS_STATUS_SBAS_FIX // with satellite-based augmentation
+  // ROS constant STATUS_GBAS_FIX = 2; package constant NAV_SAT_STATUS_STATUS_GBAS_FIX // with ground-based augmentation
+
+  status : RosInt8 = -2 // STATUS_UNKNOWN
+
+// Bits defining which Global Navigation Satellite System signals were
+// used by the receiver.
+
+  // ROS constant SERVICE_UNKNOWN = 0; package constant NAV_SAT_STATUS_SERVICE_UNKNOWN // Remember service is a bitfield, so checking (service & SERVICE_UNKNOWN) will not work. Use == instead.
+  // ROS constant SERVICE_GPS = 1; package constant NAV_SAT_STATUS_SERVICE_GPS
+  // ROS constant SERVICE_GLONASS = 2; package constant NAV_SAT_STATUS_SERVICE_GLONASS
+  // ROS constant SERVICE_COMPASS = 4; package constant NAV_SAT_STATUS_SERVICE_COMPASS // includes BeiDou.
+  // ROS constant SERVICE_GALILEO = 8; package constant NAV_SAT_STATUS_SERVICE_GALILEO
+
+  serviceValue : RosUInt16
+}
+const NAV_SAT_STATUS_STATUS_UNKNOWN : RosInt8 = -2 // status is not yet set
+const NAV_SAT_STATUS_STATUS_NO_FIX : RosInt8 = -1 // unable to fix position
+const NAV_SAT_STATUS_STATUS_FIX : RosInt8 = 0 // unaugmented fix
+const NAV_SAT_STATUS_STATUS_SBAS_FIX : RosInt8 = 1 // with satellite-based augmentation
+const NAV_SAT_STATUS_STATUS_GBAS_FIX : RosInt8 = 2 // with ground-based augmentation
+const NAV_SAT_STATUS_SERVICE_UNKNOWN : RosUInt16 = 0 // Remember service is a bitfield, so checking (service & SERVICE_UNKNOWN) will not work. Use == instead.
+const NAV_SAT_STATUS_SERVICE_GPS : RosUInt16 = 1
+const NAV_SAT_STATUS_SERVICE_GLONASS : RosUInt16 = 2
+const NAV_SAT_STATUS_SERVICE_COMPASS : RosUInt16 = 4 // includes BeiDou.
+const NAV_SAT_STATUS_SERVICE_GALILEO : RosUInt16 = 8
+// Upstream: sensor_msgs/msg/PointCloud.msg
+struct PointCloud {
+//# THIS MESSAGE IS DEPRECATED AS OF FOXY
+//# Please use sensor_msgs/PointCloud2
+
+// This message holds a collection of 3d points, plus optional additional
+// information about each point.
+
+// Time of sensor data acquisition, coordinate frame ID.
+  header : Header
+
+// Array of 3d points. Each Point32 should be interpreted as a 3d point
+// in the frame given in the header.
+  points : [Point32; 0..18446744073709551615]
+
+// Each channel should have the same number of elements as points array,
+// and the data in each channel should correspond 1:1 with each point.
+// Channel names in common practice are listed in ChannelFloat32.msg.
+  channels : [ChannelFloat32; 0..18446744073709551615]
+}
+// Upstream: sensor_msgs/msg/PointCloud2.msg
+struct PointCloud2 {
+// This message holds a collection of N-dimensional points, which may
+// contain additional information such as normals, intensity, etc. The
+// point data is stored as a binary blob, its layout described by the
+// contents of the "fields" array.
+//
+// The point cloud data may be organized 2d (image-like) or 1d (unordered).
+// Point clouds organized as 2d images may be produced by camera depth sensors
+// such as stereo or time-of-flight.
+
+// Time of sensor data acquisition, and the coordinate frame ID (for 3d points).
+  header : Header
+
+// 2D structure of the point cloud. If the cloud is unordered, height is
+// 1 and width is the length of the point cloud.
+  height : RosUInt32
+  width : RosUInt32
+
+// Describes the channels and their layout in the binary data blob.
+  fields : [PointField; 0..18446744073709551615]
+
+  isBigendian : RosBoolean // Is this data bigendian?
+  pointStep : RosUInt32 // Length of a point in bytes
+  rowStep : RosUInt32 // Length of a row in bytes
+  data : [RosUInt8; 0..18446744073709551615] // Actual point data, size is (row_step*height)
+
+  isDense : RosBoolean // True if there are no invalid points
+}
+// Upstream: sensor_msgs/msg/PointField.msg
+struct PointField {
+// This message holds the description of one point entry in the
+// PointCloud2 message format.
+  // ROS constant INT8 = 1; package constant POINT_FIELD_INT8
+  // ROS constant UINT8 = 2; package constant POINT_FIELD_UINT8
+  // ROS constant INT16 = 3; package constant POINT_FIELD_INT16
+  // ROS constant UINT16 = 4; package constant POINT_FIELD_UINT16
+  // ROS constant INT32 = 5; package constant POINT_FIELD_INT32
+  // ROS constant UINT32 = 6; package constant POINT_FIELD_UINT32
+  // ROS constant FLOAT32 = 7; package constant POINT_FIELD_FLOAT32
+  // ROS constant FLOAT64 = 8; package constant POINT_FIELD_FLOAT64
+  // ROS constant INT64 = 9; package constant POINT_FIELD_INT64
+  // ROS constant UINT64 = 10; package constant POINT_FIELD_UINT64
+  // ROS constant BOOL = 11; package constant POINT_FIELD_BOOL
+
+// Common PointField names are x, y, z, intensity, rgb, rgba
+  name : RosString // Name of field
+  offset : RosUInt32 // Offset from start of point struct
+  datatype : RosUInt8 // Datatype enumeration, see above
+  count : RosUInt32 // How many elements in the field
+}
+const POINT_FIELD_INT8 : RosUInt8 = 1
+const POINT_FIELD_UINT8 : RosUInt8 = 2
+const POINT_FIELD_INT16 : RosUInt8 = 3
+const POINT_FIELD_UINT16 : RosUInt8 = 4
+const POINT_FIELD_INT32 : RosUInt8 = 5
+const POINT_FIELD_UINT32 : RosUInt8 = 6
+const POINT_FIELD_FLOAT32 : RosUInt8 = 7
+const POINT_FIELD_FLOAT64 : RosUInt8 = 8
+const POINT_FIELD_INT64 : RosUInt8 = 9
+const POINT_FIELD_UINT64 : RosUInt8 = 10
+const POINT_FIELD_BOOL : RosUInt8 = 11
+// Upstream: sensor_msgs/msg/Range.msg
+struct Range {
+// Single range reading from an active ranger that emits energy and reports
+// one range reading that is valid along an arc at the distance measured.
+// This message is  not appropriate for laser scanners. See the LaserScan
+// message if you are working with a laser scanner.
+//
+// This message also can represent a fixed-distance (binary) ranger.  This
+// sensor will have min_range===max_range===distance of detection.
+// These sensors follow REP 117 and will output -Inf if the object is detected
+// and +Inf if the object is outside of the detection range.
+
+  header : Header // timestamp in the header is the time the ranger
+                             // returned the distance reading
+
+// Radiation type enums
+// If you want a value added to this list, send an email to the ros-users list
+  // ROS constant ULTRASOUND = 0; package constant RANGE_ULTRASOUND
+  // ROS constant INFRARED = 1; package constant RANGE_INFRARED
+
+  radiationType : RosUInt8 // the type of radiation used by the sensor
+                        // (sound, IR, etc) [enum]
+
+  fieldOfView : RosFloat32 // the size of the arc that the distance reading is
+                        // valid for [rad]
+                        // the object causing the range reading may have
+                        // been anywhere within -field_of_view/2 and
+                        // field_of_view/2 at the measured range.
+                        // 0 angle corresponds to the x-axis of the sensor.
+
+  minRange : RosMetres // minimum range value [m]
+  maxRange : RosMetres // maximum range value [m]
+                        // Fixed distance rangers require min_range==max_range
+
+  range : RosMetres // range data [m]
+                        // (Note: values < range_min or > range_max should be discarded)
+                        // Fixed distance rangers only output -Inf or +Inf.
+                        // -Inf represents a detection within fixed distance.
+                        // (Detection too close to the sensor to quantify)
+                        // +Inf represents no detection within the fixed distance.
+                        // (Object out of range)
+
+  variance : RosFloat32 // variance of the range sensor
+                        // 0 is interpreted as variance unknown
+}
+const RANGE_ULTRASOUND : RosUInt8 = 0
+const RANGE_INFRARED : RosUInt8 = 1
+// Upstream: sensor_msgs/msg/RegionOfInterest.msg
+struct RegionOfInterest {
+// This message is used to specify a region of interest within an image.
+//
+// When used to specify the ROI setting of the camera when the image was
+// taken, the height and width fields should either match the height and
+// width fields for the associated image; or height = width = 0
+// indicates that the full resolution image was captured.
+
+  xOffset : RosUInt32 // Leftmost pixel of the ROI
+                 // (0 if the ROI includes the left edge of the image)
+  yOffset : RosUInt32 // Topmost pixel of the ROI
+                 // (0 if the ROI includes the top edge of the image)
+  height : RosUInt32 // Height of ROI
+  width : RosUInt32 // Width of ROI
+
+// True if a distinct rectified ROI should be calculated from the "raw"
+// ROI in this message. Typically this should be False if the full image
+// is captured (ROI not used), and True if a subwindow is captured (ROI
+// used).
+  doRectify : RosBoolean
+}
+// Upstream: sensor_msgs/msg/RelativeHumidity.msg
+struct RelativeHumidity {
+// Single reading from a relative humidity sensor.
+// Defines the ratio of partial pressure of water vapor to the saturated vapor
+// pressure at a temperature.
+
+  header : Header // timestamp of the measurement
+                             // frame_id is the location of the humidity sensor
+
+  relativeHumidity : RosFloat64 // Expression of the relative humidity
+                             // from 0.0 to 1.0.
+                             // 0.0 is no partial pressure of water vapor
+                             // 1.0 represents partial pressure of saturation
+
+  variance : RosFloat64 // 0 is interpreted as variance unknown
+}
+// Upstream: sensor_msgs/msg/Temperature.msg
+struct Temperature {
+// Single temperature reading.
+
+  header : Header // timestamp is the time the temperature was measured
+                             // frame_id is the location of the temperature reading
+
+  temperature : RosCelsius // Measurement of the Temperature in Degrees Celsius.
+
+  variance : RosFloat64 // 0 is interpreted as variance unknown.
+}
+// Upstream: sensor_msgs/msg/TimeReference.msg
+struct TimeReference {
+// Measurement from an external time source not actively synchronized with the system clock.
+
+  header : Header // stamp is system time for which measurement was valid
+                                  // frame_id is not used
+
+  timeRef : Time // corresponding time from this external source
+  source : RosString // (optional) name of time source
+}

@@ -1,0 +1,716 @@
+package common
+
+// Translation helpers; these are not upstream declarations.
+type Char16: bytes [16]
+type Float32: float
+type Float32Meters: m
+type Float32MetersPerSecond: m/s
+type Float32Microseconds: us
+type Float32Seconds: s
+type Int16: integer [-32768..32767]
+type Int16Centiamperes: cA [-32768..32767]
+type Int32: integer [-2147483648..2147483647]
+type Int32Millimeters: mm [-2147483648..2147483647]
+type Int8Percent: % [-128..127]
+type Uint16: integer [0..65535]
+type Uint16CentimetersPerSecond: cm/s [0..65535]
+type Uint16Millivolts: mV [0..65535]
+type Uint16Percent: % [0..65535]
+type Uint32: integer [0..4294967295]
+type Uint32Millimeters: mm [0..4294967295]
+type Uint32MillimetersPerSecond: mm/s [0..4294967295]
+type Uint32Milliseconds: ms [0..4294967295]
+struct Uint64Bytes {
+  data: [Uint8; 8]
+}
+type Uint8: integer [0..255]
+type Uint8Percent: % [0..255]
+
+// XML message: id="1" name="SYS_STATUS"
+/// Sensor and subsystem status information. Provides a compact representation of sensor/subsystem status and a few other basic statistics.
+struct SysStatus {
+  // XML field: type="uint32_t" name="onboard_control_sensors_present" enum="MAV_SYS_STATUS_SENSOR" print_format="0x%04x"
+  /// Bitmap showing which onboard controllers and sensors are present. Value of 0: not present. Value of 1: present.
+  onboardControlSensorsPresent: MavSysStatusSensor
+  // XML field: type="uint32_t" name="onboard_control_sensors_enabled" enum="MAV_SYS_STATUS_SENSOR" print_format="0x%04x"
+  /// Bitmap showing which onboard controllers and sensors are enabled:  Value of 0: not enabled. Value of 1: enabled.
+  onboardControlSensorsEnabled: MavSysStatusSensor
+  // XML field: type="uint32_t" name="onboard_control_sensors_health" enum="MAV_SYS_STATUS_SENSOR" print_format="0x%04x"
+  /// Bitmap showing which onboard controllers and sensors have an error (or are operational). Value of 0: error. Value of 1: healthy.
+  onboardControlSensorsHealth: MavSysStatusSensor
+  // XML field: type="uint16_t" name="load" units="d%"
+  /// Maximum usage in percent of the mainloop time. Values: [0-1000] - should always be below 1000
+  load: Uint16
+  // XML field: type="uint16_t" name="voltage_battery" units="mV" invalid="UINT16_MAX"
+  /// Battery voltage, UINT16_MAX: Voltage not sent by autopilot. Value is ambiguous on multi-battery systems. BATTERY_STATUS is a recommended alternative.
+  voltageBattery: Uint16Millivolts
+  // XML field: type="int16_t" name="current_battery" units="cA" invalid="-1"
+  /// Battery current, -1: Current not sent by autopilot. Value may overflow/rollover for very high currents (> 327.67A). Value is ambiguous on multi-battery systems. BATTERY_STATUS is a recommended alternative.
+  currentBattery: Int16Centiamperes
+  // XML field: type="int8_t" name="battery_remaining" units="%" invalid="-1"
+  /// Battery energy remaining, -1: Battery remaining energy not sent by autopilot. Value is ambiguous on multi-battery systems. BATTERY_STATUS is a recommended alternative.
+  batteryRemaining: Int8Percent
+  // XML field: type="uint16_t" name="drop_rate_comm" units="c%"
+  /// Communication drop rate, (UART, I2C, SPI, CAN), dropped packets on all links (packets that were corrupted on reception on the MAV)
+  dropRateComm: Uint16
+  // XML field: type="uint16_t" name="errors_comm"
+  /// Communication errors (UART, I2C, SPI, CAN), dropped packets on all links (packets that were corrupted on reception on the MAV)
+  errorsComm: Uint16
+  // XML field: type="uint16_t" name="errors_count1"
+  /// Autopilot-specific errors
+  errorsCount1: Uint16
+  // XML field: type="uint16_t" name="errors_count2"
+  /// Autopilot-specific errors
+  errorsCount2: Uint16
+  // XML field: type="uint16_t" name="errors_count3"
+  /// Autopilot-specific errors
+  errorsCount3: Uint16
+  // XML field: type="uint16_t" name="errors_count4"
+  /// Autopilot-specific errors
+  errorsCount4: Uint16
+  // XML <extensions/>
+  // XML field: type="uint32_t" name="onboard_control_sensors_present_extended" enum="MAV_SYS_STATUS_SENSOR_EXTENDED" print_format="0x%04x"
+  /// Bitmap showing which onboard controllers and sensors are present. Value of 0: not present. Value of 1: present.
+  onboardControlSensorsPresentExtended: Uint32
+  // XML field: type="uint32_t" name="onboard_control_sensors_enabled_extended" enum="MAV_SYS_STATUS_SENSOR_EXTENDED" print_format="0x%04x"
+  /// Bitmap showing which onboard controllers and sensors are enabled:  Value of 0: not enabled. Value of 1: enabled.
+  onboardControlSensorsEnabledExtended: Uint32
+  // XML field: type="uint32_t" name="onboard_control_sensors_health_extended" enum="MAV_SYS_STATUS_SENSOR_EXTENDED" print_format="0x%04x"
+  /// Bitmap showing which onboard controllers and sensors have an error (or are operational). Value of 0: error. Value of 1: healthy.
+  onboardControlSensorsHealthExtended: Uint32
+}
+
+// XML message: id="20" name="PARAM_REQUEST_READ"
+/// Request to read the onboard parameter with the param_id string id. Onboard parameters are stored as key[const char*] -> value[float]. This allows to send a parameter to any other component (such as the GCS) without the need of previous knowledge of possible parameter names. Thus the same GCS can store different parameters for different autopilots. See also https://mavlink.io/en/services/parameter.html for a full documentation of QGroundControl and IMU code.
+struct ParamRequestRead {
+  // XML field: type="uint8_t" name="target_system"
+  /// System ID
+  targetSystem: Uint8
+  // XML field: type="uint8_t" name="target_component"
+  /// Component ID
+  targetComponent: Uint8
+  // XML field: type="char[16]" name="param_id"
+  /// Onboard parameter id, terminated by NULL if the length is less than 16 human-readable chars and WITHOUT null termination (NULL) byte if the length is exactly 16 chars - applications have to provide 16+1 bytes storage if the ID is stored as string. Encoded as 7-bit ASCII.
+  paramId: Char16
+  // XML field: type="int16_t" name="param_index" invalid="-1"
+  /// Parameter index. Send -1 to use the param ID field as identifier (else the param id will be ignored)
+  paramIndex: Int16
+}
+
+// XML message: id="21" name="PARAM_REQUEST_LIST"
+/// Request all parameters of this component. After this request, all parameters are emitted. The parameter microservice is documented at https://mavlink.io/en/services/parameter.html
+struct ParamRequestList {
+  // XML field: type="uint8_t" name="target_system"
+  /// System ID
+  targetSystem: Uint8
+  // XML field: type="uint8_t" name="target_component"
+  /// Component ID
+  targetComponent: Uint8
+}
+
+// XML message: id="22" name="PARAM_VALUE"
+/// Emit the value of a onboard parameter. The inclusion of param_count and param_index in the message allows the recipient to keep track of received parameters and allows him to re-request missing parameters after a loss or timeout. The parameter microservice is documented at https://mavlink.io/en/services/parameter.html
+struct ParamValue {
+  // XML field: type="char[16]" name="param_id"
+  /// Onboard parameter id, terminated by NULL if the length is less than 16 human-readable chars and WITHOUT null termination (NULL) byte if the length is exactly 16 chars - applications have to provide 16+1 bytes storage if the ID is stored as string. Encoded as 7-bit ASCII.
+  paramId: Char16
+  // XML field: type="float" name="param_value"
+  /// Onboard parameter value
+  paramValue: Float32
+  // XML field: type="uint8_t" name="param_type" enum="MAV_PARAM_TYPE"
+  /// Onboard parameter type.
+  paramType: MavParamType
+  // XML field: type="uint16_t" name="param_count"
+  /// Total number of onboard parameters
+  paramCount: Uint16
+  // XML field: type="uint16_t" name="param_index"
+  /// Index of this onboard parameter
+  paramIndex: Uint16
+}
+
+// XML message: id="23" name="PARAM_SET"
+/// Set a parameter value (write new value to permanent storage).
+///         The receiving component should acknowledge the new parameter value by broadcasting a PARAM_VALUE message (broadcasting ensures that multiple GCS all have an up-to-date list of all parameters). If the sending GCS did not receive a PARAM_VALUE within its timeout time, it should re-send the PARAM_SET message. The parameter microservice is documented at https://mavlink.io/en/services/parameter.html.
+///       
+struct ParamSet {
+  // XML field: type="uint8_t" name="target_system"
+  /// System ID
+  targetSystem: Uint8
+  // XML field: type="uint8_t" name="target_component"
+  /// Component ID
+  targetComponent: Uint8
+  // XML field: type="char[16]" name="param_id"
+  /// Onboard parameter id, terminated by NULL if the length is less than 16 human-readable chars and WITHOUT null termination (NULL) byte if the length is exactly 16 chars - applications have to provide 16+1 bytes storage if the ID is stored as string. Encoded as 7-bit ASCII.
+  paramId: Char16
+  // XML field: type="float" name="param_value"
+  /// Onboard parameter value
+  paramValue: Float32
+  // XML field: type="uint8_t" name="param_type" enum="MAV_PARAM_TYPE"
+  /// Onboard parameter type.
+  paramType: MavParamType
+}
+
+// XML message: id="24" name="GPS_RAW_INT"
+/// The global position, as returned by the Global Positioning System (GPS). This is
+///                 NOT the global position estimate of the system, but rather a RAW sensor value. See message GLOBAL_POSITION_INT for the global position estimate.
+struct GpsRawInt {
+  // XML field: type="uint64_t" name="time_usec" units="us"
+  /// Timestamp (UNIX Epoch time or time since system boot). The receiving end can infer timestamp format (since 1.1.1970 or since system boot) by checking for the magnitude of the number.
+  timeUsec: Uint64Bytes
+  // XML field: type="uint8_t" name="fix_type" enum="GPS_FIX_TYPE"
+  /// GPS fix type.
+  fixType: GpsFixType
+  // XML field: type="int32_t" name="lat" units="degE7"
+  /// Latitude (WGS84, EGM96 ellipsoid)
+  lat: Int32
+  // XML field: type="int32_t" name="lon" units="degE7"
+  /// Longitude (WGS84, EGM96 ellipsoid)
+  lon: Int32
+  // XML field: type="int32_t" name="alt" units="mm"
+  /// Altitude (MSL). Positive for up. Note that virtually all GPS modules provide the MSL altitude in addition to the WGS84 altitude.
+  alt: Int32Millimeters
+  // XML field: type="uint16_t" name="eph" invalid="UINT16_MAX" multiplier="1E-2"
+  /// GPS HDOP horizontal dilution of position (unitless * 100). If unknown, set to: UINT16_MAX
+  eph: Uint16
+  // XML field: type="uint16_t" name="epv" invalid="UINT16_MAX" multiplier="1E-2"
+  /// GPS VDOP vertical dilution of position (unitless * 100). If unknown, set to: UINT16_MAX
+  epv: Uint16
+  // XML field: type="uint16_t" name="vel" units="cm/s" invalid="UINT16_MAX"
+  /// GPS ground speed. If unknown, set to: UINT16_MAX
+  vel: Uint16CentimetersPerSecond
+  // XML field: type="uint16_t" name="cog" units="cdeg" invalid="UINT16_MAX"
+  /// Course over ground (NOT heading, but direction of movement) in degrees * 100, 0.0..359.99 degrees. If unknown, set to: UINT16_MAX
+  cog: Uint16
+  // XML field: type="uint8_t" name="satellites_visible" invalid="UINT8_MAX"
+  /// Number of satellites visible. If unknown, set to UINT8_MAX
+  satellitesVisible: Uint8
+  // XML <extensions/>
+  // XML field: type="int32_t" name="alt_ellipsoid" units="mm"
+  /// Altitude (above WGS84, EGM96 ellipsoid). Positive for up.
+  altEllipsoid: Int32Millimeters
+  // XML field: type="uint32_t" name="h_acc" units="mm"
+  /// Position uncertainty.
+  hAcc: Uint32Millimeters
+  // XML field: type="uint32_t" name="v_acc" units="mm"
+  /// Altitude uncertainty.
+  vAcc: Uint32Millimeters
+  // XML field: type="uint32_t" name="vel_acc" units="mm/s"
+  /// Speed uncertainty.
+  velAcc: Uint32MillimetersPerSecond
+  // XML field: type="uint32_t" name="hdg_acc" units="degE5"
+  /// Heading / track uncertainty
+  hdgAcc: Uint32
+  // XML field: type="uint16_t" name="yaw" units="cdeg" invalid="0"
+  /// Yaw in earth frame from north. Use 0 if this GPS does not provide yaw. Use UINT16_MAX if this GPS is configured to provide yaw and is currently unable to provide it. Use 36000 for north.
+  yaw: Uint16
+}
+
+// XML message: id="30" name="ATTITUDE"
+/// The attitude in the aeronautical frame (right-handed, Z-down, Y-right, X-front, ZYX, intrinsic).
+struct Attitude {
+  // XML field: type="uint32_t" name="time_boot_ms" units="ms"
+  /// Timestamp (time since system boot).
+  timeBootMs: Uint32Milliseconds
+  // XML field: type="float" name="roll" units="rad"
+  /// Roll angle (-pi..+pi)
+  roll: Float32
+  // XML field: type="float" name="pitch" units="rad"
+  /// Pitch angle (-pi..+pi)
+  pitch: Float32
+  // XML field: type="float" name="yaw" units="rad"
+  /// Yaw angle (-pi..+pi)
+  yaw: Float32
+  // XML field: type="float" name="rollspeed" units="rad/s"
+  /// Roll angular speed
+  rollspeed: Float32
+  // XML field: type="float" name="pitchspeed" units="rad/s"
+  /// Pitch angular speed
+  pitchspeed: Float32
+  // XML field: type="float" name="yawspeed" units="rad/s"
+  /// Yaw angular speed
+  yawspeed: Float32
+}
+
+// XML message: id="32" name="LOCAL_POSITION_NED"
+/// The filtered local position (e.g. fused computer vision and accelerometers). Coordinate frame is right-handed, Z-axis down (aeronautical frame, NED / north-east-down convention)
+struct LocalPositionNed {
+  // XML field: type="uint32_t" name="time_boot_ms" units="ms"
+  /// Timestamp (time since system boot).
+  timeBootMs: Uint32Milliseconds
+  // XML field: type="float" name="x" units="m"
+  /// X Position
+  x: Float32Meters
+  // XML field: type="float" name="y" units="m"
+  /// Y Position
+  y: Float32Meters
+  // XML field: type="float" name="z" units="m"
+  /// Z Position
+  z: Float32Meters
+  // XML field: type="float" name="vx" units="m/s"
+  /// X Speed
+  vx: Float32MetersPerSecond
+  // XML field: type="float" name="vy" units="m/s"
+  /// Y Speed
+  vy: Float32MetersPerSecond
+  // XML field: type="float" name="vz" units="m/s"
+  /// Z Speed
+  vz: Float32MetersPerSecond
+}
+
+// XML message: id="39" name="MISSION_ITEM"
+// XML deprecated: since="2020-06" replaced_by="MISSION_ITEM_INT"
+/// Message encoding a mission item.
+///         This message is emitted to announce the presence of a mission item and to set a mission item on the system.
+///         The mission item can be either in x, y, z meters (type: LOCAL) or x:lat, y:lon, z:altitude. Local frame is Z-down, right handed (NED), global frame is Z-up, right handed (ENU). NaN may be used to indicate an optional/default value (e.g. to use the system's current latitude or yaw rather than a specific value). See also https://mavlink.io/en/services/mission.html.
+/// @deprecated
+struct MissionItem {
+  // XML field: type="uint8_t" name="target_system"
+  /// System ID
+  targetSystem: Uint8
+  // XML field: type="uint8_t" name="target_component"
+  /// Component ID
+  targetComponent: Uint8
+  // XML field: type="uint16_t" name="seq"
+  /// Sequence
+  seq: Uint16
+  // XML field: type="uint8_t" name="frame" enum="MAV_FRAME"
+  /// The coordinate system of the waypoint.
+  frame: MavFrame
+  // XML field: type="uint16_t" name="command" enum="MAV_CMD"
+  /// The scheduled action for the waypoint.
+  commandValue: MavCmd
+  // XML field: type="uint8_t" name="current"
+  /// false:0, true:1
+  currentValue: Uint8
+  // XML field: type="uint8_t" name="autocontinue"
+  /// Autocontinue to next waypoint. 0: false, 1: true. Set false to pause mission after the item completes.
+  autocontinue: Uint8
+  // XML field: type="float" name="param1"
+  /// PARAM1, see MAV_CMD enum
+  param1: Float32
+  // XML field: type="float" name="param2"
+  /// PARAM2, see MAV_CMD enum
+  param2: Float32
+  // XML field: type="float" name="param3"
+  /// PARAM3, see MAV_CMD enum
+  param3: Float32
+  // XML field: type="float" name="param4"
+  /// PARAM4, see MAV_CMD enum
+  param4: Float32
+  // XML field: type="float" name="x"
+  /// PARAM5 / local: X coordinate, global: latitude
+  x: Float32
+  // XML field: type="float" name="y"
+  /// PARAM6 / local: Y coordinate, global: longitude
+  y: Float32
+  // XML field: type="float" name="z"
+  /// PARAM7 / local: Z coordinate, global: altitude (relative or absolute, depending on frame).
+  z: Float32
+  // XML <extensions/>
+  // XML field: type="uint8_t" name="mission_type" enum="MAV_MISSION_TYPE"
+  /// Mission type.
+  missionType: MavMissionType
+}
+
+// XML message: id="40" name="MISSION_REQUEST"
+// XML deprecated: since="2020-06" replaced_by="MISSION_REQUEST_INT"
+/// A system that gets this request should respond with MISSION_ITEM_INT (as though MISSION_REQUEST_INT was received).
+/// Request the information of the mission item with the sequence number seq. The response of the system to this message should be a MISSION_ITEM message. https://mavlink.io/en/services/mission.html
+/// @deprecated
+struct MissionRequest {
+  // XML field: type="uint8_t" name="target_system"
+  /// System ID
+  targetSystem: Uint8
+  // XML field: type="uint8_t" name="target_component"
+  /// Component ID
+  targetComponent: Uint8
+  // XML field: type="uint16_t" name="seq"
+  /// Sequence
+  seq: Uint16
+  // XML <extensions/>
+  // XML field: type="uint8_t" name="mission_type" enum="MAV_MISSION_TYPE"
+  /// Mission type.
+  missionType: MavMissionType
+}
+
+// XML message: id="41" name="MISSION_SET_CURRENT"
+// XML superseded: since="2022-08" replaced_by="MAV_CMD_DO_SET_MISSION_CURRENT"
+/// 
+///         Set the mission item with sequence number seq as the current item and emit MISSION_CURRENT (whether or not the mission number changed).
+///         If a mission is currently being executed, the system will continue to this new mission item on the shortest path, skipping any intermediate mission items.
+///         Note that mission jump repeat counters are not reset (see MAV_CMD_DO_JUMP param2).
+/// 
+///         This message may trigger a mission state-machine change on some systems: for example from MISSION_STATE_NOT_STARTED or MISSION_STATE_PAUSED to MISSION_STATE_ACTIVE.
+///         If the system is in mission mode, on those systems this command might therefore start, restart or resume the mission.
+///         If the system is not in mission mode this message must not trigger a switch to mission mode.
+///       
+struct MissionSetCurrent {
+  // XML field: type="uint8_t" name="target_system"
+  /// System ID
+  targetSystem: Uint8
+  // XML field: type="uint8_t" name="target_component"
+  /// Component ID
+  targetComponent: Uint8
+  // XML field: type="uint16_t" name="seq"
+  /// Sequence
+  seq: Uint16
+}
+
+// XML message: id="42" name="MISSION_CURRENT"
+/// 
+///         Message that announces the sequence number of the current target mission item (that the system will fly towards/execute when the mission is running).
+///         This message should be streamed all the time (nominally at 1Hz).
+///         This message should be emitted following a call to MAV_CMD_DO_SET_MISSION_CURRENT or MISSION_SET_CURRENT.
+///       
+struct MissionCurrent {
+  // XML field: type="uint16_t" name="seq"
+  /// Sequence
+  seq: Uint16
+  // XML <extensions/>
+  // XML field: type="uint16_t" name="total" invalid="UINT16_MAX"
+  /// Total number of mission items on vehicle (on last item, sequence == total). If the autopilot stores its home location as part of the mission this will be excluded from the total. 0: Not supported, UINT16_MAX if no mission is present on the vehicle.
+  total: Uint16
+  // XML field: type="uint8_t" name="mission_state" enum="MISSION_STATE" invalid="0"
+  /// Mission state machine state. MISSION_STATE_UNKNOWN if state reporting not supported.
+  missionState: MissionState
+  // XML field: type="uint8_t" name="mission_mode" invalid="0"
+  /// Vehicle is in a mode that can execute mission items or suspended. 0: Unknown, 1: In mission mode, 2: Suspended (not in mission mode).
+  missionMode: Uint8
+  // XML field: type="uint32_t" name="mission_id" invalid="0"
+  /// Id of current on-vehicle mission plan, or 0 if IDs are not supported or there is no mission loaded. GCS can use this to track changes to the mission plan type. The same value is returned on mission upload (in the MISSION_ACK).
+  missionId: Uint32
+  // XML field: type="uint32_t" name="fence_id" invalid="0"
+  /// Id of current on-vehicle fence plan, or 0 if IDs are not supported or there is no fence loaded. GCS can use this to track changes to the fence plan type. The same value is returned on fence upload (in the MISSION_ACK).
+  fenceId: Uint32
+  // XML field: type="uint32_t" name="rally_points_id" invalid="0"
+  /// Id of current on-vehicle rally point plan, or 0 if IDs are not supported or there are no rally points loaded. GCS can use this to track changes to the rally point plan type. The same value is returned on rally point upload (in the MISSION_ACK).
+  rallyPointsId: Uint32
+}
+
+// XML message: id="43" name="MISSION_REQUEST_LIST"
+/// Request the overall list of mission items from the system/component.
+struct MissionRequestList {
+  // XML field: type="uint8_t" name="target_system"
+  /// System ID
+  targetSystem: Uint8
+  // XML field: type="uint8_t" name="target_component"
+  /// Component ID
+  targetComponent: Uint8
+  // XML <extensions/>
+  // XML field: type="uint8_t" name="mission_type" enum="MAV_MISSION_TYPE"
+  /// Mission type.
+  missionType: MavMissionType
+}
+
+// XML message: id="44" name="MISSION_COUNT"
+/// This message is emitted as response to MISSION_REQUEST_LIST by the MAV and to initiate a write transaction. The GCS can then request the individual mission item based on the knowledge of the total number of waypoints.
+struct MissionCount {
+  // XML field: type="uint8_t" name="target_system"
+  /// System ID
+  targetSystem: Uint8
+  // XML field: type="uint8_t" name="target_component"
+  /// Component ID
+  targetComponent: Uint8
+  // XML field: type="uint16_t" name="count"
+  /// Number of mission items in the sequence
+  count: Uint16
+  // XML <extensions/>
+  // XML field: type="uint8_t" name="mission_type" enum="MAV_MISSION_TYPE"
+  /// Mission type.
+  missionType: MavMissionType
+  // XML field: type="uint32_t" name="opaque_id" invalid="0"
+  /// Id of current on-vehicle mission, fence, or rally point plan (on download from vehicle).
+  ///         This field is used when downloading a plan from a vehicle to a GCS.
+  ///         0 on upload to the vehicle from GCS.
+  ///         0 if plan ids are not supported.
+  ///         The current on-vehicle plan ids are streamed in `MISSION_CURRENT`, allowing a GCS to determine if any part of the plan has changed and needs to be re-uploaded.
+  ///         The ids are recalculated by the vehicle when any part of the on-vehicle plan changes (when a new plan is uploaded, the vehicle returns the new id to the GCS in MISSION_ACK).
+  ///       
+  opaqueId: Uint32
+}
+
+// XML message: id="45" name="MISSION_CLEAR_ALL"
+/// Delete all mission items at once.
+struct MissionClearAll {
+  // XML field: type="uint8_t" name="target_system"
+  /// System ID
+  targetSystem: Uint8
+  // XML field: type="uint8_t" name="target_component"
+  /// Component ID
+  targetComponent: Uint8
+  // XML <extensions/>
+  // XML field: type="uint8_t" name="mission_type" enum="MAV_MISSION_TYPE"
+  /// Mission type.
+  missionType: MavMissionType
+}
+
+// XML message: id="46" name="MISSION_ITEM_REACHED"
+/// A certain mission item has been reached. The system will either hold this position (or circle on the orbit) or (if the autocontinue on the WP was set) continue to the next waypoint.
+struct MissionItemReached {
+  // XML field: type="uint16_t" name="seq"
+  /// Sequence
+  seq: Uint16
+}
+
+// XML message: id="47" name="MISSION_ACK"
+/// Acknowledgment message during waypoint handling. The type field states if this message is a positive ack (type=0) or if an error happened (type=non-zero).
+struct MissionAck {
+  // XML field: type="uint8_t" name="target_system"
+  /// System ID
+  targetSystem: Uint8
+  // XML field: type="uint8_t" name="target_component"
+  /// Component ID
+  targetComponent: Uint8
+  // XML field: type="uint8_t" name="type" enum="MAV_MISSION_RESULT"
+  /// Mission result.
+  typeValue: MavMissionResult
+  // XML <extensions/>
+  // XML field: type="uint8_t" name="mission_type" enum="MAV_MISSION_TYPE"
+  /// Mission type.
+  missionType: MavMissionType
+  // XML field: type="uint32_t" name="opaque_id" invalid="0"
+  /// Id of new on-vehicle mission, fence, or rally point plan (on upload to vehicle).
+  ///         The id is calculated and returned by a vehicle when a new plan is uploaded by a GCS.
+  ///         The only requirement on the id is that it must change when there is any change to the on-vehicle plan type (there is no requirement that the id be globally unique).
+  ///         0 on download from the vehicle to the GCS (on download the ID is set in MISSION_COUNT).
+  ///         0 if plan ids are not supported.
+  ///         The current on-vehicle plan ids are streamed in `MISSION_CURRENT`, allowing a GCS to determine if any part of the plan has changed and needs to be re-uploaded.
+  ///       
+  opaqueId: Uint32
+}
+
+// XML message: id="51" name="MISSION_REQUEST_INT"
+/// Request the information of the mission item with the sequence number seq. The response of the system to this message should be a MISSION_ITEM_INT message. https://mavlink.io/en/services/mission.html
+struct MissionRequestInt {
+  // XML field: type="uint8_t" name="target_system"
+  /// System ID
+  targetSystem: Uint8
+  // XML field: type="uint8_t" name="target_component"
+  /// Component ID
+  targetComponent: Uint8
+  // XML field: type="uint16_t" name="seq"
+  /// Sequence
+  seq: Uint16
+  // XML <extensions/>
+  // XML field: type="uint8_t" name="mission_type" enum="MAV_MISSION_TYPE"
+  /// Mission type.
+  missionType: MavMissionType
+}
+
+// XML message: id="73" name="MISSION_ITEM_INT"
+/// Message encoding a mission item. This message is emitted to announce
+///                 the presence of a mission item and to set a mission item on the system. The mission item can be either in x, y, z meters (type: LOCAL) or x:lat, y:lon, z:altitude. Local frame is Z-down, right handed (NED), global frame is Z-up, right handed (ENU). NaN or INT32_MAX may be used in float/integer params (respectively) to indicate optional/default values (e.g. to use the component's current latitude, yaw rather than a specific value). See also https://mavlink.io/en/services/mission.html.
+struct MissionItemInt {
+  // XML field: type="uint8_t" name="target_system"
+  /// System ID
+  targetSystem: Uint8
+  // XML field: type="uint8_t" name="target_component"
+  /// Component ID
+  targetComponent: Uint8
+  // XML field: type="uint16_t" name="seq"
+  /// Waypoint ID (sequence number). Starts at zero. Increases monotonically for each waypoint, no gaps in the sequence (0,1,2,3,4).
+  seq: Uint16
+  // XML field: type="uint8_t" name="frame" enum="MAV_FRAME"
+  /// The coordinate system of the waypoint.
+  frame: MavFrame
+  // XML field: type="uint16_t" name="command" enum="MAV_CMD"
+  /// The scheduled action for the waypoint.
+  commandValue: MavCmd
+  // XML field: type="uint8_t" name="current"
+  /// false:0, true:1
+  currentValue: Uint8
+  // XML field: type="uint8_t" name="autocontinue"
+  /// Autocontinue to next waypoint. 0: false, 1: true. Set false to pause mission after the item completes.
+  autocontinue: Uint8
+  // XML field: type="float" name="param1"
+  /// PARAM1, see MAV_CMD enum
+  param1: Float32
+  // XML field: type="float" name="param2"
+  /// PARAM2, see MAV_CMD enum
+  param2: Float32
+  // XML field: type="float" name="param3"
+  /// PARAM3, see MAV_CMD enum
+  param3: Float32
+  // XML field: type="float" name="param4"
+  /// PARAM4, see MAV_CMD enum
+  param4: Float32
+  // XML field: type="int32_t" name="x"
+  /// PARAM5 / local: x position in meters * 1e4, global: latitude in degrees * 10^7
+  x: Int32
+  // XML field: type="int32_t" name="y"
+  /// PARAM6 / y position: local: x position in meters * 1e4, global: longitude in degrees *10^7
+  y: Int32
+  // XML field: type="float" name="z"
+  /// PARAM7 / z position: global: altitude in meters (relative or absolute, depending on frame.
+  z: Float32
+  // XML <extensions/>
+  // XML field: type="uint8_t" name="mission_type" enum="MAV_MISSION_TYPE"
+  /// Mission type.
+  missionType: MavMissionType
+}
+
+// XML message: id="74" name="VFR_HUD"
+/// Metrics typically displayed on a HUD for fixed wing aircraft.
+struct VfrHud {
+  // XML field: type="float" name="airspeed" units="m/s"
+  /// Vehicle speed in form appropriate for vehicle type. For standard aircraft this is typically calibrated airspeed (CAS) or indicated airspeed (IAS) - either of which can be used by a pilot to estimate stall speed.
+  airspeed: Float32MetersPerSecond
+  // XML field: type="float" name="groundspeed" units="m/s"
+  /// Current ground speed.
+  groundspeed: Float32MetersPerSecond
+  // XML field: type="int16_t" name="heading" units="deg"
+  /// Current heading in compass units (0-360, 0=north).
+  heading: Int16
+  // XML field: type="uint16_t" name="throttle" units="%"
+  /// Current throttle setting (0 to 100).
+  throttle: Uint16Percent
+  // XML field: type="float" name="alt" units="m"
+  /// Current altitude (MSL).
+  alt: Float32Meters
+  // XML field: type="float" name="climb" units="m/s"
+  /// Current climb rate.
+  climb: Float32MetersPerSecond
+}
+
+// XML message: id="75" name="COMMAND_INT"
+/// Send a command with up to seven parameters to the MAV, where params 5 and 6 are integers and the other values are floats. This is preferred over COMMAND_LONG as it allows the MAV_FRAME to be specified for interpreting positional information, such as altitude. COMMAND_INT is also preferred when sending latitude and longitude data in params 5 and 6, as it allows for greater precision. Param 5 and 6 encode positional data as scaled integers, where the scaling depends on the actual command value. NaN or INT32_MAX may be used in float/integer params (respectively) to indicate optional/default values (e.g. to use the component's current latitude, yaw rather than a specific value). The command microservice is documented at https://mavlink.io/en/services/command.html
+struct CommandInt {
+  // XML field: type="uint8_t" name="target_system"
+  /// System ID
+  targetSystem: Uint8
+  // XML field: type="uint8_t" name="target_component"
+  /// Component ID
+  targetComponent: Uint8
+  // XML field: type="uint8_t" name="frame" enum="MAV_FRAME"
+  /// The coordinate system of the COMMAND.
+  frame: MavFrame
+  // XML field: type="uint16_t" name="command" enum="MAV_CMD"
+  /// The scheduled action for the mission item.
+  commandValue: MavCmd
+  // XML field: type="uint8_t" name="current"
+  /// Not used.
+  currentValue: Uint8
+  // XML field: type="uint8_t" name="autocontinue"
+  /// Not used (set 0).
+  autocontinue: Uint8
+  // XML field: type="float" name="param1" invalid="NaN"
+  /// PARAM1, see MAV_CMD enum
+  param1: Float32
+  // XML field: type="float" name="param2" invalid="NaN"
+  /// PARAM2, see MAV_CMD enum
+  param2: Float32
+  // XML field: type="float" name="param3" invalid="NaN"
+  /// PARAM3, see MAV_CMD enum
+  param3: Float32
+  // XML field: type="float" name="param4" invalid="NaN"
+  /// PARAM4, see MAV_CMD enum
+  param4: Float32
+  // XML field: type="int32_t" name="x" invalid="INT32_MAX"
+  /// PARAM5 / local: x position in meters * 1e4, global: latitude in degrees * 10^7
+  x: Int32
+  // XML field: type="int32_t" name="y" invalid="INT32_MAX"
+  /// PARAM6 / local: y position in meters * 1e4, global: longitude in degrees * 10^7
+  y: Int32
+  // XML field: type="float" name="z" invalid="NaN"
+  /// PARAM7 / z position: global: altitude in meters (relative or absolute, depending on frame).
+  z: Float32
+}
+
+// XML message: id="76" name="COMMAND_LONG"
+/// Send a command with up to seven parameters to the MAV. COMMAND_INT is generally preferred when sending MAV_CMD commands that include positional information; it offers higher precision and allows the MAV_FRAME to be specified (which may otherwise be ambiguous, particularly for altitude). The command microservice is documented at https://mavlink.io/en/services/command.html
+struct CommandLong {
+  // XML field: type="uint8_t" name="target_system"
+  /// System which should execute the command
+  targetSystem: Uint8
+  // XML field: type="uint8_t" name="target_component"
+  /// Component which should execute the command, 0 for all components
+  targetComponent: Uint8
+  // XML field: type="uint16_t" name="command" enum="MAV_CMD"
+  /// Command ID (of command to send).
+  commandValue: MavCmd
+  // XML field: type="uint8_t" name="confirmation"
+  /// 0: First transmission of this command. 1-255: Confirmation transmissions (e.g. for kill command)
+  confirmation: Uint8
+  // XML field: type="float" name="param1" invalid="NaN"
+  /// Parameter 1 (for the specific command).
+  param1: Float32
+  // XML field: type="float" name="param2" invalid="NaN"
+  /// Parameter 2 (for the specific command).
+  param2: Float32
+  // XML field: type="float" name="param3" invalid="NaN"
+  /// Parameter 3 (for the specific command).
+  param3: Float32
+  // XML field: type="float" name="param4" invalid="NaN"
+  /// Parameter 4 (for the specific command).
+  param4: Float32
+  // XML field: type="float" name="param5" invalid="NaN"
+  /// Parameter 5 (for the specific command).
+  param5: Float32
+  // XML field: type="float" name="param6" invalid="NaN"
+  /// Parameter 6 (for the specific command).
+  param6: Float32
+  // XML field: type="float" name="param7" invalid="NaN"
+  /// Parameter 7 (for the specific command).
+  param7: Float32
+}
+
+// XML message: id="77" name="COMMAND_ACK"
+/// Report status of a command. Includes feedback whether the command was executed. The command microservice is documented at https://mavlink.io/en/services/command.html
+struct CommandAck {
+  // XML field: type="uint16_t" name="command" enum="MAV_CMD"
+  /// Command ID (of acknowledged command).
+  commandValue: MavCmd
+  // XML field: type="uint8_t" name="result" enum="MAV_RESULT"
+  /// Result of command.
+  result: MavResult
+  // XML <extensions/>
+  // XML field: type="uint8_t" name="progress" invalid="UINT8_MAX" units="%"
+  /// The progress percentage when result is MAV_RESULT_IN_PROGRESS. Values: [0-100], or UINT8_MAX if the progress is unknown.
+  progress: Uint8Percent
+  // XML field: type="int32_t" name="result_param2"
+  /// Additional result information. Can be set with a command-specific enum containing command-specific error reasons for why the command might be denied. If used, the associated enum must be documented in the corresponding MAV_CMD (this enum should have a 0 value to indicate "unused" or "unknown").
+  resultParam2: Int32
+  // XML field: type="uint8_t" name="target_system"
+  /// System ID of the target recipient. This is the ID of the system that sent the command for which this COMMAND_ACK is an acknowledgement.
+  targetSystem: Uint8
+  // XML field: type="uint8_t" name="target_component"
+  /// Component ID of the target recipient. This is the ID of the system that sent the command for which this COMMAND_ACK is an acknowledgement.
+  targetComponent: Uint8
+}
+
+// XML message: id="80" name="COMMAND_CANCEL"
+// XML wip
+//  This message is work-in-progress and it can therefore change. It should NOT be used in stable production environments. 
+/// Cancel a long running command. The target system should respond with a COMMAND_ACK to the original command with result=MAV_RESULT_CANCELLED if the long running process was cancelled. If it has already completed, the cancel action can be ignored. The cancel action can be retried until some sort of acknowledgement to the original command has been received. The command microservice is documented at https://mavlink.io/en/services/command.html
+struct CommandCancel {
+  // XML field: type="uint8_t" name="target_system"
+  /// System executing long running command. Should not be broadcast (0).
+  targetSystem: Uint8
+  // XML field: type="uint8_t" name="target_component"
+  /// Component executing long running command.
+  targetComponent: Uint8
+  // XML field: type="uint16_t" name="command" enum="MAV_CMD"
+  /// Command ID (of command to cancel).
+  commandValue: MavCmd
+}
+
+// XML message: id="345" name="PARAM_ERROR"
+/// Parameter set/get error. Returned from a MAVLink node in response to an error in the parameter protocol, for example failing to set a parameter because it does not exist.
+///       
+struct ParamError {
+  // XML field: type="uint8_t" name="target_system"
+  /// System ID
+  targetSystem: Uint8
+  // XML field: type="uint8_t" name="target_component"
+  /// Component ID
+  targetComponent: Uint8
+  // XML field: type="char[16]" name="param_id"
+  /// Parameter id. Terminated by NULL if the length is less than 16 human-readable chars and WITHOUT null termination (NULL) byte if the length is exactly 16 chars - applications have to provide 16+1 bytes storage if the ID is stored as string. Encoded as 7-bit ASCII.
+  paramId: Char16
+  // XML field: type="int16_t" name="param_index"
+  /// Parameter index. Will be -1 if the param ID field should be used as an identifier (else the param id will be ignored)
+  paramIndex: Int16
+  // XML field: type="uint8_t" name="error" enum="MAV_PARAM_ERROR"
+  /// Error being returned to client.
+  errorValue: MavParamError
+}

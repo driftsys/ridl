@@ -1,0 +1,565 @@
+package common
+
+import standard.MavBool
+
+// XML enum: name="MAV_SYS_STATUS_SENSOR" bitmask="true"
+/// These encode the sensors whose status is sent as part of the SYS_STATUS message.
+enumset MavSysStatusSensor {
+  // XML entry: value="1" name="MAV_SYS_STATUS_SENSOR_3D_GYRO"
+  /// 0x01 3D gyro
+  MAV_SYS_STATUS_SENSOR_3D_GYRO = 0
+  // XML entry: value="2" name="MAV_SYS_STATUS_SENSOR_3D_ACCEL"
+  /// 0x02 3D accelerometer
+  MAV_SYS_STATUS_SENSOR_3D_ACCEL = 1
+  // XML entry: value="4" name="MAV_SYS_STATUS_SENSOR_3D_MAG"
+  /// 0x04 3D magnetometer
+  MAV_SYS_STATUS_SENSOR_3D_MAG = 2
+  // XML entry: value="8" name="MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE"
+  /// 0x08 absolute pressure
+  MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE = 3
+  // XML entry: value="16" name="MAV_SYS_STATUS_SENSOR_DIFFERENTIAL_PRESSURE"
+  /// 0x10 differential pressure
+  MAV_SYS_STATUS_SENSOR_DIFFERENTIAL_PRESSURE = 4
+  // XML entry: value="32" name="MAV_SYS_STATUS_SENSOR_GPS"
+  /// 0x20 GPS
+  MAV_SYS_STATUS_SENSOR_GPS = 5
+  // XML entry: value="64" name="MAV_SYS_STATUS_SENSOR_OPTICAL_FLOW"
+  /// 0x40 optical flow
+  MAV_SYS_STATUS_SENSOR_OPTICAL_FLOW = 6
+  // XML entry: value="128" name="MAV_SYS_STATUS_SENSOR_VISION_POSITION"
+  /// 0x80 computer vision position
+  MAV_SYS_STATUS_SENSOR_VISION_POSITION = 7
+  // XML entry: value="256" name="MAV_SYS_STATUS_SENSOR_LASER_POSITION"
+  /// 0x100 laser based position
+  MAV_SYS_STATUS_SENSOR_LASER_POSITION = 8
+  // XML entry: value="512" name="MAV_SYS_STATUS_SENSOR_EXTERNAL_GROUND_TRUTH"
+  /// 0x200 external ground truth (Vicon or Leica)
+  MAV_SYS_STATUS_SENSOR_EXTERNAL_GROUND_TRUTH = 9
+  // XML entry: value="1024" name="MAV_SYS_STATUS_SENSOR_ANGULAR_RATE_CONTROL"
+  /// 0x400 3D angular rate control
+  MAV_SYS_STATUS_SENSOR_ANGULAR_RATE_CONTROL = 10
+  // XML entry: value="2048" name="MAV_SYS_STATUS_SENSOR_ATTITUDE_STABILIZATION"
+  /// 0x800 attitude stabilization
+  MAV_SYS_STATUS_SENSOR_ATTITUDE_STABILIZATION = 11
+  // XML entry: value="4096" name="MAV_SYS_STATUS_SENSOR_YAW_POSITION"
+  /// 0x1000 yaw position
+  MAV_SYS_STATUS_SENSOR_YAW_POSITION = 12
+  // XML entry: value="8192" name="MAV_SYS_STATUS_SENSOR_Z_ALTITUDE_CONTROL"
+  /// 0x2000 z/altitude control
+  MAV_SYS_STATUS_SENSOR_Z_ALTITUDE_CONTROL = 13
+  // XML entry: value="16384" name="MAV_SYS_STATUS_SENSOR_XY_POSITION_CONTROL"
+  /// 0x4000 x/y position control
+  MAV_SYS_STATUS_SENSOR_XY_POSITION_CONTROL = 14
+  // XML entry: value="32768" name="MAV_SYS_STATUS_SENSOR_MOTOR_OUTPUTS"
+  /// 0x8000 motor outputs / control
+  MAV_SYS_STATUS_SENSOR_MOTOR_OUTPUTS = 15
+  // XML entry: value="65536" name="MAV_SYS_STATUS_SENSOR_RC_RECEIVER"
+  /// 0x10000 RC receiver
+  MAV_SYS_STATUS_SENSOR_RC_RECEIVER = 16
+  // XML entry: value="131072" name="MAV_SYS_STATUS_SENSOR_3D_GYRO2"
+  /// 0x20000 2nd 3D gyro
+  MAV_SYS_STATUS_SENSOR_3D_GYRO2 = 17
+  // XML entry: value="262144" name="MAV_SYS_STATUS_SENSOR_3D_ACCEL2"
+  /// 0x40000 2nd 3D accelerometer
+  MAV_SYS_STATUS_SENSOR_3D_ACCEL2 = 18
+  // XML entry: value="524288" name="MAV_SYS_STATUS_SENSOR_3D_MAG2"
+  /// 0x80000 2nd 3D magnetometer
+  MAV_SYS_STATUS_SENSOR_3D_MAG2 = 19
+  // XML entry: value="1048576" name="MAV_SYS_STATUS_GEOFENCE"
+  /// 0x100000 geofence
+  MAV_SYS_STATUS_GEOFENCE = 20
+  // XML entry: value="2097152" name="MAV_SYS_STATUS_AHRS"
+  /// 0x200000 AHRS subsystem health
+  MAV_SYS_STATUS_AHRS = 21
+  // XML entry: value="4194304" name="MAV_SYS_STATUS_TERRAIN"
+  /// 0x400000 Terrain subsystem health
+  MAV_SYS_STATUS_TERRAIN = 22
+  // XML entry: value="8388608" name="MAV_SYS_STATUS_REVERSE_MOTOR"
+  /// 0x800000 Motors are reversed
+  MAV_SYS_STATUS_REVERSE_MOTOR = 23
+  // XML entry: value="16777216" name="MAV_SYS_STATUS_LOGGING"
+  /// 0x1000000 Logging
+  MAV_SYS_STATUS_LOGGING = 24
+  // XML entry: value="33554432" name="MAV_SYS_STATUS_SENSOR_BATTERY"
+  /// 0x2000000 Battery
+  MAV_SYS_STATUS_SENSOR_BATTERY = 25
+  // XML entry: value="67108864" name="MAV_SYS_STATUS_SENSOR_PROXIMITY"
+  /// 0x4000000 Proximity
+  MAV_SYS_STATUS_SENSOR_PROXIMITY = 26
+  // XML entry: value="134217728" name="MAV_SYS_STATUS_SENSOR_SATCOM"
+  /// 0x8000000 Satellite Communication 
+  MAV_SYS_STATUS_SENSOR_SATCOM = 27
+  // XML entry: value="268435456" name="MAV_SYS_STATUS_PREARM_CHECK"
+  /// 0x10000000 pre-arm check status. Always healthy when armed
+  MAV_SYS_STATUS_PREARM_CHECK = 28
+  // XML entry: value="536870912" name="MAV_SYS_STATUS_OBSTACLE_AVOIDANCE"
+  /// 0x20000000 Avoidance/collision prevention
+  MAV_SYS_STATUS_OBSTACLE_AVOIDANCE = 29
+  // XML entry: value="1073741824" name="MAV_SYS_STATUS_SENSOR_PROPULSION"
+  /// 0x40000000 propulsion (actuator, esc, motor or propellor)
+  MAV_SYS_STATUS_SENSOR_PROPULSION = 30
+  // XML entry: value="2147483648" name="MAV_SYS_STATUS_EXTENSION_USED"
+  /// 0x80000000 Extended bit-field are used for further sensor status bits (needs to be set in onboard_control_sensors_present only)
+  MAV_SYS_STATUS_EXTENSION_USED = 31
+}
+
+// XML enum: name="MAV_SYS_STATUS_SENSOR_EXTENDED" bitmask="true"
+/// These encode the sensors whose status is sent as part of the SYS_STATUS message in the extended fields.
+enumset MavSysStatusSensorExtended {
+  // XML entry: value="1" name="MAV_SYS_STATUS_RECOVERY_SYSTEM"
+  /// 0x01 Recovery system (parachute, balloon, retracts etc)
+  MAV_SYS_STATUS_RECOVERY_SYSTEM = 0
+  // XML entry: value="2" name="MAV_SYS_STATUS_SENSOR_LEAK"
+  /// 0x02 Leak detection
+  MAV_SYS_STATUS_SENSOR_LEAK = 1
+  // XML entry: value="4" name="MAV_SYS_STATUS_SENSOR_3D_GYRO3"
+  /// 0x04 3rd 3D gyro
+  MAV_SYS_STATUS_SENSOR_3D_GYRO3 = 2
+  // XML entry: value="8" name="MAV_SYS_STATUS_SENSOR_3D_ACCEL3"
+  /// 0x08 3rd 3D accelerometer
+  MAV_SYS_STATUS_SENSOR_3D_ACCEL3 = 3
+  // XML entry: value="16" name="MAV_SYS_STATUS_SENSOR_3D_GYRO4"
+  /// 0x10 4th 3D gyro
+  MAV_SYS_STATUS_SENSOR_3D_GYRO4 = 4
+  // XML entry: value="32" name="MAV_SYS_STATUS_SENSOR_3D_ACCEL4"
+  /// 0x20 4th 3D accelerometer
+  MAV_SYS_STATUS_SENSOR_3D_ACCEL4 = 5
+  // XML entry: value="64" name="MAV_SYS_STATUS_SENSOR_3D_MAG3"
+  /// 0x40 3rd 3D magnetometer
+  MAV_SYS_STATUS_SENSOR_3D_MAG3 = 6
+  // XML entry: value="128" name="MAV_SYS_STATUS_SENSOR_3D_MAG4"
+  /// 0x80 4th 3D magnetometer
+  MAV_SYS_STATUS_SENSOR_3D_MAG4 = 7
+}
+
+// XML enum: name="MAV_FRAME"
+/// Coordinate frames used by MAVLink. Not all frames are supported by all commands, messages, or vehicles.
+/// 
+///       Global frames use the following naming conventions:
+///       - "GLOBAL": Global coordinate frame with WGS84 latitude/longitude and altitude positive over mean sea level (MSL) by default.
+///         The following modifiers may be used with "GLOBAL":
+///         - "RELATIVE_ALT": Altitude is relative to the vehicle home position rather than MSL.
+///         - "TERRAIN_ALT": Altitude is relative to ground level rather than MSL.
+///         - "INT": Latitude/longitude (in degrees) are scaled by multiplying by 1E7.
+/// 
+///       Local frames use the following naming conventions:
+///       - "LOCAL": Origin of local frame is fixed relative to earth. Unless otherwise specified this origin is the origin of the vehicle position-estimator ("EKF").
+///       - "BODY": Origin of local frame travels with the vehicle. NOTE, "BODY" does NOT indicate alignment of frame axis with vehicle attitude.
+///       - "OFFSET": Deprecated synonym for "BODY" (origin travels with the vehicle). Not to be used for new frames.
+/// 
+///       Some deprecated frames do not follow these conventions (e.g. MAV_FRAME_BODY_NED and MAV_FRAME_BODY_OFFSET_NED).
+///  
+enum MavFrame {
+  // XML entry: value="0" name="MAV_FRAME_GLOBAL"
+  /// Global (WGS84) coordinate frame + altitude relative to mean sea level (MSL).
+  MAV_FRAME_GLOBAL = 0
+  // XML entry: value="1" name="MAV_FRAME_LOCAL_NED"
+  /// NED local tangent frame (x: North, y: East, z: Down) with origin fixed relative to earth.
+  MAV_FRAME_LOCAL_NED = 1
+  // XML entry: value="2" name="MAV_FRAME_MISSION"
+  /// NOT a coordinate frame, indicates a mission command.
+  MAV_FRAME_MISSION = 2
+  // XML entry: value="3" name="MAV_FRAME_GLOBAL_RELATIVE_ALT"
+  /// 
+  ///           Global (WGS84) coordinate frame + altitude relative to the home position.
+  ///         
+  MAV_FRAME_GLOBAL_RELATIVE_ALT = 3
+  // XML entry: value="4" name="MAV_FRAME_LOCAL_ENU"
+  /// ENU local tangent frame (x: East, y: North, z: Up) with origin fixed relative to earth.
+  MAV_FRAME_LOCAL_ENU = 4
+  // XML entry: value="5" name="MAV_FRAME_GLOBAL_INT"
+  // XML superseded: since="2024-03" replaced_by="MAV_FRAME_GLOBAL"
+  /// Use MAV_FRAME_GLOBAL in COMMAND_INT (and elsewhere) as a synonymous replacement.
+  /// Global (WGS84) coordinate frame (scaled) + altitude relative to mean sea level (MSL).
+  MAV_FRAME_GLOBAL_INT = 5
+  // XML entry: value="6" name="MAV_FRAME_GLOBAL_RELATIVE_ALT_INT"
+  // XML superseded: since="2024-03" replaced_by="MAV_FRAME_GLOBAL_RELATIVE_ALT"
+  /// Use MAV_FRAME_GLOBAL_RELATIVE_ALT in COMMAND_INT (and elsewhere) as a synonymous replacement.
+  /// Global (WGS84) coordinate frame (scaled) + altitude relative to the home position. 
+  MAV_FRAME_GLOBAL_RELATIVE_ALT_INT = 6
+  // XML entry: value="7" name="MAV_FRAME_LOCAL_OFFSET_NED"
+  /// NED local tangent frame (x: North, y: East, z: Down) with origin that travels with the vehicle.
+  MAV_FRAME_LOCAL_OFFSET_NED = 7
+  // XML entry: value="8" name="MAV_FRAME_BODY_NED"
+  // XML superseded: since="2019-08" replaced_by="MAV_FRAME_BODY_FRD"
+  /// Same as MAV_FRAME_LOCAL_NED when used to represent position values. Same as MAV_FRAME_BODY_FRD when used with velocity/acceleration values.
+  MAV_FRAME_BODY_NED = 8
+  // XML entry: value="9" name="MAV_FRAME_BODY_OFFSET_NED"
+  // XML superseded: since="2019-08" replaced_by="MAV_FRAME_BODY_FRD"
+  /// This is the same as MAV_FRAME_BODY_FRD.
+  MAV_FRAME_BODY_OFFSET_NED = 9
+  // XML entry: value="10" name="MAV_FRAME_GLOBAL_TERRAIN_ALT"
+  /// Global (WGS84) coordinate frame with AGL altitude (altitude at ground level).
+  MAV_FRAME_GLOBAL_TERRAIN_ALT = 10
+  // XML entry: value="11" name="MAV_FRAME_GLOBAL_TERRAIN_ALT_INT"
+  // XML superseded: since="2024-03" replaced_by="MAV_FRAME_GLOBAL_TERRAIN_ALT"
+  /// Use MAV_FRAME_GLOBAL_TERRAIN_ALT in COMMAND_INT (and elsewhere) as a synonymous replacement.
+  /// Global (WGS84) coordinate frame (scaled) with AGL altitude (altitude at ground level).
+  MAV_FRAME_GLOBAL_TERRAIN_ALT_INT = 11
+  // XML entry: value="12" name="MAV_FRAME_BODY_FRD"
+  /// FRD local frame aligned to the vehicle's attitude (x: Forward, y: Right, z: Down) with an origin that travels with vehicle.
+  MAV_FRAME_BODY_FRD = 12
+  // XML entry: value="13" name="MAV_FRAME_RESERVED_13"
+  // XML deprecated: since="2019-04" replaced_by=""
+  /// MAV_FRAME_BODY_FLU - Body fixed frame of reference, Z-up (x: Forward, y: Left, z: Up).
+  MAV_FRAME_RESERVED_13 = 13
+  // XML entry: value="14" name="MAV_FRAME_RESERVED_14"
+  // XML deprecated: since="2019-04" replaced_by="MAV_FRAME_LOCAL_FRD"
+  /// MAV_FRAME_MOCAP_NED - Odometry local coordinate frame of data given by a motion capture system, Z-down (x: North, y: East, z: Down).
+  MAV_FRAME_RESERVED_14 = 14
+  // XML entry: value="15" name="MAV_FRAME_RESERVED_15"
+  // XML deprecated: since="2019-04" replaced_by="MAV_FRAME_LOCAL_FLU"
+  /// MAV_FRAME_MOCAP_ENU - Odometry local coordinate frame of data given by a motion capture system, Z-up (x: East, y: North, z: Up).
+  MAV_FRAME_RESERVED_15 = 15
+  // XML entry: value="16" name="MAV_FRAME_RESERVED_16"
+  // XML deprecated: since="2019-04" replaced_by="MAV_FRAME_LOCAL_FRD"
+  /// MAV_FRAME_VISION_NED - Odometry local coordinate frame of data given by a vision estimation system, Z-down (x: North, y: East, z: Down).
+  MAV_FRAME_RESERVED_16 = 16
+  // XML entry: value="17" name="MAV_FRAME_RESERVED_17"
+  // XML deprecated: since="2019-04" replaced_by="MAV_FRAME_LOCAL_FLU"
+  /// MAV_FRAME_VISION_ENU - Odometry local coordinate frame of data given by a vision estimation system, Z-up (x: East, y: North, z: Up).
+  MAV_FRAME_RESERVED_17 = 17
+  // XML entry: value="18" name="MAV_FRAME_RESERVED_18"
+  // XML deprecated: since="2019-04" replaced_by="MAV_FRAME_LOCAL_FRD"
+  /// MAV_FRAME_ESTIM_NED - Odometry local coordinate frame of data given by an estimator running onboard the vehicle, Z-down (x: North, y: East, z: Down).
+  MAV_FRAME_RESERVED_18 = 18
+  // XML entry: value="19" name="MAV_FRAME_RESERVED_19"
+  // XML deprecated: since="2019-04" replaced_by="MAV_FRAME_LOCAL_FLU"
+  /// MAV_FRAME_ESTIM_ENU - Odometry local coordinate frame of data given by an estimator running onboard the vehicle, Z-up (x: East, y: North, z: Up).
+  MAV_FRAME_RESERVED_19 = 19
+  // XML entry: value="20" name="MAV_FRAME_LOCAL_FRD"
+  /// FRD local tangent frame (x: Forward, y: Right, z: Down) with origin fixed relative to earth. The forward axis is aligned to the front of the vehicle in the horizontal plane.
+  MAV_FRAME_LOCAL_FRD = 20
+  // XML entry: value="21" name="MAV_FRAME_LOCAL_FLU"
+  /// FLU local tangent frame (x: Forward, y: Left, z: Up) with origin fixed relative to earth. The forward axis is aligned to the front of the vehicle in the horizontal plane.
+  MAV_FRAME_LOCAL_FLU = 21
+}
+
+// XML enum: name="MAV_CMD"
+/// Commands to be executed by the MAV. They can be executed on user request, or as part of a mission script. If the action is used in a mission, the parameter mapping to the waypoint/mission message is as follows: Param 1, Param 2, Param 3, Param 4, X: Param 5, Y:Param 6, Z:Param 7. This command list is similar what ARINC 424 is for commercial aircraft: A data format how to interpret waypoint/mission data. NaN and INT32_MAX may be used in float/integer params (respectively) to indicate optional/default values (e.g. to use the component's current yaw or latitude rather than a specific value). See https://mavlink.io/en/guide/xml_schema.html#MAV_CMD for information about the structure of the MAV_CMD entries
+enum MavCmd {
+  // XML entry: value="16" name="MAV_CMD_NAV_WAYPOINT" hasLocation="true" isDestination="true" mission="true"
+  /// Navigate to waypoint. This is intended for use in missions (for guided commands outside of missions use MAV_CMD_DO_REPOSITION).
+  // XML param: index="1" label="Hold" units="s" minValue="0"
+  /// Hold time. (ignored by fixed wing, time to stay at waypoint for rotary wing)
+  // XML param: index="2" label="Accept Radius" units="m" minValue="0"
+  /// Acceptance radius (if the sphere with this radius is hit, the waypoint counts as reached)
+  // XML param: index="3" label="Pass Radius" units="m"
+  /// 0 to pass through the WP, if > 0 radius to pass by WP. Positive value for clockwise orbit, negative value for counter-clockwise orbit. Allows trajectory control.
+  // XML param: index="4" label="Yaw" units="deg"
+  /// Desired yaw angle at waypoint (rotary wing). NaN to use the current system yaw heading mode (e.g. yaw towards next waypoint, yaw to home, etc.).
+  // XML param: index="5" label="Latitude"
+  /// Latitude
+  // XML param: index="6" label="Longitude"
+  /// Longitude
+  // XML param: index="7" label="Altitude" units="m"
+  /// Altitude
+  MAV_CMD_NAV_WAYPOINT = 16
+  // XML entry: value="224" name="MAV_CMD_DO_SET_MISSION_CURRENT" command="true"
+  /// 
+  ///           Set the mission item with sequence number seq as the current item and emit MISSION_CURRENT (whether or not the mission number changed).
+  ///           If a mission is currently being executed, the system will continue to this new mission item on the shortest path, skipping any intermediate mission items.
+  /// 	  Note that mission jump repeat counters are not reset unless param2 is set (see MAV_CMD_DO_JUMP param2).
+  /// 
+  ///           This command may trigger a mission state-machine change on some systems: for example from MISSION_STATE_NOT_STARTED or MISSION_STATE_PAUSED to MISSION_STATE_ACTIVE.
+  ///           If the system is in mission mode, on those systems this command might therefore start, restart or resume the mission.
+  ///           If the system is not in mission mode this command must not trigger a switch to mission mode.
+  /// 
+  ///           The mission may be "reset" using param2.
+  ///           Resetting sets jump counters to initial values (to reset counters without changing the current mission item set the param1 to `-1`).
+  ///           Resetting also explicitly changes a mission state of MISSION_STATE_COMPLETE to MISSION_STATE_PAUSED or MISSION_STATE_ACTIVE, potentially allowing it to resume when it is (next) in a mission mode.
+  /// 
+  /// 	  The command will ACK with MAV_RESULT_FAILED if the sequence number is out of range (including if there is no mission item).
+  ///         
+  // XML param: index="1" label="Number" minValue="-1" increment="1"
+  /// Mission sequence value to set. -1 for the current mission item (use to reset mission without changing current mission item).
+  // XML param: index="2" label="Reset Mission" enum="MAV_BOOL"
+  /// Reset mission. A value of MAV_BOOL_TRUE resets jump counters to initial values and changes mission state "completed" to be "active" or "paused". Values not equal to 0 or 1 are invalid.
+  // XML param: index="3"
+  /// Empty
+  // XML param: index="4"
+  /// Empty
+  // XML param: index="5"
+  /// Empty
+  // XML param: index="6"
+  /// Empty
+  // XML param: index="7"
+  /// Empty
+  MAV_CMD_DO_SET_MISSION_CURRENT = 224
+  // XML entry: value="400" name="MAV_CMD_COMPONENT_ARM_DISARM" command="true"
+  /// Arms / Disarms a component
+  // XML param: index="1" label="Arm" enum="MAV_BOOL"
+  /// Arm (MAV_BOOL_TRUE). A value of MAV_BOOL_FALSE disarms. Values not equal to 0 or 1 are invalid.
+  // XML param: index="2" label="Force" minValue="0" maxValue="21196" increment="21196"
+  /// 0: arm-disarm unless prevented by safety checks (i.e. when landed), 21196: force arming/disarming (e.g. allow arming to override preflight checks and disarming in flight)
+  MAV_CMD_COMPONENT_ARM_DISARM = 400
+  // XML entry: value="511" name="MAV_CMD_SET_MESSAGE_INTERVAL" command="true"
+  /// Set the interval between messages for a particular MAVLink message ID. This interface replaces REQUEST_DATA_STREAM.
+  // XML param: index="1" label="Message ID" minValue="0" maxValue="16777215" increment="1"
+  /// The MAVLink message ID
+  // XML param: index="2" label="Interval" units="us" minValue="-1" increment="1"
+  /// The interval between two messages. -1: disable. 0: request default rate (which may be zero).
+  // XML param: index="3" label="Req Param 3"
+  /// Use for index ID, if required. Otherwise, the use of this parameter (if any) must be defined in the requested message. By default assumed not used (0).  When used as an index ID, 0 means "all instances", "1" means the first instance in the sequence (the emitted message will have an id of 0 if message ids are 0-indexed, or 1 if index numbers start from one).
+  // XML param: index="4" label="Req Param 4"
+  /// The use of this parameter (if any), must be defined in the requested message. By default assumed not used (0).
+  // XML param: index="5" label="Req Param 5"
+  /// The use of this parameter (if any), must be defined in the requested message. By default assumed not used (0/NaN).
+  // XML param: index="6" label="Req Param 6"
+  /// The use of this parameter (if any), must be defined in the requested message. By default assumed not used (0/NaN).
+  // XML param: index="7" label="Response Target" minValue="0" maxValue="2" increment="1"
+  /// Target address of message stream (if message has target address fields). 0: Flight-stack default (recommended), 1: address of requester, 2: broadcast.
+  MAV_CMD_SET_MESSAGE_INTERVAL = 511
+  // XML entry: value="512" name="MAV_CMD_REQUEST_MESSAGE" command="true"
+  /// Request the target system(s) emit a single instance of a specified message (i.e. a "one-shot" version of MAV_CMD_SET_MESSAGE_INTERVAL).
+  // XML param: index="1" label="Message ID" minValue="0" maxValue="16777215" increment="1"
+  /// The MAVLink message ID of the requested message.
+  // XML param: index="2" label="Req Param 1"
+  /// Use for index ID, if required. Otherwise, the use of this parameter (if any) must be defined in the requested message. By default assumed not used (0).
+  // XML param: index="3" label="Req Param 2"
+  /// The use of this parameter (if any), must be defined in the requested message. By default assumed not used (0).
+  // XML param: index="4" label="Req Param 3"
+  /// The use of this parameter (if any), must be defined in the requested message. By default assumed not used (0).
+  // XML param: index="5" label="Req Param 4"
+  /// The use of this parameter (if any), must be defined in the requested message. By default assumed not used (0).
+  // XML param: index="6" label="Req Param 5"
+  /// The use of this parameter (if any), must be defined in the requested message. By default assumed not used (0).
+  // XML param: index="7" label="Response Target" minValue="0" maxValue="2" increment="1"
+  /// Target address for requested message (if message has target address fields). 0: Flight-stack default, 1: address of requester, 2: broadcast.
+  MAV_CMD_REQUEST_MESSAGE = 512
+}
+
+// XML enum: name="MAV_PARAM_TYPE"
+/// Specifies the datatype of a MAVLink parameter.
+enum MavParamType {
+  // XML entry: value="1" name="MAV_PARAM_TYPE_UINT8"
+  /// 8-bit unsigned integer
+  MAV_PARAM_TYPE_UINT8 = 1
+  // XML entry: value="2" name="MAV_PARAM_TYPE_INT8"
+  /// 8-bit signed integer
+  MAV_PARAM_TYPE_INT8 = 2
+  // XML entry: value="3" name="MAV_PARAM_TYPE_UINT16"
+  /// 16-bit unsigned integer
+  MAV_PARAM_TYPE_UINT16 = 3
+  // XML entry: value="4" name="MAV_PARAM_TYPE_INT16"
+  /// 16-bit signed integer
+  MAV_PARAM_TYPE_INT16 = 4
+  // XML entry: value="5" name="MAV_PARAM_TYPE_UINT32"
+  /// 32-bit unsigned integer
+  MAV_PARAM_TYPE_UINT32 = 5
+  // XML entry: value="6" name="MAV_PARAM_TYPE_INT32"
+  /// 32-bit signed integer
+  MAV_PARAM_TYPE_INT32 = 6
+  // XML entry: value="7" name="MAV_PARAM_TYPE_UINT64"
+  /// 64-bit unsigned integer
+  MAV_PARAM_TYPE_UINT64 = 7
+  // XML entry: value="8" name="MAV_PARAM_TYPE_INT64"
+  /// 64-bit signed integer
+  MAV_PARAM_TYPE_INT64 = 8
+  // XML entry: value="9" name="MAV_PARAM_TYPE_REAL32"
+  /// 32-bit floating-point
+  MAV_PARAM_TYPE_REAL32 = 9
+  // XML entry: value="10" name="MAV_PARAM_TYPE_REAL64"
+  /// 64-bit floating-point
+  MAV_PARAM_TYPE_REAL64 = 10
+}
+
+// XML enum: name="MAV_PARAM_ERROR"
+/// Parameter protocol error types (see PARAM_ERROR).
+enum MavParamError {
+  // XML entry: value="0" name="MAV_PARAM_ERROR_NO_ERROR"
+  /// No error occurred (not expected in PARAM_ERROR but may be used in future implementations.
+  MAV_PARAM_ERROR_NO_ERROR = 0
+  // XML entry: value="1" name="MAV_PARAM_ERROR_DOES_NOT_EXIST"
+  /// Parameter does not exist
+  MAV_PARAM_ERROR_DOES_NOT_EXIST = 1
+  // XML entry: value="2" name="MAV_PARAM_ERROR_VALUE_OUT_OF_RANGE"
+  /// Parameter value does not fit within accepted range
+  MAV_PARAM_ERROR_VALUE_OUT_OF_RANGE = 2
+  // XML entry: value="3" name="MAV_PARAM_ERROR_PERMISSION_DENIED"
+  /// Caller is not permitted to set the value of this parameter
+  MAV_PARAM_ERROR_PERMISSION_DENIED = 3
+  // XML entry: value="4" name="MAV_PARAM_ERROR_COMPONENT_NOT_FOUND"
+  /// Unknown component specified
+  MAV_PARAM_ERROR_COMPONENT_NOT_FOUND = 4
+  // XML entry: value="5" name="MAV_PARAM_ERROR_READ_ONLY"
+  /// Parameter is read-only
+  MAV_PARAM_ERROR_READ_ONLY = 5
+  // XML entry: value="6" name="MAV_PARAM_ERROR_TYPE_UNSUPPORTED"
+  /// Parameter data type (MAV_PARAM_TYPE) is not supported by flight stack (at all)
+  MAV_PARAM_ERROR_TYPE_UNSUPPORTED = 6
+  // XML entry: value="7" name="MAV_PARAM_ERROR_TYPE_MISMATCH"
+  /// Parameter type does not match expected type
+  MAV_PARAM_ERROR_TYPE_MISMATCH = 7
+  // XML entry: value="8" name="MAV_PARAM_ERROR_READ_FAIL"
+  /// Parameter exists but reading failed
+  MAV_PARAM_ERROR_READ_FAIL = 8
+}
+
+// XML enum: name="MAV_RESULT"
+/// Result from a MAVLink command (MAV_CMD)
+enum MavResult {
+  // XML entry: value="0" name="MAV_RESULT_ACCEPTED"
+  /// Command is valid (is supported and has valid parameters), and was executed.
+  MAV_RESULT_ACCEPTED = 0
+  // XML entry: value="1" name="MAV_RESULT_TEMPORARILY_REJECTED"
+  /// Command is valid, but cannot be executed at this time. This is used to indicate a problem that should be fixed just by waiting (e.g. a state machine is busy, can't arm because have not got GPS lock, etc.). Retrying later should work.
+  MAV_RESULT_TEMPORARILY_REJECTED = 1
+  // XML entry: value="2" name="MAV_RESULT_DENIED"
+  /// Command is invalid; it is supported but one or more parameter values are invalid (i.e. parameter reserved, value allowed by spec but not supported by flight stack, and so on). Retrying the same command and parameters will not work.
+  MAV_RESULT_DENIED = 2
+  // XML entry: value="3" name="MAV_RESULT_UNSUPPORTED"
+  /// Command is not supported (unknown).
+  MAV_RESULT_UNSUPPORTED = 3
+  // XML entry: value="4" name="MAV_RESULT_FAILED"
+  /// Command is valid, but execution has failed. This is used to indicate any non-temporary or unexpected problem, i.e. any problem that must be fixed before the command can succeed/be retried. For example, attempting to write a file when out of memory, attempting to arm when sensors are not calibrated, etc.
+  MAV_RESULT_FAILED = 4
+  // XML entry: value="5" name="MAV_RESULT_IN_PROGRESS"
+  /// Command is valid and is being executed. This will be followed by further progress updates, i.e. the component may send further COMMAND_ACK messages with result MAV_RESULT_IN_PROGRESS (at a rate decided by the implementation), and must terminate by sending a COMMAND_ACK message with final result of the operation. The COMMAND_ACK.progress field can be used to indicate the progress of the operation.
+  MAV_RESULT_IN_PROGRESS = 5
+  // XML entry: value="6" name="MAV_RESULT_CANCELLED"
+  /// Command has been cancelled (as a result of receiving a COMMAND_CANCEL message).
+  MAV_RESULT_CANCELLED = 6
+  // XML entry: value="7" name="MAV_RESULT_COMMAND_LONG_ONLY"
+  /// Command is only accepted when sent as a COMMAND_LONG.
+  MAV_RESULT_COMMAND_LONG_ONLY = 7
+  // XML entry: value="8" name="MAV_RESULT_COMMAND_INT_ONLY"
+  /// Command is only accepted when sent as a COMMAND_INT.
+  MAV_RESULT_COMMAND_INT_ONLY = 8
+  // XML entry: value="9" name="MAV_RESULT_COMMAND_UNSUPPORTED_MAV_FRAME"
+  /// Command is invalid because a frame is required and the specified frame is not supported.
+  MAV_RESULT_COMMAND_UNSUPPORTED_MAV_FRAME = 9
+  // XML entry: value="10" name="MAV_RESULT_NOT_IN_CONTROL"
+  // XML wip
+  /// Command has been rejected because source system is not in control of the target system/component.
+  MAV_RESULT_NOT_IN_CONTROL = 10
+}
+
+// XML enum: name="MAV_MISSION_RESULT"
+/// Result of mission operation (in a MISSION_ACK message).
+enum MavMissionResult {
+  // XML entry: value="0" name="MAV_MISSION_ACCEPTED"
+  /// mission accepted OK
+  MAV_MISSION_ACCEPTED = 0
+  // XML entry: value="1" name="MAV_MISSION_ERROR"
+  /// Generic error / not accepting mission commands at all right now.
+  MAV_MISSION_ERROR = 1
+  // XML entry: value="2" name="MAV_MISSION_UNSUPPORTED_FRAME"
+  /// Coordinate frame is not supported.
+  MAV_MISSION_UNSUPPORTED_FRAME = 2
+  // XML entry: value="3" name="MAV_MISSION_UNSUPPORTED"
+  /// Command is not supported.
+  MAV_MISSION_UNSUPPORTED = 3
+  // XML entry: value="4" name="MAV_MISSION_NO_SPACE"
+  /// Mission items exceed storage space.
+  MAV_MISSION_NO_SPACE = 4
+  // XML entry: value="5" name="MAV_MISSION_INVALID"
+  /// One of the parameters has an invalid value.
+  MAV_MISSION_INVALID = 5
+  // XML entry: value="6" name="MAV_MISSION_INVALID_PARAM1"
+  /// param1 has an invalid value.
+  MAV_MISSION_INVALID_PARAM1 = 6
+  // XML entry: value="7" name="MAV_MISSION_INVALID_PARAM2"
+  /// param2 has an invalid value.
+  MAV_MISSION_INVALID_PARAM2 = 7
+  // XML entry: value="8" name="MAV_MISSION_INVALID_PARAM3"
+  /// param3 has an invalid value.
+  MAV_MISSION_INVALID_PARAM3 = 8
+  // XML entry: value="9" name="MAV_MISSION_INVALID_PARAM4"
+  /// param4 has an invalid value.
+  MAV_MISSION_INVALID_PARAM4 = 9
+  // XML entry: value="10" name="MAV_MISSION_INVALID_PARAM5_X"
+  /// x / param5 has an invalid value.
+  MAV_MISSION_INVALID_PARAM5_X = 10
+  // XML entry: value="11" name="MAV_MISSION_INVALID_PARAM6_Y"
+  /// y / param6 has an invalid value.
+  MAV_MISSION_INVALID_PARAM6_Y = 11
+  // XML entry: value="12" name="MAV_MISSION_INVALID_PARAM7"
+  /// z / param7 has an invalid value.
+  MAV_MISSION_INVALID_PARAM7 = 12
+  // XML entry: value="13" name="MAV_MISSION_INVALID_SEQUENCE"
+  /// Mission item received out of sequence
+  MAV_MISSION_INVALID_SEQUENCE = 13
+  // XML entry: value="14" name="MAV_MISSION_DENIED"
+  /// Not accepting any mission commands from this communication partner.
+  MAV_MISSION_DENIED = 14
+  // XML entry: value="15" name="MAV_MISSION_OPERATION_CANCELLED"
+  /// Current mission operation cancelled (e.g. mission upload, mission download).
+  MAV_MISSION_OPERATION_CANCELLED = 15
+}
+
+// XML enum: name="MAV_MISSION_TYPE"
+/// Type of mission items being requested/sent in mission protocol.
+enum MavMissionType {
+  // XML entry: value="0" name="MAV_MISSION_TYPE_MISSION"
+  /// Items are mission commands for main mission.
+  MAV_MISSION_TYPE_MISSION = 0
+  // XML entry: value="1" name="MAV_MISSION_TYPE_FENCE"
+  /// Specifies GeoFence area(s). Items are MAV_CMD_NAV_FENCE_ GeoFence items.
+  MAV_MISSION_TYPE_FENCE = 1
+  // XML entry: value="2" name="MAV_MISSION_TYPE_RALLY"
+  /// Specifies the rally points for the vehicle. Rally points are alternative RTL points. Items are MAV_CMD_NAV_RALLY_POINT rally point items.
+  MAV_MISSION_TYPE_RALLY = 2
+  // XML entry: value="255" name="MAV_MISSION_TYPE_ALL"
+  /// Only used in MISSION_CLEAR_ALL to clear all mission types.
+  MAV_MISSION_TYPE_ALL = 255
+}
+
+// XML enum: name="GPS_FIX_TYPE"
+/// Type of GPS fix
+enum GpsFixType {
+  // XML entry: value="0" name="GPS_FIX_TYPE_NO_GPS"
+  /// No GPS connected
+  GPS_FIX_TYPE_NO_GPS = 0
+  // XML entry: value="1" name="GPS_FIX_TYPE_NO_FIX"
+  /// No position information, GPS is connected
+  GPS_FIX_TYPE_NO_FIX = 1
+  // XML entry: value="2" name="GPS_FIX_TYPE_2D_FIX"
+  /// 2D position
+  GPS_FIX_TYPE_2D_FIX = 2
+  // XML entry: value="3" name="GPS_FIX_TYPE_3D_FIX"
+  /// 3D position
+  GPS_FIX_TYPE_3D_FIX = 3
+  // XML entry: value="4" name="GPS_FIX_TYPE_DGPS"
+  /// DGPS/SBAS aided 3D position
+  GPS_FIX_TYPE_DGPS = 4
+  // XML entry: value="5" name="GPS_FIX_TYPE_RTK_FLOAT"
+  /// RTK float, 3D position
+  GPS_FIX_TYPE_RTK_FLOAT = 5
+  // XML entry: value="6" name="GPS_FIX_TYPE_RTK_FIXED"
+  /// RTK Fixed, 3D position
+  GPS_FIX_TYPE_RTK_FIXED = 6
+  // XML entry: value="7" name="GPS_FIX_TYPE_STATIC"
+  /// Static fixed, typically used for base stations
+  GPS_FIX_TYPE_STATIC = 7
+  // XML entry: value="8" name="GPS_FIX_TYPE_PPP"
+  /// PPP, 3D position.
+  GPS_FIX_TYPE_PPP = 8
+}
+
+// XML enum: name="MISSION_STATE"
+/// 
+///         States of the mission state machine.
+///         Note that these states are independent of whether the mission is in a mode that can execute mission items or not (is suspended).
+///         They may not all be relevant on all vehicles.
+///       
+enum MissionState {
+  // XML entry: value="0" name="MISSION_STATE_UNKNOWN"
+  /// The mission status reporting is not supported.
+  MISSION_STATE_UNKNOWN = 0
+  // XML entry: value="1" name="MISSION_STATE_NO_MISSION"
+  /// No mission on the vehicle.
+  MISSION_STATE_NO_MISSION = 1
+  // XML entry: value="2" name="MISSION_STATE_NOT_STARTED"
+  /// Mission has not started. This is the case after a mission has uploaded but not yet started executing.
+  MISSION_STATE_NOT_STARTED = 2
+  // XML entry: value="3" name="MISSION_STATE_ACTIVE"
+  /// Mission is active, and will execute mission items when in auto mode.
+  MISSION_STATE_ACTIVE = 3
+  // XML entry: value="4" name="MISSION_STATE_PAUSED"
+  /// Mission is paused when in auto mode.
+  MISSION_STATE_PAUSED = 4
+  // XML entry: value="5" name="MISSION_STATE_COMPLETE"
+  /// Mission has executed all mission items.
+  MISSION_STATE_COMPLETE = 5
+}

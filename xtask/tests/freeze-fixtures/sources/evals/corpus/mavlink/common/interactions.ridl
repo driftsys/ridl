@@ -1,0 +1,41 @@
+package common
+
+import standard.GlobalPositionInt
+
+interface MissionProtocol {
+  command missionItem(request: MissionItem)
+  query missionRequest(request: MissionRequest): MissionItemInt
+  command missionSetCurrent(request: MissionSetCurrent)
+  signal missionCurrent: MissionCurrent
+  query missionRequestList(request: MissionRequestList): MissionCount
+  command missionCount(request: MissionCount)
+  command missionClearAll(request: MissionClearAll)
+  event missionItemReached: MissionItemReached
+  event missionAck: MissionAck
+  query missionRequestInt(request: MissionRequestInt): MissionItemInt
+  command missionItemInt(request: MissionItemInt)
+}
+
+interface CommandProtocol {
+  command commandInt(request: CommandInt)
+  command commandLong(request: CommandLong)
+  event commandAck: CommandAck
+  command commandCancel(request: CommandCancel)
+}
+
+interface ParameterProtocol {
+  query paramRequestRead(request: ParamRequestRead): ParamValue
+  query paramRequestList(request: ParamRequestList): <ParamValue>
+  event paramValue: ParamValue
+  command paramSet(request: ParamSet)
+  event paramError: ParamError
+}
+
+interface Telemetry {
+  signal sysStatus: SysStatus
+  signal gpsRawInt: GpsRawInt
+  signal attitude: Attitude
+  signal localPositionNed: LocalPositionNed
+  signal globalPositionInt: GlobalPositionInt
+  signal vfrHud: VfrHud
+}

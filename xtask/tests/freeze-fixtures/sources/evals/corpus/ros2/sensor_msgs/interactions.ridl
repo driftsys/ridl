@@ -1,0 +1,22 @@
+// Modified ROS 2-to-RIDL translation. Inputs and pinned revisions: PROVENANCE.md.
+package sensormsgs
+// Upstream: sensor_msgs/srv/SetCameraInfo.srv
+struct SetCameraInfoRequest {
+// This service requests that a camera stores the given CameraInfo as that
+// camera's calibration information.
+//
+// The width and height in the camera_info field should match what the
+// camera is currently outputting on its camera_info topic, and the camera
+// will assume that the region of the imager that is being referred to is
+// the region that the camera is currently capturing.
+
+  cameraInfo : CameraInfo // The camera_info to store
+}
+struct SetCameraInfoResponse {
+
+  success : RosBoolean // True if the call succeeded
+  statusMessage : RosString // Used to give details about success
+}
+interface SensorMsgsInteractions {
+  query setCameraInfo(cameraInfo: CameraInfo): SetCameraInfoResponse
+}

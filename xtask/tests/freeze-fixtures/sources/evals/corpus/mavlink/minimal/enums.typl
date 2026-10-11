@@ -1,0 +1,288 @@
+package minimal
+
+// XML enum: name="MAV_AUTOPILOT"
+/// Micro air vehicle / autopilot classes. This identifies the individual model.
+enum MavAutopilot {
+  // XML entry: value="0" name="MAV_AUTOPILOT_GENERIC"
+  /// Generic autopilot, full support for everything
+  MAV_AUTOPILOT_GENERIC = 0
+  // XML entry: value="1" name="MAV_AUTOPILOT_RESERVED"
+  /// Reserved for future use.
+  MAV_AUTOPILOT_RESERVED = 1
+  // XML entry: value="2" name="MAV_AUTOPILOT_SLUGS"
+  /// SLUGS autopilot, http://slugsuav.soe.ucsc.edu
+  MAV_AUTOPILOT_SLUGS = 2
+  // XML entry: value="3" name="MAV_AUTOPILOT_ARDUPILOTMEGA"
+  /// ArduPilot - Plane/Copter/Rover/Sub/Tracker, https://ardupilot.org
+  MAV_AUTOPILOT_ARDUPILOTMEGA = 3
+  // XML entry: value="4" name="MAV_AUTOPILOT_OPENPILOT"
+  /// OpenPilot, http://openpilot.org
+  MAV_AUTOPILOT_OPENPILOT = 4
+  // XML entry: value="5" name="MAV_AUTOPILOT_GENERIC_WAYPOINTS_ONLY"
+  /// Generic autopilot only supporting simple waypoints
+  MAV_AUTOPILOT_GENERIC_WAYPOINTS_ONLY = 5
+  // XML entry: value="6" name="MAV_AUTOPILOT_GENERIC_WAYPOINTS_AND_SIMPLE_NAVIGATION_ONLY"
+  /// Generic autopilot supporting waypoints and other simple navigation commands
+  MAV_AUTOPILOT_GENERIC_WAYPOINTS_AND_SIMPLE_NAVIGATION_ONLY = 6
+  // XML entry: value="7" name="MAV_AUTOPILOT_GENERIC_MISSION_FULL"
+  /// Generic autopilot supporting the full mission command set
+  MAV_AUTOPILOT_GENERIC_MISSION_FULL = 7
+  // XML entry: value="8" name="MAV_AUTOPILOT_INVALID"
+  /// No valid autopilot, e.g. a GCS or other MAVLink component
+  MAV_AUTOPILOT_INVALID = 8
+  // XML entry: value="9" name="MAV_AUTOPILOT_PPZ"
+  /// PPZ UAV - http://nongnu.org/paparazzi
+  MAV_AUTOPILOT_PPZ = 9
+  // XML entry: value="10" name="MAV_AUTOPILOT_UDB"
+  /// UAV Dev Board
+  MAV_AUTOPILOT_UDB = 10
+  // XML entry: value="11" name="MAV_AUTOPILOT_FP"
+  /// FlexiPilot
+  MAV_AUTOPILOT_FP = 11
+  // XML entry: value="12" name="MAV_AUTOPILOT_PX4"
+  /// PX4 Autopilot - http://px4.io/
+  MAV_AUTOPILOT_PX4 = 12
+  // XML entry: value="13" name="MAV_AUTOPILOT_SMACCMPILOT"
+  /// SMACCMPilot - http://smaccmpilot.org
+  MAV_AUTOPILOT_SMACCMPILOT = 13
+  // XML entry: value="14" name="MAV_AUTOPILOT_AUTOQUAD"
+  /// AutoQuad -- http://autoquad.org
+  MAV_AUTOPILOT_AUTOQUAD = 14
+  // XML entry: value="15" name="MAV_AUTOPILOT_ARMAZILA"
+  /// Armazila -- http://armazila.com
+  MAV_AUTOPILOT_ARMAZILA = 15
+  // XML entry: value="16" name="MAV_AUTOPILOT_AEROB"
+  /// Aerob -- http://aerob.ru
+  MAV_AUTOPILOT_AEROB = 16
+  // XML entry: value="17" name="MAV_AUTOPILOT_ASLUAV"
+  /// ASLUAV autopilot -- http://www.asl.ethz.ch
+  MAV_AUTOPILOT_ASLUAV = 17
+  // XML entry: value="18" name="MAV_AUTOPILOT_SMARTAP"
+  /// SmartAP Autopilot - http://sky-drones.com
+  MAV_AUTOPILOT_SMARTAP = 18
+  // XML entry: value="19" name="MAV_AUTOPILOT_AIRRAILS"
+  /// AirRails - http://uaventure.com
+  MAV_AUTOPILOT_AIRRAILS = 19
+  // XML entry: value="20" name="MAV_AUTOPILOT_REFLEX"
+  /// Fusion Reflex - https://fusion.engineering
+  MAV_AUTOPILOT_REFLEX = 20
+  // XML entry: value="21" name="MAV_AUTOPILOT_FLIX"
+  /// Flix quadcopter - https://quadcopter.dev
+  MAV_AUTOPILOT_FLIX = 21
+}
+
+// XML enum: name="MAV_TYPE"
+/// MAVLINK component type reported in HEARTBEAT message. Flight controllers must report the type of the vehicle on which they are mounted (e.g. MAV_TYPE_OCTOROTOR). All other components must report a value appropriate for their type (e.g. a camera must use MAV_TYPE_CAMERA).
+enum MavType {
+  // XML entry: value="0" name="MAV_TYPE_GENERIC"
+  /// Generic micro air vehicle
+  MAV_TYPE_GENERIC = 0
+  // XML entry: value="1" name="MAV_TYPE_FIXED_WING"
+  /// Fixed wing aircraft.
+  MAV_TYPE_FIXED_WING = 1
+  // XML entry: value="2" name="MAV_TYPE_QUADROTOR"
+  /// Quadrotor
+  MAV_TYPE_QUADROTOR = 2
+  // XML entry: value="3" name="MAV_TYPE_COAXIAL"
+  /// Coaxial helicopter
+  MAV_TYPE_COAXIAL = 3
+  // XML entry: value="4" name="MAV_TYPE_HELICOPTER"
+  /// Normal helicopter with tail rotor.
+  MAV_TYPE_HELICOPTER = 4
+  // XML entry: value="5" name="MAV_TYPE_ANTENNA_TRACKER"
+  /// Ground installation
+  MAV_TYPE_ANTENNA_TRACKER = 5
+  // XML entry: value="6" name="MAV_TYPE_GCS"
+  /// Operator control unit / ground control station
+  MAV_TYPE_GCS = 6
+  // XML entry: value="7" name="MAV_TYPE_AIRSHIP"
+  /// Airship, controlled
+  MAV_TYPE_AIRSHIP = 7
+  // XML entry: value="8" name="MAV_TYPE_FREE_BALLOON"
+  /// Free balloon, uncontrolled
+  MAV_TYPE_FREE_BALLOON = 8
+  // XML entry: value="9" name="MAV_TYPE_ROCKET"
+  /// Rocket
+  MAV_TYPE_ROCKET = 9
+  // XML entry: value="10" name="MAV_TYPE_GROUND_ROVER"
+  /// Ground rover
+  MAV_TYPE_GROUND_ROVER = 10
+  // XML entry: value="11" name="MAV_TYPE_SURFACE_BOAT"
+  /// Surface vessel, boat, ship
+  MAV_TYPE_SURFACE_BOAT = 11
+  // XML entry: value="12" name="MAV_TYPE_SUBMARINE"
+  /// Submarine
+  MAV_TYPE_SUBMARINE = 12
+  // XML entry: value="13" name="MAV_TYPE_HEXAROTOR"
+  /// Hexarotor
+  MAV_TYPE_HEXAROTOR = 13
+  // XML entry: value="14" name="MAV_TYPE_OCTOROTOR"
+  /// Octorotor
+  MAV_TYPE_OCTOROTOR = 14
+  // XML entry: value="15" name="MAV_TYPE_TRICOPTER"
+  /// Tricopter
+  MAV_TYPE_TRICOPTER = 15
+  // XML entry: value="16" name="MAV_TYPE_FLAPPING_WING"
+  /// Flapping wing
+  MAV_TYPE_FLAPPING_WING = 16
+  // XML entry: value="17" name="MAV_TYPE_KITE"
+  /// Kite
+  MAV_TYPE_KITE = 17
+  // XML entry: value="18" name="MAV_TYPE_ONBOARD_CONTROLLER"
+  /// Onboard companion controller
+  MAV_TYPE_ONBOARD_CONTROLLER = 18
+  // XML entry: value="19" name="MAV_TYPE_VTOL_TAILSITTER_DUOROTOR"
+  /// Two-rotor Tailsitter VTOL that additionally uses control surfaces in vertical operation. Note, value previously named MAV_TYPE_VTOL_DUOROTOR.
+  MAV_TYPE_VTOL_TAILSITTER_DUOROTOR = 19
+  // XML entry: value="20" name="MAV_TYPE_VTOL_TAILSITTER_QUADROTOR"
+  /// Quad-rotor Tailsitter VTOL using a V-shaped quad config in vertical operation. Note: value previously named MAV_TYPE_VTOL_QUADROTOR.
+  MAV_TYPE_VTOL_TAILSITTER_QUADROTOR = 20
+  // XML entry: value="21" name="MAV_TYPE_VTOL_TILTROTOR"
+  /// Tiltrotor VTOL. Fuselage and wings stay (nominally) horizontal in all flight phases. It able to tilt (some) rotors to provide thrust in cruise flight.
+  MAV_TYPE_VTOL_TILTROTOR = 21
+  // XML entry: value="22" name="MAV_TYPE_VTOL_FIXEDROTOR"
+  /// VTOL with separate fixed rotors for hover and cruise flight. Fuselage and wings stay (nominally) horizontal in all flight phases.
+  MAV_TYPE_VTOL_FIXEDROTOR = 22
+  // XML entry: value="23" name="MAV_TYPE_VTOL_TAILSITTER"
+  /// Tailsitter VTOL. Fuselage and wings orientation changes depending on flight phase: vertical for hover, horizontal for cruise. Use more specific VTOL MAV_TYPE_VTOL_TAILSITTER_DUOROTOR or MAV_TYPE_VTOL_TAILSITTER_QUADROTOR if appropriate.
+  MAV_TYPE_VTOL_TAILSITTER = 23
+  // XML entry: value="24" name="MAV_TYPE_VTOL_TILTWING"
+  /// Tiltwing VTOL. Fuselage stays horizontal in all flight phases. The whole wing, along with any attached engine, can tilt between vertical and horizontal mode.
+  MAV_TYPE_VTOL_TILTWING = 24
+  //  Entry 25 reserved for other VTOL airframe 
+  // XML entry: value="25" name="MAV_TYPE_VTOL_RESERVED5"
+  /// VTOL reserved 5
+  MAV_TYPE_VTOL_RESERVED5 = 25
+  // XML entry: value="26" name="MAV_TYPE_GIMBAL"
+  /// Gimbal
+  MAV_TYPE_GIMBAL = 26
+  // XML entry: value="27" name="MAV_TYPE_ADSB"
+  /// ADSB system
+  MAV_TYPE_ADSB = 27
+  // XML entry: value="28" name="MAV_TYPE_PARAFOIL"
+  /// Steerable, nonrigid airfoil
+  MAV_TYPE_PARAFOIL = 28
+  // XML entry: value="29" name="MAV_TYPE_DODECAROTOR"
+  /// Dodecarotor
+  MAV_TYPE_DODECAROTOR = 29
+  // XML entry: value="30" name="MAV_TYPE_CAMERA"
+  /// Camera
+  MAV_TYPE_CAMERA = 30
+  // XML entry: value="31" name="MAV_TYPE_CHARGING_STATION"
+  /// Charging station
+  MAV_TYPE_CHARGING_STATION = 31
+  // XML entry: value="32" name="MAV_TYPE_FLARM"
+  /// FLARM collision avoidance system
+  MAV_TYPE_FLARM = 32
+  // XML entry: value="33" name="MAV_TYPE_SERVO"
+  /// Servo
+  MAV_TYPE_SERVO = 33
+  // XML entry: value="34" name="MAV_TYPE_ODID"
+  /// Open Drone ID. See https://mavlink.io/en/services/opendroneid.html.
+  MAV_TYPE_ODID = 34
+  // XML entry: value="35" name="MAV_TYPE_DECAROTOR"
+  /// Decarotor
+  MAV_TYPE_DECAROTOR = 35
+  // XML entry: value="36" name="MAV_TYPE_BATTERY"
+  /// Battery
+  MAV_TYPE_BATTERY = 36
+  // XML entry: value="37" name="MAV_TYPE_PARACHUTE"
+  /// Parachute
+  MAV_TYPE_PARACHUTE = 37
+  // XML entry: value="38" name="MAV_TYPE_LOG"
+  /// Log
+  MAV_TYPE_LOG = 38
+  // XML entry: value="39" name="MAV_TYPE_OSD"
+  /// OSD
+  MAV_TYPE_OSD = 39
+  // XML entry: value="40" name="MAV_TYPE_IMU"
+  /// IMU
+  MAV_TYPE_IMU = 40
+  // XML entry: value="41" name="MAV_TYPE_GPS"
+  /// GPS
+  MAV_TYPE_GPS = 41
+  // XML entry: value="42" name="MAV_TYPE_WINCH"
+  /// Winch
+  MAV_TYPE_WINCH = 42
+  // XML entry: value="43" name="MAV_TYPE_GENERIC_MULTIROTOR"
+  /// Generic multirotor that does not fit into a specific type or whose type is unknown
+  MAV_TYPE_GENERIC_MULTIROTOR = 43
+  // XML entry: value="44" name="MAV_TYPE_ILLUMINATOR"
+  /// Illuminator. An illuminator is a light source that is used for lighting up dark areas external to the system: e.g. a torch or searchlight (as opposed to a light source for illuminating the system itself, e.g. an indicator light).
+  MAV_TYPE_ILLUMINATOR = 44
+  // XML entry: value="45" name="MAV_TYPE_SPACECRAFT_ORBITER"
+  /// Orbiter spacecraft. Includes satellites orbiting terrestrial and extra-terrestrial bodies. Follows NASA Spacecraft Classification.
+  MAV_TYPE_SPACECRAFT_ORBITER = 45
+  // XML entry: value="46" name="MAV_TYPE_GROUND_QUADRUPED"
+  /// A generic four-legged ground vehicle (e.g., a robot dog).
+  MAV_TYPE_GROUND_QUADRUPED = 46
+  // XML entry: value="47" name="MAV_TYPE_VTOL_GYRODYNE"
+  /// VTOL hybrid of helicopter and autogyro. It has a main rotor for lift and separate propellers for forward flight. The rotor must be powered for hover but can autorotate in cruise flight. See: https://en.wikipedia.org/wiki/Gyrodyne
+  MAV_TYPE_VTOL_GYRODYNE = 47
+  // XML entry: value="48" name="MAV_TYPE_GRIPPER"
+  /// Gripper
+  MAV_TYPE_GRIPPER = 48
+  // XML entry: value="49" name="MAV_TYPE_RADIO"
+  /// Radio
+  MAV_TYPE_RADIO = 49
+}
+
+// XML enum: name="MAV_MODE_FLAG" bitmask="true"
+/// These flags encode the MAV mode, see MAV_MODE enum for useful combinations.
+enumset MavModeFlag {
+  // XML entry: value="128" name="MAV_MODE_FLAG_SAFETY_ARMED"
+  /// 0b10000000 MAV safety set to armed. Motors are enabled / running / can start. Ready to fly. Additional note: this flag is to be ignored when sent in the command MAV_CMD_DO_SET_MODE and MAV_CMD_COMPONENT_ARM_DISARM shall be used instead. The flag can still be used to report the armed state.
+  MAV_MODE_FLAG_SAFETY_ARMED = 7
+  // XML entry: value="64" name="MAV_MODE_FLAG_MANUAL_INPUT_ENABLED"
+  /// 0b01000000 remote control input is enabled.
+  MAV_MODE_FLAG_MANUAL_INPUT_ENABLED = 6
+  // XML entry: value="32" name="MAV_MODE_FLAG_HIL_ENABLED"
+  /// 0b00100000 hardware in the loop simulation. All motors / actuators are blocked, but internal software is full operational.
+  MAV_MODE_FLAG_HIL_ENABLED = 5
+  // XML entry: value="16" name="MAV_MODE_FLAG_STABILIZE_ENABLED"
+  /// 0b00010000 system stabilizes electronically its attitude (and optionally position). It needs however further control inputs to move around.
+  MAV_MODE_FLAG_STABILIZE_ENABLED = 4
+  // XML entry: value="8" name="MAV_MODE_FLAG_GUIDED_ENABLED"
+  /// 0b00001000 guided mode enabled, system flies waypoints / mission items.
+  MAV_MODE_FLAG_GUIDED_ENABLED = 3
+  // XML entry: value="4" name="MAV_MODE_FLAG_AUTO_ENABLED"
+  /// 0b00000100 autonomous mode enabled, system finds its own goal positions. Guided flag can be set or not, depends on the actual implementation.
+  MAV_MODE_FLAG_AUTO_ENABLED = 2
+  // XML entry: value="2" name="MAV_MODE_FLAG_TEST_ENABLED"
+  /// 0b00000010 system has a test mode enabled. This flag is intended for temporary system tests and should not be used for stable implementations.
+  MAV_MODE_FLAG_TEST_ENABLED = 1
+  // XML entry: value="1" name="MAV_MODE_FLAG_CUSTOM_MODE_ENABLED"
+  /// 0b00000001 system-specific custom mode is enabled. When using this flag to enable a custom mode all other flags should be ignored.
+  MAV_MODE_FLAG_CUSTOM_MODE_ENABLED = 0
+}
+
+// XML enum: name="MAV_STATE"
+enum MavState {
+  // XML entry: value="0" name="MAV_STATE_UNINIT"
+  /// Uninitialized system, state is unknown.
+  MAV_STATE_UNINIT = 0
+  // XML entry: value="1" name="MAV_STATE_BOOT"
+  /// System is booting up.
+  MAV_STATE_BOOT = 1
+  // XML entry: value="2" name="MAV_STATE_CALIBRATING"
+  /// System is calibrating and not flight-ready.
+  MAV_STATE_CALIBRATING = 2
+  // XML entry: value="3" name="MAV_STATE_STANDBY"
+  /// System is grounded and on standby. It can be launched any time.
+  MAV_STATE_STANDBY = 3
+  // XML entry: value="4" name="MAV_STATE_ACTIVE"
+  /// System is active and might be already airborne. Motors are engaged.
+  MAV_STATE_ACTIVE = 4
+  // XML entry: value="5" name="MAV_STATE_CRITICAL"
+  /// System is in a non-normal flight mode (failsafe). It can however still navigate.
+  MAV_STATE_CRITICAL = 5
+  // XML entry: value="6" name="MAV_STATE_EMERGENCY"
+  /// System is in a non-normal flight mode (failsafe). It lost control over parts or over the whole airframe. It is in mayday and going down.
+  MAV_STATE_EMERGENCY = 6
+  // XML entry: value="7" name="MAV_STATE_POWEROFF"
+  /// System just initialized its power-down sequence, will shut down now.
+  MAV_STATE_POWEROFF = 7
+  // XML entry: value="8" name="MAV_STATE_FLIGHT_TERMINATION"
+  /// System is terminating itself (failsafe or commanded).
+  MAV_STATE_FLIGHT_TERMINATION = 8
+}

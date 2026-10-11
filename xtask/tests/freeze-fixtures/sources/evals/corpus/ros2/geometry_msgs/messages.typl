@@ -1,0 +1,308 @@
+// Modified ROS 2-to-RIDL translation. Inputs and pinned revisions: PROVENANCE.md.
+package geometrymsgs
+import stdmsgs.Header
+type RosFloat32 : float
+type RosFloat64 : float
+type RosInertiaTensor : kg.m2
+type RosInt64 : integer [-9223372036854775808..9223372036854775807]
+type RosKilograms : kg
+type RosString : string [0..18446744073709551615]
+// Upstream: geometry_msgs/msg/Accel.msg
+struct Accel {
+// This expresses acceleration in free space broken into its linear and angular parts.
+  linear : Vector3
+  angular : Vector3
+}
+// Upstream: geometry_msgs/msg/AccelStamped.msg
+struct AccelStamped {
+// An accel with reference coordinate frame and timestamp
+  header : Header
+  accel : Accel
+}
+// Upstream: geometry_msgs/msg/AccelWithCovariance.msg
+struct AccelWithCovariance {
+// This expresses acceleration in free space with uncertainty.
+
+  accel : Accel
+
+// Row-major representation of the 6x6 covariance matrix
+// The orientation parameters use a fixed-axis representation.
+// In order, the parameters are:
+// (x, y, z, rotation about X axis, rotation about Y axis, rotation about Z axis)
+  covariance : [RosFloat64; 36]
+}
+// Upstream: geometry_msgs/msg/AccelWithCovarianceStamped.msg
+struct AccelWithCovarianceStamped {
+// This represents an estimated accel with reference coordinate frame and timestamp.
+  header : Header
+  accel : AccelWithCovariance
+}
+// Upstream: geometry_msgs/msg/Inertia.msg
+struct Inertia {
+// Mass [kg]
+  m : RosKilograms
+
+// Center of mass [m]
+  com : Vector3
+
+// Inertia Tensor [kg-m^2] about the center of mass
+//     | ixx ixy ixz |
+// I = | ixy iyy iyz |
+//     | ixz iyz izz |
+  ixx : RosInertiaTensor
+  ixy : RosInertiaTensor
+  ixz : RosInertiaTensor
+  iyy : RosInertiaTensor
+  iyz : RosInertiaTensor
+  izz : RosInertiaTensor
+}
+// Upstream: geometry_msgs/msg/InertiaStamped.msg
+struct InertiaStamped {
+// An Inertia with a time stamp and reference frame.
+
+  header : Header
+  inertia : Inertia
+}
+// Upstream: geometry_msgs/msg/Point.msg
+struct Point {
+// This contains the position of a point in free space
+  x : RosFloat64
+  y : RosFloat64
+  z : RosFloat64
+}
+// Upstream: geometry_msgs/msg/Point32.msg
+struct Point32 {
+// This contains the position of a point in free space(with 32 bits of precision).
+// It is recommended to use Point wherever possible instead of Point32.
+//
+// This recommendation is to promote interoperability.
+//
+// This message is designed to take up less space when sending
+// lots of points at once, as in the case of a PointCloud.
+
+  x : RosFloat32
+  y : RosFloat32
+  z : RosFloat32
+}
+// Upstream: geometry_msgs/msg/PointStamped.msg
+struct PointStamped {
+// This represents a Point with reference coordinate frame and timestamp
+
+  header : Header
+  point : Point
+}
+// Upstream: geometry_msgs/msg/Polygon.msg
+struct Polygon {
+// A specification of a polygon where the first and last points are assumed to be connected
+
+  points : [Point32; 0..18446744073709551615]
+}
+// Upstream: geometry_msgs/msg/PolygonInstance.msg
+struct PolygonInstance {
+// A specification of a polygon where the first and last points are assumed to be connected
+// It includes a unique identification field for disambiguating multiple instances
+
+  polygon : Polygon
+  id : RosInt64
+}
+// Upstream: geometry_msgs/msg/PolygonInstanceStamped.msg
+struct PolygonInstanceStamped {
+// This represents a Polygon with reference coordinate frame and timestamp
+// It includes a unique identification field for disambiguating multiple instances
+
+  header : Header
+  polygon : PolygonInstance
+}
+// Upstream: geometry_msgs/msg/PolygonStamped.msg
+struct PolygonStamped {
+// This represents a Polygon with reference coordinate frame and timestamp
+
+  header : Header
+  polygon : Polygon
+}
+// Upstream: geometry_msgs/msg/Pose.msg
+struct Pose {
+// A representation of pose in free space, composed of position and orientation.
+
+  position : Point
+  orientation : Quaternion
+}
+// Upstream: geometry_msgs/msg/PoseArray.msg
+struct PoseArray {
+// An array of poses with a header for global reference.
+
+  header : Header
+
+  poses : [Pose; 0..18446744073709551615]
+}
+// Upstream: geometry_msgs/msg/PoseStamped.msg
+struct PoseStamped {
+// A Pose with reference coordinate frame and timestamp
+
+  header : Header
+  pose : Pose
+}
+// Upstream: geometry_msgs/msg/PoseWithCovariance.msg
+struct PoseWithCovariance {
+// This represents a pose in free space with uncertainty.
+
+  pose : Pose
+
+// Row-major representation of the 6x6 covariance matrix
+// The orientation parameters use a fixed-axis representation.
+// In order, the parameters are:
+// (x, y, z, rotation about X axis, rotation about Y axis, rotation about Z axis)
+  covariance : [RosFloat64; 36]
+}
+// Upstream: geometry_msgs/msg/PoseWithCovarianceStamped.msg
+struct PoseWithCovarianceStamped {
+// This expresses an estimated pose with a reference coordinate frame and timestamp
+
+  header : Header
+  pose : PoseWithCovariance
+}
+// Upstream: geometry_msgs/msg/Quaternion.msg
+struct Quaternion {
+// This represents an orientation in free space in quaternion form.
+
+  x : RosFloat64 = 0.0
+  y : RosFloat64 = 0.0
+  z : RosFloat64 = 0.0
+  w : RosFloat64 = 1.0
+}
+// Upstream: geometry_msgs/msg/QuaternionStamped.msg
+struct QuaternionStamped {
+// This represents an orientation with reference coordinate frame and timestamp.
+
+  header : Header
+  quaternion : Quaternion
+}
+// Upstream: geometry_msgs/msg/Transform.msg
+struct Transform {
+// This represents the transform between two coordinate frames in free space.
+
+  translation : Vector3
+  rotation : Quaternion
+}
+// Upstream: geometry_msgs/msg/TransformStamped.msg
+struct TransformStamped {
+// This expresses a transform from coordinate frame header.frame_id
+// to the coordinate frame child_frame_id at the time of header.stamp
+//
+// This message is mostly used by the
+// <a href="https://docs.ros.org/en/rolling/p/tf2/">tf2</a> package.
+// See its documentation for more information.
+//
+// The child_frame_id is necessary in addition to the frame_id
+// in the Header to communicate the full reference for the transform
+// in a self contained message.
+
+// The frame id in the header is used as the reference frame of this transform.
+  header : Header
+
+// The frame id of the child frame to which this transform points.
+  childFrameId : RosString
+
+// Translation and rotation in 3-dimensions of child_frame_id from header.frame_id.
+  transform : Transform
+}
+// Upstream: geometry_msgs/msg/Twist.msg
+struct Twist {
+// This expresses velocity in free space broken into its linear and angular parts.
+
+  linear : Vector3
+  angular : Vector3
+}
+// Upstream: geometry_msgs/msg/TwistStamped.msg
+struct TwistStamped {
+// A twist with reference coordinate frame and timestamp
+
+  header : Header
+  twist : Twist
+}
+// Upstream: geometry_msgs/msg/TwistWithCovariance.msg
+struct TwistWithCovariance {
+// This expresses velocity in free space with uncertainty.
+
+  twist : Twist
+
+// Row-major representation of the 6x6 covariance matrix
+// The orientation parameters use a fixed-axis representation.
+// In order, the parameters are:
+// (x, y, z, rotation about X axis, rotation about Y axis, rotation about Z axis)
+  covariance : [RosFloat64; 36]
+}
+// Upstream: geometry_msgs/msg/TwistWithCovarianceStamped.msg
+struct TwistWithCovarianceStamped {
+// This represents an estimated twist with reference coordinate frame and timestamp.
+
+  header : Header
+  twist : TwistWithCovariance
+}
+// Upstream: geometry_msgs/msg/Vector3.msg
+struct Vector3 {
+// This represents a vector in free space.
+
+// This is semantically different than a point.
+// A vector is always anchored at the origin.
+// When a transform is applied to a vector, only the rotational component is applied.
+
+  x : RosFloat64
+  y : RosFloat64
+  z : RosFloat64
+}
+// Upstream: geometry_msgs/msg/Vector3Stamped.msg
+struct Vector3Stamped {
+// This represents a Vector3 with reference coordinate frame and timestamp
+
+// Note that this follows vector semantics with it always anchored at the origin,
+// so the rotational elements of a transform are the only parts applied when transforming.
+
+  header : Header
+  vector : Vector3
+}
+// Upstream: geometry_msgs/msg/VelocityStamped.msg
+struct VelocityStamped {
+// This expresses the timestamped velocity vector of a frame 'body_frame_id' in the reference frame 'reference_frame_id' expressed from arbitrary observation frame 'header.frame_id'.
+// - If the 'body_frame_id' and 'header.frame_id' are identical, the velocity is observed and defined in the local coordinates system of the body
+//   which is the usual use-case in mobile robotics and is also known as a body twist.
+
+  header : Header
+  bodyFrameId : RosString
+  referenceFrameId : RosString
+  velocity : Twist
+}
+// Upstream: geometry_msgs/msg/VelocityWithCovarianceStamped.msg
+struct VelocityWithCovarianceStamped {
+// A timestamped velocity of a body whose frame is 'body_frame_id', measured
+// relative to the reference frame 'reference_frame_id', with the velocity and
+// covariance both expressed in the basis of the observation frame
+// 'header.frame_id'.
+//
+// - If 'body_frame_id' and 'header.frame_id' are identical, the velocity and
+//   covariance are expressed in the body's own basis. This is functionally
+//   equivalent to the body-twist convention used by
+//   'geometry_msgs/TwistStamped'.
+//
+// This message is the covariance-bearing analogue of
+// 'geometry_msgs/VelocityStamped'.
+
+  header : Header
+  bodyFrameId : RosString
+  referenceFrameId : RosString
+  velocity : TwistWithCovariance
+}
+// Upstream: geometry_msgs/msg/Wrench.msg
+struct Wrench {
+// This represents force in free space, separated into its linear and angular parts.
+
+  force : Vector3
+  torque : Vector3
+}
+// Upstream: geometry_msgs/msg/WrenchStamped.msg
+struct WrenchStamped {
+// A wrench with reference coordinate frame and timestamp
+
+  header : Header
+  wrench : Wrench
+}

@@ -1,0 +1,40 @@
+package standard
+
+// Translation helpers; these are not upstream declarations.
+type Int16CentimetersPerSecond: cm/s [-32768..32767]
+type Int32: integer [-2147483648..2147483647]
+type Int32Millimeters: mm [-2147483648..2147483647]
+type Uint16: integer [0..65535]
+type Uint32Milliseconds: ms [0..4294967295]
+
+// XML message: id="33" name="GLOBAL_POSITION_INT"
+/// The filtered global position (e.g. fused GPS and accelerometers). The position is in GPS-frame (right-handed, Z-up). It is designed as scaled integer message since the resolution of float is not sufficient.
+struct GlobalPositionInt {
+  // XML field: type="uint32_t" name="time_boot_ms" units="ms"
+  /// Timestamp (time since system boot).
+  timeBootMs: Uint32Milliseconds
+  // XML field: type="int32_t" name="lat" units="degE7"
+  /// Latitude, expressed
+  lat: Int32
+  // XML field: type="int32_t" name="lon" units="degE7"
+  /// Longitude, expressed
+  lon: Int32
+  // XML field: type="int32_t" name="alt" units="mm"
+  /// Altitude (MSL). Note that virtually all GPS modules provide both WGS84 and MSL.
+  alt: Int32Millimeters
+  // XML field: type="int32_t" name="relative_alt" units="mm"
+  /// Altitude above home
+  relativeAlt: Int32Millimeters
+  // XML field: type="int16_t" name="vx" units="cm/s"
+  /// Ground X Speed (Latitude, positive north)
+  vx: Int16CentimetersPerSecond
+  // XML field: type="int16_t" name="vy" units="cm/s"
+  /// Ground Y Speed (Longitude, positive east)
+  vy: Int16CentimetersPerSecond
+  // XML field: type="int16_t" name="vz" units="cm/s"
+  /// Ground Z Speed (Altitude, positive down)
+  vz: Int16CentimetersPerSecond
+  // XML field: type="uint16_t" name="hdg" units="cdeg" invalid="UINT16_MAX"
+  /// Vehicle heading (yaw angle), 0.0..359.99 degrees. If unknown, set to: UINT16_MAX
+  hdg: Uint16
+}

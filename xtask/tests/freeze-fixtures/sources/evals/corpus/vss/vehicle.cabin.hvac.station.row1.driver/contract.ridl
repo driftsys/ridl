@@ -1,0 +1,58 @@
+package vehicle.cabin.hvac.station.row1.driver
+
+// Modified VSS-to-RIDL translation; see the workspace PROVENANCE.md and LICENSE.
+// Source repetition for concrete instance Vehicle.Cabin.HVAC.Station.Row1.Driver:
+// spec/Cabin/SingleHVACStation.vspec, included at HVAC.vspec line 19.
+// Copyright (c) 2016 Contributors to COVESA
+//
+// This program and the accompanying materials are made available under the
+// terms of the Mozilla Public License 2.0 which is available at
+// https://www.mozilla.org/en-US/MPL/2.0/
+//
+// SPDX-License-Identifier: MPL-2.0
+//
+//
+// A single HVAC station in the vehicle.
+//
+//
+//FanSpeed:
+//  datatype: uint8
+//  type: actuator
+//  min: 0
+//  max: 100
+//  unit: percent
+//  description: Fan Speed, 0 = off. 100 = max
+//
+//Temperature:
+//  datatype: float
+//  type: actuator
+//  unit: Celsius
+//  description: Temperature
+//
+//AirDistribution:
+//  datatype: string
+//  type: actuator
+//  allowed: ['UP', 'MIDDLE', 'DOWN']
+//  description: Direction of airstream
+
+// FanSpeed: uint8 with inclusive 0..100. Upstream unit: percent; UCUM: %.
+// Integer unit backing is unavailable; preserve the integer domain and unit as metadata.
+type FanSpeed : integer [0..100]
+// Temperature: upstream float and Celsius; no range or step.
+type Temperature : Cel
+// AirDistribution: string allowed domain ['UP', 'MIDDLE', 'DOWN'].
+// Integer enum values are representation codes in source order, not upstream values.
+enum AirDistribution {
+  UP = 0
+  MIDDLE = 1
+  DOWN = 2
+}
+
+interface Driver {
+  signal FanSpeed : FanSpeed
+  command setFanSpeed(value : FanSpeed)
+  signal Temperature : Temperature
+  command setTemperature(value : Temperature)
+  signal AirDistribution : AirDistribution
+  command setAirDistribution(value : AirDistribution)
+}

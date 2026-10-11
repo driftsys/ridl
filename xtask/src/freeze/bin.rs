@@ -82,6 +82,13 @@ pub fn tracked_files(root: &Path, paths: &[&str]) -> Result<Vec<String>, String>
         .collect())
 }
 
+/// The frozen copies of the example and corpus packages that the
+/// accepted-sources and wire dumps read, relative to the repository root.
+/// Below it, each copy keeps the path of its original, for example
+/// `examples/cabin`, so an edit to `examples/` or to `evals/corpus/` does not
+/// change a dump.
+pub const SOURCE_COPIES: &str = "xtask/tests/freeze-fixtures/sources";
+
 /// The directories under `paths` that hold a tracked `ridl.toml`, sorted,
 /// leaving out any directory below a `generated*` directory.
 pub fn package_dirs(root: &Path, paths: &[&str]) -> Result<Vec<String>, String> {

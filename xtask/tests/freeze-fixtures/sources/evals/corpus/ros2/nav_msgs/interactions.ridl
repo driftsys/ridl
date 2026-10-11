@@ -1,0 +1,82 @@
+// Modified ROS 2-to-RIDL translation. Inputs and pinned revisions: PROVENANCE.md.
+package navmsgs
+import geometrymsgs.PoseStamped
+import geometrymsgs.PoseWithCovarianceStamped
+type RosBoolean : boolean
+type RosMetres : m
+type RosUInt8 : integer [0..255]
+// Upstream: nav_msgs/srv/GetMap.srv
+struct GetMapRequest {
+// Get the map as a nav_msgs/OccupancyGrid
+}
+struct GetMapResponse {
+
+// The current map hosted by this map service.
+  map : OccupancyGrid
+}
+// Upstream: nav_msgs/srv/GetPlan.srv
+struct GetPlanRequest {
+// Get a plan from the current position to the goal Pose
+
+// The start pose for the plan
+  start : PoseStamped
+
+// The final pose of the goal position
+  goal : PoseStamped
+
+// If the goal is obstructed, how many meters the planner can
+// relax the constraint in x and y before failing.
+  tolerance : RosMetres
+}
+struct GetPlanResponse {
+
+// Array of poses from start to goal if one was successfully found.
+  plan : Path
+}
+// Upstream: nav_msgs/srv/LoadMap.srv
+struct LoadMapRequest {
+// URL of map resource
+// Can be an absolute path to a file: file:///path/to/maps/floor1.yaml
+// Or, relative to a ROS package: package://my_ros_package/maps/floor2.yaml
+  mapUrl : RosString
+}
+struct LoadMapResponse {
+
+// Result code definitions
+  // ROS constant RESULT_SUCCESS = 0; package constant LOAD_MAP_RESPONSE_RESULT_SUCCESS
+  // ROS constant RESULT_MAP_DOES_NOT_EXIST = 1; package constant LOAD_MAP_RESPONSE_RESULT_MAP_DOES_NOT_EXIST
+  // ROS constant RESULT_INVALID_MAP_DATA = 2; package constant LOAD_MAP_RESPONSE_RESULT_INVALID_MAP_DATA
+  // ROS constant RESULT_INVALID_MAP_METADATA = 3; package constant LOAD_MAP_RESPONSE_RESULT_INVALID_MAP_METADATA
+  // ROS constant RESULT_UNDEFINED_FAILURE = 255; package constant LOAD_MAP_RESPONSE_RESULT_UNDEFINED_FAILURE
+
+// Returned map is only valid if result equals RESULT_SUCCESS
+  map : OccupancyGrid
+  result : RosUInt8
+}
+const LOAD_MAP_RESPONSE_RESULT_SUCCESS : RosUInt8 = 0
+const LOAD_MAP_RESPONSE_RESULT_MAP_DOES_NOT_EXIST : RosUInt8 = 1
+const LOAD_MAP_RESPONSE_RESULT_INVALID_MAP_DATA : RosUInt8 = 2
+const LOAD_MAP_RESPONSE_RESULT_INVALID_MAP_METADATA : RosUInt8 = 3
+const LOAD_MAP_RESPONSE_RESULT_UNDEFINED_FAILURE : RosUInt8 = 255
+// Upstream: nav_msgs/srv/SetMap.srv
+struct SetMapRequest {
+// Set a new map together with an initial pose
+
+// Requested 2D map to be set.
+  map : OccupancyGrid
+
+// Estimated initial pose when setting new map.
+  initialPose : PoseWithCovarianceStamped
+}
+struct SetMapResponse {
+
+
+// True if the map was successfully set, false otherwise.
+  success : RosBoolean
+}
+interface NavMsgsInteractions {
+  query getMap(): GetMapResponse
+  query getPlan(start: PoseStamped, goal: PoseStamped, tolerance: RosMetres): GetPlanResponse
+  query loadMap(mapUrl: RosString): LoadMapResponse
+  query setMap(map: OccupancyGrid, initialPose: PoseWithCovarianceStamped): SetMapResponse
+}
