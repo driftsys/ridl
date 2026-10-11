@@ -70,7 +70,9 @@ needs the steps of "Approve a break":
   line and fails. A new optional property only adds lines and passes. The rule
   is the same for an output schema: a new required property in an output schema
   also fails, although it does not break a client, and needs the steps of
-  "Approve a break".
+  "Approve a break". A path inside a `oneOf` branch carries `/oneOf/<n>`, so a
+  property that moves between branches, or a reordering of the branches, removes
+  a line. An `anyOf` branch adds nothing to the path.
 - `cli`: each flag has a `required` or an `optional` line, and each command has
   one `<path> requires <words>` line that holds every required flag and
   argument. A flag or an argument that becomes optional removes a line. A new
