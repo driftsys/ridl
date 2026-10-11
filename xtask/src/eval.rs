@@ -1,0 +1,166 @@
+//! `cargo xtask eval`: runs the eval tasks with and without the
+//! ridl-authoring skill on each host, scores each run, and writes the results
+//! under `evals/results/<date>/`.
+//!
+//! `cargo xtask eval [--task <id>]... [--host claude|codex]... [--runs <n>]
+//! [--skill with|without|both] [--out <dir>]`
+
+mod host;
+mod task;
+
+use host::Host;
+use std::path::{Path, PathBuf};
+
+pub struct Options {
+    pub tasks: Vec<String>,
+    pub hosts: Vec<Host>,
+    pub runs: u32,
+    /// `true` runs with the skill, `false` without it.
+    pub skill: Vec<bool>,
+    pub out: Option<PathBuf>,
+}
+
+pub fn parse(args: &[String]) -> Result<Options, String> {
+    let mut options = Options {
+        tasks: Vec::new(),
+        hosts: Vec::new(),
+        runs: 1,
+        skill: vec![true, false],
+        out: None,
+    };
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        let mut value = || {
+            iter.next()
+                .cloned()
+                .ok_or_else(|| format!("{arg} needs a value"))
+        };
+        match arg.as_str() {
+            "--task" => options.tasks.push(value()?),
+            "--host" => options.hosts.push(match value()?.as_str() {
+                "claude" => Host::Claude,
+                "codex" => Host::Codex,
+                other => return Err(format!("unknown host: {other}")),
+            }),
+            "--runs" => {
+                options.runs = value()?
+                    .parse()
+                    .map_err(|_| "--runs takes a positive number".to_owned())?
+            }
+            "--skill" => {
+                options.skill = match value()?.as_str() {
+                    "with" => vec![true],
+                    "without" => vec![false],
+                    "both" => vec![true, false],
+                    other => {
+                        return Err(format!("--skill takes with, without or both, not {other}"));
+                    }
+                }
+            }
+            "--out" => options.out = Some(PathBuf::from(value()?)),
+            other => return Err(format!("unknown argument: {other}")),
+        }
+    }
+    if options.runs == 0 {
+        return Err("--runs takes a positive number".to_owned());
+    }
+    if options.hosts.is_empty() {
+        options.hosts = vec![Host::Claude, Host::Codex];
+    }
+    Ok(options)
+}
+
+pub fn run(args: &[String]) -> Result<(), String> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("the repository root")
+        .to_owned();
+    let options = parse(args)?;
+    let tasks = task::load_tasks(&root, &options.tasks)?;
+    let models = host::load_models(&root)?;
+    check_keys()?;
+    let out = options
+        .out
+        .clone()
+        .unwrap_or_else(|| root.join("evals/results").join(today()));
+    let skill = root.join("skills/ridl-authoring");
+    for task in &tasks {
+        let prompt =
+            std::fs::read_to_string(task.dir.join("prompt.md")).map_err(|e| e.to_string())?;
+        for &host in &options.hosts {
+            for &with_skill in &options.skill {
+                for n in 1..=options.runs {
+                    let label = format!(
+                        "{}-{}-{n}",
+                        host.name(),
+                        if with_skill { "with" } else { "without" }
+                    );
+                    let base = scratch_dir(&task.id, &label)?;
+                    let dirs = host::prepare_run(&base, task, host, with_skill, &skill)?;
+                    if host == Host::Codex {
+                        codex_login(&dirs.home)?;
+                    }
+                    let invocation =
+                        host::agent_invocation(host, host.model(&models), &dirs, &prompt);
+                    let status = host::run(&invocation, &dirs.transcript)?;
+                    eprintln!("eval: {} {label}: agent exited {status}", task.id);
+                    let transcripts = out.join("transcripts").join(&task.id);
+                    std::fs::create_dir_all(&transcripts).map_err(|e| e.to_string())?;
+                    std::fs::copy(&dirs.transcript, transcripts.join(format!("{label}.jsonl")))
+                        .map_err(|e| e.to_string())?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The judge of each host is the other host, so both keys are needed for any
+/// run. An eval run reads no stored login: Claude runs with `--bare` and each
+/// Codex run has a fresh home.
+fn check_keys() -> Result<(), String> {
+    for var in ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"] {
+        if std::env::var(var).map_or(true, |v| v.is_empty()) {
+            return Err(format!(
+                "{var} is not set; an eval run reads no stored login"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn codex_login(home: &Path) -> Result<(), String> {
+    let invocation = host::Invocation {
+        program: Host::Codex.binary(),
+        args: vec!["login".into(), "--with-api-key".into()],
+        env: vec![("CODEX_HOME".into(), home.display().to_string())],
+        cwd: home.to_owned(),
+        stdin: std::env::var("OPENAI_API_KEY").unwrap_or_default(),
+    };
+    let status = host::run(&invocation, &home.join("login.log"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("codex login failed: {status}"))
+    }
+}
+
+/// A fresh directory under the system temporary directory, outside any git
+/// repository.
+fn scratch_dir(task: &str, label: &str) -> Result<PathBuf, String> {
+    let dir = std::env::temp_dir().join(format!("ridl-eval-{}-{task}-{label}", std::process::id()));
+    if dir.exists() {
+        std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+    }
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+/// Today's date as YYYY-MM-DD, from `date`, so xtask needs no date crate.
+fn today() -> String {
+    let out = std::process::Command::new("date")
+        .arg("+%Y-%m-%d")
+        .output()
+        .expect("run date");
+    String::from_utf8_lossy(&out.stdout).trim().to_owned()
+}

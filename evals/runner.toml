@@ -1,0 +1,7 @@
+# The models the eval runner pins. Each result file records the model it ran
+# with. The judge of a run uses the other host's model.
+[claude]
+model = "claude-opus-5-5"
+
+[codex]
+model = "gpt-6-sol"
