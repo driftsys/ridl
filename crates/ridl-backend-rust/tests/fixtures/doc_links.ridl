@@ -1,0 +1,30 @@
+package veh.links
+
+/// A level, in percent.
+type Level: integer [0..100]
+
+/// A reading whose field name is a Rust keyword.
+struct Reading {
+  /// The level of the loop.
+  loop: Level
+}
+
+/// An interface with a signal, an event, a command and a query.
+interface Panel {
+  /// The current level.
+  signal level: Level @10ms
+  /// Sent when the level changes.
+  event changed: Level @[100ms..1s]
+  /// Sets the level.
+  command setLevel(level: Level) @[..50ms]
+  /// Reads the level back.
+  query read(window: Level): Level @[..200ms]
+}
+
+/// Links, from a type's doc: [Reading.loop] is a member named by a Rust
+/// keyword, [Panel.level] a signal, [Panel.changed] an event, [Panel.setLevel]
+/// a command and [Panel.read] a query.
+struct Links {
+  /// The level.
+  level: Level
+}

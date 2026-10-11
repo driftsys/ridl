@@ -72,6 +72,7 @@ enumset Subsystems {
 
 /// A report that links to an enum set bit, an enum value and an interaction,
 /// and holds a range written as prose: a value in [0, 1].
+/// @see veh.cabin.Cabin.warning
 /// @see veh.cabin.Cabin.setLevel
 /// @since 1.0
 struct Diagnostic {
@@ -80,6 +81,8 @@ struct Diagnostic {
   covers: Subsystems
   /// The health found. It is [Health.OK] when no fault was found.
   health: Health
+  /// The level taken, which [Diagnostic.loop] names: a Rust keyword.
+  loop: Level
 }
 
 /// A second interface with a signal and nothing else, so the emitted crate

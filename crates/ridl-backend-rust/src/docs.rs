@@ -156,6 +156,10 @@ impl<'a> Links<'a> {
                 return Some(spelled(type_path(&qualified)));
             };
             let member = member_name(decl, member)?;
+            // Rustdoc cannot resolve a raw identifier in a link path.
+            if member.starts_with("r#") {
+                return None;
+            }
             return Some(format!("{}::{member}", spelled(type_path(&qualified))));
         }
 
@@ -190,14 +194,24 @@ impl<'a> Links<'a> {
                     _ => None,
                 })
                 .find(|interaction| declared(interaction.name.as_ref()) == member)?;
-            // A fixed member has no client method.
-            if matches!(
+            // The async `Client` has a method for a signal, a command and a
+            // query only: an event is received through `Subscribe`, and a
+            // fixed member has no method.
+            if !matches!(
                 interaction.shape,
-                None | Some(v1::interaction::Shape::Fixed(_))
+                Some(
+                    v1::interaction::Shape::Signal(_)
+                        | v1::interaction::Shape::Command(_)
+                        | v1::interaction::Shape::Query(_)
+                )
             ) {
                 return None;
             }
             let method = ident(snake_of(interaction.name.as_ref()));
+            // Rustdoc cannot resolve a raw identifier in a link path.
+            if method.to_string().starts_with("r#") {
+                return None;
+            }
             return Some(format!("{module_path}::Client::{method}"));
         }
         None

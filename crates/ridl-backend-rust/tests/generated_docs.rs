@@ -203,3 +203,36 @@ interface Wide {
         assert_clean(&format!("the {label} skip note"), &source);
     }
 }
+
+/// A link to a member whose Rust name is a raw identifier, and a link to an
+/// interaction the async `Client` has no method for, render as code spans:
+/// rustdoc cannot resolve either as a path. A signal, a command and a query
+/// link to their `Client` method.
+#[test]
+fn links_rustdoc_cannot_resolve_render_as_code_spans() {
+    let package = ir::compile_fixture("doc_links.ridl");
+    let source = ridl_backend_rust::generate_pipeline(
+        &package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        &[],
+    )
+    .expect("the fixture generates")
+    .rust_source;
+    assert!(source.contains("`veh.links.Reading.loop`"), "{source}");
+    assert!(source.contains("`veh.links.Panel.changed`"), "{source}");
+    for (written, path) in [
+        ("[Panel.level]", "crate::veh::links::panel::Client::level"),
+        (
+            "[Panel.setLevel]",
+            "crate::veh::links::panel::Client::set_level",
+        ),
+        ("[Panel.read]", "crate::veh::links::panel::Client::read"),
+    ] {
+        assert!(
+            source.contains(&format!("{written}({path})")),
+            "{written}\n{source}"
+        );
+    }
+    assert!(!source.contains("r#loop)"), "{source}");
+    assert!(!source.contains("Client::changed"), "{source}");
+}
