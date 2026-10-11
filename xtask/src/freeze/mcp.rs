@@ -289,6 +289,15 @@ mod tests {
     }
 
     #[test]
+    fn a_node_with_required_and_no_properties_has_its_required_set() {
+        let lines = walked("input", serde_json::json!({"anyOf": [{"required": ["a"]}]}));
+        assert!(
+            lines.iter().any(|l| l == "t input  required-set a"),
+            "{lines:?}"
+        );
+    }
+
+    #[test]
     fn a_new_required_property_removes_a_line() {
         use crate::freeze::missing_lines;
         let baseline = walked_text(serde_json::json!({

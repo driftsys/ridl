@@ -8,8 +8,11 @@
 //! `semver_check_passes_an_added_item`,
 //! `semver_check_flags_a_lint_that_warns_by_default`,
 //! `semver_check_flags_a_break_in_a_runtime_crate` and
-//! `semver_check_passes_runtime_crates_with_an_added_item`. The other tests
-//! stop before the tool starts.
+//! `semver_check_passes_runtime_crates_with_an_added_item`.
+//! `check_fails_when_the_semver_tool_fails` also starts the tool, but passes
+//! without it: cargo then fails on the unknown subcommand, which the check
+//! also reports as a failure of the tool. The other tests stop before the tool
+//! starts.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
