@@ -65,11 +65,13 @@ fn every_cited_code_is_in_the_catalogue() {
 
 #[test]
 fn an_unknown_code_is_reported() {
-    let catalogue: BTreeSet<String> = ["TYPL-101".to_owned()].into();
-    assert_eq!(
-        unknown_codes("TYPL-101 and RIDL-999", &catalogue),
-        ["RIDL-999"]
-    );
+    // The unknown code is assembled, so that the catalogue drift check in
+    // `ridl_core::diag`, which reads quoted codes in Rust sources, does not
+    // take this test's deliberate example for an uncatalogued code.
+    let unknown = format!("RIDL-{}", 999);
+    let catalogue: BTreeSet<String> = [format!("TYPL-{}", 101)].into();
+    let text = format!("TYPL-101 and {unknown} in a skill file");
+    assert_eq!(unknown_codes(&text, &catalogue), [unknown]);
 }
 
 /// The anchor of a heading: lowercase, punctuation other than `-` and `_`
