@@ -35,7 +35,7 @@ pull request can rewrite any of them with `cargo insta accept` in the same
 change that breaks the surface. A freeze check must therefore compare against a
 version that the pull request cannot edit: a git ref.
 
-The check as built differs from the design in five ways. This record refines the
+The check as built differs from the design in six ways. This record refines the
 design in each:
 
 - The generated-crate inputs are frozen copies of `examples/cabin` and of the
