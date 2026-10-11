@@ -204,6 +204,11 @@ jobs:
             | tar -xz -C "$HOME/.local/bin" just
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/just" --version
+      # `just freeze-check` runs cargo-semver-checks. The workflow pins no
+      # third-party action by tag, so the tool is built with cargo, which the
+      # cache above keeps warm.
+      - name: install cargo-semver-checks
+        run: cargo install cargo-semver-checks --locked --version 0.51.0
       - run: just toolchain-check
       # Needs no toolchain of its own, and has no other job to sit in.
       - run: just gate-parity
