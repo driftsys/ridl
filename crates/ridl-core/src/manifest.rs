@@ -1578,35 +1578,76 @@ version = \"1.0.0\"
         assert_eq!(spanned, ["bar", "foo"]);
     }
 
-    /// A manifest text that writes every key of `KNOWN_KEYS` once.
+    /// A manifest text that writes every key of `KNOWN_KEYS` once, with one
+    /// table per section, so that the text is valid TOML.
     fn all_known_keys_text() -> String {
         let mut text = String::new();
-        for (section, keys) in KNOWN_KEYS {
-            if section.is_empty() {
-                for key in *keys {
-                    text.push_str(&format!("[{key}]\n"));
-                }
-                continue;
-            }
-            if *section == BACKEND_SECTION {
-                text.push_str("[backend.rust]\n");
+        for key in known_keys("") {
+            let section = if *key == "backend" {
+                BACKEND_SECTION
             } else {
-                text.push_str(&format!("[{section}]\n"));
-            }
-            for key in *keys {
+                key
+            };
+            let header = if *key == "backend" {
+                "backend.rust"
+            } else {
+                key
+            };
+            text.push_str(&format!("[{header}]\n"));
+            for key in known_keys(section) {
                 text.push_str(&format!("{key} = 1\n"));
             }
         }
         text
     }
 
+    /// The manifest of [`PACKAGE_HEAD`] with the key `key` of `section` set to
+    /// the TOML value `value`. A key of `BACKEND_SECTION` is written in
+    /// `[backend.rust]`.
+    fn manifest_with(section: &str, key: &str, value: &str) -> String {
+        let mut table: toml::Table = toml::from_str(PACKAGE_HEAD).unwrap();
+        let value = toml::from_str::<toml::Table>(&format!("v = {value}")).unwrap()["v"].clone();
+        let path: Vec<&str> = match section {
+            "" => vec![],
+            BACKEND_SECTION => vec!["backend", "rust"],
+            other => vec![other],
+        };
+        let mut target = &mut table;
+        for part in path {
+            target = target
+                .entry(part)
+                .or_insert_with(|| toml::Value::Table(toml::Table::new()))
+                .as_table_mut()
+                .unwrap();
+        }
+        target.insert(key.to_string(), value);
+        toml::to_string(&table).unwrap()
+    }
+
     #[test]
     fn known_keys_drive_mani_005() {
         let mut map = SourceMap::new();
         let file_id = map.file_id("ridl.toml", "");
+        let text = all_known_keys_text();
+        // `check_unknown_keys` returns early on a text that is not TOML.
+        assert!(toml::from_str::<toml::Table>(&text).is_ok(), "{text}");
         let mut diags = Vec::new();
-        check_unknown_keys(file_id, &all_known_keys_text(), &mut diags);
+        check_unknown_keys(file_id, &text, &mut diags);
         assert!(diags.is_empty(), "{diags:?}");
+
+        // Each listed key is one the reader reads: an integer where a table,
+        // a string or an array is expected draws a diagnostic other than
+        // MANI-005. A key the reader ignores draws none.
+        for (section, keys) in KNOWN_KEYS {
+            for key in *keys {
+                let text = manifest_with(section, key, "1");
+                let (_, diags) = parse(&text);
+                assert!(
+                    diags.iter().any(|d| d.code.as_str() != "MANI-005"),
+                    "`{section}` key `{key}` is in KNOWN_KEYS, but the reader ignores it:\n{text}"
+                );
+            }
+        }
 
         let mut diags = Vec::new();
         check_unknown_keys(file_id, "[package]\nnmae = \"x\"\n", &mut diags);
