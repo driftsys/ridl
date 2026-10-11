@@ -25,7 +25,6 @@ mod wire;
 use serde::Deserialize;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 /// One row of `freeze/surfaces.toml`.
 #[derive(Debug, PartialEq, Eq)]
@@ -59,6 +58,15 @@ pub fn parse_surfaces(toml: &str) -> Result<Vec<Row>, String> {
                 row.name
             ));
         };
+        // `git show :<path>` reads the index, and git reads a leading dash as
+        // an option.
+        if baseline.is_empty() || baseline.starts_with('-') {
+            return Err(format!(
+                "surfaces.toml: surface `{}` has the baseline `{baseline}`, which is not a git \
+ref: write a tag or a commit",
+                row.name
+            ));
+        }
         if rows.iter().any(|r| r.surface == row.name) {
             return Err(format!(
                 "surfaces.toml: surface `{}` appears twice",
@@ -313,18 +321,31 @@ fn check_api_surfaces(apis: &[(&ApiSurface, bool)], rows: &[Row], root: &Path) -
     failures
 }
 
+/// Fails with an instruction to fetch the row's baseline when the ref does
+/// not name a commit of the repository at `root`.
+fn verify_baseline(root: &Path, row: &Row) -> Result<(), String> {
+    let output = bin::git(root)
+        .args(["rev-parse", "--verify", "--quiet", "--end-of-options"])
+        .arg(format!("{}^{{commit}}", row.baseline))
+        .output()
+        .map_err(|e| format!("cannot run git: {e}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    Err(format!(
+        "surface `{}`: the baseline `{}` names no commit of this clone (row: name = \"{}\", \
+baseline = \"{}\"). Fetch it with `git fetch origin {}`, or with `git fetch --tags` for a \
+tag. A shallow clone has no history: in CI, check out with `fetch-depth: 0`.",
+        row.surface, row.baseline, row.surface, row.baseline, row.baseline
+    ))
+}
+
 /// `git show <baseline>:freeze/<surface>.txt` in `root`.
 fn baseline_dump(root: &Path, row: &Row) -> Result<String, String> {
+    verify_baseline(root, row)?;
     let spec = format!("{}:freeze/{}.txt", row.baseline, row.surface);
-    let mut command = Command::new("git");
-    command
-        .arg("-C")
-        .arg(root)
+    let output = bin::git(root)
         .args(["show", &spec])
-        .env_remove("GIT_DIR")
-        .env_remove("GIT_INDEX_FILE")
-        .env_remove("GIT_WORK_TREE");
-    let output = command
         .output()
         .map_err(|e| format!("cannot run git: {e}"))?;
     if output.status.success() {
@@ -582,6 +603,22 @@ mod tests {
     fn parse_surfaces_rejects_unknown_names() {
         assert!(parse_surfaces("[[surfaces]]\nname = \"x\"\nbaseline = \"v1\"\n").is_err());
         assert!(parse_surfaces("[[surface]]\nname = \"x\"\nbaselnie = \"v1\"\n").is_err());
+    }
+
+    #[test]
+    fn parse_surfaces_rejects_an_empty_or_dash_leading_baseline() {
+        // `git show :freeze/x.txt` reads the index, and a leading dash is read
+        // as an option.
+        for baseline in ["", "-x", "--all"] {
+            let error = parse_surfaces(&format!(
+                "[[surface]]\nname = \"x\"\nbaseline = \"{baseline}\"\n"
+            ))
+            .unwrap_err();
+            assert!(
+                error.contains("surface `x`") && error.contains("git ref"),
+                "{baseline}: {error}"
+            );
+        }
     }
 
     #[test]

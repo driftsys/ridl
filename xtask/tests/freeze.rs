@@ -110,10 +110,10 @@ fn check_fails_when_the_baseline_has_no_dump() {
     );
     let output = repo.check(Some(("fixture", &fixture)));
     assert!(!output.status.success());
+    let err = stderr(&output);
     assert!(
-        stderr(&output).contains("freeze/fixture.txt"),
-        "{}",
-        stderr(&output)
+        err.contains("freeze/fixture.txt") && err.contains("`HEAD~1`"),
+        "{err}"
     );
 }
 
@@ -130,10 +130,20 @@ fn check_fails_when_the_baseline_ref_is_unknown() {
     repo.commit();
     let output = repo.check(Some(("fixture", &fixture)));
     assert!(!output.status.success());
+    assert_unknown_ref_hint(&stderr(&output), "fixture");
+}
+
+/// The failure for the unknown baseline ref `no-such-ref` names the ref and
+/// the row, and says how to fetch the ref.
+fn assert_unknown_ref_hint(err: &str, surface: &str) {
     assert!(
-        stderr(&output).contains("no-such-ref"),
-        "{}",
-        stderr(&output)
+        err.contains(&format!("surface `{surface}`"))
+            && err.contains(&format!(
+                "(row: name = \"{surface}\", baseline = \"no-such-ref\")"
+            ))
+            && err.contains("`git fetch origin no-such-ref`")
+            && err.contains("fetch-depth: 0"),
+        "{err}"
     );
 }
 
@@ -368,6 +378,22 @@ fn semver_check_fails_when_a_crate_is_missing_at_head() {
         err.contains("freeze/generated/api") && err.contains("`base`"),
         "{err}"
     );
+}
+
+#[test]
+fn semver_check_names_an_unknown_baseline_ref() {
+    let repo = repo_with_api_baseline(
+        "semver-bad-ref",
+        &api_fixture("Cargo.toml"),
+        &api_fixture("src/lib.rs"),
+    );
+    repo.write(
+        "freeze/surfaces.toml",
+        "[[surface]]\nname = \"generated-crate\"\nbaseline = \"no-such-ref\"\n",
+    );
+    let output = check_generated_semver(&repo);
+    assert!(!output.status.success());
+    assert_unknown_ref_hint(&stderr(&output), "generated-crate");
 }
 
 #[test]

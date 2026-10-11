@@ -256,8 +256,9 @@ fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
 /// Extracts `freeze/generated` of the row's baseline into `dir` with
 /// `git archive`.
 fn extract_baseline(root: &Path, row: &Row, dir: &Path) -> Result<(), String> {
+    super::verify_baseline(root, row)?;
     let archive = dir.join("baseline.tar");
-    let output = git(root)
+    let output = bin::git(root)
         .args(["archive", "--format=tar", "-o"])
         .arg(&archive)
         .arg(&row.baseline)
@@ -349,17 +350,6 @@ fn standalone_manifest(text: &str, ridl_rt: &Path) -> Result<String, String> {
     toml::to_string(&manifest).map_err(|e| e.to_string())
 }
 
-fn git(root: &Path) -> Command {
-    let mut command = Command::new("git");
-    command
-        .arg("-C")
-        .arg(root)
-        .env_remove("GIT_DIR")
-        .env_remove("GIT_INDEX_FILE")
-        .env_remove("GIT_WORK_TREE");
-    command
-}
-
 fn semver_command(root: &Path) -> Command {
     let mut command = Command::new("cargo");
     command
@@ -370,10 +360,8 @@ fn semver_command(root: &Path) -> Command {
         .env(
             "CARGO_TARGET_DIR",
             bin::target_dir(root).join("freeze-api").join("target"),
-        )
-        .env_remove("GIT_DIR")
-        .env_remove("GIT_INDEX_FILE")
-        .env_remove("GIT_WORK_TREE");
+        );
+    bin::without_git_env(&mut command);
     command
 }
 

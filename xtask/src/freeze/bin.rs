@@ -57,17 +57,29 @@ pub fn run(exe: &Path, dir: &Path, args: &[&str]) -> Result<Run, String> {
     })
 }
 
-/// The tracked files of `root` under `paths`, as paths relative to `root`
-/// with `/` separators. A tracked file is never a git-ignored one.
-pub fn tracked_files(root: &Path, paths: &[&str]) -> Result<Vec<String>, String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args(["ls-files", "--"])
-        .args(paths)
+/// Removes the variables a git hook exports from `command`'s environment, so
+/// that a git command it runs reads the repository of its own directory.
+pub fn without_git_env(command: &mut Command) -> &mut Command {
+    command
         .env_remove("GIT_DIR")
         .env_remove("GIT_INDEX_FILE")
         .env_remove("GIT_WORK_TREE")
+}
+
+/// `git -C <root>`, without the variables a git hook exports.
+pub fn git(root: &Path) -> Command {
+    let mut command = Command::new("git");
+    command.arg("-C").arg(root);
+    without_git_env(&mut command);
+    command
+}
+
+/// The tracked files of `root` under `paths`, as paths relative to `root`
+/// with `/` separators. A tracked file is never a git-ignored one.
+pub fn tracked_files(root: &Path, paths: &[&str]) -> Result<Vec<String>, String> {
+    let output = git(root)
+        .args(["ls-files", "--"])
+        .args(paths)
         .output()
         .map_err(|e| format!("cannot run git: {e}"))?;
     if !output.status.success() {
