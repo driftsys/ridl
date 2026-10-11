@@ -460,6 +460,63 @@ mod tests {
         );
     }
 
+    /// The paths of the `anyOf` nodes under `node` that are not a nullable
+    /// wrapper: exactly one `{"type": "null"}` branch and one other branch.
+    fn non_nullable_any_ofs(node: &Value, path: &str, found: &mut Vec<String>) {
+        match node {
+            Value::Object(map) => {
+                if let Some(Value::Array(branches)) = map.get("anyOf") {
+                    let nulls = branches
+                        .iter()
+                        .filter(|b| **b == serde_json::json!({"type": "null"}))
+                        .count();
+                    if branches.len() != 2 || nulls != 1 {
+                        found.push(format!("{path}/anyOf"));
+                    }
+                }
+                for (key, value) in map {
+                    non_nullable_any_ofs(value, &format!("{path}/{key}"), found);
+                }
+            }
+            Value::Array(items) => {
+                for (index, value) in items.iter().enumerate() {
+                    non_nullable_any_ofs(value, &format!("{path}/{index}"), found);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn the_any_of_check_flags_a_second_non_null_branch() {
+        let schema = serde_json::json!({"properties": {
+            "ok": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+            "bad": {"anyOf": [{"type": "string"}, {"type": "integer"}]},
+            "three": {"anyOf": [{"type": "string"}, {"type": "integer"}, {"type": "null"}]},
+        }});
+        let mut found = Vec::new();
+        non_nullable_any_ofs(&schema, "", &mut found);
+        found.sort();
+        assert_eq!(
+            found,
+            vec!["/properties/bad/anyOf", "/properties/three/anyOf"]
+        );
+    }
+
+    #[test]
+    fn every_any_of_in_the_tool_schemas_is_a_nullable_wrapper() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let text = std::fs::read_to_string(root.join("crates/ridl-mcp/tests/tools.json")).unwrap();
+        let tools: Value = serde_json::from_str(&text).unwrap();
+        let mut found = Vec::new();
+        non_nullable_any_ofs(&tools, "", &mut found);
+        assert!(
+            found.is_empty(),
+            "`anyOf` branches share their parent's path, so a second non-null shape needs \
+indexing like `oneOf`; these `anyOf` nodes have one: {found:?}"
+        );
+    }
+
     #[test]
     fn mcp_dump_lists_every_tool() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
