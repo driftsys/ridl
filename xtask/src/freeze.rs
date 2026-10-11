@@ -33,9 +33,19 @@ pub struct Row {
     pub baseline: String,
 }
 
+/// The contents of `freeze/surfaces.toml`.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Surfaces {
+    /// The surfaces that must have a row when a release is made.
+    pub required: Vec<String>,
+    pub rows: Vec<Row>,
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawFile {
+    #[serde(default)]
+    required: Vec<String>,
     #[serde(default)]
     surface: Vec<RawRow>,
 }
@@ -47,8 +57,18 @@ struct RawRow {
     baseline: Option<String>,
 }
 
-/// Reads the `[[surface]]` tables of `freeze/surfaces.toml`, in file order.
-pub fn parse_surfaces(toml: &str) -> Result<Vec<Row>, String> {
+/// The names in `required` that have no row, in `required` order.
+pub fn rows_missing(required: &[String], rows: &[Row]) -> Vec<String> {
+    required
+        .iter()
+        .filter(|name| !rows.iter().any(|row| &row.surface == *name))
+        .cloned()
+        .collect()
+}
+
+/// Reads `required` and the `[[surface]]` tables of `freeze/surfaces.toml`, in
+/// file order.
+pub fn parse_surfaces(toml: &str) -> Result<Surfaces, String> {
     let file: RawFile = toml::from_str(toml).map_err(|e| format!("surfaces.toml: {e}"))?;
     let mut rows: Vec<Row> = Vec::new();
     for row in file.surface {
@@ -78,7 +98,17 @@ ref: write a tag or a commit",
             baseline,
         });
     }
-    Ok(rows)
+    for (index, name) in file.required.iter().enumerate() {
+        if file.required[..index].contains(name) {
+            return Err(format!(
+                "surfaces.toml: `{name}` appears twice in `required`"
+            ));
+        }
+    }
+    Ok(Surfaces {
+        required: file.required,
+        rows,
+    })
 }
 
 /// The lines of `baseline` that are not in `head`, compared as sets of
@@ -151,20 +181,22 @@ pub fn api_surfaces() -> &'static [ApiSurface] {
 }
 
 const USAGE: &str = "usage: cargo xtask freeze <update|check> [--root <dir>] \
-[--dumper-fixture <name>=<file>] [--fixtures-only] [--api-semver <name>]\n\
+[--dumper-fixture <name>=<file>] [--fixtures-only] [--api-semver <name>] [--release]\n\
   --root <dir>                      repository root (default: the workspace root)\n\
   --dumper-fixture <name>=<file>    test-only: register a surface whose lines \
 are read from <file>\n\
   --fixtures-only                   test-only: skip the registered dumpers and API \
 checkers, which read the real repository\n\
   --api-semver <name>               test-only: with --fixtures-only, run the baseline \
-comparison of the API surface <name> on the files under --root";
+comparison of the API surface <name> on the files under --root\n\
+  --release                         fail when a surface listed in `required` has no row\n";
 
 struct Options {
     root: PathBuf,
     fixtures: Vec<(String, PathBuf)>,
     fixtures_only: bool,
     api_semver: Vec<String>,
+    release: bool,
 }
 
 fn parse_options(args: &[String]) -> Result<Options, String> {
@@ -175,6 +207,7 @@ fn parse_options(args: &[String]) -> Result<Options, String> {
     let mut fixtures = Vec::new();
     let mut fixtures_only = false;
     let mut api_semver = Vec::new();
+    let mut release = false;
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
         let value = |iter: &mut std::slice::Iter<String>| {
@@ -192,6 +225,7 @@ fn parse_options(args: &[String]) -> Result<Options, String> {
                 fixtures.push((name.to_string(), PathBuf::from(file)));
             }
             "--fixtures-only" => fixtures_only = true,
+            "--release" => release = true,
             "--api-semver" => {
                 let name = value(&mut iter)?;
                 if !api_surfaces().iter().any(|s| s.name == name) {
@@ -213,6 +247,7 @@ surface already runs\n{USAGE}"
         fixtures,
         fixtures_only,
         api_semver,
+        release,
     })
 }
 
@@ -268,7 +303,7 @@ fn dump_path(root: &Path, surface: &str) -> PathBuf {
     root.join("freeze").join(format!("{surface}.txt"))
 }
 
-fn read_rows(root: &Path) -> Result<Vec<Row>, String> {
+fn read_rows(root: &Path) -> Result<Surfaces, String> {
     let path = root.join("freeze").join("surfaces.toml");
     let text = std::fs::read_to_string(&path)
         .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
@@ -362,10 +397,11 @@ fn baseline_dump(root: &Path, row: &Row) -> Result<String, String> {
 fn check(options: &Options) -> Result<(), String> {
     let dumps = dump_all(options)?;
     let apis = active_api_surfaces(options);
-    let rows = read_rows(&options.root)?;
+    let surfaces = read_rows(&options.root)?;
+    let rows = &surfaces.rows;
     let mut failures: Vec<String> = Vec::new();
 
-    for row in &rows {
+    for row in rows {
         if !dumps.iter().any(|(name, _)| *name == row.surface)
             && !apis.iter().any(|(api, _)| api.name == row.surface)
         {
@@ -417,7 +453,31 @@ run `cargo xtask freeze update` and commit the result"
         }
     }
 
-    failures.extend(check_api_surfaces(&apis, &rows, &options.root));
+    for name in &surfaces.required {
+        if !dumps.iter().any(|(dump, _)| dump == name)
+            && !apis.iter().any(|(api, _)| api.name == *name)
+        {
+            failures.push(format!(
+                "surfaces.toml lists `{name}` in `required` but no dumper or API checker has \
+that name"
+            ));
+        }
+    }
+    for name in rows_missing(&surfaces.required, rows) {
+        if options.release {
+            failures.push(format!(
+                "surface `{name}` is required but has no row: a release cannot leave a frozen \
+surface without a baseline (see freeze/README.md, \"Approve a break\")"
+            ));
+        } else {
+            println!(
+                "freeze: surface `{name}` is required but has no row; add it back with a \
+baseline before the next release"
+            );
+        }
+    }
+
+    failures.extend(check_api_surfaces(&apis, rows, &options.root));
 
     if failures.is_empty() {
         println!("freeze: {} surface(s) checked.", dumps.len() + apis.len());
@@ -551,6 +611,7 @@ mod tests {
             fixtures: Vec::new(),
             fixtures_only,
             api_semver: api_semver.iter().map(|s| s.to_string()).collect(),
+            release: false,
         }
     }
 
@@ -653,7 +714,8 @@ mod tests {
             "[[surface]]\nname = \"one\"\nbaseline = \"v1\"\n\n\
              [[surface]]\nname = \"two\"\nbaseline = \"v2\"\n",
         )
-        .unwrap();
+        .unwrap()
+        .rows;
         assert_eq!(
             rows,
             vec![
@@ -669,5 +731,45 @@ mod tests {
         );
         let error = parse_surfaces("[[surface]]\nname = \"lonely\"\n").unwrap_err();
         assert!(error.contains("lonely"), "{error}");
+    }
+
+    #[test]
+    fn parse_surfaces_reads_the_required_list() {
+        let surfaces = parse_surfaces(
+            "required = [\"keywords\", \"cli\"]\n\n[[surface]]\nname = \"keywords\"\nbaseline = \"v0.10.0\"\n",
+        )
+        .unwrap();
+        assert_eq!(
+            surfaces.required,
+            vec!["keywords".to_string(), "cli".to_string()]
+        );
+        assert_eq!(surfaces.rows.len(), 1);
+    }
+
+    #[test]
+    fn parse_surfaces_defaults_required_to_empty() {
+        assert!(parse_surfaces("").unwrap().required.is_empty());
+    }
+
+    #[test]
+    fn parse_surfaces_rejects_a_name_listed_twice_in_required() {
+        let error = parse_surfaces("required = [\"cli\", \"cli\"]\n").unwrap_err();
+        assert!(
+            error.contains("`cli` appears twice in `required`"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn rows_missing_lists_required_surfaces_without_a_row() {
+        let rows = vec![Row {
+            surface: "keywords".into(),
+            baseline: "v0.10.0".into(),
+        }];
+        let required = vec!["keywords".to_string(), "cli".to_string(), "mcp".to_string()];
+        assert_eq!(
+            rows_missing(&required, &rows),
+            vec!["cli".to_string(), "mcp".to_string()]
+        );
     }
 }

@@ -1,3 +1,8 @@
+# `required` lists the surfaces that must have a row when a release is made.
+# `just freeze-check` prints a notice for a listed surface without a row; the
+# `release` recipe fails on it.
+required = []
+
 # Baseline rows for the freeze check. Each row names a frozen surface and the
 # git ref its dump is compared against:
 #

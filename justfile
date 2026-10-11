@@ -2484,7 +2484,9 @@ pre-push: lint-commits toolchain-check gate-parity fmt-check check doc-path-chec
 verify: lint-commits build
 
 # Cut a release: git-std bumps the version, writes the changelog, tags.
-release:
+# The release check of the freeze gate runs first.
+release: toolchain-check
+    cargo run --locked --package xtask -- freeze check --release
     git std bump
 
 # Set up a clone or worktree: git-std, prim, the git hooks, the Rust toolchain
