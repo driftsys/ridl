@@ -3738,24 +3738,37 @@ fn rules_are_empty_where_no_item_ref_exists() {
 fn foreign_declaration_carries_rules() {
     let units = v2::Package {
         name: "veh.units".to_string(),
-        decls: vec![v2::Decl {
-            name: "Kph".to_string(),
-            visibility: v2::Visibility::Public as i32,
-            kind: Some(v2::decl::Kind::TypeDef(v2::TypeDef {
-                backing: Some(v2::Backing {
-                    kind: Some(v2::backing::Kind::Primitive(
-                        v2::PrimitiveType::Integer as i32,
-                    )),
-                }),
-                constraint: Some(v2::Constraint {
-                    min: Some("0".to_string()),
-                    max: Some("300".to_string()),
+        decls: vec![
+            v2::Decl {
+                name: "Kph".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::TypeDef(v2::TypeDef {
+                    backing: Some(v2::Backing {
+                        kind: Some(v2::backing::Kind::Primitive(
+                            v2::PrimitiveType::Integer as i32,
+                        )),
+                    }),
+                    constraint: Some(v2::Constraint {
+                        min: Some("0".to_string()),
+                        max: Some("300".to_string()),
+                        ..Default::default()
+                    }),
                     ..Default::default()
-                }),
+                })),
                 ..Default::default()
-            })),
-            ..Default::default()
-        }],
+            },
+            v2::Decl {
+                // A bare reference: it resolves only in `veh.units`, the package
+                // that declares `Leg`, and not in the lowered package.
+                name: "Leg".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![member(1, "speed", named("Kph"))],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
         ..Default::default()
     };
     let app = v2::Package {
@@ -3764,7 +3777,10 @@ fn foreign_declaration_carries_rules() {
             name: "Trip".to_string(),
             visibility: v2::Visibility::Public as i32,
             kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
-                members: vec![member(1, "speed", named("veh.units.Kph"))],
+                members: vec![
+                    member(1, "speed", named("veh.units.Kph")),
+                    member(2, "leg", named("veh.units.Leg")),
+                ],
                 fixed_layout: false,
             })),
             ..Default::default()
@@ -3779,11 +3795,19 @@ fn foreign_declaration_carries_rules() {
     let field = model_fields(model_decl(&model, "Trip"))[0];
     assert_eq!(texts(&field.rules), ["range 0 ..= 300"]);
 
-    let foreign = model
-        .foreign
-        .iter()
-        .find(|foreign| foreign.package == "veh.units")
-        .and_then(|foreign| foreign.declaration.as_ref())
-        .expect("the foreign declaration Kph");
-    assert_eq!(texts(&foreign.rules), ["range 0 ..= 300"]);
+    let foreign = |name: &str| -> &v1::Declaration {
+        model
+            .foreign
+            .iter()
+            .filter(|foreign| foreign.package == "veh.units")
+            .filter_map(|foreign| foreign.declaration.as_ref())
+            .find(|decl| decl.name.as_ref().map(|n| n.declared.as_str()) == Some(name))
+            .unwrap_or_else(|| panic!("the foreign declaration {name}"))
+    };
+    assert_eq!(texts(&foreign("Kph").rules), ["range 0 ..= 300"]);
+
+    // The field of a foreign struct resolves its bare type name in the
+    // package that declares the struct, not in the lowered package.
+    let leg_field = model_fields(foreign("Leg"))[0];
+    assert_eq!(texts(&leg_field.rules), ["range 0 ..= 300"]);
 }

@@ -27,7 +27,7 @@ and `@labels` and `@deprecated` stay doc tags (decision 4); the codegen model
 carries the doc links, `see` and `since` (decision 6); the codegen model carries
 the rules, and the shape of `Rule` is no longer provisional (decision 9).
 
-It amends three records in place, in the same change:
+This record amends three records in place, in the same change:
 
 - [ADR-0002](ADR-0002-module-system.md) §4 gains root discovery (decision 10).
 - [ADR-0024](ADR-0024-lint-registry-and-levels.md) decisions 1, 8, 12 and 15
