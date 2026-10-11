@@ -7,7 +7,12 @@ which release each surface is frozen against (ADR-0029).
   fact. A dump is generated, never edited by hand.
 - `surfaces.toml` has one `[[surface]]` table per frozen surface, with a `name`
   and a `baseline` (a git ref). The check fails when a line of the dump at the
-  baseline is missing from the dump at HEAD. An added line passes.
+  baseline is missing from the dump at HEAD. An added line passes. The optional
+  top-level `required` key lists the surfaces that must have a row; it stays
+  above the first table. The check fails when a row's name is not in `required`,
+  when `required` names a surface that no dumper or API checker has, or when
+  `required` lists a name twice. `check --release` also fails when a name in
+  `required` has no row.
 
 ## The frozen source copies
 
@@ -72,7 +77,9 @@ needs the steps of "Approve a break":
   also fails, although it does not break a client, and needs the steps of
   "Approve a break". A path inside a `oneOf` branch carries `/oneOf/<n>`, so a
   property that moves between branches, or a reordering of the branches, removes
-  a line. An `anyOf` branch adds nothing to the path.
+  a line. Inserting a branch before another, or wrapping a schema in a `oneOf`,
+  also changes the paths and removes lines, so it is a break too. An `anyOf`
+  branch adds nothing to the path.
 - `cli`: each flag has a `required` or an `optional` line, and each command has
   one `<path> requires <words>` line that holds every required flag and
   argument. A flag or an argument that becomes optional removes a line. A new

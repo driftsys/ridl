@@ -175,7 +175,9 @@ design in each:
      `freeze/surfaces.toml`. A follow-up pull request adds the row again with
      that merge commit as its `baseline`. The surface is unchecked between the
      two pull requests. While its name is in `required` and it has no row,
-     `just freeze-check` prints a notice, and `just release` fails.
+     `just freeze-check` prints a notice, and `just release` fails. The check
+     guards only a forgotten re-add: removing a name from `required` is an edit
+     of `freeze/surfaces.toml` that review must catch.
    - At 0.10.0, the release pull request moves every baseline to `v0.10.0`.
    - During 0.10.x, no break lands. The one exception is a security fix; its
      reason is recorded in this record, in the same pull request that makes the
@@ -227,7 +229,7 @@ design in each:
 - **Freeze size and budget values.** Rejected: they are tuned as the encodings
   mature, and no user program depends on an exact value.
 - **Index `anyOf` branches of an MCP schema under their own paths.** Rejected:
-  every `anyOf` in the tool schemas wraps one object branch and a `null` branch,
+  every `anyOf` in the tool schemas wraps one value branch and a `null` branch,
   which is how a nullable value is written. Indexing them would move every
   nullable property under `/anyOf/0` and make a reordering of `[T, null]` a
   break, with no gain. Only `oneOf`, which lists alternative shapes, is indexed.
