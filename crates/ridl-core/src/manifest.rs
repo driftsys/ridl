@@ -648,48 +648,74 @@ fn check_unknown_keys(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) 
         // Unreachable: the typed parse already accepted this text.
         Err(_) => return,
     };
-    // The allowed-key lists below must stay in sync with the fields of
-    // `RawPackage`, `RawWorkspace`, `RawDefaults`, `RawCodegen`, and `RawBackend`: a field added there
-    // without a matching entry here would wrongly warn as an unknown key.
-    // Keys under `[lints]` are lint names; `collect_lints` checks them against
-    // the registry (MANI-010), so they are never "unknown" here.
+    // `KNOWN_KEYS` must stay in sync with the fields of `RawPackage`,
+    // `RawWorkspace`, `RawDefaults`, `RawCodegen`, and `RawBackend`: a field
+    // added there without a matching entry there would wrongly warn as an
+    // unknown key. Keys under `[lints]` are lint names; `collect_lints` checks
+    // them against the registry (MANI-010), so they are never "unknown" here.
+    // Keys under `[imports]` are never "unknown" either.
     for (key, value) in &doc {
-        match key.as_str() {
-            "package" => check_section_keys(file_id, "package", value, &["name", "version"], diags),
-            "workspace" => check_section_keys(file_id, "workspace", value, &["members"], diags),
-            "defaults" => check_section_keys(
-                file_id,
-                "defaults",
-                value,
-                &["timing", "command_timing", "query_timing"],
-                diags,
-            ),
-            "codegen" => check_section_keys(file_id, "codegen", value, &["header-file"], diags),
-            "backend" => {
-                // One sub-table per backend name; the name is any string, so
-                // only the keys inside each sub-table are checked, each at
-                // its own span.
-                for (name, key, range) in backend_keys(text) {
-                    if key != "encodings" {
-                        diags.push(warning(
-                            DiagCode::MANI_005,
-                            file_id,
-                            range,
-                            format!("unknown key `{key}` in `[backend.{name}]`"),
-                        ));
-                    }
-                }
-            }
-            "imports" => {}
-            "lints" => {}
-            _ => diags.push(warning(
+        if !known_keys("").contains(&key.as_str()) {
+            diags.push(warning(
                 DiagCode::MANI_005,
                 file_id,
                 value.span(),
                 format!("unknown manifest key `{key}`"),
-            )),
+            ));
+        } else if key == "backend" {
+            // One sub-table per backend name; the name is any string, so
+            // only the keys inside each sub-table are checked, each at
+            // its own span.
+            for (name, key, range) in backend_keys(text) {
+                if !known_keys(BACKEND_SECTION).contains(&key.as_str()) {
+                    diags.push(warning(
+                        DiagCode::MANI_005,
+                        file_id,
+                        range,
+                        format!("unknown key `{key}` in `[backend.{name}]`"),
+                    ));
+                }
+            }
+        } else if KNOWN_KEYS.iter().any(|(section, _)| section == key) {
+            check_section_keys(file_id, key, value, known_keys(key), diags);
         }
     }
+}
+
+/// The section name `KNOWN_KEYS` uses for every `[backend.<name>]` table: the
+/// loader accepts any backend name, and the keys are the same for each.
+pub const BACKEND_SECTION: &str = "backend.*";
+
+/// The keys the manifest schema defines, as `(section, allowed keys)`. The
+/// top level has the section name `""`. `[imports]` and `[lints]` hold
+/// user-chosen names and are not listed as sections. MANI-005 warns on any key
+/// outside these lists.
+pub const KNOWN_KEYS: &[(&str, &[&str])] = &[
+    (
+        "",
+        &[
+            "package",
+            "workspace",
+            "defaults",
+            "codegen",
+            "backend",
+            "imports",
+            "lints",
+        ],
+    ),
+    ("package", &["name", "version"]),
+    ("workspace", &["members"]),
+    ("defaults", &["timing", "command_timing", "query_timing"]),
+    ("codegen", &["header-file"]),
+    (BACKEND_SECTION, &["encodings"]),
+];
+
+/// The allowed keys of `section` in [`KNOWN_KEYS`]; empty for an unlisted one.
+fn known_keys(section: &str) -> &'static [&'static str] {
+    KNOWN_KEYS
+        .iter()
+        .find(|(name, _)| *name == section)
+        .map_or(&[], |(_, keys)| keys)
 }
 
 /// The keys of every `[backend.<name>]` table, as `(name, key, span of the
@@ -1550,5 +1576,40 @@ version = \"1.0.0\"
         let mut spanned: Vec<&str> = diags.iter().map(|diag| span_text(&text, diag)).collect();
         spanned.sort_unstable();
         assert_eq!(spanned, ["bar", "foo"]);
+    }
+
+    /// A manifest text that writes every key of `KNOWN_KEYS` once.
+    fn all_known_keys_text() -> String {
+        let mut text = String::new();
+        for (section, keys) in KNOWN_KEYS {
+            if section.is_empty() {
+                for key in *keys {
+                    text.push_str(&format!("[{key}]\n"));
+                }
+                continue;
+            }
+            if *section == BACKEND_SECTION {
+                text.push_str("[backend.rust]\n");
+            } else {
+                text.push_str(&format!("[{section}]\n"));
+            }
+            for key in *keys {
+                text.push_str(&format!("{key} = 1\n"));
+            }
+        }
+        text
+    }
+
+    #[test]
+    fn known_keys_drive_mani_005() {
+        let mut map = SourceMap::new();
+        let file_id = map.file_id("ridl.toml", "");
+        let mut diags = Vec::new();
+        check_unknown_keys(file_id, &all_known_keys_text(), &mut diags);
+        assert!(diags.is_empty(), "{diags:?}");
+
+        let mut diags = Vec::new();
+        check_unknown_keys(file_id, "[package]\nnmae = \"x\"\n", &mut diags);
+        assert_eq!(codes(&diags), vec!["MANI-005"]);
     }
 }
