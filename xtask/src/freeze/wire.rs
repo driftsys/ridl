@@ -81,6 +81,34 @@ fn is_known_rejection(corpus: &str, emit: &str, stderr: &str) -> bool {
     corpus == known_corpus && emit == known_emit && stderr.contains(marker)
 }
 
+/// The non-blank, non-comment lines of one schema file, trimmed. A line inside
+/// a declaration (a message, table, struct, enum, union, oneof or service)
+/// starts with `[<Name>]`, the dotted names of the declarations that enclose
+/// it, so that a field which moves from one declaration to another in the
+/// same file removes a line. A line that ends with `{` opens a declaration
+/// named by its second word; a line that starts with `}` closes one.
+fn schema_file_lines(text: &str) -> Vec<String> {
+    let mut scope: Vec<String> = Vec::new();
+    let mut out = Vec::new();
+    for line in text.lines().map(str::trim) {
+        if line.is_empty() || line.starts_with("//") {
+            continue;
+        }
+        if scope.is_empty() {
+            out.push(line.to_string());
+        } else {
+            out.push(format!("[{}] {line}", scope.join(".")));
+        }
+        if line.starts_with('}') {
+            scope.pop();
+        } else if line.ends_with('{') {
+            let name = line.split_whitespace().nth(1).unwrap_or("");
+            scope.push(name.trim_end_matches('{').to_string());
+        }
+    }
+    out
+}
+
 /// Each corpus workspace the schema lines are built from, as `(name,
 /// directory)`: the name is the one the dump lines carry, the directory is
 /// the frozen copy that `ridl build` reads, relative to the repository root.
@@ -99,8 +127,9 @@ fn corpora(root: &Path) -> Result<Vec<(String, String)>, String> {
     Ok(out)
 }
 
-/// `<ext> <corpus>/<file> <line>` for each non-blank, non-comment line of the
-/// schemas that `ridl build --emit <emit>` writes for each corpus workspace.
+/// `<ext> <corpus>/<file> <line>` for each line [`schema_file_lines`] keeps of
+/// the schemas that `ridl build --emit <emit>` writes for each corpus
+/// workspace.
 /// A corpus the emit rejects in the one known way (`KNOWN_REJECTION`)
 /// contributes no line; any other failure is an error.
 fn schema_lines(
@@ -146,10 +175,8 @@ fn schema_lines(
                 .replace('\\', "/");
             let text = std::fs::read_to_string(&file)
                 .map_err(|e| format!("cannot read {}: {e}", file.display()))?;
-            for line in text.lines().map(str::trim) {
-                if !line.is_empty() && !line.starts_with("//") {
-                    out.push(format!("{extension} {name}/{relative} {line}"));
-                }
+            for line in schema_file_lines(&text) {
+                out.push(format!("{extension} {name}/{relative} {line}"));
             }
         }
     }
@@ -268,6 +295,31 @@ mod tests {
         assert!(
             CATALOG_SOURCE.starts_with("xtask/tests/freeze-fixtures/"),
             "{CATALOG_SOURCE}"
+        );
+    }
+
+    #[test]
+    fn a_field_line_names_its_enclosing_declaration() {
+        // The same field in two messages of one file must give two lines, so
+        // that moving it from one message to the other removes a line.
+        let text = "syntax = \"proto3\";\nmessage A {\n  // c\n  uint32 x = 1;\n  message N {\n    bool y = 1;\n  }\n}\nmessage B {\n  uint32 x = 1;\n}\nenum E {\n  E_ZERO = 0;\n}\n";
+        assert_eq!(
+            schema_file_lines(text),
+            vec![
+                "syntax = \"proto3\";",
+                "message A {",
+                "[A] uint32 x = 1;",
+                "[A] message N {",
+                "[A.N] bool y = 1;",
+                "[A.N] }",
+                "[A] }",
+                "message B {",
+                "[B] uint32 x = 1;",
+                "[B] }",
+                "enum E {",
+                "[E] E_ZERO = 0;",
+                "[E] }",
+            ]
         );
     }
 
