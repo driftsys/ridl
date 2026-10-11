@@ -1534,12 +1534,12 @@ fn refuse_overwrite(
 /// the `regex` version the workspace's `Cargo.lock` resolves, which is the
 /// version the checker links.
 ///
-/// The `ridl-rt = "0.8"` requirement is a literal, not read from
+/// The `ridl-rt = "0.9"` requirement is a literal, not read from
 /// `crates/ridl-rt/Cargo.toml`, because `ridlc` is an installed binary with no
 /// access to this repository's sources at run time; a guard test
 /// (`crates/ridlc/tests/`) keeps the two from drifting apart silently.
 fn render_cargo_toml(crate_name: &str, preamble: &str, encodings: &[String]) -> String {
-    const RIDL_RT_REQUIREMENT: &str = "0.8";
+    const RIDL_RT_REQUIREMENT: &str = "0.9";
     let ridl_rt = if encodings.is_empty() {
         format!(r#"ridl-rt = {{ version = "{RIDL_RT_REQUIREMENT}" }}"#)
     } else {

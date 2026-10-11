@@ -107,10 +107,10 @@ with `=`. This `Cargo.toml` fragment is an illustration and is not compiled:
 
 ```toml
 [dependencies]
-ridl-rt = "0.8.0"
+ridl-rt = "0.9.0"
 
 [dev-dependencies]
-ridl-rt-conformance = "=0.8.0"
+ridl-rt-conformance = "=0.9.0"
 ```
 
 In the test crate, implement the `Factory` trait on a type of that crate — a
