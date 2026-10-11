@@ -13,8 +13,8 @@ const PROFILES: [(&str, Profile); 3] = [
 /// `reserved-set <words>` line that holds every reserved word, sorted, and
 /// `<profile> <word>` for each one that `active(profile, word)` says is an
 /// active keyword of `profile`. A profile that adopts a reserved word
-/// therefore only adds a line, and a word that is reserved or no longer
-/// reserved removes the `reserved-set` line.
+/// therefore only adds a line, and a newly reserved word, or a word that is no
+/// longer reserved, removes the `reserved-set` line.
 fn lines(words: &[&str], active: impl Fn(Profile, &str) -> bool) -> Vec<String> {
     let mut sorted = words.to_vec();
     sorted.sort_unstable();
@@ -77,6 +77,13 @@ mod tests {
             vec!["reserved model", "reserved-set model unit"],
             "{baseline}"
         );
+    }
+
+    #[test]
+    fn the_reserved_set_line_is_sorted_whatever_the_input_order() {
+        // Reordering `FAMILY_RESERVED` must not change the dump.
+        let lines = lines(&["unit", "model"], |_, _| false);
+        assert_eq!(lines[0], "reserved-set model unit", "{lines:?}");
     }
 
     #[test]
