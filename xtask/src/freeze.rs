@@ -189,7 +189,7 @@ are read from <file>\n\
 checkers, which read the real repository\n\
   --api-semver <name>               test-only: with --fixtures-only, run the baseline \
 comparison of the API surface <name> on the files under --root\n\
-  --release                         fail when a surface listed in `required` has no row\n";
+  --release                         fail when a surface listed in `required` has no row";
 
 struct Options {
     root: PathBuf,
