@@ -274,6 +274,19 @@ wasm-check:
 # ridl-loopback is held to the same terms: its manifest must set the same
 # rust-version as ridl-rt and edition 2021, and the packaged crate, unchanged
 # apart from the appended tables, must build with the minimum toolchain.
+#
+# ridl-descriptor has its own minimum, the rust-version in its manifest
+# (1.88, the minimum of planus 1.3.0). It is packaged together with ridl-ir,
+# the only workspace crate it depends on, and the packaged manifest is built
+# unchanged apart from the appended tables, in three feature sets: the
+# defaults, none, and only `dedup`; the unit tests run with the
+# defaults (the integration tests need a dev-dependency the package drops). Its
+# lockfile is resolved with the pin's cargo and
+# CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback, so that a dependency
+# release with a higher minimum is not selected, and the build is offline with
+# the older toolchain. The recipe also fails on: a ridl-descriptor manifest
+# without a rust-version line, or one that names a version the pin is older
+# than.
 compat-check: toolchain-check
     #!/usr/bin/env bash
     set -euo pipefail
@@ -388,6 +401,39 @@ compat-check: toolchain-check
         --extern "ridl_rt=$cabin/libridl_rt.rlib" \
         "$cabin/generated/lib.rs" -o "$cabin/libveh_cabin.rmeta"
 
+    # ridl-descriptor has its own minimum. It is packaged with ridl-ir, its
+    # only workspace dependency (checked below), in one command for the same
+    # reason as above: the version is not on the registry until the release
+    # publishes it.
+    descriptor_manifest="crates/ridl-descriptor/Cargo.toml"
+    descriptor_minimum="$(sed -n 's/^rust-version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$descriptor_manifest")"
+    if ! printf '%s' "$descriptor_minimum" | grep -qE '^[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
+        echo "compat-check: $descriptor_manifest sets rust-version = \"$descriptor_minimum\", which is not a" >&2
+        echo "compat-check: MAJOR.MINOR or MAJOR.MINOR.PATCH version." >&2
+        exit 1
+    fi
+    if ! rustup run "$descriptor_minimum" rustc --version >/dev/null 2>&1; then
+        echo "compat-check: installing the $descriptor_minimum toolchain (not found locally)." >&2
+        rustup toolchain install "$descriptor_minimum" --profile minimal
+    fi
+    if [ -n "$(grep -E '^ridl-[a-z-]+[[:space:]]*=' crates/ridl-ir/Cargo.toml || true)" ]; then
+        echo "compat-check: ridl-ir now depends on a workspace crate; add it to the" >&2
+        echo "compat-check: cargo package command for ridl-descriptor." >&2
+        exit 1
+    fi
+    echo "compat-check: packaging ridl-ir and ridl-descriptor $version"
+    cargo package -p ridl-ir -p ridl-descriptor --no-verify --allow-dirty
+    pkg_ir="$PWD/target/compat-check/pkg-ir"
+    pkg_descriptor="$PWD/target/compat-check/pkg-descriptor"
+    mkdir -p "$pkg_ir" "$pkg_descriptor"
+    tar -xzf "${CARGO_TARGET_DIR:-target}/package/ridl-ir-$version.crate" -C "$pkg_ir" --strip-components=1
+    tar -xzf "${CARGO_TARGET_DIR:-target}/package/ridl-descriptor-$version.crate" -C "$pkg_descriptor" --strip-components=1
+    printf '\n[workspace]\n\n[patch.crates-io]\nridl-ir = { path = "%s" }\n' "$pkg_ir" >> "$pkg_descriptor/Cargo.toml"
+    # The lockfile is resolved with the pin's cargo, which knows the
+    # rust-version-aware fallback; the build below runs with the older cargo.
+    CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback \
+        cargo "+$pin" generate-lockfile --manifest-path "$pkg_descriptor/Cargo.toml"
+
     export CARGO_TARGET_DIR="$PWD/target/compat-check/build"
 
     echo "compat-check: $minimum, edition 2021 (packaged)"
@@ -443,6 +489,17 @@ compat-check: toolchain-check
 
     echo "compat-check: $pin, edition 2024 (packaged ridl-rt-conformance)"
     cargo "+$pin" test --all-features --offline --manifest-path "$pkg_conformance/Cargo.toml"
+
+    # ridl-descriptor at its own minimum, as published: only the tables above
+    # were appended. The package drops the dev-dependency on ridl-backend-rust
+    # (a path with no version), so the integration tests in tests/ cannot build
+    # standalone; the unit tests run with the defaults.
+    echo "compat-check: $descriptor_minimum (packaged ridl-descriptor, default features)"
+    cargo "+$descriptor_minimum" test --lib --offline --manifest-path "$pkg_descriptor/Cargo.toml"
+    echo "compat-check: $descriptor_minimum (packaged ridl-descriptor, no default features)"
+    cargo "+$descriptor_minimum" build --offline --no-default-features --manifest-path "$pkg_descriptor/Cargo.toml"
+    echo "compat-check: $descriptor_minimum (packaged ridl-descriptor, dedup only)"
+    cargo "+$descriptor_minimum" build --offline --no-default-features --features dedup --manifest-path "$pkg_descriptor/Cargo.toml"
 
 # Generate the cabin example's crate and run the program that links it.
 #
