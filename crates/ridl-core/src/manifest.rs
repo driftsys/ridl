@@ -677,7 +677,7 @@ fn check_unknown_keys(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) 
                 }
             }
         } else if KNOWN_KEYS.iter().any(|(section, _)| section == key) {
-            check_section_keys(file_id, key, value, known_keys(key), diags);
+            check_section_keys(file_id, key, value, &known_keys(key), diags);
         }
     }
 }
@@ -686,36 +686,49 @@ fn check_unknown_keys(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) 
 /// loader accepts any backend name, and the keys are the same for each.
 pub const BACKEND_SECTION: &str = "backend.*";
 
-/// The keys the manifest schema defines, as `(section, allowed keys)`. The
-/// top level has the section name `""`. `[imports]` and `[lints]` hold
+/// The keys the manifest schema defines, as `(section, [(key, value type)])`.
+/// The top level has the section name `""`. `[imports]` and `[lints]` hold
 /// user-chosen names and are not listed as sections. MANI-005 warns on any key
 /// outside these lists.
-pub const KNOWN_KEYS: &[(&str, &[&str])] = &[
+///
+/// The value type is the TOML type the reader accepts for the key: `string`,
+/// `table`, `array<string>` (an array of strings), `table<string>` (a table of
+/// strings) or `table<table>` (a table of tables).
+pub const KNOWN_KEYS: &[(&str, &[(&str, &str)])] = &[
     (
         "",
         &[
-            "package",
-            "workspace",
-            "defaults",
-            "codegen",
-            "backend",
-            "imports",
-            "lints",
+            ("package", "table"),
+            ("workspace", "table"),
+            ("defaults", "table"),
+            ("codegen", "table"),
+            ("backend", "table<table>"),
+            ("imports", "table<string>"),
+            ("lints", "table<string>"),
         ],
     ),
-    ("package", &["name", "version"]),
-    ("workspace", &["members"]),
-    ("defaults", &["timing", "command_timing", "query_timing"]),
-    ("codegen", &["header-file"]),
-    (BACKEND_SECTION, &["encodings"]),
+    ("package", &[("name", "string"), ("version", "string")]),
+    ("workspace", &[("members", "array<string>")]),
+    (
+        "defaults",
+        &[
+            ("timing", "string"),
+            ("command_timing", "string"),
+            ("query_timing", "string"),
+        ],
+    ),
+    ("codegen", &[("header-file", "string")]),
+    (BACKEND_SECTION, &[("encodings", "array<string>")]),
 ];
 
 /// The allowed keys of `section` in [`KNOWN_KEYS`]; empty for an unlisted one.
-fn known_keys(section: &str) -> &'static [&'static str] {
+fn known_keys(section: &str) -> Vec<&'static str> {
     KNOWN_KEYS
         .iter()
         .find(|(name, _)| *name == section)
-        .map_or(&[], |(_, keys)| keys)
+        .map_or(Vec::new(), |(_, keys)| {
+            keys.iter().map(|(key, _)| *key).collect()
+        })
 }
 
 /// The keys of every `[backend.<name>]` table, as `(name, key, span of the
@@ -1583,12 +1596,12 @@ version = \"1.0.0\"
     fn all_known_keys_text() -> String {
         let mut text = String::new();
         for key in known_keys("") {
-            let section = if *key == "backend" {
+            let section = if key == "backend" {
                 BACKEND_SECTION
             } else {
                 key
             };
-            let header = if *key == "backend" {
+            let header = if key == "backend" {
                 "backend.rust"
             } else {
                 key
@@ -1639,7 +1652,7 @@ version = \"1.0.0\"
         // a string or an array is expected draws a diagnostic other than
         // MANI-005. A key the reader ignores draws none.
         for (section, keys) in KNOWN_KEYS {
-            for key in *keys {
+            for (key, _) in *keys {
                 let text = manifest_with(section, key, "1");
                 let (_, diags) = parse(&text);
                 assert!(
@@ -1652,5 +1665,49 @@ version = \"1.0.0\"
         let mut diags = Vec::new();
         check_unknown_keys(file_id, "[package]\nnmae = \"x\"\n", &mut diags);
         assert_eq!(codes(&diags), vec!["MANI-005"]);
+    }
+
+    /// A value of each type of `KNOWN_KEYS`, and values of other types.
+    fn type_samples(value_type: &str) -> (&'static str, &'static [&'static str]) {
+        match value_type {
+            "string" => ("\"flatbuffers\"", &["1", "[]"]),
+            "table" => ("{}", &["1", "\"x\""]),
+            "array<string>" => ("[\"flatbuffers\"]", &["1", "[1]"]),
+            "table<string>" => (
+                "{ missing-docs = \"warn\" }",
+                &["1", "{ missing-docs = 1 }"],
+            ),
+            "table<table>" => ("{ rust = {} }", &["1", "{ rust = 1 }"]),
+            other => panic!("KNOWN_KEYS names the unknown value type `{other}`"),
+        }
+    }
+
+    /// The codes a value of the wrong type draws: MANI-001 from the typed
+    /// parse, MANI-010 from `[lints]` and MANI-015 from `[backend]`.
+    const TYPE_CODES: [&str; 3] = ["MANI-001", "MANI-010", "MANI-015"];
+
+    #[test]
+    fn known_key_types_are_the_types_the_reader_accepts() {
+        for (section, keys) in KNOWN_KEYS {
+            for (key, value_type) in *keys {
+                let (right, wrong) = type_samples(value_type);
+                let text = manifest_with(section, key, right);
+                let (_, diags) = parse(&text);
+                assert!(
+                    !codes(&diags).iter().any(|c| TYPE_CODES.contains(c)),
+                    "`{section}` key `{key}` is `{value_type}`, but the reader rejects \
+                     {right}: {diags:?}\n{text}"
+                );
+                for value in wrong {
+                    let text = manifest_with(section, key, value);
+                    let (_, diags) = parse(&text);
+                    assert!(
+                        codes(&diags).iter().any(|c| TYPE_CODES.contains(c)),
+                        "`{section}` key `{key}` is `{value_type}`, but the reader accepts \
+                         {value}\n{text}"
+                    );
+                }
+            }
+        }
     }
 }

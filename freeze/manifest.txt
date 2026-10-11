@@ -1,15 +1,15 @@
-backend
-backend.*.encodings
-codegen
-codegen.header-file
-defaults
-defaults.command_timing
-defaults.query_timing
-defaults.timing
-imports
-lints
-package
-package.name
-package.version
-workspace
-workspace.members
+backend table<table>
+backend.*.encodings array<string>
+codegen table
+codegen.header-file string
+defaults table
+defaults.command_timing string
+defaults.query_timing string
+defaults.timing string
+imports table<string>
+lints table<string>
+package table
+package.name string
+package.version string
+workspace table
+workspace.members array<string>
