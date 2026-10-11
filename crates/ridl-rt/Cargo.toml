@@ -34,3 +34,8 @@ std = []
 # `flatbuffers` and `task` modules resolve.
 [package.metadata.docs.rs]
 all-features = true
+
+# The freeze check denies the major-level lints that cargo-semver-checks only
+# warns about by default (`[workspace.metadata.cargo-semver-checks.lints]`).
+[package.metadata.cargo-semver-checks.lints]
+workspace = true

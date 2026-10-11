@@ -1,0 +1,79 @@
+// `internal` on the interaction layer (typl §3.3, ADR-0008 decision 7).
+//
+// `internal` is accepted on an `interface` — not on an interaction and not on a
+// service, which are parse errors — and the IR records it faithfully
+// (`Interface.visibility = 2`). What the backends do with it is the point of
+// this file: it is what caught them dropping `internal` entirely. See
+// `veh-cluster/NOTES`, "`internal` was dropped by both backends".
+//
+// It is also the corpus's **legal** case for the visibility rule TYPL-005 states
+// (issue #161): `WheelDiagnostics` is package-private and names a
+// package-private payload in every position, which must keep compiling. The
+// checker leaves it alone and the generated Rust is `pub(crate)` on both sides,
+// so `veh_cluster_generated_rust_compiles_with_rustc` — which denies
+// `private_interfaces` — is the proof rather than a snapshot comparison.
+//
+// A **tuple** under an `internal` declaration is here for the same reason
+// (issue #167). Until that fix the file deliberately held none: a tuple
+// generates a named struct of its own, that struct was emitted `pub` whatever
+// induced it, and the compile proof would have failed on a program the checker
+// correctly accepts. So "an `internal` interface over an `internal` payload
+// compiles" was proven for the tuple-free subset only, while
+// `internal_interface_may_name_internal_types_in_every_position` in `ridl-sem`
+// asserted the tuple position legal. Both halves now say the same thing.
+
+package veh.cluster
+
+/// A package-private payload type, so the interaction layer's legal
+/// `internal`-over-`internal` case is exercised inside one package. The
+/// cross-package counterpart is impossible by construction: a foreign
+/// `internal` name never resolves (typl §3.3).
+internal type RawTickCount : integer [0..65535]
+
+// A package-private struct holding a tuple, so the **typl** half of issue #167
+// is in the corpus too: the struct `span` induces is named after `RawWheelSpan`
+// and belongs to it, so it is package-private with it.
+//
+// `bursts` is the second half, and it is here for issue #177: an array **whose
+// element is a tuple**. No corpus entry held that combination — `veh-common`
+// has an array of a named type (`readings : [Speed; 8]`) and a bare tuple field
+// (`range : (min, max)`) but never the two nested — so no generated init ever
+// put an object literal in a concise arrow body, and the TypeScript backend
+// emitted `() => { first: … }`, which parses as a block and returns
+// `undefined`. `span` beside it is the control: a tuple in direct field
+// position was correct throughout, and the two now sit in one generated init
+// function, so the snapshot shows both forms next to each other.
+
+/// The window of raw tick counts a wheel diagnostic covers.
+internal struct RawWheelSpan {
+  span   : (first : RawTickCount, latest : RawTickCount)
+  bursts : [(first : RawTickCount, latest : RawTickCount); 2]
+}
+
+/// A package-private contract shape: realized inside this package, never part
+/// of the cross-package surface.
+internal interface WheelDiagnostics {
+  signal wheelTicks : RawTickCount @[100ms..1s]
+  event slipDetected : FilterState @[50ms..500ms]
+  query readTicks(): RawTickCount @[..50ms]
+  // Appended, so the ordinals above do not move (ridl §11). A parameter is its
+  // own exposure position: it is one of the positions rustc reported when a
+  // public interface carried an `internal` payload.
+  command resetTicks(seed: RawTickCount) @[..50ms]
+  // The tuple return — one of the two interaction positions a tuple can reach.
+  // A signal or event payload and a parameter are narrowed to a named type
+  // (FORM-102), and a collection return is FORM-101.
+  query readSpan(): (min : RawTickCount, max : RawTickCount) @[..50ms]
+  // The other one, and the position that had no corpus entry at all: FORM-102
+  // narrows a `fixed` payload to "a named type OR AN ARRAY" and does not
+  // descend into the element, so a tuple reaches an interaction through the
+  // array and induces `WheelDiagnosticsTickBoundsElement`. Everything
+  // `field_type_tokens` can build is reachable below that element.
+  fixed tickBounds : [(low : RawTickCount, high : RawTickCount); 2]
+}
+
+/// A public shape beside it, so the generated output shows the two side by
+/// side and the difference is readable in one snapshot.
+interface WheelSummary {
+  signal wheelHealth : FanLevel @[1s..10s]
+}

@@ -313,6 +313,44 @@ fn semver_check_passes_an_added_item() {
     let repo = repo_with_api_baseline("semver-added", &api_fixture("Cargo.toml"), &lib_rs);
     let output = check_generated_semver(&repo);
     assert!(output.status.success(), "{}", stderr(&output));
+    // Both copies the check compared, the one of HEAD and the one of the
+    // baseline, build outside any workspace with the denied lints.
+    for copy in ["head/api", "baseline/freeze/generated/api"] {
+        let manifest = repo
+            .dir
+            .join("target/freeze-api")
+            .join(copy)
+            .join("Cargo.toml");
+        let text = std::fs::read_to_string(&manifest)
+            .unwrap_or_else(|e| panic!("{}: {e}", manifest.display()));
+        assert!(
+            text.contains("[workspace]")
+                && text.contains("repr_c_plain_struct_fields_reordered = \"deny\""),
+            "{copy}: {text}"
+        );
+    }
+}
+
+#[test]
+fn semver_check_flags_a_lint_that_warns_by_default() {
+    // cargo-semver-checks reports `repr_c_plain_struct_fields_reordered` as a
+    // warning unless the check denies it.
+    let lib_rs = api_fixture("src/lib.rs").replace(
+        "    pub first: u8,\n    pub second: u16,",
+        "    pub second: u16,\n    pub first: u8,",
+    );
+    assert!(
+        lib_rs.contains("pub second: u16,\n    pub first"),
+        "the fixture changed"
+    );
+    let repo = repo_with_api_baseline("semver-lint", &api_fixture("Cargo.toml"), &lib_rs);
+    let output = check_generated_semver(&repo);
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(
+        err.contains("finds a break") && err.contains("repr_c_plain_struct_fields_reordered"),
+        "{err}"
+    );
 }
 
 #[test]

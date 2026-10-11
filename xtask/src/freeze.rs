@@ -194,6 +194,12 @@ fn parse_options(args: &[String]) -> Result<Options, String> {
             other => return Err(format!("unknown argument `{other}`\n{USAGE}")),
         }
     }
+    if !api_semver.is_empty() && !fixtures_only {
+        return Err(format!(
+            "--api-semver is test-only and needs --fixtures-only: without it every API \
+surface already runs\n{USAGE}"
+        ));
+    }
     Ok(Options {
         root,
         fixtures,
@@ -269,13 +275,42 @@ fn update(options: &Options) -> Result<(), String> {
         std::fs::write(&path, text).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
         println!("wrote {}", path.display());
     }
-    for (surface, regenerate) in active_api_surfaces(options) {
-        if let (true, Some(update)) = (regenerate, surface.update) {
-            update(&options.root).map_err(|e| format!("surface `{}`: {e}", surface.name))?;
+    update_api_surfaces(&active_api_surfaces(options), &options.root)
+}
+
+/// Runs the `update` step of each API surface whose flag is set.
+fn update_api_surfaces(apis: &[(&ApiSurface, bool)], root: &Path) -> Result<(), String> {
+    for (surface, regenerate) in apis {
+        if let (true, Some(update)) = (*regenerate, surface.update) {
+            update(root).map_err(|e| format!("surface `{}`: {e}", surface.name))?;
             println!("updated surface `{}`", surface.name);
         }
     }
     Ok(())
+}
+
+/// The failures of the API surfaces: the `current` step of each surface whose
+/// flag is set, and the `compare` step of each surface that has a row.
+fn check_api_surfaces(apis: &[(&ApiSurface, bool)], rows: &[Row], root: &Path) -> Vec<String> {
+    let mut failures = Vec::new();
+    for (surface, regenerate) in apis {
+        let name = surface.name;
+        if let (true, Some(current)) = (*regenerate, surface.current) {
+            match current(root) {
+                Ok(lines) => {
+                    failures.extend(lines.into_iter().map(|l| format!("surface `{name}`: {l}")))
+                }
+                Err(error) => failures.push(format!("surface `{name}`: {error}")),
+            }
+        }
+        if let Some(row) = rows.iter().find(|r| r.surface == name) {
+            match (surface.compare)(root, row) {
+                Ok(lines) => failures.extend(lines),
+                Err(error) => failures.push(error),
+            }
+        }
+    }
+    failures
 }
 
 /// `git show <baseline>:freeze/<surface>.txt` in `root`.
@@ -361,23 +396,7 @@ run `cargo xtask freeze update` and commit the result"
         }
     }
 
-    for (surface, regenerate) in &apis {
-        let name = surface.name;
-        if let (true, Some(current)) = (*regenerate, surface.current) {
-            match current(&options.root) {
-                Ok(lines) => {
-                    failures.extend(lines.into_iter().map(|l| format!("surface `{name}`: {l}")))
-                }
-                Err(error) => failures.push(format!("surface `{name}`: {error}")),
-            }
-        }
-        if let Some(row) = rows.iter().find(|r| r.surface == name) {
-            match (surface.compare)(&options.root, row) {
-                Ok(lines) => failures.extend(lines),
-                Err(error) => failures.push(error),
-            }
-        }
-    }
+    failures.extend(check_api_surfaces(&apis, &rows, &options.root));
 
     if failures.is_empty() {
         println!("freeze: {} surface(s) checked.", dumps.len() + apis.len());
@@ -421,6 +440,117 @@ mod tests {
             );
             assert!(!text.contains('\\'), "surface `{name}` has a backslash");
         }
+    }
+
+    fn stub_current(_: &Path) -> Result<Vec<String>, String> {
+        Ok(vec!["stale file".into()])
+    }
+
+    fn stub_compare(_: &Path, row: &Row) -> Result<Vec<String>, String> {
+        Ok(vec![format!("break since `{}`", row.baseline)])
+    }
+
+    static STUB_UPDATES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+    fn stub_update(_: &Path) -> Result<(), String> {
+        STUB_UPDATES.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Ok(())
+    }
+
+    const STUB: ApiSurface = ApiSurface {
+        name: "stub",
+        update: Some(stub_update),
+        current: Some(stub_current),
+        compare: stub_compare,
+    };
+
+    #[test]
+    fn check_api_surfaces_runs_current_when_regenerating() {
+        let root = Path::new(".");
+        assert_eq!(
+            check_api_surfaces(&[(&STUB, true)], &[], root),
+            vec!["surface `stub`: stale file"]
+        );
+        assert!(check_api_surfaces(&[(&STUB, false)], &[], root).is_empty());
+    }
+
+    #[test]
+    fn check_api_surfaces_runs_compare_for_a_row_only() {
+        let root = Path::new(".");
+        let rows = [Row {
+            surface: "stub".into(),
+            baseline: "v1".into(),
+        }];
+        assert_eq!(
+            check_api_surfaces(&[(&STUB, false)], &rows, root),
+            vec!["break since `v1`"]
+        );
+        let other = [Row {
+            surface: "other".into(),
+            baseline: "v1".into(),
+        }];
+        assert!(check_api_surfaces(&[(&STUB, false)], &other, root).is_empty());
+    }
+
+    #[test]
+    fn update_api_surfaces_runs_update_when_regenerating() {
+        let root = Path::new(".");
+        let before = STUB_UPDATES.load(std::sync::atomic::Ordering::SeqCst);
+        update_api_surfaces(&[(&STUB, false)], root).unwrap();
+        assert_eq!(
+            STUB_UPDATES.load(std::sync::atomic::Ordering::SeqCst),
+            before
+        );
+        update_api_surfaces(&[(&STUB, true)], root).unwrap();
+        assert_eq!(
+            STUB_UPDATES.load(std::sync::atomic::Ordering::SeqCst),
+            before + 1
+        );
+    }
+
+    fn options(fixtures_only: bool, api_semver: &[&str]) -> Options {
+        Options {
+            root: PathBuf::from("."),
+            fixtures: Vec::new(),
+            fixtures_only,
+            api_semver: api_semver.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn active_api_surfaces_runs_every_surface_with_its_steps() {
+        let active = active_api_surfaces(&options(false, &[]));
+        let names: Vec<&str> = active.iter().map(|(s, _)| s.name).collect();
+        assert_eq!(names, vec!["generated-crate", "runtime-crates"]);
+        assert!(active.iter().all(|(_, regenerate)| *regenerate));
+        let generated = active[0].0;
+        assert!(generated.update.is_some() && generated.current.is_some());
+    }
+
+    #[test]
+    fn active_api_surfaces_under_fixtures_only_runs_the_named_comparison() {
+        assert!(active_api_surfaces(&options(true, &[])).is_empty());
+        let active = active_api_surfaces(&options(true, &["generated-crate"]));
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].0.name, "generated-crate");
+        assert!(!active[0].1);
+    }
+
+    #[test]
+    fn parse_options_rejects_api_semver_without_fixtures_only() {
+        let args = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let error = parse_options(&args(&["--api-semver", "generated-crate"]))
+            .err()
+            .unwrap();
+        assert!(error.contains("--fixtures-only"), "{error}");
+        assert!(
+            parse_options(&args(&[
+                "--fixtures-only",
+                "--api-semver",
+                "generated-crate"
+            ]))
+            .is_ok()
+        );
     }
 
     #[test]

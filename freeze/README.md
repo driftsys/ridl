@@ -17,11 +17,19 @@ lines. Neither has a `<surface>.txt`.
 - `runtime-crates`: `ridl-rt`, `ridl-rt-conformance`, `ridl-loopback` and
   `ridl-descriptor`, compared with the same crates at the baseline.
 - `generated-crate`: each directory `generated/<name>/` holds a crate that
-  `ridl build --emit rust` writes, for `examples/cabin` and for
-  `crates/ridlc/tests/corpus/veh-cluster`. The check fails when it differs from
-  a regeneration. With a row, each crate is compared with the same crate in the
-  baseline's `generated/`, on copies outside the repository that read `ridl-rt`
-  from `crates/ridl-rt`.
+  `ridl build --emit rust` writes, from the source packages under
+  `xtask/tests/freeze-fixtures/generated/`. Those are frozen copies of
+  `examples/cabin` and of `crates/ridlc/tests/corpus/veh-cluster`, so an edit to
+  `examples/` or to the corpus is not a break of this surface. The check fails
+  when a crate differs from a regeneration. With a row, each crate is compared
+  with the same crate in the baseline's `generated/`, on copies outside the
+  repository that read `ridl-rt` from `crates/ridl-rt`.
+
+cargo-semver-checks reports some lints that require a major version only as
+warnings. The check denies each of them (`DENIED_LINTS` in
+`xtask/src/freeze/rust_api.rs`, and
+`[workspace.metadata.cargo-semver-checks.lints]` in the root `Cargo.toml`), so
+the break they find fails the check.
 
 The comparison runs without the network, so the dependencies must already be in
 the local cargo cache. A build of the workspace puts them there.

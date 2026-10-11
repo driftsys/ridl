@@ -24,6 +24,23 @@ members = ["crates/*", "xtask"]
 # `cargo semver-checks` on copies outside the repository, never built here.
 exclude = ["examples", "freeze/generated"]
 
+# The lints of cargo-semver-checks whose required update is major but whose
+# default level is `warn`, raised to `deny` so that `cargo xtask freeze check`
+# fails on the break they find. The runtime crates opt in with
+# `[package.metadata.cargo-semver-checks.lints] workspace = true`. The list
+# equals `DENIED_LINTS` in xtask/src/freeze/rust_api.rs, which a test checks.
+[workspace.metadata.cargo-semver-checks.lints]
+partial_ord_enum_struct_variant_fields_reordered = "deny"
+partial_ord_enum_variants_reordered = "deny"
+partial_ord_struct_fields_reordered = "deny"
+pub_api_sealed_trait_method_receiver_added = "deny"
+pub_api_sealed_trait_method_receiver_mut_ref_became_ref = "deny"
+pub_api_sealed_trait_method_return_value_added = "deny"
+pub_api_sealed_trait_method_target_feature_removed = "deny"
+repr_c_enum_struct_variant_fields_reordered = "deny"
+repr_c_plain_struct_fields_reordered = "deny"
+union_field_added_with_non_pub_fields = "deny"
+
 [workspace.package]
 # Every crate in the workspace shares this version and moves with it: a
 # `v<version>` tag publishes every crate whose manifest does not set

@@ -1,0 +1,6 @@
+[package]
+name = "veh.cabin"
+version = "1.0.0"
+
+[backend.rust]
+encodings = ["flatbuffers"]

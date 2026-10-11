@@ -24,3 +24,8 @@ rust-version = "1.83"
 # port traits and through the hooks of its own `Factory` trait.
 [dependencies]
 ridl-rt.workspace = true
+
+# The freeze check denies the major-level lints that cargo-semver-checks only
+# warns about by default (`[workspace.metadata.cargo-semver-checks.lints]`).
+[package.metadata.cargo-semver-checks.lints]
+workspace = true

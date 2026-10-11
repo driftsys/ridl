@@ -3,14 +3,17 @@
 //! - `runtime-crates`: the published runtime crates, compared with the same
 //!   crates at the baseline ref (`--baseline-rev`).
 //! - `generated-crate`: the crates `ridl build --emit rust` writes for two
-//!   source packages, committed under `freeze/generated/`. The committed tree
+//!   source packages, committed under `freeze/generated/`. The sources are
+//!   frozen copies under `xtask/tests/freeze-fixtures/generated/`, so an edit
+//!   to `examples/` or to a test corpus does not change the frozen API. The committed tree
 //!   must equal a regeneration, and for a row it is compared with the tree at
 //!   the baseline ref (`--baseline-root`).
 //!
 //! `cargo semver-checks` runs with `CARGO_NET_OFFLINE=true`: the check reads
 //! no network, so every dependency must already be in the local cargo cache,
 //! which the workspace build fills. It also runs with `--release-type minor`:
-//! a frozen surface accepts no break, whatever version the crates carry.
+//! a frozen surface accepts no break, whatever version the crates carry. The
+//! lints of [`DENIED_LINTS`] are raised to `deny` (see there).
 
 use super::Row;
 use super::bin;
@@ -27,12 +30,35 @@ const RUNTIME_CRATES: [&str; 4] = [
 ];
 
 /// The generated crates: the directory under `freeze/generated/` and the
-/// source package `ridl build` compiles, relative to the repository root.
+/// source package `ridl build` compiles, relative to the repository root. The
+/// sources are copies of `examples/cabin` and of
+/// `crates/ridlc/tests/corpus/veh-cluster`, taken when the check was added.
 /// Their manifests name `flatbuffers`, the one encoding the Rust backend emits
 /// a codec for; it rejects `proto3` and `repr-c`.
 const GENERATED: [(&str, &str); 2] = [
-    ("cabin", "examples/cabin"),
-    ("veh-cluster", "crates/ridlc/tests/corpus/veh-cluster"),
+    ("cabin", "xtask/tests/freeze-fixtures/generated/cabin"),
+    (
+        "veh-cluster",
+        "xtask/tests/freeze-fixtures/generated/veh-cluster",
+    ),
+];
+
+/// The lints of cargo-semver-checks 0.51.0 whose required update is major and
+/// whose default level is `warn`, so that a break they find would not fail
+/// the check. The check raises each to `deny`: in the copied manifests of the
+/// generated crates, and through `[workspace.metadata.cargo-semver-checks.lints]`
+/// in the root `Cargo.toml` for the runtime crates.
+pub const DENIED_LINTS: [&str; 10] = [
+    "partial_ord_enum_struct_variant_fields_reordered",
+    "partial_ord_enum_variants_reordered",
+    "partial_ord_struct_fields_reordered",
+    "pub_api_sealed_trait_method_receiver_added",
+    "pub_api_sealed_trait_method_receiver_mut_ref_became_ref",
+    "pub_api_sealed_trait_method_return_value_added",
+    "pub_api_sealed_trait_method_target_feature_removed",
+    "repr_c_enum_struct_variant_fields_reordered",
+    "repr_c_plain_struct_fields_reordered",
+    "union_field_added_with_non_pub_fields",
 ];
 
 const GENERATED_DIR: &str = "freeze/generated";
@@ -43,16 +69,21 @@ const BREAK_FOUND: i32 = 100;
 /// Compares the runtime crates with the same crates at the row's baseline,
 /// in one `cargo semver-checks` run.
 pub fn runtime_compare(root: &Path, row: &Row) -> Result<Vec<String>, String> {
+    let command = runtime_command(root, row);
+    let what = format!("the crates {}", RUNTIME_CRATES.join(", "));
+    Ok(run_semver(command, &row.surface, &row.baseline, &what)?
+        .into_iter()
+        .collect())
+}
+
+fn runtime_command(root: &Path, row: &Row) -> Command {
     let mut command = semver_command(root);
     command.arg("--manifest-path").arg(root.join("Cargo.toml"));
     for name in RUNTIME_CRATES {
         command.args(["--package", name]);
     }
     command.args(["--baseline-rev", &row.baseline]);
-    let what = format!("the crates {}", RUNTIME_CRATES.join(", "));
-    Ok(run_semver(command, &row.surface, &row.baseline, &what)?
-        .into_iter()
-        .collect())
+    command
 }
 
 /// Writes the generated crates to `freeze/generated/`, replacing what is there.
@@ -274,7 +305,8 @@ fn crate_dirs(dir: &Path) -> Result<Vec<String>, String> {
 
 /// The manifest of a copied generated crate, made to build outside the
 /// repository without the network: an empty `[workspace]` table, and the
-/// `ridl-rt` dependency read from `ridl_rt` (HEAD's crate, for both sides).
+/// `ridl-rt` dependency read from `ridl_rt` (HEAD's crate, for both sides),
+/// and every lint of [`DENIED_LINTS`] at `deny`.
 ///
 /// The dependency is replaced, not patched: `cargo semver-checks` builds the
 /// crate as a dependency of a crate of its own, and cargo applies
@@ -295,6 +327,23 @@ fn standalone_manifest(text: &str, ridl_rt: &Path) -> Result<String, String> {
             toml::Value::String(ridl_rt.to_string_lossy().into_owned()),
         );
         *dependency = toml::Value::Table(table);
+    }
+    let lints: toml::Table = DENIED_LINTS
+        .iter()
+        .map(|lint| (lint.to_string(), toml::Value::String("deny".into())))
+        .collect();
+    let mut semver = toml::Table::new();
+    semver.insert("lints".into(), toml::Value::Table(lints));
+    let package = manifest
+        .entry("package")
+        .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+    if let toml::Value::Table(package) = package {
+        let metadata = package
+            .entry("metadata")
+            .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+        if let toml::Value::Table(metadata) = metadata {
+            metadata.insert("cargo-semver-checks".into(), toml::Value::Table(semver));
+        }
     }
     manifest.insert("workspace".into(), toml::Value::Table(toml::Table::new()));
     toml::to_string(&manifest).map_err(|e| e.to_string())
@@ -433,6 +482,64 @@ ridl-rt = { version = \"0.8\", features = [\"flatbuffers\"] }\nregex = \"1\"\n";
         assert_eq!(ridl_rt["features"][0].as_str(), Some("flatbuffers"));
         assert_eq!(manifest["dependencies"]["regex"].as_str(), Some("1"));
         assert!(manifest["workspace"].as_table().unwrap().is_empty());
+        let lints = manifest["package"]["metadata"]["cargo-semver-checks"]["lints"]
+            .as_table()
+            .unwrap();
+        assert_eq!(lints.len(), DENIED_LINTS.len());
+        for lint in DENIED_LINTS {
+            assert_eq!(lints[lint].as_str(), Some("deny"), "{lint}");
+        }
+    }
+
+    #[test]
+    fn runtime_command_checks_every_runtime_crate_against_the_baseline() {
+        let row = Row {
+            surface: "runtime-crates".into(),
+            baseline: "v9".into(),
+        };
+        let command = runtime_command(Path::new("/r"), &row);
+        let args: Vec<String> = command
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        let has = |flag: &str, value: &str| args.windows(2).any(|w| w[0] == flag && w[1] == value);
+        for name in RUNTIME_CRATES {
+            assert!(has("--package", name), "{args:?}");
+        }
+        assert!(has("--baseline-rev", "v9"), "{args:?}");
+        assert!(has("--release-type", "minor"), "{args:?}");
+        assert!(has("--manifest-path", "/r/Cargo.toml"), "{args:?}");
+        assert!(
+            command
+                .get_envs()
+                .any(|(k, v)| k == "CARGO_NET_OFFLINE" && v == Some("true".as_ref())),
+            "the check must not read the network"
+        );
+    }
+
+    #[test]
+    fn runtime_crates_deny_the_lints_that_warn_by_default() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let read = |path: PathBuf| -> toml::Table {
+            toml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap()
+        };
+        let workspace = read(root.join("Cargo.toml"));
+        let lints = workspace["workspace"]["metadata"]["cargo-semver-checks"]["lints"]
+            .as_table()
+            .unwrap();
+        let mut names: Vec<&str> = lints.keys().map(String::as_str).collect();
+        names.sort();
+        assert_eq!(names, DENIED_LINTS.to_vec());
+        assert!(lints.values().all(|v| v.as_str() == Some("deny")));
+        for name in RUNTIME_CRATES {
+            let manifest = read(root.join("crates").join(name).join("Cargo.toml"));
+            assert_eq!(
+                manifest["package"]["metadata"]["cargo-semver-checks"]["lints"]["workspace"]
+                    .as_bool(),
+                Some(true),
+                "{name} does not use the workspace's semver lints"
+            );
+        }
     }
 
     #[test]
