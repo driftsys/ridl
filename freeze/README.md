@@ -58,6 +58,11 @@ Run `cargo xtask freeze update` and commit the changed files. The recipe
 `just freeze-check` runs `cargo xtask freeze check`, which fails when a
 committed dump differs from the regenerated one.
 
+A release that raises the minor version changes the `ridl-rt` requirement in
+`freeze/generated/*/Cargo.toml`, so the pull request of that release runs
+`cargo xtask freeze update` and commits the result. A patch release does not
+change the requirement.
+
 ## Approve a break
 
 A removed or changed line, or a Rust API break, is a break of the frozen
