@@ -150,8 +150,8 @@ value; attributes describe the declaration.
 
 **R4 — `@` is time.** In source, `@` introduces a timing annotation and nothing
 else. (Doc-comment tags live inside comments — a different plane, javadoc
-heritage; after the §4.7 promotion, `@see` is the only tag left and carries no
-semantics.)
+heritage. The §4.7 promotion is declined (ADR-0028 decision 4), so `@see`,
+`@since`, `@labels` and `@deprecated` stay doc tags.)
 
 **R5 — The sentence order.** Postfix elements always appear in this order,
 skipping absent slots:
@@ -214,7 +214,8 @@ Consequences (decided): `labels` and `deprecated` are **attributes** (assurance
 gating, lint warnings, and generated `@Deprecated`/`#[deprecated]` are machine
 consumers — §4.7). `@see` and prose remain doc-comment material. The human
 _narrative_ around a deprecation stays in the doc comment; the machine-readable
-fact goes in brackets.
+fact goes in brackets. Declined later by ADR-0028 decision 4: `labels` and
+`deprecated` stay doc tags (§4.7).
 
 ### 4.2 The three attribute forms
 
@@ -321,16 +322,16 @@ Semantics:
 
 ### 4.7 Promoted metadata — `labels`, `deprecated`
 
-> **Not implemented; deferred to spec 2b** (ADR-0026 decision 4). The toolchain
-> keeps `@labels` and `@deprecated` as doc tags, beside `@see` and `@since`. An
-> attribute block exists on the interactions `signal`, `event`, `command` and
-> `query` (RIDL-106 rejects one on `fixed`) and on the rsdl declarations and
-> body lines. `type`, `const`, `struct`, `enum`, `enumset`, `union`,
-> `interface`, `service`, fields and enum values have none, so removing the tags
-> would leave them, and `fixed`, with no way to be deprecated. Spec 2b,
-> documentation in generated code, decides between this promotion (adding the
-> attribute block to the grammar) and generating deprecation metadata from the
-> doc tag.
+> **Declined** (ADR-0028 decision 4, which resolves the deferral of ADR-0026
+> decision 4). The toolchain keeps `@labels` and `@deprecated` as doc tags,
+> beside `@see` and `@since`, and generated code takes its deprecation metadata
+> from the `@deprecated` tag. An attribute block exists on the interactions
+> `signal`, `event`, `command` and `query` (RIDL-106 rejects one on `fixed`) and
+> on the rsdl declarations and body lines. `type`, `const`, `struct`, `enum`,
+> `enumset`, `union`, `interface`, `service`, fields, enum values and `fixed`
+> have none, so the promotion would add the attribute block to the grammar on
+> these eleven carriers to move two facts that the doc tags already deliver to
+> every consumer. The rest of this section records the declined proposal.
 
 ```ridl
 /// Cruise control service contract.
@@ -532,7 +533,8 @@ and adds no profile-specific semantics, which no other uxdl section does.
    production; add the attribute-diagnostic set (§4.3).
 2. **typl §14.2–14.3** — `@labels` and `@deprecated` move from doc tags to
    attributes (§4.7); `@see` remains; TYPL-402/403/405 re-anchor to attribute
-   position. Not applied: deferred with §4.7 to spec 2b (ADR-0026 decision 4).
+   position. Not applied: declined with §4.7 by ADR-0028 decision 4; `@labels`
+   and `@deprecated` stay doc tags.
 3. **ridl §2.3** — `init` downgraded from registry keyword to contextual
    attribute key (§4.5).
 4. **Concept note §6 (cruise example)** — rmdl node outputs use `: (…)`
@@ -566,7 +568,7 @@ and adds no profile-specific semantics, which no other uxdl section does.
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | Attribute syntax              | **Trailing `[ … ]` block** — position-distinguished from shape brackets (R3); prefix sigils (`#[…]`) and above-the-line placement rejected      |
 | Doc tag vs attribute boundary | **The deletion test** (§4.1), both directions normative                                                                                         |
-| `labels`, `deprecated`        | **Promoted to attributes**; `@see` remains the only doc tag                                                                                     |
+| `labels`, `deprecated`        | **Promoted to attributes**; `@see` remains the only doc tag; declined later by ADR-0028 decision 4, both stay doc tags                          |
 | Attribute grammar             | **Three forms** — flag / assignment / predicate; one `attr_block` production; allow-lists via diagnostics                                       |
 | Attribute keys                | **Contextual**, not registry keywords                                                                                                           |
 | `persist`                     | Admitted as the reference flag attribute; semantics per §4.6; diff category open                                                                |

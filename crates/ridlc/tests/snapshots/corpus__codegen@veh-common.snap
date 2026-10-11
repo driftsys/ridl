@@ -49,6 +49,26 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": true
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [
+        {
+          "text": "range 0 ..= 250",
+          "range": {
+            "min": "0",
+            "max": "250"
+          }
+        },
+        {
+          "text": "step 0.5",
+          "step": "0.5"
+        },
+        {
+          "text": "unit km/h",
+          "unit": "km/h"
+        }
+      ],
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
         "unit": "km/h",
@@ -88,6 +108,26 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": true
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [
+        {
+          "text": "range -40 ..= 125",
+          "range": {
+            "min": "-40",
+            "max": "125"
+          }
+        },
+        {
+          "text": "step 0.1",
+          "step": "0.1"
+        },
+        {
+          "text": "unit Cel",
+          "unit": "Cel"
+        }
+      ],
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
         "unit": "Cel",
@@ -127,6 +167,26 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": true
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [
+        {
+          "text": "range 0 ..= 8000",
+          "range": {
+            "min": "0",
+            "max": "8000"
+          }
+        },
+        {
+          "text": "step 10",
+          "step": "10"
+        },
+        {
+          "text": "unit /min",
+          "unit": "/min"
+        }
+      ],
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
         "unit": "/min",
@@ -166,6 +226,26 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": true
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [
+        {
+          "text": "range 0 ..= 100",
+          "range": {
+            "min": "0",
+            "max": "100"
+          }
+        },
+        {
+          "text": "step 0.1",
+          "step": "0.1"
+        },
+        {
+          "text": "unit %",
+          "unit": "%"
+        }
+      ],
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
         "unit": "%",
@@ -205,6 +285,18 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": true
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [
+        {
+          "text": "range 0 ..= 65535",
+          "range": {
+            "min": "0",
+            "max": "65535"
+          }
+        }
+      ],
       "scalar": {
         "class": "SCALAR_CLASS_INTEGER",
         "constraint": {
@@ -242,6 +334,22 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": true
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [
+        {
+          "text": "range 0 ..= 1",
+          "range": {
+            "min": "0",
+            "max": "1"
+          }
+        },
+        {
+          "text": "step 0.01",
+          "step": "0.01"
+        }
+      ],
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
         "constraint": {
@@ -265,6 +373,10 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "isError": false,
       "doc": "",
       "labels": [],
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "constant": {
         "value": "250",
         "named": {
@@ -289,6 +401,10 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "isError": false,
       "doc": "",
       "labels": [],
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "constant": {
         "value": "130",
         "named": {
@@ -313,6 +429,10 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "isError": false,
       "doc": "",
       "labels": [],
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "constant": {
         "value": "6",
         "primitive": "PRIMITIVE_TYPE_INTEGER"
@@ -330,6 +450,10 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "isError": false,
       "doc": "",
       "labels": [],
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "constant": {
         "value": "800",
         "named": {
@@ -368,6 +492,10 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "enum": {
         "values": [
           {
@@ -379,7 +507,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "pascal": "Park"
             },
             "value": "0",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           },
           {
             "name": {
@@ -390,7 +522,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "pascal": "Drive"
             },
             "value": "1",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           },
           {
             "name": {
@@ -401,7 +537,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "pascal": "Reverse"
             },
             "value": "2",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           },
           {
             "name": {
@@ -412,7 +552,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "pascal": "Neutral"
             },
             "value": "3",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           }
         ],
         "retired": [],
@@ -446,6 +590,10 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "enum": {
         "values": [
           {
@@ -457,7 +605,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "pascal": "LowFuel"
             },
             "value": "0",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           },
           {
             "name": {
@@ -468,7 +620,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "pascal": "CheckEngine"
             },
             "value": "1",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           },
           {
             "name": {
@@ -479,7 +635,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "pascal": "DoorOpen"
             },
             "value": "2",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           },
           {
             "name": {
@@ -490,7 +650,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "pascal": "Seatbelt"
             },
             "value": "3",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           }
         ],
         "retired": [],
@@ -524,6 +688,10 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "enumSet": {
         "backingEnum": {
           "reference": "Warning",
@@ -543,7 +711,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "pascal": "LowFuel"
             },
             "value": "0",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           },
           {
             "name": {
@@ -554,7 +726,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "pascal": "CheckEngine"
             },
             "value": "1",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           },
           {
             "name": {
@@ -565,7 +741,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "pascal": "DoorOpen"
             },
             "value": "2",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           },
           {
             "name": {
@@ -576,7 +756,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "pascal": "Seatbelt"
             },
             "value": "3",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           }
         ],
         "width": "INT_WIDTH_U8",
@@ -609,6 +793,10 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "struct": {
         "slots": [
           {
@@ -639,7 +827,27 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "oneLevel": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "range 0 ..= 250",
+                  "range": {
+                    "min": "0",
+                    "max": "250"
+                  }
+                },
+                {
+                  "text": "step 0.5",
+                  "step": "0.5"
+                },
+                {
+                  "text": "unit km/h",
+                  "unit": "km/h"
+                }
+              ]
             }
           },
           {
@@ -670,7 +878,27 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "oneLevel": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "range 0 ..= 250",
+                  "range": {
+                    "min": "0",
+                    "max": "250"
+                  }
+                },
+                {
+                  "text": "step 0.5",
+                  "step": "0.5"
+                },
+                {
+                  "text": "unit km/h",
+                  "unit": "km/h"
+                }
+              ]
             }
           }
         ],
@@ -703,6 +931,10 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "source": "INIT_SOURCE_NONE",
         "oneLevel": false
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "struct": {
         "slots": [
           {
@@ -732,7 +964,23 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "oneLevel": false
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "length 1 ..= 128",
+                  "length": {
+                    "min": "1",
+                    "max": "128"
+                  }
+                },
+                {
+                  "text": "pattern `/^[\\x20-\\x7E]+$/`",
+                  "pattern": "/^[\\x20-\\x7E]+$/"
+                }
+              ]
             }
           },
           {
@@ -763,7 +1011,27 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "oneLevel": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "range 0 ..= 250",
+                  "range": {
+                    "min": "0",
+                    "max": "250"
+                  }
+                },
+                {
+                  "text": "step 0.5",
+                  "step": "0.5"
+                },
+                {
+                  "text": "unit km/h",
+                  "unit": "km/h"
+                }
+              ]
             }
           },
           {
@@ -793,7 +1061,27 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "oneLevel": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "range 0 ..= 250",
+                  "range": {
+                    "min": "0",
+                    "max": "250"
+                  }
+                },
+                {
+                  "text": "step 0.5",
+                  "step": "0.5"
+                },
+                {
+                  "text": "unit km/h",
+                  "unit": "km/h"
+                }
+              ]
             }
           },
           {
@@ -826,7 +1114,19 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "oneLevel": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "range 0 ..= 6",
+                  "range": {
+                    "min": "0",
+                    "max": "6"
+                  }
+                }
+              ]
             }
           }
         ],
@@ -859,6 +1159,10 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "source": "INIT_SOURCE_NONE",
         "oneLevel": false
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "struct": {
         "slots": [
           {
@@ -883,7 +1187,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "oneLevel": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": []
             }
           },
           {
@@ -920,7 +1228,19 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "oneLevel": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "count 8",
+                  "collectionBound": {
+                    "min": "8",
+                    "max": "8"
+                  }
+                }
+              ]
             }
           },
           {
@@ -957,7 +1277,19 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "oneLevel": false
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "count 1 ..= 16",
+                  "collectionBound": {
+                    "min": "1",
+                    "max": "16"
+                  }
+                }
+              ]
             }
           },
           {
@@ -1006,7 +1338,19 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "oneLevel": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "count 0 ..= 32",
+                  "collectionBound": {
+                    "min": "0",
+                    "max": "32"
+                  }
+                }
+              ]
             }
           }
         ],
@@ -1039,6 +1383,10 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "union": {
         "arms": [
           {
@@ -1059,7 +1407,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "kind": "DECL_KIND_STRUCT"
             },
             "doc": "",
-            "discriminant": 1
+            "discriminant": 1,
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           },
           {
             "name": {
@@ -1079,7 +1431,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
               "kind": "DECL_KIND_STRUCT"
             },
             "doc": "",
-            "discriminant": 2
+            "discriminant": 2,
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           }
         ],
         "retired": [],
@@ -1112,6 +1468,10 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "struct": {
         "slots": [
           {
@@ -1142,7 +1502,27 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "oneLevel": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "range 0 ..= 250",
+                  "range": {
+                    "min": "0",
+                    "max": "250"
+                  }
+                },
+                {
+                  "text": "step 0.5",
+                  "step": "0.5"
+                },
+                {
+                  "text": "unit km/h",
+                  "unit": "km/h"
+                }
+              ]
             }
           },
           {
@@ -1173,7 +1553,19 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "oneLevel": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "range 0 ..= 9223372036854775807",
+                  "range": {
+                    "min": "0",
+                    "max": "9223372036854775807"
+                  }
+                }
+              ]
             }
           }
         ],
@@ -1206,6 +1598,10 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "source": "INIT_SOURCE_NONE",
         "oneLevel": false
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "struct": {
         "slots": [
           {
@@ -1236,7 +1632,19 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "oneLevel": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "range 0 ..= 65535",
+                  "range": {
+                    "min": "0",
+                    "max": "65535"
+                  }
+                }
+              ]
             }
           },
           {
@@ -1266,7 +1674,23 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "oneLevel": false
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "length 1 ..= 256",
+                  "length": {
+                    "min": "1",
+                    "max": "256"
+                  }
+                },
+                {
+                  "text": "pattern `/^[\\x20-\\x7E]+$/`",
+                  "pattern": "/^[\\x20-\\x7E]+$/"
+                }
+              ]
             }
           }
         ],
@@ -1299,6 +1723,10 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "source": "INIT_SOURCE_NONE",
         "oneLevel": false
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "struct": {
         "slots": [
           {
@@ -1329,7 +1757,19 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "oneLevel": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "range 0 ..= 65535",
+                  "range": {
+                    "min": "0",
+                    "max": "65535"
+                  }
+                }
+              ]
             }
           },
           {
@@ -1359,7 +1799,19 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                 "oneLevel": false
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "length 8",
+                  "length": {
+                    "min": "8",
+                    "max": "8"
+                  }
+                }
+              ]
             }
           }
         ],
@@ -1399,7 +1851,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
             "oneLevel": false
           },
           "doc": "",
-          "labels": []
+          "labels": [],
+          "links": [],
+          "see": [],
+          "since": [],
+          "rules": []
         },
         {
           "name": {
@@ -1426,7 +1882,11 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
             "oneLevel": false
           },
           "doc": "",
-          "labels": []
+          "labels": [],
+          "links": [],
+          "see": [],
+          "since": [],
+          "rules": []
         }
       ],
       "visibility": "VISIBILITY_PUBLIC",
@@ -2036,6 +2496,22 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           "source": "INIT_SOURCE_NONE",
           "oneLevel": false
         },
+        "links": [],
+        "see": [],
+        "since": [],
+        "rules": [
+          {
+            "text": "length 1 ..= 128",
+            "length": {
+              "min": "1",
+              "max": "128"
+            }
+          },
+          {
+            "text": "pattern `/^[\\x20-\\x7E]+$/`",
+            "pattern": "/^[\\x20-\\x7E]+$/"
+          }
+        ],
         "scalar": {
           "class": "SCALAR_CLASS_STRING",
           "constraint": {
@@ -2076,6 +2552,22 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           "source": "INIT_SOURCE_NONE",
           "oneLevel": false
         },
+        "links": [],
+        "see": [],
+        "since": [],
+        "rules": [
+          {
+            "text": "length 1 ..= 64",
+            "length": {
+              "min": "1",
+              "max": "64"
+            }
+          },
+          {
+            "text": "pattern `/^[\\x20-\\x7E]+$/`",
+            "pattern": "/^[\\x20-\\x7E]+$/"
+          }
+        ],
         "scalar": {
           "class": "SCALAR_CLASS_STRING",
           "constraint": {
@@ -2117,6 +2609,18 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           "source": "INIT_SOURCE_DERIVED",
           "oneLevel": true
         },
+        "links": [],
+        "see": [],
+        "since": [],
+        "rules": [
+          {
+            "text": "range 0 ..= 9223372036854775807",
+            "range": {
+              "min": "0",
+              "max": "9223372036854775807"
+            }
+          }
+        ],
         "scalar": {
           "class": "SCALAR_CLASS_INTEGER",
           "constraint": {
@@ -2156,6 +2660,22 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           "source": "INIT_SOURCE_NONE",
           "oneLevel": false
         },
+        "links": [],
+        "see": [],
+        "since": [],
+        "rules": [
+          {
+            "text": "length 1 ..= 256",
+            "length": {
+              "min": "1",
+              "max": "256"
+            }
+          },
+          {
+            "text": "pattern `/^[\\x20-\\x7E]+$/`",
+            "pattern": "/^[\\x20-\\x7E]+$/"
+          }
+        ],
         "scalar": {
           "class": "SCALAR_CLASS_STRING",
           "constraint": {

@@ -60,6 +60,7 @@ mod clauses;
 mod contract;
 mod deployment;
 pub mod depth;
+mod docs;
 mod facts;
 mod flatbuffers;
 mod lower;

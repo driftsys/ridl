@@ -16,6 +16,7 @@
 use std::collections::HashMap;
 
 use super::clauses;
+use super::docs::{doc_links, model_rules};
 use super::facts::{Closures, Inits, scalar_class};
 use super::flatbuffers;
 use super::names::{dotted_name, joined_camel, spellings};
@@ -24,6 +25,7 @@ use super::v1;
 use crate::name::camel_case;
 use crate::projection::flatbuffers as fb;
 use crate::projection::size::{self, AbsentCause, Ctx, Encoding, PayloadShape, SizeState};
+use crate::rules::ItemRef;
 use crate::v2;
 
 /// Lowers one package over the scope `others` (design note D-1).
@@ -46,6 +48,7 @@ pub fn lower_with(
     let scope = Scope { package, others };
     let mut lowering = Lowering {
         scope,
+        deps: scope.packages().collect(),
         sizes: Ctx::new(package, others),
         inits: Inits::new(scope),
         closures: Closures::new(scope),
@@ -239,6 +242,8 @@ struct TupleEntry<'a> {
 
 struct Lowering<'a> {
     scope: Scope<'a>,
+    /// The `deps` of `rules::rules`: the lowered package, then the others.
+    deps: Vec<&'a v2::Package>,
     sizes: Ctx<'a>,
     inits: Inits<'a>,
     closures: Closures<'a>,
@@ -268,6 +273,10 @@ impl<'a> Lowering<'a> {
             doc: decl.doc.clone(),
             labels: decl.labels.clone(),
             deprecated: decl.deprecated.clone(),
+            links: doc_links(&decl.links),
+            see: doc_links(&decl.see),
+            since: decl.since.clone(),
+            rules: model_rules(home, &self.deps, ItemRef::Decl(decl)),
             closure: (!is_constant).then(|| self.closures.declaration(home, decl)),
             init: (!is_constant).then(|| self.inits.declaration(home, decl)),
             kind: self.declaration_kind(home, decl, path),
@@ -338,6 +347,10 @@ impl<'a> Lowering<'a> {
             doc: field.doc.clone(),
             labels: field.labels.clone(),
             deprecated: field.deprecated.clone(),
+            links: doc_links(&field.links),
+            see: doc_links(&field.see),
+            since: field.since.clone(),
+            rules: model_rules(home, &self.deps, ItemRef::Field(field)),
         }
     }
 
@@ -417,6 +430,11 @@ impl<'a> Lowering<'a> {
                     discriminant: fb::union_arm_discriminant(arm),
                     // Patched once the projection has its table indices.
                     flatbuffers_box: None,
+                    links: doc_links(&arm.links),
+                    see: doc_links(&arm.see),
+                    since: arm.since.clone(),
+                    // `rules::rules` has no item for a union arm.
+                    rules: Vec::new(),
                 })
                 .collect(),
             retired: def.reserved.iter().map(retired).collect(),
@@ -652,6 +670,12 @@ impl<'a> Lowering<'a> {
                         doc: String::new(),
                         labels: Vec::new(),
                         deprecated: None,
+                        // A tuple field carries no doc in the IR, and
+                        // `rules::rules` has no item for it.
+                        links: Vec::new(),
+                        see: Vec::new(),
+                        since: Vec::new(),
+                        rules: Vec::new(),
                     }
                 })
                 .collect();
@@ -741,6 +765,11 @@ impl<'a> Lowering<'a> {
             doc: interface.doc.clone(),
             labels: interface.labels.clone(),
             deprecated: interface.deprecated.clone(),
+            links: doc_links(&interface.links),
+            see: doc_links(&interface.see),
+            since: interface.since.clone(),
+            // `rules::rules` has no item for an interface.
+            rules: Vec::new(),
             slots,
             table_budget: Some(table_budget),
             inline_of_service,
@@ -908,6 +937,10 @@ impl<'a> Lowering<'a> {
             timing: timing.map(timing_of),
             reservation: Some(reservation),
             shape,
+            links: doc_links(&decl.links),
+            see: doc_links(&decl.see),
+            since: decl.since.clone(),
+            rules: model_rules(home, &self.deps, ItemRef::Decl(decl)),
         }
     }
 
@@ -931,6 +964,11 @@ impl<'a> Lowering<'a> {
                 v1::Param {
                     name: Some(spellings(&param.name)),
                     r#type: param.r#type.as_ref().map(|ty| self.type_at(home, ty, &at)),
+                    doc: param.doc.clone(),
+                    links: doc_links(&param.links),
+                    see: doc_links(&param.see),
+                    since: param.since.clone(),
+                    rules: model_rules(home, &self.deps, ItemRef::Param(param)),
                 }
             })
             .collect()
@@ -1090,6 +1128,11 @@ impl<'a> Lowering<'a> {
                     deprecated: service.deprecated.clone(),
                     interface_refs,
                     inline_shape,
+                    links: doc_links(&service.links),
+                    see: doc_links(&service.see),
+                    since: service.since.clone(),
+                    // `rules::rules` has no item for a service.
+                    rules: Vec::new(),
                 }
             })
             .collect()
@@ -1373,6 +1416,11 @@ fn enum_value(value: &v2::EnumValue) -> v1::EnumValue {
         name: Some(spellings(&value.name)),
         value: value.value,
         doc: value.doc.clone(),
+        links: doc_links(&value.links),
+        see: doc_links(&value.see),
+        since: value.since.clone(),
+        // `rules::rules` has no item for an enum value.
+        rules: Vec::new(),
     }
 }
 

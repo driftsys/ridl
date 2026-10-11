@@ -61,6 +61,19 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "bytes": "43"
               }
             },
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "interval 100000 ..= 1000000 us",
+                "timing": {
+                  "mode": "TIMING_MODE_RANGE",
+                  "minUs": "100000",
+                  "maxUs": "1000000"
+                }
+              }
+            ],
             "signal": {
               "payload": {
                 "type": {
@@ -120,6 +133,19 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "bytes": "46"
               }
             },
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "interval 100000 ..= 1000000 us",
+                "timing": {
+                  "mode": "TIMING_MODE_RANGE",
+                  "minUs": "100000",
+                  "maxUs": "1000000"
+                }
+              }
+            ],
             "signal": {
               "payload": {
                 "type": {
@@ -178,6 +204,17 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "bytes": "50"
               }
             },
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 50000 us",
+                "responseBound": {
+                  "maxUs": "50000"
+                }
+              }
+            ],
             "command": {
               "params": [
                 {
@@ -198,7 +235,12 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                       "index": 2,
                       "kind": "DECL_KIND_ENUM"
                     }
-                  }
+                  },
+                  "doc": "",
+                  "links": [],
+                  "see": [],
+                  "since": [],
+                  "rules": []
                 }
               ],
               "request": {
@@ -245,6 +287,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "bytes": "139"
         }
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "declared": {
         "declared": "CruiseControl",
         "snake": "cruise_control",
@@ -288,6 +334,19 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "bytes": "43"
               }
             },
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "interval 100000 ..= 1000000 us",
+                "timing": {
+                  "mode": "TIMING_MODE_RANGE",
+                  "minUs": "100000",
+                  "maxUs": "1000000"
+                }
+              }
+            ],
             "signal": {
               "payload": {
                 "type": {
@@ -328,6 +387,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "bytes": "43"
         }
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "declared": {
         "declared": "LaneAssist",
         "snake": "lane_assist",
@@ -354,7 +417,11 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "labels": [],
       "interfaceRefs": [
         "CruiseControl"
-      ]
+      ],
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": []
     },
     {
       "name": {
@@ -372,7 +439,11 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "labels": [],
       "interfaceRefs": [
         "LaneAssist"
-      ]
+      ],
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": []
     }
   ],
   "catalog": {
@@ -415,6 +486,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "source": "INIT_SOURCE_DERIVED",
           "oneLevel": true
         },
+        "links": [],
+        "see": [],
+        "since": [],
+        "rules": [],
         "scalar": {
           "class": "SCALAR_CLASS_BOOLEAN",
           "vacuous": true
@@ -450,6 +525,26 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "source": "INIT_SOURCE_DERIVED",
           "oneLevel": true
         },
+        "links": [],
+        "see": [],
+        "since": [],
+        "rules": [
+          {
+            "text": "range 0 ..= 250",
+            "range": {
+              "min": "0",
+              "max": "250"
+            }
+          },
+          {
+            "text": "step 0.5",
+            "step": "0.5"
+          },
+          {
+            "text": "unit km/h",
+            "unit": "km/h"
+          }
+        ],
         "scalar": {
           "class": "SCALAR_CLASS_FLOAT",
           "unit": "km/h",
@@ -491,6 +586,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "source": "INIT_SOURCE_DERIVED",
           "oneLevel": false
         },
+        "links": [],
+        "see": [],
+        "since": [],
+        "rules": [],
         "enum": {
           "values": [
             {
@@ -502,7 +601,11 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "pascal": "Set"
               },
               "value": "1",
-              "doc": ""
+              "doc": "",
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": []
             },
             {
               "name": {
@@ -513,7 +616,11 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "pascal": "Cancel"
               },
               "value": "2",
-              "doc": ""
+              "doc": "",
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": []
             },
             {
               "name": {
@@ -524,7 +631,11 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "pascal": "Resume"
               },
               "value": "3",
-              "doc": ""
+              "doc": "",
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": []
             }
           ],
           "retired": [],
@@ -584,6 +695,26 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": true
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [
+        {
+          "text": "range 0 ..= 250",
+          "range": {
+            "min": "0",
+            "max": "250"
+          }
+        },
+        {
+          "text": "step 0.5",
+          "step": "0.5"
+        },
+        {
+          "text": "unit km/h",
+          "unit": "km/h"
+        }
+      ],
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
         "unit": "km/h",
@@ -623,6 +754,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": true
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "scalar": {
         "class": "SCALAR_CLASS_BOOLEAN",
         "vacuous": true
@@ -654,6 +789,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "enum": {
         "values": [
           {
@@ -665,7 +804,11 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               "pascal": "Set"
             },
             "value": "1",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           },
           {
             "name": {
@@ -676,7 +819,11 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               "pascal": "Cancel"
             },
             "value": "2",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           },
           {
             "name": {
@@ -687,7 +834,11 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               "pascal": "Resume"
             },
             "value": "3",
-            "doc": ""
+            "doc": "",
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": []
           }
         ],
         "retired": [],
@@ -720,6 +871,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "struct": {
         "slots": [
           {
@@ -751,7 +906,19 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "oneLevel": true
               },
               "doc": "",
-              "labels": []
+              "labels": [],
+              "links": [],
+              "see": [],
+              "since": [],
+              "rules": [
+                {
+                  "text": "range 0 ..= 255",
+                  "range": {
+                    "min": "0",
+                    "max": "255"
+                  }
+                }
+              ]
             }
           }
         ],
@@ -934,6 +1101,17 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "unsized": "readFaults.request: ()"
               }
             },
+            "links": [],
+            "see": [],
+            "since": [],
+            "rules": [
+              {
+                "text": "response within 100000 us",
+                "responseBound": {
+                  "maxUs": "100000"
+                }
+              }
+            ],
             "query": {
               "params": [],
               "reply": {
@@ -1002,6 +1180,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "unsized": "readFaults"
         }
       },
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": [],
       "service": {
         "dotted": "veh.diag.access",
         "segments": [
@@ -1030,7 +1212,11 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "doc": "",
       "labels": [],
       "interfaceRefs": [],
-      "inlineShape": 0
+      "inlineShape": 0,
+      "links": [],
+      "see": [],
+      "since": [],
+      "rules": []
     }
   ],
   "catalog": {
@@ -1072,6 +1258,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "source": "INIT_SOURCE_DERIVED",
           "oneLevel": false
         },
+        "links": [],
+        "see": [],
+        "since": [],
+        "rules": [],
         "struct": {
           "slots": [
             {
@@ -1103,7 +1293,19 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                   "oneLevel": true
                 },
                 "doc": "",
-                "labels": []
+                "labels": [],
+                "links": [],
+                "see": [],
+                "since": [],
+                "rules": [
+                  {
+                    "text": "range 0 ..= 255",
+                    "range": {
+                      "min": "0",
+                      "max": "255"
+                    }
+                  }
+                ]
               }
             }
           ],

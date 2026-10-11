@@ -3006,3 +3006,784 @@ fn the_compatible_list_is_field_four_on_the_wire() {
         vec![0x22, 0x01, 0xab]
     );
 }
+
+// ---------------------------------------------------------------------
+// Doc links, `see`, `since` and rules (ADR-0028)
+// ---------------------------------------------------------------------
+
+/// The field number of every doc field on every doc carrier, of `DocLink`, and
+/// of `Rule`. A plugin reads the number, so a renumber is a wire change that
+/// neither the JSON nor a round trip through this crate's own impls shows.
+#[test]
+fn doc_carrier_field_numbers() {
+    let pool = v2::codegen_model_descriptor().parent_pool().clone();
+    let number = |message: &str, field: &str| -> u32 {
+        pool.get_message_by_name(message)
+            .unwrap_or_else(|| panic!("the compiled schema declares {message}"))
+            .get_field_by_name(field)
+            .unwrap_or_else(|| panic!("{message} declares {field}"))
+            .number()
+    };
+    let carriers: [(&str, u32, u32, u32, u32, u32); 8] = [
+        ("Declaration", 4, 20, 21, 22, 23),
+        ("Field", 5, 8, 9, 10, 11),
+        ("EnumValue", 3, 4, 5, 6, 7),
+        ("Arm", 4, 7, 8, 9, 10),
+        ("Interface", 4, 20, 21, 22, 23),
+        ("Interaction", 4, 20, 21, 22, 23),
+        ("Service", 3, 8, 9, 10, 11),
+        ("Param", 3, 4, 5, 6, 7),
+    ];
+    for (message, doc, links, see, since, rules) in carriers {
+        let message = format!("ridl.codegen.v1.{message}");
+        let actual = [
+            number(&message, "doc"),
+            number(&message, "links"),
+            number(&message, "see"),
+            number(&message, "since"),
+            number(&message, "rules"),
+        ];
+        assert_eq!(actual, [doc, links, see, since, rules], "{message}");
+    }
+
+    let rows: &[(&str, &[(&str, u32)])] = &[
+        (
+            "DocLink",
+            &[("text", 1), ("offset", 2), ("len", 3), ("target", 4)],
+        ),
+        (
+            "Rule",
+            &[
+                ("text", 1),
+                ("range", 10),
+                ("step", 11),
+                ("unit", 12),
+                ("length", 13),
+                ("pattern", 14),
+                ("collection_bound", 15),
+                ("timing", 16),
+                ("response_bound", 17),
+                ("errors", 18),
+                ("contract", 19),
+            ],
+        ),
+        ("Rule.Range", &[("min", 1), ("max", 2)]),
+        ("Rule.Length", &[("min", 1), ("max", 2)]),
+        ("Rule.CollectionBound", &[("min", 1), ("max", 2)]),
+        ("Rule.Timing", &[("mode", 1), ("min_us", 2), ("max_us", 3)]),
+        ("Rule.ResponseBound", &[("min_us", 1), ("max_us", 2)]),
+        ("Rule.Errors", &[("names", 1)]),
+        ("Rule.Contract", &[("kind", 1), ("source", 2)]),
+    ];
+    for (message, fields) in rows {
+        let message = format!("ridl.codegen.v1.{message}");
+        let declared = pool
+            .get_message_by_name(&message)
+            .unwrap_or_else(|| panic!("the compiled schema declares {message}"))
+            .fields()
+            .count();
+        assert_eq!(
+            declared,
+            fields.len(),
+            "{message} declares exactly these fields"
+        );
+        for (field, expected) in *fields {
+            assert_eq!(number(&message, field), *expected, "{message}.{field}");
+        }
+    }
+}
+
+/// The doc text, one link, one `see` entry and one `since` version of one
+/// item. Each value is distinct to `tag`, so a value copied from the wrong
+/// item is caught.
+struct DocParts {
+    doc: String,
+    links: Vec<v2::DocLink>,
+    see: Vec<v2::DocLink>,
+    since: Vec<String>,
+}
+
+fn doc_parts(tag: &str) -> DocParts {
+    DocParts {
+        doc: format!("See [{tag}] for details."),
+        links: vec![v2::DocLink {
+            text: tag.to_string(),
+            offset: 4,
+            len: tag.len() as u32 + 2,
+            target: format!("veh.docs.{tag}"),
+        }],
+        see: vec![v2::DocLink {
+            text: format!("{tag}Ref"),
+            offset: 0,
+            len: 0,
+            target: format!("veh.docs.{tag}Ref"),
+        }],
+        since: vec![format!("{tag}-1.0")],
+    }
+}
+
+fn named_decl(name: &str, kind: v2::decl::Kind, tag: &str) -> v2::Decl {
+    let DocParts {
+        doc,
+        links,
+        see,
+        since,
+    } = doc_parts(tag);
+    v2::Decl {
+        name: name.to_string(),
+        visibility: v2::Visibility::Public as i32,
+        doc,
+        links,
+        see,
+        since,
+        kind: Some(kind),
+        ..Default::default()
+    }
+}
+
+fn doc_field(ordinal: u32, name: &str, ty: v2::FieldType) -> v2::StructMember {
+    let DocParts {
+        doc,
+        links,
+        see,
+        since,
+    } = doc_parts(name);
+    v2::StructMember {
+        member: Some(v2::struct_member::Member::Field(Box::new(v2::Field {
+            name: name.to_string(),
+            ordinal,
+            r#type: Some(ty),
+            doc,
+            links,
+            see,
+            since,
+            ..Default::default()
+        }))),
+    }
+}
+
+/// One item of each doc carrier, each with a link, a `see` entry and a
+/// `since` version, and one item of every rule kind: a ranged unit type with
+/// a step, a string with a length and a pattern, an array field with a
+/// collection bound, a signal with timing, and a fallible query with a
+/// response bound, a `require` and an `ensure`.
+fn docs_package() -> v2::Package {
+    let speed = v2::TypeDef {
+        backing: Some(v2::Backing {
+            kind: Some(v2::backing::Kind::Unit("km/h".to_string())),
+        }),
+        constraint: Some(v2::Constraint {
+            min: Some("0.0".to_string()),
+            max: Some("250.0".to_string()),
+            step: Some("0.5".to_string()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let vin = v2::TypeDef {
+        backing: Some(v2::Backing {
+            kind: Some(v2::backing::Kind::Primitive(
+                v2::PrimitiveType::String as i32,
+            )),
+        }),
+        constraint: Some(v2::Constraint {
+            len_min: Some(1),
+            len_max: Some(17),
+            pattern: Some("^[A-Z0-9]+$".to_string()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let gear = v2::EnumDef {
+        values: vec![{
+            let DocParts {
+                doc,
+                links,
+                see,
+                since,
+            } = doc_parts("PARK");
+            v2::EnumValue {
+                name: "PARK".to_string(),
+                value: 0,
+                doc,
+                links,
+                see,
+                since,
+            }
+        }],
+        reserved: Vec::new(),
+    };
+    let choice = v2::UnionDef {
+        arms: vec![{
+            let DocParts {
+                doc,
+                links,
+                see,
+                since,
+            } = doc_parts("fast");
+            v2::UnionArm {
+                name: "fast".to_string(),
+                ordinal: 1,
+                type_ref: "Speed".to_string(),
+                doc,
+                links,
+                see,
+                since,
+            }
+        }],
+        ..Default::default()
+    };
+    let car = v2::StructDef {
+        members: vec![
+            doc_field(1, "speed", named("Speed")),
+            doc_field(2, "vin", named("Vin")),
+            doc_field(
+                3,
+                "stops",
+                v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                        element: Some(Box::new(named("Speed"))),
+                        min: 1,
+                        max: 8,
+                    }))),
+                },
+            ),
+        ],
+        fixed_layout: false,
+    };
+    let signal = v2::SignalDef {
+        payload: "Speed".to_string(),
+        timing: Some(v2::Timing {
+            mode: v2::TimingMode::Range as i32,
+            min_us: Some("1000".to_string()),
+            max_us: Some("2000".to_string()),
+            default_applied: false,
+        }),
+        ..Default::default()
+    };
+    let query = v2::QueryDef {
+        params: vec![{
+            let DocParts {
+                doc,
+                links,
+                see,
+                since,
+            } = doc_parts("vin");
+            v2::Param {
+                name: "vin".to_string(),
+                r#type: Some(named("Vin")),
+                doc,
+                links,
+                see,
+                since,
+            }
+        }],
+        return_type: Some(v2::ReturnType {
+            kind: Some(v2::return_type::Kind::Fallible(v2::FallibleType {
+                ok: "Speed".to_string(),
+                err: "DriveError".to_string(),
+            })),
+        }),
+        contracts: vec![
+            v2::Contract {
+                kind: v2::ContractKind::Require as i32,
+                source: "vin != \"\"".to_string(),
+                ..Default::default()
+            },
+            v2::Contract {
+                kind: v2::ContractKind::Ensure as i32,
+                source: "result >= 0.0".to_string(),
+                ..Default::default()
+            },
+        ],
+        timing: Some(v2::Timing {
+            mode: v2::TimingMode::Range as i32,
+            min_us: Some("100".to_string()),
+            max_us: Some("5000".to_string()),
+            default_applied: false,
+        }),
+    };
+    let drive = {
+        let DocParts {
+            doc,
+            links,
+            see,
+            since,
+        } = doc_parts("Drive");
+        v2::Interface {
+            name: "Drive".to_string(),
+            visibility: v2::Visibility::Public as i32,
+            doc,
+            links,
+            see,
+            since,
+            interactions: vec![
+                named_decl("speed", v2::decl::Kind::SignalDef(signal), "speedSignal"),
+                named_decl("lookup", v2::decl::Kind::QueryDef(query), "lookup"),
+            ],
+            number: 1,
+            ..Default::default()
+        }
+    };
+    let garage = {
+        let DocParts {
+            doc,
+            links,
+            see,
+            since,
+        } = doc_parts("Garage");
+        v2::Service {
+            name: "veh.docs.Garage".to_string(),
+            visibility: v2::Visibility::Public as i32,
+            doc,
+            links,
+            see,
+            since,
+            shapes: vec![v2::ServiceShape {
+                kind: Some(v2::service_shape::Kind::InterfaceRef("Drive".to_string())),
+            }],
+            ..Default::default()
+        }
+    };
+    v2::Package {
+        name: "veh.docs".to_string(),
+        decls: vec![
+            named_decl("Speed", v2::decl::Kind::TypeDef(speed), "Speed"),
+            named_decl("Vin", v2::decl::Kind::TypeDef(vin), "Vin"),
+            named_decl("Gear", v2::decl::Kind::EnumDef(gear), "Gear"),
+            named_decl("Choice", v2::decl::Kind::UnionDef(choice), "Choice"),
+            named_decl("Car", v2::decl::Kind::StructDef(car), "Car"),
+            v2::Decl {
+                is_error: true,
+                ..named_decl(
+                    "DriveError",
+                    v2::decl::Kind::StructDef(v2::StructDef::default()),
+                    "DriveError",
+                )
+            },
+        ],
+        interfaces: vec![drive],
+        services: vec![garage],
+        ..Default::default()
+    }
+}
+
+/// A link as a tuple of its four fields, for a field-by-field comparison.
+fn ir_link(link: &v2::DocLink) -> (String, u32, u32, String) {
+    (
+        link.text.clone(),
+        link.offset,
+        link.len,
+        link.target.clone(),
+    )
+}
+
+fn model_link(link: &v1::DocLink) -> (String, u32, u32, String) {
+    (
+        link.text.clone(),
+        link.offset,
+        link.len,
+        link.target.clone(),
+    )
+}
+
+/// Asserts that a carrier's `links`, `see` and `since` equal the IR item's,
+/// field by field, and that each is not empty, so the comparison is not
+/// between two empty lists.
+fn assert_doc_copied(
+    what: &str,
+    links: (&[v1::DocLink], &[v2::DocLink]),
+    see: (&[v1::DocLink], &[v2::DocLink]),
+    since: (&[String], &[String]),
+) {
+    assert!(!links.1.is_empty() && !see.1.is_empty() && !since.1.is_empty());
+    assert_eq!(
+        links.0.iter().map(model_link).collect::<Vec<_>>(),
+        links.1.iter().map(ir_link).collect::<Vec<_>>(),
+        "{what}: links"
+    );
+    assert_eq!(
+        see.0.iter().map(model_link).collect::<Vec<_>>(),
+        see.1.iter().map(ir_link).collect::<Vec<_>>(),
+        "{what}: see"
+    );
+    assert_eq!(since.0, since.1, "{what}: since");
+}
+
+fn ir_decl<'p>(package: &'p v2::Package, name: &str) -> &'p v2::Decl {
+    package
+        .decls
+        .iter()
+        .find(|decl| decl.name == name)
+        .expect("the IR declaration")
+}
+
+fn model_decl<'m>(model: &'m v1::Model, name: &str) -> &'m v1::Declaration {
+    model
+        .declarations
+        .iter()
+        .find(|decl| decl.name.as_ref().map(|n| n.declared.as_str()) == Some(name))
+        .expect("the model declaration")
+}
+
+/// The fixture's one interface, through the shape walk.
+fn ir_drive(package: &v2::Package) -> &v2::Interface {
+    package
+        .shapes()
+        .next()
+        .expect("the Drive interface")
+        .interface
+}
+
+fn ir_fields(decl: &v2::Decl) -> Vec<&v2::Field> {
+    match decl.kind.as_ref() {
+        Some(v2::decl::Kind::StructDef(def)) => def
+            .members
+            .iter()
+            .filter_map(|member| match member.member.as_ref() {
+                Some(v2::struct_member::Member::Field(field)) => Some(&**field),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn model_fields(decl: &v1::Declaration) -> Vec<&v1::Field> {
+    match decl.kind.as_ref() {
+        Some(v1::declaration::Kind::Struct(def)) => def
+            .slots
+            .iter()
+            .filter_map(|slot| match slot.occupant.as_ref() {
+                Some(v1::slot::Occupant::Field(field)) => Some(&**field),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn ir_params(decl: &v2::Decl) -> &[v2::Param] {
+    match decl.kind.as_ref() {
+        Some(v2::decl::Kind::CommandDef(command)) => &command.params,
+        Some(v2::decl::Kind::QueryDef(query)) => &query.params,
+        _ => &[],
+    }
+}
+
+fn model_params(interaction: &v1::Interaction) -> &[v1::Param] {
+    match interaction.shape.as_ref() {
+        Some(v1::interaction::Shape::Command(command)) => &command.params,
+        Some(v1::interaction::Shape::Query(query)) => &query.params,
+        _ => &[],
+    }
+}
+
+#[test]
+fn lowering_copies_links_see_and_since() {
+    let package = docs_package();
+    let model = lower(&package, &[]);
+
+    let ir = ir_decl(&package, "Car");
+    let lowered = model_decl(&model, "Car");
+    assert_doc_copied(
+        "declaration Car",
+        (&lowered.links, &ir.links),
+        (&lowered.see, &ir.see),
+        (&lowered.since, &ir.since),
+    );
+
+    let ir_field = ir_fields(ir)[0];
+    let field = model_fields(lowered)[0];
+    assert_doc_copied(
+        "field speed",
+        (&field.links, &ir_field.links),
+        (&field.see, &ir_field.see),
+        (&field.since, &ir_field.since),
+    );
+
+    let Some(v2::decl::Kind::EnumDef(ir_enum)) = ir_decl(&package, "Gear").kind.as_ref() else {
+        panic!("Gear is an enum");
+    };
+    let Some(v1::declaration::Kind::Enum(lowered_enum)) = model_decl(&model, "Gear").kind.as_ref()
+    else {
+        panic!("Gear is lowered as an enum");
+    };
+    let (ir_value, value) = (&ir_enum.values[0], &lowered_enum.values[0]);
+    assert_doc_copied(
+        "enum value PARK",
+        (&value.links, &ir_value.links),
+        (&value.see, &ir_value.see),
+        (&value.since, &ir_value.since),
+    );
+
+    let Some(v2::decl::Kind::UnionDef(ir_union)) = ir_decl(&package, "Choice").kind.as_ref() else {
+        panic!("Choice is a union");
+    };
+    let Some(v1::declaration::Kind::Union(lowered_union)) =
+        model_decl(&model, "Choice").kind.as_ref()
+    else {
+        panic!("Choice is lowered as a union");
+    };
+    let (ir_arm, arm) = (&ir_union.arms[0], &lowered_union.arms[0]);
+    assert_doc_copied(
+        "arm fast",
+        (&arm.links, &ir_arm.links),
+        (&arm.see, &ir_arm.see),
+        (&arm.since, &ir_arm.since),
+    );
+
+    let ir_interface = ir_drive(&package);
+    let interface = interface_named(&model, "Drive");
+    assert_doc_copied(
+        "interface Drive",
+        (&interface.links, &ir_interface.links),
+        (&interface.see, &ir_interface.see),
+        (&interface.since, &ir_interface.since),
+    );
+
+    let ir_lookup = &ir_interface.interactions[1];
+    let lookup = live_member(interface, "lookup");
+    assert_doc_copied(
+        "interaction lookup",
+        (&lookup.links, &ir_lookup.links),
+        (&lookup.see, &ir_lookup.see),
+        (&lookup.since, &ir_lookup.since),
+    );
+
+    let (ir_param, param) = (&ir_params(ir_lookup)[0], &model_params(lookup)[0]);
+    assert!(!ir_param.doc.is_empty());
+    assert_eq!(param.doc, ir_param.doc, "parameter vin: doc");
+    assert_doc_copied(
+        "parameter vin",
+        (&param.links, &ir_param.links),
+        (&param.see, &ir_param.see),
+        (&param.since, &ir_param.since),
+    );
+
+    let (ir_service, service) = (&package.services[0], &model.services[0]);
+    assert_doc_copied(
+        "service Garage",
+        (&service.links, &ir_service.links),
+        (&service.see, &ir_service.see),
+        (&service.since, &ir_service.since),
+    );
+}
+
+/// Whether the model rule's `oneof` member is the one that matches the
+/// `rules::Rule` variant, with the same values.
+fn kind_matches(rule: &crate::rules::Rule, kind: Option<&v1::rule::Kind>) -> bool {
+    use crate::rules::Rule;
+    use v1::rule::Kind;
+    match (rule, kind) {
+        (Rule::Range { min, max }, Some(Kind::Range(range))) => {
+            range.min == *min && range.max == *max
+        }
+        (Rule::Step(step), Some(Kind::Step(other))) => step == other,
+        (Rule::Unit(unit), Some(Kind::Unit(other))) => unit == other,
+        (Rule::Length { min, max }, Some(Kind::Length(length))) => {
+            length.min == *min && length.max == *max
+        }
+        (Rule::Pattern(pattern), Some(Kind::Pattern(other))) => pattern == other,
+        (Rule::CollectionBound { min, max }, Some(Kind::CollectionBound(bound))) => {
+            bound.min == *min && bound.max == *max
+        }
+        (
+            Rule::Timing {
+                mode,
+                min_us,
+                max_us,
+            },
+            Some(Kind::Timing(timing)),
+        ) => timing.mode == *mode as i32 && timing.min_us == *min_us && timing.max_us == *max_us,
+        (Rule::ResponseBound { min_us, max_us }, Some(Kind::ResponseBound(bound))) => {
+            bound.min_us == *min_us && bound.max_us == *max_us
+        }
+        (Rule::Errors(names), Some(Kind::Errors(errors))) => errors.names == *names,
+        (Rule::Contract { kind, source }, Some(Kind::Contract(contract))) => {
+            contract.kind == *kind as i32 && contract.source == *source
+        }
+        _ => false,
+    }
+}
+
+/// The variant name of a `rules::Rule`, to check that the fixture reaches
+/// every kind.
+fn variant(rule: &crate::rules::Rule) -> &'static str {
+    use crate::rules::Rule;
+    match rule {
+        Rule::Range { .. } => "range",
+        Rule::Step(_) => "step",
+        Rule::Unit(_) => "unit",
+        Rule::Length { .. } => "length",
+        Rule::Pattern(_) => "pattern",
+        Rule::CollectionBound { .. } => "collection_bound",
+        Rule::Timing { .. } => "timing",
+        Rule::ResponseBound { .. } => "response_bound",
+        Rule::Errors(_) => "errors",
+        Rule::Contract { .. } => "contract",
+    }
+}
+
+/// Asserts that `lowered` is `expected`, in order: each `text` is
+/// `rules::render` of the matching rule, and each `oneof` member matches the
+/// rule's variant. Returns the variants seen.
+fn assert_rules(
+    what: &str,
+    lowered: &[v1::Rule],
+    expected: &[crate::rules::Rule],
+) -> Vec<&'static str> {
+    assert_eq!(
+        lowered
+            .iter()
+            .map(|rule| rule.text.clone())
+            .collect::<Vec<_>>(),
+        expected
+            .iter()
+            .map(crate::rules::render)
+            .collect::<Vec<_>>(),
+        "{what}: rule text"
+    );
+    for (rule, model_rule) in expected.iter().zip(lowered) {
+        assert!(
+            kind_matches(rule, model_rule.kind.as_ref()),
+            "{what}: {rule:?} lowered as {:?}",
+            model_rule.kind
+        );
+    }
+    expected.iter().map(variant).collect()
+}
+
+#[test]
+fn model_rules_text_matches_render() {
+    use crate::rules::{ItemRef, rules};
+
+    let package = docs_package();
+    let model = lower(&package, &[]);
+    // The lowered package followed by the others, as `lower` passes them.
+    let deps = [&package];
+    let mut seen: Vec<&'static str> = Vec::new();
+
+    assert_eq!(model.declarations.len(), package.decls.len());
+    for (decl, lowered) in package.decls.iter().zip(&model.declarations) {
+        let expected = rules(&package, &deps, ItemRef::Decl(decl));
+        seen.extend(assert_rules(&decl.name, &lowered.rules, &expected));
+        let (fields, model_fields) = (ir_fields(decl), model_fields(lowered));
+        assert_eq!(fields.len(), model_fields.len());
+        for (field, lowered) in fields.into_iter().zip(model_fields) {
+            let expected = rules(&package, &deps, ItemRef::Field(field));
+            seen.extend(assert_rules(&field.name, &lowered.rules, &expected));
+        }
+    }
+
+    let interface = ir_drive(&package);
+    let lowered_interface = interface_named(&model, "Drive");
+    for decl in &interface.interactions {
+        let lowered = live_member(lowered_interface, &decl.name);
+        let expected = rules(&package, &deps, ItemRef::Decl(decl));
+        seen.extend(assert_rules(&decl.name, &lowered.rules, &expected));
+        let (params, model_params) = (ir_params(decl), model_params(lowered));
+        assert_eq!(params.len(), model_params.len());
+        for (param, lowered) in params.iter().zip(model_params) {
+            let expected = rules(&package, &deps, ItemRef::Param(param));
+            seen.extend(assert_rules(&param.name, &lowered.rules, &expected));
+        }
+    }
+
+    seen.sort_unstable();
+    seen.dedup();
+    assert_eq!(
+        seen,
+        [
+            "collection_bound",
+            "contract",
+            "errors",
+            "length",
+            "pattern",
+            "range",
+            "response_bound",
+            "step",
+            "timing",
+            "unit",
+        ],
+        "the fixture reaches every rule kind"
+    );
+}
+
+#[test]
+fn rules_are_empty_where_no_item_ref_exists() {
+    let package = docs_package();
+    let model = lower(&package, &[]);
+
+    let Some(v1::declaration::Kind::Enum(gear)) = model_decl(&model, "Gear").kind.as_ref() else {
+        panic!("Gear is lowered as an enum");
+    };
+    assert!(gear.values[0].rules.is_empty(), "enum value");
+    // The arm's type is the ranged `Speed`: an arm that took its type's rules
+    // would fail here.
+    let Some(v1::declaration::Kind::Union(choice)) = model_decl(&model, "Choice").kind.as_ref()
+    else {
+        panic!("Choice is lowered as a union");
+    };
+    assert!(choice.arms[0].rules.is_empty(), "union arm");
+    assert!(
+        interface_named(&model, "Drive").rules.is_empty(),
+        "interface"
+    );
+    assert!(model.services[0].rules.is_empty(), "service");
+}
+
+#[test]
+fn foreign_declaration_carries_rules() {
+    let units = v2::Package {
+        name: "veh.units".to_string(),
+        decls: vec![v2::Decl {
+            name: "Kph".to_string(),
+            visibility: v2::Visibility::Public as i32,
+            kind: Some(v2::decl::Kind::TypeDef(v2::TypeDef {
+                backing: Some(v2::Backing {
+                    kind: Some(v2::backing::Kind::Primitive(
+                        v2::PrimitiveType::Integer as i32,
+                    )),
+                }),
+                constraint: Some(v2::Constraint {
+                    min: Some("0".to_string()),
+                    max: Some("300".to_string()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let app = v2::Package {
+        name: "veh.app".to_string(),
+        decls: vec![v2::Decl {
+            name: "Trip".to_string(),
+            visibility: v2::Visibility::Public as i32,
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![member(1, "speed", named("veh.units.Kph"))],
+                fixed_layout: false,
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let model = lower(&app, &[&units]);
+    let texts = |rules: &[v1::Rule]| -> Vec<String> {
+        rules.iter().map(|rule| rule.text.clone()).collect()
+    };
+
+    let field = model_fields(model_decl(&model, "Trip"))[0];
+    assert_eq!(texts(&field.rules), ["range 0 ..= 300"]);
+
+    let foreign = model
+        .foreign
+        .iter()
+        .find(|foreign| foreign.package == "veh.units")
+        .and_then(|foreign| foreign.declaration.as_ref())
+        .expect("the foreign declaration Kph");
+    assert_eq!(texts(&foreign.rules), ["range 0 ..= 300"]);
+}
