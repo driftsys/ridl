@@ -16,9 +16,8 @@ lines. Neither has a `<surface>.txt`.
 
 - `runtime-crates`: `ridl-rt`, `ridl-rt-conformance`, `ridl-loopback` and
   `ridl-descriptor`, compared with the same crates at the baseline.
-- `generated-crate`: `generated/<name>/` is the crate that
-  `ridl build --emit
-  rust` writes for `examples/cabin` and for
+- `generated-crate`: each directory `generated/<name>/` holds a crate that
+  `ridl build --emit rust` writes, for `examples/cabin` and for
   `crates/ridlc/tests/corpus/veh-cluster`. The check fails when it differs from
   a regeneration. With a row, each crate is compared with the same crate in the
   baseline's `generated/`, on copies outside the repository that read `ridl-rt`
