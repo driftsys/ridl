@@ -1,5 +1,6 @@
 //! The command line of `ridl` and `ridlc`: subcommands, flags with their value
-//! kind, the exit codes, and the key paths of the `json` and `sarif` reports.
+//! kind, whether each flag and positional argument is required, the exit codes
+//! of `ridl check`, and the key paths of the `json` and `sarif` reports.
 
 use super::bin;
 use serde_json::Value;
@@ -105,11 +106,56 @@ fn value_lines(label: &str, body: &str, lines: &mut Vec<String>) {
     }
 }
 
+/// The words of the `Usage:` text that clap prints outside brackets: the
+/// required flags with their placeholders, the required positional arguments
+/// and `<COMMAND>` when a subcommand is required. The command path at the
+/// start is left out. A usage that wraps onto indented lines is read whole.
+fn required_words(help: &str) -> Vec<String> {
+    let mut usage = String::new();
+    let mut in_usage = false;
+    for line in help.lines() {
+        if let Some(rest) = line.strip_prefix("Usage:") {
+            in_usage = true;
+            usage.push_str(rest);
+        } else if in_usage && line.starts_with(' ') && !line.trim().is_empty() {
+            usage.push(' ');
+            usage.push_str(line);
+        } else if in_usage {
+            break;
+        }
+    }
+    let mut outside = String::new();
+    let mut depth = 0usize;
+    for c in usage.chars() {
+        match c {
+            '[' => depth += 1,
+            ']' => depth = depth.saturating_sub(1),
+            _ if depth == 0 => outside.push(c),
+            _ => {}
+        }
+    }
+    outside
+        .split_whitespace()
+        .skip_while(|word| word.starts_with(|c: char| c.is_alphanumeric()))
+        .map(str::to_string)
+        .collect()
+}
+
 /// The lines of one command: its flags (long and short names, each with the
-/// placeholder clap prints or `switch`), the possible values and defaults of
-/// each, and its positional arguments in order, each `required` (`<NAME>`) or
-/// `optional` (`[NAME]`).
+/// placeholder clap prints or `switch`, and whether the flag is `required` or
+/// `optional`), the possible values and defaults of each, its positional
+/// arguments in order, each `required` (`<NAME>`) or `optional` (`[NAME]`),
+/// and one `<path> requires <words>` line that holds every required flag and
+/// argument. A new required flag or argument therefore changes that line and
+/// removes it.
 fn command_lines(path: &str, help: &str, lines: &mut Vec<String>) {
+    let required = required_words(help);
+    lines.push(
+        std::iter::once(format!("{path} requires"))
+            .chain(required.iter().cloned())
+            .collect::<Vec<_>>()
+            .join(" "),
+    );
     let flags = entries(help, "Options:", |indent, text| {
         indent <= 6 && text.starts_with('-')
     });
@@ -122,10 +168,15 @@ fn command_lines(path: &str, help: &str, lines: &mut Vec<String>) {
             Some(placeholder) if placeholder.starts_with('<') => placeholder,
             _ => "switch",
         };
+        let mut requirement = "optional";
         for name in &names {
             let name = name.split_whitespace().next().unwrap_or("");
+            if required.iter().any(|word| word == name) {
+                requirement = "required";
+            }
             lines.push(format!("{path} {name} {kind}"));
         }
+        lines.push(format!("{path} {long_name} {requirement}"));
         value_lines(&format!("{path} {long_name}"), &entry.body, lines);
     }
     let arguments = entries(help, "Arguments:", |indent, text| {
@@ -321,6 +372,9 @@ mod tests {
             "ridl check --format value sarif",
             "ridl check --format default text",
             "ridl build -h switch",
+            "ridl build --out-dir optional",
+            "ridlc build --out-dir required",
+            "ridlc build requires --out-dir <OUT_DIR> <PATH>",
             "exit 0",
             "exit 1",
             "exit 2",
@@ -353,6 +407,57 @@ mod tests {
         ] {
             assert!(has(lines, line), "missing `{line}`");
         }
+    }
+
+    #[test]
+    fn each_flag_is_required_or_optional() {
+        let help = "Usage: x [OPTIONS] --out-dir <DIR> [PATH]\n\nArguments:\n  [PATH]  Path\n\nOptions:\n  -o, --out-dir <DIR>  Output\n      --emit <EMIT>    Emit\n  -h, --help           Print help\n";
+        let mut lines = Vec::new();
+        command_lines("x", help, &mut lines);
+        for line in [
+            "x --out-dir required",
+            "x --emit optional",
+            "x --help optional",
+            "x requires --out-dir <DIR>",
+        ] {
+            assert!(has(&lines, line), "missing `{line}` in {lines:?}");
+        }
+    }
+
+    fn command_text(help: &str) -> String {
+        let mut lines = Vec::new();
+        command_lines("x", help, &mut lines);
+        lines.into_iter().map(|l| l + "\n").collect()
+    }
+
+    #[test]
+    fn a_new_required_argument_or_flag_removes_a_line() {
+        use crate::freeze::missing_lines;
+        let baseline = command_text("Usage: x [OPTIONS]\n\nOptions:\n      --emit <EMIT>  Emit\n");
+        // A required positional added to a command that had none.
+        let head = command_text(
+            "Usage: x [OPTIONS] <NAME>\n\nArguments:\n  <NAME>  Name\n\nOptions:\n      --emit <EMIT>  Emit\n",
+        );
+        assert_eq!(
+            missing_lines(&baseline, &head),
+            vec!["x requires"],
+            "{head}"
+        );
+        // A flag that becomes required.
+        let head = command_text("Usage: x --emit <EMIT>\n\nOptions:\n      --emit <EMIT>  Emit\n");
+        assert_eq!(
+            missing_lines(&baseline, &head),
+            vec!["x --emit optional", "x requires"],
+            "{head}"
+        );
+    }
+
+    #[test]
+    fn a_usage_that_wraps_is_read_whole() {
+        let help = "Usage: x [OPTIONS] --first <A>\n         --second <B>\n\nOptions:\n      --first <A>   A\n      --second <B>  B\n";
+        let mut lines = Vec::new();
+        command_lines("x", help, &mut lines);
+        assert!(has(&lines, "x --second required"), "{lines:?}");
     }
 
     #[test]
