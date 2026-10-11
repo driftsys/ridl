@@ -720,6 +720,8 @@ ridl.ir.v2.Route.member = 5 singular string
 ridl.ir.v2.Route.member_ordinal = 3 singular uint32
 ridl.ir.v2.Route.producers = 7 repeated ridl.ir.v2.Endpoint
 ridl.ir.v2.Route.service = 6 singular string
+ridl.ir.v2.Service reserved 10
+ridl.ir.v2.Service reserved 11
 ridl.ir.v2.Service.deprecated = 5 optional string
 ridl.ir.v2.Service.doc = 3 singular string
 ridl.ir.v2.Service.labels = 4 repeated string
@@ -729,6 +731,8 @@ ridl.ir.v2.Service.see = 7 repeated ridl.ir.v2.DocLink
 ridl.ir.v2.Service.shapes = 12 repeated ridl.ir.v2.ServiceShape
 ridl.ir.v2.Service.since = 8 repeated string
 ridl.ir.v2.Service.visibility = 2 singular ridl.ir.v2.Visibility
+ridl.ir.v2.ServiceShape reserved 1
+ridl.ir.v2.ServiceShape reserved 12
 ridl.ir.v2.ServiceShape.inline = 11 singular ridl.ir.v2.Interface oneof=kind
 ridl.ir.v2.ServiceShape.interface_ref = 10 singular string oneof=kind
 ridl.ir.v2.SignalDef.declared_init = 2 optional string
