@@ -1,0 +1,132 @@
+exit 0
+exit 1
+exit 2
+json /*
+json /*/code
+json /*/fixes
+json /*/fixes/*
+json /*/fixes/*/label
+json /*/fixes/*/replacement
+json /*/fixes/*/span
+json /*/fixes/*/span/end
+json /*/fixes/*/span/end/column
+json /*/fixes/*/span/end/line
+json /*/fixes/*/span/path
+json /*/fixes/*/span/start
+json /*/fixes/*/span/start/column
+json /*/fixes/*/span/start/line
+json /*/labels
+json /*/labels/*
+json /*/lint
+json /*/message
+json /*/severity
+json /*/span
+json /*/span/end
+json /*/span/end/column
+json /*/span/end/line
+json /*/span/path
+json /*/span/start
+json /*/span/start/column
+json /*/span/start/line
+ridl --help switch
+ridl --version switch
+ridl baseline
+ridl baseline --help switch
+ridl baseline --out <DIR>
+ridl build
+ridl build --deployment <NAME>
+ridl build --emit <EMIT>
+ridl build --frozen switch
+ridl build --help switch
+ridl build --out-dir <OUT_DIR>
+ridl build --plugin <LANGUAGE[=PATH]>
+ridl build --plugin-timeout <SECONDS>
+ridl check
+ridl check --baseline <DIR|FILE>
+ridl check --format <FORMAT>
+ridl check --frozen switch
+ridl check --help switch
+ridl describe
+ridl describe --help switch
+ridl diff
+ridl diff --explain <CATEGORY>
+ridl diff --format <FORMAT>
+ridl diff --help switch
+ridl fmt
+ridl fmt --check switch
+ridl fmt --help switch
+ridl init
+ridl init --help switch
+ridl init --name <NAME>
+ridl init --workspace switch
+ridl lock
+ridl lock --help switch
+ridl lock --rename <OLD=NEW>
+ridl lock --retire <NAME>
+ridl lock merge
+ridl lock merge --help switch
+ridl lsp
+ridl lsp --clientProcessId <PID>
+ridl lsp --help switch
+ridl lsp --stdio switch
+ridl mcp
+ridl mcp --help switch
+ridl new
+ridl new --help switch
+ridl new --name <NAME>
+ridl new --workspace switch
+ridl test
+ridl test --format <FORMAT>
+ridl test --help switch
+ridl test --samples <SAMPLES>
+ridlc --help switch
+ridlc --version switch
+ridlc build
+ridlc build --deployment <NAME>
+ridlc build --emit <EMIT>
+ridlc build --frozen switch
+ridlc build --help switch
+ridlc build --out-dir <OUT_DIR>
+ridlc build --plugin <LANGUAGE[=PATH]>
+ridlc build --plugin-timeout <SECONDS>
+ridlc check
+ridlc check --frozen switch
+ridlc check --help switch
+sarif /$schema
+sarif /runs
+sarif /runs/*
+sarif /runs/*/columnKind
+sarif /runs/*/originalUriBaseIds
+sarif /runs/*/originalUriBaseIds/%SRCROOT%
+sarif /runs/*/originalUriBaseIds/%SRCROOT%/uri
+sarif /runs/*/results
+sarif /runs/*/results/*
+sarif /runs/*/results/*/level
+sarif /runs/*/results/*/locations
+sarif /runs/*/results/*/locations/*
+sarif /runs/*/results/*/locations/*/physicalLocation
+sarif /runs/*/results/*/locations/*/physicalLocation/artifactLocation
+sarif /runs/*/results/*/locations/*/physicalLocation/artifactLocation/uri
+sarif /runs/*/results/*/locations/*/physicalLocation/artifactLocation/uriBaseId
+sarif /runs/*/results/*/locations/*/physicalLocation/region
+sarif /runs/*/results/*/locations/*/physicalLocation/region/endColumn
+sarif /runs/*/results/*/locations/*/physicalLocation/region/endLine
+sarif /runs/*/results/*/locations/*/physicalLocation/region/startColumn
+sarif /runs/*/results/*/locations/*/physicalLocation/region/startLine
+sarif /runs/*/results/*/message
+sarif /runs/*/results/*/message/text
+sarif /runs/*/results/*/ruleId
+sarif /runs/*/results/*/ruleIndex
+sarif /runs/*/tool
+sarif /runs/*/tool/driver
+sarif /runs/*/tool/driver/name
+sarif /runs/*/tool/driver/rules
+sarif /runs/*/tool/driver/rules/*
+sarif /runs/*/tool/driver/rules/*/defaultConfiguration
+sarif /runs/*/tool/driver/rules/*/defaultConfiguration/level
+sarif /runs/*/tool/driver/rules/*/id
+sarif /runs/*/tool/driver/rules/*/name
+sarif /runs/*/tool/driver/rules/*/shortDescription
+sarif /runs/*/tool/driver/rules/*/shortDescription/text
+sarif /runs/*/tool/driver/version
+sarif /version

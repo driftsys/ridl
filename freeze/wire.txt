@@ -1,0 +1,1746 @@
+catalog-hash veh.cabin 59b9f924835244a0d7b597e80aff1b1fea8b07acf192744af7f2033ecb2942de
+encoding flatbuffers
+encoding proto3
+encoding repr-c
+fbs mavlink/common.fbs ATTITUDE = 3,
+fbs mavlink/common.fbs COMMAND_ACK = 3,
+fbs mavlink/common.fbs COMMAND_CANCEL = 4,
+fbs mavlink/common.fbs COMMAND_INT = 1,
+fbs mavlink/common.fbs COMMAND_LONG = 2,
+fbs mavlink/common.fbs GLOBAL_POSITION_INT = 5,
+fbs mavlink/common.fbs GPS_FIX_TYPE_2D_FIX = 2,
+fbs mavlink/common.fbs GPS_FIX_TYPE_3D_FIX = 3,
+fbs mavlink/common.fbs GPS_FIX_TYPE_DGPS = 4,
+fbs mavlink/common.fbs GPS_FIX_TYPE_NO_FIX = 1,
+fbs mavlink/common.fbs GPS_FIX_TYPE_NO_GPS = 0,
+fbs mavlink/common.fbs GPS_FIX_TYPE_PPP = 8,
+fbs mavlink/common.fbs GPS_FIX_TYPE_RTK_FIXED = 6,
+fbs mavlink/common.fbs GPS_FIX_TYPE_RTK_FLOAT = 5,
+fbs mavlink/common.fbs GPS_FIX_TYPE_STATIC = 7,
+fbs mavlink/common.fbs GPS_RAW_INT = 2,
+fbs mavlink/common.fbs LOCAL_POSITION_NED = 4,
+fbs mavlink/common.fbs MAV_CMD_COMPONENT_ARM_DISARM = 400,
+fbs mavlink/common.fbs MAV_CMD_DO_SET_MISSION_CURRENT = 224,
+fbs mavlink/common.fbs MAV_CMD_NAV_WAYPOINT = 16,
+fbs mavlink/common.fbs MAV_CMD_REQUEST_MESSAGE = 512,
+fbs mavlink/common.fbs MAV_CMD_SET_MESSAGE_INTERVAL = 511,
+fbs mavlink/common.fbs MAV_FRAME_BODY_FRD = 12,
+fbs mavlink/common.fbs MAV_FRAME_BODY_NED = 8,
+fbs mavlink/common.fbs MAV_FRAME_BODY_OFFSET_NED = 9,
+fbs mavlink/common.fbs MAV_FRAME_GLOBAL = 0,
+fbs mavlink/common.fbs MAV_FRAME_GLOBAL_INT = 5,
+fbs mavlink/common.fbs MAV_FRAME_GLOBAL_RELATIVE_ALT = 3,
+fbs mavlink/common.fbs MAV_FRAME_GLOBAL_RELATIVE_ALT_INT = 6,
+fbs mavlink/common.fbs MAV_FRAME_GLOBAL_TERRAIN_ALT = 10,
+fbs mavlink/common.fbs MAV_FRAME_GLOBAL_TERRAIN_ALT_INT = 11,
+fbs mavlink/common.fbs MAV_FRAME_LOCAL_ENU = 4,
+fbs mavlink/common.fbs MAV_FRAME_LOCAL_FLU = 21,
+fbs mavlink/common.fbs MAV_FRAME_LOCAL_FRD = 20,
+fbs mavlink/common.fbs MAV_FRAME_LOCAL_NED = 1,
+fbs mavlink/common.fbs MAV_FRAME_LOCAL_OFFSET_NED = 7,
+fbs mavlink/common.fbs MAV_FRAME_MISSION = 2,
+fbs mavlink/common.fbs MAV_FRAME_RESERVED_13 = 13,
+fbs mavlink/common.fbs MAV_FRAME_RESERVED_14 = 14,
+fbs mavlink/common.fbs MAV_FRAME_RESERVED_15 = 15,
+fbs mavlink/common.fbs MAV_FRAME_RESERVED_16 = 16,
+fbs mavlink/common.fbs MAV_FRAME_RESERVED_17 = 17,
+fbs mavlink/common.fbs MAV_FRAME_RESERVED_18 = 18,
+fbs mavlink/common.fbs MAV_FRAME_RESERVED_19 = 19,
+fbs mavlink/common.fbs MAV_MISSION_ACCEPTED = 0,
+fbs mavlink/common.fbs MAV_MISSION_DENIED = 14,
+fbs mavlink/common.fbs MAV_MISSION_ERROR = 1,
+fbs mavlink/common.fbs MAV_MISSION_INVALID = 5,
+fbs mavlink/common.fbs MAV_MISSION_INVALID_PARAM1 = 6,
+fbs mavlink/common.fbs MAV_MISSION_INVALID_PARAM2 = 7,
+fbs mavlink/common.fbs MAV_MISSION_INVALID_PARAM3 = 8,
+fbs mavlink/common.fbs MAV_MISSION_INVALID_PARAM4 = 9,
+fbs mavlink/common.fbs MAV_MISSION_INVALID_PARAM5_X = 10,
+fbs mavlink/common.fbs MAV_MISSION_INVALID_PARAM6_Y = 11,
+fbs mavlink/common.fbs MAV_MISSION_INVALID_PARAM7 = 12,
+fbs mavlink/common.fbs MAV_MISSION_INVALID_SEQUENCE = 13,
+fbs mavlink/common.fbs MAV_MISSION_NO_SPACE = 4,
+fbs mavlink/common.fbs MAV_MISSION_OPERATION_CANCELLED = 15,
+fbs mavlink/common.fbs MAV_MISSION_TYPE_ALL = 255,
+fbs mavlink/common.fbs MAV_MISSION_TYPE_FENCE = 1,
+fbs mavlink/common.fbs MAV_MISSION_TYPE_MISSION = 0,
+fbs mavlink/common.fbs MAV_MISSION_TYPE_RALLY = 2,
+fbs mavlink/common.fbs MAV_MISSION_UNSUPPORTED = 3,
+fbs mavlink/common.fbs MAV_MISSION_UNSUPPORTED_FRAME = 2,
+fbs mavlink/common.fbs MAV_PARAM_ERROR_COMPONENT_NOT_FOUND = 4,
+fbs mavlink/common.fbs MAV_PARAM_ERROR_DOES_NOT_EXIST = 1,
+fbs mavlink/common.fbs MAV_PARAM_ERROR_NO_ERROR = 0,
+fbs mavlink/common.fbs MAV_PARAM_ERROR_PERMISSION_DENIED = 3,
+fbs mavlink/common.fbs MAV_PARAM_ERROR_READ_FAIL = 8,
+fbs mavlink/common.fbs MAV_PARAM_ERROR_READ_ONLY = 5,
+fbs mavlink/common.fbs MAV_PARAM_ERROR_TYPE_MISMATCH = 7,
+fbs mavlink/common.fbs MAV_PARAM_ERROR_TYPE_UNSUPPORTED = 6,
+fbs mavlink/common.fbs MAV_PARAM_ERROR_VALUE_OUT_OF_RANGE = 2,
+fbs mavlink/common.fbs MAV_PARAM_TYPE_INT16 = 4,
+fbs mavlink/common.fbs MAV_PARAM_TYPE_INT32 = 6,
+fbs mavlink/common.fbs MAV_PARAM_TYPE_INT64 = 8,
+fbs mavlink/common.fbs MAV_PARAM_TYPE_INT8 = 2,
+fbs mavlink/common.fbs MAV_PARAM_TYPE_REAL32 = 9,
+fbs mavlink/common.fbs MAV_PARAM_TYPE_REAL64 = 10,
+fbs mavlink/common.fbs MAV_PARAM_TYPE_UINT16 = 3,
+fbs mavlink/common.fbs MAV_PARAM_TYPE_UINT32 = 5,
+fbs mavlink/common.fbs MAV_PARAM_TYPE_UINT64 = 7,
+fbs mavlink/common.fbs MAV_PARAM_TYPE_UINT8 = 1,
+fbs mavlink/common.fbs MAV_RESULT_ACCEPTED = 0,
+fbs mavlink/common.fbs MAV_RESULT_CANCELLED = 6,
+fbs mavlink/common.fbs MAV_RESULT_COMMAND_INT_ONLY = 8,
+fbs mavlink/common.fbs MAV_RESULT_COMMAND_LONG_ONLY = 7,
+fbs mavlink/common.fbs MAV_RESULT_COMMAND_UNSUPPORTED_MAV_FRAME = 9,
+fbs mavlink/common.fbs MAV_RESULT_DENIED = 2,
+fbs mavlink/common.fbs MAV_RESULT_FAILED = 4,
+fbs mavlink/common.fbs MAV_RESULT_IN_PROGRESS = 5,
+fbs mavlink/common.fbs MAV_RESULT_NOT_IN_CONTROL = 10,
+fbs mavlink/common.fbs MAV_RESULT_TEMPORARILY_REJECTED = 1,
+fbs mavlink/common.fbs MAV_RESULT_UNSUPPORTED = 3,
+fbs mavlink/common.fbs MISSION_ACK = 9,
+fbs mavlink/common.fbs MISSION_CLEAR_ALL = 7,
+fbs mavlink/common.fbs MISSION_COUNT = 6,
+fbs mavlink/common.fbs MISSION_CURRENT = 4,
+fbs mavlink/common.fbs MISSION_ITEM = 1,
+fbs mavlink/common.fbs MISSION_ITEM_INT = 11,
+fbs mavlink/common.fbs MISSION_ITEM_REACHED = 8,
+fbs mavlink/common.fbs MISSION_REQUEST = 2,
+fbs mavlink/common.fbs MISSION_REQUEST_INT = 10,
+fbs mavlink/common.fbs MISSION_REQUEST_LIST = 5,
+fbs mavlink/common.fbs MISSION_SET_CURRENT = 3,
+fbs mavlink/common.fbs MISSION_STATE_ACTIVE = 3,
+fbs mavlink/common.fbs MISSION_STATE_COMPLETE = 5,
+fbs mavlink/common.fbs MISSION_STATE_NOT_STARTED = 2,
+fbs mavlink/common.fbs MISSION_STATE_NO_MISSION = 1,
+fbs mavlink/common.fbs MISSION_STATE_PAUSED = 4,
+fbs mavlink/common.fbs MISSION_STATE_UNKNOWN = 0,
+fbs mavlink/common.fbs PARAM_ERROR = 5,
+fbs mavlink/common.fbs PARAM_REQUEST_LIST = 2,
+fbs mavlink/common.fbs PARAM_REQUEST_READ = 1,
+fbs mavlink/common.fbs PARAM_SET = 4,
+fbs mavlink/common.fbs PARAM_VALUE = 3,
+fbs mavlink/common.fbs SYS_STATUS = 1,
+fbs mavlink/common.fbs VFR_HUD = 6,
+fbs mavlink/common.fbs airspeed: double (id: 0);
+fbs mavlink/common.fbs alt: double (id: 4);
+fbs mavlink/common.fbs alt_ellipsoid: double (id: 10);
+fbs mavlink/common.fbs autocontinue: ubyte (id: 5);
+fbs mavlink/common.fbs autocontinue: ubyte (id: 6);
+fbs mavlink/common.fbs battery_remaining: double (id: 6);
+fbs mavlink/common.fbs climb: double (id: 5);
+fbs mavlink/common.fbs cog: ushort (id: 8);
+fbs mavlink/common.fbs command_value: MavCmd = null (id: 0);
+fbs mavlink/common.fbs command_value: MavCmd = null (id: 2);
+fbs mavlink/common.fbs command_value: MavCmd = null (id: 3);
+fbs mavlink/common.fbs command_value: MavCmd = null (id: 4);
+fbs mavlink/common.fbs confirmation: ubyte (id: 3);
+fbs mavlink/common.fbs count: ushort (id: 2);
+fbs mavlink/common.fbs current_battery: double (id: 5);
+fbs mavlink/common.fbs current_value: ubyte (id: 4);
+fbs mavlink/common.fbs current_value: ubyte (id: 5);
+fbs mavlink/common.fbs data: [ubyte] (id: 0);
+fbs mavlink/common.fbs drop_rate_comm: ushort (id: 7);
+fbs mavlink/common.fbs enum CommandProtocolOrdinal : uint {
+fbs mavlink/common.fbs enum GpsFixType : long {
+fbs mavlink/common.fbs enum MavCmd : long {
+fbs mavlink/common.fbs enum MavFrame : long {
+fbs mavlink/common.fbs enum MavMissionResult : long {
+fbs mavlink/common.fbs enum MavMissionType : long {
+fbs mavlink/common.fbs enum MavParamError : long {
+fbs mavlink/common.fbs enum MavParamType : long {
+fbs mavlink/common.fbs enum MavResult : long {
+fbs mavlink/common.fbs enum MissionProtocolOrdinal : uint {
+fbs mavlink/common.fbs enum MissionState : long {
+fbs mavlink/common.fbs enum ParameterProtocolOrdinal : uint {
+fbs mavlink/common.fbs enum TelemetryOrdinal : uint {
+fbs mavlink/common.fbs eph: ushort (id: 5);
+fbs mavlink/common.fbs epv: ushort (id: 6);
+fbs mavlink/common.fbs error_value: MavParamError (id: 4);
+fbs mavlink/common.fbs errors_comm: ushort (id: 8);
+fbs mavlink/common.fbs errors_count1: ushort (id: 9);
+fbs mavlink/common.fbs errors_count2: ushort (id: 10);
+fbs mavlink/common.fbs errors_count3: ushort (id: 11);
+fbs mavlink/common.fbs errors_count4: ushort (id: 12);
+fbs mavlink/common.fbs fence_id: uint (id: 5);
+fbs mavlink/common.fbs fix_type: GpsFixType (id: 1);
+fbs mavlink/common.fbs frame: MavFrame (id: 2);
+fbs mavlink/common.fbs frame: MavFrame (id: 3);
+fbs mavlink/common.fbs groundspeed: double (id: 1);
+fbs mavlink/common.fbs h_acc: double (id: 11);
+fbs mavlink/common.fbs hdg_acc: uint (id: 14);
+fbs mavlink/common.fbs heading: short (id: 2);
+fbs mavlink/common.fbs lat: int (id: 2);
+fbs mavlink/common.fbs load: ushort (id: 3);
+fbs mavlink/common.fbs lon: int (id: 3);
+fbs mavlink/common.fbs mission_id: uint (id: 4);
+fbs mavlink/common.fbs mission_mode: ubyte (id: 3);
+fbs mavlink/common.fbs mission_state: MissionState (id: 2);
+fbs mavlink/common.fbs mission_type: MavMissionType (id: 14);
+fbs mavlink/common.fbs mission_type: MavMissionType (id: 2);
+fbs mavlink/common.fbs mission_type: MavMissionType (id: 3);
+fbs mavlink/common.fbs namespace common;
+fbs mavlink/common.fbs onboard_control_sensors_enabled: uint (id: 1);
+fbs mavlink/common.fbs onboard_control_sensors_enabled_extended: uint (id: 14);
+fbs mavlink/common.fbs onboard_control_sensors_health: uint (id: 2);
+fbs mavlink/common.fbs onboard_control_sensors_health_extended: uint (id: 15);
+fbs mavlink/common.fbs onboard_control_sensors_present: uint (id: 0);
+fbs mavlink/common.fbs onboard_control_sensors_present_extended: uint (id: 13);
+fbs mavlink/common.fbs opaque_id: uint (id: 4);
+fbs mavlink/common.fbs param1: double (id: 4);
+fbs mavlink/common.fbs param1: double (id: 6);
+fbs mavlink/common.fbs param1: double (id: 7);
+fbs mavlink/common.fbs param2: double (id: 5);
+fbs mavlink/common.fbs param2: double (id: 7);
+fbs mavlink/common.fbs param2: double (id: 8);
+fbs mavlink/common.fbs param3: double (id: 6);
+fbs mavlink/common.fbs param3: double (id: 8);
+fbs mavlink/common.fbs param3: double (id: 9);
+fbs mavlink/common.fbs param4: double (id: 10);
+fbs mavlink/common.fbs param4: double (id: 7);
+fbs mavlink/common.fbs param4: double (id: 9);
+fbs mavlink/common.fbs param5: double (id: 8);
+fbs mavlink/common.fbs param6: double (id: 9);
+fbs mavlink/common.fbs param7: double (id: 10);
+fbs mavlink/common.fbs param_count: ushort (id: 3);
+fbs mavlink/common.fbs param_id: [ubyte] (id: 0);
+fbs mavlink/common.fbs param_id: [ubyte] (id: 2);
+fbs mavlink/common.fbs param_index: short (id: 3);
+fbs mavlink/common.fbs param_index: ushort (id: 4);
+fbs mavlink/common.fbs param_type: MavParamType = null (id: 2);
+fbs mavlink/common.fbs param_type: MavParamType = null (id: 4);
+fbs mavlink/common.fbs param_value: double (id: 1);
+fbs mavlink/common.fbs param_value: double (id: 3);
+fbs mavlink/common.fbs pitch: double (id: 2);
+fbs mavlink/common.fbs pitchspeed: double (id: 5);
+fbs mavlink/common.fbs progress: double (id: 2);
+fbs mavlink/common.fbs rally_points_id: uint (id: 6);
+fbs mavlink/common.fbs result: MavResult (id: 1);
+fbs mavlink/common.fbs result_param2: int (id: 3);
+fbs mavlink/common.fbs roll: double (id: 1);
+fbs mavlink/common.fbs rollspeed: double (id: 4);
+fbs mavlink/common.fbs satellites_visible: ubyte (id: 9);
+fbs mavlink/common.fbs seq: ushort (id: 0);
+fbs mavlink/common.fbs seq: ushort (id: 2);
+fbs mavlink/common.fbs table Attitude {
+fbs mavlink/common.fbs table Char16Box {
+fbs mavlink/common.fbs table CommandAck {
+fbs mavlink/common.fbs table CommandCancel {
+fbs mavlink/common.fbs table CommandInt {
+fbs mavlink/common.fbs table CommandLong {
+fbs mavlink/common.fbs table Float32Box {
+fbs mavlink/common.fbs table Float32MetersBox {
+fbs mavlink/common.fbs table Float32MetersPerSecondBox {
+fbs mavlink/common.fbs table Float32MicrosecondsBox {
+fbs mavlink/common.fbs table Float32SecondsBox {
+fbs mavlink/common.fbs table GpsFixTypeBox {
+fbs mavlink/common.fbs table GpsRawInt {
+fbs mavlink/common.fbs table Int16Box {
+fbs mavlink/common.fbs table Int16CentiamperesBox {
+fbs mavlink/common.fbs table Int32Box {
+fbs mavlink/common.fbs table Int32MillimetersBox {
+fbs mavlink/common.fbs table Int8PercentBox {
+fbs mavlink/common.fbs table LocalPositionNed {
+fbs mavlink/common.fbs table MavCmdBox {
+fbs mavlink/common.fbs table MavFrameBox {
+fbs mavlink/common.fbs table MavMissionResultBox {
+fbs mavlink/common.fbs table MavMissionTypeBox {
+fbs mavlink/common.fbs table MavParamErrorBox {
+fbs mavlink/common.fbs table MavParamTypeBox {
+fbs mavlink/common.fbs table MavResultBox {
+fbs mavlink/common.fbs table MavSysStatusSensorBox {
+fbs mavlink/common.fbs table MavSysStatusSensorExtendedBox {
+fbs mavlink/common.fbs table MissionAck {
+fbs mavlink/common.fbs table MissionClearAll {
+fbs mavlink/common.fbs table MissionCount {
+fbs mavlink/common.fbs table MissionCurrent {
+fbs mavlink/common.fbs table MissionItem {
+fbs mavlink/common.fbs table MissionItemInt {
+fbs mavlink/common.fbs table MissionItemReached {
+fbs mavlink/common.fbs table MissionRequest {
+fbs mavlink/common.fbs table MissionRequestInt {
+fbs mavlink/common.fbs table MissionRequestList {
+fbs mavlink/common.fbs table MissionSetCurrent {
+fbs mavlink/common.fbs table MissionStateBox {
+fbs mavlink/common.fbs table ParamError {
+fbs mavlink/common.fbs table ParamRequestList {
+fbs mavlink/common.fbs table ParamRequestRead {
+fbs mavlink/common.fbs table ParamSet {
+fbs mavlink/common.fbs table ParamValue {
+fbs mavlink/common.fbs table SysStatus {
+fbs mavlink/common.fbs table Uint16Box {
+fbs mavlink/common.fbs table Uint16CentimetersPerSecondBox {
+fbs mavlink/common.fbs table Uint16MillivoltsBox {
+fbs mavlink/common.fbs table Uint16PercentBox {
+fbs mavlink/common.fbs table Uint32Box {
+fbs mavlink/common.fbs table Uint32MillimetersBox {
+fbs mavlink/common.fbs table Uint32MillimetersPerSecondBox {
+fbs mavlink/common.fbs table Uint32MillisecondsBox {
+fbs mavlink/common.fbs table Uint64Bytes {
+fbs mavlink/common.fbs table Uint8Box {
+fbs mavlink/common.fbs table Uint8PercentBox {
+fbs mavlink/common.fbs table VfrHud {
+fbs mavlink/common.fbs target_component: ubyte (id: 1);
+fbs mavlink/common.fbs target_component: ubyte (id: 5);
+fbs mavlink/common.fbs target_system: ubyte (id: 0);
+fbs mavlink/common.fbs target_system: ubyte (id: 4);
+fbs mavlink/common.fbs throttle: double (id: 3);
+fbs mavlink/common.fbs time_boot_ms: double (id: 0);
+fbs mavlink/common.fbs time_usec: Uint64Bytes (id: 0);
+fbs mavlink/common.fbs total: ushort (id: 1);
+fbs mavlink/common.fbs type_value: MavMissionResult (id: 2);
+fbs mavlink/common.fbs v_acc: double (id: 12);
+fbs mavlink/common.fbs value: GpsFixType (id: 0);
+fbs mavlink/common.fbs value: MavCmd = null (id: 0);
+fbs mavlink/common.fbs value: MavFrame (id: 0);
+fbs mavlink/common.fbs value: MavMissionResult (id: 0);
+fbs mavlink/common.fbs value: MavMissionType (id: 0);
+fbs mavlink/common.fbs value: MavParamError (id: 0);
+fbs mavlink/common.fbs value: MavParamType = null (id: 0);
+fbs mavlink/common.fbs value: MavResult (id: 0);
+fbs mavlink/common.fbs value: MissionState (id: 0);
+fbs mavlink/common.fbs value: [ubyte] (id: 0);
+fbs mavlink/common.fbs value: double (id: 0);
+fbs mavlink/common.fbs value: int (id: 0);
+fbs mavlink/common.fbs value: short (id: 0);
+fbs mavlink/common.fbs value: ubyte (id: 0);
+fbs mavlink/common.fbs value: uint (id: 0);
+fbs mavlink/common.fbs value: ushort (id: 0);
+fbs mavlink/common.fbs vel: double (id: 7);
+fbs mavlink/common.fbs vel_acc: double (id: 13);
+fbs mavlink/common.fbs voltage_battery: double (id: 4);
+fbs mavlink/common.fbs vx: double (id: 4);
+fbs mavlink/common.fbs vy: double (id: 5);
+fbs mavlink/common.fbs vz: double (id: 6);
+fbs mavlink/common.fbs x: double (id: 1);
+fbs mavlink/common.fbs x: double (id: 11);
+fbs mavlink/common.fbs x: int (id: 10);
+fbs mavlink/common.fbs x: int (id: 11);
+fbs mavlink/common.fbs y: double (id: 12);
+fbs mavlink/common.fbs y: double (id: 2);
+fbs mavlink/common.fbs y: int (id: 11);
+fbs mavlink/common.fbs y: int (id: 12);
+fbs mavlink/common.fbs yaw: double (id: 3);
+fbs mavlink/common.fbs yaw: ushort (id: 15);
+fbs mavlink/common.fbs yawspeed: double (id: 6);
+fbs mavlink/common.fbs z: double (id: 12);
+fbs mavlink/common.fbs z: double (id: 13);
+fbs mavlink/common.fbs z: double (id: 3);
+fbs mavlink/common.fbs }
+fbs mavlink/minimal.fbs HEARTBEAT = 1,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_AEROB = 16,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_AIRRAILS = 19,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_ARDUPILOTMEGA = 3,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_ARMAZILA = 15,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_ASLUAV = 17,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_AUTOQUAD = 14,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_FLIX = 21,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_FP = 11,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_GENERIC = 0,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_GENERIC_MISSION_FULL = 7,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_GENERIC_WAYPOINTS_AND_SIMPLE_NAVIGATION_ONLY = 6,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_GENERIC_WAYPOINTS_ONLY = 5,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_INVALID = 8,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_OPENPILOT = 4,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_PPZ = 9,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_PX4 = 12,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_REFLEX = 20,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_RESERVED = 1,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_SLUGS = 2,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_SMACCMPILOT = 13,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_SMARTAP = 18,
+fbs mavlink/minimal.fbs MAV_AUTOPILOT_UDB = 10,
+fbs mavlink/minimal.fbs MAV_STATE_ACTIVE = 4,
+fbs mavlink/minimal.fbs MAV_STATE_BOOT = 1,
+fbs mavlink/minimal.fbs MAV_STATE_CALIBRATING = 2,
+fbs mavlink/minimal.fbs MAV_STATE_CRITICAL = 5,
+fbs mavlink/minimal.fbs MAV_STATE_EMERGENCY = 6,
+fbs mavlink/minimal.fbs MAV_STATE_FLIGHT_TERMINATION = 8,
+fbs mavlink/minimal.fbs MAV_STATE_POWEROFF = 7,
+fbs mavlink/minimal.fbs MAV_STATE_STANDBY = 3,
+fbs mavlink/minimal.fbs MAV_STATE_UNINIT = 0,
+fbs mavlink/minimal.fbs MAV_TYPE_ADSB = 27,
+fbs mavlink/minimal.fbs MAV_TYPE_AIRSHIP = 7,
+fbs mavlink/minimal.fbs MAV_TYPE_ANTENNA_TRACKER = 5,
+fbs mavlink/minimal.fbs MAV_TYPE_BATTERY = 36,
+fbs mavlink/minimal.fbs MAV_TYPE_CAMERA = 30,
+fbs mavlink/minimal.fbs MAV_TYPE_CHARGING_STATION = 31,
+fbs mavlink/minimal.fbs MAV_TYPE_COAXIAL = 3,
+fbs mavlink/minimal.fbs MAV_TYPE_DECAROTOR = 35,
+fbs mavlink/minimal.fbs MAV_TYPE_DODECAROTOR = 29,
+fbs mavlink/minimal.fbs MAV_TYPE_FIXED_WING = 1,
+fbs mavlink/minimal.fbs MAV_TYPE_FLAPPING_WING = 16,
+fbs mavlink/minimal.fbs MAV_TYPE_FLARM = 32,
+fbs mavlink/minimal.fbs MAV_TYPE_FREE_BALLOON = 8,
+fbs mavlink/minimal.fbs MAV_TYPE_GCS = 6,
+fbs mavlink/minimal.fbs MAV_TYPE_GENERIC = 0,
+fbs mavlink/minimal.fbs MAV_TYPE_GENERIC_MULTIROTOR = 43,
+fbs mavlink/minimal.fbs MAV_TYPE_GIMBAL = 26,
+fbs mavlink/minimal.fbs MAV_TYPE_GPS = 41,
+fbs mavlink/minimal.fbs MAV_TYPE_GRIPPER = 48,
+fbs mavlink/minimal.fbs MAV_TYPE_GROUND_QUADRUPED = 46,
+fbs mavlink/minimal.fbs MAV_TYPE_GROUND_ROVER = 10,
+fbs mavlink/minimal.fbs MAV_TYPE_HELICOPTER = 4,
+fbs mavlink/minimal.fbs MAV_TYPE_HEXAROTOR = 13,
+fbs mavlink/minimal.fbs MAV_TYPE_ILLUMINATOR = 44,
+fbs mavlink/minimal.fbs MAV_TYPE_IMU = 40,
+fbs mavlink/minimal.fbs MAV_TYPE_KITE = 17,
+fbs mavlink/minimal.fbs MAV_TYPE_LOG = 38,
+fbs mavlink/minimal.fbs MAV_TYPE_OCTOROTOR = 14,
+fbs mavlink/minimal.fbs MAV_TYPE_ODID = 34,
+fbs mavlink/minimal.fbs MAV_TYPE_ONBOARD_CONTROLLER = 18,
+fbs mavlink/minimal.fbs MAV_TYPE_OSD = 39,
+fbs mavlink/minimal.fbs MAV_TYPE_PARACHUTE = 37,
+fbs mavlink/minimal.fbs MAV_TYPE_PARAFOIL = 28,
+fbs mavlink/minimal.fbs MAV_TYPE_QUADROTOR = 2,
+fbs mavlink/minimal.fbs MAV_TYPE_RADIO = 49,
+fbs mavlink/minimal.fbs MAV_TYPE_ROCKET = 9,
+fbs mavlink/minimal.fbs MAV_TYPE_SERVO = 33,
+fbs mavlink/minimal.fbs MAV_TYPE_SPACECRAFT_ORBITER = 45,
+fbs mavlink/minimal.fbs MAV_TYPE_SUBMARINE = 12,
+fbs mavlink/minimal.fbs MAV_TYPE_SURFACE_BOAT = 11,
+fbs mavlink/minimal.fbs MAV_TYPE_TRICOPTER = 15,
+fbs mavlink/minimal.fbs MAV_TYPE_VTOL_FIXEDROTOR = 22,
+fbs mavlink/minimal.fbs MAV_TYPE_VTOL_GYRODYNE = 47,
+fbs mavlink/minimal.fbs MAV_TYPE_VTOL_RESERVED5 = 25,
+fbs mavlink/minimal.fbs MAV_TYPE_VTOL_TAILSITTER = 23,
+fbs mavlink/minimal.fbs MAV_TYPE_VTOL_TAILSITTER_DUOROTOR = 19,
+fbs mavlink/minimal.fbs MAV_TYPE_VTOL_TAILSITTER_QUADROTOR = 20,
+fbs mavlink/minimal.fbs MAV_TYPE_VTOL_TILTROTOR = 21,
+fbs mavlink/minimal.fbs MAV_TYPE_VTOL_TILTWING = 24,
+fbs mavlink/minimal.fbs MAV_TYPE_WINCH = 42,
+fbs mavlink/minimal.fbs autopilot: MavAutopilot (id: 1);
+fbs mavlink/minimal.fbs base_mode: ubyte (id: 2);
+fbs mavlink/minimal.fbs custom_mode: uint (id: 3);
+fbs mavlink/minimal.fbs enum HeartbeatProtocolOrdinal : uint {
+fbs mavlink/minimal.fbs enum MavAutopilot : long {
+fbs mavlink/minimal.fbs enum MavState : long {
+fbs mavlink/minimal.fbs enum MavType : long {
+fbs mavlink/minimal.fbs mavlink_version: ubyte (id: 5);
+fbs mavlink/minimal.fbs namespace minimal;
+fbs mavlink/minimal.fbs system_status: MavState (id: 4);
+fbs mavlink/minimal.fbs table Heartbeat {
+fbs mavlink/minimal.fbs table MavAutopilotBox {
+fbs mavlink/minimal.fbs table MavModeFlagBox {
+fbs mavlink/minimal.fbs table MavStateBox {
+fbs mavlink/minimal.fbs table MavTypeBox {
+fbs mavlink/minimal.fbs table MavlinkVersionBox {
+fbs mavlink/minimal.fbs table Uint32Box {
+fbs mavlink/minimal.fbs type_value: MavType (id: 0);
+fbs mavlink/minimal.fbs value: MavAutopilot (id: 0);
+fbs mavlink/minimal.fbs value: MavState (id: 0);
+fbs mavlink/minimal.fbs value: MavType (id: 0);
+fbs mavlink/minimal.fbs value: ubyte (id: 0);
+fbs mavlink/minimal.fbs value: uint (id: 0);
+fbs mavlink/minimal.fbs }
+fbs mavlink/standard.fbs MAV_BOOL_FALSE = 0,
+fbs mavlink/standard.fbs MAV_BOOL_TRUE = 1,
+fbs mavlink/standard.fbs alt: double (id: 3);
+fbs mavlink/standard.fbs enum MavBool : long {
+fbs mavlink/standard.fbs hdg: ushort (id: 8);
+fbs mavlink/standard.fbs lat: int (id: 1);
+fbs mavlink/standard.fbs lon: int (id: 2);
+fbs mavlink/standard.fbs namespace standard;
+fbs mavlink/standard.fbs relative_alt: double (id: 4);
+fbs mavlink/standard.fbs table GlobalPositionInt {
+fbs mavlink/standard.fbs table Int16CentimetersPerSecondBox {
+fbs mavlink/standard.fbs table Int32Box {
+fbs mavlink/standard.fbs table Int32MillimetersBox {
+fbs mavlink/standard.fbs table MavBoolBox {
+fbs mavlink/standard.fbs table Uint16Box {
+fbs mavlink/standard.fbs table Uint32MillisecondsBox {
+fbs mavlink/standard.fbs time_boot_ms: double (id: 0);
+fbs mavlink/standard.fbs value: MavBool (id: 0);
+fbs mavlink/standard.fbs value: double (id: 0);
+fbs mavlink/standard.fbs value: int (id: 0);
+fbs mavlink/standard.fbs value: ushort (id: 0);
+fbs mavlink/standard.fbs vx: double (id: 5);
+fbs mavlink/standard.fbs vy: double (id: 6);
+fbs mavlink/standard.fbs vz: double (id: 7);
+fbs mavlink/standard.fbs }
+fbs vss/vehicle.cabin.hvac.fbs AMBIENT_AIR_TEMPERATURE = 9,
+fbs vss/vehicle.cabin.hvac.fbs IS_AIR_CONDITIONING_ACTIVE = 7,
+fbs vss/vehicle.cabin.hvac.fbs IS_AUTO_POWER_OPTIMIZE = 12,
+fbs vss/vehicle.cabin.hvac.fbs IS_FRONT_DEFROSTER_ACTIVE = 3,
+fbs vss/vehicle.cabin.hvac.fbs IS_REAR_DEFROSTER_ACTIVE = 5,
+fbs vss/vehicle.cabin.hvac.fbs IS_RECIRCULATION_ACTIVE = 1,
+fbs vss/vehicle.cabin.hvac.fbs POWER_OPTIMIZE_LEVEL = 10,
+fbs vss/vehicle.cabin.hvac.fbs SET_IS_AIR_CONDITIONING_ACTIVE = 8,
+fbs vss/vehicle.cabin.hvac.fbs SET_IS_AUTO_POWER_OPTIMIZE = 13,
+fbs vss/vehicle.cabin.hvac.fbs SET_IS_FRONT_DEFROSTER_ACTIVE = 4,
+fbs vss/vehicle.cabin.hvac.fbs SET_IS_REAR_DEFROSTER_ACTIVE = 6,
+fbs vss/vehicle.cabin.hvac.fbs SET_IS_RECIRCULATION_ACTIVE = 2,
+fbs vss/vehicle.cabin.hvac.fbs SET_POWER_OPTIMIZE_LEVEL = 11,
+fbs vss/vehicle.cabin.hvac.fbs enum HVACOrdinal : uint {
+fbs vss/vehicle.cabin.hvac.fbs namespace vehicle.cabin.hvac;
+fbs vss/vehicle.cabin.hvac.fbs table AmbientAirTemperatureBox {
+fbs vss/vehicle.cabin.hvac.fbs table BooleanBox {
+fbs vss/vehicle.cabin.hvac.fbs table PowerOptimizeLevelBox {
+fbs vss/vehicle.cabin.hvac.fbs value: bool (id: 0);
+fbs vss/vehicle.cabin.hvac.fbs value: double (id: 0);
+fbs vss/vehicle.cabin.hvac.fbs value: ubyte (id: 0);
+fbs vss/vehicle.cabin.hvac.fbs }
+fbs vss/vehicle.cabin.hvac.station.fbs enum StationOrdinal : uint {
+fbs vss/vehicle.cabin.hvac.station.fbs namespace vehicle.cabin.hvac.station;
+fbs vss/vehicle.cabin.hvac.station.fbs }
+fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs AIR_DISTRIBUTION = 5,
+fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs DOWN = 2,
+fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs FAN_SPEED = 1,
+fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs MIDDLE = 1,
+fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs SET_AIR_DISTRIBUTION = 6,
+fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs SET_FAN_SPEED = 2,
+fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs SET_TEMPERATURE = 4,
+fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs TEMPERATURE = 3,
+fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs UP = 0,
+fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs enum AirDistribution : long {
+fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs enum DriverOrdinal : uint {
+fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs namespace vehicle.cabin.hvac.station.row1.driver;
+fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs table AirDistributionBox {
+fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs table FanSpeedBox {
+fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs table TemperatureBox {
+fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs value: AirDistribution (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs value: double (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs value: ubyte (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs }
+fbs vss/vehicle.cabin.hvac.station.row1.fbs enum Row1Ordinal : uint {
+fbs vss/vehicle.cabin.hvac.station.row1.fbs namespace vehicle.cabin.hvac.station.row1;
+fbs vss/vehicle.cabin.hvac.station.row1.fbs }
+fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs AIR_DISTRIBUTION = 5,
+fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs DOWN = 2,
+fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs FAN_SPEED = 1,
+fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs MIDDLE = 1,
+fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs SET_AIR_DISTRIBUTION = 6,
+fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs SET_FAN_SPEED = 2,
+fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs SET_TEMPERATURE = 4,
+fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs TEMPERATURE = 3,
+fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs UP = 0,
+fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs enum AirDistribution : long {
+fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs enum PassengerOrdinal : uint {
+fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs namespace vehicle.cabin.hvac.station.row1.passenger;
+fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs table AirDistributionBox {
+fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs table FanSpeedBox {
+fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs table TemperatureBox {
+fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs value: AirDistribution (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs value: double (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs value: ubyte (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs }
+fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs AIR_DISTRIBUTION = 5,
+fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs DOWN = 2,
+fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs FAN_SPEED = 1,
+fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs MIDDLE = 1,
+fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs SET_AIR_DISTRIBUTION = 6,
+fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs SET_FAN_SPEED = 2,
+fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs SET_TEMPERATURE = 4,
+fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs TEMPERATURE = 3,
+fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs UP = 0,
+fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs enum AirDistribution : long {
+fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs enum DriverOrdinal : uint {
+fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs namespace vehicle.cabin.hvac.station.row2.driver;
+fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs table AirDistributionBox {
+fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs table FanSpeedBox {
+fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs table TemperatureBox {
+fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs value: AirDistribution (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs value: double (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs value: ubyte (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs }
+fbs vss/vehicle.cabin.hvac.station.row2.fbs enum Row2Ordinal : uint {
+fbs vss/vehicle.cabin.hvac.station.row2.fbs namespace vehicle.cabin.hvac.station.row2;
+fbs vss/vehicle.cabin.hvac.station.row2.fbs }
+fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs AIR_DISTRIBUTION = 5,
+fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs DOWN = 2,
+fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs FAN_SPEED = 1,
+fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs MIDDLE = 1,
+fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs SET_AIR_DISTRIBUTION = 6,
+fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs SET_FAN_SPEED = 2,
+fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs SET_TEMPERATURE = 4,
+fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs TEMPERATURE = 3,
+fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs UP = 0,
+fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs enum AirDistribution : long {
+fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs enum PassengerOrdinal : uint {
+fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs namespace vehicle.cabin.hvac.station.row2.passenger;
+fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs table AirDistributionBox {
+fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs table FanSpeedBox {
+fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs table TemperatureBox {
+fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs value: AirDistribution (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs value: double (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs value: ubyte (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs }
+fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs AIR_DISTRIBUTION = 5,
+fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs DOWN = 2,
+fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs FAN_SPEED = 1,
+fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs MIDDLE = 1,
+fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs SET_AIR_DISTRIBUTION = 6,
+fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs SET_FAN_SPEED = 2,
+fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs SET_TEMPERATURE = 4,
+fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs TEMPERATURE = 3,
+fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs UP = 0,
+fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs enum AirDistribution : long {
+fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs enum DriverOrdinal : uint {
+fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs namespace vehicle.cabin.hvac.station.row3.driver;
+fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs table AirDistributionBox {
+fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs table FanSpeedBox {
+fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs table TemperatureBox {
+fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs value: AirDistribution (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs value: double (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs value: ubyte (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs }
+fbs vss/vehicle.cabin.hvac.station.row3.fbs enum Row3Ordinal : uint {
+fbs vss/vehicle.cabin.hvac.station.row3.fbs namespace vehicle.cabin.hvac.station.row3;
+fbs vss/vehicle.cabin.hvac.station.row3.fbs }
+fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs AIR_DISTRIBUTION = 5,
+fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs DOWN = 2,
+fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs FAN_SPEED = 1,
+fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs MIDDLE = 1,
+fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs SET_AIR_DISTRIBUTION = 6,
+fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs SET_FAN_SPEED = 2,
+fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs SET_TEMPERATURE = 4,
+fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs TEMPERATURE = 3,
+fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs UP = 0,
+fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs enum AirDistribution : long {
+fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs enum PassengerOrdinal : uint {
+fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs namespace vehicle.cabin.hvac.station.row3.passenger;
+fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs table AirDistributionBox {
+fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs table FanSpeedBox {
+fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs table TemperatureBox {
+fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs value: AirDistribution (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs value: double (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs value: ubyte (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs }
+fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs AIR_DISTRIBUTION = 5,
+fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs DOWN = 2,
+fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs FAN_SPEED = 1,
+fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs MIDDLE = 1,
+fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs SET_AIR_DISTRIBUTION = 6,
+fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs SET_FAN_SPEED = 2,
+fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs SET_TEMPERATURE = 4,
+fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs TEMPERATURE = 3,
+fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs UP = 0,
+fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs enum AirDistribution : long {
+fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs enum DriverOrdinal : uint {
+fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs namespace vehicle.cabin.hvac.station.row4.driver;
+fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs table AirDistributionBox {
+fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs table FanSpeedBox {
+fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs table TemperatureBox {
+fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs value: AirDistribution (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs value: double (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs value: ubyte (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs }
+fbs vss/vehicle.cabin.hvac.station.row4.fbs enum Row4Ordinal : uint {
+fbs vss/vehicle.cabin.hvac.station.row4.fbs namespace vehicle.cabin.hvac.station.row4;
+fbs vss/vehicle.cabin.hvac.station.row4.fbs }
+fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs AIR_DISTRIBUTION = 5,
+fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs DOWN = 2,
+fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs FAN_SPEED = 1,
+fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs MIDDLE = 1,
+fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs SET_AIR_DISTRIBUTION = 6,
+fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs SET_FAN_SPEED = 2,
+fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs SET_TEMPERATURE = 4,
+fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs TEMPERATURE = 3,
+fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs UP = 0,
+fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs enum AirDistribution : long {
+fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs enum PassengerOrdinal : uint {
+fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs namespace vehicle.cabin.hvac.station.row4.passenger;
+fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs table AirDistributionBox {
+fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs table FanSpeedBox {
+fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs table TemperatureBox {
+fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs value: AirDistribution (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs value: double (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs value: ubyte (id: 0);
+fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs }
+proto mavlink/common.proto COMMAND_PROTOCOL_ORDINAL_COMMAND_ACK = 3;
+proto mavlink/common.proto COMMAND_PROTOCOL_ORDINAL_COMMAND_CANCEL = 4;
+proto mavlink/common.proto COMMAND_PROTOCOL_ORDINAL_COMMAND_INT = 1;
+proto mavlink/common.proto COMMAND_PROTOCOL_ORDINAL_COMMAND_LONG = 2;
+proto mavlink/common.proto COMMAND_PROTOCOL_ORDINAL_UNSPECIFIED = 0;
+proto mavlink/common.proto GPS_FIX_TYPE_GPS_FIX_TYPE_2_D_FIX = 2;
+proto mavlink/common.proto GPS_FIX_TYPE_GPS_FIX_TYPE_3_D_FIX = 3;
+proto mavlink/common.proto GPS_FIX_TYPE_GPS_FIX_TYPE_DGPS = 4;
+proto mavlink/common.proto GPS_FIX_TYPE_GPS_FIX_TYPE_NO_FIX = 1;
+proto mavlink/common.proto GPS_FIX_TYPE_GPS_FIX_TYPE_NO_GPS = 0;
+proto mavlink/common.proto GPS_FIX_TYPE_GPS_FIX_TYPE_PPP = 8;
+proto mavlink/common.proto GPS_FIX_TYPE_GPS_FIX_TYPE_RTK_FIXED = 6;
+proto mavlink/common.proto GPS_FIX_TYPE_GPS_FIX_TYPE_RTK_FLOAT = 5;
+proto mavlink/common.proto GPS_FIX_TYPE_GPS_FIX_TYPE_STATIC = 7;
+proto mavlink/common.proto GpsFixType fix_type = 2;
+proto mavlink/common.proto MAV_CMD_MAV_CMD_COMPONENT_ARM_DISARM = 400;
+proto mavlink/common.proto MAV_CMD_MAV_CMD_DO_SET_MISSION_CURRENT = 224;
+proto mavlink/common.proto MAV_CMD_MAV_CMD_NAV_WAYPOINT = 16;
+proto mavlink/common.proto MAV_CMD_MAV_CMD_REQUEST_MESSAGE = 512;
+proto mavlink/common.proto MAV_CMD_MAV_CMD_SET_MESSAGE_INTERVAL = 511;
+proto mavlink/common.proto MAV_CMD_UNSPECIFIED = 0;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_BODY_FRD = 12;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_BODY_NED = 8;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_BODY_OFFSET_NED = 9;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_GLOBAL = 0;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_GLOBAL_INT = 5;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_GLOBAL_RELATIVE_ALT = 3;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_GLOBAL_RELATIVE_ALT_INT = 6;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_GLOBAL_TERRAIN_ALT = 10;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_GLOBAL_TERRAIN_ALT_INT = 11;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_LOCAL_ENU = 4;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_LOCAL_FLU = 21;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_LOCAL_FRD = 20;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_LOCAL_NED = 1;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_LOCAL_OFFSET_NED = 7;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_MISSION = 2;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_RESERVED_13 = 13;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_RESERVED_14 = 14;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_RESERVED_15 = 15;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_RESERVED_16 = 16;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_RESERVED_17 = 17;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_RESERVED_18 = 18;
+proto mavlink/common.proto MAV_FRAME_MAV_FRAME_RESERVED_19 = 19;
+proto mavlink/common.proto MAV_MISSION_RESULT_MAV_MISSION_ACCEPTED = 0;
+proto mavlink/common.proto MAV_MISSION_RESULT_MAV_MISSION_DENIED = 14;
+proto mavlink/common.proto MAV_MISSION_RESULT_MAV_MISSION_ERROR = 1;
+proto mavlink/common.proto MAV_MISSION_RESULT_MAV_MISSION_INVALID = 5;
+proto mavlink/common.proto MAV_MISSION_RESULT_MAV_MISSION_INVALID_PARAM1 = 6;
+proto mavlink/common.proto MAV_MISSION_RESULT_MAV_MISSION_INVALID_PARAM2 = 7;
+proto mavlink/common.proto MAV_MISSION_RESULT_MAV_MISSION_INVALID_PARAM3 = 8;
+proto mavlink/common.proto MAV_MISSION_RESULT_MAV_MISSION_INVALID_PARAM4 = 9;
+proto mavlink/common.proto MAV_MISSION_RESULT_MAV_MISSION_INVALID_PARAM5_X = 10;
+proto mavlink/common.proto MAV_MISSION_RESULT_MAV_MISSION_INVALID_PARAM6_Y = 11;
+proto mavlink/common.proto MAV_MISSION_RESULT_MAV_MISSION_INVALID_PARAM7 = 12;
+proto mavlink/common.proto MAV_MISSION_RESULT_MAV_MISSION_INVALID_SEQUENCE = 13;
+proto mavlink/common.proto MAV_MISSION_RESULT_MAV_MISSION_NO_SPACE = 4;
+proto mavlink/common.proto MAV_MISSION_RESULT_MAV_MISSION_OPERATION_CANCELLED = 15;
+proto mavlink/common.proto MAV_MISSION_RESULT_MAV_MISSION_UNSUPPORTED = 3;
+proto mavlink/common.proto MAV_MISSION_RESULT_MAV_MISSION_UNSUPPORTED_FRAME = 2;
+proto mavlink/common.proto MAV_MISSION_TYPE_MAV_MISSION_TYPE_ALL = 255;
+proto mavlink/common.proto MAV_MISSION_TYPE_MAV_MISSION_TYPE_FENCE = 1;
+proto mavlink/common.proto MAV_MISSION_TYPE_MAV_MISSION_TYPE_MISSION = 0;
+proto mavlink/common.proto MAV_MISSION_TYPE_MAV_MISSION_TYPE_RALLY = 2;
+proto mavlink/common.proto MAV_PARAM_ERROR_MAV_PARAM_ERROR_COMPONENT_NOT_FOUND = 4;
+proto mavlink/common.proto MAV_PARAM_ERROR_MAV_PARAM_ERROR_DOES_NOT_EXIST = 1;
+proto mavlink/common.proto MAV_PARAM_ERROR_MAV_PARAM_ERROR_NO_ERROR = 0;
+proto mavlink/common.proto MAV_PARAM_ERROR_MAV_PARAM_ERROR_PERMISSION_DENIED = 3;
+proto mavlink/common.proto MAV_PARAM_ERROR_MAV_PARAM_ERROR_READ_FAIL = 8;
+proto mavlink/common.proto MAV_PARAM_ERROR_MAV_PARAM_ERROR_READ_ONLY = 5;
+proto mavlink/common.proto MAV_PARAM_ERROR_MAV_PARAM_ERROR_TYPE_MISMATCH = 7;
+proto mavlink/common.proto MAV_PARAM_ERROR_MAV_PARAM_ERROR_TYPE_UNSUPPORTED = 6;
+proto mavlink/common.proto MAV_PARAM_ERROR_MAV_PARAM_ERROR_VALUE_OUT_OF_RANGE = 2;
+proto mavlink/common.proto MAV_PARAM_TYPE_MAV_PARAM_TYPE_INT16 = 4;
+proto mavlink/common.proto MAV_PARAM_TYPE_MAV_PARAM_TYPE_INT32 = 6;
+proto mavlink/common.proto MAV_PARAM_TYPE_MAV_PARAM_TYPE_INT64 = 8;
+proto mavlink/common.proto MAV_PARAM_TYPE_MAV_PARAM_TYPE_INT8 = 2;
+proto mavlink/common.proto MAV_PARAM_TYPE_MAV_PARAM_TYPE_REAL32 = 9;
+proto mavlink/common.proto MAV_PARAM_TYPE_MAV_PARAM_TYPE_REAL64 = 10;
+proto mavlink/common.proto MAV_PARAM_TYPE_MAV_PARAM_TYPE_UINT16 = 3;
+proto mavlink/common.proto MAV_PARAM_TYPE_MAV_PARAM_TYPE_UINT32 = 5;
+proto mavlink/common.proto MAV_PARAM_TYPE_MAV_PARAM_TYPE_UINT64 = 7;
+proto mavlink/common.proto MAV_PARAM_TYPE_MAV_PARAM_TYPE_UINT8 = 1;
+proto mavlink/common.proto MAV_PARAM_TYPE_UNSPECIFIED = 0;
+proto mavlink/common.proto MAV_RESULT_MAV_RESULT_ACCEPTED = 0;
+proto mavlink/common.proto MAV_RESULT_MAV_RESULT_CANCELLED = 6;
+proto mavlink/common.proto MAV_RESULT_MAV_RESULT_COMMAND_INT_ONLY = 8;
+proto mavlink/common.proto MAV_RESULT_MAV_RESULT_COMMAND_LONG_ONLY = 7;
+proto mavlink/common.proto MAV_RESULT_MAV_RESULT_COMMAND_UNSUPPORTED_MAV_FRAME = 9;
+proto mavlink/common.proto MAV_RESULT_MAV_RESULT_DENIED = 2;
+proto mavlink/common.proto MAV_RESULT_MAV_RESULT_FAILED = 4;
+proto mavlink/common.proto MAV_RESULT_MAV_RESULT_IN_PROGRESS = 5;
+proto mavlink/common.proto MAV_RESULT_MAV_RESULT_NOT_IN_CONTROL = 10;
+proto mavlink/common.proto MAV_RESULT_MAV_RESULT_TEMPORARILY_REJECTED = 1;
+proto mavlink/common.proto MAV_RESULT_MAV_RESULT_UNSUPPORTED = 3;
+proto mavlink/common.proto MISSION_PROTOCOL_ORDINAL_MISSION_ACK = 9;
+proto mavlink/common.proto MISSION_PROTOCOL_ORDINAL_MISSION_CLEAR_ALL = 7;
+proto mavlink/common.proto MISSION_PROTOCOL_ORDINAL_MISSION_COUNT = 6;
+proto mavlink/common.proto MISSION_PROTOCOL_ORDINAL_MISSION_CURRENT = 4;
+proto mavlink/common.proto MISSION_PROTOCOL_ORDINAL_MISSION_ITEM = 1;
+proto mavlink/common.proto MISSION_PROTOCOL_ORDINAL_MISSION_ITEM_INT = 11;
+proto mavlink/common.proto MISSION_PROTOCOL_ORDINAL_MISSION_ITEM_REACHED = 8;
+proto mavlink/common.proto MISSION_PROTOCOL_ORDINAL_MISSION_REQUEST = 2;
+proto mavlink/common.proto MISSION_PROTOCOL_ORDINAL_MISSION_REQUEST_INT = 10;
+proto mavlink/common.proto MISSION_PROTOCOL_ORDINAL_MISSION_REQUEST_LIST = 5;
+proto mavlink/common.proto MISSION_PROTOCOL_ORDINAL_MISSION_SET_CURRENT = 3;
+proto mavlink/common.proto MISSION_PROTOCOL_ORDINAL_UNSPECIFIED = 0;
+proto mavlink/common.proto MISSION_STATE_MISSION_STATE_ACTIVE = 3;
+proto mavlink/common.proto MISSION_STATE_MISSION_STATE_COMPLETE = 5;
+proto mavlink/common.proto MISSION_STATE_MISSION_STATE_NOT_STARTED = 2;
+proto mavlink/common.proto MISSION_STATE_MISSION_STATE_NO_MISSION = 1;
+proto mavlink/common.proto MISSION_STATE_MISSION_STATE_PAUSED = 4;
+proto mavlink/common.proto MISSION_STATE_MISSION_STATE_UNKNOWN = 0;
+proto mavlink/common.proto MavCmd command_value = 1;
+proto mavlink/common.proto MavCmd command_value = 3;
+proto mavlink/common.proto MavCmd command_value = 4;
+proto mavlink/common.proto MavCmd command_value = 5;
+proto mavlink/common.proto MavFrame frame = 3;
+proto mavlink/common.proto MavFrame frame = 4;
+proto mavlink/common.proto MavMissionResult type_value = 3;
+proto mavlink/common.proto MavMissionType mission_type = 15;
+proto mavlink/common.proto MavMissionType mission_type = 3;
+proto mavlink/common.proto MavMissionType mission_type = 4;
+proto mavlink/common.proto MavParamError error_value = 5;
+proto mavlink/common.proto MavParamType param_type = 3;
+proto mavlink/common.proto MavParamType param_type = 5;
+proto mavlink/common.proto MavResult result = 2;
+proto mavlink/common.proto MissionState mission_state = 3;
+proto mavlink/common.proto PARAMETER_PROTOCOL_ORDINAL_PARAM_ERROR = 5;
+proto mavlink/common.proto PARAMETER_PROTOCOL_ORDINAL_PARAM_REQUEST_LIST = 2;
+proto mavlink/common.proto PARAMETER_PROTOCOL_ORDINAL_PARAM_REQUEST_READ = 1;
+proto mavlink/common.proto PARAMETER_PROTOCOL_ORDINAL_PARAM_SET = 4;
+proto mavlink/common.proto PARAMETER_PROTOCOL_ORDINAL_PARAM_VALUE = 3;
+proto mavlink/common.proto PARAMETER_PROTOCOL_ORDINAL_UNSPECIFIED = 0;
+proto mavlink/common.proto TELEMETRY_ORDINAL_ATTITUDE = 3;
+proto mavlink/common.proto TELEMETRY_ORDINAL_GLOBAL_POSITION_INT = 5;
+proto mavlink/common.proto TELEMETRY_ORDINAL_GPS_RAW_INT = 2;
+proto mavlink/common.proto TELEMETRY_ORDINAL_LOCAL_POSITION_NED = 4;
+proto mavlink/common.proto TELEMETRY_ORDINAL_SYS_STATUS = 1;
+proto mavlink/common.proto TELEMETRY_ORDINAL_UNSPECIFIED = 0;
+proto mavlink/common.proto TELEMETRY_ORDINAL_VFR_HUD = 6;
+proto mavlink/common.proto Uint64Bytes time_usec = 1;
+proto mavlink/common.proto bytes param_id = 1;
+proto mavlink/common.proto bytes param_id = 3;
+proto mavlink/common.proto double airspeed = 1;
+proto mavlink/common.proto double alt = 5;
+proto mavlink/common.proto double alt_ellipsoid = 11;
+proto mavlink/common.proto double battery_remaining = 7;
+proto mavlink/common.proto double climb = 6;
+proto mavlink/common.proto double current_battery = 6;
+proto mavlink/common.proto double groundspeed = 2;
+proto mavlink/common.proto double h_acc = 12;
+proto mavlink/common.proto double param1 = 5;
+proto mavlink/common.proto double param1 = 7;
+proto mavlink/common.proto double param1 = 8;
+proto mavlink/common.proto double param2 = 6;
+proto mavlink/common.proto double param2 = 8;
+proto mavlink/common.proto double param2 = 9;
+proto mavlink/common.proto double param3 = 10;
+proto mavlink/common.proto double param3 = 7;
+proto mavlink/common.proto double param3 = 9;
+proto mavlink/common.proto double param4 = 10;
+proto mavlink/common.proto double param4 = 11;
+proto mavlink/common.proto double param4 = 8;
+proto mavlink/common.proto double param5 = 9;
+proto mavlink/common.proto double param6 = 10;
+proto mavlink/common.proto double param7 = 11;
+proto mavlink/common.proto double param_value = 2;
+proto mavlink/common.proto double param_value = 4;
+proto mavlink/common.proto double pitch = 3;
+proto mavlink/common.proto double pitchspeed = 6;
+proto mavlink/common.proto double progress = 3;
+proto mavlink/common.proto double roll = 2;
+proto mavlink/common.proto double rollspeed = 5;
+proto mavlink/common.proto double throttle = 4;
+proto mavlink/common.proto double time_boot_ms = 1;
+proto mavlink/common.proto double v_acc = 13;
+proto mavlink/common.proto double vel = 8;
+proto mavlink/common.proto double vel_acc = 14;
+proto mavlink/common.proto double voltage_battery = 5;
+proto mavlink/common.proto double vx = 5;
+proto mavlink/common.proto double vy = 6;
+proto mavlink/common.proto double vz = 7;
+proto mavlink/common.proto double x = 12;
+proto mavlink/common.proto double x = 2;
+proto mavlink/common.proto double y = 13;
+proto mavlink/common.proto double y = 3;
+proto mavlink/common.proto double yaw = 4;
+proto mavlink/common.proto double yawspeed = 7;
+proto mavlink/common.proto double z = 13;
+proto mavlink/common.proto double z = 14;
+proto mavlink/common.proto double z = 4;
+proto mavlink/common.proto enum CommandProtocolOrdinal {
+proto mavlink/common.proto enum GpsFixType {
+proto mavlink/common.proto enum MavCmd {
+proto mavlink/common.proto enum MavFrame {
+proto mavlink/common.proto enum MavMissionResult {
+proto mavlink/common.proto enum MavMissionType {
+proto mavlink/common.proto enum MavParamError {
+proto mavlink/common.proto enum MavParamType {
+proto mavlink/common.proto enum MavResult {
+proto mavlink/common.proto enum MissionProtocolOrdinal {
+proto mavlink/common.proto enum MissionState {
+proto mavlink/common.proto enum ParameterProtocolOrdinal {
+proto mavlink/common.proto enum TelemetryOrdinal {
+proto mavlink/common.proto message Attitude {
+proto mavlink/common.proto message CommandAck {
+proto mavlink/common.proto message CommandCancel {
+proto mavlink/common.proto message CommandInt {
+proto mavlink/common.proto message CommandLong {
+proto mavlink/common.proto message GpsRawInt {
+proto mavlink/common.proto message LocalPositionNed {
+proto mavlink/common.proto message MissionAck {
+proto mavlink/common.proto message MissionClearAll {
+proto mavlink/common.proto message MissionCount {
+proto mavlink/common.proto message MissionCurrent {
+proto mavlink/common.proto message MissionItem {
+proto mavlink/common.proto message MissionItemInt {
+proto mavlink/common.proto message MissionItemReached {
+proto mavlink/common.proto message MissionRequest {
+proto mavlink/common.proto message MissionRequestInt {
+proto mavlink/common.proto message MissionRequestList {
+proto mavlink/common.proto message MissionSetCurrent {
+proto mavlink/common.proto message ParamError {
+proto mavlink/common.proto message ParamRequestList {
+proto mavlink/common.proto message ParamRequestRead {
+proto mavlink/common.proto message ParamSet {
+proto mavlink/common.proto message ParamValue {
+proto mavlink/common.proto message SysStatus {
+proto mavlink/common.proto message Uint64Bytes {
+proto mavlink/common.proto message VfrHud {
+proto mavlink/common.proto package common;
+proto mavlink/common.proto repeated uint32 data = 1;
+proto mavlink/common.proto sint32 heading = 3;
+proto mavlink/common.proto sint32 lat = 3;
+proto mavlink/common.proto sint32 lon = 4;
+proto mavlink/common.proto sint32 param_index = 4;
+proto mavlink/common.proto sint32 result_param2 = 4;
+proto mavlink/common.proto sint32 x = 11;
+proto mavlink/common.proto sint32 x = 12;
+proto mavlink/common.proto sint32 y = 12;
+proto mavlink/common.proto sint32 y = 13;
+proto mavlink/common.proto syntax = "proto3";
+proto mavlink/common.proto uint32 autocontinue = 6;
+proto mavlink/common.proto uint32 autocontinue = 7;
+proto mavlink/common.proto uint32 cog = 9;
+proto mavlink/common.proto uint32 confirmation = 4;
+proto mavlink/common.proto uint32 count = 3;
+proto mavlink/common.proto uint32 current_value = 5;
+proto mavlink/common.proto uint32 current_value = 6;
+proto mavlink/common.proto uint32 drop_rate_comm = 8;
+proto mavlink/common.proto uint32 eph = 6;
+proto mavlink/common.proto uint32 epv = 7;
+proto mavlink/common.proto uint32 errors_comm = 9;
+proto mavlink/common.proto uint32 errors_count1 = 10;
+proto mavlink/common.proto uint32 errors_count2 = 11;
+proto mavlink/common.proto uint32 errors_count3 = 12;
+proto mavlink/common.proto uint32 errors_count4 = 13;
+proto mavlink/common.proto uint32 fence_id = 6;
+proto mavlink/common.proto uint32 hdg_acc = 15;
+proto mavlink/common.proto uint32 load = 4;
+proto mavlink/common.proto uint32 mission_id = 5;
+proto mavlink/common.proto uint32 mission_mode = 4;
+proto mavlink/common.proto uint32 onboard_control_sensors_enabled = 2;
+proto mavlink/common.proto uint32 onboard_control_sensors_enabled_extended = 15;
+proto mavlink/common.proto uint32 onboard_control_sensors_health = 3;
+proto mavlink/common.proto uint32 onboard_control_sensors_health_extended = 16;
+proto mavlink/common.proto uint32 onboard_control_sensors_present = 1;
+proto mavlink/common.proto uint32 onboard_control_sensors_present_extended = 14;
+proto mavlink/common.proto uint32 opaque_id = 5;
+proto mavlink/common.proto uint32 param_count = 4;
+proto mavlink/common.proto uint32 param_index = 5;
+proto mavlink/common.proto uint32 rally_points_id = 7;
+proto mavlink/common.proto uint32 satellites_visible = 10;
+proto mavlink/common.proto uint32 seq = 1;
+proto mavlink/common.proto uint32 seq = 3;
+proto mavlink/common.proto uint32 target_component = 2;
+proto mavlink/common.proto uint32 target_component = 6;
+proto mavlink/common.proto uint32 target_system = 1;
+proto mavlink/common.proto uint32 target_system = 5;
+proto mavlink/common.proto uint32 total = 2;
+proto mavlink/common.proto uint32 yaw = 16;
+proto mavlink/common.proto }
+proto mavlink/minimal.proto HEARTBEAT_PROTOCOL_ORDINAL_HEARTBEAT = 1;
+proto mavlink/minimal.proto HEARTBEAT_PROTOCOL_ORDINAL_UNSPECIFIED = 0;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_AEROB = 16;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_AIRRAILS = 19;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_ARDUPILOTMEGA = 3;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_ARMAZILA = 15;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_ASLUAV = 17;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_AUTOQUAD = 14;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_FLIX = 21;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_FP = 11;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_GENERIC = 0;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_GENERIC_MISSION_FULL = 7;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_GENERIC_WAYPOINTS_AND_SIMPLE_NAVIGATION_ONLY = 6;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_GENERIC_WAYPOINTS_ONLY = 5;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_INVALID = 8;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_OPENPILOT = 4;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_PPZ = 9;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_PX4 = 12;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_REFLEX = 20;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_RESERVED = 1;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_SLUGS = 2;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_SMACCMPILOT = 13;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_SMARTAP = 18;
+proto mavlink/minimal.proto MAV_AUTOPILOT_MAV_AUTOPILOT_UDB = 10;
+proto mavlink/minimal.proto MAV_STATE_MAV_STATE_ACTIVE = 4;
+proto mavlink/minimal.proto MAV_STATE_MAV_STATE_BOOT = 1;
+proto mavlink/minimal.proto MAV_STATE_MAV_STATE_CALIBRATING = 2;
+proto mavlink/minimal.proto MAV_STATE_MAV_STATE_CRITICAL = 5;
+proto mavlink/minimal.proto MAV_STATE_MAV_STATE_EMERGENCY = 6;
+proto mavlink/minimal.proto MAV_STATE_MAV_STATE_FLIGHT_TERMINATION = 8;
+proto mavlink/minimal.proto MAV_STATE_MAV_STATE_POWEROFF = 7;
+proto mavlink/minimal.proto MAV_STATE_MAV_STATE_STANDBY = 3;
+proto mavlink/minimal.proto MAV_STATE_MAV_STATE_UNINIT = 0;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_ADSB = 27;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_AIRSHIP = 7;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_ANTENNA_TRACKER = 5;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_BATTERY = 36;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_CAMERA = 30;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_CHARGING_STATION = 31;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_COAXIAL = 3;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_DECAROTOR = 35;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_DODECAROTOR = 29;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_FIXED_WING = 1;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_FLAPPING_WING = 16;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_FLARM = 32;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_FREE_BALLOON = 8;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_GCS = 6;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_GENERIC = 0;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_GENERIC_MULTIROTOR = 43;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_GIMBAL = 26;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_GPS = 41;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_GRIPPER = 48;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_GROUND_QUADRUPED = 46;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_GROUND_ROVER = 10;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_HELICOPTER = 4;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_HEXAROTOR = 13;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_ILLUMINATOR = 44;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_IMU = 40;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_KITE = 17;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_LOG = 38;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_OCTOROTOR = 14;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_ODID = 34;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_ONBOARD_CONTROLLER = 18;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_OSD = 39;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_PARACHUTE = 37;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_PARAFOIL = 28;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_QUADROTOR = 2;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_RADIO = 49;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_ROCKET = 9;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_SERVO = 33;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_SPACECRAFT_ORBITER = 45;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_SUBMARINE = 12;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_SURFACE_BOAT = 11;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_TRICOPTER = 15;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_VTOL_FIXEDROTOR = 22;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_VTOL_GYRODYNE = 47;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_VTOL_RESERVED5 = 25;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_VTOL_TAILSITTER = 23;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_VTOL_TAILSITTER_DUOROTOR = 19;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_VTOL_TAILSITTER_QUADROTOR = 20;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_VTOL_TILTROTOR = 21;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_VTOL_TILTWING = 24;
+proto mavlink/minimal.proto MAV_TYPE_MAV_TYPE_WINCH = 42;
+proto mavlink/minimal.proto MavAutopilot autopilot = 2;
+proto mavlink/minimal.proto MavState system_status = 5;
+proto mavlink/minimal.proto MavType type_value = 1;
+proto mavlink/minimal.proto enum HeartbeatProtocolOrdinal {
+proto mavlink/minimal.proto enum MavAutopilot {
+proto mavlink/minimal.proto enum MavState {
+proto mavlink/minimal.proto enum MavType {
+proto mavlink/minimal.proto message Heartbeat {
+proto mavlink/minimal.proto package minimal;
+proto mavlink/minimal.proto syntax = "proto3";
+proto mavlink/minimal.proto uint32 base_mode = 3;
+proto mavlink/minimal.proto uint32 custom_mode = 4;
+proto mavlink/minimal.proto uint32 mavlink_version = 6;
+proto mavlink/minimal.proto }
+proto mavlink/standard.proto MAV_BOOL_MAV_BOOL_FALSE = 0;
+proto mavlink/standard.proto MAV_BOOL_MAV_BOOL_TRUE = 1;
+proto mavlink/standard.proto double alt = 4;
+proto mavlink/standard.proto double relative_alt = 5;
+proto mavlink/standard.proto double time_boot_ms = 1;
+proto mavlink/standard.proto double vx = 6;
+proto mavlink/standard.proto double vy = 7;
+proto mavlink/standard.proto double vz = 8;
+proto mavlink/standard.proto enum MavBool {
+proto mavlink/standard.proto message GlobalPositionInt {
+proto mavlink/standard.proto package standard;
+proto mavlink/standard.proto sint32 lat = 2;
+proto mavlink/standard.proto sint32 lon = 3;
+proto mavlink/standard.proto syntax = "proto3";
+proto mavlink/standard.proto uint32 hdg = 9;
+proto mavlink/standard.proto }
+proto ros2/builtininterfaces.proto message Duration {
+proto ros2/builtininterfaces.proto message Time {
+proto ros2/builtininterfaces.proto package builtininterfaces;
+proto ros2/builtininterfaces.proto sint32 sec = 1;
+proto ros2/builtininterfaces.proto syntax = "proto3";
+proto ros2/builtininterfaces.proto uint32 nanosec = 2;
+proto ros2/builtininterfaces.proto }
+proto ros2/geometrymsgs.proto Accel accel = 1;
+proto ros2/geometrymsgs.proto Accel accel = 2;
+proto ros2/geometrymsgs.proto AccelWithCovariance accel = 2;
+proto ros2/geometrymsgs.proto Inertia inertia = 2;
+proto ros2/geometrymsgs.proto Point point = 2;
+proto ros2/geometrymsgs.proto Point position = 1;
+proto ros2/geometrymsgs.proto Polygon polygon = 1;
+proto ros2/geometrymsgs.proto Polygon polygon = 2;
+proto ros2/geometrymsgs.proto PolygonInstance polygon = 2;
+proto ros2/geometrymsgs.proto Pose pose = 1;
+proto ros2/geometrymsgs.proto Pose pose = 2;
+proto ros2/geometrymsgs.proto PoseWithCovariance pose = 2;
+proto ros2/geometrymsgs.proto Quaternion orientation = 2;
+proto ros2/geometrymsgs.proto Quaternion quaternion = 2;
+proto ros2/geometrymsgs.proto Quaternion rotation = 2;
+proto ros2/geometrymsgs.proto Transform transform = 3;
+proto ros2/geometrymsgs.proto Twist twist = 1;
+proto ros2/geometrymsgs.proto Twist twist = 2;
+proto ros2/geometrymsgs.proto Twist velocity = 4;
+proto ros2/geometrymsgs.proto TwistWithCovariance twist = 2;
+proto ros2/geometrymsgs.proto TwistWithCovariance velocity = 4;
+proto ros2/geometrymsgs.proto Vector3 angular = 2;
+proto ros2/geometrymsgs.proto Vector3 com = 2;
+proto ros2/geometrymsgs.proto Vector3 force = 1;
+proto ros2/geometrymsgs.proto Vector3 linear = 1;
+proto ros2/geometrymsgs.proto Vector3 torque = 2;
+proto ros2/geometrymsgs.proto Vector3 translation = 1;
+proto ros2/geometrymsgs.proto Vector3 vector = 2;
+proto ros2/geometrymsgs.proto Wrench wrench = 2;
+proto ros2/geometrymsgs.proto double ixx = 3;
+proto ros2/geometrymsgs.proto double ixy = 4;
+proto ros2/geometrymsgs.proto double ixz = 5;
+proto ros2/geometrymsgs.proto double iyy = 6;
+proto ros2/geometrymsgs.proto double iyz = 7;
+proto ros2/geometrymsgs.proto double izz = 8;
+proto ros2/geometrymsgs.proto double m = 1;
+proto ros2/geometrymsgs.proto double w = 4;
+proto ros2/geometrymsgs.proto double x = 1;
+proto ros2/geometrymsgs.proto double y = 2;
+proto ros2/geometrymsgs.proto double z = 3;
+proto ros2/geometrymsgs.proto import "stdmsgs.proto";
+proto ros2/geometrymsgs.proto message Accel {
+proto ros2/geometrymsgs.proto message AccelStamped {
+proto ros2/geometrymsgs.proto message AccelWithCovariance {
+proto ros2/geometrymsgs.proto message AccelWithCovarianceStamped {
+proto ros2/geometrymsgs.proto message Inertia {
+proto ros2/geometrymsgs.proto message InertiaStamped {
+proto ros2/geometrymsgs.proto message Point {
+proto ros2/geometrymsgs.proto message Point32 {
+proto ros2/geometrymsgs.proto message PointStamped {
+proto ros2/geometrymsgs.proto message Polygon {
+proto ros2/geometrymsgs.proto message PolygonInstance {
+proto ros2/geometrymsgs.proto message PolygonInstanceStamped {
+proto ros2/geometrymsgs.proto message PolygonStamped {
+proto ros2/geometrymsgs.proto message Pose {
+proto ros2/geometrymsgs.proto message PoseArray {
+proto ros2/geometrymsgs.proto message PoseStamped {
+proto ros2/geometrymsgs.proto message PoseWithCovariance {
+proto ros2/geometrymsgs.proto message PoseWithCovarianceStamped {
+proto ros2/geometrymsgs.proto message Quaternion {
+proto ros2/geometrymsgs.proto message QuaternionStamped {
+proto ros2/geometrymsgs.proto message Transform {
+proto ros2/geometrymsgs.proto message TransformStamped {
+proto ros2/geometrymsgs.proto message Twist {
+proto ros2/geometrymsgs.proto message TwistStamped {
+proto ros2/geometrymsgs.proto message TwistWithCovariance {
+proto ros2/geometrymsgs.proto message TwistWithCovarianceStamped {
+proto ros2/geometrymsgs.proto message Vector3 {
+proto ros2/geometrymsgs.proto message Vector3Stamped {
+proto ros2/geometrymsgs.proto message VelocityStamped {
+proto ros2/geometrymsgs.proto message VelocityWithCovarianceStamped {
+proto ros2/geometrymsgs.proto message Wrench {
+proto ros2/geometrymsgs.proto message WrenchStamped {
+proto ros2/geometrymsgs.proto package geometrymsgs;
+proto ros2/geometrymsgs.proto repeated Point32 points = 1;
+proto ros2/geometrymsgs.proto repeated Pose poses = 2;
+proto ros2/geometrymsgs.proto repeated double covariance = 2;
+proto ros2/geometrymsgs.proto sint64 id = 2;
+proto ros2/geometrymsgs.proto stdmsgs.Header header = 1;
+proto ros2/geometrymsgs.proto string body_frame_id = 2;
+proto ros2/geometrymsgs.proto string child_frame_id = 2;
+proto ros2/geometrymsgs.proto string reference_frame_id = 3;
+proto ros2/geometrymsgs.proto syntax = "proto3";
+proto ros2/geometrymsgs.proto }
+proto ros2/nav2msgs.proto Costmap map = 1;
+proto ros2/nav2msgs.proto CostmapMetaData metadata = 2;
+proto ros2/nav2msgs.proto CostmapMetaData specs = 1;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_ASSISTED_TELEOP = 7;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_ASSISTED_TELEOP_FEEDBACK = 8;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_BACK_UP = 9;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_BACK_UP_FEEDBACK = 10;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_CLEAR_ENTIRE_COSTMAP = 1;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_FOLLOW_PATH = 11;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_FOLLOW_PATH_FEEDBACK = 12;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_FOLLOW_WAYPOINTS = 13;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_FOLLOW_WAYPOINTS_FEEDBACK = 14;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_GET_COSTMAP = 2;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_IS_PATH_VALID = 3;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_LOAD_MAP = 4;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_MANAGE_LIFECYCLE_NODES = 5;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_NAVIGATE_TO_POSE = 15;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_NAVIGATE_TO_POSE_FEEDBACK = 16;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_SAVE_MAP = 6;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_SPIN = 17;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_SPIN_FEEDBACK = 18;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_UNSPECIFIED = 0;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_WAIT = 19;
+proto ros2/nav2msgs.proto NAV2_MSGS_INTERACTIONS_ORDINAL_WAIT_FEEDBACK = 20;
+proto ros2/nav2msgs.proto TrackingFeedback tracking_feedback = 1;
+proto ros2/nav2msgs.proto bool consider_unknown_as_obstacle = 3;
+proto ros2/nav2msgs.proto bool disable_collision_checks = 3;
+proto ros2/nav2msgs.proto bool disable_collision_checks = 4;
+proto ros2/nav2msgs.proto bool is_valid = 2;
+proto ros2/nav2msgs.proto bool percentage = 2;
+proto ros2/nav2msgs.proto bool result = 1;
+proto ros2/nav2msgs.proto bool stop_at_first_collision = 6;
+proto ros2/nav2msgs.proto bool success = 1;
+proto ros2/nav2msgs.proto builtininterfaces.Duration current_teleop_duration = 1;
+proto ros2/nav2msgs.proto builtininterfaces.Duration estimated_time_remaining = 3;
+proto ros2/nav2msgs.proto builtininterfaces.Duration navigation_time = 2;
+proto ros2/nav2msgs.proto builtininterfaces.Duration time = 1;
+proto ros2/nav2msgs.proto builtininterfaces.Duration time_allowance = 1;
+proto ros2/nav2msgs.proto builtininterfaces.Duration time_allowance = 2;
+proto ros2/nav2msgs.proto builtininterfaces.Duration time_allowance = 3;
+proto ros2/nav2msgs.proto builtininterfaces.Duration time_left = 1;
+proto ros2/nav2msgs.proto builtininterfaces.Duration total_elapsed_time = 1;
+proto ros2/nav2msgs.proto builtininterfaces.Time map_load_time = 1;
+proto ros2/nav2msgs.proto builtininterfaces.Time timestamp = 1;
+proto ros2/nav2msgs.proto builtininterfaces.Time update_time = 2;
+proto ros2/nav2msgs.proto double angular_distance_traveled = 1;
+proto ros2/nav2msgs.proto double distance_remaining = 5;
+proto ros2/nav2msgs.proto double distance_to_goal = 6;
+proto ros2/nav2msgs.proto double distance_traveled = 1;
+proto ros2/nav2msgs.proto double free_thresh = 5;
+proto ros2/nav2msgs.proto double heading_tracking_error = 3;
+proto ros2/nav2msgs.proto double heading_tracking_error = 7;
+proto ros2/nav2msgs.proto double max_lookahead_distance = 7;
+proto ros2/nav2msgs.proto double occupied_thresh = 6;
+proto ros2/nav2msgs.proto double position_tracking_error = 2;
+proto ros2/nav2msgs.proto double position_tracking_error = 6;
+proto ros2/nav2msgs.proto double remaining_path_length = 8;
+proto ros2/nav2msgs.proto double resolution = 4;
+proto ros2/nav2msgs.proto double speed = 2;
+proto ros2/nav2msgs.proto double speed = 7;
+proto ros2/nav2msgs.proto double speed_limit = 3;
+proto ros2/nav2msgs.proto double target_yaw = 1;
+proto ros2/nav2msgs.proto double weight = 2;
+proto ros2/nav2msgs.proto enum Nav2MsgsInteractionsOrdinal {
+proto ros2/nav2msgs.proto geometrymsgs.Point target = 1;
+proto ros2/nav2msgs.proto geometrymsgs.Point32 origin = 3;
+proto ros2/nav2msgs.proto geometrymsgs.Pose origin = 7;
+proto ros2/nav2msgs.proto geometrymsgs.Pose pose = 1;
+proto ros2/nav2msgs.proto geometrymsgs.PoseStamped current_pose = 1;
+proto ros2/nav2msgs.proto geometrymsgs.PoseStamped pose = 1;
+proto ros2/nav2msgs.proto geometrymsgs.PoseStamped robot_pose = 5;
+proto ros2/nav2msgs.proto geometrymsgs.PoseStamped waypoint_pose = 3;
+proto ros2/nav2msgs.proto geometrymsgs.Vector3 resolutions = 4;
+proto ros2/nav2msgs.proto import "builtininterfaces.proto";
+proto ros2/nav2msgs.proto import "geometrymsgs.proto";
+proto ros2/nav2msgs.proto import "navmsgs.proto";
+proto ros2/nav2msgs.proto import "stdmsgs.proto";
+proto ros2/nav2msgs.proto message AssistedTeleopFeedback {
+proto ros2/nav2msgs.proto message AssistedTeleopGoal {
+proto ros2/nav2msgs.proto message AssistedTeleopResult {
+proto ros2/nav2msgs.proto message BackUpFeedback {
+proto ros2/nav2msgs.proto message BackUpGoal {
+proto ros2/nav2msgs.proto message BackUpResult {
+proto ros2/nav2msgs.proto message BehaviorTreeLog {
+proto ros2/nav2msgs.proto message BehaviorTreeStatusChange {
+proto ros2/nav2msgs.proto message ClearEntireCostmapRequest {
+proto ros2/nav2msgs.proto message ClearEntireCostmapResponse {
+proto ros2/nav2msgs.proto message Costmap {
+proto ros2/nav2msgs.proto message CostmapMetaData {
+proto ros2/nav2msgs.proto message FollowPathFeedback {
+proto ros2/nav2msgs.proto message FollowPathGoal {
+proto ros2/nav2msgs.proto message FollowPathResult {
+proto ros2/nav2msgs.proto message FollowWaypointsFeedback {
+proto ros2/nav2msgs.proto message FollowWaypointsGoal {
+proto ros2/nav2msgs.proto message FollowWaypointsResult {
+proto ros2/nav2msgs.proto message GetCostmapRequest {
+proto ros2/nav2msgs.proto message GetCostmapResponse {
+proto ros2/nav2msgs.proto message IsPathValidRequest {
+proto ros2/nav2msgs.proto message IsPathValidResponse {
+proto ros2/nav2msgs.proto message LoadMapRequest {
+proto ros2/nav2msgs.proto message LoadMapResponse {
+proto ros2/nav2msgs.proto message ManageLifecycleNodesRequest {
+proto ros2/nav2msgs.proto message ManageLifecycleNodesResponse {
+proto ros2/nav2msgs.proto message NavigateToPoseFeedback {
+proto ros2/nav2msgs.proto message NavigateToPoseGoal {
+proto ros2/nav2msgs.proto message NavigateToPoseResult {
+proto ros2/nav2msgs.proto message Particle {
+proto ros2/nav2msgs.proto message ParticleCloud {
+proto ros2/nav2msgs.proto message SaveMapRequest {
+proto ros2/nav2msgs.proto message SaveMapResponse {
+proto ros2/nav2msgs.proto message SpeedLimit {
+proto ros2/nav2msgs.proto message SpinFeedback {
+proto ros2/nav2msgs.proto message SpinGoal {
+proto ros2/nav2msgs.proto message SpinResult {
+proto ros2/nav2msgs.proto message TrackingFeedback {
+proto ros2/nav2msgs.proto message VoxelGrid {
+proto ros2/nav2msgs.proto message WaitFeedback {
+proto ros2/nav2msgs.proto message WaitGoal {
+proto ros2/nav2msgs.proto message WaitResult {
+proto ros2/nav2msgs.proto message WaypointStatus {
+proto ros2/nav2msgs.proto navmsgs.OccupancyGrid map = 1;
+proto ros2/nav2msgs.proto navmsgs.Path path = 1;
+proto ros2/nav2msgs.proto package nav2msgs;
+proto ros2/nav2msgs.proto repeated BehaviorTreeStatusChange event_log = 2;
+proto ros2/nav2msgs.proto repeated Particle particles = 2;
+proto ros2/nav2msgs.proto repeated WaypointStatus missed_waypoints = 1;
+proto ros2/nav2msgs.proto repeated geometrymsgs.PoseStamped poses = 3;
+proto ros2/nav2msgs.proto repeated sint32 invalid_pose_indices = 3;
+proto ros2/nav2msgs.proto repeated string plugins = 1;
+proto ros2/nav2msgs.proto repeated uint32 data = 2;
+proto ros2/nav2msgs.proto repeated uint32 data = 3;
+proto ros2/nav2msgs.proto sint32 number_of_recoveries = 4;
+proto ros2/nav2msgs.proto stdmsgs.Empty result = 1;
+proto ros2/nav2msgs.proto stdmsgs.Header header = 1;
+proto ros2/nav2msgs.proto string behavior_tree = 2;
+proto ros2/nav2msgs.proto string controller_id = 2;
+proto ros2/nav2msgs.proto string current_status = 5;
+proto ros2/nav2msgs.proto string error_msg = 2;
+proto ros2/nav2msgs.proto string error_msg = 3;
+proto ros2/nav2msgs.proto string error_msg = 5;
+proto ros2/nav2msgs.proto string footprint = 5;
+proto ros2/nav2msgs.proto string goal_checker_id = 3;
+proto ros2/nav2msgs.proto string image_format = 3;
+proto ros2/nav2msgs.proto string layer = 3;
+proto ros2/nav2msgs.proto string layer_name = 4;
+proto ros2/nav2msgs.proto string map_mode = 4;
+proto ros2/nav2msgs.proto string map_topic = 1;
+proto ros2/nav2msgs.proto string map_url = 1;
+proto ros2/nav2msgs.proto string map_url = 2;
+proto ros2/nav2msgs.proto string node_name = 2;
+proto ros2/nav2msgs.proto string path_handler_id = 5;
+proto ros2/nav2msgs.proto string previous_status = 4;
+proto ros2/nav2msgs.proto string progress_checker_id = 4;
+proto ros2/nav2msgs.proto syntax = "proto3";
+proto ros2/nav2msgs.proto uint32 command_value = 1;
+proto ros2/nav2msgs.proto uint32 current_path_index = 4;
+proto ros2/nav2msgs.proto uint32 current_waypoint = 1;
+proto ros2/nav2msgs.proto uint32 error_code = 1;
+proto ros2/nav2msgs.proto uint32 error_code = 2;
+proto ros2/nav2msgs.proto uint32 error_code = 4;
+proto ros2/nav2msgs.proto uint32 goal_index = 2;
+proto ros2/nav2msgs.proto uint32 max_cost = 2;
+proto ros2/nav2msgs.proto uint32 number_of_loops = 1;
+proto ros2/nav2msgs.proto uint32 result = 2;
+proto ros2/nav2msgs.proto uint32 size_x = 5;
+proto ros2/nav2msgs.proto uint32 size_y = 6;
+proto ros2/nav2msgs.proto uint32 size_z = 7;
+proto ros2/nav2msgs.proto uint32 uid = 3;
+proto ros2/nav2msgs.proto uint32 waypoint_index = 2;
+proto ros2/nav2msgs.proto uint32 waypoint_status = 1;
+proto ros2/nav2msgs.proto }
+proto ros2/navmsgs.proto MapMetaData info = 2;
+proto ros2/navmsgs.proto NAV_MSGS_INTERACTIONS_ORDINAL_GET_MAP = 1;
+proto ros2/navmsgs.proto NAV_MSGS_INTERACTIONS_ORDINAL_GET_PLAN = 2;
+proto ros2/navmsgs.proto NAV_MSGS_INTERACTIONS_ORDINAL_LOAD_MAP = 3;
+proto ros2/navmsgs.proto NAV_MSGS_INTERACTIONS_ORDINAL_SET_MAP = 4;
+proto ros2/navmsgs.proto NAV_MSGS_INTERACTIONS_ORDINAL_UNSPECIFIED = 0;
+proto ros2/navmsgs.proto OccupancyGrid map = 1;
+proto ros2/navmsgs.proto Path plan = 1;
+proto ros2/navmsgs.proto bool success = 1;
+proto ros2/navmsgs.proto builtininterfaces.Time map_load_time = 1;
+proto ros2/navmsgs.proto double cell_height = 3;
+proto ros2/navmsgs.proto double cell_width = 2;
+proto ros2/navmsgs.proto double resolution = 2;
+proto ros2/navmsgs.proto double tolerance = 3;
+proto ros2/navmsgs.proto enum NavMsgsInteractionsOrdinal {
+proto ros2/navmsgs.proto geometrymsgs.Accel acceleration = 4;
+proto ros2/navmsgs.proto geometrymsgs.Pose origin = 5;
+proto ros2/navmsgs.proto geometrymsgs.Pose pose = 2;
+proto ros2/navmsgs.proto geometrymsgs.PoseStamped goal = 2;
+proto ros2/navmsgs.proto geometrymsgs.PoseStamped start = 1;
+proto ros2/navmsgs.proto geometrymsgs.PoseWithCovariance pose = 3;
+proto ros2/navmsgs.proto geometrymsgs.PoseWithCovarianceStamped initial_pose = 2;
+proto ros2/navmsgs.proto geometrymsgs.Twist velocity = 3;
+proto ros2/navmsgs.proto geometrymsgs.TwistWithCovariance twist = 4;
+proto ros2/navmsgs.proto geometrymsgs.Wrench effort = 5;
+proto ros2/navmsgs.proto import "builtininterfaces.proto";
+proto ros2/navmsgs.proto import "geometrymsgs.proto";
+proto ros2/navmsgs.proto import "stdmsgs.proto";
+proto ros2/navmsgs.proto message GetMapRequest {
+proto ros2/navmsgs.proto message GetMapResponse {
+proto ros2/navmsgs.proto message GetPlanRequest {
+proto ros2/navmsgs.proto message GetPlanResponse {
+proto ros2/navmsgs.proto message Goals {
+proto ros2/navmsgs.proto message GridCells {
+proto ros2/navmsgs.proto message LoadMapRequest {
+proto ros2/navmsgs.proto message LoadMapResponse {
+proto ros2/navmsgs.proto message MapMetaData {
+proto ros2/navmsgs.proto message OccupancyGrid {
+proto ros2/navmsgs.proto message Odometry {
+proto ros2/navmsgs.proto message Path {
+proto ros2/navmsgs.proto message SetMapRequest {
+proto ros2/navmsgs.proto message SetMapResponse {
+proto ros2/navmsgs.proto message Trajectory {
+proto ros2/navmsgs.proto message TrajectoryPoint {
+proto ros2/navmsgs.proto package navmsgs;
+proto ros2/navmsgs.proto repeated TrajectoryPoint points = 2;
+proto ros2/navmsgs.proto repeated geometrymsgs.Point cells = 4;
+proto ros2/navmsgs.proto repeated geometrymsgs.PoseStamped goals = 2;
+proto ros2/navmsgs.proto repeated geometrymsgs.PoseStamped poses = 2;
+proto ros2/navmsgs.proto repeated sint32 data = 3;
+proto ros2/navmsgs.proto stdmsgs.Header header = 1;
+proto ros2/navmsgs.proto string child_frame_id = 2;
+proto ros2/navmsgs.proto string map_url = 1;
+proto ros2/navmsgs.proto syntax = "proto3";
+proto ros2/navmsgs.proto uint32 height = 4;
+proto ros2/navmsgs.proto uint32 result = 2;
+proto ros2/navmsgs.proto uint32 width = 3;
+proto ros2/navmsgs.proto }
+proto ros2/sensormsgs.proto CameraInfo camera_info = 1;
+proto ros2/sensormsgs.proto NavSatStatus status = 2;
+proto ros2/sensormsgs.proto RegionOfInterest roi = 11;
+proto ros2/sensormsgs.proto SENSOR_MSGS_INTERACTIONS_ORDINAL_SET_CAMERA_INFO = 1;
+proto ros2/sensormsgs.proto SENSOR_MSGS_INTERACTIONS_ORDINAL_UNSPECIFIED = 0;
+proto ros2/sensormsgs.proto bool do_rectify = 5;
+proto ros2/sensormsgs.proto bool is_bigendian = 5;
+proto ros2/sensormsgs.proto bool is_dense = 9;
+proto ros2/sensormsgs.proto bool present = 12;
+proto ros2/sensormsgs.proto bool success = 1;
+proto ros2/sensormsgs.proto builtininterfaces.Time time_ref = 2;
+proto ros2/sensormsgs.proto double altitude = 5;
+proto ros2/sensormsgs.proto double angle_increment = 4;
+proto ros2/sensormsgs.proto double angle_max = 3;
+proto ros2/sensormsgs.proto double angle_min = 2;
+proto ros2/sensormsgs.proto double capacity = 6;
+proto ros2/sensormsgs.proto double charge = 5;
+proto ros2/sensormsgs.proto double current_value = 4;
+proto ros2/sensormsgs.proto double design_capacity = 7;
+proto ros2/sensormsgs.proto double field_of_view = 3;
+proto ros2/sensormsgs.proto double fluid_pressure = 2;
+proto ros2/sensormsgs.proto double illuminance = 2;
+proto ros2/sensormsgs.proto double intensity = 3;
+proto ros2/sensormsgs.proto double latitude = 3;
+proto ros2/sensormsgs.proto double longitude = 4;
+proto ros2/sensormsgs.proto double max_range = 5;
+proto ros2/sensormsgs.proto double min_range = 4;
+proto ros2/sensormsgs.proto double percentage = 8;
+proto ros2/sensormsgs.proto double range = 6;
+proto ros2/sensormsgs.proto double range_max = 8;
+proto ros2/sensormsgs.proto double range_min = 7;
+proto ros2/sensormsgs.proto double relative_humidity = 2;
+proto ros2/sensormsgs.proto double scan_time = 6;
+proto ros2/sensormsgs.proto double temperature = 2;
+proto ros2/sensormsgs.proto double temperature = 3;
+proto ros2/sensormsgs.proto double time_increment = 5;
+proto ros2/sensormsgs.proto double variance = 3;
+proto ros2/sensormsgs.proto double variance = 7;
+proto ros2/sensormsgs.proto double voltage = 2;
+proto ros2/sensormsgs.proto enum SensorMsgsInteractionsOrdinal {
+proto ros2/sensormsgs.proto geometrymsgs.Quaternion orientation = 2;
+proto ros2/sensormsgs.proto geometrymsgs.Vector3 angular_velocity = 4;
+proto ros2/sensormsgs.proto geometrymsgs.Vector3 linear_acceleration = 6;
+proto ros2/sensormsgs.proto geometrymsgs.Vector3 magnetic_field = 2;
+proto ros2/sensormsgs.proto import "builtininterfaces.proto";
+proto ros2/sensormsgs.proto import "geometrymsgs.proto";
+proto ros2/sensormsgs.proto import "stdmsgs.proto";
+proto ros2/sensormsgs.proto message BatteryState {
+proto ros2/sensormsgs.proto message CameraInfo {
+proto ros2/sensormsgs.proto message ChannelFloat32 {
+proto ros2/sensormsgs.proto message CompressedImage {
+proto ros2/sensormsgs.proto message FluidPressure {
+proto ros2/sensormsgs.proto message Illuminance {
+proto ros2/sensormsgs.proto message Image {
+proto ros2/sensormsgs.proto message Imu {
+proto ros2/sensormsgs.proto message JointState {
+proto ros2/sensormsgs.proto message Joy {
+proto ros2/sensormsgs.proto message JoyFeedback {
+proto ros2/sensormsgs.proto message JoyFeedbackArray {
+proto ros2/sensormsgs.proto message LaserEcho {
+proto ros2/sensormsgs.proto message LaserScan {
+proto ros2/sensormsgs.proto message MagneticField {
+proto ros2/sensormsgs.proto message MultiDOFJointState {
+proto ros2/sensormsgs.proto message MultiEchoLaserScan {
+proto ros2/sensormsgs.proto message NavSatFix {
+proto ros2/sensormsgs.proto message NavSatStatus {
+proto ros2/sensormsgs.proto message PointCloud {
+proto ros2/sensormsgs.proto message PointCloud2 {
+proto ros2/sensormsgs.proto message PointField {
+proto ros2/sensormsgs.proto message Range {
+proto ros2/sensormsgs.proto message RegionOfInterest {
+proto ros2/sensormsgs.proto message RelativeHumidity {
+proto ros2/sensormsgs.proto message SetCameraInfoRequest {
+proto ros2/sensormsgs.proto message SetCameraInfoResponse {
+proto ros2/sensormsgs.proto message Temperature {
+proto ros2/sensormsgs.proto message TimeReference {
+proto ros2/sensormsgs.proto package sensormsgs;
+proto ros2/sensormsgs.proto repeated ChannelFloat32 channels = 3;
+proto ros2/sensormsgs.proto repeated JoyFeedback array = 1;
+proto ros2/sensormsgs.proto repeated LaserEcho intensities = 10;
+proto ros2/sensormsgs.proto repeated LaserEcho ranges = 9;
+proto ros2/sensormsgs.proto repeated PointField fields = 4;
+proto ros2/sensormsgs.proto repeated double angular_velocity_covariance = 5;
+proto ros2/sensormsgs.proto repeated double axes = 2;
+proto ros2/sensormsgs.proto repeated double cell_temperature = 14;
+proto ros2/sensormsgs.proto repeated double cell_voltage = 13;
+proto ros2/sensormsgs.proto repeated double d = 5;
+proto ros2/sensormsgs.proto repeated double echoes = 1;
+proto ros2/sensormsgs.proto repeated double effort = 5;
+proto ros2/sensormsgs.proto repeated double intensities = 10;
+proto ros2/sensormsgs.proto repeated double k = 6;
+proto ros2/sensormsgs.proto repeated double linear_acceleration_covariance = 7;
+proto ros2/sensormsgs.proto repeated double magnetic_field_covariance = 3;
+proto ros2/sensormsgs.proto repeated double orientation_covariance = 3;
+proto ros2/sensormsgs.proto repeated double p = 8;
+proto ros2/sensormsgs.proto repeated double position = 3;
+proto ros2/sensormsgs.proto repeated double position_covariance = 6;
+proto ros2/sensormsgs.proto repeated double r = 7;
+proto ros2/sensormsgs.proto repeated double ranges = 9;
+proto ros2/sensormsgs.proto repeated double values = 2;
+proto ros2/sensormsgs.proto repeated double velocity = 4;
+proto ros2/sensormsgs.proto repeated geometrymsgs.Point32 points = 2;
+proto ros2/sensormsgs.proto repeated geometrymsgs.Transform transforms = 3;
+proto ros2/sensormsgs.proto repeated geometrymsgs.Twist twist = 4;
+proto ros2/sensormsgs.proto repeated geometrymsgs.Wrench wrench = 5;
+proto ros2/sensormsgs.proto repeated sint32 buttons = 3;
+proto ros2/sensormsgs.proto repeated string joint_names = 2;
+proto ros2/sensormsgs.proto repeated string name = 2;
+proto ros2/sensormsgs.proto repeated uint32 data = 3;
+proto ros2/sensormsgs.proto repeated uint32 data = 7;
+proto ros2/sensormsgs.proto repeated uint32 data = 8;
+proto ros2/sensormsgs.proto sint32 status = 1;
+proto ros2/sensormsgs.proto stdmsgs.Header header = 1;
+proto ros2/sensormsgs.proto string distortion_model = 4;
+proto ros2/sensormsgs.proto string encoding = 4;
+proto ros2/sensormsgs.proto string format = 2;
+proto ros2/sensormsgs.proto string location = 15;
+proto ros2/sensormsgs.proto string name = 1;
+proto ros2/sensormsgs.proto string serial_number = 16;
+proto ros2/sensormsgs.proto string source = 3;
+proto ros2/sensormsgs.proto string status_message = 2;
+proto ros2/sensormsgs.proto syntax = "proto3";
+proto ros2/sensormsgs.proto uint32 binning_x = 9;
+proto ros2/sensormsgs.proto uint32 binning_y = 10;
+proto ros2/sensormsgs.proto uint32 count = 4;
+proto ros2/sensormsgs.proto uint32 datatype = 3;
+proto ros2/sensormsgs.proto uint32 height = 2;
+proto ros2/sensormsgs.proto uint32 height = 3;
+proto ros2/sensormsgs.proto uint32 id = 2;
+proto ros2/sensormsgs.proto uint32 is_bigendian = 5;
+proto ros2/sensormsgs.proto uint32 offset = 2;
+proto ros2/sensormsgs.proto uint32 point_step = 6;
+proto ros2/sensormsgs.proto uint32 position_covariance_type = 7;
+proto ros2/sensormsgs.proto uint32 power_supply_health = 10;
+proto ros2/sensormsgs.proto uint32 power_supply_status = 9;
+proto ros2/sensormsgs.proto uint32 power_supply_technology = 11;
+proto ros2/sensormsgs.proto uint32 radiation_type = 2;
+proto ros2/sensormsgs.proto uint32 row_step = 7;
+proto ros2/sensormsgs.proto uint32 service_value = 2;
+proto ros2/sensormsgs.proto uint32 step_value = 6;
+proto ros2/sensormsgs.proto uint32 type_value = 1;
+proto ros2/sensormsgs.proto uint32 width = 3;
+proto ros2/sensormsgs.proto uint32 width = 4;
+proto ros2/sensormsgs.proto uint32 x_offset = 1;
+proto ros2/sensormsgs.proto uint32 y_offset = 2;
+proto ros2/sensormsgs.proto }
+proto ros2/stdmsgs.proto MultiArrayLayout layout = 1;
+proto ros2/stdmsgs.proto bool data = 1;
+proto ros2/stdmsgs.proto builtininterfaces.Time stamp = 1;
+proto ros2/stdmsgs.proto bytes data = 1;
+proto ros2/stdmsgs.proto double a = 4;
+proto ros2/stdmsgs.proto double b = 3;
+proto ros2/stdmsgs.proto double data = 1;
+proto ros2/stdmsgs.proto double g = 2;
+proto ros2/stdmsgs.proto double r = 1;
+proto ros2/stdmsgs.proto import "builtininterfaces.proto";
+proto ros2/stdmsgs.proto message Bool {
+proto ros2/stdmsgs.proto message Byte {
+proto ros2/stdmsgs.proto message ByteMultiArray {
+proto ros2/stdmsgs.proto message Char {
+proto ros2/stdmsgs.proto message ColorRGBA {
+proto ros2/stdmsgs.proto message Empty {
+proto ros2/stdmsgs.proto message Float32 {
+proto ros2/stdmsgs.proto message Float32MultiArray {
+proto ros2/stdmsgs.proto message Float64 {
+proto ros2/stdmsgs.proto message Float64MultiArray {
+proto ros2/stdmsgs.proto message Header {
+proto ros2/stdmsgs.proto message Int16 {
+proto ros2/stdmsgs.proto message Int16MultiArray {
+proto ros2/stdmsgs.proto message Int32 {
+proto ros2/stdmsgs.proto message Int32MultiArray {
+proto ros2/stdmsgs.proto message Int64 {
+proto ros2/stdmsgs.proto message Int64MultiArray {
+proto ros2/stdmsgs.proto message Int8 {
+proto ros2/stdmsgs.proto message Int8MultiArray {
+proto ros2/stdmsgs.proto message MultiArrayDimension {
+proto ros2/stdmsgs.proto message MultiArrayLayout {
+proto ros2/stdmsgs.proto message String {
+proto ros2/stdmsgs.proto message UInt16 {
+proto ros2/stdmsgs.proto message UInt16MultiArray {
+proto ros2/stdmsgs.proto message UInt32 {
+proto ros2/stdmsgs.proto message UInt32MultiArray {
+proto ros2/stdmsgs.proto message UInt64 {
+proto ros2/stdmsgs.proto message UInt64MultiArray {
+proto ros2/stdmsgs.proto message UInt8 {
+proto ros2/stdmsgs.proto message UInt8MultiArray {
+proto ros2/stdmsgs.proto package stdmsgs;
+proto ros2/stdmsgs.proto repeated MultiArrayDimension dim = 1;
+proto ros2/stdmsgs.proto repeated bytes data = 2;
+proto ros2/stdmsgs.proto repeated double data = 2;
+proto ros2/stdmsgs.proto repeated sint32 data = 2;
+proto ros2/stdmsgs.proto repeated sint64 data = 2;
+proto ros2/stdmsgs.proto repeated uint32 data = 2;
+proto ros2/stdmsgs.proto sint32 data = 1;
+proto ros2/stdmsgs.proto sint64 data = 1;
+proto ros2/stdmsgs.proto string data = 1;
+proto ros2/stdmsgs.proto string frame_id = 2;
+proto ros2/stdmsgs.proto string label = 1;
+proto ros2/stdmsgs.proto syntax = "proto3";
+proto ros2/stdmsgs.proto uint32 data = 1;
+proto ros2/stdmsgs.proto uint32 data_offset = 2;
+proto ros2/stdmsgs.proto uint32 size = 2;
+proto ros2/stdmsgs.proto uint32 stride = 3;
+proto ros2/stdmsgs.proto }
+proto ros2/stdsrvs.proto STD_SRVS_INTERACTIONS_ORDINAL_EMPTY = 1;
+proto ros2/stdsrvs.proto STD_SRVS_INTERACTIONS_ORDINAL_SET_BOOL = 2;
+proto ros2/stdsrvs.proto STD_SRVS_INTERACTIONS_ORDINAL_TRIGGER = 3;
+proto ros2/stdsrvs.proto STD_SRVS_INTERACTIONS_ORDINAL_UNSPECIFIED = 0;
+proto ros2/stdsrvs.proto bool data = 1;
+proto ros2/stdsrvs.proto bool success = 1;
+proto ros2/stdsrvs.proto enum StdSrvsInteractionsOrdinal {
+proto ros2/stdsrvs.proto message EmptyRequest {
+proto ros2/stdsrvs.proto message EmptyResponse {
+proto ros2/stdsrvs.proto message SetBoolRequest {
+proto ros2/stdsrvs.proto message SetBoolResponse {
+proto ros2/stdsrvs.proto message TriggerRequest {
+proto ros2/stdsrvs.proto message TriggerResponse {
+proto ros2/stdsrvs.proto package stdsrvs;
+proto ros2/stdsrvs.proto string message = 2;
+proto ros2/stdsrvs.proto syntax = "proto3";
+proto ros2/stdsrvs.proto }
+proto vss/vehicle.cabin.hvac.proto HVAC_ORDINAL_AMBIENT_AIR_TEMPERATURE = 9;
+proto vss/vehicle.cabin.hvac.proto HVAC_ORDINAL_IS_AIR_CONDITIONING_ACTIVE = 7;
+proto vss/vehicle.cabin.hvac.proto HVAC_ORDINAL_IS_AUTO_POWER_OPTIMIZE = 12;
+proto vss/vehicle.cabin.hvac.proto HVAC_ORDINAL_IS_FRONT_DEFROSTER_ACTIVE = 3;
+proto vss/vehicle.cabin.hvac.proto HVAC_ORDINAL_IS_REAR_DEFROSTER_ACTIVE = 5;
+proto vss/vehicle.cabin.hvac.proto HVAC_ORDINAL_IS_RECIRCULATION_ACTIVE = 1;
+proto vss/vehicle.cabin.hvac.proto HVAC_ORDINAL_POWER_OPTIMIZE_LEVEL = 10;
+proto vss/vehicle.cabin.hvac.proto HVAC_ORDINAL_SET_IS_AIR_CONDITIONING_ACTIVE = 8;
+proto vss/vehicle.cabin.hvac.proto HVAC_ORDINAL_SET_IS_AUTO_POWER_OPTIMIZE = 13;
+proto vss/vehicle.cabin.hvac.proto HVAC_ORDINAL_SET_IS_FRONT_DEFROSTER_ACTIVE = 4;
+proto vss/vehicle.cabin.hvac.proto HVAC_ORDINAL_SET_IS_REAR_DEFROSTER_ACTIVE = 6;
+proto vss/vehicle.cabin.hvac.proto HVAC_ORDINAL_SET_IS_RECIRCULATION_ACTIVE = 2;
+proto vss/vehicle.cabin.hvac.proto HVAC_ORDINAL_SET_POWER_OPTIMIZE_LEVEL = 11;
+proto vss/vehicle.cabin.hvac.proto HVAC_ORDINAL_UNSPECIFIED = 0;
+proto vss/vehicle.cabin.hvac.proto enum HVACOrdinal {
+proto vss/vehicle.cabin.hvac.proto package vehicle.cabin.hvac;
+proto vss/vehicle.cabin.hvac.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.proto }
+proto vss/vehicle.cabin.hvac.station.proto STATION_ORDINAL_UNSPECIFIED = 0;
+proto vss/vehicle.cabin.hvac.station.proto enum StationOrdinal {
+proto vss/vehicle.cabin.hvac.station.proto package vehicle.cabin.hvac.station;
+proto vss/vehicle.cabin.hvac.station.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.proto }
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto AIR_DISTRIBUTION_DOWN = 2;
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto AIR_DISTRIBUTION_MIDDLE = 1;
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto AIR_DISTRIBUTION_UP = 0;
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto DRIVER_ORDINAL_AIR_DISTRIBUTION = 5;
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto DRIVER_ORDINAL_FAN_SPEED = 1;
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto DRIVER_ORDINAL_SET_AIR_DISTRIBUTION = 6;
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto DRIVER_ORDINAL_SET_FAN_SPEED = 2;
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto DRIVER_ORDINAL_SET_TEMPERATURE = 4;
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto DRIVER_ORDINAL_TEMPERATURE = 3;
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto DRIVER_ORDINAL_UNSPECIFIED = 0;
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto enum AirDistribution {
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto enum DriverOrdinal {
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto package vehicle.cabin.hvac.station.row1.driver;
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto }
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto AIR_DISTRIBUTION_DOWN = 2;
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto AIR_DISTRIBUTION_MIDDLE = 1;
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto AIR_DISTRIBUTION_UP = 0;
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto PASSENGER_ORDINAL_AIR_DISTRIBUTION = 5;
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto PASSENGER_ORDINAL_FAN_SPEED = 1;
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto PASSENGER_ORDINAL_SET_AIR_DISTRIBUTION = 6;
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto PASSENGER_ORDINAL_SET_FAN_SPEED = 2;
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto PASSENGER_ORDINAL_SET_TEMPERATURE = 4;
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto PASSENGER_ORDINAL_TEMPERATURE = 3;
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto PASSENGER_ORDINAL_UNSPECIFIED = 0;
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto enum AirDistribution {
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto enum PassengerOrdinal {
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto package vehicle.cabin.hvac.station.row1.passenger;
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto }
+proto vss/vehicle.cabin.hvac.station.row1.proto ROW1_ORDINAL_UNSPECIFIED = 0;
+proto vss/vehicle.cabin.hvac.station.row1.proto enum Row1Ordinal {
+proto vss/vehicle.cabin.hvac.station.row1.proto package vehicle.cabin.hvac.station.row1;
+proto vss/vehicle.cabin.hvac.station.row1.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.row1.proto }
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto AIR_DISTRIBUTION_DOWN = 2;
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto AIR_DISTRIBUTION_MIDDLE = 1;
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto AIR_DISTRIBUTION_UP = 0;
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto DRIVER_ORDINAL_AIR_DISTRIBUTION = 5;
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto DRIVER_ORDINAL_FAN_SPEED = 1;
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto DRIVER_ORDINAL_SET_AIR_DISTRIBUTION = 6;
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto DRIVER_ORDINAL_SET_FAN_SPEED = 2;
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto DRIVER_ORDINAL_SET_TEMPERATURE = 4;
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto DRIVER_ORDINAL_TEMPERATURE = 3;
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto DRIVER_ORDINAL_UNSPECIFIED = 0;
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto enum AirDistribution {
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto enum DriverOrdinal {
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto package vehicle.cabin.hvac.station.row2.driver;
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto }
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto AIR_DISTRIBUTION_DOWN = 2;
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto AIR_DISTRIBUTION_MIDDLE = 1;
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto AIR_DISTRIBUTION_UP = 0;
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto PASSENGER_ORDINAL_AIR_DISTRIBUTION = 5;
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto PASSENGER_ORDINAL_FAN_SPEED = 1;
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto PASSENGER_ORDINAL_SET_AIR_DISTRIBUTION = 6;
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto PASSENGER_ORDINAL_SET_FAN_SPEED = 2;
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto PASSENGER_ORDINAL_SET_TEMPERATURE = 4;
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto PASSENGER_ORDINAL_TEMPERATURE = 3;
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto PASSENGER_ORDINAL_UNSPECIFIED = 0;
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto enum AirDistribution {
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto enum PassengerOrdinal {
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto package vehicle.cabin.hvac.station.row2.passenger;
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto }
+proto vss/vehicle.cabin.hvac.station.row2.proto ROW2_ORDINAL_UNSPECIFIED = 0;
+proto vss/vehicle.cabin.hvac.station.row2.proto enum Row2Ordinal {
+proto vss/vehicle.cabin.hvac.station.row2.proto package vehicle.cabin.hvac.station.row2;
+proto vss/vehicle.cabin.hvac.station.row2.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.row2.proto }
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto AIR_DISTRIBUTION_DOWN = 2;
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto AIR_DISTRIBUTION_MIDDLE = 1;
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto AIR_DISTRIBUTION_UP = 0;
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto DRIVER_ORDINAL_AIR_DISTRIBUTION = 5;
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto DRIVER_ORDINAL_FAN_SPEED = 1;
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto DRIVER_ORDINAL_SET_AIR_DISTRIBUTION = 6;
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto DRIVER_ORDINAL_SET_FAN_SPEED = 2;
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto DRIVER_ORDINAL_SET_TEMPERATURE = 4;
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto DRIVER_ORDINAL_TEMPERATURE = 3;
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto DRIVER_ORDINAL_UNSPECIFIED = 0;
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto enum AirDistribution {
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto enum DriverOrdinal {
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto package vehicle.cabin.hvac.station.row3.driver;
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto }
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto AIR_DISTRIBUTION_DOWN = 2;
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto AIR_DISTRIBUTION_MIDDLE = 1;
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto AIR_DISTRIBUTION_UP = 0;
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto PASSENGER_ORDINAL_AIR_DISTRIBUTION = 5;
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto PASSENGER_ORDINAL_FAN_SPEED = 1;
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto PASSENGER_ORDINAL_SET_AIR_DISTRIBUTION = 6;
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto PASSENGER_ORDINAL_SET_FAN_SPEED = 2;
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto PASSENGER_ORDINAL_SET_TEMPERATURE = 4;
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto PASSENGER_ORDINAL_TEMPERATURE = 3;
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto PASSENGER_ORDINAL_UNSPECIFIED = 0;
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto enum AirDistribution {
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto enum PassengerOrdinal {
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto package vehicle.cabin.hvac.station.row3.passenger;
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto }
+proto vss/vehicle.cabin.hvac.station.row3.proto ROW3_ORDINAL_UNSPECIFIED = 0;
+proto vss/vehicle.cabin.hvac.station.row3.proto enum Row3Ordinal {
+proto vss/vehicle.cabin.hvac.station.row3.proto package vehicle.cabin.hvac.station.row3;
+proto vss/vehicle.cabin.hvac.station.row3.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.row3.proto }
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto AIR_DISTRIBUTION_DOWN = 2;
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto AIR_DISTRIBUTION_MIDDLE = 1;
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto AIR_DISTRIBUTION_UP = 0;
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto DRIVER_ORDINAL_AIR_DISTRIBUTION = 5;
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto DRIVER_ORDINAL_FAN_SPEED = 1;
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto DRIVER_ORDINAL_SET_AIR_DISTRIBUTION = 6;
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto DRIVER_ORDINAL_SET_FAN_SPEED = 2;
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto DRIVER_ORDINAL_SET_TEMPERATURE = 4;
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto DRIVER_ORDINAL_TEMPERATURE = 3;
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto DRIVER_ORDINAL_UNSPECIFIED = 0;
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto enum AirDistribution {
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto enum DriverOrdinal {
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto package vehicle.cabin.hvac.station.row4.driver;
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto }
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto AIR_DISTRIBUTION_DOWN = 2;
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto AIR_DISTRIBUTION_MIDDLE = 1;
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto AIR_DISTRIBUTION_UP = 0;
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto PASSENGER_ORDINAL_AIR_DISTRIBUTION = 5;
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto PASSENGER_ORDINAL_FAN_SPEED = 1;
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto PASSENGER_ORDINAL_SET_AIR_DISTRIBUTION = 6;
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto PASSENGER_ORDINAL_SET_FAN_SPEED = 2;
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto PASSENGER_ORDINAL_SET_TEMPERATURE = 4;
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto PASSENGER_ORDINAL_TEMPERATURE = 3;
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto PASSENGER_ORDINAL_UNSPECIFIED = 0;
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto enum AirDistribution {
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto enum PassengerOrdinal {
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto package vehicle.cabin.hvac.station.row4.passenger;
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto }
+proto vss/vehicle.cabin.hvac.station.row4.proto ROW4_ORDINAL_UNSPECIFIED = 0;
+proto vss/vehicle.cabin.hvac.station.row4.proto enum Row4Ordinal {
+proto vss/vehicle.cabin.hvac.station.row4.proto package vehicle.cabin.hvac.station.row4;
+proto vss/vehicle.cabin.hvac.station.row4.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.row4.proto }

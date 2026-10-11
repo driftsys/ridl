@@ -6,11 +6,16 @@
 //! and fails when a line of a surface's dump at its baseline ref is missing
 //! from the dump at HEAD. A line that was added passes.
 
+mod bin;
+mod cli;
 mod diagnostics;
 mod keywords;
+mod manifest;
 mod mcp;
 mod msrv;
 mod protocol;
+mod sources;
+mod wire;
 
 use serde::Deserialize;
 use std::collections::BTreeSet;
@@ -82,11 +87,15 @@ pub type Dumper = fn(&Path) -> Result<Vec<String>, String>;
 /// The registry of frozen surfaces.
 pub fn dumpers() -> &'static [(&'static str, Dumper)] {
     &[
+        ("accepted-sources", sources::dump),
+        ("cli", cli::dump),
         ("codegen-protocol", protocol::dump),
         ("diagnostics", diagnostics::dump),
         ("keywords", keywords::dump),
+        ("manifest", manifest::dump),
         ("mcp", mcp::dump),
         ("msrv", msrv::dump),
+        ("wire", wire::dump),
     ]
 }
 
