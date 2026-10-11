@@ -22,13 +22,14 @@ happened to the E0 open items.
 ## The workspace map
 
 One Cargo workspace for the toolchain (`Cargo.toml`,
-`members = ["crates/*", "xtask"]`, `exclude = ["examples"]` — `examples/cabin`
-is a second, separate workspace, because one of its members is written by
-`ridl build` and is not in git): every crate under `crates/` with its directory
-named after it, and the `xtask` automation member at the root (issue #180),
-which runs two generators, `codegen` and `descriptor-codegen`, and the
-`calibrate` command. The VS Code extension (`editors/vscode`) is TypeScript and
-is not a workspace member.
+`members = ["crates/*", "xtask"]`, `exclude = ["examples", "freeze/generated"]`
+— `examples/cabin` is a second, separate workspace, because one of its members
+is written by `ridl build` and is not in git, and `freeze/generated` holds the
+generated crates that the freeze check commits): every crate under `crates/`
+with its directory named after it, and the `xtask` automation member at the root
+(issue #180), which runs two generators, `codegen` and `descriptor-codegen`, and
+the `calibrate` and `freeze` commands. The VS Code extension (`editors/vscode`)
+is TypeScript and is not a workspace member.
 
 The crates below arrived in three waves: seven from the E1 spine, grown in place
 through E2; two more from E2 — `ridl-backend-ts` and `ridl-diff`; and
@@ -336,6 +337,11 @@ here. This list is not a standing count of every crate the workspace holds — s
 
   `cargo xtask calibrate` dumps the design lints' findings over `evals/` and
   derives the calibration summary ([`xtask/README.md`](../../xtask/README.md)).
+
+  `cargo xtask freeze update` writes the dumps of the frozen surfaces under
+  `freeze/`, and `cargo xtask freeze check`, which `just freeze-check` runs,
+  compares them with their baselines (ADR-0029,
+  [`freeze/README.md`](../../freeze/README.md)).
 
   Run `cargo xtask descriptor-codegen` after every schema edit. The xtask test
   `committed_generated_accessors_match_the_schema` fails while the committed

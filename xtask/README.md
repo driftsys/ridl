@@ -6,6 +6,8 @@ Run the automation crate from the workspace root:
 cargo xtask codegen
 cargo xtask descriptor-codegen
 cargo xtask calibrate --help
+cargo xtask freeze update
+cargo xtask freeze check
 ```
 
 Calibration reads the workspace from the current directory, so run it from the
@@ -13,6 +15,16 @@ workspace root. Relative output paths are resolved from that directory.
 
 The first two commands regenerate the typed AST and catalog descriptor
 accessors. Their drift tests compare generated output with the committed files.
+
+## Check the frozen surfaces
+
+`cargo xtask freeze update` writes the dump of each frozen surface to
+`freeze/<surface>.txt` and the generated crates to `freeze/generated/`.
+`cargo xtask freeze check`, which `just freeze-check` runs, fails when a
+committed dump differs from a regeneration, when a line of a surface's dump at
+its baseline ref is missing, or when `cargo semver-checks` finds a Rust API
+break against the baseline. [`freeze/README.md`](../freeze/README.md) describes
+the dumps and the baseline table, and ADR-0029 is the policy.
 
 ## Dump calibration findings
 

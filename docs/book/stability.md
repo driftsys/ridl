@@ -21,7 +21,9 @@ effect now; release 0.10.0 is not published yet.
 - **The runtime crates.** The public API of `ridl-rt`, `ridl-rt-conformance`,
   `ridl-loopback` and `ridl-descriptor`, and the names of their cargo features.
 - **The codegen plugin protocol.** The messages `ridl.ir.v2` and
-  `ridl.codegen.v1`, as a plugin reads and writes them.
+  `ridl.codegen.v1`, as a plugin reads and writes them. An enum of the protocol
+  gains a value only in a minor release, such as 0.11, because a plugin rejects
+  an enum value that it does not know.
 - **The MCP tools.** The tool names and the input and output schemas.
 - **The wire format.** The frame envelope, the `attach` handshake, the inputs of
   the catalog hash, the emitted `.proto` and `.fbs` mapping and the encoding
@@ -55,8 +57,10 @@ The releases of 0.9.x and earlier are not covered by this promise.
 
 The repository checks each frozen surface that has a recorded baseline against
 that baseline, and a change that removes or alters something a user depends on
-fails the build. The frame envelope and the `attach` handshake are promised by
-policy and not yet checked by a tool. A contributor who must change a frozen
+fails the build. Some parts are promised by policy and not yet checked by a
+tool: the frame envelope, the `attach` handshake, the formats of
+`interfaces.lock` and `.ridl/baseline`, and the exit codes of every subcommand
+other than `ridl check`. A contributor who must change a frozen
 surface follows the steps in `CONTRIBUTING.md`, "Changing a frozen surface". The
 full policy, with the gate that checks each surface and the rules for approving
 a break, is [ADR-0029](../decisions/ADR-0029-stability-policy.md).

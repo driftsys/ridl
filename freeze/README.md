@@ -38,8 +38,10 @@ lines. Neither has a `<surface>.txt`.
   `examples/cabin` and of `crates/ridlc/tests/corpus/veh-cluster`, so an edit to
   `examples/` or to the corpus is not a break of this surface. The check fails
   when a crate differs from a regeneration. With a row, each crate is compared
-  with the same crate in the baseline's `generated/`, on copies outside the
-  repository that read `ridl-rt` from `crates/ridl-rt`.
+  with the same crate in the baseline's `generated/`, on copies under
+  `${CARGO_TARGET_DIR:-target}/freeze-api/` that read `ridl-rt` from
+  `crates/ridl-rt`. Each copy has an empty `[workspace]` table, so it is outside
+  the workspace.
 
 cargo-semver-checks reports some lints that require a major version only as
 warnings. The check denies each of them (`DENIED_LINTS` in
@@ -50,7 +52,34 @@ the break they find fails the check. The list was read from cargo-semver-checks
 `.github/workflows/ci.yml` changes.
 
 The comparison runs without the network, so the dependencies must already be in
-the local cargo cache. A build of the workspace puts them there.
+the local cargo cache. Before the first comparison, the check runs
+`cargo fetch --locked` with the network allowed, which puts every package of
+`Cargo.lock` there, for every platform. A build of the workspace is not enough:
+it downloads only the packages of the host platform.
+
+## Lines that a compatible change removes
+
+Some lines record a whole set or whether something is required. A change that a
+user or a reader can accept therefore still removes a line, fails the check, and
+needs the steps of "Approve a break":
+
+- `mcp`: each schema property has a `required` or an `optional` line, so an
+  input property that becomes optional removes a line, as does one that becomes
+  required.
+- `cli`: each flag has a `required` or an `optional` line, and each command has
+  one `<path> requires <words>` line that holds every required flag and
+  argument. A flag or an argument that becomes optional removes a line, as does
+  a new required one.
+- `keywords`: the `reserved-set` line holds every reserved word, so a new
+  reserved word and a word that is no longer reserved each remove it.
+- `codegen-protocol`: the `<enum> values` line holds every value name of an
+  enum, so a new enum value removes it. A plugin rejects an enum value it does
+  not know, so a new value lands only in a minor release.
+- `msrv`: any change of a value is a break, including a lower `rust-version`.
+
+The `cli` dump reads the `--help` text that clap prints. A clap upgrade can
+change that text with no change to the command line, so after a clap upgrade,
+run `cargo xtask freeze update` and check the change to `freeze/cli.txt`.
 
 ## Update a dump
 

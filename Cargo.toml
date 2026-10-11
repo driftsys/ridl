@@ -21,7 +21,9 @@ members = ["crates/*", "xtask"]
 # `members` above never globbed the directory and `examples/cabin` declares a
 # `[workspace]` of its own. `freeze/generated` holds the crates the freeze
 # check commits (freeze/README.md); they are compared with
-# `cargo semver-checks` on copies outside the repository, never built here.
+# `cargo semver-checks` on copies under the cargo target directory, each with
+# an empty `[workspace]` table, so the copies are outside this workspace. They
+# are never built as members here.
 exclude = ["examples", "freeze/generated"]
 
 # The lints of cargo-semver-checks whose required update is major but whose
