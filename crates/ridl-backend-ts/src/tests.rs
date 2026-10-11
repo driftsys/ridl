@@ -1827,7 +1827,7 @@ fn tsdoc_link_after_multibyte_text() {
 #[test]
 fn tsdoc_link_off_a_character_boundary_or_out_of_range_leaves_the_text() {
     let doc = "in °C [X]";
-    for (offset, len) in [(4, 2), (8, 9), (1, u32::MAX)] {
+    for (offset, len) in [(4, 2), (8, 9), (1, u32::MAX), (7, 0)] {
         let source = ts_for(vec![v2::Decl {
             doc: doc.to_string(),
             links: vec![v2::DocLink {
@@ -1840,6 +1840,184 @@ fn tsdoc_link_off_a_character_boundary_or_out_of_range_leaves_the_text() {
         }]);
         assert!(source.contains(" * in °C [X]\n"), "got:\n{source}");
     }
+}
+
+/// A zero-length link at the offset of a link already replaced inserts
+/// nothing: only the real link is rendered.
+#[test]
+fn tsdoc_zero_length_link_at_a_replaced_offset_inserts_nothing() {
+    let doc = "in °C [X]";
+    let link = |len| v2::DocLink {
+        text: "X".to_string(),
+        offset: 7,
+        len,
+        target: "veh.common.X".to_string(),
+    };
+    let source = ts_for(vec![v2::Decl {
+        doc: doc.to_string(),
+        links: vec![link(3), link(0)],
+        ..speed_decl()
+    }]);
+    assert!(
+        source.contains(" * in °C `veh.common.X`\n"),
+        "got:\n{source}"
+    );
+}
+
+/// `lower` adds foreign declarations transitively: `veh.common` imports only
+/// `other.pkg`, whose `Thing` has a field of type `third.pkg.Deep`, so
+/// `third.pkg.Deep` is in the model's foreign declarations while the module
+/// does not import `third.pkg`. A link to it is a code span.
+#[test]
+fn tsdoc_link_to_a_foreign_declaration_of_a_package_not_imported_is_a_code_span() {
+    let third = package(
+        "third.pkg",
+        vec![counter_decl(), {
+            let deep = v2::StructDef {
+                members: vec![field_member(named_field(
+                    "level",
+                    1,
+                    "Counter",
+                    false,
+                    init_value(true, None),
+                ))],
+                fixed_layout: false,
+            };
+            public_decl("Deep", v2::decl::Kind::StructDef(deep))
+        }],
+    );
+    let thing = v2::StructDef {
+        members: vec![field_member(named_field(
+            "deep",
+            1,
+            "third.pkg.Deep",
+            false,
+            init_value(true, None),
+        ))],
+        fixed_layout: false,
+    };
+    let other = package(
+        "other.pkg",
+        vec![public_decl("Thing", v2::decl::Kind::StructDef(thing))],
+    );
+    let doc = "Holds [other.pkg.Thing], which holds [third.pkg.Deep].";
+    let holder = v2::StructDef {
+        members: vec![field_member(named_field(
+            "thing",
+            1,
+            "other.pkg.Thing",
+            false,
+            init_value(true, None),
+        ))],
+        fixed_layout: false,
+    };
+    let local = package(
+        "veh.common",
+        vec![v2::Decl {
+            doc: doc.to_string(),
+            links: vec![
+                doc_link(doc, "[other.pkg.Thing]", "other.pkg.Thing"),
+                doc_link(doc, "[third.pkg.Deep]", "third.pkg.Deep"),
+            ],
+            ..public_decl("Holder", v2::decl::Kind::StructDef(holder))
+        }],
+    );
+    let model = ridl_ir::codegen::lower(&local, &[&other, &third]);
+    assert!(
+        model
+            .foreign
+            .iter()
+            .any(|foreign| foreign.package == "third.pkg"),
+        "the fixture must put third.pkg.Deep in the model: {:?}",
+        model.foreign
+    );
+    let source = super::generate_with(&local, &model)
+        .expect("generation succeeds")
+        .source;
+    assert!(!source.contains("from './third.pkg'"), "got:\n{source}");
+    assert!(
+        source.contains("Holds {@link other_pkg.Thing}, which holds `third.pkg.Deep`."),
+        "got:\n{source}"
+    );
+}
+
+/// A foreign constant that the foreign module does not emit (a `bytes`
+/// constant) is a code span, as a local one is. No typl source reaches a
+/// foreign constant through a type reference; the fixture is built by hand
+/// to put one in the model's foreign declarations, next to a string constant
+/// the foreign module does emit.
+#[test]
+fn tsdoc_link_to_a_foreign_constant_the_foreign_module_skips_is_a_code_span() {
+    let constant = |name: &str, type_ref: &str, value: &str| {
+        public_decl(
+            name,
+            v2::decl::Kind::ConstDef(v2::ConstDef {
+                type_ref: Some(type_ref.to_string()),
+                value: value.to_string(),
+                regex: None,
+            }),
+        )
+    };
+    let other = package(
+        "other.pkg",
+        vec![
+            constant("BLOB", "bytes", "00"),
+            constant("GREETING", "string", "hello"),
+        ],
+    );
+    let doc = "Not [other.pkg.BLOB], but [other.pkg.GREETING].";
+    let holder = v2::StructDef {
+        members: vec![
+            field_member(named_field(
+                "blob",
+                1,
+                "other.pkg.BLOB",
+                false,
+                init_value(false, None),
+            )),
+            field_member(named_field(
+                "greeting",
+                2,
+                "other.pkg.GREETING",
+                false,
+                init_value(false, None),
+            )),
+        ],
+        fixed_layout: false,
+    };
+    let local = package(
+        "veh.common",
+        vec![v2::Decl {
+            doc: doc.to_string(),
+            links: vec![
+                doc_link(doc, "[other.pkg.BLOB]", "other.pkg.BLOB"),
+                doc_link(doc, "[other.pkg.GREETING]", "other.pkg.GREETING"),
+            ],
+            ..public_decl("Holder", v2::decl::Kind::StructDef(holder))
+        }],
+    );
+    let model = ridl_ir::codegen::lower(&local, &[&other]);
+    let in_model = |name: &str| {
+        model.foreign.iter().any(|foreign| {
+            foreign
+                .declaration
+                .as_ref()
+                .and_then(|decl| decl.name.as_ref())
+                .is_some_and(|spelled| spelled.declared == name)
+        })
+    };
+    assert!(
+        in_model("BLOB") && in_model("GREETING"),
+        "the fixture must put both constants in the model: {:?}",
+        model.foreign
+    );
+    let source = super::generate_with(&local, &model)
+        .expect("generation succeeds")
+        .source;
+    assert!(
+        source.contains("Not `other.pkg.BLOB`, but {@link other_pkg.GREETING}."),
+        "got:\n{source}"
+    );
 }
 
 /// The comment blocks of `source`: each run of lines from a `/**` to the

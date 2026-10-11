@@ -1245,6 +1245,11 @@ fn linked(ctx: &Ctx, doc: &str, links: &[v1::DocLink]) -> String {
     ordered.sort_by_key(|link| std::cmp::Reverse(link.offset));
     let mut limit = doc.len();
     for link in ordered {
+        // A zero-length link has no text to replace, and at the offset of a
+        // link already replaced it would insert a second rendering.
+        if link.len == 0 {
+            continue;
+        }
         let start = link.offset as usize;
         let Some(end) = start.checked_add(link.len as usize) else {
             continue;
@@ -1307,7 +1312,7 @@ fn ts_link(model: &v1::Model, output: &Output, target: &str) -> Option<String> {
             return None;
         }
         let in_output = match &alias {
-            Some(_) => output.imports.contains(owner),
+            Some(_) => output.imports.contains(owner) && foreign_module_emits(model, owner, decl),
             None => output.emitted.contains(name),
         };
         if !in_output {
@@ -1320,6 +1325,43 @@ fn ts_link(model: &v1::Model, output: &Output, target: &str) -> Option<String> {
         return ts_member(decl, member).map(|member| format!("{prefix}{member}"));
     }
     None
+}
+
+/// Whether the module of the package `owner` emits its declaration `decl`,
+/// by the rule `emit_const` applies: every kind but a constant is emitted,
+/// and a constant is emitted when it is a regex, a primitive other than
+/// `bytes`, or of a named scalar of its own package that is not backed by
+/// `bytes`. A named scalar this model does not hold gives `false`.
+fn foreign_module_emits(model: &v1::Model, owner: &str, decl: &v1::Declaration) -> bool {
+    let Some(v1::declaration::Kind::Constant(constant)) = decl.kind.as_ref() else {
+        return true;
+    };
+    match constant.typed.as_ref() {
+        Some(v1::constant::Typed::RegexBody(_)) => true,
+        Some(v1::constant::Typed::Primitive(primitive)) => !matches!(
+            v1::PrimitiveType::try_from(*primitive),
+            Ok(v1::PrimitiveType::Bytes | v1::PrimitiveType::Unspecified) | Err(_)
+        ),
+        Some(v1::constant::Typed::Named(named)) => {
+            if !named.resolved || named.package != owner {
+                return false;
+            }
+            let target = if named.foreign {
+                model
+                    .foreign
+                    .get(named.index as usize)
+                    .and_then(|foreign| foreign.declaration.as_ref())
+            } else {
+                model.declarations.get(named.index as usize)
+            };
+            matches!(
+                target.and_then(|target| target.kind.as_ref()),
+                Some(v1::declaration::Kind::Scalar(scalar))
+                    if scalar.class != v1::ScalarClass::Bytes as i32
+            )
+        }
+        Some(v1::constant::Typed::Unresolved(_)) | None => false,
+    }
 }
 
 /// The TypeScript spelling of the member `member` (its declared name) of
