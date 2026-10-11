@@ -12,6 +12,7 @@
 - [Writing a codegen plugin](codegen-plugins.md)
 - [CLI reference](cli-reference.md)
 - [Lints](lints.md)
+- [Stability](stability.md)
 
 # Language reference
 

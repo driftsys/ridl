@@ -153,6 +153,10 @@ breaking change under decision 10, to be released with the workspace in
 driftsys/ridl#801; the as-built record is
 [the `ridl-rt` design record](../design/ridl-rt.md).
 
+Amended 2026-10-11 by [ADR-0029](ADR-0029-stability-policy.md): the public API
+of `ridl-rt` and the minimum Rust version of decision 10 are frozen surfaces
+from 0.10.0, checked by `just freeze-check`.
+
 ## Context
 
 `ridl-rt` 0.1 is the first crate a generated ridl package links and a runtime

@@ -189,6 +189,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # `just freeze-check` reads dumps at baseline refs with `git show`.
+          fetch-depth: 0
       # No `dtolnay/rust-toolchain@stable`: it runs `rustup default`, which a
       # rust-toolchain.toml directory override outranks, so it would install a
       # toolchain on every run that nothing here uses. `rustup show` installs
@@ -204,6 +207,11 @@ jobs:
             | tar -xz -C "$HOME/.local/bin" just
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/just" --version
+      # `just freeze-check` runs cargo-semver-checks. It is built with
+      # `cargo install` at the version `bootstrap` names, not installed with a
+      # third-party action.
+      - name: install cargo-semver-checks
+        run: cargo install cargo-semver-checks --locked --version 0.51.0
       - run: just toolchain-check
       # Needs no toolchain of its own, and has no other job to sit in.
       - run: just gate-parity
@@ -211,6 +219,7 @@ jobs:
       # local file:// fixture.
       - run: just install-check
       - run: just fmt-check
+      - run: just freeze-check
       - run: just compile
       - run: just test
       - run: just lint

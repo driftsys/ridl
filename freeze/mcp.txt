@@ -1,0 +1,466 @@
+ridl_check
+ridl_check input  required-set
+ridl_check input /properties/overlays array|null
+ridl_check input /properties/overlays optional
+ridl_check input /properties/overlays/items object
+ridl_check input /properties/overlays/items required-set path source
+ridl_check input /properties/overlays/items/properties/path required
+ridl_check input /properties/overlays/items/properties/path string
+ridl_check input /properties/overlays/items/properties/source required
+ridl_check input /properties/overlays/items/properties/source string
+ridl_check input /properties/path null|string
+ridl_check input /properties/path optional
+ridl_check input /properties/profile enum ridl
+ridl_check input /properties/profile enum rsdl
+ridl_check input /properties/profile enum typl
+ridl_check input /properties/profile null|string
+ridl_check input /properties/profile optional
+ridl_check input /properties/source null|string
+ridl_check input /properties/source optional
+ridl_check output  required-set diagnostics
+ridl_check output /properties/diagnostics array
+ridl_check output /properties/diagnostics required
+ridl_check output /properties/diagnostics/items any
+ridl_check output /properties/workspace null|object
+ridl_check output /properties/workspace optional
+ridl_check output /properties/workspace required-set errors notes root warnings
+ridl_check output /properties/workspace/properties/errors format uint
+ridl_check output /properties/workspace/properties/errors integer
+ridl_check output /properties/workspace/properties/errors minimum 0
+ridl_check output /properties/workspace/properties/errors required
+ridl_check output /properties/workspace/properties/notes array
+ridl_check output /properties/workspace/properties/notes required
+ridl_check output /properties/workspace/properties/notes/items string
+ridl_check output /properties/workspace/properties/root required
+ridl_check output /properties/workspace/properties/root string
+ridl_check output /properties/workspace/properties/warnings format uint
+ridl_check output /properties/workspace/properties/warnings integer
+ridl_check output /properties/workspace/properties/warnings minimum 0
+ridl_check output /properties/workspace/properties/warnings required
+ridl_dependencies
+ridl_dependencies input  required-set path
+ridl_dependencies input /properties/overlays array|null
+ridl_dependencies input /properties/overlays optional
+ridl_dependencies input /properties/overlays/items object
+ridl_dependencies input /properties/overlays/items required-set path source
+ridl_dependencies input /properties/overlays/items/properties/path required
+ridl_dependencies input /properties/overlays/items/properties/path string
+ridl_dependencies input /properties/overlays/items/properties/source required
+ridl_dependencies input /properties/overlays/items/properties/source string
+ridl_dependencies input /properties/package null|string
+ridl_dependencies input /properties/package optional
+ridl_dependencies input /properties/path required
+ridl_dependencies input /properties/path string
+ridl_dependencies output  required-set packages workspace
+ridl_dependencies output /properties/packages array
+ridl_dependencies output /properties/packages required
+ridl_dependencies output /properties/packages/items object
+ridl_dependencies output /properties/packages/items required-set dependents depends_on imports name
+ridl_dependencies output /properties/packages/items/properties/dependents array
+ridl_dependencies output /properties/packages/items/properties/dependents required
+ridl_dependencies output /properties/packages/items/properties/dependents/items string
+ridl_dependencies output /properties/packages/items/properties/depends_on array
+ridl_dependencies output /properties/packages/items/properties/depends_on required
+ridl_dependencies output /properties/packages/items/properties/depends_on/items string
+ridl_dependencies output /properties/packages/items/properties/imports array
+ridl_dependencies output /properties/packages/items/properties/imports required
+ridl_dependencies output /properties/packages/items/properties/imports/items string
+ridl_dependencies output /properties/packages/items/properties/name required
+ridl_dependencies output /properties/packages/items/properties/name string
+ridl_dependencies output /properties/workspace object
+ridl_dependencies output /properties/workspace required
+ridl_dependencies output /properties/workspace required-set errors notes root warnings
+ridl_dependencies output /properties/workspace/properties/errors format uint
+ridl_dependencies output /properties/workspace/properties/errors integer
+ridl_dependencies output /properties/workspace/properties/errors minimum 0
+ridl_dependencies output /properties/workspace/properties/errors required
+ridl_dependencies output /properties/workspace/properties/notes array
+ridl_dependencies output /properties/workspace/properties/notes required
+ridl_dependencies output /properties/workspace/properties/notes/items string
+ridl_dependencies output /properties/workspace/properties/root required
+ridl_dependencies output /properties/workspace/properties/root string
+ridl_dependencies output /properties/workspace/properties/warnings format uint
+ridl_dependencies output /properties/workspace/properties/warnings integer
+ridl_dependencies output /properties/workspace/properties/warnings minimum 0
+ridl_dependencies output /properties/workspace/properties/warnings required
+ridl_describe_type
+ridl_describe_type input  required-set name path
+ridl_describe_type input /properties/from null|string
+ridl_describe_type input /properties/from optional
+ridl_describe_type input /properties/name required
+ridl_describe_type input /properties/name string
+ridl_describe_type input /properties/overlays array|null
+ridl_describe_type input /properties/overlays optional
+ridl_describe_type input /properties/overlays/items object
+ridl_describe_type input /properties/overlays/items required-set path source
+ridl_describe_type input /properties/overlays/items/properties/path required
+ridl_describe_type input /properties/overlays/items/properties/path string
+ridl_describe_type input /properties/overlays/items/properties/source required
+ridl_describe_type input /properties/overlays/items/properties/source string
+ridl_describe_type input /properties/path required
+ridl_describe_type input /properties/path string
+ridl_describe_type output  required-set declaration package workspace
+ridl_describe_type output /properties/declaration any
+ridl_describe_type output /properties/declaration required
+ridl_describe_type output /properties/location null|object
+ridl_describe_type output /properties/location optional
+ridl_describe_type output /properties/location required-set end path start
+ridl_describe_type output /properties/location/properties/end object
+ridl_describe_type output /properties/location/properties/end required
+ridl_describe_type output /properties/location/properties/end required-set column line
+ridl_describe_type output /properties/location/properties/end/properties/column format uint32
+ridl_describe_type output /properties/location/properties/end/properties/column integer
+ridl_describe_type output /properties/location/properties/end/properties/column minimum 0
+ridl_describe_type output /properties/location/properties/end/properties/column required
+ridl_describe_type output /properties/location/properties/end/properties/line format uint32
+ridl_describe_type output /properties/location/properties/end/properties/line integer
+ridl_describe_type output /properties/location/properties/end/properties/line minimum 0
+ridl_describe_type output /properties/location/properties/end/properties/line required
+ridl_describe_type output /properties/location/properties/path required
+ridl_describe_type output /properties/location/properties/path string
+ridl_describe_type output /properties/location/properties/start object
+ridl_describe_type output /properties/location/properties/start required
+ridl_describe_type output /properties/location/properties/start required-set column line
+ridl_describe_type output /properties/location/properties/start/properties/column format uint32
+ridl_describe_type output /properties/location/properties/start/properties/column integer
+ridl_describe_type output /properties/location/properties/start/properties/column minimum 0
+ridl_describe_type output /properties/location/properties/start/properties/column required
+ridl_describe_type output /properties/location/properties/start/properties/line format uint32
+ridl_describe_type output /properties/location/properties/start/properties/line integer
+ridl_describe_type output /properties/location/properties/start/properties/line minimum 0
+ridl_describe_type output /properties/location/properties/start/properties/line required
+ridl_describe_type output /properties/package required
+ridl_describe_type output /properties/package string
+ridl_describe_type output /properties/workspace object
+ridl_describe_type output /properties/workspace required
+ridl_describe_type output /properties/workspace required-set errors notes root warnings
+ridl_describe_type output /properties/workspace/properties/errors format uint
+ridl_describe_type output /properties/workspace/properties/errors integer
+ridl_describe_type output /properties/workspace/properties/errors minimum 0
+ridl_describe_type output /properties/workspace/properties/errors required
+ridl_describe_type output /properties/workspace/properties/notes array
+ridl_describe_type output /properties/workspace/properties/notes required
+ridl_describe_type output /properties/workspace/properties/notes/items string
+ridl_describe_type output /properties/workspace/properties/root required
+ridl_describe_type output /properties/workspace/properties/root string
+ridl_describe_type output /properties/workspace/properties/warnings format uint
+ridl_describe_type output /properties/workspace/properties/warnings integer
+ridl_describe_type output /properties/workspace/properties/warnings minimum 0
+ridl_describe_type output /properties/workspace/properties/warnings required
+ridl_diff
+ridl_diff input  required-set new old
+ridl_diff input /properties/new required
+ridl_diff input /properties/new string
+ridl_diff input /properties/old required
+ridl_diff input /properties/old string
+ridl_diff input /properties/overlays array|null
+ridl_diff input /properties/overlays optional
+ridl_diff input /properties/overlays/items object
+ridl_diff input /properties/overlays/items required-set path source
+ridl_diff input /properties/overlays/items/properties/path required
+ridl_diff input /properties/overlays/items/properties/path string
+ridl_diff input /properties/overlays/items/properties/source required
+ridl_diff input /properties/overlays/items/properties/source string
+ridl_diff output  additionalProperties true
+ridl_explain
+ridl_explain input  required-set code
+ridl_explain input /properties/code required
+ridl_explain input /properties/code string
+ridl_explain output  required-set category kind text
+ridl_explain output  required-set code kind severity summary
+ridl_explain output /properties/category required
+ridl_explain output /properties/category string
+ridl_explain output /properties/code required
+ridl_explain output /properties/code string
+ridl_explain output /properties/default_level null|string
+ridl_explain output /properties/default_level optional
+ridl_explain output /properties/kind const diagnostic
+ridl_explain output /properties/kind const diff_category
+ridl_explain output /properties/kind required
+ridl_explain output /properties/kind string
+ridl_explain output /properties/lint null|string
+ridl_explain output /properties/lint optional
+ridl_explain output /properties/severity required
+ridl_explain output /properties/severity string
+ridl_explain output /properties/summary required
+ridl_explain output /properties/summary string
+ridl_explain output /properties/text required
+ridl_explain output /properties/text string
+ridl_list_interactions
+ridl_list_interactions input  required-set interface path
+ridl_list_interactions input /properties/from null|string
+ridl_list_interactions input /properties/from optional
+ridl_list_interactions input /properties/interface required
+ridl_list_interactions input /properties/interface string
+ridl_list_interactions input /properties/overlays array|null
+ridl_list_interactions input /properties/overlays optional
+ridl_list_interactions input /properties/overlays/items object
+ridl_list_interactions input /properties/overlays/items required-set path source
+ridl_list_interactions input /properties/overlays/items/properties/path required
+ridl_list_interactions input /properties/overlays/items/properties/path string
+ridl_list_interactions input /properties/overlays/items/properties/source required
+ridl_list_interactions input /properties/overlays/items/properties/source string
+ridl_list_interactions input /properties/path required
+ridl_list_interactions input /properties/path string
+ridl_list_interactions output  required-set interactions interface workspace
+ridl_list_interactions output /properties/interactions array
+ridl_list_interactions output /properties/interactions required
+ridl_list_interactions output /properties/interactions/items any
+ridl_list_interactions output /properties/interface object
+ridl_list_interactions output /properties/interface required
+ridl_list_interactions output /properties/interface required-set doc labels name number package provisional
+ridl_list_interactions output /properties/interface/properties/deprecated null|string
+ridl_list_interactions output /properties/interface/properties/deprecated optional
+ridl_list_interactions output /properties/interface/properties/doc required
+ridl_list_interactions output /properties/interface/properties/doc string
+ridl_list_interactions output /properties/interface/properties/labels array
+ridl_list_interactions output /properties/interface/properties/labels required
+ridl_list_interactions output /properties/interface/properties/labels/items string
+ridl_list_interactions output /properties/interface/properties/name required
+ridl_list_interactions output /properties/interface/properties/name string
+ridl_list_interactions output /properties/interface/properties/number format uint32
+ridl_list_interactions output /properties/interface/properties/number integer
+ridl_list_interactions output /properties/interface/properties/number minimum 0
+ridl_list_interactions output /properties/interface/properties/number required
+ridl_list_interactions output /properties/interface/properties/package required
+ridl_list_interactions output /properties/interface/properties/package string
+ridl_list_interactions output /properties/interface/properties/provisional boolean
+ridl_list_interactions output /properties/interface/properties/provisional required
+ridl_list_interactions output /properties/location null|object
+ridl_list_interactions output /properties/location optional
+ridl_list_interactions output /properties/location required-set end path start
+ridl_list_interactions output /properties/location/properties/end object
+ridl_list_interactions output /properties/location/properties/end required
+ridl_list_interactions output /properties/location/properties/end required-set column line
+ridl_list_interactions output /properties/location/properties/end/properties/column format uint32
+ridl_list_interactions output /properties/location/properties/end/properties/column integer
+ridl_list_interactions output /properties/location/properties/end/properties/column minimum 0
+ridl_list_interactions output /properties/location/properties/end/properties/column required
+ridl_list_interactions output /properties/location/properties/end/properties/line format uint32
+ridl_list_interactions output /properties/location/properties/end/properties/line integer
+ridl_list_interactions output /properties/location/properties/end/properties/line minimum 0
+ridl_list_interactions output /properties/location/properties/end/properties/line required
+ridl_list_interactions output /properties/location/properties/path required
+ridl_list_interactions output /properties/location/properties/path string
+ridl_list_interactions output /properties/location/properties/start object
+ridl_list_interactions output /properties/location/properties/start required
+ridl_list_interactions output /properties/location/properties/start required-set column line
+ridl_list_interactions output /properties/location/properties/start/properties/column format uint32
+ridl_list_interactions output /properties/location/properties/start/properties/column integer
+ridl_list_interactions output /properties/location/properties/start/properties/column minimum 0
+ridl_list_interactions output /properties/location/properties/start/properties/column required
+ridl_list_interactions output /properties/location/properties/start/properties/line format uint32
+ridl_list_interactions output /properties/location/properties/start/properties/line integer
+ridl_list_interactions output /properties/location/properties/start/properties/line minimum 0
+ridl_list_interactions output /properties/location/properties/start/properties/line required
+ridl_list_interactions output /properties/workspace object
+ridl_list_interactions output /properties/workspace required
+ridl_list_interactions output /properties/workspace required-set errors notes root warnings
+ridl_list_interactions output /properties/workspace/properties/errors format uint
+ridl_list_interactions output /properties/workspace/properties/errors integer
+ridl_list_interactions output /properties/workspace/properties/errors minimum 0
+ridl_list_interactions output /properties/workspace/properties/errors required
+ridl_list_interactions output /properties/workspace/properties/notes array
+ridl_list_interactions output /properties/workspace/properties/notes required
+ridl_list_interactions output /properties/workspace/properties/notes/items string
+ridl_list_interactions output /properties/workspace/properties/root required
+ridl_list_interactions output /properties/workspace/properties/root string
+ridl_list_interactions output /properties/workspace/properties/warnings format uint
+ridl_list_interactions output /properties/workspace/properties/warnings integer
+ridl_list_interactions output /properties/workspace/properties/warnings minimum 0
+ridl_list_interactions output /properties/workspace/properties/warnings required
+ridl_metrics
+ridl_metrics input  required-set path
+ridl_metrics input /properties/path required
+ridl_metrics input /properties/path string
+ridl_metrics output  required-set interfaces packages workspace
+ridl_metrics output /properties/interfaces array
+ridl_metrics output /properties/interfaces required
+ridl_metrics output /properties/interfaces/items object
+ridl_metrics output /properties/interfaces/items required-set groups members name
+ridl_metrics output /properties/interfaces/items/properties/groups array
+ridl_metrics output /properties/interfaces/items/properties/groups required
+ridl_metrics output /properties/interfaces/items/properties/groups/items array
+ridl_metrics output /properties/interfaces/items/properties/groups/items/items string
+ridl_metrics output /properties/interfaces/items/properties/members format uint
+ridl_metrics output /properties/interfaces/items/properties/members integer
+ridl_metrics output /properties/interfaces/items/properties/members minimum 0
+ridl_metrics output /properties/interfaces/items/properties/members required
+ridl_metrics output /properties/interfaces/items/properties/name required
+ridl_metrics output /properties/interfaces/items/properties/name string
+ridl_metrics output /properties/packages array
+ridl_metrics output /properties/packages required
+ridl_metrics output /properties/packages/items object
+ridl_metrics output /properties/packages/items required-set dependsOn fanIn fanOut name
+ridl_metrics output /properties/packages/items/properties/dependsOn array
+ridl_metrics output /properties/packages/items/properties/dependsOn required
+ridl_metrics output /properties/packages/items/properties/dependsOn/items string
+ridl_metrics output /properties/packages/items/properties/fanIn format uint
+ridl_metrics output /properties/packages/items/properties/fanIn integer
+ridl_metrics output /properties/packages/items/properties/fanIn minimum 0
+ridl_metrics output /properties/packages/items/properties/fanIn required
+ridl_metrics output /properties/packages/items/properties/fanOut format uint
+ridl_metrics output /properties/packages/items/properties/fanOut integer
+ridl_metrics output /properties/packages/items/properties/fanOut minimum 0
+ridl_metrics output /properties/packages/items/properties/fanOut required
+ridl_metrics output /properties/packages/items/properties/instability format double
+ridl_metrics output /properties/packages/items/properties/instability null|number
+ridl_metrics output /properties/packages/items/properties/instability optional
+ridl_metrics output /properties/packages/items/properties/name required
+ridl_metrics output /properties/packages/items/properties/name string
+ridl_metrics output /properties/workspace object
+ridl_metrics output /properties/workspace required
+ridl_metrics output /properties/workspace required-set errors notes root warnings
+ridl_metrics output /properties/workspace/properties/errors format uint
+ridl_metrics output /properties/workspace/properties/errors integer
+ridl_metrics output /properties/workspace/properties/errors minimum 0
+ridl_metrics output /properties/workspace/properties/errors required
+ridl_metrics output /properties/workspace/properties/notes array
+ridl_metrics output /properties/workspace/properties/notes required
+ridl_metrics output /properties/workspace/properties/notes/items string
+ridl_metrics output /properties/workspace/properties/root required
+ridl_metrics output /properties/workspace/properties/root string
+ridl_metrics output /properties/workspace/properties/warnings format uint
+ridl_metrics output /properties/workspace/properties/warnings integer
+ridl_metrics output /properties/workspace/properties/warnings minimum 0
+ridl_metrics output /properties/workspace/properties/warnings required
+ridl_references
+ridl_references input  required-set name path
+ridl_references input /properties/from null|string
+ridl_references input /properties/from optional
+ridl_references input /properties/name required
+ridl_references input /properties/name string
+ridl_references input /properties/overlays array|null
+ridl_references input /properties/overlays optional
+ridl_references input /properties/overlays/items object
+ridl_references input /properties/overlays/items required-set path source
+ridl_references input /properties/overlays/items/properties/path required
+ridl_references input /properties/overlays/items/properties/path string
+ridl_references input /properties/overlays/items/properties/source required
+ridl_references input /properties/overlays/items/properties/source string
+ridl_references input /properties/path required
+ridl_references input /properties/path string
+ridl_references output  required-set references target workspace
+ridl_references output /properties/references array
+ridl_references output /properties/references required
+ridl_references output /properties/references/items object
+ridl_references output /properties/references/items required-set declaration kind package
+ridl_references output /properties/references/items/properties/declaration required
+ridl_references output /properties/references/items/properties/declaration string
+ridl_references output /properties/references/items/properties/interaction null|string
+ridl_references output /properties/references/items/properties/interaction optional
+ridl_references output /properties/references/items/properties/kind enum component
+ridl_references output /properties/references/items/properties/kind enum declaration
+ridl_references output /properties/references/items/properties/kind enum interface
+ridl_references output /properties/references/items/properties/kind enum service
+ridl_references output /properties/references/items/properties/kind required
+ridl_references output /properties/references/items/properties/kind string
+ridl_references output /properties/references/items/properties/location null|object
+ridl_references output /properties/references/items/properties/location optional
+ridl_references output /properties/references/items/properties/location required-set end path start
+ridl_references output /properties/references/items/properties/location/properties/end object
+ridl_references output /properties/references/items/properties/location/properties/end required
+ridl_references output /properties/references/items/properties/location/properties/end required-set column line
+ridl_references output /properties/references/items/properties/location/properties/end/properties/column integer
+ridl_references output /properties/references/items/properties/location/properties/end/properties/column required
+ridl_references output /properties/references/items/properties/location/properties/end/properties/line integer
+ridl_references output /properties/references/items/properties/location/properties/end/properties/line required
+ridl_references output /properties/references/items/properties/location/properties/path required
+ridl_references output /properties/references/items/properties/location/properties/path string
+ridl_references output /properties/references/items/properties/location/properties/start object
+ridl_references output /properties/references/items/properties/location/properties/start required
+ridl_references output /properties/references/items/properties/location/properties/start required-set column line
+ridl_references output /properties/references/items/properties/location/properties/start/properties/column integer
+ridl_references output /properties/references/items/properties/location/properties/start/properties/column required
+ridl_references output /properties/references/items/properties/location/properties/start/properties/line integer
+ridl_references output /properties/references/items/properties/location/properties/start/properties/line required
+ridl_references output /properties/references/items/properties/package required
+ridl_references output /properties/references/items/properties/package string
+ridl_references output /properties/target required
+ridl_references output /properties/target string
+ridl_references output /properties/workspace object
+ridl_references output /properties/workspace required
+ridl_references output /properties/workspace required-set errors notes root warnings
+ridl_references output /properties/workspace/properties/errors format uint
+ridl_references output /properties/workspace/properties/errors integer
+ridl_references output /properties/workspace/properties/errors minimum 0
+ridl_references output /properties/workspace/properties/errors required
+ridl_references output /properties/workspace/properties/notes array
+ridl_references output /properties/workspace/properties/notes required
+ridl_references output /properties/workspace/properties/notes/items string
+ridl_references output /properties/workspace/properties/root required
+ridl_references output /properties/workspace/properties/root string
+ridl_references output /properties/workspace/properties/warnings format uint
+ridl_references output /properties/workspace/properties/warnings integer
+ridl_references output /properties/workspace/properties/warnings minimum 0
+ridl_references output /properties/workspace/properties/warnings required
+ridl_resolve
+ridl_resolve input  required-set name path
+ridl_resolve input /properties/from null|string
+ridl_resolve input /properties/from optional
+ridl_resolve input /properties/name required
+ridl_resolve input /properties/name string
+ridl_resolve input /properties/overlays array|null
+ridl_resolve input /properties/overlays optional
+ridl_resolve input /properties/overlays/items object
+ridl_resolve input /properties/overlays/items required-set path source
+ridl_resolve input /properties/overlays/items/properties/path required
+ridl_resolve input /properties/overlays/items/properties/path string
+ridl_resolve input /properties/overlays/items/properties/source required
+ridl_resolve input /properties/overlays/items/properties/source string
+ridl_resolve input /properties/path required
+ridl_resolve input /properties/path string
+ridl_resolve output  required-set kind name package visibility workspace
+ridl_resolve output /properties/alias null|string
+ridl_resolve output /properties/alias optional
+ridl_resolve output /properties/kind required
+ridl_resolve output /properties/kind string
+ridl_resolve output /properties/location null|object
+ridl_resolve output /properties/location optional
+ridl_resolve output /properties/location required-set end path start
+ridl_resolve output /properties/location/properties/end object
+ridl_resolve output /properties/location/properties/end required
+ridl_resolve output /properties/location/properties/end required-set column line
+ridl_resolve output /properties/location/properties/end/properties/column format uint32
+ridl_resolve output /properties/location/properties/end/properties/column integer
+ridl_resolve output /properties/location/properties/end/properties/column minimum 0
+ridl_resolve output /properties/location/properties/end/properties/column required
+ridl_resolve output /properties/location/properties/end/properties/line format uint32
+ridl_resolve output /properties/location/properties/end/properties/line integer
+ridl_resolve output /properties/location/properties/end/properties/line minimum 0
+ridl_resolve output /properties/location/properties/end/properties/line required
+ridl_resolve output /properties/location/properties/path required
+ridl_resolve output /properties/location/properties/path string
+ridl_resolve output /properties/location/properties/start object
+ridl_resolve output /properties/location/properties/start required
+ridl_resolve output /properties/location/properties/start required-set column line
+ridl_resolve output /properties/location/properties/start/properties/column format uint32
+ridl_resolve output /properties/location/properties/start/properties/column integer
+ridl_resolve output /properties/location/properties/start/properties/column minimum 0
+ridl_resolve output /properties/location/properties/start/properties/column required
+ridl_resolve output /properties/location/properties/start/properties/line format uint32
+ridl_resolve output /properties/location/properties/start/properties/line integer
+ridl_resolve output /properties/location/properties/start/properties/line minimum 0
+ridl_resolve output /properties/location/properties/start/properties/line required
+ridl_resolve output /properties/name required
+ridl_resolve output /properties/name string
+ridl_resolve output /properties/package required
+ridl_resolve output /properties/package string
+ridl_resolve output /properties/visibility required
+ridl_resolve output /properties/visibility string
+ridl_resolve output /properties/workspace object
+ridl_resolve output /properties/workspace required
+ridl_resolve output /properties/workspace required-set errors notes root warnings
+ridl_resolve output /properties/workspace/properties/errors format uint
+ridl_resolve output /properties/workspace/properties/errors integer
+ridl_resolve output /properties/workspace/properties/errors minimum 0
+ridl_resolve output /properties/workspace/properties/errors required
+ridl_resolve output /properties/workspace/properties/notes array
+ridl_resolve output /properties/workspace/properties/notes required
+ridl_resolve output /properties/workspace/properties/notes/items string
+ridl_resolve output /properties/workspace/properties/root required
+ridl_resolve output /properties/workspace/properties/root string
+ridl_resolve output /properties/workspace/properties/warnings format uint
+ridl_resolve output /properties/workspace/properties/warnings integer
+ridl_resolve output /properties/workspace/properties/warnings minimum 0
+ridl_resolve output /properties/workspace/properties/warnings required

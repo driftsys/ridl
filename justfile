@@ -94,6 +94,13 @@ compile:
         echo "compile: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi
 
+# Check the frozen surfaces: each committed dump under freeze/ matches the
+# regenerated one, and no line of a dump at its baseline ref is missing now
+# (freeze/README.md). The baseline refs are read with `git show`, so the
+# checkout needs the tags and the history (fetch-depth: 0 in CI).
+freeze-check: toolchain-check
+    cargo run --locked --package xtask -- freeze check
+
 # Run the Rust workspace test suite (same defensive guard as `compile`).
 #
 # This carries the `ridl test` property runs (E2.11a): a `ridl` integration test
@@ -2151,7 +2158,7 @@ gate-parity:
     # the `build:` line, so removing or adding one has to be done twice. Without
     # this list the check would read its expectation from the line under test,
     # and a member removed from that line would only shrink what is checked.
-    expected="toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check compile test lint wasm-check compat-check demo check"
+    expected="toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check freeze-check compile test lint wasm-check compat-check demo check"
     removed="$(comm -23 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort) | paste -sd' ' -)"
     added="$(comm -13 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort -u) | paste -sd' ' -)"
     duplicated="$(printf '%s\n' $members | sort | uniq -d | paste -sd' ' -)"
@@ -2419,7 +2426,7 @@ install-check:
 # The four members that need no compilation run first, so a wrong toolchain, an
 # unwired CI job, a formatting regression, or an unparseable SUMMARY.md all
 # report before a compile starts rather than after a full compile and test run.
-build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check compile test lint wasm-check compat-check demo check
+build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check freeze-check compile test lint wasm-check compat-check demo check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:
@@ -2465,11 +2472,11 @@ lint-commits base="main":
         git std lint --range "$ref"..HEAD
     fi
 
-# Lint and static-check gate before pushing — skips `compile`, `lint`,
-# `test`, `wasm-check`, `compat-check`, `demo`, and `install-check`. Wired as the
-# pre-push hook (.githooks/pre-push.hooks). CI (ci.yml) still runs the full
-# `just build` gate on the PR; `just verify` runs that same gate locally before
-# opening one.
+# Lint and static-check gate before pushing — skips `freeze-check`, `compile`,
+# `lint`, `test`, `wasm-check`, `compat-check`, `demo`, and `install-check`.
+# Wired as the pre-push hook (.githooks/pre-push.hooks). CI (ci.yml) still runs
+# the full `just build` gate on the PR; `just verify` runs that same gate
+# locally before opening one.
 pre-push: lint-commits toolchain-check gate-parity fmt-check check doc-path-check story-id-check link-check book-check
 
 # Commit-message lint over commits not yet on origin/main, then build.

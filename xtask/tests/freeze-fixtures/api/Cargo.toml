@@ -1,0 +1,12 @@
+# The crate that the semver tests of xtask/tests/freeze.rs copy into a
+# temporary repository under freeze/generated/api/. It is not a member of the
+# workspace.
+
+[package]
+name = "freeze-api-fixture"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "src/lib.rs"

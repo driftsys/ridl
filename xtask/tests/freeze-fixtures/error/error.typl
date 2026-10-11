@@ -1,0 +1,4 @@
+package freeze.error
+
+/// A name that is not defined.
+type Limit: nothere

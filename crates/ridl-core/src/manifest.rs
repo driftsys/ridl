@@ -648,48 +648,87 @@ fn check_unknown_keys(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) 
         // Unreachable: the typed parse already accepted this text.
         Err(_) => return,
     };
-    // The allowed-key lists below must stay in sync with the fields of
-    // `RawPackage`, `RawWorkspace`, `RawDefaults`, `RawCodegen`, and `RawBackend`: a field added there
-    // without a matching entry here would wrongly warn as an unknown key.
-    // Keys under `[lints]` are lint names; `collect_lints` checks them against
-    // the registry (MANI-010), so they are never "unknown" here.
+    // `KNOWN_KEYS` must stay in sync with the fields of `RawPackage`,
+    // `RawWorkspace`, `RawDefaults`, `RawCodegen`, and `RawBackend`: a field
+    // added there without a matching entry there would wrongly warn as an
+    // unknown key. Keys under `[lints]` are lint names; `collect_lints` checks
+    // them against the registry (MANI-010), so they are never "unknown" here.
+    // Keys under `[imports]` are never "unknown" either.
     for (key, value) in &doc {
-        match key.as_str() {
-            "package" => check_section_keys(file_id, "package", value, &["name", "version"], diags),
-            "workspace" => check_section_keys(file_id, "workspace", value, &["members"], diags),
-            "defaults" => check_section_keys(
-                file_id,
-                "defaults",
-                value,
-                &["timing", "command_timing", "query_timing"],
-                diags,
-            ),
-            "codegen" => check_section_keys(file_id, "codegen", value, &["header-file"], diags),
-            "backend" => {
-                // One sub-table per backend name; the name is any string, so
-                // only the keys inside each sub-table are checked, each at
-                // its own span.
-                for (name, key, range) in backend_keys(text) {
-                    if key != "encodings" {
-                        diags.push(warning(
-                            DiagCode::MANI_005,
-                            file_id,
-                            range,
-                            format!("unknown key `{key}` in `[backend.{name}]`"),
-                        ));
-                    }
-                }
-            }
-            "imports" => {}
-            "lints" => {}
-            _ => diags.push(warning(
+        if !known_keys("").contains(&key.as_str()) {
+            diags.push(warning(
                 DiagCode::MANI_005,
                 file_id,
                 value.span(),
                 format!("unknown manifest key `{key}`"),
-            )),
+            ));
+        } else if key == "backend" {
+            // One sub-table per backend name; the name is any string, so
+            // only the keys inside each sub-table are checked, each at
+            // its own span.
+            for (name, key, range) in backend_keys(text) {
+                if !known_keys(BACKEND_SECTION).contains(&key.as_str()) {
+                    diags.push(warning(
+                        DiagCode::MANI_005,
+                        file_id,
+                        range,
+                        format!("unknown key `{key}` in `[backend.{name}]`"),
+                    ));
+                }
+            }
+        } else if KNOWN_KEYS.iter().any(|(section, _)| section == key) {
+            check_section_keys(file_id, key, value, &known_keys(key), diags);
         }
     }
+}
+
+/// The section name `KNOWN_KEYS` uses for every `[backend.<name>]` table: the
+/// loader accepts any backend name, and the keys are the same for each.
+pub const BACKEND_SECTION: &str = "backend.*";
+
+/// The keys the manifest schema defines, as `(section, [(key, value type)])`.
+/// The top level has the section name `""`. `[imports]` and `[lints]` hold
+/// user-chosen names and are not listed as sections. MANI-005 warns on any key
+/// outside these lists.
+///
+/// The value type is the TOML type the reader accepts for the key: `string`,
+/// `table`, `array<string>` (an array of strings), `table<string>` (a table of
+/// strings) or `table<table>` (a table of tables).
+pub const KNOWN_KEYS: &[(&str, &[(&str, &str)])] = &[
+    (
+        "",
+        &[
+            ("package", "table"),
+            ("workspace", "table"),
+            ("defaults", "table"),
+            ("codegen", "table"),
+            ("backend", "table<table>"),
+            ("imports", "table<string>"),
+            ("lints", "table<string>"),
+        ],
+    ),
+    ("package", &[("name", "string"), ("version", "string")]),
+    ("workspace", &[("members", "array<string>")]),
+    (
+        "defaults",
+        &[
+            ("timing", "string"),
+            ("command_timing", "string"),
+            ("query_timing", "string"),
+        ],
+    ),
+    ("codegen", &[("header-file", "string")]),
+    (BACKEND_SECTION, &[("encodings", "array<string>")]),
+];
+
+/// The allowed keys of `section` in [`KNOWN_KEYS`]; empty for an unlisted one.
+fn known_keys(section: &str) -> Vec<&'static str> {
+    KNOWN_KEYS
+        .iter()
+        .find(|(name, _)| *name == section)
+        .map_or(Vec::new(), |(_, keys)| {
+            keys.iter().map(|(key, _)| *key).collect()
+        })
 }
 
 /// The keys of every `[backend.<name>]` table, as `(name, key, span of the
@@ -1550,5 +1589,129 @@ version = \"1.0.0\"
         let mut spanned: Vec<&str> = diags.iter().map(|diag| span_text(&text, diag)).collect();
         spanned.sort_unstable();
         assert_eq!(spanned, ["bar", "foo"]);
+    }
+
+    /// A manifest text that writes every key of `KNOWN_KEYS` once, with one
+    /// table per section, so that the text is valid TOML.
+    fn all_known_keys_text() -> String {
+        let mut text = String::new();
+        for key in known_keys("") {
+            let section = if key == "backend" {
+                BACKEND_SECTION
+            } else {
+                key
+            };
+            let header = if key == "backend" {
+                "backend.rust"
+            } else {
+                key
+            };
+            text.push_str(&format!("[{header}]\n"));
+            for key in known_keys(section) {
+                text.push_str(&format!("{key} = 1\n"));
+            }
+        }
+        text
+    }
+
+    /// The manifest of [`PACKAGE_HEAD`] with the key `key` of `section` set to
+    /// the TOML value `value`. A key of `BACKEND_SECTION` is written in
+    /// `[backend.rust]`.
+    fn manifest_with(section: &str, key: &str, value: &str) -> String {
+        let mut table: toml::Table = toml::from_str(PACKAGE_HEAD).unwrap();
+        let value = toml::from_str::<toml::Table>(&format!("v = {value}")).unwrap()["v"].clone();
+        let path: Vec<&str> = match section {
+            "" => vec![],
+            BACKEND_SECTION => vec!["backend", "rust"],
+            other => vec![other],
+        };
+        let mut target = &mut table;
+        for part in path {
+            target = target
+                .entry(part)
+                .or_insert_with(|| toml::Value::Table(toml::Table::new()))
+                .as_table_mut()
+                .unwrap();
+        }
+        target.insert(key.to_string(), value);
+        toml::to_string(&table).unwrap()
+    }
+
+    #[test]
+    fn known_keys_drive_mani_005() {
+        let mut map = SourceMap::new();
+        let file_id = map.file_id("ridl.toml", "");
+        let text = all_known_keys_text();
+        // `check_unknown_keys` returns early on a text that is not TOML.
+        assert!(toml::from_str::<toml::Table>(&text).is_ok(), "{text}");
+        let mut diags = Vec::new();
+        check_unknown_keys(file_id, &text, &mut diags);
+        assert!(diags.is_empty(), "{diags:?}");
+
+        // Each listed key is one the reader reads: an integer where a table,
+        // a string or an array is expected draws a diagnostic other than
+        // MANI-005. A key the reader ignores draws none.
+        for (section, keys) in KNOWN_KEYS {
+            for (key, _) in *keys {
+                let text = manifest_with(section, key, "1");
+                let (_, diags) = parse(&text);
+                assert!(
+                    diags.iter().any(|d| d.code.as_str() != "MANI-005"),
+                    "`{section}` key `{key}` is in KNOWN_KEYS, but the reader ignores it:\n{text}"
+                );
+            }
+        }
+
+        let mut diags = Vec::new();
+        check_unknown_keys(file_id, "[package]\nnmae = \"x\"\n", &mut diags);
+        assert_eq!(codes(&diags), vec!["MANI-005"]);
+    }
+
+    /// Values of each type of `KNOWN_KEYS`, and values of other types. A plain
+    /// `table` accepts a table that holds an integer, which each `table<T>` of
+    /// the list rejects, so the two are told apart.
+    fn type_samples(value_type: &str) -> (&'static [&'static str], &'static [&'static str]) {
+        match value_type {
+            "string" => (&["\"flatbuffers\""], &["1", "[]"]),
+            "table" => (&["{}", "{ a = 1 }"], &["1", "\"x\""]),
+            "array<string>" => (&["[\"flatbuffers\"]"], &["1", "[1]"]),
+            "table<string>" => (
+                &["{ missing-docs = \"warn\" }"],
+                &["1", "{ missing-docs = 1 }"],
+            ),
+            "table<table>" => (&["{ rust = {} }"], &["1", "{ rust = 1 }"]),
+            other => panic!("KNOWN_KEYS names the unknown value type `{other}`"),
+        }
+    }
+
+    /// The codes a value of the wrong type draws: MANI-001 from the typed
+    /// parse, MANI-010 from `[lints]` and MANI-015 from `[backend]`.
+    const TYPE_CODES: [&str; 3] = ["MANI-001", "MANI-010", "MANI-015"];
+
+    #[test]
+    fn known_key_types_are_the_types_the_reader_accepts() {
+        for (section, keys) in KNOWN_KEYS {
+            for (key, value_type) in *keys {
+                let (right, wrong) = type_samples(value_type);
+                for value in right {
+                    let text = manifest_with(section, key, value);
+                    let (_, diags) = parse(&text);
+                    assert!(
+                        !codes(&diags).iter().any(|c| TYPE_CODES.contains(c)),
+                        "`{section}` key `{key}` is `{value_type}`, but the reader rejects \
+                         {value}: {diags:?}\n{text}"
+                    );
+                }
+                for value in wrong {
+                    let text = manifest_with(section, key, value);
+                    let (_, diags) = parse(&text);
+                    assert!(
+                        codes(&diags).iter().any(|c| TYPE_CODES.contains(c)),
+                        "`{section}` key `{key}` is `{value_type}`, but the reader accepts \
+                         {value}\n{text}"
+                    );
+                }
+            }
+        }
     }
 }

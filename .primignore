@@ -8,6 +8,7 @@ CHANGELOG.md
 # Upstream licence text is carried without reformatting.
 THIRD-PARTY-NOTICES.txt
 evals/corpus/*/LICENSE
+xtask/tests/freeze-fixtures/sources/evals/corpus/*/LICENSE
 
 # mdBook build output.
 book/
@@ -27,3 +28,8 @@ crates/ridl/tests/fixtures/sarif-2.1.0.json
 # would rewrap its tables. The hand-written record is notes.md, which prim
 # formats.
 evals/calibration/summary.md
+
+# The crates `ridl build --emit rust` writes for the freeze check. `cargo xtask
+# freeze check` fails when they differ from a regeneration by one byte, so prim
+# must not reformat their Cargo.toml files.
+freeze/generated/

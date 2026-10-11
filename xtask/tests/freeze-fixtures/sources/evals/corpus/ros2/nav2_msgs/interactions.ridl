@@ -1,0 +1,405 @@
+// Modified ROS 2-to-RIDL translation. Inputs and pinned revisions: PROVENANCE.md.
+package nav2msgs
+import builtininterfaces.Duration
+import geometrymsgs.Point
+import geometrymsgs.PoseStamped
+import navmsgs.OccupancyGrid
+import navmsgs.Path
+import stdmsgs.Empty
+type RosInt16 : integer [-32768..32767]
+type RosInt32 : integer [-2147483648..2147483647]
+// Upstream: nav2_msgs/srv/ClearEntireCostmap.srv
+struct ClearEntireCostmapRequest {
+// Clears all layers on the costmap
+
+  plugins : [RosString; 0..18446744073709551615]
+}
+struct ClearEntireCostmapResponse {
+
+  success : RosBoolean
+}
+// Upstream: nav2_msgs/srv/GetCostmap.srv
+struct GetCostmapRequest {
+// Get the costmap
+
+// Specifications for the requested costmap
+  specs : CostmapMetaData
+}
+struct GetCostmapResponse {
+
+  map : Costmap
+}
+// Upstream: nav2_msgs/srv/IsPathValid.srv
+struct IsPathValidRequest {
+//Determine if the current path is still valid
+
+  path : Path
+  maxCost : RosUInt8 = 254
+  considerUnknownAsObstacle : RosBoolean = false
+  layerName : RosString = ""
+  footprint : RosString = ""
+  stopAtFirstCollision : RosBoolean = true
+  maxLookaheadDistance : RosFloat64 = -1.0
+}
+struct IsPathValidResponse {
+
+  success : RosBoolean
+  isValid : RosBoolean
+  invalidPoseIndices : [RosInt32; 0..18446744073709551615]
+}
+// Upstream: nav2_msgs/srv/LoadMap.srv
+struct LoadMapRequest {
+// URL of map resource
+// Can be an absolute path to a file: file:///path/to/maps/floor1.yaml
+// Or, relative to a ROS package: package://my_ros_package/maps/floor2.yaml
+  mapUrl : RosString
+}
+struct LoadMapResponse {
+
+// Result code definitions
+  // ROS constant RESULT_SUCCESS = 0; package constant LOAD_MAP_RESPONSE_RESULT_SUCCESS
+  // ROS constant RESULT_MAP_DOES_NOT_EXIST = 1; package constant LOAD_MAP_RESPONSE_RESULT_MAP_DOES_NOT_EXIST
+  // ROS constant RESULT_INVALID_MAP_DATA = 2; package constant LOAD_MAP_RESPONSE_RESULT_INVALID_MAP_DATA
+  // ROS constant RESULT_INVALID_MAP_METADATA = 3; package constant LOAD_MAP_RESPONSE_RESULT_INVALID_MAP_METADATA
+  // ROS constant RESULT_UNDEFINED_FAILURE = 255; package constant LOAD_MAP_RESPONSE_RESULT_UNDEFINED_FAILURE
+
+// Returned map is only valid if result equals RESULT_SUCCESS
+  map : OccupancyGrid
+  result : RosUInt8
+}
+const LOAD_MAP_RESPONSE_RESULT_SUCCESS : RosUInt8 = 0
+const LOAD_MAP_RESPONSE_RESULT_MAP_DOES_NOT_EXIST : RosUInt8 = 1
+const LOAD_MAP_RESPONSE_RESULT_INVALID_MAP_DATA : RosUInt8 = 2
+const LOAD_MAP_RESPONSE_RESULT_INVALID_MAP_METADATA : RosUInt8 = 3
+const LOAD_MAP_RESPONSE_RESULT_UNDEFINED_FAILURE : RosUInt8 = 255
+// Upstream: nav2_msgs/srv/ManageLifecycleNodes.srv
+struct ManageLifecycleNodesRequest {
+  // ROS constant STARTUP = 0; package constant MANAGE_LIFECYCLE_NODES_REQUEST_STARTUP
+  // ROS constant PAUSE = 1; package constant MANAGE_LIFECYCLE_NODES_REQUEST_PAUSE
+  // ROS constant RESUME = 2; package constant MANAGE_LIFECYCLE_NODES_REQUEST_RESUME
+  // ROS constant RESET = 3; package constant MANAGE_LIFECYCLE_NODES_REQUEST_RESET
+  // ROS constant SHUTDOWN = 4; package constant MANAGE_LIFECYCLE_NODES_REQUEST_SHUTDOWN
+  // ROS constant CONFIGURE = 5; package constant MANAGE_LIFECYCLE_NODES_REQUEST_CONFIGURE
+  // ROS constant CLEANUP = 6; package constant MANAGE_LIFECYCLE_NODES_REQUEST_CLEANUP
+
+  commandValue : RosUInt8
+}
+struct ManageLifecycleNodesResponse {
+
+  success : RosBoolean
+}
+const MANAGE_LIFECYCLE_NODES_REQUEST_STARTUP : RosUInt8 = 0
+const MANAGE_LIFECYCLE_NODES_REQUEST_PAUSE : RosUInt8 = 1
+const MANAGE_LIFECYCLE_NODES_REQUEST_RESUME : RosUInt8 = 2
+const MANAGE_LIFECYCLE_NODES_REQUEST_RESET : RosUInt8 = 3
+const MANAGE_LIFECYCLE_NODES_REQUEST_SHUTDOWN : RosUInt8 = 4
+const MANAGE_LIFECYCLE_NODES_REQUEST_CONFIGURE : RosUInt8 = 5
+const MANAGE_LIFECYCLE_NODES_REQUEST_CLEANUP : RosUInt8 = 6
+// Upstream: nav2_msgs/srv/SaveMap.srv
+struct SaveMapRequest {
+// URL of map resource
+// Can be an absolute path to a file: file:///path/to/maps/floor1.yaml
+// Or, relative to a ROS package: package://my_ros_package/maps/floor2.yaml
+  mapTopic : RosString
+  mapUrl : RosString
+// Constants for image_format. Supported formats: pgm, png, bmp
+  imageFormat : RosString
+// Map modes: trinary, scale or raw
+  mapMode : RosString
+// Thresholds. Values in range of [0.0 .. 1.0]
+  freeThresh : RosFloat32
+  occupiedThresh : RosFloat32
+}
+struct SaveMapResponse {
+
+  result : RosBoolean
+}
+// Upstream: nav2_msgs/action/AssistedTeleop.action
+struct AssistedTeleopGoal {
+//goal definition
+  timeAllowance : Duration
+}
+struct AssistedTeleopResult {
+
+//result definition
+
+// Error codes
+// Note: The expected priority order of the error should match the message order
+  // ROS constant NONE = 0; package constant ASSISTED_TELEOP_RESULT_NONE
+  // ROS constant GOAL_REJECTED = 1; package constant ASSISTED_TELEOP_RESULT_GOAL_REJECTED
+  // ROS constant SEND_GOAL_FAILURE = 2; package constant ASSISTED_TELEOP_RESULT_SEND_GOAL_FAILURE
+  // ROS constant UNKNOWN = 730; package constant ASSISTED_TELEOP_RESULT_UNKNOWN
+  // ROS constant TIMEOUT = 731; package constant ASSISTED_TELEOP_RESULT_TIMEOUT
+  // ROS constant TF_ERROR = 732; package constant ASSISTED_TELEOP_RESULT_TF_ERROR
+  // ROS constant TELEOP_INPUT_TIMEOUT = 733; package constant ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT
+
+  totalElapsedTime : Duration
+  errorCode : RosUInt16
+  errorMsg : RosString
+}
+struct AssistedTeleopFeedback {
+
+//feedback
+  currentTeleopDuration : Duration
+}
+const ASSISTED_TELEOP_RESULT_NONE : RosUInt16 = 0
+const ASSISTED_TELEOP_RESULT_GOAL_REJECTED : RosUInt16 = 1
+const ASSISTED_TELEOP_RESULT_SEND_GOAL_FAILURE : RosUInt16 = 2
+const ASSISTED_TELEOP_RESULT_UNKNOWN : RosUInt16 = 730
+const ASSISTED_TELEOP_RESULT_TIMEOUT : RosUInt16 = 731
+const ASSISTED_TELEOP_RESULT_TF_ERROR : RosUInt16 = 732
+const ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT : RosUInt16 = 733
+// Upstream: nav2_msgs/action/BackUp.action
+struct BackUpGoal {
+
+//goal definition
+  target : Point
+  speed : RosFloat32
+  timeAllowance : Duration
+  disableCollisionChecks : RosBoolean = false
+}
+struct BackUpResult {
+
+//result definition
+
+// Error codes
+// Note: The expected priority order of the error should match the message order
+  // ROS constant NONE = 0; package constant BACK_UP_RESULT_NONE
+  // ROS constant GOAL_REJECTED = 1; package constant BACK_UP_RESULT_GOAL_REJECTED
+  // ROS constant SEND_GOAL_FAILURE = 2; package constant BACK_UP_RESULT_SEND_GOAL_FAILURE
+  // ROS constant UNKNOWN = 710; package constant BACK_UP_RESULT_UNKNOWN
+  // ROS constant TIMEOUT = 711; package constant BACK_UP_RESULT_TIMEOUT
+  // ROS constant TF_ERROR = 712; package constant BACK_UP_RESULT_TF_ERROR
+  // ROS constant INVALID_INPUT = 713; package constant BACK_UP_RESULT_INVALID_INPUT
+  // ROS constant COLLISION_AHEAD = 714; package constant BACK_UP_RESULT_COLLISION_AHEAD
+
+  totalElapsedTime : Duration
+  errorCode : RosUInt16
+  errorMsg : RosString
+}
+struct BackUpFeedback {
+
+//feedback definition
+  distanceTraveled : RosFloat32
+}
+const BACK_UP_RESULT_NONE : RosUInt16 = 0
+const BACK_UP_RESULT_GOAL_REJECTED : RosUInt16 = 1
+const BACK_UP_RESULT_SEND_GOAL_FAILURE : RosUInt16 = 2
+const BACK_UP_RESULT_UNKNOWN : RosUInt16 = 710
+const BACK_UP_RESULT_TIMEOUT : RosUInt16 = 711
+const BACK_UP_RESULT_TF_ERROR : RosUInt16 = 712
+const BACK_UP_RESULT_INVALID_INPUT : RosUInt16 = 713
+const BACK_UP_RESULT_COLLISION_AHEAD : RosUInt16 = 714
+// Upstream: nav2_msgs/action/FollowPath.action
+struct FollowPathGoal {
+// goal definition
+  path : Path
+  controllerId : RosString
+  goalCheckerId : RosString
+  progressCheckerId : RosString
+  pathHandlerId : RosString
+}
+struct FollowPathResult {
+
+// result definition
+
+// Error codes
+// Note: The expected priority order of the errors should match the message order
+  // ROS constant NONE = 0; package constant FOLLOW_PATH_RESULT_NONE
+  // ROS constant GOAL_REJECTED = 1; package constant FOLLOW_PATH_RESULT_GOAL_REJECTED
+  // ROS constant SEND_GOAL_FAILURE = 2; package constant FOLLOW_PATH_RESULT_SEND_GOAL_FAILURE
+  // ROS constant UNKNOWN = 100; package constant FOLLOW_PATH_RESULT_UNKNOWN
+  // ROS constant INVALID_CONTROLLER = 101; package constant FOLLOW_PATH_RESULT_INVALID_CONTROLLER
+  // ROS constant TF_ERROR = 102; package constant FOLLOW_PATH_RESULT_TF_ERROR
+  // ROS constant INVALID_PATH = 103; package constant FOLLOW_PATH_RESULT_INVALID_PATH
+  // ROS constant PATIENCE_EXCEEDED = 104; package constant FOLLOW_PATH_RESULT_PATIENCE_EXCEEDED
+  // ROS constant FAILED_TO_MAKE_PROGRESS = 105; package constant FOLLOW_PATH_RESULT_FAILED_TO_MAKE_PROGRESS
+  // ROS constant NO_VALID_CONTROL = 106; package constant FOLLOW_PATH_RESULT_NO_VALID_CONTROL
+  // ROS constant CONTROLLER_TIMED_OUT = 107; package constant FOLLOW_PATH_RESULT_CONTROLLER_TIMED_OUT
+  // ROS constant TIMEOUT = 108; package constant FOLLOW_PATH_RESULT_TIMEOUT
+
+  result : Empty
+  errorCode : RosUInt16
+  errorMsg : RosString
+}
+struct FollowPathFeedback {
+
+// feedback definition
+// Real-time tracking error indicating which side of the path the robot is on
+// If the position_tracking_error is positive, the robot is to the left of the path
+// If the heading_tracking_error is positive, the robot heading is rotated to the right of the path direction
+  trackingFeedback : TrackingFeedback
+}
+const FOLLOW_PATH_RESULT_NONE : RosUInt16 = 0
+const FOLLOW_PATH_RESULT_GOAL_REJECTED : RosUInt16 = 1
+const FOLLOW_PATH_RESULT_SEND_GOAL_FAILURE : RosUInt16 = 2
+const FOLLOW_PATH_RESULT_UNKNOWN : RosUInt16 = 100
+const FOLLOW_PATH_RESULT_INVALID_CONTROLLER : RosUInt16 = 101
+const FOLLOW_PATH_RESULT_TF_ERROR : RosUInt16 = 102
+const FOLLOW_PATH_RESULT_INVALID_PATH : RosUInt16 = 103
+const FOLLOW_PATH_RESULT_PATIENCE_EXCEEDED : RosUInt16 = 104
+const FOLLOW_PATH_RESULT_FAILED_TO_MAKE_PROGRESS : RosUInt16 = 105
+const FOLLOW_PATH_RESULT_NO_VALID_CONTROL : RosUInt16 = 106
+const FOLLOW_PATH_RESULT_CONTROLLER_TIMED_OUT : RosUInt16 = 107
+const FOLLOW_PATH_RESULT_TIMEOUT : RosUInt16 = 108
+// Upstream: nav2_msgs/action/FollowWaypoints.action
+struct FollowWaypointsGoal {
+//goal definition
+  numberOfLoops : RosUInt32
+  goalIndex : RosUInt32 = 0
+  poses : [PoseStamped; 0..18446744073709551615]
+}
+struct FollowWaypointsResult {
+
+//result definition
+
+// Error codes
+// Note: The expected priority order of the errors should match the message order
+  // ROS constant NONE = 0; package constant FOLLOW_WAYPOINTS_RESULT_NONE
+  // ROS constant UNKNOWN = 600; package constant FOLLOW_WAYPOINTS_RESULT_UNKNOWN
+  // ROS constant TASK_EXECUTOR_FAILED = 601; package constant FOLLOW_WAYPOINTS_RESULT_TASK_EXECUTOR_FAILED
+  // ROS constant NO_VALID_WAYPOINTS = 602; package constant FOLLOW_WAYPOINTS_RESULT_NO_VALID_WAYPOINTS
+  // ROS constant STOP_ON_MISSED_WAYPOINT = 603; package constant FOLLOW_WAYPOINTS_RESULT_STOP_ON_MISSED_WAYPOINT
+
+  missedWaypoints : [WaypointStatus; 0..18446744073709551615]
+  errorCode : RosUInt16
+  errorMsg : RosString
+}
+struct FollowWaypointsFeedback {
+
+//feedback definition
+  currentWaypoint : RosUInt32
+}
+const FOLLOW_WAYPOINTS_RESULT_NONE : RosUInt16 = 0
+const FOLLOW_WAYPOINTS_RESULT_UNKNOWN : RosUInt16 = 600
+const FOLLOW_WAYPOINTS_RESULT_TASK_EXECUTOR_FAILED : RosUInt16 = 601
+const FOLLOW_WAYPOINTS_RESULT_NO_VALID_WAYPOINTS : RosUInt16 = 602
+const FOLLOW_WAYPOINTS_RESULT_STOP_ON_MISSED_WAYPOINT : RosUInt16 = 603
+// Upstream: nav2_msgs/action/NavigateToPose.action
+struct NavigateToPoseGoal {
+//goal definition
+  pose : PoseStamped
+  behaviorTree : RosString
+}
+struct NavigateToPoseResult {
+
+//result definition
+
+// Error codes
+// Note: The expected priority order of the errors should match the message order
+  // ROS constant NONE = 0; package constant NAVIGATE_TO_POSE_RESULT_NONE
+  // ROS constant GOAL_REJECTED = 1; package constant NAVIGATE_TO_POSE_RESULT_GOAL_REJECTED
+  // ROS constant SEND_GOAL_FAILURE = 2; package constant NAVIGATE_TO_POSE_RESULT_SEND_GOAL_FAILURE
+  // ROS constant UNKNOWN = 9000; package constant NAVIGATE_TO_POSE_RESULT_UNKNOWN
+  // ROS constant FAILED_TO_LOAD_BEHAVIOR_TREE = 9001; package constant NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE
+  // ROS constant TF_ERROR = 9002; package constant NAVIGATE_TO_POSE_RESULT_TF_ERROR
+  // ROS constant TIMEOUT = 9003; package constant NAVIGATE_TO_POSE_RESULT_TIMEOUT
+
+  errorCode : RosUInt16
+  errorMsg : RosString
+}
+struct NavigateToPoseFeedback {
+
+//feedback definition
+  currentPose : PoseStamped
+  navigationTime : Duration
+  estimatedTimeRemaining : Duration
+  numberOfRecoveries : RosInt16
+  distanceRemaining : RosFloat32
+  positionTrackingError : RosFloat32
+  headingTrackingError : RosFloat32
+}
+const NAVIGATE_TO_POSE_RESULT_NONE : RosUInt16 = 0
+const NAVIGATE_TO_POSE_RESULT_GOAL_REJECTED : RosUInt16 = 1
+const NAVIGATE_TO_POSE_RESULT_SEND_GOAL_FAILURE : RosUInt16 = 2
+const NAVIGATE_TO_POSE_RESULT_UNKNOWN : RosUInt16 = 9000
+const NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE : RosUInt16 = 9001
+const NAVIGATE_TO_POSE_RESULT_TF_ERROR : RosUInt16 = 9002
+const NAVIGATE_TO_POSE_RESULT_TIMEOUT : RosUInt16 = 9003
+// Upstream: nav2_msgs/action/Spin.action
+struct SpinGoal {
+//goal definition
+  targetYaw : RosFloat32
+  timeAllowance : Duration
+  disableCollisionChecks : RosBoolean = false
+}
+struct SpinResult {
+
+//result definition
+
+// Error codes
+// Note: The expected priority order of the error should match the message order
+  // ROS constant NONE = 0; package constant SPIN_RESULT_NONE
+  // ROS constant GOAL_REJECTED = 1; package constant SPIN_RESULT_GOAL_REJECTED
+  // ROS constant SEND_GOAL_FAILURE = 2; package constant SPIN_RESULT_SEND_GOAL_FAILURE
+  // ROS constant UNKNOWN = 700; package constant SPIN_RESULT_UNKNOWN
+  // ROS constant TIMEOUT = 701; package constant SPIN_RESULT_TIMEOUT
+  // ROS constant TF_ERROR = 702; package constant SPIN_RESULT_TF_ERROR
+  // ROS constant COLLISION_AHEAD = 703; package constant SPIN_RESULT_COLLISION_AHEAD
+
+  totalElapsedTime : Duration
+  errorCode : RosUInt16
+  errorMsg : RosString
+}
+struct SpinFeedback {
+
+//feedback definition
+  angularDistanceTraveled : RosFloat32
+}
+const SPIN_RESULT_NONE : RosUInt16 = 0
+const SPIN_RESULT_GOAL_REJECTED : RosUInt16 = 1
+const SPIN_RESULT_SEND_GOAL_FAILURE : RosUInt16 = 2
+const SPIN_RESULT_UNKNOWN : RosUInt16 = 700
+const SPIN_RESULT_TIMEOUT : RosUInt16 = 701
+const SPIN_RESULT_TF_ERROR : RosUInt16 = 702
+const SPIN_RESULT_COLLISION_AHEAD : RosUInt16 = 703
+// Upstream: nav2_msgs/action/Wait.action
+struct WaitGoal {
+//goal definition
+  time : Duration
+}
+struct WaitResult {
+
+//result definition
+  totalElapsedTime : Duration
+  errorCode : RosUInt16
+  errorMsg : RosString
+
+  // ROS constant NONE = 0; package constant WAIT_RESULT_NONE
+  // ROS constant GOAL_REJECTED = 1; package constant WAIT_RESULT_GOAL_REJECTED
+  // ROS constant SEND_GOAL_FAILURE = 2; package constant WAIT_RESULT_SEND_GOAL_FAILURE
+  // ROS constant UNKNOWN = 740; package constant WAIT_RESULT_UNKNOWN
+  // ROS constant TIMEOUT = 741; package constant WAIT_RESULT_TIMEOUT
+}
+struct WaitFeedback {
+
+//feedback definition
+  timeLeft : Duration
+}
+const WAIT_RESULT_NONE : RosUInt16 = 0
+const WAIT_RESULT_GOAL_REJECTED : RosUInt16 = 1
+const WAIT_RESULT_SEND_GOAL_FAILURE : RosUInt16 = 2
+const WAIT_RESULT_UNKNOWN : RosUInt16 = 740
+const WAIT_RESULT_TIMEOUT : RosUInt16 = 741
+interface Nav2MsgsInteractions {
+  query clearEntireCostmap(plugins: ClearEntireCostmapRequest): ClearEntireCostmapResponse
+  query getCostmap(specs: CostmapMetaData): GetCostmapResponse
+  query isPathValid(path: Path, maxCost: RosUInt8, considerUnknownAsObstacle: RosBoolean, layerName: RosString, footprint: RosString, stopAtFirstCollision: RosBoolean, maxLookaheadDistance: RosFloat64): IsPathValidResponse
+  query loadMap(mapUrl: RosString): LoadMapResponse
+  query manageLifecycleNodes(commandValue: RosUInt8): ManageLifecycleNodesResponse
+  query saveMap(mapTopic: RosString, mapUrl: RosString, imageFormat: RosString, mapMode: RosString, freeThresh: RosFloat32, occupiedThresh: RosFloat32): SaveMapResponse
+  command assistedTeleop(goal: AssistedTeleopGoal)
+  event assistedTeleopFeedback : AssistedTeleopFeedback
+  command backUp(goal: BackUpGoal)
+  event backUpFeedback : BackUpFeedback
+  command followPath(goal: FollowPathGoal)
+  event followPathFeedback : FollowPathFeedback
+  command followWaypoints(goal: FollowWaypointsGoal)
+  event followWaypointsFeedback : FollowWaypointsFeedback
+  command navigateToPose(goal: NavigateToPoseGoal)
+  event navigateToPoseFeedback : NavigateToPoseFeedback
+  command spin(goal: SpinGoal)
+  event spinFeedback : SpinFeedback
+  command wait(goal: WaitGoal)
+  event waitFeedback : WaitFeedback
+}

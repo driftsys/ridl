@@ -84,6 +84,9 @@ Proposed draft with no implementation. See
   - ADR-0028 and `docs/book/generated-code.md` — before changing what a backend
     renders in a generated doc comment, or the doc fields of the codegen
     `Model`.
+  - ADR-0029, `docs/book/stability.md` and `freeze/README.md` — before changing
+    a frozen surface, a dump under `freeze/`, `freeze/surfaces.toml`, or the
+    freeze check in `xtask/src/freeze.rs` and `xtask/src/freeze/`.
 - `docs/ROADMAP.md` — the forward plan: the two steps it structures from the
   2026-09-12 re-scope's release scope (step 1, rsdl finalized plus the Rust
   runtime and codegen; step 2, TypeScript and the codegen plugin system), the
@@ -147,6 +150,11 @@ member; rsdl is the apex.
                          names file:line for each match. The ROADMAP, the
                          backlog, the ADRs, the rest of the specifications,
                          docs/archive/ and docs/wip/ may hold ids
+    just freeze-check    every committed dump under freeze/ matches the
+                         regenerated one, and no line of a dump at its
+                         baseline ref is missing now (the baseline refs are
+                         in freeze/surfaces.toml; repair a stale dump with
+                         cargo xtask freeze update)
     just compile         compile the Rust workspace (--locked)
     just test            run the Rust workspace test suite (--locked), and
                          ridl-descriptor's tests with its default
@@ -187,15 +195,16 @@ member; rsdl is the apex.
                          this workspace cannot reach
     just build           toolchain-check + gate-parity + install-check +
                          fmt-check + book-check + link-check + doc-path-check +
-                         story-id-check + compile + test + lint + wasm-check +
-                         compat-check + demo + check — the full local gate: every member ADR-0008
-                         decision 11 names, the four CI checks ADR-0009 brought
-                         back to this side, and doc-path-check, story-id-check and
-                         demo, which postdate both
+                         story-id-check + freeze-check + compile + test +
+                         lint + wasm-check + compat-check + demo + check — the
+                         full local gate: every member ADR-0008 decision 11
+                         names, the four CI checks ADR-0009 brought back to this
+                         side, and doc-path-check, story-id-check,
+                         freeze-check and demo, which postdate both
     just lint-commits    git std lint over the commits on top of a base branch
                          (BASE defaults to main; CI passes the PR base branch)
     just pre-push        lint-commits + the static-check members of build,
-                         skips compile, lint, test, wasm-check,
+                         skips freeze-check, compile, lint, test, wasm-check,
                          compat-check, demo, and install-check — wired as the
                          pre-push hook
     just verify          lint-commits, then build — run before a PR

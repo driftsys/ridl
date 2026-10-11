@@ -57,6 +57,37 @@ repairs the new release wants in the same commit.
    `just check` when every changed file is Rust source. A push to `main` runs
    every job.
 
+## Changing a frozen surface
+
+Ten surfaces are frozen from release 0.10.0, and `just freeze-check` compares
+each one with a baseline git ref (ADR-0029). The dumps are in `freeze/`, and the
+baseline of each surface is in `freeze/surfaces.toml`. Some parts of the frozen
+surfaces are frozen by policy and checked by no tool: the formats of
+`interfaces.lock` and `.ridl/baseline`, the exit codes of every subcommand other
+than `ridl check`, the output of `ridl diff` and the `ridl-diff` categories, the
+frame envelope and the `attach` handshake.
+
+1. Run `cargo xtask freeze update` after a change that touches a surface, and
+   commit the changed dumps. An added line is not a break.
+2. If `just freeze-check` reports a missing line or a Rust API break, the change
+   breaks the surface. Before 0.10.0, delete that surface's row from
+   `freeze/surfaces.toml` in the same pull request, put `!` in the title, and
+   state the approval and the reason in the description. The pull request merges
+   only on the maintainer's explicit approval. A follow-up pull request adds the
+   row again with the merge commit of the first as the `baseline`. The surface
+   is unchecked between the two pull requests.
+3. During 0.10.x, do not break a frozen surface. A security fix is the one
+   exception, and its reason is recorded in ADR-0029.
+4. To start checking a new surface, add its dump in one pull request. Add its
+   row to `freeze/surfaces.toml` in a follow-up pull request, with the merge
+   commit of the first as the `baseline`.
+5. The accepted-sources and wire dumps read frozen copies of the packages under
+   `examples/` and `evals/corpus/`, in `xtask/tests/freeze-fixtures/sources/`,
+   so an edit to an example or to the corpus changes no dump. To refresh a copy
+   on purpose, copy the package's files over it and run
+   `cargo xtask freeze update`. A new copy adds lines; a replaced copy that
+   removes a line is a break, handled as in step 2.
+
 ## Writing examples in the book
 
 Every fenced block in `docs/book/` whose info string starts with `ridl`, `typl`
@@ -189,15 +220,16 @@ Run `just --list` for the full set. The common ones:
 | `just book-check`      | `mdbook build` on a copy — catches a SUMMARY.md mdBook cannot parse                                                                                                                                                                                                                                                                                                                                                                         |
 | `just doc-path-check`  | every `docs/` file path named in a tracked file resolves — the bare paths `link-check` cannot see, in prose, in an inline code span and in a source comment. A directory citation is checked when it ends with `/`; the slashless form (`docs/book`) is not. A file that is not text is named rather than scanned. Skips `docs/archive/`, `docs/wip/` and `CHANGELOG.md`; a path belonging to another repository has to be written as a URL |
 | `just story-id-check`  | no story id such as `E16.5` and no plan name such as `epic E11`, `stage K3` or `lane M` in a tracked file under `crates/`, `xtask/`, `examples/`, `editors/vscode/src/`, `docs/book/`, `docs/design/` or `docs/technotes/`, nor in a `docs/specification/` file that the book includes; names file:line for each match. The roadmap, the backlog, the ADRs, the rest of the specifications, `docs/archive/` and `docs/wip/` may hold ids    |
+| `just freeze-check`    | each committed dump under `freeze/` matches a regeneration, no line of a surface's dump at its baseline ref in `freeze/surfaces.toml` is missing, and the runtime and generated crates have no Rust API break against the baseline (`cargo semver-checks`, ADR-0029)                                                                                                                                                                        |
 | `just compile`         | compile the Rust workspace (`--locked`)                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `just test`            | run the Rust workspace test suite (`--locked`), and `ridl-descriptor`'s tests with its default features off, and with only `dedup` on                                                                                                                                                                                                                                                                                                       |
 | `just lint`            | `cargo clippy --workspace --all-targets -- -D warnings`                                                                                                                                                                                                                                                                                                                                                                                     |
 | `just wasm-check`      | `cargo check` for wasm32, `--no-default-features`; and `ridl-descriptor` with its default features off, and with only `dedup` on, for a target with no standard library, and with its features on for wasm32                                                                                                                                                                                                                                |
 | `just compat-check`    | build and test `ridl-rt` and `ridl-rt-conformance` as edition 2021 with its minimum supported Rust version and as edition 2024 with the `rust-toolchain.toml` pin, and check the crate `ridl build` emits for `examples/cabin` as edition 2021 with that minimum, the first cell of the codegen build matrix (ADR-0021 decision 10)                                                                                                         |
 | `just demo`            | generate the cabin example's crate and run the program that links it — each round trip's value is matched, and a missing one or a non-zero exit fails; it also checks that no planus crate is in the generated crate's dependency graph, and that the generated crate, and one generated from the veh-cluster corpus, check with their default features off for a target with no standard library                                           |
-| `just build`           | `toolchain-check` + `gate-parity` + `install-check` + `fmt-check` + `book-check` + `link-check` + `doc-path-check` + `story-id-check` + `compile` + `test` + `lint` + `wasm-check` + `compat-check` + `demo` + `check` — the full local gate                                                                                                                                                                                                |
+| `just build`           | `toolchain-check` + `gate-parity` + `install-check` + `fmt-check` + `book-check` + `link-check` + `doc-path-check` + `story-id-check` + `freeze-check` + `compile` + `test` + `lint` + `wasm-check` + `compat-check` + `demo` + `check` — the full local gate                                                                                                                                                                               |
 | `just lint-commits`    | `git std lint` over the commits on top of a base branch                                                                                                                                                                                                                                                                                                                                                                                     |
-| `just pre-push`        | `lint-commits` + the static-check members of `build`, skips `compile`, `lint`, `test`, `wasm-check`, `compat-check`, `demo`, and `install-check` — wired as the pre-push hook                                                                                                                                                                                                                                                               |
+| `just pre-push`        | `lint-commits` + the static-check members of `build`, skips `freeze-check`, `compile`, `lint`, `test`, `wasm-check`, `compat-check`, `demo`, and `install-check` — wired as the pre-push hook                                                                                                                                                                                                                                               |
 | `just verify`          | `lint-commits` + `build` — run before a PR                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `just book`            | serve the mdBook docs locally                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `just release`         | `git std bump` — version, changelog, tag                                                                                                                                                                                                                                                                                                                                                                                                    |

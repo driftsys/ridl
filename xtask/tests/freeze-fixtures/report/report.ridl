@@ -1,0 +1,13 @@
+// The freeze check reads the key paths of the JSON and SARIF reports of this
+// package (REPORT_FIXTURE in xtask/src/freeze/cli.rs). It draws RIDL-401, an
+// error with a label, and TYPL-406, a warning with a fix.
+package freeze.report
+
+type Limit: integer [0..3]
+
+/// A body that reserves a name and declares it again.
+interface Status {
+  reserved level
+  /// The level.
+  signal level: Limit @1s
+}

@@ -1,0 +1,3 @@
+package freeze.warn
+
+type Limit: integer [0..3]

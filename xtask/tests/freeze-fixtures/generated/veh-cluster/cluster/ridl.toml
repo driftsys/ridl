@@ -1,0 +1,8 @@
+[package]
+name = "veh.cluster"
+version = "1.0.0"
+
+# A package-level timing default (ridl §9.1): it shadows the built-in
+# `[100ms..1000ms]` and is what an untimed interaction resolves to in the IR.
+[defaults]
+timing = "[200ms..2s]"

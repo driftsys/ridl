@@ -58,3 +58,8 @@ serde_json = { workspace = true, optional = true }
 # `ridl-backend-rust` publishes after this crate. The reasoning is written
 # out above `ridlc` in `crates/ridl-backend-rust/Cargo.toml`.
 ridl-backend-rust = { path = "../ridl-backend-rust" }
+
+# The freeze check denies the major-level lints that cargo-semver-checks only
+# warns about by default (`[workspace.metadata.cargo-semver-checks.lints]`).
+[package.metadata.cargo-semver-checks.lints]
+workspace = true

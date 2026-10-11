@@ -1,0 +1,297 @@
+exit 0
+exit 1
+exit 2
+json /*
+json /*/code
+json /*/fixes
+json /*/fixes/*
+json /*/fixes/*/label
+json /*/fixes/*/replacement
+json /*/fixes/*/span
+json /*/fixes/*/span/end
+json /*/fixes/*/span/end/column
+json /*/fixes/*/span/end/line
+json /*/fixes/*/span/path
+json /*/fixes/*/span/start
+json /*/fixes/*/span/start/column
+json /*/fixes/*/span/start/line
+json /*/labels
+json /*/labels/*
+json /*/labels/*/message
+json /*/labels/*/span
+json /*/labels/*/span/end
+json /*/labels/*/span/end/column
+json /*/labels/*/span/end/line
+json /*/labels/*/span/path
+json /*/labels/*/span/start
+json /*/labels/*/span/start/column
+json /*/labels/*/span/start/line
+json /*/lint
+json /*/message
+json /*/severity
+json /*/span
+json /*/span/end
+json /*/span/end/column
+json /*/span/end/line
+json /*/span/path
+json /*/span/start
+json /*/span/start/column
+json /*/span/start/line
+ridl --help optional
+ridl --help switch
+ridl --version optional
+ridl --version switch
+ridl -V switch
+ridl -h switch
+ridl baseline
+ridl baseline --help optional
+ridl baseline --help switch
+ridl baseline --out <DIR>
+ridl baseline --out optional
+ridl baseline -h switch
+ridl baseline arg 1 <PATH> optional
+ridl baseline arg 1 default .
+ridl baseline requires
+ridl build
+ridl build --deployment <NAME>
+ridl build --deployment optional
+ridl build --emit <EMIT>
+ridl build --emit default rust
+ridl build --emit optional
+ridl build --emit value catalog
+ridl build --emit value codegen-model
+ridl build --emit value flatbuffers
+ridl build --emit value ir-binary
+ridl build --emit value ir-json
+ridl build --emit value ir-text
+ridl build --emit value proto
+ridl build --emit value rust
+ridl build --emit value typescript
+ridl build --frozen optional
+ridl build --frozen switch
+ridl build --help optional
+ridl build --help switch
+ridl build --out-dir <OUT_DIR>
+ridl build --out-dir default out
+ridl build --out-dir optional
+ridl build --plugin <LANGUAGE[=PATH]>
+ridl build --plugin optional
+ridl build --plugin-timeout <SECONDS>
+ridl build --plugin-timeout default 60
+ridl build --plugin-timeout optional
+ridl build -h switch
+ridl build arg 1 <PATH> optional
+ridl build arg 1 default .
+ridl build requires
+ridl check
+ridl check --baseline <DIR|FILE>
+ridl check --baseline optional
+ridl check --format <FORMAT>
+ridl check --format default text
+ridl check --format optional
+ridl check --format value json
+ridl check --format value sarif
+ridl check --format value text
+ridl check --frozen optional
+ridl check --frozen switch
+ridl check --help optional
+ridl check --help switch
+ridl check -h switch
+ridl check arg 1 <PATH> optional
+ridl check arg 1 default .
+ridl check requires
+ridl describe
+ridl describe --help optional
+ridl describe --help switch
+ridl describe -h switch
+ridl describe arg 1 <PATH> required
+ridl describe requires <PATH>
+ridl diff
+ridl diff --explain <CATEGORY>
+ridl diff --explain optional
+ridl diff --format <FORMAT>
+ridl diff --format default text
+ridl diff --format optional
+ridl diff --format value json
+ridl diff --format value text
+ridl diff --help optional
+ridl diff --help switch
+ridl diff -h switch
+ridl diff arg 1 <OLD> optional
+ridl diff arg 2 <NEW> optional
+ridl diff requires
+ridl fmt
+ridl fmt --check optional
+ridl fmt --check switch
+ridl fmt --help optional
+ridl fmt --help switch
+ridl fmt -h switch
+ridl fmt arg 1 <PATH> optional
+ridl fmt arg 1 default .
+ridl fmt requires
+ridl init
+ridl init --help optional
+ridl init --help switch
+ridl init --name <NAME>
+ridl init --name optional
+ridl init --workspace optional
+ridl init --workspace switch
+ridl init -h switch
+ridl init arg 1 <PATH> optional
+ridl init arg 1 default .
+ridl init requires
+ridl lock
+ridl lock --help optional
+ridl lock --help switch
+ridl lock --rename <OLD=NEW>
+ridl lock --rename optional
+ridl lock --retire <NAME>
+ridl lock --retire optional
+ridl lock -h switch
+ridl lock arg 1 <PATH> optional
+ridl lock arg 1 default .
+ridl lock merge
+ridl lock merge --help optional
+ridl lock merge --help switch
+ridl lock merge -h switch
+ridl lock merge arg 1 <BASE> required
+ridl lock merge arg 2 <OURS> required
+ridl lock merge arg 3 <THEIRS> required
+ridl lock merge arg 4 <MARKER_SIZE> required
+ridl lock merge requires <BASE> <OURS> <THEIRS> <MARKER_SIZE>
+ridl lock requires <COMMAND>
+ridl lsp
+ridl lsp --clientProcessId <PID>
+ridl lsp --clientProcessId optional
+ridl lsp --help optional
+ridl lsp --help switch
+ridl lsp --stdio optional
+ridl lsp --stdio switch
+ridl lsp -h switch
+ridl lsp requires
+ridl mcp
+ridl mcp --help optional
+ridl mcp --help switch
+ridl mcp -h switch
+ridl mcp requires
+ridl new
+ridl new --help optional
+ridl new --help switch
+ridl new --name <NAME>
+ridl new --name optional
+ridl new --workspace optional
+ridl new --workspace switch
+ridl new -h switch
+ridl new arg 1 <PATH> required
+ridl new requires <PATH>
+ridl requires <COMMAND>
+ridl test
+ridl test --format <FORMAT>
+ridl test --format default text
+ridl test --format optional
+ridl test --format value json
+ridl test --format value text
+ridl test --help optional
+ridl test --help switch
+ridl test --samples <SAMPLES>
+ridl test --samples default 256
+ridl test --samples optional
+ridl test -h switch
+ridl test arg 1 <PATH> optional
+ridl test arg 1 default .
+ridl test requires
+ridlc --help optional
+ridlc --help switch
+ridlc --version optional
+ridlc --version switch
+ridlc -V switch
+ridlc -h switch
+ridlc build
+ridlc build --deployment <NAME>
+ridlc build --deployment optional
+ridlc build --emit <EMIT>
+ridlc build --emit default rust
+ridlc build --emit optional
+ridlc build --emit value catalog
+ridlc build --emit value codegen-model
+ridlc build --emit value flatbuffers
+ridlc build --emit value ir-binary
+ridlc build --emit value ir-json
+ridlc build --emit value ir-text
+ridlc build --emit value proto
+ridlc build --emit value rust
+ridlc build --emit value typescript
+ridlc build --frozen optional
+ridlc build --frozen switch
+ridlc build --help optional
+ridlc build --help switch
+ridlc build --out-dir <OUT_DIR>
+ridlc build --out-dir required
+ridlc build --plugin <LANGUAGE[=PATH]>
+ridlc build --plugin optional
+ridlc build --plugin-timeout <SECONDS>
+ridlc build --plugin-timeout default 60
+ridlc build --plugin-timeout optional
+ridlc build -h switch
+ridlc build arg 1 <PATH> required
+ridlc build requires --out-dir <OUT_DIR> <PATH>
+ridlc check
+ridlc check --frozen optional
+ridlc check --frozen switch
+ridlc check --help optional
+ridlc check --help switch
+ridlc check -h switch
+ridlc check arg 1 <PATH> required
+ridlc check requires <PATH>
+ridlc requires <COMMAND>
+sarif /$schema
+sarif /runs
+sarif /runs/*
+sarif /runs/*/columnKind
+sarif /runs/*/originalUriBaseIds
+sarif /runs/*/originalUriBaseIds/%SRCROOT%
+sarif /runs/*/originalUriBaseIds/%SRCROOT%/uri
+sarif /runs/*/results
+sarif /runs/*/results/*
+sarif /runs/*/results/*/level
+sarif /runs/*/results/*/locations
+sarif /runs/*/results/*/locations/*
+sarif /runs/*/results/*/locations/*/physicalLocation
+sarif /runs/*/results/*/locations/*/physicalLocation/artifactLocation
+sarif /runs/*/results/*/locations/*/physicalLocation/artifactLocation/uri
+sarif /runs/*/results/*/locations/*/physicalLocation/artifactLocation/uriBaseId
+sarif /runs/*/results/*/locations/*/physicalLocation/region
+sarif /runs/*/results/*/locations/*/physicalLocation/region/endColumn
+sarif /runs/*/results/*/locations/*/physicalLocation/region/endLine
+sarif /runs/*/results/*/locations/*/physicalLocation/region/startColumn
+sarif /runs/*/results/*/locations/*/physicalLocation/region/startLine
+sarif /runs/*/results/*/message
+sarif /runs/*/results/*/message/text
+sarif /runs/*/results/*/relatedLocations
+sarif /runs/*/results/*/relatedLocations/*
+sarif /runs/*/results/*/relatedLocations/*/message
+sarif /runs/*/results/*/relatedLocations/*/message/text
+sarif /runs/*/results/*/relatedLocations/*/physicalLocation
+sarif /runs/*/results/*/relatedLocations/*/physicalLocation/artifactLocation
+sarif /runs/*/results/*/relatedLocations/*/physicalLocation/artifactLocation/uri
+sarif /runs/*/results/*/relatedLocations/*/physicalLocation/artifactLocation/uriBaseId
+sarif /runs/*/results/*/relatedLocations/*/physicalLocation/region
+sarif /runs/*/results/*/relatedLocations/*/physicalLocation/region/endColumn
+sarif /runs/*/results/*/relatedLocations/*/physicalLocation/region/endLine
+sarif /runs/*/results/*/relatedLocations/*/physicalLocation/region/startColumn
+sarif /runs/*/results/*/relatedLocations/*/physicalLocation/region/startLine
+sarif /runs/*/results/*/ruleId
+sarif /runs/*/results/*/ruleIndex
+sarif /runs/*/tool
+sarif /runs/*/tool/driver
+sarif /runs/*/tool/driver/name
+sarif /runs/*/tool/driver/rules
+sarif /runs/*/tool/driver/rules/*
+sarif /runs/*/tool/driver/rules/*/defaultConfiguration
+sarif /runs/*/tool/driver/rules/*/defaultConfiguration/level
+sarif /runs/*/tool/driver/rules/*/id
+sarif /runs/*/tool/driver/rules/*/name
+sarif /runs/*/tool/driver/rules/*/shortDescription
+sarif /runs/*/tool/driver/rules/*/shortDescription/text
+sarif /runs/*/tool/driver/version
+sarif /version
