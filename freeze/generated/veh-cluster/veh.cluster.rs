@@ -3,6 +3,9 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct DoorPayload {
+    /// # Rules
+    ///
+    /// - range 0 ..= 15
     pub sensor_id: ::core::primitive::i64,
     pub is_open: ::core::primitive::bool,
 }
@@ -16,7 +19,14 @@ impl ::core::default::Default for DoorPayload {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct DiagFilter {
+    /// # Rules
+    ///
+    /// - range 0 ..= 5
     pub severity: ::core::primitive::i64,
+    /// # Rules
+    ///
+    /// - length 1 ..= 64
+    /// - pattern `/^[\x20-\x7E]+$/`
     pub category: ::core::option::Option<crate::ridl::std::Label>,
 }
 impl ::core::default::Default for DiagFilter {
@@ -29,8 +39,18 @@ impl ::core::default::Default for DiagFilter {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct FaultEvent {
+    /// # Rules
+    ///
+    /// - range 0 ..= 65535
     pub code: ::core::primitive::i64,
+    /// # Rules
+    ///
+    /// - length 1 ..= 256
+    /// - pattern `/^[\x20-\x7E]+$/`
     pub message: crate::ridl::std::Message,
+    /// # Rules
+    ///
+    /// - range 0 ..= 9223372036854775807
     pub timestamp: crate::ridl::std::Timestamp,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -70,6 +90,9 @@ impl ::core::default::Default for DiagError {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct FaultPage {
+    /// # Rules
+    ///
+    /// - count 0 ..= 64
     pub faults: ::std::vec::Vec<FaultEvent>,
 }
 impl ::core::default::Default for FaultPage {
@@ -83,29 +106,24 @@ impl ::core::default::Default for FaultPage {
 /// `internal`-over-`internal` case is exercised inside one package. The
 /// cross-package counterpart is impossible by construction: a foreign
 /// `internal` name never resolves (typl §3.3).
+///
+/// # Rules
+///
+/// - range 0 ..= 65535
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 #[allow(dead_code)]
 pub(crate) struct RawTickCount(::core::primitive::i64);
 #[allow(dead_code)]
 impl RawTickCount {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub(crate) fn new(
         value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::i64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -163,6 +181,9 @@ impl ::core::default::Default for RawTickCount {
 #[allow(dead_code)]
 pub(crate) struct RawWheelSpan {
     pub span: RawWheelSpanSpan,
+    /// # Rules
+    ///
+    /// - count 2
     pub bursts: [RawWheelSpanBurstsElement; 2],
 }
 #[allow(dead_code)]
@@ -174,27 +195,21 @@ impl ::core::default::Default for RawWheelSpan {
         }
     }
 }
+/// # Rules
+///
+/// - range 0 ..= 7
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct FanLevel(::core::primitive::i64);
 impl FanLevel {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::i64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -246,6 +261,9 @@ impl ::core::default::Default for FanLevel {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct FilterState {
+    /// # Rules
+    ///
+    /// - range 0 ..= 65535
     pub hours_run: ::core::primitive::i64,
     pub clogged: ::core::primitive::bool,
 }
@@ -260,8 +278,21 @@ impl ::core::default::Default for FilterState {
 #[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
 pub struct ClimateReport {
+    /// # Rules
+    ///
+    /// - range -40 ..= 125
+    /// - step 0.1
+    /// - unit Cel
     pub cabin: crate::veh::common::Temperature,
+    /// # Rules
+    ///
+    /// - range -40 ..= 125
+    /// - step 0.1
+    /// - unit Cel
     pub setpoint: crate::veh::common::Temperature,
+    /// # Rules
+    ///
+    /// - range 0 ..= 7
     pub fan: FanLevel,
 }
 impl ::core::default::Default for ClimateReport {
@@ -315,27 +346,22 @@ pub const FAN_CEILING: FanLevel = FanLevel::new_unchecked(7);
 /// The same ceiling, one hop further along the chain.
 pub const FAN_LIMIT: FanLevel = FanLevel::new_unchecked(7);
 /// The label a cabin fan reports itself under.
+///
+/// # Rules
+///
+/// - length 1 ..= 32
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct FanTag(::std::string::String);
 impl FanTag {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::str,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -420,7 +446,7 @@ impl ::core::default::Default for RawWheelSpanBurstsElement {
         }
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `DoorPayload`'s `verify` accepted.
+/// A `DoorPayload` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -461,7 +487,6 @@ impl<'a> DoorPayloadFbView<'a> {
         }
     }
 }
-/// Writes `DoorPayload` as a FlatBuffers table and returns its position.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_DoorPayload(
     value: &DoorPayload,
@@ -496,11 +521,6 @@ pub(crate) fn __ridl_fb_encode_DoorPayload(
     __n += 1;
     builder.push_table(6usize, 4usize, 2u16, &__fields[..__n])
 }
-/// Checks the FlatBuffers table at `table` against `DoorPayload`'s shape.
-///
-/// Checks the structure, enum discriminants, collection bounds,
-/// map key uniqueness, and named and anonymous scalar ranges,
-/// steps and lengths. Pattern checks require `validate-pattern`.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_DoorPayload(
     buf: &[::core::primitive::u8],
@@ -547,18 +567,6 @@ pub(crate) fn __ridl_fb_verify_DoorPayload(
     }
     ::core::result::Result::Ok(())
 }
-/// Builds `DoorPayload` from the FlatBuffers table at `table`.
-///
-/// It cannot fail. An absent non-optional scalar or enum field
-/// reads as its FlatBuffers default — 0, or the enum's zero
-/// member — which is a value `verify` accepted
-/// (driftsys/ridl#472). Any other read that could fail is
-/// discharged with the neutral value of its own type — zero, the
-/// empty string or collection, the first declared enum variant —
-/// and `verify` is what makes those branches unreachable. A named scalar is
-/// built with its unchecked constructor (`new_unchecked`) over a
-/// value `verify` has already range-checked (`check`), so this
-/// never re-checks and never fails.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_DoorPayload(
     buf: &[::core::primitive::u8],
@@ -584,16 +592,6 @@ pub(crate) fn __ridl_fb_decode_DoorPayload(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorPayload {
     /// The largest FlatBuffers buffer any legal `DoorPayload` encodes to: 53 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 53usize;
     type Buffer = [::core::primitive::u8; 53usize];
     const BUFFER: Self::Buffer = [0u8; 53usize];
@@ -643,7 +641,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorPaylo
         __ridl_fb_decode_DoorPayload(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `DiagFilter`'s `verify` accepted.
+/// A `DiagFilter` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -686,7 +684,6 @@ impl<'a> DiagFilterFbView<'a> {
         }
     }
 }
-/// Writes `DiagFilter` as a FlatBuffers table and returns its position.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_DiagFilter(
     value: &DiagFilter,
@@ -720,11 +717,6 @@ pub(crate) fn __ridl_fb_encode_DiagFilter(
     }
     builder.push_table(12usize, 4usize, 2u16, &__fields[..__n])
 }
-/// Checks the FlatBuffers table at `table` against `DiagFilter`'s shape.
-///
-/// Checks the structure, enum discriminants, collection bounds,
-/// map key uniqueness, and named and anonymous scalar ranges,
-/// steps and lengths. Pattern checks require `validate-pattern`.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_DiagFilter(
     buf: &[::core::primitive::u8],
@@ -773,18 +765,6 @@ pub(crate) fn __ridl_fb_verify_DiagFilter(
     }
     ::core::result::Result::Ok(())
 }
-/// Builds `DiagFilter` from the FlatBuffers table at `table`.
-///
-/// It cannot fail. An absent non-optional scalar or enum field
-/// reads as its FlatBuffers default — 0, or the enum's zero
-/// member — which is a value `verify` accepted
-/// (driftsys/ridl#472). Any other read that could fail is
-/// discharged with the neutral value of its own type — zero, the
-/// empty string or collection, the first declared enum variant —
-/// and `verify` is what makes those branches unreachable. A named scalar is
-/// built with its unchecked constructor (`new_unchecked`) over a
-/// value `verify` has already range-checked (`check`), so this
-/// never re-checks and never fails.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_DiagFilter(
     buf: &[::core::primitive::u8],
@@ -816,16 +796,6 @@ pub(crate) fn __ridl_fb_decode_DiagFilter(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DiagFilter {
     /// The largest FlatBuffers buffer any legal `DiagFilter` encodes to: 324 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 324usize;
     type Buffer = [::core::primitive::u8; 324usize];
     const BUFFER: Self::Buffer = [0u8; 324usize];
@@ -875,7 +845,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DiagFilte
         __ridl_fb_decode_DiagFilter(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `FaultEvent`'s `verify` accepted.
+/// A `FaultEvent` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -926,7 +896,6 @@ impl<'a> FaultEventFbView<'a> {
         }
     }
 }
-/// Writes `FaultEvent` as a FlatBuffers table and returns its position.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_FaultEvent(
     value: &FaultEvent,
@@ -969,11 +938,6 @@ pub(crate) fn __ridl_fb_encode_FaultEvent(
     __n += 1;
     builder.push_table(24usize, 8usize, 3u16, &__fields[..__n])
 }
-/// Checks the FlatBuffers table at `table` against `FaultEvent`'s shape.
-///
-/// Checks the structure, enum discriminants, collection bounds,
-/// map key uniqueness, and named and anonymous scalar ranges,
-/// steps and lengths. Pattern checks require `validate-pattern`.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_FaultEvent(
     buf: &[::core::primitive::u8],
@@ -1039,18 +1003,6 @@ pub(crate) fn __ridl_fb_verify_FaultEvent(
     }
     ::core::result::Result::Ok(())
 }
-/// Builds `FaultEvent` from the FlatBuffers table at `table`.
-///
-/// It cannot fail. An absent non-optional scalar or enum field
-/// reads as its FlatBuffers default — 0, or the enum's zero
-/// member — which is a value `verify` accepted
-/// (driftsys/ridl#472). Any other read that could fail is
-/// discharged with the neutral value of its own type — zero, the
-/// empty string or collection, the first declared enum variant —
-/// and `verify` is what makes those branches unreachable. A named scalar is
-/// built with its unchecked constructor (`new_unchecked`) over a
-/// value `verify` has already range-checked (`check`), so this
-/// never re-checks and never fails.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_FaultEvent(
     buf: &[::core::primitive::u8],
@@ -1089,16 +1041,6 @@ pub(crate) fn __ridl_fb_decode_FaultEvent(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FaultEvent {
     /// The largest FlatBuffers buffer any legal `FaultEvent` encodes to: 1110 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 1110usize;
     type Buffer = [::core::primitive::u8; 1110usize];
     const BUFFER: Self::Buffer = [0u8; 1110usize];
@@ -1148,13 +1090,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FaultEven
         __ridl_fb_decode_FaultEvent(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `DiagError`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `DiagError` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct DiagErrorFbView<'a> {
@@ -1169,12 +1105,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for DiagErrorFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> DiagErrorFbView<'a> {
-    /// The value the box carries. `DiagError` is one value, so this decodes it rather than borrowing it, which costs one read.
+    /// The value the bytes hold. `DiagError` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> DiagError {
         __ridl_fb_decode_DiagError(self.buf, self.table)
     }
 }
-/// Writes `DiagError` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_DiagError(
     value: &DiagError,
@@ -1235,16 +1170,6 @@ pub(crate) fn __ridl_fb_decode_DiagError(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DiagError {
     /// The largest FlatBuffers buffer any legal `DiagError` encodes to: 50 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
     type Buffer = [::core::primitive::u8; 50usize];
     const BUFFER: Self::Buffer = [0u8; 50usize];
@@ -1294,7 +1219,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DiagError
         __ridl_fb_decode_DiagError(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `FaultPage`'s `verify` accepted.
+/// A `FaultPage` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -1341,7 +1266,6 @@ impl<'a> FaultPageFbView<'a> {
         }
     }
 }
-/// Writes `FaultPage` as a FlatBuffers table and returns its position.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_FaultPage(
     value: &FaultPage,
@@ -1373,11 +1297,6 @@ pub(crate) fn __ridl_fb_encode_FaultPage(
     __n += 1;
     builder.push_table(8usize, 4usize, 1u16, &__fields[..__n])
 }
-/// Checks the FlatBuffers table at `table` against `FaultPage`'s shape.
-///
-/// Checks the structure, enum discriminants, collection bounds,
-/// map key uniqueness, and named and anonymous scalar ranges,
-/// steps and lengths. Pattern checks require `validate-pattern`.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_FaultPage(
     buf: &[::core::primitive::u8],
@@ -1414,18 +1333,6 @@ pub(crate) fn __ridl_fb_verify_FaultPage(
     }
     ::core::result::Result::Ok(())
 }
-/// Builds `FaultPage` from the FlatBuffers table at `table`.
-///
-/// It cannot fail. An absent non-optional scalar or enum field
-/// reads as its FlatBuffers default — 0, or the enum's zero
-/// member — which is a value `verify` accepted
-/// (driftsys/ridl#472). Any other read that could fail is
-/// discharged with the neutral value of its own type — zero, the
-/// empty string or collection, the first declared enum variant —
-/// and `verify` is what makes those branches unreachable. A named scalar is
-/// built with its unchecked constructor (`new_unchecked`) over a
-/// value `verify` has already range-checked (`check`), so this
-/// never re-checks and never fails.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_FaultPage(
     buf: &[::core::primitive::u8],
@@ -1461,16 +1368,6 @@ pub(crate) fn __ridl_fb_decode_FaultPage(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FaultPage {
     /// The largest FlatBuffers buffer any legal `FaultPage` encodes to: 70649 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 70649usize;
     type Buffer = [::core::primitive::u8; 70649usize];
     const BUFFER: Self::Buffer = [0u8; 70649usize];
@@ -1520,13 +1417,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FaultPage
         __ridl_fb_decode_FaultPage(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `RawTickCount`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `RawTickCount` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 #[allow(dead_code)]
@@ -1544,12 +1435,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for RawTickCountFbView<'a> {
 #[allow(deprecated)]
 #[allow(dead_code)]
 impl<'a> RawTickCountFbView<'a> {
-    /// The value the box carries. `RawTickCount` is one value, so this decodes it rather than borrowing it, which costs one read.
+    /// The value the bytes hold. `RawTickCount` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub(crate) fn value(&self) -> RawTickCount {
         __ridl_fb_decode_RawTickCount(self.buf, self.table)
     }
 }
-/// Writes `RawTickCount` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 #[allow(dead_code)]
 pub(crate) fn __ridl_fb_encode_RawTickCount(
@@ -1617,16 +1507,6 @@ pub(crate) fn __ridl_fb_decode_RawTickCount(
 #[allow(dead_code)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawTickCount {
     /// The largest FlatBuffers buffer any legal `RawTickCount` encodes to: 44 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 44usize;
     type Buffer = [::core::primitive::u8; 44usize];
     const BUFFER: Self::Buffer = [0u8; 44usize];
@@ -1679,7 +1559,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawTickCo
         __ridl_fb_decode_RawTickCount(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `RawWheelSpan`'s `verify` accepted.
+/// A `RawWheelSpan` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -1733,7 +1613,6 @@ impl<'a> RawWheelSpanFbView<'a> {
         }
     }
 }
-/// Writes `RawWheelSpan` as a FlatBuffers table and returns its position.
 #[allow(deprecated, non_snake_case)]
 #[allow(dead_code)]
 pub(crate) fn __ridl_fb_encode_RawWheelSpan(
@@ -1775,11 +1654,6 @@ pub(crate) fn __ridl_fb_encode_RawWheelSpan(
     __n += 1;
     builder.push_table(12usize, 4usize, 2u16, &__fields[..__n])
 }
-/// Checks the FlatBuffers table at `table` against `RawWheelSpan`'s shape.
-///
-/// Checks the structure, enum discriminants, collection bounds,
-/// map key uniqueness, and named and anonymous scalar ranges,
-/// steps and lengths. Pattern checks require `validate-pattern`.
 #[allow(deprecated, non_snake_case)]
 #[allow(dead_code)]
 pub(crate) fn __ridl_fb_verify_RawWheelSpan(
@@ -1833,18 +1707,6 @@ pub(crate) fn __ridl_fb_verify_RawWheelSpan(
     }
     ::core::result::Result::Ok(())
 }
-/// Builds `RawWheelSpan` from the FlatBuffers table at `table`.
-///
-/// It cannot fail. An absent non-optional scalar or enum field
-/// reads as its FlatBuffers default — 0, or the enum's zero
-/// member — which is a value `verify` accepted
-/// (driftsys/ridl#472). Any other read that could fail is
-/// discharged with the neutral value of its own type — zero, the
-/// empty string or collection, the first declared enum variant —
-/// and `verify` is what makes those branches unreachable. A named scalar is
-/// built with its unchecked constructor (`new_unchecked`) over a
-/// value `verify` has already range-checked (`check`), so this
-/// never re-checks and never fails.
 #[allow(deprecated, non_snake_case)]
 #[allow(dead_code)]
 pub(crate) fn __ridl_fb_decode_RawWheelSpan(
@@ -1886,16 +1748,6 @@ pub(crate) fn __ridl_fb_decode_RawWheelSpan(
 #[allow(dead_code)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelSpan {
     /// The largest FlatBuffers buffer any legal `RawWheelSpan` encodes to: 210 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 210usize;
     type Buffer = [::core::primitive::u8; 210usize];
     const BUFFER: Self::Buffer = [0u8; 210usize];
@@ -1948,13 +1800,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelS
         __ridl_fb_decode_RawWheelSpan(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `FanLevel`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `FanLevel` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct FanLevelFbView<'a> {
@@ -1969,12 +1815,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for FanLevelFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> FanLevelFbView<'a> {
-    /// The value the box carries. `FanLevel` is one value, so this decodes it rather than borrowing it, which costs one read.
+    /// The value the bytes hold. `FanLevel` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> FanLevel {
         __ridl_fb_decode_FanLevel(self.buf, self.table)
     }
 }
-/// Writes `FanLevel` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_FanLevel(
     value: &FanLevel,
@@ -2036,16 +1881,6 @@ pub(crate) fn __ridl_fb_decode_FanLevel(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanLevel {
     /// The largest FlatBuffers buffer any legal `FanLevel` encodes to: 43 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 43usize;
     type Buffer = [::core::primitive::u8; 43usize];
     const BUFFER: Self::Buffer = [0u8; 43usize];
@@ -2095,7 +1930,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanLevel 
         __ridl_fb_decode_FanLevel(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `FilterState`'s `verify` accepted.
+/// A `FilterState` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -2136,7 +1971,6 @@ impl<'a> FilterStateFbView<'a> {
         }
     }
 }
-/// Writes `FilterState` as a FlatBuffers table and returns its position.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_FilterState(
     value: &FilterState,
@@ -2171,11 +2005,6 @@ pub(crate) fn __ridl_fb_encode_FilterState(
     __n += 1;
     builder.push_table(7usize, 4usize, 2u16, &__fields[..__n])
 }
-/// Checks the FlatBuffers table at `table` against `FilterState`'s shape.
-///
-/// Checks the structure, enum discriminants, collection bounds,
-/// map key uniqueness, and named and anonymous scalar ranges,
-/// steps and lengths. Pattern checks require `validate-pattern`.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_FilterState(
     buf: &[::core::primitive::u8],
@@ -2222,18 +2051,6 @@ pub(crate) fn __ridl_fb_verify_FilterState(
     }
     ::core::result::Result::Ok(())
 }
-/// Builds `FilterState` from the FlatBuffers table at `table`.
-///
-/// It cannot fail. An absent non-optional scalar or enum field
-/// reads as its FlatBuffers default — 0, or the enum's zero
-/// member — which is a value `verify` accepted
-/// (driftsys/ridl#472). Any other read that could fail is
-/// discharged with the neutral value of its own type — zero, the
-/// empty string or collection, the first declared enum variant —
-/// and `verify` is what makes those branches unreachable. A named scalar is
-/// built with its unchecked constructor (`new_unchecked`) over a
-/// value `verify` has already range-checked (`check`), so this
-/// never re-checks and never fails.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_FilterState(
     buf: &[::core::primitive::u8],
@@ -2259,16 +2076,6 @@ pub(crate) fn __ridl_fb_decode_FilterState(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FilterState {
     /// The largest FlatBuffers buffer any legal `FilterState` encodes to: 54 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 54usize;
     type Buffer = [::core::primitive::u8; 54usize];
     const BUFFER: Self::Buffer = [0u8; 54usize];
@@ -2318,7 +2125,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FilterSta
         __ridl_fb_decode_FilterState(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `ClimateReport`'s `verify` accepted.
+/// A `ClimateReport` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -2378,7 +2185,6 @@ impl<'a> ClimateReportFbView<'a> {
         }
     }
 }
-/// Writes `ClimateReport` as a FlatBuffers table and returns its position.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_ClimateReport(
     value: &ClimateReport,
@@ -2422,11 +2228,6 @@ pub(crate) fn __ridl_fb_encode_ClimateReport(
     __n += 1;
     builder.push_table(13usize, 4usize, 3u16, &__fields[..__n])
 }
-/// Checks the FlatBuffers table at `table` against `ClimateReport`'s shape.
-///
-/// Checks the structure, enum discriminants, collection bounds,
-/// map key uniqueness, and named and anonymous scalar ranges,
-/// steps and lengths. Pattern checks require `validate-pattern`.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_ClimateReport(
     buf: &[::core::primitive::u8],
@@ -2473,18 +2274,6 @@ pub(crate) fn __ridl_fb_verify_ClimateReport(
     }
     ::core::result::Result::Ok(())
 }
-/// Builds `ClimateReport` from the FlatBuffers table at `table`.
-///
-/// It cannot fail. An absent non-optional scalar or enum field
-/// reads as its FlatBuffers default — 0, or the enum's zero
-/// member — which is a value `verify` accepted
-/// (driftsys/ridl#472). Any other read that could fail is
-/// discharged with the neutral value of its own type — zero, the
-/// empty string or collection, the first declared enum variant —
-/// and `verify` is what makes those branches unreachable. A named scalar is
-/// built with its unchecked constructor (`new_unchecked`) over a
-/// value `verify` has already range-checked (`check`), so this
-/// never re-checks and never fails.
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_decode_ClimateReport(
     buf: &[::core::primitive::u8],
@@ -2526,16 +2315,6 @@ pub(crate) fn __ridl_fb_decode_ClimateReport(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for ClimateReport {
     /// The largest FlatBuffers buffer any legal `ClimateReport` encodes to: 69 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 69usize;
     type Buffer = [::core::primitive::u8; 69usize];
     const BUFFER: Self::Buffer = [0u8; 69usize];
@@ -2588,13 +2367,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for ClimateRe
         __ridl_fb_decode_ClimateReport(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `HvacError`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `HvacError` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct HvacErrorFbView<'a> {
@@ -2609,12 +2382,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for HvacErrorFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> HvacErrorFbView<'a> {
-    /// The value the box carries. `HvacError` is one value, so this decodes it rather than borrowing it, which costs one read.
+    /// The value the bytes hold. `HvacError` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> HvacError {
         __ridl_fb_decode_HvacError(self.buf, self.table)
     }
 }
-/// Writes `HvacError` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_HvacError(
     value: &HvacError,
@@ -2675,16 +2447,6 @@ pub(crate) fn __ridl_fb_decode_HvacError(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for HvacError {
     /// The largest FlatBuffers buffer any legal `HvacError` encodes to: 50 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
     type Buffer = [::core::primitive::u8; 50usize];
     const BUFFER: Self::Buffer = [0u8; 50usize];
@@ -2734,13 +2496,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for HvacError
         __ridl_fb_decode_HvacError(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `FanTag`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `FanTag` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct FanTagFbView<'a> {
@@ -2755,12 +2511,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for FanTagFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> FanTagFbView<'a> {
-    /// The value the box carries. `FanTag` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    /// The value the bytes hold. `FanTag` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> FanTag {
         __ridl_fb_decode_FanTag(self.buf, self.table)
     }
 }
-/// Writes `FanTag` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_FanTag(
     value: &FanTag,
@@ -2824,16 +2579,6 @@ pub(crate) fn __ridl_fb_decode_FanTag(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanTag {
     /// The largest FlatBuffers buffer any legal `FanTag` encodes to: 186 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 186usize;
     type Buffer = [::core::primitive::u8; 186usize];
     const BUFFER: Self::Buffer = [0u8; 186usize];
@@ -2880,7 +2625,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanTag {
         __ridl_fb_decode_FanTag(__view.buf, __view.table)
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `RawWheelSpanSpan`'s `verify` accepted.
+/// A `RawWheelSpanSpan` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -2930,7 +2675,6 @@ impl<'a> RawWheelSpanSpanFbView<'a> {
         }
     }
 }
-/// Writes `RawWheelSpanSpan` as a FlatBuffers table and returns its position.
 #[allow(deprecated, non_snake_case)]
 #[allow(dead_code)]
 pub(crate) fn __ridl_fb_encode_RawWheelSpanSpan(
@@ -2966,11 +2710,6 @@ pub(crate) fn __ridl_fb_encode_RawWheelSpanSpan(
     __n += 1;
     builder.push_table(8usize, 4usize, 2u16, &__fields[..__n])
 }
-/// Checks the FlatBuffers table at `table` against `RawWheelSpanSpan`'s shape.
-///
-/// Checks the structure, enum discriminants, collection bounds,
-/// map key uniqueness, and named and anonymous scalar ranges,
-/// steps and lengths. Pattern checks require `validate-pattern`.
 #[allow(deprecated, non_snake_case)]
 #[allow(dead_code)]
 pub(crate) fn __ridl_fb_verify_RawWheelSpanSpan(
@@ -3005,18 +2744,6 @@ pub(crate) fn __ridl_fb_verify_RawWheelSpanSpan(
     }
     ::core::result::Result::Ok(())
 }
-/// Builds `RawWheelSpanSpan` from the FlatBuffers table at `table`.
-///
-/// It cannot fail. An absent non-optional scalar or enum field
-/// reads as its FlatBuffers default — 0, or the enum's zero
-/// member — which is a value `verify` accepted
-/// (driftsys/ridl#472). Any other read that could fail is
-/// discharged with the neutral value of its own type — zero, the
-/// empty string or collection, the first declared enum variant —
-/// and `verify` is what makes those branches unreachable. A named scalar is
-/// built with its unchecked constructor (`new_unchecked`) over a
-/// value `verify` has already range-checked (`check`), so this
-/// never re-checks and never fails.
 #[allow(deprecated, non_snake_case)]
 #[allow(dead_code)]
 pub(crate) fn __ridl_fb_decode_RawWheelSpanSpan(
@@ -3046,7 +2773,7 @@ pub(crate) fn __ridl_fb_decode_RawWheelSpanSpan(
         },
     }
 }
-/// A zero-copy accessor over FlatBuffers bytes `RawWheelSpanBurstsElement`'s `verify` accepted.
+/// A `RawWheelSpanBurstsElement` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -3096,7 +2823,6 @@ impl<'a> RawWheelSpanBurstsElementFbView<'a> {
         }
     }
 }
-/// Writes `RawWheelSpanBurstsElement` as a FlatBuffers table and returns its position.
 #[allow(deprecated, non_snake_case)]
 #[allow(dead_code)]
 pub(crate) fn __ridl_fb_encode_RawWheelSpanBurstsElement(
@@ -3132,11 +2858,6 @@ pub(crate) fn __ridl_fb_encode_RawWheelSpanBurstsElement(
     __n += 1;
     builder.push_table(8usize, 4usize, 2u16, &__fields[..__n])
 }
-/// Checks the FlatBuffers table at `table` against `RawWheelSpanBurstsElement`'s shape.
-///
-/// Checks the structure, enum discriminants, collection bounds,
-/// map key uniqueness, and named and anonymous scalar ranges,
-/// steps and lengths. Pattern checks require `validate-pattern`.
 #[allow(deprecated, non_snake_case)]
 #[allow(dead_code)]
 pub(crate) fn __ridl_fb_verify_RawWheelSpanBurstsElement(
@@ -3171,18 +2892,6 @@ pub(crate) fn __ridl_fb_verify_RawWheelSpanBurstsElement(
     }
     ::core::result::Result::Ok(())
 }
-/// Builds `RawWheelSpanBurstsElement` from the FlatBuffers table at `table`.
-///
-/// It cannot fail. An absent non-optional scalar or enum field
-/// reads as its FlatBuffers default — 0, or the enum's zero
-/// member — which is a value `verify` accepted
-/// (driftsys/ridl#472). Any other read that could fail is
-/// discharged with the neutral value of its own type — zero, the
-/// empty string or collection, the first declared enum variant —
-/// and `verify` is what makes those branches unreachable. A named scalar is
-/// built with its unchecked constructor (`new_unchecked`) over a
-/// value `verify` has already range-checked (`check`), so this
-/// never re-checks and never fails.
 #[allow(deprecated, non_snake_case)]
 #[allow(dead_code)]
 pub(crate) fn __ridl_fb_decode_RawWheelSpanBurstsElement(
@@ -3216,7 +2925,7 @@ pub(crate) fn __ridl_fb_decode_RawWheelSpanBurstsElement(
 ///
 /// The emitter refused it: cannot translate contract clause `position != GearPosition.PARK || currentSpeed == 0.0`: not `<subject> <comparison> <numeric literal>`
 ///
-/// A contract clause outside the form the narrow translator accepts — `<subject> <comparison> <numeric literal>`, conjoined with `&&`. driftsys/ridl#704 replaces the translator and removes this.
+/// A contract clause outside the form the narrow translator accepts — `<subject> <comparison> <numeric literal>`, conjoined with `&&`. Write each `require` and `ensure` clause in that form to get a face.
 ///
 /// Its descriptors are absent for the reason above: the refusal is
 /// raised by the descriptor emitter, which the face is built on. The
@@ -3225,9 +2934,9 @@ pub(crate) fn __ridl_fb_decode_RawWheelSpanBurstsElement(
 /// (interaction-face design rule 2).
 #[allow(dead_code, non_upper_case_globals)]
 const __RIDL_NO_FACE_VehicleStatus: () = ();
-/**Descriptor for interface `WheelHistory`.
+/**Descriptor for interface `WheelHistory`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
 
-Its size table in FlatBuffers is `<WheelHistory as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound. The face holds the table's claim and event buffers.*/
+Its size table in FlatBuffers is `<WheelHistory as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.*/
 pub struct WheelHistory;
 impl ::ridl_rt::contract::Interface for WheelHistory {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -3307,6 +3016,7 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for WheelHisto
     const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
     const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
 }
+#[doc(hidden)]
 pub struct WheelHistoryWheelTicks;
 impl ::ridl_rt::contract::Interaction for WheelHistoryWheelTicks {
     type Iface = WheelHistory;
@@ -3319,6 +3029,7 @@ impl ::ridl_rt::contract::Signal for WheelHistoryWheelTicks {
         <FanLevel as ::core::default::Default>::default()
     }
 }
+#[doc(hidden)]
 pub struct WheelHistoryWheelTemp;
 impl ::ridl_rt::contract::Interaction for WheelHistoryWheelTemp {
     type Iface = WheelHistory;
@@ -3331,6 +3042,7 @@ impl ::ridl_rt::contract::Signal for WheelHistoryWheelTemp {
         <crate::veh::common::Temperature as ::core::default::Default>::default()
     }
 }
+#[doc(hidden)]
 pub struct WheelHistoryWheelSlipRate;
 impl ::ridl_rt::contract::Interaction for WheelHistoryWheelSlipRate {
     type Iface = WheelHistory;
@@ -3343,9 +3055,11 @@ impl ::ridl_rt::contract::Signal for WheelHistoryWheelSlipRate {
         <crate::veh::common::Ratio as ::core::default::Default>::default()
     }
 }
+/// Retired members in a named interface. Ordinals 2 and 4 can never be
+/// reissued; `wheelSlipRate` is ordinal 5, not ordinal 3.
+///
 ///The generated interaction face of interface `WheelHistory`.
 pub mod wheel_history {
-    ///Panics unless `found` is the catalog the face of interface `WheelHistory` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new` of the face, and `serve` where the interface emits one, call it once, before they store or use the port.
     #[track_caller]
     fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
         let expected = <super::WheelHistory as ::ridl_rt::contract::Interface>::CATALOG;
@@ -3362,6 +3076,10 @@ pub mod wheel_history {
     }
     impl<P: ::ridl_rt::port::SignalReader> Client<P> {
         ///Reads signal `wheelTicks` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///
+        /// # Rules
+        ///
+        /// - interval 100000 ..= 1000000 us
         pub fn wheel_ticks(
             &self,
         ) -> ::core::result::Result<
@@ -3420,6 +3138,10 @@ pub mod wheel_history {
             })
         }
         ///Reads signal `wheelTemp` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///
+        /// # Rules
+        ///
+        /// - interval 1000000 ..= 10000000 us
         pub fn wheel_temp(
             &self,
         ) -> ::core::result::Result<
@@ -3478,6 +3200,10 @@ pub mod wheel_history {
             })
         }
         ///Reads signal `wheelSlipRate` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///
+        /// # Rules
+        ///
+        /// - interval 500000 ..= 5000000 us
         pub fn wheel_slip_rate(
             &self,
         ) -> ::core::result::Result<
@@ -3549,7 +3275,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             Client { port }
         }
     }
-    ///Stages the invalid state of one signal of interface `WheelHistory`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>` (ADR-0023 decision 7); `prelude` brings it into scope anonymously.
+    ///Stages the invalid state of one signal of interface `WheelHistory`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>`; `prelude` brings it into scope anonymously.
     pub trait Invalidate {
         ///Stages the invalid state for signal `wheelTicks`, with `Cause::Declared`. It is published by `commit`.
         fn invalidate_wheel_ticks(
@@ -3570,6 +3296,10 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     }
     impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
         ///Stages a new value for signal `wheelTicks`. It is published by `commit`.
+        ///
+        /// # Rules
+        ///
+        /// - interval 100000 ..= 1000000 us
         pub fn wheel_ticks(
             &mut self,
             value: super::FanLevel,
@@ -3598,6 +3328,10 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                 )
         }
         ///Stages a new value for signal `wheelTemp`. It is published by `commit`.
+        ///
+        /// # Rules
+        ///
+        /// - interval 1000000 ..= 10000000 us
         pub fn wheel_temp(
             &mut self,
             value: crate::veh::common::Temperature,
@@ -3626,6 +3360,10 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                 )
         }
         ///Stages a new value for signal `wheelSlipRate`. It is published by `commit`.
+        ///
+        /// # Rules
+        ///
+        /// - interval 500000 ..= 5000000 us
         pub fn wheel_slip_rate(
             &mut self,
             value: crate::veh::common::Ratio,
@@ -3711,7 +3449,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
 }
 /// Interface `WheelDiagnostics` carries no generated interaction descriptors.
 ///
-/// The emitter refused it: interaction `readTicks` must declare exactly one parameter (the face emits no induced argument struct, driftsys/ridl#713)
+/// The emitter refused it: interaction `readTicks` must declare exactly one parameter (the face emits no induced argument struct)
 ///
 /// The interface is `internal`, so it has no face in any case; only its descriptors are absent, for the reason above.
 ///
@@ -3721,9 +3459,9 @@ Panics when `port` is attached to a catalog other than the one this face was gen
 /// (interaction-face design, "The consumer face").
 #[allow(dead_code, non_upper_case_globals)]
 const __RIDL_NO_FACE_WheelDiagnostics: () = ();
-/**Descriptor for interface `WheelSummary`.
+/**Descriptor for interface `WheelSummary`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
 
-Its size table in FlatBuffers is `<WheelSummary as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound. The face holds the table's claim and event buffers.*/
+Its size table in FlatBuffers is `<WheelSummary as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.*/
 pub struct WheelSummary;
 impl ::ridl_rt::contract::Interface for WheelSummary {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -3767,6 +3505,7 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for WheelSumma
     const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
     const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
 }
+#[doc(hidden)]
 pub struct WheelSummaryWheelHealth;
 impl ::ridl_rt::contract::Interaction for WheelSummaryWheelHealth {
     type Iface = WheelSummary;
@@ -3779,9 +3518,11 @@ impl ::ridl_rt::contract::Signal for WheelSummaryWheelHealth {
         <FanLevel as ::core::default::Default>::default()
     }
 }
+/// A public shape beside it, so the generated output shows the two side by
+/// side and the difference is readable in one snapshot.
+///
 ///The generated interaction face of interface `WheelSummary`.
 pub mod wheel_summary {
-    ///Panics unless `found` is the catalog the face of interface `WheelSummary` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new` of the face, and `serve` where the interface emits one, call it once, before they store or use the port.
     #[track_caller]
     fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
         let expected = <super::WheelSummary as ::ridl_rt::contract::Interface>::CATALOG;
@@ -3798,6 +3539,10 @@ pub mod wheel_summary {
     }
     impl<P: ::ridl_rt::port::SignalReader> Client<P> {
         ///Reads signal `wheelHealth` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///
+        /// # Rules
+        ///
+        /// - interval 1000000 ..= 10000000 us
         pub fn wheel_health(
             &self,
         ) -> ::core::result::Result<
@@ -3869,7 +3614,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             Client { port }
         }
     }
-    ///Stages the invalid state of one signal of interface `WheelSummary`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>` (ADR-0023 decision 7); `prelude` brings it into scope anonymously.
+    ///Stages the invalid state of one signal of interface `WheelSummary`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>`; `prelude` brings it into scope anonymously.
     pub trait Invalidate {
         ///Stages the invalid state for signal `wheelHealth`, with `Cause::Declared`. It is published by `commit`.
         fn invalidate_wheel_health(
@@ -3882,6 +3627,10 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     }
     impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
         ///Stages a new value for signal `wheelHealth`. It is published by `commit`.
+        ///
+        /// # Rules
+        ///
+        /// - interval 1000000 ..= 10000000 us
         pub fn wheel_health(
             &mut self,
             value: super::FanLevel,

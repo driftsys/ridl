@@ -18,28 +18,22 @@ pub const IPV6_PATTERN: &::core::primitive::str = "^[0-9a-f:]+$";
 pub const ASCII_PATTERN: &::core::primitive::str = "^[\\x20-\\x7E]+$";
 /// RFC 4122 UUID — 36 characters including hyphens
 ///
-/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature.
+/// # Rules
+///
+/// - length 36
+/// - pattern `/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Uuid(::std::string::String);
 impl Uuid {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::str,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -103,28 +97,22 @@ impl ::core::convert::From<Uuid> for ::std::string::String {
 }
 /// ULID — 26 characters, lexicographically sortable
 ///
-/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature.
+/// # Rules
+///
+/// - length 26
+/// - pattern `/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Ulid(::std::string::String);
 impl Ulid {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::str,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -186,28 +174,22 @@ impl ::core::convert::From<Ulid> for ::std::string::String {
 }
 /// RFC 3986 URI
 ///
-/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature.
+/// # Rules
+///
+/// - length 1 ..= 2048
+/// - pattern `/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\/.+$/`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Uri(::std::string::String);
 impl Uri {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::str,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -269,28 +251,22 @@ impl ::core::convert::From<Uri> for ::std::string::String {
 }
 /// HTTP/HTTPS URL
 ///
-/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature.
+/// # Rules
+///
+/// - length 1 ..= 2048
+/// - pattern `/^https?:\/\/.+$/`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Url(::std::string::String);
 impl Url {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::str,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -352,28 +328,22 @@ impl ::core::convert::From<Url> for ::std::string::String {
 }
 /// Email address — RFC 5321
 ///
-/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature.
+/// # Rules
+///
+/// - length 1 ..= 254
+/// - pattern `/^[^@]+@[^@]+\.[^@]+$/`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Email(::std::string::String);
 impl Email {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::str,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -435,28 +405,22 @@ impl ::core::convert::From<Email> for ::std::string::String {
 }
 /// IPv4 address — dotted decimal notation
 ///
-/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature.
+/// # Rules
+///
+/// - length 7 ..= 15
+/// - pattern `/^(\d{1,3}\.){3}\d{1,3}$/`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct IpV4(::std::string::String);
 impl IpV4 {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::str,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -518,28 +482,22 @@ impl ::core::convert::From<IpV4> for ::std::string::String {
 }
 /// IPv6 address
 ///
-/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature.
+/// # Rules
+///
+/// - length 2 ..= 39
+/// - pattern `/^[0-9a-f:]+$/`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct IpV6(::std::string::String);
 impl IpV6 {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::str,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -601,28 +559,22 @@ impl ::core::convert::From<IpV6> for ::std::string::String {
 }
 /// Short human-readable label — ASCII printable, max 64 characters
 ///
-/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature.
+/// # Rules
+///
+/// - length 1 ..= 64
+/// - pattern `/^[\x20-\x7E]+$/`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Label(::std::string::String);
 impl Label {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::str,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -684,28 +636,22 @@ impl ::core::convert::From<Label> for ::std::string::String {
 }
 /// Human-readable name — max 128 characters
 ///
-/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature.
+/// # Rules
+///
+/// - length 1 ..= 128
+/// - pattern `/^[\x20-\x7E]+$/`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Name(::std::string::String);
 impl Name {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::str,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -767,28 +713,22 @@ impl ::core::convert::From<Name> for ::std::string::String {
 }
 /// Short message or description — max 256 characters
 ///
-/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature.
+/// # Rules
+///
+/// - length 1 ..= 256
+/// - pattern `/^[\x20-\x7E]+$/`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Message(::std::string::String);
 impl Message {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::str,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -852,27 +792,22 @@ impl ::core::convert::From<Message> for ::std::string::String {
 /// int64 microseconds since the PTP epoch, 1970-01-01 00:00:00 TAI.
 /// Continuous and leap-second-free; convert to civil datetime only at
 /// presentation edges.
+///
+/// # Rules
+///
+/// - range 0 ..= 9223372036854775807
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Timestamp(::core::primitive::i64);
 impl Timestamp {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::i64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::i64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -916,27 +851,23 @@ impl ::core::default::Default for Timestamp {
     }
 }
 /// Elapsed time interval in milliseconds
+///
+/// # Rules
+///
+/// - range 0 ..= 9223372036854775807
+/// - unit ms
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Duration(::core::primitive::f64);
 impl Duration {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::core::primitive::f64,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::f64,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -993,28 +924,22 @@ impl ::core::default::Default for Duration {
 }
 /// Calendar date — ISO 8601 YYYY-MM-DD
 ///
-/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature.
+/// # Rules
+///
+/// - length 10
+/// - pattern `/^\d{4}-\d{2}-\d{2}$/`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Date(::std::string::String);
 impl Date {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::str,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -1076,28 +1001,22 @@ impl ::core::convert::From<Date> for ::std::string::String {
 }
 /// Time of day — ISO 8601 HH:MM:SS
 ///
-/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature.
+/// # Rules
+///
+/// - length 8 ..= 15
+/// - pattern `/^\d{2}:\d{2}:\d{2}/`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct TimeOfDay(::std::string::String);
 impl TimeOfDay {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::str,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -1159,28 +1078,22 @@ impl ::core::convert::From<TimeOfDay> for ::std::string::String {
 }
 /// Semantic version — SemVer 2.0.0
 ///
-/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature.
+/// # Rules
+///
+/// - length 5 ..= 32
+/// - pattern `/^\d+\.\d+\.\d+/`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Version(::std::string::String);
 impl Version {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::str,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -1242,28 +1155,22 @@ impl ::core::convert::From<Version> for ::std::string::String {
 }
 /// ISO 3166-1 alpha-2 country code
 ///
-/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature.
+/// # Rules
+///
+/// - length 2
+/// - pattern `/^[A-Z]{2}$/`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct CountryCode(::std::string::String);
 impl CountryCode {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::str,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -1325,28 +1232,22 @@ impl ::core::convert::From<CountryCode> for ::std::string::String {
 }
 /// ISO 639-1 language code with optional region — e.g. "en", "en-US"
 ///
-/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature.
+/// # Rules
+///
+/// - length 2 ..= 5
+/// - pattern `/^[a-z]{2}(-[A-Z]{2})?$/`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct LanguageCode(::std::string::String);
 impl LanguageCode {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::string::String,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &::core::primitive::str,
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -1407,27 +1308,22 @@ impl ::core::convert::From<LanguageCode> for ::std::string::String {
     }
 }
 /// SHA-256 hash — 32 bytes
+///
+/// # Rules
+///
+/// - length 32
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Sha256Hash(::std::vec::Vec<::core::primitive::u8>);
 impl Sha256Hash {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::vec::Vec<::core::primitive::u8>,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &[::core::primitive::u8],
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -1474,27 +1370,22 @@ impl ::core::convert::From<Sha256Hash> for ::std::vec::Vec<::core::primitive::u8
     }
 }
 /// SHA-512 hash — 64 bytes
+///
+/// # Rules
+///
+/// - length 64
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Sha512Hash(::std::vec::Vec<::core::primitive::u8>);
 impl Sha512Hash {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::vec::Vec<::core::primitive::u8>,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &[::core::primitive::u8],
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -1541,27 +1432,22 @@ impl ::core::convert::From<Sha512Hash> for ::std::vec::Vec<::core::primitive::u8
     }
 }
 /// Generic cryptographic signature — 64 bytes
+///
+/// # Rules
+///
+/// - length 64
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Signature(::std::vec::Vec<::core::primitive::u8>);
 impl Signature {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::vec::Vec<::core::primitive::u8>,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &[::core::primitive::u8],
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -1608,27 +1494,22 @@ impl ::core::convert::From<Signature> for ::std::vec::Vec<::core::primitive::u8>
     }
 }
 /// X.509 DER certificate
+///
+/// # Rules
+///
+/// - length 1 ..= 4096
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Certificate(::std::vec::Vec<::core::primitive::u8>);
 impl Certificate {
-    /// Constructs the value, enforcing its typl constraints.
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
     pub fn new(
         value: ::std::vec::Vec<::core::primitive::u8>,
     ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         Self::check(&value)?;
         ::core::result::Result::Ok(Self::new_unchecked(value))
     }
-    /// Checks `value` against this type's typl constraints, without
-    /// constructing it. `pub(crate)` rather than `pub`: a caller
-    /// outside `new` is a function generated into this crate — since
-    /// driftsys/ridl#467 that includes the codec of *another* package
-    /// of the same build, which reaches this type through the module
-    /// tree and so cannot see a private item here. The emitted crate
-    /// is one crate per build, so `pub(crate)` reaches every such
-    /// caller while adding nothing to the crate's public surface.
-    /// Whether this becomes `pub` is an open question of the public API surface.
-    /// `new` is the composition of this and `new_unchecked`.
     pub(crate) fn check(
         value: &[::core::primitive::u8],
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
@@ -1674,13 +1555,7 @@ impl ::core::convert::From<Certificate> for ::std::vec::Vec<::core::primitive::u
         value.0
     }
 }
-/// An accessor over FlatBuffers bytes `Uuid`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Uuid` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct UuidFbView<'a> {
@@ -1695,12 +1570,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for UuidFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> UuidFbView<'a> {
-    /// The value the box carries. `Uuid` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    /// The value the bytes hold. `Uuid` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> Uuid {
         __ridl_fb_decode_Uuid(self.buf, self.table)
     }
 }
-/// Writes `Uuid` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Uuid(
     value: &Uuid,
@@ -1764,16 +1638,6 @@ pub(crate) fn __ridl_fb_decode_Uuid(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Uuid {
     /// The largest FlatBuffers buffer any legal `Uuid` encodes to: 202 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 202usize;
     type Buffer = [::core::primitive::u8; 202usize];
     const BUFFER: Self::Buffer = [0u8; 202usize];
@@ -1820,13 +1684,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Uuid {
         __ridl_fb_decode_Uuid(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Ulid`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Ulid` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct UlidFbView<'a> {
@@ -1841,12 +1699,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for UlidFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> UlidFbView<'a> {
-    /// The value the box carries. `Ulid` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    /// The value the bytes hold. `Ulid` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> Ulid {
         __ridl_fb_decode_Ulid(self.buf, self.table)
     }
 }
-/// Writes `Ulid` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Ulid(
     value: &Ulid,
@@ -1910,16 +1767,6 @@ pub(crate) fn __ridl_fb_decode_Ulid(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Ulid {
     /// The largest FlatBuffers buffer any legal `Ulid` encodes to: 162 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 162usize;
     type Buffer = [::core::primitive::u8; 162usize];
     const BUFFER: Self::Buffer = [0u8; 162usize];
@@ -1966,13 +1813,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Ulid {
         __ridl_fb_decode_Ulid(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Uri`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Uri` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct UriFbView<'a> {
@@ -1987,12 +1828,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for UriFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> UriFbView<'a> {
-    /// The value the box carries. `Uri` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    /// The value the bytes hold. `Uri` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> Uri {
         __ridl_fb_decode_Uri(self.buf, self.table)
     }
 }
-/// Writes `Uri` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Uri(
     value: &Uri,
@@ -2056,16 +1896,6 @@ pub(crate) fn __ridl_fb_decode_Uri(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Uri {
     /// The largest FlatBuffers buffer any legal `Uri` encodes to: 8250 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 8250usize;
     type Buffer = [::core::primitive::u8; 8250usize];
     const BUFFER: Self::Buffer = [0u8; 8250usize];
@@ -2112,13 +1942,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Uri {
         __ridl_fb_decode_Uri(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Url`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Url` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct UrlFbView<'a> {
@@ -2133,12 +1957,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for UrlFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> UrlFbView<'a> {
-    /// The value the box carries. `Url` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    /// The value the bytes hold. `Url` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> Url {
         __ridl_fb_decode_Url(self.buf, self.table)
     }
 }
-/// Writes `Url` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Url(
     value: &Url,
@@ -2202,16 +2025,6 @@ pub(crate) fn __ridl_fb_decode_Url(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Url {
     /// The largest FlatBuffers buffer any legal `Url` encodes to: 8250 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 8250usize;
     type Buffer = [::core::primitive::u8; 8250usize];
     const BUFFER: Self::Buffer = [0u8; 8250usize];
@@ -2258,13 +2071,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Url {
         __ridl_fb_decode_Url(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Email`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Email` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct EmailFbView<'a> {
@@ -2279,12 +2086,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for EmailFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> EmailFbView<'a> {
-    /// The value the box carries. `Email` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    /// The value the bytes hold. `Email` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> Email {
         __ridl_fb_decode_Email(self.buf, self.table)
     }
 }
-/// Writes `Email` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Email(
     value: &Email,
@@ -2348,16 +2154,6 @@ pub(crate) fn __ridl_fb_decode_Email(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Email {
     /// The largest FlatBuffers buffer any legal `Email` encodes to: 1074 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 1074usize;
     type Buffer = [::core::primitive::u8; 1074usize];
     const BUFFER: Self::Buffer = [0u8; 1074usize];
@@ -2404,13 +2200,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Email {
         __ridl_fb_decode_Email(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `IpV4`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `IpV4` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct IpV4FbView<'a> {
@@ -2425,12 +2215,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for IpV4FbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> IpV4FbView<'a> {
-    /// The value the box carries. `IpV4` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    /// The value the bytes hold. `IpV4` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> IpV4 {
         __ridl_fb_decode_IpV4(self.buf, self.table)
     }
 }
-/// Writes `IpV4` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_IpV4(
     value: &IpV4,
@@ -2494,16 +2283,6 @@ pub(crate) fn __ridl_fb_decode_IpV4(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for IpV4 {
     /// The largest FlatBuffers buffer any legal `IpV4` encodes to: 118 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 118usize;
     type Buffer = [::core::primitive::u8; 118usize];
     const BUFFER: Self::Buffer = [0u8; 118usize];
@@ -2550,13 +2329,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for IpV4 {
         __ridl_fb_decode_IpV4(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `IpV6`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `IpV6` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct IpV6FbView<'a> {
@@ -2571,12 +2344,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for IpV6FbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> IpV6FbView<'a> {
-    /// The value the box carries. `IpV6` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    /// The value the bytes hold. `IpV6` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> IpV6 {
         __ridl_fb_decode_IpV6(self.buf, self.table)
     }
 }
-/// Writes `IpV6` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_IpV6(
     value: &IpV6,
@@ -2640,16 +2412,6 @@ pub(crate) fn __ridl_fb_decode_IpV6(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for IpV6 {
     /// The largest FlatBuffers buffer any legal `IpV6` encodes to: 214 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 214usize;
     type Buffer = [::core::primitive::u8; 214usize];
     const BUFFER: Self::Buffer = [0u8; 214usize];
@@ -2696,13 +2458,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for IpV6 {
         __ridl_fb_decode_IpV6(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Label`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Label` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct LabelFbView<'a> {
@@ -2717,12 +2473,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for LabelFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> LabelFbView<'a> {
-    /// The value the box carries. `Label` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    /// The value the bytes hold. `Label` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> Label {
         __ridl_fb_decode_Label(self.buf, self.table)
     }
 }
-/// Writes `Label` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Label(
     value: &Label,
@@ -2786,16 +2541,6 @@ pub(crate) fn __ridl_fb_decode_Label(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Label {
     /// The largest FlatBuffers buffer any legal `Label` encodes to: 314 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 314usize;
     type Buffer = [::core::primitive::u8; 314usize];
     const BUFFER: Self::Buffer = [0u8; 314usize];
@@ -2842,13 +2587,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Label {
         __ridl_fb_decode_Label(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Name`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Name` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct NameFbView<'a> {
@@ -2863,12 +2602,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for NameFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> NameFbView<'a> {
-    /// The value the box carries. `Name` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    /// The value the bytes hold. `Name` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> Name {
         __ridl_fb_decode_Name(self.buf, self.table)
     }
 }
-/// Writes `Name` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Name(
     value: &Name,
@@ -2932,16 +2670,6 @@ pub(crate) fn __ridl_fb_decode_Name(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Name {
     /// The largest FlatBuffers buffer any legal `Name` encodes to: 570 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 570usize;
     type Buffer = [::core::primitive::u8; 570usize];
     const BUFFER: Self::Buffer = [0u8; 570usize];
@@ -2988,13 +2716,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Name {
         __ridl_fb_decode_Name(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Message`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Message` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct MessageFbView<'a> {
@@ -3009,12 +2731,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for MessageFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> MessageFbView<'a> {
-    /// The value the box carries. `Message` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    /// The value the bytes hold. `Message` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> Message {
         __ridl_fb_decode_Message(self.buf, self.table)
     }
 }
-/// Writes `Message` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Message(
     value: &Message,
@@ -3078,16 +2799,6 @@ pub(crate) fn __ridl_fb_decode_Message(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Message {
     /// The largest FlatBuffers buffer any legal `Message` encodes to: 1082 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 1082usize;
     type Buffer = [::core::primitive::u8; 1082usize];
     const BUFFER: Self::Buffer = [0u8; 1082usize];
@@ -3134,13 +2845,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Message {
         __ridl_fb_decode_Message(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Timestamp`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Timestamp` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct TimestampFbView<'a> {
@@ -3155,12 +2860,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for TimestampFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> TimestampFbView<'a> {
-    /// The value the box carries. `Timestamp` is one value, so this decodes it rather than borrowing it, which costs one read.
+    /// The value the bytes hold. `Timestamp` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Timestamp {
         __ridl_fb_decode_Timestamp(self.buf, self.table)
     }
 }
-/// Writes `Timestamp` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Timestamp(
     value: &Timestamp,
@@ -3223,16 +2927,6 @@ pub(crate) fn __ridl_fb_decode_Timestamp(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Timestamp {
     /// The largest FlatBuffers buffer any legal `Timestamp` encodes to: 50 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
     type Buffer = [::core::primitive::u8; 50usize];
     const BUFFER: Self::Buffer = [0u8; 50usize];
@@ -3282,13 +2976,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Timestamp
         __ridl_fb_decode_Timestamp(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Duration`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Duration` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct DurationFbView<'a> {
@@ -3303,12 +2991,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for DurationFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> DurationFbView<'a> {
-    /// The value the box carries. `Duration` is one value, so this decodes it rather than borrowing it, which costs one read.
+    /// The value the bytes hold. `Duration` is one value, so this decodes it rather than borrowing it, which costs one read.
     pub fn value(&self) -> Duration {
         __ridl_fb_decode_Duration(self.buf, self.table)
     }
 }
-/// Writes `Duration` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Duration(
     value: &Duration,
@@ -3367,16 +3054,6 @@ pub(crate) fn __ridl_fb_decode_Duration(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Duration {
     /// The largest FlatBuffers buffer any legal `Duration` encodes to: 50 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
     type Buffer = [::core::primitive::u8; 50usize];
     const BUFFER: Self::Buffer = [0u8; 50usize];
@@ -3426,13 +3103,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Duration 
         __ridl_fb_decode_Duration(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Date`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Date` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct DateFbView<'a> {
@@ -3447,12 +3118,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for DateFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> DateFbView<'a> {
-    /// The value the box carries. `Date` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    /// The value the bytes hold. `Date` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> Date {
         __ridl_fb_decode_Date(self.buf, self.table)
     }
 }
-/// Writes `Date` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Date(
     value: &Date,
@@ -3516,16 +3186,6 @@ pub(crate) fn __ridl_fb_decode_Date(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Date {
     /// The largest FlatBuffers buffer any legal `Date` encodes to: 98 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 98usize;
     type Buffer = [::core::primitive::u8; 98usize];
     const BUFFER: Self::Buffer = [0u8; 98usize];
@@ -3572,13 +3232,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Date {
         __ridl_fb_decode_Date(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `TimeOfDay`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `TimeOfDay` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct TimeOfDayFbView<'a> {
@@ -3593,12 +3247,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for TimeOfDayFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> TimeOfDayFbView<'a> {
-    /// The value the box carries. `TimeOfDay` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    /// The value the bytes hold. `TimeOfDay` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> TimeOfDay {
         __ridl_fb_decode_TimeOfDay(self.buf, self.table)
     }
 }
-/// Writes `TimeOfDay` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_TimeOfDay(
     value: &TimeOfDay,
@@ -3662,16 +3315,6 @@ pub(crate) fn __ridl_fb_decode_TimeOfDay(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for TimeOfDay {
     /// The largest FlatBuffers buffer any legal `TimeOfDay` encodes to: 118 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 118usize;
     type Buffer = [::core::primitive::u8; 118usize];
     const BUFFER: Self::Buffer = [0u8; 118usize];
@@ -3721,13 +3364,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for TimeOfDay
         __ridl_fb_decode_TimeOfDay(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Version`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Version` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct VersionFbView<'a> {
@@ -3742,12 +3379,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for VersionFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> VersionFbView<'a> {
-    /// The value the box carries. `Version` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    /// The value the bytes hold. `Version` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> Version {
         __ridl_fb_decode_Version(self.buf, self.table)
     }
 }
-/// Writes `Version` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Version(
     value: &Version,
@@ -3811,16 +3447,6 @@ pub(crate) fn __ridl_fb_decode_Version(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Version {
     /// The largest FlatBuffers buffer any legal `Version` encodes to: 186 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 186usize;
     type Buffer = [::core::primitive::u8; 186usize];
     const BUFFER: Self::Buffer = [0u8; 186usize];
@@ -3867,13 +3493,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Version {
         __ridl_fb_decode_Version(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `CountryCode`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `CountryCode` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct CountryCodeFbView<'a> {
@@ -3888,12 +3508,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for CountryCodeFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> CountryCodeFbView<'a> {
-    /// The value the box carries. `CountryCode` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    /// The value the bytes hold. `CountryCode` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> CountryCode {
         __ridl_fb_decode_CountryCode(self.buf, self.table)
     }
 }
-/// Writes `CountryCode` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_CountryCode(
     value: &CountryCode,
@@ -3957,16 +3576,6 @@ pub(crate) fn __ridl_fb_decode_CountryCode(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for CountryCode {
     /// The largest FlatBuffers buffer any legal `CountryCode` encodes to: 66 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 66usize;
     type Buffer = [::core::primitive::u8; 66usize];
     const BUFFER: Self::Buffer = [0u8; 66usize];
@@ -4016,13 +3625,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for CountryCo
         __ridl_fb_decode_CountryCode(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `LanguageCode`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `LanguageCode` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct LanguageCodeFbView<'a> {
@@ -4037,12 +3640,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for LanguageCodeFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> LanguageCodeFbView<'a> {
-    /// The value the box carries. `LanguageCode` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    /// The value the bytes hold. `LanguageCode` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> LanguageCode {
         __ridl_fb_decode_LanguageCode(self.buf, self.table)
     }
 }
-/// Writes `LanguageCode` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_LanguageCode(
     value: &LanguageCode,
@@ -4106,16 +3708,6 @@ pub(crate) fn __ridl_fb_decode_LanguageCode(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for LanguageCode {
     /// The largest FlatBuffers buffer any legal `LanguageCode` encodes to: 78 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 78usize;
     type Buffer = [::core::primitive::u8; 78usize];
     const BUFFER: Self::Buffer = [0u8; 78usize];
@@ -4168,13 +3760,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for LanguageC
         __ridl_fb_decode_LanguageCode(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Sha256Hash`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Sha256Hash` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct Sha256HashFbView<'a> {
@@ -4189,12 +3775,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for Sha256HashFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> Sha256HashFbView<'a> {
-    /// The value the box carries. `Sha256Hash` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    /// The value the bytes hold. `Sha256Hash` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> Sha256Hash {
         __ridl_fb_decode_Sha256Hash(self.buf, self.table)
     }
 }
-/// Writes `Sha256Hash` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Sha256Hash(
     value: &Sha256Hash,
@@ -4262,16 +3847,6 @@ pub(crate) fn __ridl_fb_decode_Sha256Hash(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Sha256Hash {
     /// The largest FlatBuffers buffer any legal `Sha256Hash` encodes to: 89 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 89usize;
     type Buffer = [::core::primitive::u8; 89usize];
     const BUFFER: Self::Buffer = [0u8; 89usize];
@@ -4321,13 +3896,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Sha256Has
         __ridl_fb_decode_Sha256Hash(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Sha512Hash`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Sha512Hash` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct Sha512HashFbView<'a> {
@@ -4342,12 +3911,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for Sha512HashFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> Sha512HashFbView<'a> {
-    /// The value the box carries. `Sha512Hash` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    /// The value the bytes hold. `Sha512Hash` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> Sha512Hash {
         __ridl_fb_decode_Sha512Hash(self.buf, self.table)
     }
 }
-/// Writes `Sha512Hash` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Sha512Hash(
     value: &Sha512Hash,
@@ -4415,16 +3983,6 @@ pub(crate) fn __ridl_fb_decode_Sha512Hash(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Sha512Hash {
     /// The largest FlatBuffers buffer any legal `Sha512Hash` encodes to: 121 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 121usize;
     type Buffer = [::core::primitive::u8; 121usize];
     const BUFFER: Self::Buffer = [0u8; 121usize];
@@ -4474,13 +4032,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Sha512Has
         __ridl_fb_decode_Sha512Hash(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Signature`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Signature` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct SignatureFbView<'a> {
@@ -4495,12 +4047,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for SignatureFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> SignatureFbView<'a> {
-    /// The value the box carries. `Signature` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    /// The value the bytes hold. `Signature` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> Signature {
         __ridl_fb_decode_Signature(self.buf, self.table)
     }
 }
-/// Writes `Signature` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Signature(
     value: &Signature,
@@ -4568,16 +4119,6 @@ pub(crate) fn __ridl_fb_decode_Signature(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Signature {
     /// The largest FlatBuffers buffer any legal `Signature` encodes to: 121 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 121usize;
     type Buffer = [::core::primitive::u8; 121usize];
     const BUFFER: Self::Buffer = [0u8; 121usize];
@@ -4627,13 +4168,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Signature
         __ridl_fb_decode_Signature(__view.buf, __view.table)
     }
 }
-/// An accessor over FlatBuffers bytes `Certificate`'s `verify` accepted.
-///
-/// The buffer's root is the box table ADR-0019 decision 8
-/// gives this declaration: one non-optional `value` field. A
-/// buffer carrying no slot for it holds the FlatBuffers
-/// default, 0, when 0 is a legal value of this type, and is
-/// `MissingRequired` when it is not.
+/// A `Certificate` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
 pub struct CertificateFbView<'a> {
@@ -4648,12 +4183,11 @@ impl<'a> ::ridl_rt::payload::View<'a> for CertificateFbView<'a> {
 }
 #[allow(deprecated)]
 impl<'a> CertificateFbView<'a> {
-    /// The value the box carries. `Certificate` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    /// The value the bytes hold. `Certificate` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
     pub fn value(&self) -> Certificate {
         __ridl_fb_decode_Certificate(self.buf, self.table)
     }
 }
-/// Writes `Certificate` as its box table and returns its position (ADR-0019 decision 8).
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_encode_Certificate(
     value: &Certificate,
@@ -4721,16 +4255,6 @@ pub(crate) fn __ridl_fb_decode_Certificate(
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Certificate {
     /// The largest FlatBuffers buffer any legal `Certificate` encodes to: 4153 bytes.
-    ///
-    /// `ridl_ir::projection::flatbuffers::max_size` computed it,
-    /// which is the one implementation of the bound (design note
-    /// D-6): each table is charged its `soffset`, its inline
-    /// fields, its vtable and one alignment event per slot; a
-    /// string four bytes per declared character plus a
-    /// terminator; a collection its declared maximum. It is a
-    /// literal rather than an expression over the field types
-    /// because that slack is not expressible in Rust's type
-    /// system.
     const MAX_SIZE: ::core::primitive::usize = 4153usize;
     type Buffer = [::core::primitive::u8; 4153usize];
     const BUFFER: Self::Buffer = [0u8; 4153usize];
