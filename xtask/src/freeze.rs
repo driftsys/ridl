@@ -413,6 +413,16 @@ has that name",
         }
     }
 
+    for row in rows {
+        if !surfaces.required.contains(&row.surface) {
+            failures.push(format!(
+                "surfaces.toml has a row for `{0}` but `{0}` is not in `required`: add it to \
+`required`",
+                row.surface
+            ));
+        }
+    }
+
     if let Ok(entries) = std::fs::read_dir(options.root.join("freeze")) {
         for entry in entries.flatten() {
             let file = entry.file_name().to_string_lossy().into_owned();

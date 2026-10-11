@@ -153,6 +153,35 @@ fn release_check_passes_with_an_empty_required_list() {
 }
 
 #[test]
+fn check_fails_on_a_row_whose_surface_is_not_required() {
+    let (repo, fixture) = repo_with_surfaces(
+        "row-not-required",
+        "required = []\n\n[[surface]]\nname = \"fixture\"\nbaseline = \"HEAD\"\n",
+    );
+    let output = repo.check(Some(("fixture", &fixture)));
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(
+        err.contains(
+            "has a row for `fixture` but `fixture` is not in `required`: add it to `required`"
+        ),
+        "{err}"
+    );
+}
+
+#[test]
+fn check_passes_a_row_whose_surface_is_required() {
+    let (repo, fixture) = repo_with_surfaces(
+        "row-required",
+        "required = [\"fixture\"]\n\n[[surface]]\nname = \"fixture\"\nbaseline = \"HEAD\"\n",
+    );
+    let output = repo.check(Some(("fixture", &fixture)));
+    assert!(output.status.success(), "{}", stderr(&output));
+    let output = repo.check_release(Some(("fixture", &fixture)));
+    assert!(output.status.success(), "{}", stderr(&output));
+}
+
+#[test]
 fn check_fails_on_an_unknown_name_in_required() {
     let (repo, fixture) = repo_with_surfaces("required-unknown", "required = [\"no-such\"]\n");
     let output = repo.check(Some(("fixture", &fixture)));
@@ -222,7 +251,8 @@ fn assert_unknown_ref_hint(err: &str, surface: &str) {
     );
 }
 
-const ROW: &str = "[[surface]]\nname = \"fixture\"\nbaseline = \"base\"\n";
+const ROW: &str =
+    "required = [\"fixture\"]\n\n[[surface]]\nname = \"fixture\"\nbaseline = \"base\"\n";
 
 /// A repository whose tag `base` holds freeze/fixture.txt = `baseline`; HEAD
 /// holds the row, the committed dump `committed` and the fixture lines `head`
@@ -319,7 +349,7 @@ fn api_fixture(relative: &str) -> String {
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 
-const API_ROW: &str = "[[surface]]\nname = \"generated-crate\"\nbaseline = \"base\"\n";
+const API_ROW: &str = "required = [\"generated-crate\"]\n\n[[surface]]\nname = \"generated-crate\"\nbaseline = \"base\"\n";
 
 /// A repository whose tag `base` holds the fixture crate under
 /// freeze/generated/api/; HEAD holds the row for `generated-crate` and the
@@ -539,7 +569,7 @@ fn repo_with_runtime_baseline(tag: &str, lib_rs: &str) -> Repo {
     repo.git(&["tag", "base"]);
     repo.write(
         "freeze/surfaces.toml",
-        "[[surface]]\nname = \"runtime-crates\"\nbaseline = \"base\"\n",
+        "required = [\"runtime-crates\"]\n\n[[surface]]\nname = \"runtime-crates\"\nbaseline = \"base\"\n",
     );
     repo.commit();
     repo.write("crates/ridl-rt/src/lib.rs", lib_rs);
