@@ -6799,6 +6799,58 @@ fn doc_links_to_constants_follow_how_each_is_typed() {
     );
 }
 
+/// A doc link to a constant another package declares follows the same rule
+/// as one to a local constant, read through the model's foreign
+/// declarations: a constant of a scalar of that package is a path link, and
+/// one of a `bytes`-backed scalar of that package stays a code span.
+#[test]
+fn doc_links_to_foreign_constants_follow_how_each_is_typed() {
+    let other = package(
+        "other.pkg",
+        vec![
+            speed_decl(),
+            public_decl("Blob", bounded_bytes_type(init_value(true, Some("")))),
+            const_decl("LIMIT", "Speed", "10.0"),
+            const_decl("RAW", "Blob", ""),
+        ],
+    );
+    let doc = "See [other.pkg.LIMIT] and [other.pkg.RAW].";
+    let holder = v2::StructDef {
+        members: ["LIMIT", "RAW"]
+            .iter()
+            .zip(1..)
+            .map(|(name, ordinal)| {
+                field_member(named_field(
+                    &name.to_lowercase(),
+                    ordinal,
+                    &format!("other.pkg.{name}"),
+                    false,
+                    init_value(false, None),
+                ))
+            })
+            .collect(),
+        fixed_layout: false,
+    };
+    let local = package(
+        "veh.common",
+        vec![v2::Decl {
+            doc: doc.to_string(),
+            links: vec![
+                doc_link(doc, "[other.pkg.LIMIT]", "other.pkg.LIMIT"),
+                doc_link(doc, "[other.pkg.RAW]", "other.pkg.RAW"),
+            ],
+            ..public_decl("Holder", v2::decl::Kind::StructDef(holder))
+        }],
+    );
+    let source = super::generate_with(&local, &[&other])
+        .expect("generation succeeds")
+        .rust_source;
+    assert!(
+        source.contains("See [other.pkg.LIMIT](crate::other::pkg::LIMIT) and `other.pkg.RAW`."),
+        "got:\n{source}"
+    );
+}
+
 /// Through the backend contract, over a model that this test lowers with the
 /// other packages itself, a field of a foreign type carries that type's
 /// rules. That the build lowers with the other packages is pinned in
