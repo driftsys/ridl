@@ -2,6 +2,7 @@
 
 - [Introduction](introduction.md)
 - [Reading guide](reading-guide.md)
+- [First steps](first-steps.md)
 - [Getting started](getting-started.md)
 - [Describing a system](rsdl.md)
 - [Using the generated Rust code](generated-code.md)
