@@ -315,6 +315,100 @@ descriptor](catalog-descriptor.md).
 and init functions. It emits no face, no codec and no feature selection, so
 there is no async or blocking API to choose between.
 
+## Documentation in the generated code
+
+The doc comment of a declaration or a member (see
+[Documenting your API](documenting.md)) becomes the doc comment of the item
+generated from it: rustdoc in the Rust crate, TSDoc in the TypeScript module.
+The generated doc also lists the item's _rules_: the facts the schema states
+about the values the item admits and the way it is used. They are the same
+lines the editor's hover shows in its **Contract** list.
+
+A generated doc holds these parts, in this order, and leaves out each part that
+is empty:
+
+| Part          | Rust                                       | TypeScript                                   |
+| ------------- | ------------------------------------------ | -------------------------------------------- |
+| doc text      | `///` lines; each link an intra-doc link   | the comment's text; each link `{@link Name}` |
+| rules         | a `# Rules` section, one bullet per rule   | `@remarks`, then a `Rules:` list             |
+| typl tags     | none                                       | `@unit`, `@range`, `@bounds`                 |
+| `@see`        | a `# See also` section, one bullet each    | one `@see` tag each                          |
+| `@since`      | one `Available since <version>.` line each | one `@since` tag each                        |
+| `@deprecated` | the `#[deprecated]` attribute              | one `@deprecated` tag                        |
+
+A link, or an `@see` target, whose target has no item in the same output is
+written as a code span of the target's qualified name, such as
+`veh.common.Speed`, so that no generated doc holds a link that does not
+resolve. That is the case for a declaration of a package the build does not
+generate and for an `internal` declaration, in both languages. In Rust it is
+also the case for an event, a `fixed`, an interface with no face module, and a
+name that Rust spells as a raw identifier (`r#move`). In TypeScript it is also
+the case for an interface, an interaction and a union arm, which the module
+holds no item for. `@labels` is not rendered.
+
+In the Rust face, the doc of an interaction goes on each method a program calls
+or implements for it: the method of the async `Client`, of the blocking
+`Client` and of the `Provider` trait, each of which also carries the
+interaction's `#[deprecated]`. A `Publisher` method carries the doc without
+`#[deprecated]`. The interaction's doc comes first, then a sentence the backend
+writes about the method itself, then, for a command or a query, a
+`# Parameters` section: one bullet per parameter with its name and its doc, and
+the parameter's rules as nested bullets. The doc of an interface goes on its
+face module.
+
+### What the generated code checks
+
+The docs state the contract, not what the code checks. Every rule the schema
+declares is listed, in the same words in both languages, whether or not the
+generated code checks it. There is one exception: a Rust named scalar with a
+`match` pattern says on the type whether `new` checks the pattern.
+
+This table records, for each kind of rule, the generated item that checks it:
+
+| Rule             | Rust                                                      | TypeScript  |
+| ---------------- | --------------------------------------------------------- | ----------- |
+| range            | checked by `new`, `TryFrom` and `verify`                  | not checked |
+| step             | checked by `new`, `TryFrom` and `verify`                  | not checked |
+| unit             | not checked                                               | not checked |
+| length           | checked by `new`, `TryFrom` and `verify`                  | not checked |
+| pattern          | checked by `new`, `TryFrom` and `verify`, under a feature | not checked |
+| collection bound | checked by `verify`                                       | not checked |
+| timing           | not checked                                               | not checked |
+| response bound   | `max` checked by the future of a `Client` call            | not checked |
+| errors           | not checked                                               | not checked |
+| `require`        | checked by the call methods of `Client` and by `serve`    | not checked |
+| `ensure`         | checked by `serve`                                        | not checked |
+
+In the Rust column:
+
+- `new` and `TryFrom` are the constructors of a named scalar. `verify` is the
+  FlatBuffers codec's check of a received payload. It also checks a field whose
+  type is written inline, which has no constructor. A struct, an array or a map
+  that the program builds itself is not checked until it is received.
+- The pattern is checked only when the crate is built with the
+  `validate-pattern` feature (see [Cargo features](#cargo-features)).
+- A call's future, in the async and in the blocking `Client`, resolves to a
+  failure when the response bound's `max` passes (see [Failures](#failures)).
+  Its `min` is not checked.
+- A query that declares an error type gets no face, so no generated item
+  carries the errors rule.
+- A `Client` call method evaluates the `require` clauses before it sends.
+  `serve` evaluates them before it calls the `Provider`, and evaluates the
+  `ensure` clauses on the reply before it sends the reply. The `Client` does not
+  evaluate `ensure`.
+- `verify` and the face exist only when the manifest names `flatbuffers` under
+  `[backend.rust] encodings` (see
+  [What the crate contains](#what-the-crate-contains)).
+
+The TypeScript module holds types and init functions only, and none of them
+checks a value.
+
+An item that the generated code needs but a program does not name carries no
+doc. In Rust it is `pub(crate)`, such as the constraint check behind `new` and
+the codec's functions for each table, or `pub` under `#[doc(hidden)]` where code
+outside the crate must reach it, such as the descriptor of each interaction,
+which a runtime reads.
+
 ## Further reading
 
 - [The interaction face][face] — the design record of everything the Rust
