@@ -406,9 +406,13 @@ compat-check: toolchain-check
     # built with the pin, in the workspace's own target directory, before
     # CARGO_TARGET_DIR is pointed at the compat build below.
     cargo build --locked -p ridl-cli
+    # The CLI path is captured here, as an absolute path, because
+    # CARGO_TARGET_DIR is exported below and the same expression would then
+    # name another directory.
+    ridl_bin="$(cd "${CARGO_TARGET_DIR:-target}" && pwd)/debug/ridl"
     cabin="$PWD/target/compat-check/cabin"
     mkdir -p "$cabin"
-    "${CARGO_TARGET_DIR:-target}/debug/ridl" build examples/cabin --emit rust --out-dir "$cabin/generated"
+    "$ridl_bin" build examples/cabin --emit rust --out-dir "$cabin/generated"
     echo "compat-check: $minimum, edition 2021 (the emitted cabin crate)"
     # `std` is on for both: the emitted crate's `blocking` module is under its
     # `std` feature and names `ridl_rt::task::block_on`, which `ridl-rt`'s
@@ -482,6 +486,7 @@ compat-check: toolchain-check
     # added as a path dev-dependency, with a test target for the copy. The test
     # expands `suite!` with every extension flag. Compile only: the pin runs
     # this test in the workspace.
+    #
     # `cargo package` leaves an empty [dev-dependencies] table as the last
     # table of the manifest, where the dropped dependency was. The dependency
     # line goes under it. The manifest sets autotests = false, so the copied
@@ -511,7 +516,7 @@ compat-check: toolchain-check
     # minimum (driftsys/ridl#874).
     corpus="$PWD/target/compat-check/veh-cluster"
     mkdir -p "$corpus"
-    "$PWD/target/debug/ridl" build crates/ridlc/tests/corpus/veh-cluster --emit rust --out-dir "$corpus/generated"
+    "$ridl_bin" build crates/ridlc/tests/corpus/veh-cluster --emit rust --out-dir "$corpus/generated"
     awk -v minimum="$minimum" '
         /^edition = "2024"$/ { print "edition = \"2021\""; print "rust-version = \"" minimum "\""; next }
         { print }

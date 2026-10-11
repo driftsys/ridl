@@ -73,18 +73,18 @@ design in each:
 1. **Ten surfaces are frozen from 0.10.0.** A change that removes or alters what
    a user depends on in one of them is a break.
 
-   | Surface                 | What a user depends on                                                                                                                  |
-   | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-   | Language                | typl, ridl and rsdl syntax and keywords; the set of sources that compile without an error                                               |
-   | Manifest                | `ridl.toml` keys and their value types, `interfaces.lock`, `.ridl/baseline`                                                             |
-   | Diagnostics and lints   | diagnostic codes, lint names, lint default levels                                                                                       |
-   | CLI                     | subcommands, flags, exit codes, the `--format json` and `--format sarif` output shapes                                                  |
-   | Generated Rust crate    | the domain types and the interaction face (`Client`, `Provider`, `Publisher`, `Event`, `serve`, `Bind`)                                 |
-   | Runtime crates          | the public API of `ridl-rt`, `ridl-rt-conformance`, `ridl-loopback` and `ridl-descriptor`, and their cargo feature names                |
-   | Codegen plugin protocol | `ridl.ir.v2` and `ridl.codegen.v1`, the request and response of a plugin                                                                |
-   | MCP tools               | tool names, input schemas and output schemas                                                                                            |
-   | Wire format             | the frame envelope, the `attach` handshake, the inputs of the catalog hash, the emitted `.proto` and `.fbs` mapping, the encoding names |
-   | Minimum Rust version    | Rust 1.83 and edition 2021 for `ridl-rt`, `ridl-rt-conformance`, `ridl-loopback`; Rust 1.88 for `ridl-descriptor` (`just compat-check`) |
+   | Surface                 | What a user depends on                                                                                                                                   |
+   | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | Language                | typl, ridl and rsdl syntax and keywords; the set of sources that compile without an error                                                                |
+   | Manifest                | `ridl.toml` keys and their value types, `interfaces.lock`, `.ridl/baseline`                                                                              |
+   | Diagnostics and lints   | diagnostic codes, lint names, lint default levels                                                                                                        |
+   | CLI                     | subcommands, flags, exit codes, the `--format json` and `--format sarif` output shapes                                                                   |
+   | Generated Rust crate    | the domain types and the interaction face (`Client`, `Provider`, `Publisher`, `Event`, `serve`, `Bind`)                                                  |
+   | Runtime crates          | the public API of `ridl-rt`, `ridl-rt-conformance`, `ridl-loopback` and `ridl-descriptor`, and their cargo feature names                                 |
+   | Codegen plugin protocol | `ridl.ir.v2` and `ridl.codegen.v1`, the request and response of a plugin                                                                                 |
+   | MCP tools               | tool names, input schemas and output schemas                                                                                                             |
+   | Wire format             | the frame envelope, the `attach` handshake, the inputs of the catalog hash, the emitted `.proto` and `.fbs` mapping, the encoding names                  |
+   | Minimum Rust version    | Rust 1.83 and edition 2021 for `ridl-rt`, `ridl-rt-conformance`, `ridl-loopback`; Rust 1.88 and edition 2024 for `ridl-descriptor` (`just compat-check`) |
 
    The frozen minimum of the last row is Rust 1.83 and edition 2021 for
    `ridl-rt`, `ridl-rt-conformance` and `ridl-loopback`, and Rust 1.88 with
