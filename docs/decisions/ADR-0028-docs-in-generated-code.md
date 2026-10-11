@@ -19,8 +19,10 @@ decision 6 is section 2 with S-5 to S-7, and decision 7 is section 3. The design
 is
 [`docs/wip/2026-10-10-docs-in-generated-code-design.md`](../wip/2026-10-10-docs-in-generated-code-design.md).
 
-The `Model` fields of decision 5 are implemented. The rendering of decisions 6
-and 7 is implemented in the backends by later changes of the same plan.
+The `Model` fields of decision 5 are implemented, and the Rust and TypeScript
+backends render them as decisions 6 and 7 state.
+[Documentation in the generated code](../book/generated-code.md#documentation-in-the-generated-code)
+records what each backend's generated code checks (decision 3).
 
 It amends three records in place, in the same change:
 
