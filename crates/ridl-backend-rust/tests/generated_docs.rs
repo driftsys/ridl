@@ -236,3 +236,21 @@ fn links_rustdoc_cannot_resolve_render_as_code_spans() {
     assert!(!source.contains("r#loop)"), "{source}");
     assert!(!source.contains("Client::changed"), "{source}");
 }
+
+/// A package segment that is a Rust keyword puts `r#` in every path of the
+/// package, so each link renders as a code span.
+#[test]
+fn links_into_a_keyword_package_render_as_code_spans() {
+    let package = ir::compile_fixture("doc_links_keyword.ridl");
+    let source = ridl_backend_rust::generate_pipeline(
+        &package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        &[],
+    )
+    .expect("the fixture generates")
+    .rust_source;
+    for target in ["Level", "Reading.level", "Panel.level"] {
+        assert!(source.contains(&format!("`veh.move.{target}`")), "{source}");
+    }
+    assert!(!source.contains("r#move)"), "{source}");
+}

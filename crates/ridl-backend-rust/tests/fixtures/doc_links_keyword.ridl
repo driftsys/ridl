@@ -1,0 +1,23 @@
+package veh.move
+
+/// A level, in percent.
+type Level: integer [0..100]
+
+/// A reading.
+struct Reading {
+  /// The level.
+  level: Level
+}
+
+/// An interface with a signal.
+interface Panel {
+  /// The current level.
+  signal level: Level @10ms
+}
+
+/// Links into a package whose name is a Rust keyword: [Level], [Reading.level]
+/// and [Panel.level].
+struct Links {
+  /// The level.
+  level: Level
+}

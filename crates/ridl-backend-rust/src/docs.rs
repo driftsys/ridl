@@ -127,7 +127,14 @@ impl<'a> Links<'a> {
     ///
     /// The path is read while a `Ctx` is live, because [`type_path`] and
     /// [`package_prefix`] read the package names of the build from it.
+    ///
+    /// A path with a raw identifier segment (`r#move`) is `None` as well:
+    /// rustdoc cuts an intra-doc path at `#` and cannot resolve it.
     pub(crate) fn path(&self, target: &str) -> Option<String> {
+        self.resolve(target).filter(|path| !path.contains("r#"))
+    }
+
+    fn resolve(&self, target: &str) -> Option<String> {
         let package = self
             .model
             .scope
@@ -156,10 +163,6 @@ impl<'a> Links<'a> {
                 return Some(spelled(type_path(&qualified)));
             };
             let member = member_name(decl, member)?;
-            // Rustdoc cannot resolve a raw identifier in a link path.
-            if member.starts_with("r#") {
-                return None;
-            }
             return Some(format!("{}::{member}", spelled(type_path(&qualified))));
         }
 
@@ -208,10 +211,6 @@ impl<'a> Links<'a> {
                 return None;
             }
             let method = ident(snake_of(interaction.name.as_ref()));
-            // Rustdoc cannot resolve a raw identifier in a link path.
-            if method.to_string().starts_with("r#") {
-                return None;
-            }
             return Some(format!("{module_path}::Client::{method}"));
         }
         None

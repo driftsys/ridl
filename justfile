@@ -475,9 +475,10 @@ compat-check: toolchain-check
 # its `lib.rs` does not allow, or an allow that no longer fires; a `lib.rs`
 # with no `#![allow(` line to rewrite; the crate emitted for the veh-cluster
 # corpus drawing a clippy diagnostic, with default features or without them, or
-# cargo finishing no build there; `cargo doc` on either generated crate drawing a broken or private intra-doc link; a planus crate in the resolved graph of `examples/cabin`; the
-# planus check running no test or more than one, which is what a renamed test
-# or a changed filter does.
+# cargo finishing no build there; `cargo doc` on either generated crate drawing
+# a broken or private intra-doc link; a planus crate in the resolved graph of
+# `examples/cabin`; the planus check running no test or more than one, which is
+# what a renamed test or a changed filter does.
 #
 # The generated rustdoc of both crates is built with `cargo doc` and the flags
 # `-D rustdoc::broken_intra_doc_links -D rustdoc::private_intra_doc_links`, so a
