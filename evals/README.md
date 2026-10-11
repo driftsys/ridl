@@ -22,12 +22,15 @@ for `vss`, and 6,000 in total; expected warnings are preserved.
 The
 [task format](../docs/decisions/ADR-0027-design-lints-calibrated-on-a-corpus.md)
 uses one directory per stable task ID, with `task.toml`, `prompt.md` and
-`rubric.md`. The manifest records a `review`, `evolve` or `design` task and its
-compilation, lint or compatibility expectations. The prompt states the
-designer's request without rubric hints. The rubric has numbered, one-sentence
-items marked **must**, **should** or **must not**. Adding a task requires an
-independent review and approval of the task set; review rubrics are written
-before candidate checks run on the corpus.
+`rubric.md`. A task may also hold `start/`, a workspace the agent starts from; a
+design task without it starts from an empty directory, and a review or evolve
+task names exactly one of a `corpus` workspace and `start/`. The manifest
+records a `review`, `evolve` or `design` task and its compilation, lint or
+compatibility expectations. The prompt states the designer's request without
+rubric hints. The rubric has numbered, one-sentence items marked **must**,
+**should** or **must not**. Adding a task requires an independent review and
+approval of the task set; review rubrics are written before candidate checks run
+on the corpus.
 
 The
 [calibration procedure](../docs/design/design-lints.md#the-corpus-and-the-calibration)

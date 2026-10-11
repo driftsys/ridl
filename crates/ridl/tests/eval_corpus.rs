@@ -211,16 +211,31 @@ fn validate_task(dir: &Path) -> Result<serde_json::Value, String> {
         task["title"].as_str().is_some_and(|s| !s.trim().is_empty()),
         "title must be nonempty",
     )?;
+    let start = dir.join("start");
+    let has_start = start.is_dir();
+    if has_start {
+        require(
+            start.join("ridl.toml").is_file(),
+            "start/ must hold a ridl.toml",
+        )?;
+    }
     if kind == "design" {
         require(task.get("corpus").is_none(), "design task must omit corpus")?;
     } else {
-        let corpus = task["corpus"].as_str().ok_or("corpus must be a string")?;
+        let corpus = task.get("corpus");
         require(
-            corpus_dirs()
-                .iter()
-                .any(|p| p.file_name().and_then(|n| n.to_str()) == Some(corpus)),
-            "corpus must name an existing workspace",
+            corpus.is_some() != has_start,
+            "a review or evolve task names exactly one of corpus and start/",
         )?;
+        if let Some(corpus) = corpus {
+            let corpus = corpus.as_str().ok_or("corpus must be a string")?;
+            require(
+                corpus_dirs()
+                    .iter()
+                    .any(|p| p.file_name().and_then(|n| n.to_str()) == Some(corpus)),
+                "corpus must name an existing workspace",
+            )?;
+        }
     }
     require(
         task["expect"]["compiles"].is_boolean(),
@@ -744,4 +759,107 @@ fn the_vss_workspace_has_no_manifest_below_a_member() {
         nested.is_empty(),
         "manifests below a workspace member: {nested:?}"
     );
+}
+
+fn task_fixture_dir(toml_text: &str, with_start: bool) -> PathBuf {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("the current time follows the epoch")
+        .as_nanos();
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let sequence = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let id = format!("ridl-start-{}-{unique}-{sequence}", std::process::id());
+    let dir = std::env::temp_dir().join(&id);
+    std::fs::create_dir(&dir).expect("create the task fixture");
+    std::fs::write(dir.join("task.toml"), toml_text.replace("{id}", &id)).expect("write task.toml");
+    std::fs::write(dir.join("prompt.md"), "Do the task.\n").expect("write prompt.md");
+    std::fs::write(dir.join("rubric.md"), "1. **must** do the task.\n").expect("write rubric.md");
+    if with_start {
+        std::fs::create_dir(dir.join("start")).expect("create start/");
+        std::fs::write(
+            dir.join("start/ridl.toml"),
+            "[package]\nname = \"p\"\nversion = \"1.0.0\"\n",
+        )
+        .expect("write start/ridl.toml");
+    }
+    dir
+}
+
+const EVOLVE_NO_CORPUS: &str = "id = \"{id}\"\nkind = \"evolve\"\ntitle = \"t\"\n\n[expect]\ncompiles = true\nlints = []\ndiff = \"compatible\"\n";
+const DESIGN: &str =
+    "id = \"{id}\"\nkind = \"design\"\ntitle = \"t\"\n\n[expect]\ncompiles = true\nlints = []\n";
+
+#[test]
+fn an_evolve_task_may_start_from_its_own_workspace() {
+    let dir = task_fixture_dir(EVOLVE_NO_CORPUS, true);
+    assert!(validate_task(&dir).is_ok(), "{:?}", validate_task(&dir));
+}
+
+#[test]
+fn an_evolve_task_needs_a_corpus_or_a_start_workspace() {
+    let dir = task_fixture_dir(EVOLVE_NO_CORPUS, false);
+    assert_eq!(
+        validate_task(&dir).unwrap_err(),
+        "a review or evolve task names exactly one of corpus and start/"
+    );
+}
+
+#[test]
+fn a_task_cannot_name_both_a_corpus_and_a_start_workspace() {
+    let corpus = corpus_dirs()[0]
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_owned();
+    let text = EVOLVE_NO_CORPUS.replace(
+        "kind = \"evolve\"\n",
+        &format!("kind = \"evolve\"\ncorpus = {corpus:?}\n"),
+    );
+    let dir = task_fixture_dir(&text, true);
+    assert_eq!(
+        validate_task(&dir).unwrap_err(),
+        "a review or evolve task names exactly one of corpus and start/"
+    );
+}
+
+#[test]
+fn a_design_task_may_start_from_its_own_workspace() {
+    let dir = task_fixture_dir(DESIGN, true);
+    assert!(validate_task(&dir).is_ok(), "{:?}", validate_task(&dir));
+}
+
+#[test]
+fn a_start_directory_must_be_a_workspace() {
+    let dir = task_fixture_dir(DESIGN, true);
+    std::fs::remove_file(dir.join("start/ridl.toml")).unwrap();
+    assert_eq!(
+        validate_task(&dir).unwrap_err(),
+        "start/ must hold a ridl.toml"
+    );
+}
+
+#[test]
+fn every_start_workspace_checks_without_an_error() {
+    let tasks = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../evals/tasks");
+    for entry in std::fs::read_dir(&tasks).expect("read evals/tasks") {
+        let start = entry.expect("read a task entry").path().join("start");
+        if !start.is_dir() {
+            continue;
+        }
+        let output = Command::new(env!("CARGO_BIN_EXE_ridl"))
+            .args(["check", "--format", "json"])
+            .arg(&start)
+            .output()
+            .expect("run ridl check");
+        let report: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("ridl check prints JSON");
+        let errors: Vec<_> = report
+            .as_array()
+            .expect("a JSON array")
+            .iter()
+            .filter(|d| d["severity"] == "error")
+            .collect();
+        assert!(errors.is_empty(), "{}: {errors:?}", start.display());
+    }
 }
