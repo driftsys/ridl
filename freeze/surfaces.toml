@@ -1,6 +1,7 @@
 # `required` lists the surfaces that must have a row when a release is made.
 # `just freeze-check` prints a notice for a listed surface without a row; the
-# `release` recipe fails on it.
+# `release` recipe fails on it. A row's name must be listed here, and this key
+# must stay above the first `[[surface]]` table.
 required = []
 
 # Baseline rows for the freeze check. Each row names a frozen surface and the

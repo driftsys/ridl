@@ -114,10 +114,12 @@ squash merge. To accept a break:
    surface's name in the `required` list of `surfaces.toml`, so that the missing
    row stays visible.
 2. After that pull request merges, add the row again in a follow-up pull
-   request, with the merge commit of the first as the `baseline`. The pull
-   request that adds a surface's row also adds its name to `required` in
-   `freeze/surfaces.toml`.
+   request, with the merge commit of the first as the `baseline`.
 
 The surface is unchecked between the two pull requests. While its name is in
 `required` and it has no row, `just freeze-check` prints a notice, and
 `just release` fails.
+
+A row and the name in `required` go together: the check fails when a row's name
+is not in `required`. The pull request that adds the row of a new surface also
+adds its name to `required`.

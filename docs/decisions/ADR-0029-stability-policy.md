@@ -237,7 +237,8 @@ design in each:
 - Adding a row for a new surface needs two pull requests: the first adds the
   dump, and the second adds the row with the first one's merge commit as its
   baseline. The pull request that adds a surface's row also adds its name to
-  `required` in `freeze/surfaces.toml`.
+  `required` in `freeze/surfaces.toml`, and the check fails when a row's name is
+  not in `required`.
 - Before the Rust API comparison, the check runs `cargo fetch --locked` with the
   network allowed, so its first run on a machine with an empty cargo cache needs
   the network. The comparison itself runs offline.
