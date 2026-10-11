@@ -289,8 +289,11 @@ fn crossing_of(crossing: i32) -> i32 {
 /// nothing else: within one machine the payload is mapped or passed, so it is
 /// FlatBuffers; across machines it is serialized into a stream, so it is
 /// proto3 (`docs/decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md`
-/// decision 2).
-fn encoding_of(crossing: i32) -> i32 {
+/// decision 2). This is the one place the rule is written: the lowering reads
+/// it for each link's `encoding`, and `ridlc` reads it for RSDL-807, which
+/// compares a link's encoding with the names a `[backend.<name>] encodings`
+/// list carries.
+pub fn encoding_of(crossing: i32) -> i32 {
     let encoding = match v2::Crossing::try_from(crossing) {
         Ok(v2::Crossing::SameMachine) => v1::Encoding::Flatbuffers,
         Ok(v2::Crossing::DifferentMachine | v2::Crossing::OffBoard) => v1::Encoding::Proto3,

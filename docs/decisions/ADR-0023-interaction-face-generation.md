@@ -146,6 +146,15 @@ read `Claim::trace`. No generated method signature changes. Generated spans,
 which would fill the argument and read the field, are owned by
 driftsys/ridl#754.
 
+**Amendment (2026-10-10) — decisions 2, 6 and 7: the face on request, and its
+buffers.** `ridl build --emit rust` emits the face only when the manifest's
+`[backend.rust] encodings` names `flatbuffers`. The face reads every buffer from
+`Payload::BUFFER` or `Sizes<FlatBuffers>`. Decision 6 keeps `Client<P>`. The
+companion entry point of decision 2 is `generate_face_with(package, encodings)`;
+`generate_face(package)` is removed, and `generate` emits the domain types only.
+The change is tracked as driftsys/ridl#801; the as-built record is
+[the interaction-face design record](../design/interaction-face.md).
+
 ## Context
 
 The approved M1 design (archived at
@@ -194,6 +203,12 @@ never stated.
    tests named below; what changed is which entry point the pipeline calls, not
    what this one emits. The as-built record is the section "The face is emitted
    by `ridl build`" of [`interaction-face.md`](../design/interaction-face.md).
+
+   **Consequence note (2026-10-10) — the face is emitted on request.**
+   `ridl build --emit rust` emits the face, the descriptors and the codec only
+   when `[backend.rust] encodings` names `flatbuffers`; with no such name it
+   emits the domain types alone. The sentence above that says `--emit rust` does
+   emit the face is the state of 2026-09-21. The decision is not amended.
 
    The decision as taken, unamended, follows.
 
@@ -464,6 +479,12 @@ argument for it in the command case.
    decision 1 of the
    [pass-1 dispositions on driftsys/ridl#557](https://github.com/driftsys/ridl/pull/557#issuecomment-5848835004)).
 
+   **Amendment (2026-10-10) — the encoding and `Client<P>`.** Decision 6 keeps
+   `Client<P>`, with the bounds above and no type parameter for the encoding.
+   The face does not use `port::Encoded` yet. The part that adds the `Encoded`
+   bound and reads the encoding from `P::Encoding` is later work, and until it
+   lands the face encodes with FlatBuffers.
+
 7. **Amendment (2026-09-28) — the fixed methods of the face are trait methods;
    the member methods stay inherent.** Rust gives one type one inherent
    namespace, and a trait its own; a member and a fixed method of one name
@@ -603,6 +624,15 @@ argument for it in the command case.
    namespaces RIDL-149 checks — a member `subscribeWarning` beside an event
    `warning` is not refused, because `subscribe_warning` and `warning` are
    distinct).
+
+   **Amendment (2026-10-10) — buffers.** The sentence above that says the
+   emitted code names `::ridl_rt::encoding::FlatBuffers` at each site still
+   holds. A buffer is no longer sized from the interface descriptor's inherent
+   constants: the face takes a payload's buffer from
+   `<T as Payload<FlatBuffers>>::BUFFER`, and the claim and event buffers from
+   `<Iface as Sizes<FlatBuffers>>::CLAIM_BUFFER` and `EVENT_BUFFER`. The
+   inherent `MAX_BUFFER_SIZE` and `EVENT_SOURCE_BUFFER_SIZE` constants of the
+   generated descriptor are removed; `Sizes<E>` holds them.
 
 8. **Amendment (2026-10-04) — the generated face checks the port's catalog when
    it binds to the port, and panics on a mismatch.**

@@ -35,7 +35,13 @@ fn program(main: &str) -> String {
             });
         }
     }
-    let source = ridl_backend_rust::generate(&package).unwrap().rust_source;
+    let source = ridl_backend_rust::generate_pipeline(
+        &package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        &[],
+    )
+    .unwrap()
+    .rust_source;
     format!("#![allow(dead_code)]\n{source}\n{main}")
 }
 
@@ -362,9 +368,13 @@ fn overflowing_step_retains_nonzero_lattice_points_and_wire_parity() {
         "{:?}",
         output.diagnostics
     );
-    let source = ridl_backend_rust::generate(&output.package)
-        .unwrap()
-        .rust_source;
+    let source = ridl_backend_rust::generate_pipeline(
+        &output.package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        &[],
+    )
+    .unwrap()
+    .rust_source;
     rustc::run_program(
         "overflow_nonzero",
         &format!(
@@ -397,9 +407,13 @@ fn generated_step_checks_compile_without_std() {
         "core_step.typl",
         "package app\ntype Speed : float [0.0..100.0 step 0.1]\n",
     );
-    let source = ridl_backend_rust::generate(&output.package)
-        .unwrap()
-        .rust_source;
+    let source = ridl_backend_rust::generate_pipeline(
+        &output.package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        &[],
+    )
+    .unwrap()
+    .rust_source;
     let directory = tempfile::tempdir().unwrap();
     let runtime = rustc::ridl_rt_rlib_without_std(directory.path());
     let path = directory.path().join("core_step.rs");
@@ -447,9 +461,13 @@ fn compensated_reconstruction_does_not_overflow_before_decimal_residual() {
         "{:?}",
         output.diagnostics
     );
-    let source = ridl_backend_rust::generate(&output.package)
-        .unwrap()
-        .rust_source;
+    let source = ridl_backend_rust::generate_pipeline(
+        &output.package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        &[],
+    )
+    .unwrap()
+    .rust_source;
     rustc::run_program(
         "finite_endpoint",
         &format!(

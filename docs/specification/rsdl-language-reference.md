@@ -437,6 +437,11 @@ belongs to a backend and is carried uninterpreted.**
   contract and validates its own namespace; its findings are the backend's. A
   namespace no configured backend claims is RSDL-804, a warning: the lowering
   proceeds and the key is carried.
+
+  The manifest's `[backend.<name>]` table (ADR-0002 §4, MANI-015) is a separate
+  thing: it configures a backend for the whole build, for example
+  `encodings = ["flatbuffers"]`, and it is not an attribute and is not part of
+  this namespace.
 - `labels` on a declaration is carried per node beside the map, as the family's
   own fact; an rsdl-owned key is consumed into the fact it feeds and does not
   appear in the map.
@@ -756,8 +761,8 @@ Per deployment:
 **Errors and warnings.** An error in the closure — RSDL-3xx, 4xx, 5xx, 6xx or
 9xx — blocks lowering for every deployment. An error in one deployment —
 RSDL-7xx, which includes the sizing-value rule RSDL-709 — blocks lowering for
-that deployment only. A warning (RSDL-409, RSDL-804, RSDL-805, RSDL-806) never
-blocks: the facts are produced and carry the warned condition.
+that deployment only. A warning (RSDL-409, RSDL-804, RSDL-805, RSDL-806,
+RSDL-807) never blocks: the facts are produced and carry the warned condition.
 
 ---
 
@@ -862,6 +867,7 @@ shown in any table were never allocated.
 | RSDL-804 | a backend key whose namespace no configured backend claims                                                                                                         | warning                      | §5      |
 | RSDL-805 | a declared `depth` is below `ceil(max / min)` for an event a covered link consumes                                                                                 | warning                      | §5      |
 | RSDL-806 | an event whose contract bound is not derivable is consumed by a link with no declared `depth`                                                                      | warning                      | §5      |
+| RSDL-807 | a link of the selected deployment carries an encoding the emitted backend's `encodings` list does not name                                                         | warning                      | §13     |
 | RSDL-901 | a `PLATFORM` distribution holds a component whose `requires` resolves into an `APPLICATION` distribution (tier inversion); a distribution without `tier` is exempt | error                        | §3.3    |
 | RSDL-903 | a distribution member line names something outside the closure, or nothing                                                                                         | error                        | §3.3    |
 | RSDL-904 | an implemented closure component in no distribution, while the workspace declares at least one                                                                     | error                        | §3.3    |

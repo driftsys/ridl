@@ -72,7 +72,7 @@
 //!
 //! The face is reached from [`crate::generate_pipeline`], which
 //! is what `ridl build --emit rust` calls, as well as from
-//! [`crate::generate_face`]. It is not reached from [`crate::generate`],
+//! [`crate::generate_face_with`]. It is not reached from [`crate::generate`],
 //! which still emits no face.
 //!
 //! The emitter is split by section. This file holds the per-interface walk,
@@ -1082,11 +1082,12 @@ fn ty(reference: &str) -> TokenStream {
     }
 }
 
-/// A stack buffer exactly as large as any legal value of `type_name`.
+/// A zeroed stack buffer of the payload's own type, exactly as large as any
+/// legal value of `type_name`: the codec's `Payload::BUFFER`.
 fn payload_buffer(type_name: &str) -> TokenStream {
     let path = ty(type_name);
     quote! {
-        [0u8; <#path as ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>>::MAX_SIZE]
+        <#path as ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>>::BUFFER
     }
 }
 

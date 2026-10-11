@@ -14,7 +14,8 @@
 //! - **a union arm's discriminant** ([`union_arm_discriminant`]);
 //! - **the size bound** ([`max_size`]) — the largest buffer any legal value of
 //!   a type can encode to, which the codec emits as `MAX_SIZE` and the catalog
-//!   descriptor advertises as `EncodedSizes.flatbuffers`;
+//!   descriptor advertises as the payload's `max_sizes` row for the
+//!   `Flatbuffers` encoding;
 //! - **which table a declaration is rooted in** ([`root_table`]) — its own for
 //!   a struct, its wrapper for a union, and a generated `<Name>Box` for a
 //!   named scalar, an enum and an enum set (ADR-0019 decision 8).
@@ -382,8 +383,9 @@ pub enum RootTable {
 ///
 /// This is the one implementation of the bound (design note D-6). The codec
 /// emits it as `<T as Payload<FlatBuffers>>::MAX_SIZE`, the face sizes real
-/// buffers from that constant, and the catalog descriptor advertises the same number as
-/// `EncodedSizes.flatbuffers`. A second implementation would be a defect no
+/// buffers from that constant, and the catalog descriptor advertises the same
+/// number as the payload's `max_sizes` row for the `Flatbuffers` encoding. A
+/// second implementation would be a defect no
 /// test of either consumer could catch: a codec whose buffer is larger than
 /// the size the descriptor advertises.
 ///

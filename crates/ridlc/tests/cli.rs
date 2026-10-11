@@ -1660,6 +1660,100 @@ fn build_dumping_requests(entry: &Path, extra: &[&str]) -> (Vec<serde_json::Valu
     (parsed, code, stderr)
 }
 
+/// A plugin receives the options of its own `[backend.<name>]` table and no
+/// other: the fixture's manifest has tables for `rust` and `kotlin`, so a
+/// plugin started as `kotlin` is handed `encodings=proto3,flatbuffers` and one
+/// started as `swift` is handed none. The `kotlin` list is not in alphabetical
+/// order, so the value also pins that the names keep their manifest order from
+/// the manifest parser to the plugin's request. Unix only, for the scripts.
+#[cfg(unix)]
+#[test]
+fn a_plugin_receives_its_own_backend_table() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let dir = TempDir::new("plugin-own-table");
+    let requests = dir.path().join("requests");
+    std::fs::create_dir_all(&requests).unwrap();
+    let mut args: Vec<std::ffi::OsString> = Vec::new();
+    for language in ["kotlin", "swift"] {
+        let script = dir.write(
+            &format!("ridlc-gen-{language}"),
+            &format!(
+                "#!/bin/sh\ncat > '{}'/{language}.json\n\
+                 printf '{{\"files\": [], \"diagnostics\": []}}\\n'\n",
+                requests.display()
+            ),
+        );
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        args.push("--plugin".into());
+        args.push(format!("{language}={}", script.display()).into());
+    }
+    let out = TempDir::new("plugin-own-table-out");
+    let entry = Path::new("tests/fixtures/backend-tables");
+    let mut full: Vec<&std::ffi::OsStr> = vec![
+        "build".as_ref(),
+        entry.as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "codegen-model".as_ref(),
+    ];
+    full.extend(args.iter().map(|arg| arg.as_os_str()));
+    let (code, stderr) = ridlc(&full);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+
+    let read = |language: &str| -> serde_json::Value {
+        let text = std::fs::read_to_string(requests.join(format!("{language}.json")))
+            .expect("the plugin was run");
+        serde_json::from_str(&text).expect("a request is JSON")
+    };
+    // The value joins the table's names in manifest order, not sorted.
+    assert_eq!(
+        read("kotlin")["options"],
+        serde_json::json!([{"key": "encodings", "value": "proto3,flatbuffers"}])
+    );
+    assert!(
+        read("swift")
+            .get("options")
+            .is_none_or(|options| options.as_array().is_some_and(Vec::is_empty)),
+        "a plugin with no table is handed no option"
+    );
+}
+
+/// An in-tree emit receives the options of its own `[backend.<name>]` table.
+/// The codegen model backend takes no option, so a `[backend.codegen-model]`
+/// table with an `encodings` list makes `--emit codegen-model` fail naming the
+/// option; the same build without `--emit codegen-model` is not affected.
+#[test]
+fn an_in_tree_emit_receives_its_own_backend_table() {
+    let entry = Path::new("tests/fixtures/backend-table-model");
+    let out = TempDir::new("in-tree-own-table");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        entry.as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "codegen-model".as_ref(),
+    ]);
+    assert_eq!(code, 1, "stderr:\n{stderr}");
+    assert!(stderr.contains("encodings"), "stderr:\n{stderr}");
+
+    let out = TempDir::new("in-tree-other-table");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        entry.as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "proto".as_ref(),
+    ]);
+    assert_eq!(
+        code, 0,
+        "an emit with no table is handed no option, stderr:\n{stderr}"
+    );
+}
+
 /// Every request a build hands a plugin carries the selected deployment,
 /// whichever package the request is run for. Three cases: one deployment in
 /// the workspace and no flag, a flag that names one of two, and two
@@ -2054,4 +2148,395 @@ interface VehicleStatus {
         })
         .unwrap_or_default();
     assert_eq!(compatible, Vec::<Vec<u8>>::new());
+}
+
+/// The `link-encodings` fixture: a topology whose deployment `Bench` has one
+/// same-machine link (`Panel -> Lane`) and one different-machine link
+/// (`Telemetry -> Klaxon`, the `requires` on line 6 of `topology.rsdl`), and
+/// whose deployment `Lab` places everything on one machine.
+const LINK_ENCODINGS_FIXTURE: &str = "tests/fixtures/link-encodings";
+
+/// The fixture's manifest without its `[backend.rust]` table.
+const LINK_ENCODINGS_TYPES_ONLY: &str = "[package]\nname = \"veh.bench\"\nversion = \"1.0.0\"\n\n\
+                                         [lints]\nmissing-docs = \"allow\"\n";
+
+/// The `link-encodings` fixture copied into a temp dir, with `manifest` as its
+/// `ridl.toml` and, when given, `topology` as its `topology.rsdl`.
+fn link_encodings_workspace(label: &str, manifest: &str, topology: Option<&str>) -> TempDir {
+    let dir = TempDir::new(label);
+    let fixture = Path::new(LINK_ENCODINGS_FIXTURE);
+    for name in ["lane.ridl", "topology.rsdl"] {
+        let text = std::fs::read_to_string(fixture.join(name)).expect("the fixture file reads");
+        dir.write(name, &text);
+    }
+    dir.write("ridl.toml", manifest);
+    if let Some(topology) = topology {
+        dir.write("topology.rsdl", topology);
+    }
+    dir
+}
+
+/// `ridlc build <entry> --out-dir <out> --emit rust`, with `--deployment
+/// <name>` when given.
+fn build_rust(entry: &Path, out: &Path, deployment: Option<&str>) -> (i32, String) {
+    let mut args: Vec<&std::ffi::OsStr> = vec![
+        "build".as_ref(),
+        entry.as_os_str(),
+        "--out-dir".as_ref(),
+        out.as_os_str(),
+        "--emit".as_ref(),
+        "rust".as_ref(),
+    ];
+    if let Some(name) = deployment {
+        args.push("--deployment".as_ref());
+        args.push(name.as_ref());
+    }
+    ridlc(&args)
+}
+
+/// A build whose selected deployment has one link across machines, which
+/// carries `proto3`, and a `[backend.rust]` table that names only
+/// `flatbuffers`: exactly one RSDL-807, at the consumer's `requires` line.
+#[test]
+fn a_link_whose_encoding_is_not_emitted_warns_once() {
+    let out = TempDir::new("link-encoding-warns");
+    let (code, stderr) = build_rust(Path::new(LINK_ENCODINGS_FIXTURE), out.path(), Some("Bench"));
+    assert_eq!(
+        code, 0,
+        "a warning does not fail the build, stderr:\n{stderr}"
+    );
+    assert_eq!(
+        stderr.matches("warning[RSDL-807]").count(),
+        1,
+        "one link carries an encoding the table does not name, stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("`Telemetry -> Klaxon`")
+            && stderr.contains("`Bench`")
+            && stderr.contains("carries `proto3`")
+            && stderr.contains("`[backend.rust] encodings`"),
+        "the message names the link, the deployment, the encoding and the table, got:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("topology.rsdl:6:"),
+        "the location is the different-machine `requires` line, got:\n{stderr}"
+    );
+}
+
+/// The location is the consumer's own `requires` line, not its first: a
+/// consumer with two `requires`, of which only the second crosses machines,
+/// warns once, at the second line.
+#[test]
+fn the_location_is_the_links_own_requires_line() {
+    let topology = "package veh.bench\n\n\
+                    component Lane { offers veh.bench.lane }\n\
+                    component Klaxon { offers veh.bench.horn }\n\
+                    component Telemetry {\n  \
+                      requires LaneAssist\n  \
+                      requires Horn\n\
+                    }\n\n\
+                    system Vehicle { Lane, Klaxon, Telemetry }\n\n\
+                    deployment Bench for Vehicle {\n  \
+                      machine Head { Klaxon }\n  \
+                      machine Body { Lane, Telemetry }\n\
+                    }\n";
+    let manifest = "[package]\nname = \"veh.bench\"\nversion = \"1.0.0\"\n\n\
+                    [backend.rust]\nencodings = [\"flatbuffers\"]\n\n\
+                    [lints]\nmissing-docs = \"allow\"\n";
+    let dir = link_encodings_workspace("link-encoding-own-line", manifest, Some(topology));
+    let out = TempDir::new("link-encoding-own-line-out");
+    let (code, stderr) = build_rust(dir.path(), out.path(), Some("Bench"));
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_eq!(
+        stderr.matches("warning[RSDL-807]").count(),
+        1,
+        "only `Telemetry -> Klaxon` crosses machines, stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("`Telemetry -> Klaxon`") && stderr.contains("topology.rsdl:7:"),
+        "the location is the second `requires` line of `Telemetry`, got:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("topology.rsdl:6:"),
+        "the first `requires` line, whose link stays on one machine, draws nothing, got:\n{stderr}"
+    );
+}
+
+/// A schema emit is independent of the codecs a package carries, and its
+/// backend takes no `encodings` option, so RSDL-807 is not compared against
+/// its table: `--emit rust --emit proto` draws the one warning for
+/// `[backend.rust]` and none for `[backend.proto]`.
+#[test]
+fn a_schema_emit_draws_no_rsdl_807() {
+    let out = TempDir::new("link-encoding-schema-emit");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        Path::new(LINK_ENCODINGS_FIXTURE).as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "rust".as_ref(),
+        "--emit".as_ref(),
+        "proto".as_ref(),
+        "--emit".as_ref(),
+        "flatbuffers".as_ref(),
+        "--emit".as_ref(),
+        "typescript".as_ref(),
+        "--deployment".as_ref(),
+        "Bench".as_ref(),
+    ]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_eq!(
+        stderr.matches("warning[RSDL-807]").count(),
+        1,
+        "only the Rust emit's table is compared, stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("`[backend.rust] encodings`")
+            && !stderr.contains("[backend.proto]")
+            && !stderr.contains("[backend.flatbuffers]")
+            && !stderr.contains("[backend.typescript]"),
+        "the warning names the Rust table and no schema or TypeScript table, got:\n{stderr}"
+    );
+}
+
+/// A deployment whose every link stays on one machine carries `flatbuffers`
+/// only, which the table names: no RSDL-807.
+#[test]
+fn a_same_machine_link_does_not_warn() {
+    let out = TempDir::new("link-encoding-same-machine");
+    let (code, stderr) = build_rust(Path::new(LINK_ENCODINGS_FIXTURE), out.path(), Some("Lab"));
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(
+        !stderr.contains("RSDL-807"),
+        "a same-machine link carries `flatbuffers`, got:\n{stderr}"
+    );
+}
+
+/// A manifest with no `[backend.rust]` table is a types-only build: every
+/// link of the selected deployment warns, one RSDL-807 per link.
+#[test]
+fn a_types_only_build_warns_for_every_link() {
+    let dir = link_encodings_workspace("link-encoding-types-only", LINK_ENCODINGS_TYPES_ONLY, None);
+    let out = TempDir::new("link-encoding-types-only-out");
+    let (code, stderr) = build_rust(dir.path(), out.path(), Some("Bench"));
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_eq!(
+        stderr.matches("warning[RSDL-807]").count(),
+        2,
+        "both links warn, stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("carries `flatbuffers`") && stderr.contains("carries `proto3`"),
+        "each link's own encoding is named, got:\n{stderr}"
+    );
+}
+
+/// A deployment whose placement an RSDL-7xx error blocked draws no RSDL-807,
+/// although its links have placed endpoints: the types-only manifest would
+/// make each of them warn, and the placement error is what the build reports.
+#[test]
+fn a_deployment_with_a_placement_error_does_not_warn() {
+    let topology = "package veh.bench\n\n\
+                    component Lane { offers veh.bench.lane }\n\
+                    component Klaxon { offers veh.bench.horn }\n\
+                    component Panel { requires LaneAssist }\n\
+                    component Telemetry { requires Horn }\n\n\
+                    system Vehicle { Lane, Klaxon, Panel, Telemetry }\n\n\
+                    deployment Bench for Vehicle {\n\
+                    \x20 machine Head { Lane, Klaxon, Panel }\n\
+                    \x20 machine Body { Telemetry, Panel }\n\
+                    }\n";
+    let dir = link_encodings_workspace(
+        "link-encoding-placement-error",
+        LINK_ENCODINGS_TYPES_ONLY,
+        Some(topology),
+    );
+    let out = TempDir::new("link-encoding-placement-error-out");
+    let (code, stderr) = build_rust(dir.path(), out.path(), Some("Bench"));
+    assert_eq!(
+        code, 1,
+        "the placement error fails the build, stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("error[RSDL-706]"),
+        "`Panel` is placed twice, got:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("RSDL-807"),
+        "a blocked placement draws no RSDL-807, got:\n{stderr}"
+    );
+}
+
+/// The lint reads the table of each backend the build emits, not every table
+/// of the manifest: a `[backend.kotlin]` table that names `proto3` does not
+/// cover a Rust emit whose own table names only `flatbuffers`.
+#[test]
+fn the_lint_is_compared_against_the_emitted_backends_table() {
+    let manifest = "[package]\nname = \"veh.bench\"\nversion = \"1.0.0\"\n\n\
+                    [backend.kotlin]\nencodings = [\"proto3\"]\n\n\
+                    [backend.rust]\nencodings = [\"flatbuffers\"]\n\n\
+                    [lints]\nmissing-docs = \"allow\"\n";
+    let dir = link_encodings_workspace("link-encoding-emitted-table", manifest, None);
+    let out = TempDir::new("link-encoding-emitted-table-out");
+    let (code, stderr) = build_rust(dir.path(), out.path(), Some("Bench"));
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_eq!(
+        stderr.matches("warning[RSDL-807]").count(),
+        1,
+        "the Rust table is the one compared, stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("`[backend.rust] encodings`") && !stderr.contains("kotlin"),
+        "the message names the emitted backend's table, got:\n{stderr}"
+    );
+    // The Rust table names `flatbuffers`, so the cross-machine `proto3` link
+    // warns and the same-machine `flatbuffers` link does not. Compared
+    // against the `[backend.kotlin]` list instead, the warning would fall on
+    // the other link, with the same count and the same table name.
+    assert!(
+        stderr.contains("link `Telemetry -> Klaxon` of deployment `Bench` carries `proto3`"),
+        "the warning is the cross-machine link's, got:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Panel -> Lane"),
+        "the same-machine link carries `flatbuffers`, which the Rust table names, got:\n{stderr}"
+    );
+}
+
+/// `[lints] link-encoding-not-emitted = "allow"` removes the diagnostic;
+/// `"deny"` makes it an error that stops the build before any artifact is
+/// written (ADR-0024 decision 4).
+#[test]
+fn allow_silences_it_and_deny_fails_the_build() {
+    let manifest = |level: &str| {
+        format!(
+            "[package]\nname = \"veh.bench\"\nversion = \"1.0.0\"\n\n\
+             [backend.rust]\nencodings = [\"flatbuffers\"]\n\n\
+             [lints]\nmissing-docs = \"allow\"\nlink-encoding-not-emitted = \"{level}\"\n"
+        )
+    };
+
+    let dir = link_encodings_workspace("link-encoding-allow", &manifest("allow"), None);
+    let out = TempDir::new("link-encoding-allow-out");
+    let (code, stderr) = build_rust(dir.path(), out.path(), Some("Bench"));
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(
+        !stderr.contains("RSDL-807"),
+        "`allow` removes the diagnostic, got:\n{stderr}"
+    );
+    assert!(out.path().join("lib.rs").is_file(), "the crate is written");
+
+    let dir = link_encodings_workspace("link-encoding-deny", &manifest("deny"), None);
+    let out = TempDir::new("link-encoding-deny-out");
+    let (code, stderr) = build_rust(dir.path(), out.path(), Some("Bench"));
+    assert_eq!(code, 1, "`deny` fails the build, stderr:\n{stderr}");
+    assert!(
+        stderr.contains("error[RSDL-807]"),
+        "`deny` renders the diagnostic as an error, got:\n{stderr}"
+    );
+    assert!(
+        !out.path().join("lib.rs").exists(),
+        "a build that fails writes no crate root"
+    );
+}
+
+/// `check` emits nothing, so it has no backend table to compare against: no
+/// RSDL-807.
+#[test]
+fn check_does_not_raise_it() {
+    let (code, stderr) = ridlc(&[
+        "check".as_ref(),
+        Path::new(LINK_ENCODINGS_FIXTURE).as_os_str(),
+    ]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(
+        !stderr.contains("RSDL-807"),
+        "`check` does not raise the lint, got:\n{stderr}"
+    );
+}
+
+/// The fixture declares two deployments, so a build with no `--deployment`
+/// selects none: no link is read, and nothing is drawn.
+#[test]
+fn no_deployment_selected_draws_nothing() {
+    let out = TempDir::new("link-encoding-no-deployment");
+    let (code, stderr) = build_rust(Path::new(LINK_ENCODINGS_FIXTURE), out.path(), None);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(
+        !stderr.contains("RSDL-807"),
+        "no deployment is selected, got:\n{stderr}"
+    );
+}
+
+/// A workspace with exactly one deployment selects it without the flag, and
+/// the lint reads that selection: the one different-machine link warns.
+#[test]
+fn a_single_deployment_is_selected_without_the_flag() {
+    let topology = "package veh.bench\n\n\
+                    component Lane { offers veh.bench.lane }\n\
+                    component Klaxon { offers veh.bench.horn }\n\
+                    component Panel { requires LaneAssist }\n\
+                    component Telemetry { requires Horn }\n\n\
+                    system Vehicle { Lane, Klaxon, Panel, Telemetry }\n\n\
+                    deployment Bench for Vehicle {\n  \
+                      machine Head { Lane, Klaxon, Panel }\n  \
+                      machine Body { Telemetry }\n\
+                    }\n";
+    let manifest = "[package]\nname = \"veh.bench\"\nversion = \"1.0.0\"\n\n\
+                    [backend.rust]\nencodings = [\"flatbuffers\"]\n\n\
+                    [lints]\nmissing-docs = \"allow\"\n";
+    let dir = link_encodings_workspace("link-encoding-single", manifest, Some(topology));
+    let out = TempDir::new("link-encoding-single-out");
+    let (code, stderr) = build_rust(dir.path(), out.path(), None);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_eq!(
+        stderr.matches("warning[RSDL-807]").count(),
+        1,
+        "the only deployment is selected, stderr:\n{stderr}"
+    );
+}
+
+/// A plugin is an emitted backend too: a build whose only backend is a
+/// `kotlin` plugin compares the links with `[backend.kotlin] encodings`, and
+/// the different-machine link warns once, naming that table. Unix only, for
+/// the script.
+#[cfg(unix)]
+#[test]
+fn a_plugin_is_an_emitted_backend_the_lint_compares_against() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let manifest = "[package]\nname = \"veh.bench\"\nversion = \"1.0.0\"\n\n\
+                    [backend.kotlin]\nencodings = [\"flatbuffers\"]\n\n\
+                    [lints]\nmissing-docs = \"allow\"\n";
+    let dir = link_encodings_workspace("link-encoding-plugin", manifest, None);
+    let script = dir.write(
+        "ridlc-gen-kotlin",
+        "#!/bin/sh\nprintf '{\"files\": [], \"diagnostics\": []}\\n'\n",
+    );
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let out = TempDir::new("link-encoding-plugin-out");
+    let plugin = format!("kotlin={}", script.display());
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        dir.path().as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "ir-json".as_ref(),
+        "--plugin".as_ref(),
+        plugin.as_ref(),
+        "--deployment".as_ref(),
+        "Bench".as_ref(),
+    ]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_eq!(
+        stderr.matches("warning[RSDL-807]").count(),
+        1,
+        "the plugin's table is compared once, stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("`[backend.kotlin] encodings`"),
+        "the message names the plugin's table, got:\n{stderr}"
+    );
 }

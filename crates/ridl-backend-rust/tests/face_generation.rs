@@ -1,5 +1,5 @@
 //! The generated interaction face over the interaction-face fixture.
-//! Asserts that `generate_face` emits, per interface, a
+//! Asserts that `generate_face_with` emits, per interface, a
 //! `Client` bound by exactly the ports that interface needs, a `Publisher`
 //! over the writer ports, and a `Provider` trait with the settled method
 //! signatures.
@@ -12,7 +12,7 @@
 //! face of inline sources with a bare `rustc`. What this file pins is the
 //! shape of the text those proofs exercise.
 
-use ridl_backend_rust::{generate, generate_face};
+use ridl_backend_rust::{WireEncoding, generate, generate_face_with};
 
 #[path = "support/ir.rs"]
 mod ir;
@@ -60,7 +60,9 @@ fn at(source: &str, needle: &str) -> usize {
 
 fn face() -> String {
     let package = ir::compile_fixture("interaction_face.ridl");
-    generate_face(&package).expect("generate_face").rust_source
+    generate_face_with(&package, &[WireEncoding::FlatBuffers])
+        .expect("generate_face_with")
+        .rust_source
 }
 
 #[test]
@@ -603,7 +605,7 @@ fn serve_returns_a_future_over_the_internal_dispatch_step() {
     assert!(
         d.contains(&format!(
             "pubstructServe<'a,{bounds},>{{handler:H,provider:&'amutP,\
-             buf:[u8;super::Cabin::MAX_BUFFER_SIZE],state:ServeState,}}"
+             buf:<super::Cabinas::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers,>>::ClaimBuffer,state:ServeState,}}"
         )),
         "the serve future holds the handler by value, the provider by &mut, and the claim buffer inline",
     );

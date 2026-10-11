@@ -1,6 +1,6 @@
 ---
 source: crates/ridl-backend-rust/src/tests.rs
-expression: rust_for(decls)
+expression: rust_with_codec(decls)
 ---
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -142,6 +142,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for WarningFl
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 43usize;
+    type Buffer = [::core::primitive::u8; 43usize];
+    const BUFFER: Self::Buffer = [0u8; 43usize];
     type View<'a> = WarningFlagsFbView<'a>;
     fn encode<'o>(
         &self,

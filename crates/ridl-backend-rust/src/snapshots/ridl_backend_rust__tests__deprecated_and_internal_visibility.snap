@@ -1,6 +1,6 @@
 ---
 source: crates/ridl-backend-rust/src/tests.rs
-expression: rust_for(decls)
+expression: rust_with_codec(decls)
 ---
 /// Vehicle speed over ground
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -364,6 +364,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = SpeedFbView<'a>;
     fn encode<'o>(
         &self,
@@ -500,6 +502,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for OldFlag {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 43usize;
+    type Buffer = [::core::primitive::u8; 43usize];
+    const BUFFER: Self::Buffer = [0u8; 43usize];
     type View<'a> = OldFlagFbView<'a>;
     fn encode<'o>(
         &self,
@@ -649,6 +653,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawTicks 
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = RawTicksFbView<'a>;
     fn encode<'o>(
         &self,

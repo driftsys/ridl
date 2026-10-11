@@ -44,7 +44,7 @@ use crate::db::{InputFile, RidlDatabase, parse_file};
 use crate::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span};
 use crate::interface_lock;
 use crate::lint::{LintLevels, LintScopes};
-use crate::manifest::{Manifest, ManifestKind, TimingDefaults, parse_manifest};
+use crate::manifest::{BackendTable, Manifest, ManifestKind, TimingDefaults, parse_manifest};
 use crate::package::{Package, PackageLock, PackageOrigin, Workspace, package_declarations};
 
 /// The result of [`load_workspace`]: the salsa [`Workspace`] input, the
@@ -65,6 +65,10 @@ pub struct LoadedWorkspace {
     /// `None` when no file is named, when the file holds no text, and in
     /// single-file mode.
     pub codegen_header: Option<String>,
+    /// The root manifest's `[backend.<name>]` tables, keyed by backend name;
+    /// empty when the root names none and in single-file mode. A workspace
+    /// member's manifest cannot carry one (MANI-016).
+    pub backends: BTreeMap<String, BackendTable>,
     /// The member directory the entry lies in, when the entry is inside a
     /// member of the loaded workspace ([`find_root`] walked from the member to
     /// its workspace, or the entry named a path below a member); `None` for
@@ -278,6 +282,7 @@ pub fn load_workspace_with(
         sources: loader.sources,
         lints: loader.lints,
         codegen_header: loader.codegen_header,
+        backends: loader.backends,
         report_scope,
         units: loader.units,
     })
@@ -556,6 +561,8 @@ struct Loader {
     lints: LintScopes,
     /// The workspace root's (or standalone package's) normalised header text.
     codegen_header: Option<String>,
+    /// The workspace root's (or standalone package's) `[backend.<name>]` tables.
+    backends: BTreeMap<String, BackendTable>,
     /// Every member directory of a loaded workspace, in the path form of the
     /// files recorded under it. Empty outside workspace mode.
     member_dirs: Vec<PathBuf>,
@@ -588,10 +595,13 @@ impl Loader {
             defaults,
             lints,
             codegen_header_file,
+            backends,
+            backend_span: _,
         }) = manifest
         else {
             return Ok(());
         };
+        self.backends = backends;
         if let Some((relative, range)) = codegen_header_file {
             let path = root.join(&relative);
             match fs::read_to_string(&path) {
@@ -712,10 +722,22 @@ impl Loader {
             defaults,
             lints,
             codegen_header_file,
+            backends: _,
+            backend_span,
         }) = manifest
         else {
             return Ok(());
         };
+        if let Some(range) = backend_span {
+            self.diagnostics.push(error(
+                DiagCode::MANI_016,
+                file_id,
+                byte_range(range.start, range.end),
+                format!(
+                    "a `backend` key or `[backend.<name>]` table is set in workspace member `{member}`; set it in the workspace root's `ridl.toml`"
+                ),
+            ));
+        }
         if let Some((_, range)) = codegen_header_file {
             self.diagnostics.push(error(
                 DiagCode::MANI_012,
@@ -3235,6 +3257,25 @@ service:veh.common.climate 2
     }
 
     #[test]
+    fn root_backend_tables_are_carried_out_of_the_load() {
+        let dir = TempDir::new("backend-tables");
+        dir.write(
+            "ridl.toml",
+            &format!("{PACKAGE_A}\n[backend.rust]\nencodings = [\"flatbuffers\", \"proto3\"]\n"),
+        );
+        dir.write("a.typl", "package a\ntype A: integer [0..1]\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
+        let names: Vec<&str> = loaded.backends["rust"]
+            .encodings
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect();
+        assert_eq!(names, ["flatbuffers", "proto3"]);
+    }
+
+    #[test]
     fn codegen_header_file_missing_is_mani_011() {
         let dir = TempDir::new("codegen-header-missing");
         let manifest = format!("{PACKAGE_A}\n[codegen]\nheader-file = \"nope.txt\"\n");
@@ -3322,6 +3363,56 @@ service:veh.common.climate 2
         let end = usize::from(diag.primary.range.end());
         assert_eq!(&member[start..end], "\"M.txt\"");
         assert_eq!(loaded.codegen_header.as_deref(), Some("root header"));
+    }
+
+    #[test]
+    fn backend_table_in_member_is_mani_016() {
+        let dir = TempDir::new("backend-member");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"a\"]\n");
+        let member = format!("{PACKAGE_A}\n[backend.rust]\nencodings = [\"flatbuffers\"]\n");
+        dir.write("a/ridl.toml", &member);
+        dir.write("a/a.typl", "package a\ntype A: integer [0..1]\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["MANI-016"]);
+        let diag = &loaded.diagnostics[0];
+        let start = usize::from(diag.primary.range.start());
+        let end = usize::from(diag.primary.range.end());
+        // The span is the `backend` key of the `[backend.rust]` header.
+        assert_eq!(&member[start..end], "backend", "{member}");
+    }
+
+    /// A `backend` key of the wrong shape in a member is MANI-015 for the
+    /// shape and MANI-016 for the place: the key is not allowed in a member
+    /// whatever its value.
+    #[test]
+    fn backend_of_the_wrong_shape_in_member_is_also_mani_016() {
+        let dir = TempDir::new("backend-member-wrong-shape");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"a\"]\n");
+        let member = format!("backend = 1\n\n{PACKAGE_A}");
+        dir.write("a/ridl.toml", &member);
+        dir.write("a/a.typl", "package a\ntype A: integer [0..1]\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["MANI-015", "MANI-016"]);
+        let diag = &loaded.diagnostics[1];
+        let start = usize::from(diag.primary.range.start());
+        let end = usize::from(diag.primary.range.end());
+        assert_eq!(&member[start..end], "1", "{member}");
+    }
+
+    #[test]
+    fn backend_table_at_root_is_not_mani_016() {
+        let dir = TempDir::new("backend-root");
+        dir.write(
+            "ridl.toml",
+            "[workspace]\nmembers = [\"a\"]\n\n[backend.rust]\nencodings = [\"flatbuffers\"]\n",
+        );
+        dir.write("a/ridl.toml", PACKAGE_A);
+        dir.write("a/a.typl", "package a\ntype A: integer [0..1]\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert_eq!(codes(&loaded.diagnostics), Vec::<&str>::new());
     }
 
     #[test]

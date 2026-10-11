@@ -1,0 +1,9 @@
+[package]
+name = "veh.bench"
+version = "1.0.0"
+
+[backend.rust]
+encodings = ["flatbuffers"]
+
+[lints]
+missing-docs = "allow"

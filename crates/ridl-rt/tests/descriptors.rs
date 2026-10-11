@@ -4,8 +4,8 @@
 #![forbid(unsafe_code)]
 
 use ridl_rt::contract::{
-    CatalogHash, CatalogRef, Command, EncodedSizes, Event, Fixed, Interaction, Interface,
-    InterfaceNo, Kind, Member, Ordinal, PayloadInfo, Query, Signal, Timing, TimingMode,
+    CatalogHash, CatalogRef, Command, Event, Fixed, Interaction, Interface, InterfaceNo, Kind,
+    Member, Ordinal, PayloadInfo, Query, Signal, Timing, TimingMode,
 };
 use ridl_rt::error::Contract;
 use ridl_rt::sample::Duration;
@@ -13,13 +13,6 @@ use ridl_rt::sample::Duration;
 const VEHICLE: CatalogRef = CatalogRef {
     name: "vehicle",
     hash: CatalogHash([7; 32]),
-};
-
-/// Test data, not sizes computed from an encoding.
-const SIZES: EncodedSizes = EncodedSizes {
-    proto3: Some(8),
-    flatbuffers: Some(16),
-    repr_c: Some(4),
 };
 
 /// `interface Drivetrain` with one member of each kind.
@@ -40,10 +33,7 @@ impl Interface for Drivetrain {
                 min: Some(Duration(20_000)),
                 max: Some(Duration(500_000)),
             }),
-            payloads: &[PayloadInfo {
-                type_name: "Speed",
-                max_size: SIZES,
-            }],
+            payloads: &[PayloadInfo { type_name: "Speed" }],
         },
         Member {
             ordinal: Ordinal(2),
@@ -54,10 +44,7 @@ impl Interface for Drivetrain {
                 min: Some(Duration(50_000)),
                 max: Some(Duration(500_000)),
             }),
-            payloads: &[PayloadInfo {
-                type_name: "Gear",
-                max_size: SIZES,
-            }],
+            payloads: &[PayloadInfo { type_name: "Gear" }],
         },
         Member {
             ordinal: Ordinal(3),
@@ -70,7 +57,6 @@ impl Interface for Drivetrain {
             }),
             payloads: &[PayloadInfo {
                 type_name: "SetGearArgs",
-                max_size: SIZES,
             }],
         },
         Member {
@@ -81,12 +67,8 @@ impl Interface for Drivetrain {
             payloads: &[
                 PayloadInfo {
                     type_name: "AverageSpeedArgs",
-                    max_size: SIZES,
                 },
-                PayloadInfo {
-                    type_name: "Speed",
-                    max_size: SIZES,
-                },
+                PayloadInfo { type_name: "Speed" },
             ],
         },
         Member {
@@ -94,10 +76,7 @@ impl Interface for Drivetrain {
             kind: Kind::Fixed,
             name: "wheelCount",
             timing: None,
-            payloads: &[PayloadInfo {
-                type_name: "u8",
-                max_size: SIZES,
-            }],
+            payloads: &[PayloadInfo { type_name: "u8" }],
         },
     ];
 }
@@ -106,6 +85,7 @@ struct SpeedSignal;
 impl Interaction for SpeedSignal {
     type Iface = Drivetrain;
     const MEMBER: &'static Member = &Drivetrain::MEMBERS[0];
+    const ROW: usize = 0;
 }
 impl Signal for SpeedSignal {
     type Payload = u16;
@@ -118,6 +98,7 @@ struct ShiftDoneEvent;
 impl Interaction for ShiftDoneEvent {
     type Iface = Drivetrain;
     const MEMBER: &'static Member = &Drivetrain::MEMBERS[1];
+    const ROW: usize = 1;
 }
 impl Event for ShiftDoneEvent {
     type Payload = u8;
@@ -127,6 +108,7 @@ struct SetGearCommand;
 impl Interaction for SetGearCommand {
     type Iface = Drivetrain;
     const MEMBER: &'static Member = &Drivetrain::MEMBERS[2];
+    const ROW: usize = 2;
 }
 impl Command for SetGearCommand {
     type Args = u8;
@@ -143,6 +125,7 @@ struct AverageSpeedQuery;
 impl Interaction for AverageSpeedQuery {
     type Iface = Drivetrain;
     const MEMBER: &'static Member = &Drivetrain::MEMBERS[3];
+    const ROW: usize = 3;
 }
 impl Query for AverageSpeedQuery {
     type Args = u32;
@@ -167,6 +150,7 @@ struct WheelCountFixed;
 impl Interaction for WheelCountFixed {
     type Iface = Drivetrain;
     const MEMBER: &'static Member = &Drivetrain::MEMBERS[4];
+    const ROW: usize = 4;
 }
 impl Fixed for WheelCountFixed {
     type Payload = u8;

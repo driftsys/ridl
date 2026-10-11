@@ -431,7 +431,8 @@ pub enum Event {
 }
 ```
 
-The buffer is sized by `Cabin::EVENT_SOURCE_BUFFER_SIZE`, the largest event
+The buffer is sized by
+`<Cabin as Sizes<FlatBuffers>>::EVENT_SOURCE_BUFFER_SIZE`, the largest event
 payload of the interface, because any of them may arrive.
 
 **The generated code checks the interface number before the ordinal.** A port is
@@ -681,10 +682,10 @@ the failure stays settled. `Output` is `Result<Infallible, ProviderError>`, so a
 successful serve never produces a value — it is `Pending` for as long as it
 runs.
 
-The claim buffer — `Cabin::MAX_BUFFER_SIZE` bytes, sized so a reply can be
-encoded into the same buffer the arguments arrived in — is held inside the
-future. The application supplies no buffer and receives no count of claims
-settled; the future's repeated polling is what stands in for both.
+The claim buffer — `<Cabin as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes, sized
+so a reply can be encoded into the same buffer the arguments arrived in — is
+held inside the future. The application supplies no buffer and receives no count
+of claims settled; the future's repeated polling is what stands in for both.
 
 ### The settlement table
 
@@ -892,11 +893,11 @@ variant compiles without a `_` arm. That split is pinned by doctests in
 Everything in this note is real code that compiles and runs. Several pieces of
 what it stands on are placeholders with a named replacement.
 
-| Placeholder                                                                                                                                                     | Replaced by       |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| The transport under the in-process runtime the examples run against                                                                                             | driftsys/ridl#265 |
-| `PayloadInfo.max_size.repr_c`, which is `None` (`flatbuffers` is filled (driftsys/ridl#380); `proto3` is `None` because the Rust backend emits no proto3 codec) | driftsys/ridl#317 |
-| The contract-clause translator                                                                                                                                  | driftsys/ridl#704 |
+| Placeholder                                                                               | Replaced by       |
+| ----------------------------------------------------------------------------------------- | ----------------- |
+| The transport under the in-process runtime the examples run against                       | driftsys/ridl#265 |
+| A `repr(C)` size table (`Sizes<ReprC>`): no backend emits one until the layout is defined | driftsys/ridl#317 |
+| The contract-clause translator                                                            | driftsys/ridl#704 |
 
 One further limit is not a placeholder but scope. A second, that
 `ridl --emit rust` did not emit the face at all, closed on 2026-09-21: the

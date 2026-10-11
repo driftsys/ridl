@@ -1,7 +1,7 @@
 //! The regeneration guard of the interaction-face fixture
 //! (`docs/design/interaction-face.md`).
 //!
-//! `tests/generated/interaction_face.rs` is `generate_face`'s output for
+//! `tests/generated/interaction_face.rs` is `generate_face_with`'s output for
 //! `tests/fixtures/interaction_face.ridl`, checked in and `include!`d by
 //! `tests/interaction_face.rs`. This guard lives in its own test target, apart
 //! from the tests that consume the fixture, so that when a change to the
@@ -13,16 +13,19 @@
 #[path = "support/ir.rs"]
 mod ir;
 
-/// Regenerates the fixture through `generate_face`, using the crate's own
+/// Regenerates the fixture through `generate_face_with`, using the crate's own
 /// compile helper rather than a new cargo subprocess, and compares it
 /// byte-for-byte against the checked-in file. `RIDL_UPDATE_GENERATED=1`
 /// writes the fresh output instead of comparing.
 #[test]
 fn generated_interaction_face_matches_the_emitter() {
     let package = ir::compile_fixture("interaction_face.ridl");
-    let face = ridl_backend_rust::generate_face(&package)
-        .expect("generate_face")
-        .rust_source;
+    let face = ridl_backend_rust::generate_face_with(
+        &package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+    )
+    .expect("generate_face_with")
+    .rust_source;
 
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/generated/interaction_face.rs");
@@ -43,9 +46,10 @@ fn generated_interaction_face_matches_the_emitter() {
 }
 
 /// The fixture declares public interfaces only, and the guard above pins what
-/// `generate_face` emits for them. `ridl build --emit rust` goes through the
-/// backend contract (`src/contract.rs`), which calls `generate_pipeline_over`,
-/// the function `generate_pipeline` wraps; it emits the same items in another
+/// `generate_face_with` emits for them. `ridl build --emit rust`, with
+/// `flatbuffers` in `[backend.rust] encodings`, goes through the backend
+/// contract (`src/contract.rs`), which calls `generate_pipeline_over`, the
+/// function `generate_pipeline` wraps; it emits the same items in another
 /// order. This test compares the two outputs as sorted lists of
 /// top-level items, so the checked-in fixture pins the pipeline's item set for
 /// a public interface as well; the pipeline's item order is not pinned. A
@@ -56,7 +60,7 @@ fn the_pipeline_emits_the_items_of_the_checked_in_face() {
     let package = ir::compile_fixture("interaction_face.ridl");
     let pipeline = ridl_backend_rust::generate_pipeline(
         &package,
-        ridl_backend_rust::WireEncoding::FlatBuffers,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
         &[],
     )
     .expect("generate_pipeline")
@@ -75,7 +79,7 @@ fn the_pipeline_emits_the_items_of_the_checked_in_face() {
          also fails, the fixture is stale: regenerate it with \
          RIDL_UPDATE_GENERATED=1 cargo test -p ridl-backend-rust --test \
          interaction_face_regeneration, then rerun. Otherwise the pipeline's \
-         output for a public interface has diverged from generate_face's.\n\
+         output for a public interface has diverged from generate_face_with's.\n\
          items only in the pipeline output ({}):\n{}\n\
          items only in the checked-in face ({}):\n{}",
         only_pipeline.len(),

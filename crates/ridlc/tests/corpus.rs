@@ -256,8 +256,7 @@ fn compile_entry(entry: &Path) -> Compiled {
         let rust = checked_irs
             .iter()
             .map(|(name, ir)| {
-                let generated =
-                    ridl_backend_rust::generate(ir).expect("a clean entry's IR generates Rust");
+                let generated = generate_rust(ir).expect("a clean entry's IR generates Rust");
                 format!("// ===== package {name} =====\n{}", generated.rust_source)
             })
             .collect::<Vec<_>>()
@@ -855,6 +854,17 @@ const RSDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("RSDL-804", Showcase),
     ("RSDL-805", Showcase),
     ("RSDL-806", Showcase),
+    (
+        "RSDL-807",
+        Elsewhere {
+            fixture: "crates/ridlc/tests/fixtures/link-encodings/topology.rsdl",
+            reason: "the lint compares a link's encoding with the `encodings` list of each \
+                     backend a build emits, which only the build driver knows, so it is never a \
+                     compile diagnostic and `check` never raises it. Provoked by \
+                     `a_link_whose_encoding_is_not_emitted_warns_once` in \
+                     `crates/ridlc/tests/cli.rs`",
+        },
+    ),
     ("RSDL-901", Showcase),
     ("RSDL-903", Showcase),
     ("RSDL-904", Showcase),
@@ -1450,6 +1460,14 @@ fn showcase_pins_every_severity() {
 #[test]
 fn veh_common_generated_rust_compiles_with_rustc() {
     let source = composed_source(Path::new("tests/corpus/veh-common"));
+    // The codec, which the source holds only because it is generated with the
+    // FlatBuffers encoding; types-only output fails here.
+    assert!(
+        source.contains(
+            "impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {"
+        ),
+        "the composed source must carry the FlatBuffers codec, or this proof checks types only",
+    );
 
     // A unique temp directory (removed at the end), mirroring the golden CLI
     // test rather than adding a `tempfile` dev-dependency.
@@ -1505,6 +1523,19 @@ fn veh_common_generated_rust_compiles_with_rustc() {
     );
 }
 
+/// The Rust the pipeline emits for `ir` when the package's `encodings` names
+/// `flatbuffers`: the domain types, the FlatBuffers codec over them, and the
+/// interaction-face descriptors and face. The corpus snapshots and the rustc
+/// proofs below go through this rather than `generate`, which emits the domain
+/// types only, so that the codec and the face stay covered over the corpus.
+/// The `others` list is empty, so a type that reaches another package gets no
+/// codec; the snapshots carry a `__RIDL_FB_NO_CODEC_*` note for each such type.
+fn generate_rust(
+    ir: &ridl_ir::v2::Package,
+) -> Result<ridl_backend_rust::Generated, ridl_backend_rust::GenerateError> {
+    ridl_backend_rust::generate_pipeline(ir, &[ridl_backend_rust::WireEncoding::FlatBuffers], &[])
+}
+
 /// The generated Rust of every package in the entry rooted at `entry`, as
 /// `(package-name, rust-source)` pairs, in workspace order, with the standard
 /// package's own generated Rust first. The standard package is not a workspace
@@ -1521,14 +1552,13 @@ fn generated_packages(entry: &Path) -> Vec<(String, String)> {
 
     let std_checked = check_package(&db, workspace, std, std);
     let std_generated =
-        ridl_backend_rust::generate(&std_checked.ir).expect("the standard package generates Rust");
+        generate_rust(&std_checked.ir).expect("the standard package generates Rust");
     let mut generated = vec![("ridl.std".to_string(), std_generated.rust_source)];
 
     generated.extend(packages.iter().map(|pkg| {
         let name = pkg.name(&db).clone();
         let checked = check_package(&db, workspace, *pkg, std);
-        let pkg_generated =
-            ridl_backend_rust::generate(&checked.ir).expect("a clean entry's IR generates Rust");
+        let pkg_generated = generate_rust(&checked.ir).expect("a clean entry's IR generates Rust");
         (name, pkg_generated.rust_source)
     }));
     generated
@@ -1584,6 +1614,14 @@ fn workspace_two_members_composed_compiles_with_rustc() {
     }
     let mut source = String::new();
     tree.render(&mut source);
+    // The codec, which the source holds only because it is generated with the
+    // FlatBuffers encoding; types-only output fails here.
+    assert!(
+        source.contains(
+            "impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {"
+        ),
+        "the composed source must carry the FlatBuffers codec, or this proof checks types only",
+    );
 
     let dir = std::env::temp_dir().join(format!(
         "ridlc_corpus_composed_{}_{}",
@@ -1724,18 +1762,18 @@ fn composed_source(entry: &Path) -> String {
 
 /// The generated Rust for `veh-cluster` compiles.
 ///
-/// The two existing rustc proofs cover typl-only entries, so until this test
-/// the interaction layer's generated Rust was only ever compared against a text
-/// snapshot — a snapshot records what was emitted, not that it is valid Rust.
-/// `veh-cluster` is the entry that exercises the whole interaction surface,
-/// including the consumer and provider faces of a service's inline shape, the
-/// synthesized tuple-return struct, and the `#[deprecated]` attribute.
+/// `veh-cluster` is the entry that exercises the interaction layer. Its source
+/// is composed through [`generate_rust`], so rustc checks the domain types, the
+/// FlatBuffers codec over the types that reach no other package, and the
+/// descriptors and face of each interface the face can carry (`WheelHistory`, `WheelSummary`). A text snapshot records
+/// what was emitted; this proof checks that it is valid Rust.
 ///
 /// It also carries a **tuple under an `internal` declaration**, in both layers
-/// (`internal-shape.ridl`). That is the shape issue #167 was about, and the two
-/// markers for it below are what keep this proof from going quiet on it again:
-/// the entry deliberately held no such tuple while the defect was open, so the
+/// (`internal-shape.ridl`). That is the shape issue #167 was about: the entry
+/// deliberately held no such tuple while the defect was open, so the
 /// `-D private-interfaces` deny in [`rustc_accepts`] had nothing to bite on.
+/// The `RawWheelSpanSpan` marker below keeps the tuple's struct in the source
+/// this proof compiles.
 #[test]
 fn veh_cluster_generated_rust_compiles_with_rustc() {
     let source = composed_source(Path::new("tests/corpus/veh-cluster"));
@@ -1747,6 +1785,12 @@ fn veh_cluster_generated_rust_compiles_with_rustc() {
         "pub const MAX_SPEED: Speed",
         "pub enum GearPosition",
         "crate::veh::common::",
+        // The tuple under an `internal` declaration (issue #167).
+        "pub(crate) struct RawWheelSpanSpan {",
+        // The codec and the face, which the composed source holds only
+        // because it is generated with the FlatBuffers encoding.
+        "impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {",
+        "impl ::ridl_rt::contract::Interface for WheelHistory {",
     ] {
         assert!(
             source.contains(marker),

@@ -40,7 +40,7 @@ mod descriptors;
 mod face;
 mod scalar_step;
 
-pub use contract::{Backend, WIRE_ENCODING_OPTION};
+pub use contract::{Backend, ENCODINGS_OPTION};
 
 /// The generated artifact for one package: Rust source.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,11 +62,11 @@ pub struct GenerateError {
 /// runtime paths in its output are the `::ridl_rt::payload::Violation` and
 /// `::ridl_rt::payload::Rule` that a named scalar's constructor (typl value
 /// objects, Task 3) and an enum's or enum set's `TryFrom<i64>` (Task 5) name;
-/// it emits no interaction face.
+/// it emits no codec, no descriptor and no interaction face.
 ///
 /// The compiler corpus runs this. The pipeline ran it too until it gained [`generate_pipeline`], which
-/// `ridl build --emit rust` calls, and this output is a subset of it. The face is emitted by
-/// [`generate_face`] and [`generate_pipeline`], not from here, for the reason `docs/design/interaction-face.md` gives: the
+/// `ridl build --emit rust` calls, and this output is a subset of it. The codec, the descriptors and the face are emitted by
+/// [`generate_face_with`] and [`generate_pipeline`] when their `encodings` list names a codec, not from here, for the reason `docs/design/interaction-face.md` gives: the
 /// corpus interfaces carry contract clauses the clause translator must refuse. The second reason, that the corpus proofs
 /// passed no `--extern ridl_rt`, no longer holds: every compile proof links
 /// the runtime, because a generated named scalar, enum and enum set all name
@@ -83,12 +83,13 @@ pub struct GenerateError {
 pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
     let model = ridl_ir::codegen::lower(package, &[]);
     let ctx = Ctx::new(package, &model);
-    render(package_items(&ctx, &[])?)
+    render(package_items(&ctx, &[], &[])?)
 }
 
 /// Generates the Rust source for `package`: the domain types [`generate`]
-/// emits, plus the interaction-face descriptors over the `ridl-rt` runtime
-/// crate.
+/// emits, plus, when `encodings` names a codec, that codec and the
+/// interaction-face descriptors and face over the `ridl-rt` runtime crate.
+/// An empty `encodings` is the domain types only, and refuses nothing.
 ///
 /// This is the companion entry point, not the pipeline. The descriptors it
 /// appends name `::ridl_rt` and carry the translated `require`/`ensure` clause
@@ -99,44 +100,37 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
 /// face names those types, and the orphan rule needs them local to the test
 /// crate. The codec comes from the same call for the same reason: the face
 /// names `Payload<::ridl_rt::encoding::FlatBuffers>` for every payload type,
-/// and the implementations that satisfy it are the ones [`generate`] emits.
+/// and the implementations that satisfy it are emitted beside it. The
+/// descriptors go with the face rather than with the types: they exist to be
+/// read by a face and a runtime, and a types-only package attaches to no port.
+///
+/// The encoding reaches the output at each site that names it — every buffer
+/// the face sizes and every `Ref` it builds — as the full path
+/// `::ridl_rt::encoding::FlatBuffers`, the way the prelude names are written
+/// (driftsys/ridl#420). Until `docs/technotes/rust-backend-name-collisions.md`
+/// (2026-09-29, driftsys/ridl#588) the encoding reached the output as one
+/// alias, `pub type Wire`, emitted here at package scope, and a declaration or
+/// an interface named `Wire` was refused (interaction-face design rule 5). The
+/// alias is gone and no name is reserved: a name the backend chose never
+/// refuses a package.
 ///
 /// Total for the same reason [`generate`] is: it returns [`GenerateError`]
 /// rather than panicking, and additionally refuses a contract clause outside
 /// the accepted form and a call the one-parameter restriction cannot represent.
-pub fn generate_face(package: &v2::Package) -> Result<Generated, GenerateError> {
-    generate_face_with(package, WireEncoding::default())
-}
-
-/// [`generate_face`] with the package's wire encoding stated rather than
-/// defaulted (design note D-11 of
-/// `docs/archive/2026-09-20-flatbuffers-codec-design.md`).
-///
-/// `generate_face(package)` is
-/// `generate_face_with(package, WireEncoding::default())`, which is the
-/// relation `ridl-backend-proto` and `ridl-backend-flatbuffers` already give
-/// their own `generate_with`. The encoding reaches the output at each site
-/// that names it — every buffer the face sizes and every `Ref` it builds —
-/// as the full path `::ridl_rt::encoding::FlatBuffers`, the way the prelude
-/// names are written (driftsys/ridl#420).
-///
-/// Until `docs/technotes/rust-backend-name-collisions.md` (2026-09-29, driftsys/ridl#588)
-/// the encoding reached the output as one alias, `pub type Wire`, emitted
-/// here at package scope, and a declaration or an interface named `Wire`
-/// was refused (interaction-face design rule 5). The alias is gone and no name is
-/// reserved: a name the backend chose never refuses a package.
 pub fn generate_face_with(
     package: &v2::Package,
-    wire: WireEncoding,
+    encodings: &[WireEncoding],
 ) -> Result<Generated, GenerateError> {
     let model = ridl_ir::codegen::lower(package, &[]);
     let ctx = Ctx::new(package, &model);
-    wire.check_emitted();
+    if encodings.is_empty() {
+        return render(package_items(&ctx, &[], encodings)?);
+    }
     // This entry point refuses rather than skips, so every named interface's
     // descriptors are emitted, and the face of every interface that has one,
     // and each one claims its names.
     let interfaces: Vec<&v1::Interface> = model.interfaces.iter().collect();
-    let mut items = package_items(&ctx, &interfaces)?;
+    let mut items = package_items(&ctx, &interfaces, encodings)?;
     items.extend(descriptors::interface_items(&ctx)?);
     items.extend(face::interface_items(&model)?);
     render(items)
@@ -148,34 +142,34 @@ pub fn generate_face_with(
 /// already give their own `generate_with` (ADR-0017 decision 1):
 /// `generate(package)` is `generate_with(package, &[])`.
 ///
-/// `others` is what lets the codec size and encode a cross-package reference.
-/// Without it a type reaching another package carries no
-/// `Payload<FlatBuffers>` implementation and a note saying so
-/// (driftsys/ridl#467); with it, such a type is emitted like any other.
+/// `others` is what lets the lowering resolve a cross-package reference, and
+/// what lets [`generate_pipeline`] size and encode one: without it a type
+/// reaching another package carries no `Payload<FlatBuffers>` implementation
+/// and a note saying so (driftsys/ridl#467); with it, such a type is emitted
+/// like any other. This entry point emits the domain types only, so the
+/// difference shows in the pipeline's output rather than here.
 pub fn generate_with(
     package: &v2::Package,
     others: &[&v2::Package],
 ) -> Result<Generated, GenerateError> {
     let model = ridl_ir::codegen::lower(package, others);
     let ctx = Ctx::with_others(package, others, &model);
-    render(package_items(&ctx, &[])?)
+    render(package_items(&ctx, &[], &[])?)
 }
 
 /// The pipeline's entry point: everything [`generate_face_with`] emits, over
 /// the whole build, with an interface the face cannot carry skipped rather
-/// than refused (interaction-face design rules 1, 2 and 4).
+/// than refused (interaction-face design rules 1, 2 and 4). An empty
+/// `encodings` is the domain types only, as it is for [`generate_face_with`].
 ///
 /// **Why the pipeline calls this and not [`generate`]** (design rule 1): a
 /// consumer of `ridl build --emit rust` needs the face as much as the domain
 /// types, and the face compiles over the codec in the same unit, so the
 /// emitted unit is the superset rather than two calls.
 /// [`generate`] stays the entry point for every other caller, and it still
-/// emits no face and no descriptors. Its output is not byte-for-byte what it
-/// was — this story widened the visibility of `check` and the `__ridl_fb_*`
-/// functions, which moved every corpus snapshot — but what it emits is
-/// unchanged in kind. ADR-0023 decision 2 carries a dated consequence note
-/// (2026-09-21) saying the CLI calls this entry point rather than
-/// [`generate`]; the decision itself is not amended.
+/// emits no face and no descriptors. ADR-0023 decision 2 carries a dated
+/// consequence note (2026-09-21) saying the CLI calls this entry point rather
+/// than [`generate`]; the decision itself is not amended.
 ///
 /// **Why an interface is skipped and not refused** (design rule 2): the clause
 /// translator accepts one narrow form, and a multi-parameter call and a stream
@@ -197,11 +191,11 @@ pub fn generate_with(
 /// the note says so.
 pub fn generate_pipeline(
     package: &v2::Package,
-    wire: WireEncoding,
+    encodings: &[WireEncoding],
     others: &[&v2::Package],
 ) -> Result<Generated, GenerateError> {
     let model = ridl_ir::codegen::lower(package, others);
-    generate_pipeline_over(&model, wire)
+    generate_pipeline_over(&model, encodings)
 }
 
 /// [`generate_pipeline`] over a model the caller already has.
@@ -212,10 +206,14 @@ pub fn generate_pipeline(
 /// is this function after one `lower`, which is why the two cannot disagree.
 pub(crate) fn generate_pipeline_over(
     model: &v1::Model,
-    wire: WireEncoding,
+    encodings: &[WireEncoding],
 ) -> Result<Generated, GenerateError> {
     let ctx = Ctx::over(model);
-    wire.check_emitted();
+    if encodings.is_empty() {
+        // Types only: no descriptor reads the catalog hash and no interface
+        // is walked, so nothing below applies and nothing is refused.
+        return render(package_items(&ctx, &[], encodings)?);
+    }
     // A malformed catalog hash refuses the whole model here; inside the
     // per-interface walk below it would only skip each interface.
     descriptors::catalog_hash(&ctx)?;
@@ -237,7 +235,7 @@ pub(crate) fn generate_pipeline_over(
             Err(err) => interface_items.push(skipped_interface_note(interface, &err)),
         }
     }
-    let mut items = package_items(&ctx, &faced)?;
+    let mut items = package_items(&ctx, &faced, encodings)?;
     items.extend(interface_items);
     render(items)
 }
@@ -388,12 +386,14 @@ fn face_gap(interface: &v1::Interface, err: &GenerateError) -> FaceGap {
     FaceGap::Other
 }
 
-/// The domain types and the codec over them — what [`generate`] emits, and
-/// what a face is appended to.
+/// The domain types, and the codec over them when `encodings` names one —
+/// what [`generate`] emits (types only), and what a face is appended to.
 ///
 /// There is one codec emitter and one call to it, which is why the face
-/// compiles over the codec `generate` emits rather than over one written for
-/// it (design note D-11).
+/// compiles over the codec emitted here rather than over one written for
+/// it (design note D-11). The codec is emitted only when `encodings` is not
+/// empty: a types-only package carries no `Payload<_>` implementation, no
+/// `*FbView` type and no `__ridl_fb_*` helper.
 ///
 /// The claim tables run first, before the domain types and the codec
 /// (`claims::check`). `interfaces` are the interfaces whose descriptors and
@@ -402,20 +402,30 @@ fn face_gap(interface: &v1::Interface, err: &GenerateError) -> FaceGap {
 fn package_items(
     ctx: &Ctx,
     interfaces: &[&v1::Interface],
+    encodings: &[WireEncoding],
 ) -> Result<Vec<TokenStream>, GenerateError> {
     claims::check(ctx, interfaces)?;
     let mut items = domain_items(ctx)?;
-    items.extend(codec::package_items(ctx)?);
+    if !encodings.is_empty() {
+        for encoding in encodings {
+            encoding.check_emitted();
+        }
+        items.extend(codec::package_items(ctx)?);
+    }
     Ok(items)
 }
 
-/// The payload encoding a generated package's face encodes and verifies over
-/// (design note D-11; ADR-0020 decision 1 names the three encodings).
+/// A payload encoding a generated package carries a codec for, and that its
+/// face encodes and verifies over (design note D-11; ADR-0020 decision 1
+/// names the three encodings).
 ///
 /// It is a per-package build-time choice rather than a type parameter on the
 /// face: the alternative would put an `E: Encoding` on every descriptor, every
 /// provider trait and every caller, and a `where` bound per payload type on
-/// every impl, for a choice made once per generated package.
+/// every impl, for a choice made once per generated package. The choice is
+/// the manifest's `[backend.rust] encodings` list, which reaches this backend
+/// as the [`ENCODINGS_OPTION`] request option; there is no default, and a
+/// package whose list is empty carries the domain types only.
 ///
 /// One variant today. `ridl-backend-rust` emits a `Payload` implementation for
 /// one encoding — the FlatBuffers codec — so naming another
@@ -429,16 +439,32 @@ fn package_items(
 /// the face's `Ref`s — rather than through a `pub type Wire` alias at package
 /// scope, which a declaration or an interface named `Wire` collided with
 /// (driftsys/ridl#588; `docs/technotes/rust-backend-name-collisions.md`, decision 5).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum WireEncoding {
-    /// The FlatBuffers codec, which [`generate`] emits into
-    /// every package's own output.
-    #[default]
+    /// The FlatBuffers codec, emitted into a package's own output when the
+    /// package's `encodings` names `flatbuffers`.
     FlatBuffers,
 }
 
 impl WireEncoding {
+    /// The encoding `name` spells, as `ridl_rt::encoding::Encoding::NAME`
+    /// spells it (`flatbuffers`), or `None` for every other string — an
+    /// encoding this backend has no codec for (`proto3`, `repr-c`) included.
+    pub fn parse(name: &str) -> Option<Self> {
+        match name {
+            "flatbuffers" => Some(WireEncoding::FlatBuffers),
+            _ => None,
+        }
+    }
+
+    /// The name [`parse`](WireEncoding::parse) reads this encoding from.
+    pub fn name(self) -> &'static str {
+        match self {
+            WireEncoding::FlatBuffers => "flatbuffers",
+        }
+    }
+
     /// Checks that the encoding asked for is the one every emitter writes.
     ///
     /// The codec, the descriptors and the face all write the FlatBuffers path

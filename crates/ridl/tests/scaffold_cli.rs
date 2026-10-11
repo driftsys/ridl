@@ -130,7 +130,10 @@ fn new_creates_a_package_that_checks_clean() {
     let manifest = std::fs::read_to_string(tmp.path().join("demo/ridl.toml")).expect("manifest");
     assert_eq!(
         manifest,
-        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n"
+        concat!(
+            "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+            "\n# Uncomment to generate the FlatBuffers codec, descriptors and interaction face:\n# [backend.rust]\n# encodings = [\"flatbuffers\"]\n"
+        )
     );
     let source = std::fs::read_to_string(tmp.path().join("demo/demo.ridl")).expect("source");
     assert!(source.starts_with("package demo\n"), "source:\n{source}");
@@ -187,8 +190,15 @@ fn workspace_checks_clean_from_the_root_and_from_the_member() {
     assert_eq!(stdout, "Created workspace proj\n");
     let root = tmp.path().join("proj");
     let manifest = std::fs::read_to_string(root.join("ridl.toml")).expect("root manifest");
-    assert_eq!(manifest, "[workspace]\nmembers = [\"proj\"]\n");
-    assert!(root.join("proj/ridl.toml").is_file());
+    assert_eq!(
+        manifest,
+        concat!(
+            "[workspace]\nmembers = [\"proj\"]\n",
+            "\n# Uncomment to generate the FlatBuffers codec, descriptors and interaction face:\n# [backend.rust]\n# encodings = [\"flatbuffers\"]\n"
+        )
+    );
+    let member = std::fs::read_to_string(root.join("proj/ridl.toml")).expect("member manifest");
+    assert_eq!(member, "[package]\nname = \"proj\"\nversion = \"0.1.0\"\n");
     assert!(root.join("proj/proj.ridl").is_file());
     assert_clean(&root, &["check"]);
     assert_clean(&root.join("proj"), &["check"]);
@@ -204,7 +214,13 @@ fn workspace_name_flag_names_the_member() {
     );
     let root = tmp.path().join("proj");
     let manifest = std::fs::read_to_string(root.join("ridl.toml")).expect("root manifest");
-    assert_eq!(manifest, "[workspace]\nmembers = [\"hvac\"]\n");
+    assert_eq!(
+        manifest,
+        concat!(
+            "[workspace]\nmembers = [\"hvac\"]\n",
+            "\n# Uncomment to generate the FlatBuffers codec, descriptors and interaction face:\n# [backend.rust]\n# encodings = [\"flatbuffers\"]\n"
+        )
+    );
     assert!(root.join("hvac/hvac.ridl").is_file());
     assert_clean(&root, &["check"]);
 }
@@ -619,4 +635,95 @@ fn a_failed_write_removes_what_this_command_created() {
     // The member files are written, then the root manifest fails: the
     // member files must be removed again.
     assert_refused(&root, &["init", "--workspace"], "cannot write", tmp.path());
+}
+
+#[test]
+fn uncommenting_the_backend_table_emits_the_codec() {
+    let tmp = TempDir::new("backend-hint");
+    assert_clean(tmp.path(), &["new", "demo"]);
+    let package = tmp.path().join("demo");
+    let out = package.join("out-types");
+    assert_clean(
+        &package,
+        &[
+            "build",
+            "--emit",
+            "rust",
+            "--out-dir",
+            out.to_str().unwrap(),
+        ],
+    );
+    let types_only = std::fs::read_to_string(out.join("demo.rs")).expect("types-only demo.rs");
+    assert!(
+        !types_only.contains("Payload<"),
+        "the default scaffold is types only"
+    );
+
+    let manifest_path = package.join("ridl.toml");
+    let manifest = std::fs::read_to_string(&manifest_path).expect("manifest");
+    let uncommented = manifest
+        .replace("# [backend.rust]", "[backend.rust]")
+        .replace("# encodings", "encodings");
+    assert_ne!(
+        uncommented, manifest,
+        "the manifest holds the commented table"
+    );
+    std::fs::write(&manifest_path, uncommented).expect("write manifest");
+    let out = package.join("out-codec");
+    assert_clean(
+        &package,
+        &[
+            "build",
+            "--emit",
+            "rust",
+            "--out-dir",
+            out.to_str().unwrap(),
+        ],
+    );
+    let with_codec = std::fs::read_to_string(out.join("demo.rs")).expect("codec demo.rs");
+    assert!(
+        with_codec.contains("Payload<"),
+        "the uncommented table emits the codec"
+    );
+    assert!(
+        with_codec.contains("impl ::ridl_rt::contract::Interface"),
+        "the uncommented table emits the descriptors"
+    );
+}
+
+#[test]
+fn uncommenting_the_workspace_root_table_emits_the_members_codec() {
+    let tmp = TempDir::new("backend-hint-workspace");
+    assert_clean(tmp.path(), &["new", "--workspace", "proj"]);
+    let root = tmp.path().join("proj");
+    let manifest_path = root.join("ridl.toml");
+    let manifest = std::fs::read_to_string(&manifest_path).expect("root manifest");
+    let uncommented = manifest
+        .replace("# [backend.rust]", "[backend.rust]")
+        .replace("# encodings", "encodings");
+    assert_ne!(
+        uncommented, manifest,
+        "the root manifest holds the commented table"
+    );
+    std::fs::write(&manifest_path, uncommented).expect("write root manifest");
+    let out = root.join("out");
+    assert_clean(
+        &root,
+        &[
+            "build",
+            "--emit",
+            "rust",
+            "--out-dir",
+            out.to_str().unwrap(),
+        ],
+    );
+    let member = std::fs::read_to_string(out.join("proj.rs")).expect("member module");
+    assert!(
+        member.contains("Payload<"),
+        "the root table emits the member's codec"
+    );
+    assert!(
+        member.contains("impl ::ridl_rt::contract::Interface"),
+        "the root table emits the member's descriptors"
+    );
 }

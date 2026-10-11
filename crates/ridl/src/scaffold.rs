@@ -74,10 +74,17 @@ fn plan(request: &Request<'_>) -> Result<Plan, String> {
     } else {
         target.clone()
     };
+    // The `[backend.<name>]` table belongs to the standalone package or the
+    // workspace root, never to a member (MANI-016).
+    let package_manifest = format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\n");
     let mut files = vec![
         (
             package_directory.join("ridl.toml"),
-            format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\n"),
+            if request.workspace {
+                package_manifest
+            } else {
+                format!("{package_manifest}{BACKEND_HINT}")
+            },
         ),
         (
             package_directory.join(format!("{name}.ridl")),
@@ -87,7 +94,7 @@ fn plan(request: &Request<'_>) -> Result<Plan, String> {
     if request.workspace {
         files.push((
             target.join("ridl.toml"),
-            format!("[workspace]\nmembers = [\"{name}\"]\n"),
+            format!("[workspace]\nmembers = [\"{name}\"]\n{BACKEND_HINT}"),
         ));
     }
 
@@ -176,6 +183,10 @@ fn package_name(request: &Request<'_>, target: &Path) -> Result<String, String> 
         )),
     }
 }
+
+/// The commented-out `[backend.rust]` table that a scaffolded manifest ends
+/// with. A package stays types only until the user uncomments it.
+const BACKEND_HINT: &str = "\n# Uncomment to generate the FlatBuffers codec, descriptors and interaction face:\n# [backend.rust]\n# encodings = [\"flatbuffers\"]\n";
 
 const NAME_RULE: &str = "A package name is lowercase dot-separated segments, each a letter \
      followed by letters or digits (for example `veh.common`).";

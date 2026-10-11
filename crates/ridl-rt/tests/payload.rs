@@ -56,6 +56,8 @@ fn write_le(value: u16, out: &mut [u8]) -> Result<&[u8], EncodeError> {
 /// A codec whose view is the checked bytes.
 impl Payload<ReprC> for Speed {
     const MAX_SIZE: usize = 2;
+    type Buffer = [u8; 2];
+    const BUFFER: [u8; 2] = [0; 2];
     type View<'a> = &'a [u8];
 
     fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, &'o [u8]>, EncodeError> {
@@ -88,6 +90,8 @@ struct Parsed {
 /// constants apart.
 impl Payload<Proto3> for Speed {
     const MAX_SIZE: usize = 3;
+    type Buffer = [u8; 3];
+    const BUFFER: [u8; 3] = [0; 3];
     type View<'a> = Parsed;
 
     fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, Parsed>, EncodeError> {
@@ -180,4 +184,45 @@ fn every_payload_error_is_copy_and_owns_nothing() {
     owns_nothing::<Malformed>();
     owns_nothing::<Violation>();
     owns_nothing::<Rule>();
+}
+
+/// A payload whose largest encoding is 8 bytes.
+struct Wide(u64);
+
+impl Payload<ReprC> for Wide {
+    const MAX_SIZE: usize = 8;
+    type Buffer = [u8; 8];
+    const BUFFER: [u8; 8] = [0; 8];
+    type View<'a> = &'a [u8];
+
+    fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, &'o [u8]>, EncodeError> {
+        let available = out.len();
+        let Some(front) = out.get_mut(..8) else {
+            return Err(EncodeError::Capacity {
+                needed: 8,
+                available,
+            });
+        };
+        front.copy_from_slice(&self.0.to_le_bytes());
+        let bytes: &'o [u8] = front;
+        Ok(Encoded { bytes, view: bytes })
+    }
+
+    fn verify(buf: &[u8]) -> Result<&[u8], VerifyError> {
+        Ok(buf)
+    }
+
+    fn decode(r: Ref<'_, Self, ReprC>) -> Self {
+        let mut bytes = [0u8; 8];
+        bytes.copy_from_slice(r.bytes());
+        Wide(u64::from_le_bytes(bytes))
+    }
+}
+
+#[test]
+fn a_buffer_holds_the_largest_encoding() {
+    let mut buffer = <Wide as Payload<ReprC>>::BUFFER;
+    let proof = Ref::<Wide, ReprC>::encode(&Wide(u64::MAX), buffer.as_mut())
+        .expect("a buffer is as long as the largest encoding");
+    assert_eq!(proof.bytes(), &u64::MAX.to_le_bytes());
 }

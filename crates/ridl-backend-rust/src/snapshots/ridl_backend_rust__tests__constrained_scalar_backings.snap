@@ -1,6 +1,6 @@
 ---
 source: crates/ridl-backend-rust/src/tests.rs
-expression: rust_for(decls)
+expression: rust_with_codec(decls)
 ---
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -309,6 +309,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Name {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 314usize;
+    type Buffer = [::core::primitive::u8; 314usize];
+    const BUFFER: Self::Buffer = [0u8; 314usize];
     type View<'a> = NameFbView<'a>;
     fn encode<'o>(
         &self,
@@ -457,6 +459,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Digest {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 89usize;
+    type Buffer = [::core::primitive::u8; 89usize];
+    const BUFFER: Self::Buffer = [0u8; 89usize];
     type View<'a> = DigestFbView<'a>;
     fn encode<'o>(
         &self,
@@ -596,6 +600,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Ratio {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
+    type Buffer = [::core::primitive::u8; 50usize];
+    const BUFFER: Self::Buffer = [0u8; 50usize];
     type View<'a> = RatioFbView<'a>;
     fn encode<'o>(
         &self,

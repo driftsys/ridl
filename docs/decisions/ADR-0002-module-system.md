@@ -25,6 +25,9 @@ of source packages below one `[package]` manifest, and the rule that a source
 package belongs to one unit (MANI-014); §4 refuses a `ridl.toml` inside a unit's
 tree (MANI-013).
 
+Amended 2026-10-10 by driftsys/ridl#801: §4 gains the `[backend.<name>]` tables,
+with the `encodings` key, and the codes MANI-015 and MANI-016.
+
 ## Context
 
 RIDL is an interface description language whose source files declare contracts
@@ -277,6 +280,35 @@ not UTF-8, and when it contains a control character (C0, DEL, C1, U+2028 or
 U+2029, other than a tab and a line break); MANI-012 (Error) is raised when the
 manifest of a workspace member sets the key. Single-file mode has no manifest
 and no header.
+
+**The `[backend.<name>]` tables** (amended 2026-10-10, driftsys/ridl#801) hold
+one key per backend, `encodings`: an array of the encoding names the toolchain
+knows, `flatbuffers`, `proto3` and `repr-c`, which the backend named by `<name>`
+emits beside the types:
+
+```toml
+[package]
+name = "veh.cabin"
+version = "1.0.0"
+
+[backend.rust]
+encodings = ["flatbuffers"]
+```
+
+`<name>` is the backend's language name as `ridl build` knows it: `rust` for the
+built-in Rust backend, and the `<language>` of a `--plugin <language>=<path>`
+for an external plugin. The manifest accepts any `<name>`; a table for a backend
+that the current build does not emit is read, validated and otherwise unused. An
+absent table, an absent key, and an empty array all mean types only. Only the
+workspace root's manifest, or a standalone package's manifest, may hold a
+`[backend.<name>]` table. MANI-015 (Error) is raised when `backend` or a
+`[backend.<name>]` is not a table, when `encodings` is not an array of strings,
+when an element is not a known name, and when an element repeats; MANI-016
+(Error) is raised when the manifest of a workspace member holds a `backend` key
+or `[backend.<name>]` table; any other key under `[backend.<name>]` is MANI-005.
+These tables are not the `backend.key` attribute namespace of rsdl (RSDL-804,
+which annotates rsdl declarations): the two share the word and nothing else.
+Single-file mode has no manifest and so no encodings.
 
 **Rationale — one file shape.** A second file type for workspaces would double
 the file count and the file's semantic baggage for no real gain. A section-based

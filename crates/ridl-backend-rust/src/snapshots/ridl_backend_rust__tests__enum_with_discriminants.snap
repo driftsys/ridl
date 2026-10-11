@@ -1,6 +1,6 @@
 ---
 source: crates/ridl-backend-rust/src/tests.rs
-expression: rust_for(decls)
+expression: rust_with_codec(decls)
 ---
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
@@ -139,6 +139,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for GearPosit
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
+    type Buffer = [::core::primitive::u8; 50usize];
+    const BUFFER: Self::Buffer = [0u8; 50usize];
     type View<'a> = GearPositionFbView<'a>;
     fn encode<'o>(
         &self,

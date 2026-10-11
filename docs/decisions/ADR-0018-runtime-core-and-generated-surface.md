@@ -72,6 +72,12 @@ A file of a generated surface begins with a line comment,
 header, if one is set (driftsys/ridl#746). The decision is written into decision
 6 in place; the record stays Proposed.
 
+**Amended 2026-10-10 — decisions 4, 5 and 15, on-request encodings.** The Rust
+codec is requested by the manifest's `[backend.rust] encodings`, not by a
+`--wire` flag; the face reads its buffer sizes from `Payload::BUFFER` and
+`Sizes<E>`, and the encoding it uses from its port once that part lands. Each
+decision carries the amendment in place. The record stays Proposed.
+
 ## Context
 
 The Rust backend has shipped an interaction layer since E2 — consumer and
@@ -164,6 +170,15 @@ be generated, and in what order", which is what this record answers.
    parsing — so `--emit rust --wire proto` produces code with no external
    crates.
 
+   **Amendment (2026-10-10) — the Rust codec is requested in the manifest.** The
+   Rust codec is selected by `[backend.rust] encodings = [...]` in the manifest
+   ([ADR-0002](ADR-0002-module-system.md) section 4). `--wire proto` is not the
+   form a codec request takes: `ridl build` sends the Rust backend its list as
+   the request option `encodings`, and the backend emits the codec only for a
+   name the list holds. The schema emits stay on `--emit` (`--emit proto`,
+   `--emit flatbuffers`). The text above is kept as the record of the original
+   decision.
+
    **Interoperability is at the bytes**, mediated by the emitted schema: our
    codec and a `protoc`-generated consumer interoperate without sharing a
    library. That places one obligation, which is a test rather than an
@@ -199,6 +214,13 @@ be generated, and in what order", which is what this record answers.
    move. The alternative — leaving encodings on `--emit` — makes the axis mean
    three unrelated things (a language, a wire schema, an IR encoding) and has no
    place to put the codec, which is the product of the two.
+
+   **Amendment (2026-10-10) — the codec is no longer a flag product.** The
+   three-line CLI table above is superseded for the codec: `--emit rust` emits
+   the domain types only, and the codec, the descriptors and the face are
+   emitted when `[backend.rust] encodings` names `flatbuffers`. A generated
+   package enables one `ridl-rt` feature per named encoding, and none for a
+   types-only build. The schema emits remain on `--emit`.
 
 6. **Language scope narrows to Rust, TypeScript and Kotlin.** Rust is primary,
    with **optional** FFI wrappers built from opaque handles and accessors rather
@@ -419,6 +441,13 @@ be generated, and in what order", which is what this record answers.
     `dispatch` over `Handler`. The predicted convergence on E9.11 does not
     happen: the store and the dispatcher it named are `ridl-engine`'s, parked
     outside this repository, and the face binds ports instead.
+
+    **Amendment (2026-10-10) — the face and the encoding.** The face is
+    specified to read the encoding from its port (`P: Encoded`, `P::Encoding`)
+    once the part that makes it generic lands; it names no encoding in
+    application code. Until then the face stays monomorphic over FlatBuffers and
+    reads every buffer size from `Payload::BUFFER` and the `Sizes<FlatBuffers>`
+    table, and it is emitted only when the manifest names `flatbuffers`.
 
 16. **`ridl-rt` becomes an epic at the ridl layer, in V1.** The runtime core —
     store, control plane, frame protocol, subscriptions, the sans-IO loop, the

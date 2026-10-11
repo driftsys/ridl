@@ -63,6 +63,10 @@ use support::doubles::{self, FailingHandler, Op, QueuedClaims, RecordingPorts};
 /// this one catalog.
 const CATALOG: CatalogRef = *<generated::Cabin as ridl_rt::contract::Interface>::CATALOG;
 
+/// The interface's claim-buffer maximum, read from its size table.
+const CLAIM_MAX: usize =
+    <generated::Cabin as ridl_rt::contract::Sizes<ridl_rt::encoding::FlatBuffers>>::MAX_BUFFER_SIZE;
+
 fn loopback() -> Loopback {
     Loopback::new(CATALOG)
 }
@@ -94,7 +98,7 @@ fn send_level_raw(port: &mut Loopback, level: i64) -> Correlation {
     use ridl_rt::payload::Ref;
 
     let level = generated::Level::new_unchecked(level);
-    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let mut buf = [0u8; CLAIM_MAX];
     // `Encoded.bytes` is a subslice of the buffer, not a prefix of it
     // (`crates/ridl-rt/src/payload.rs`), and the generated FlatBuffers
     // encoder builds at the tail, so the bytes to send are the ones the
@@ -111,10 +115,10 @@ fn send_level_raw(port: &mut Loopback, level: i64) -> Correlation {
     .expect("send")
 }
 
-/// The checked-in output of `generate_face` over `tests/fixtures/interaction_face.ridl`.
+/// The checked-in output of `generate_face_with` over `tests/fixtures/interaction_face.ridl`.
 /// It is `include!`d, never hand-edited; the regeneration guard in
 /// `tests/interaction_face_regeneration.rs` compares it byte-for-byte against a
-/// fresh `generate_face` call. Lint allows live on
+/// fresh `generate_face_with` call. Lint allows live on
 /// this wrapper module, as outer attributes, because the generated file itself
 /// carries no inner attribute (design §7): an inner attribute inside an
 /// `include!`d file is a hard error.
@@ -513,7 +517,7 @@ fn round_trip_failing_require_settles_precondition_failed() {
     // sending through the raw port bypasses that and exercises `dispatch`'s
     // own check instead.
     let level = generated::Level::new_unchecked(100);
-    let mut encode_buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let mut encode_buf = [0u8; CLAIM_MAX];
     // `Encoded.bytes` is a subslice of the buffer, not a prefix of it
     // (`crates/ridl-rt/src/payload.rs`), and the generated FlatBuffers
     // encoder builds at the tail, so the bytes to send are the ones the
@@ -533,7 +537,7 @@ fn round_trip_failing_require_settles_precondition_failed() {
         .expect("send");
 
     let mut provider = TestProvider::new(0);
-    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let mut buf = [0u8; CLAIM_MAX];
     let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound());
     assert_eq!(settled, Ok(1), "an outcome was still settled");
     assert!(
@@ -575,7 +579,7 @@ fn round_trip_client_set_level_short_circuits_on_failing_require() {
     // Nothing was sent: an otherwise-empty port has no claim for dispatch to
     // find.
     let mut provider = TestProvider::new(0);
-    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let mut buf = [0u8; CLAIM_MAX];
     let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound());
     assert_eq!(
         settled,
@@ -607,7 +611,7 @@ fn round_trip_client_average_short_circuits_on_failing_require() {
     // Nothing was sent: an otherwise-empty port has no claim for dispatch to
     // find.
     let mut provider = TestProvider::new(0);
-    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let mut buf = [0u8; CLAIM_MAX];
     let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound());
     assert_eq!(
         settled,
@@ -658,7 +662,7 @@ fn round_trip_dispatch_counts_only_accepted_settlements() {
     port.fail_next_settle();
 
     let mut provider = TestProvider::new(0);
-    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let mut buf = [0u8; CLAIM_MAX];
     let settled_first =
         generated::cabin::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound());
     assert_eq!(
@@ -709,7 +713,7 @@ fn round_trip_short_caller_buffer_returns_zero_without_consuming_a_claim() {
 
     // Retrying with a correctly sized buffer still finds the claim the short
     // buffer left untouched.
-    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let mut buf = [0u8; CLAIM_MAX];
     let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf, &mut budget);
     assert_eq!(settled, Ok(1));
     assert_eq!(
@@ -717,6 +721,48 @@ fn round_trip_short_caller_buffer_returns_zero_without_consuming_a_claim() {
         "the one claim taken spends one unit of the budget"
     );
     assert_eq!(provider.set_level_calls, vec![1]);
+}
+
+/// `dispatch` refuses a claim buffer one byte short of the interface maximum
+/// and accepts a buffer of exactly the maximum. On this fixture the event
+/// maximum is larger than the call maximum, so a face sized from the event
+/// maximum would fail the second half.
+#[test]
+fn round_trip_dispatch_refuses_one_byte_short_and_accepts_the_exact_maximum() {
+    let mut port = loopback();
+    send_level_raw(&mut port, 1);
+    let mut provider = TestProvider::new(0);
+
+    let mut short = vec![0u8; CLAIM_MAX - 1];
+    let mut budget = 5;
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut short, &mut budget);
+    assert_eq!(settled, Ok(0), "one byte short is refused");
+    assert!(provider.set_level_calls.is_empty());
+
+    let mut exact = vec![0u8; CLAIM_MAX];
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut exact, &mut budget);
+    assert_eq!(settled, Ok(1), "exactly the maximum is accepted");
+    assert_eq!(provider.set_level_calls, vec![1]);
+}
+
+/// The fixture source of the generated face.
+const FIXTURE: &str = include_str!("generated/interaction_face.rs");
+
+#[test]
+fn no_buffer_is_sized_by_an_array_length() {
+    assert!(
+        !FIXTURE.contains("MAX_SIZE]"),
+        "no array length names MAX_SIZE"
+    );
+    for needle in ["::BUFFER", "CLAIM_BUFFER", "EVENT_BUFFER"] {
+        assert!(FIXTURE.contains(needle), "the face names {needle}");
+    }
+}
+
+#[test]
+fn the_descriptor_has_no_inherent_buffer_constants() {
+    assert!(!FIXTURE.contains("pub const MAX_BUFFER_SIZE"));
+    assert!(!FIXTURE.contains("pub const EVENT_SOURCE_BUFFER_SIZE"));
 }
 
 // ---------------------------------------------------------------------------
@@ -788,7 +834,7 @@ fn round_trip_unrecognized_ordinal_settles_unknown_interaction() {
         .expect("send");
 
     let mut provider = TestProvider::new(0);
-    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let mut buf = [0u8; CLAIM_MAX];
     let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound());
     assert_eq!(settled, Ok(1), "an outcome was still settled");
     assert!(
@@ -825,7 +871,7 @@ fn round_trip_foreign_interface_number_settles_unknown_interaction() {
     // which pins that fallback arm instead.)
     let mut port = loopback();
     let level = generated::Level::new_unchecked(50);
-    let mut encode_buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let mut encode_buf = [0u8; CLAIM_MAX];
     // `Encoded.bytes` is a subslice of the buffer, not a prefix of it
     // (`crates/ridl-rt/src/payload.rs`), and the generated FlatBuffers
     // encoder builds at the tail, so the bytes to send are the ones the
@@ -845,7 +891,7 @@ fn round_trip_foreign_interface_number_settles_unknown_interaction() {
         .expect("send");
 
     let mut provider = TestProvider::new(0);
-    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let mut buf = [0u8; CLAIM_MAX];
     let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound());
     assert_eq!(settled, Ok(1), "an outcome was still settled");
     assert!(
@@ -883,7 +929,7 @@ fn round_trip_malformed_argument_bytes_settle_transport_corrupt() {
         .expect("send");
 
     let mut provider = TestProvider::new(0);
-    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let mut buf = [0u8; CLAIM_MAX];
     let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound());
     assert_eq!(settled, Ok(1), "an outcome was still settled");
     assert!(
@@ -910,7 +956,7 @@ fn round_trip_an_oversized_claim_is_settled_corrupt_and_the_claim_behind_it_is_s
     use ridl_rt::contract::Interaction;
 
     let mut rt = loopback();
-    let oversized = vec![0u8; generated::Cabin::MAX_BUFFER_SIZE + 1];
+    let oversized = vec![0u8; CLAIM_MAX + 1];
     let first = rt
         .command(
             CABIN,
@@ -958,7 +1004,7 @@ fn round_trip_out_of_range_argument_settles_invalid_value() {
     // structure check.
     let mut port = loopback();
     let level = generated::Level::new_unchecked(200);
-    let mut encode_buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let mut encode_buf = [0u8; CLAIM_MAX];
     // `Encoded.bytes` is a subslice of the buffer, not a prefix of it
     // (`crates/ridl-rt/src/payload.rs`), and the generated FlatBuffers
     // encoder builds at the tail, so the bytes to send are the ones the
@@ -978,7 +1024,7 @@ fn round_trip_out_of_range_argument_settles_invalid_value() {
         .expect("send");
 
     let mut provider = TestProvider::new(0);
-    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let mut buf = [0u8; CLAIM_MAX];
     let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound());
     assert_eq!(settled, Ok(1), "an outcome was still settled");
     assert!(
@@ -1720,7 +1766,7 @@ fn dispatch_counts_an_oversized_claims_accepted_settlement() {
     let mut handler = QueuedClaims::oversized(CABIN, 5);
     let counts = handler.counts();
     let mut provider = TestProvider::new(0);
-    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let mut buf = [0u8; CLAIM_MAX];
     let mut budget = 3;
     let settled = generated::cabin::dispatch(&mut handler, &mut provider, &mut buf, &mut budget);
     assert_eq!(settled, Ok(3), "each accepted settlement is counted");
@@ -1743,7 +1789,7 @@ fn dispatch_ends_the_pass_when_an_oversized_claims_settlement_is_refused() {
         let mut handler = QueuedClaims::oversized_rejecting(CABIN, 5, refusal);
         let counts = handler.counts();
         let mut provider = TestProvider::new(0);
-        let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+        let mut buf = [0u8; CLAIM_MAX];
         let mut budget = 3;
         let settled =
             generated::cabin::dispatch(&mut handler, &mut provider, &mut buf, &mut budget);
@@ -1806,7 +1852,7 @@ fn serve_over_a_handler_failing_after_one_claim_fails_after_the_oversized_one() 
     use ridl_rt::contract::Interaction;
 
     let mut rt = loopback();
-    let oversized = vec![0u8; generated::Cabin::MAX_BUFFER_SIZE + 1];
+    let oversized = vec![0u8; CLAIM_MAX + 1];
     let first = rt
         .command(
             CABIN,

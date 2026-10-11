@@ -512,6 +512,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorId {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 43usize;
+    type Buffer = [::core::primitive::u8; 43usize];
+    const BUFFER: Self::Buffer = [0u8; 43usize];
     type View<'a> = DoorIdFbView<'a>;
     fn encode<'o>(
         &self,
@@ -656,6 +658,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Percent {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = PercentFbView<'a>;
     fn encode<'o>(
         &self,
@@ -800,6 +804,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Odometer 
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = OdometerFbView<'a>;
     fn encode<'o>(
         &self,
@@ -944,6 +950,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for LockState
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
+    type Buffer = [::core::primitive::u8; 50usize];
+    const BUFFER: Self::Buffer = [0u8; 50usize];
     type View<'a> = LockStateFbView<'a>;
     fn encode<'o>(
         &self,
@@ -1164,6 +1172,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorRepor
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 60usize;
+    type Buffer = [::core::primitive::u8; 60usize];
+    const BUFFER: Self::Buffer = [0u8; 60usize];
     type View<'a> = DoorReportFbView<'a>;
     fn encode<'o>(
         &self,
@@ -1308,6 +1318,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorFault
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
+    type Buffer = [::core::primitive::u8; 50usize];
+    const BUFFER: Self::Buffer = [0u8; 50usize];
     type View<'a> = DoorFaultFbView<'a>;
     fn encode<'o>(
         &self,
@@ -1354,6 +1366,32 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorFault
         __ridl_fb_decode_DoorFault(__view.buf, __view.table)
     }
 }
+/// Interface `DoorControl` carries no generated interaction face.
+///
+/// The emitter refused it: query `readDoor`'s reply must be a single declared type
+///
+/// A call the face cannot carry — an interaction that does not declare exactly one named parameter, or a query whose reply is not a named type. driftsys/ridl#713 adds the induced argument struct that removes the first.
+///
+/// Its descriptors are absent for the reason above: the refusal is
+/// raised by the descriptor emitter, which the face is built on. The
+/// rest of this package — its domain types, its codec, and every
+/// other interface — is unaffected, which is why the build succeeded
+/// (interaction-face design rule 2).
+#[allow(dead_code, non_upper_case_globals)]
+const __RIDL_NO_FACE_DoorControl: () = ();
+/// Interface `Telemetry` carries no generated interaction face.
+///
+/// The emitter refused it: interaction `fuelLevel` must declare exactly one parameter (the face emits no induced argument struct, driftsys/ridl#713)
+///
+/// A call the face cannot carry — an interaction that does not declare exactly one named parameter, or a query whose reply is not a named type. driftsys/ridl#713 adds the induced argument struct that removes the first.
+///
+/// Its descriptors are absent for the reason above: the refusal is
+/// raised by the descriptor emitter, which the face is built on. The
+/// rest of this package — its domain types, its codec, and every
+/// other interface — is unaffected, which is why the build succeeded
+/// (interaction-face design rule 2).
+#[allow(dead_code, non_upper_case_globals)]
+const __RIDL_NO_FACE_Telemetry: () = ();
 
 
 // ===== package fleet.legacy =====
@@ -1489,6 +1527,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorFault
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
+    type Buffer = [::core::primitive::u8; 50usize];
+    const BUFFER: Self::Buffer = [0u8; 50usize];
     type View<'a> = DoorFaultFbView<'a>;
     fn encode<'o>(
         &self,

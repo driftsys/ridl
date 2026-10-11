@@ -313,10 +313,9 @@ cannot see.
 
 Each payload carries a `max_sizes` list with one `MaxSize` row per encoding that
 has a state. A row has `encoding` (`Proto3`, `FlatBuffers`, `ReprC`), `state`
-(`Bounded` or `Unbounded`), `bytes` (a `uint32`, as in
-`ridl_rt::contract::EncodedSizes` and the codegen model) and `cause` (the
-codegen model's `FbUnboundedCause`, member for member). That gives three states
-per payload and encoding:
+(`Bounded` or `Unbounded`), `bytes` (a `uint32`, as in the codegen model) and
+`cause` (the codegen model's `FbUnboundedCause`, member for member). That gives
+three states per payload and encoding:
 
 - **absent**: no row, because this toolchain computed no state;
 - **bounded**: `bytes` is the maximum encoded size of the payload, envelope and
@@ -370,9 +369,9 @@ is not safe for a size bound (driftsys/ridl#665). A `string` or `bytes` with no
 `len_max` has no bound in either column, as in `max_size`. A compiled package
 always carries `len_max`.
 
-The Rust backend's `PayloadInfo.max_size.flatbuffers` is the codegen model's
-`Payload.flatbuffers_max_size`, the same `max_size` value. Its `proto3` stays
-`None`, because that backend emits no proto3 codec.
+The Rust backend's `Payload<FlatBuffers>::MAX_SIZE` is the codegen model's
+`Payload.flatbuffers_max_size`, the same `max_size` value. It writes no proto3
+size, because that backend emits no proto3 codec.
 
 **The codegen model carries the same states.** The model (`ridl.codegen.v1`)
 writes a `PayloadSizes` message, one `SizeState` per encoding, on every payload
@@ -400,21 +399,24 @@ both per encoding:
   whose reservation is unsized. A tombstone does not count, and an interface
   with no live member has a budget of zero bytes.
 
-These are the same two sums the runtime computes:
-`ridl_rt::contract::Member::reservation` over a member's payloads, and the free
-function `ridl_rt::contract::table_budget` over `Interface::MEMBERS`. The model
-states them per wire encoding, so a plugin reads them without walking the
+The runtime computes the corresponding two sums over the interface's `Sizes<E>`
+table: `ridl_rt::contract::reservation::<X, E>()` for a member `X`, and
+`ridl_rt::contract::table_budget::<I, E>()` for an interface `I`. The model
+states its sums per wire encoding, so a plugin reads them without walking the
 members itself.
 
-The two sides agree only where the runtime holds the same per-payload sizes the
-model holds. Today the Rust backend writes no proto3 size into the runtime
-member table it generates: the `PayloadInfo::max_size` of that table carries
-`proto3: None` for every payload (`descriptors.rs` in `ridl-backend-rust`), so
-the runtime's proto3 reservation is `Unsized` for every member of a generated
-table, while the model's proto3 column can carry a byte count. The catalog
-descriptor this record describes is a different artifact, and it does write a
-proto3 row (`lower.rs` in `ridl-descriptor`). The FlatBuffers column is the one
-where the runtime table and the model read the same number.
+The two sides differ for a `fixed` member. The runtime row of a `fixed` is `0`,
+because a fixed value is never in flight, while the model's reservation counts
+the fixed member's payload, and so does its table budget. For an interface with
+a `fixed` member the model's numbers are therefore larger than the runtime's by
+the size of each fixed payload. For every other kind of member the two sides
+agree only where the runtime holds the same per-payload sizes the model holds.
+Today the Rust backend emits a `Sizes<E>` table for FlatBuffers alone, so only
+that column has a runtime counterpart; the model's proto3 column can carry a
+byte count with no table to compare it with. The catalog descriptor this record
+describes is a different artifact, and it does write a proto3 row (`lower.rs` in
+`ridl-descriptor`). The FlatBuffers column is the one where the runtime table
+and the model read the same number for a member that is not a `fixed`.
 
 ## Verification before access, and `ridl describe`
 

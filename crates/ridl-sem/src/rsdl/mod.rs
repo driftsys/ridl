@@ -28,7 +28,7 @@ pub use closure::{
     Closure, ClosureComponent, ClosureService, ComponentId, ComponentLines, InterfaceId,
 };
 pub use distribution::{DistributionDependency, DistributionFacts};
-pub use lower::lower_system;
+pub use lower::{link_crossing, lower_system};
 pub use placement::{DeploymentPlacement, Placement};
 pub use resolve::ResolvedRequire;
 pub use target::{ReferenceTarget, Target, reference_at, references};

@@ -16,7 +16,12 @@ fn map_defaults_only_construct_zero_or_one_unique_entry() {
         "{:?}",
         output.diagnostics
     );
-    let generated = ridl_backend_rust::generate(&output.package).unwrap();
+    let generated = ridl_backend_rust::generate_pipeline(
+        &output.package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        &[],
+    )
+    .unwrap();
     for name in ["Many", "BadKey", "BadValue"] {
         assert!(
             !generated

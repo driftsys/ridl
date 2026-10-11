@@ -46,6 +46,7 @@ use std::time::Duration;
 
 pub mod deps;
 mod design_lints;
+mod link_encodings;
 pub use design_lints::{check_design_lints, cohesion_groups};
 pub mod diff_side;
 pub use diff_side::{DiffSide, DiffSideError, load_diff_side};
@@ -138,6 +139,7 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
             lints: LintScopes::default(),
             // No manifest: no header file.
             codegen_header: None,
+            backends: BTreeMap::new(),
             report_scope: None,
             // A source text has no directory, so no unit is recorded.
             units: BTreeMap::new(),
@@ -652,6 +654,54 @@ impl Emit {
             .iter()
             .filter_map(|emit| emit.ir_dump_suffix().map(|suffix| (*emit, suffix)))
     }
+
+    /// The name of the `[backend.<name>]` table this emit reads, or `None`
+    /// for an emit that is not a backend: an IR dump, or the catalog
+    /// descriptor, which takes no option. An in-tree backend's table is named
+    /// after its language; the codegen model's is named `codegen-model`,
+    /// after its `--emit` value, although the backend itself reports the
+    /// language `model`.
+    pub(crate) fn backend_table(self) -> Option<&'static str> {
+        // The same discipline as `ir_dump_suffix`: a new emit must be
+        // classified here, or this crate's test targets do not build.
+        #[deny(
+            clippy::wildcard_enum_match_arm,
+            clippy::match_wildcard_for_single_variants
+        )]
+        match self {
+            Emit::Rust => Some("rust"),
+            Emit::TypeScript => Some("typescript"),
+            Emit::Proto => Some("proto"),
+            Emit::Flatbuffers => Some("flatbuffers"),
+            Emit::CodegenModel => Some("codegen-model"),
+            Emit::Catalog | Emit::IrJson | Emit::IrText | Emit::IrBinary => None,
+        }
+    }
+
+    /// Whether this emit's backend can carry a payload codec, which is what
+    /// RSDL-807 compares a deployment's links against. Only the Rust backend
+    /// reads an `encodings` list today: a schema emit (`proto`,
+    /// `flatbuffers`) is independent of the codecs a package carries, and the
+    /// TypeScript and codegen-model backends refuse the option, so a warning
+    /// naming their table would ask for a key the table cannot hold. The
+    /// TypeScript emit joins this arm when its backend emits a codec.
+    pub(crate) fn carries_codec(self) -> bool {
+        #[deny(
+            clippy::wildcard_enum_match_arm,
+            clippy::match_wildcard_for_single_variants
+        )]
+        match self {
+            Emit::Rust => true,
+            Emit::TypeScript
+            | Emit::Proto
+            | Emit::Flatbuffers
+            | Emit::CodegenModel
+            | Emit::Catalog
+            | Emit::IrJson
+            | Emit::IrText
+            | Emit::IrBinary => false,
+        }
+    }
 }
 
 /// The render-ready result of a [`run_check`] or [`run_build`] command, or of
@@ -908,12 +958,23 @@ fn run_build_inner<E: From<std::io::Error>>(
         checked,
         system,
         mut diagnostics,
-        sources,
+        mut sources,
         lints,
         codegen_header,
+        backends,
         report_scope,
         ..
     } = load_and_check(&mut db, entry, &[]).map_err(|err| E::from(load_io_error(err)))?;
+    // The backends read names only; the spans served the loader's diagnostics.
+    let backends: BTreeMap<String, Vec<String>> = backends
+        .into_iter()
+        .map(|(language, table)| {
+            (
+                language,
+                table.encodings.into_iter().map(|(name, _)| name).collect(),
+            )
+        })
+        .collect();
 
     // The earlier catalogs per unit, computed from this compile before
     // anything else can fail, so a history that cannot be read is reported
@@ -971,6 +1032,36 @@ fn run_build_inner<E: From<std::io::Error>>(
                 FileId::DETACHED,
                 TextRange::default(),
             )),
+        }
+    }
+
+    // RSDL-807: a link of the selected deployment carries an encoding the
+    // emitted backend's `encodings` list does not name, once per backend the
+    // build emits that can carry a codec — the Rust emit (`carries_codec`)
+    // and each plugin. A schema emit's table cannot name an encoding, so it
+    // is not compared. Raised here, before the levels are applied, so that
+    // `deny` makes it an error the emit gate below reads. The deployment is
+    // the one `select_deployment` selects below; a name no source declares
+    // draws nothing here and is reported there.
+    if let Some(selected) = requested_or_only(&declared_deployments(&system), deployment) {
+        let tables = emits
+            .iter()
+            .filter(|emit| emit.carries_codec())
+            .filter_map(|emit| emit.backend_table())
+            .chain(
+                resolved_plugins
+                    .iter()
+                    .map(|plugin| plugin.language.as_str()),
+            );
+        for table in tables {
+            diagnostics.extend(link_encodings::link_encoding_not_emitted(
+                &db,
+                &system,
+                selected,
+                table,
+                backends.get(table).map_or(&[], Vec::as_slice),
+                &mut sources,
+            ));
         }
     }
 
@@ -1176,6 +1267,7 @@ fn run_build_inner<E: From<std::io::Error>>(
                 plugin_timeout,
                 selected.as_ref(),
                 codegen_header.as_deref(),
+                &backends,
                 &mut diagnostics,
             )?;
         }
@@ -1196,6 +1288,7 @@ fn run_build_inner<E: From<std::io::Error>>(
                 plugin_timeout,
                 selected.as_ref(),
                 codegen_header.as_deref(),
+                &backends,
                 &mut diagnostics,
             )?;
         }
@@ -1214,12 +1307,17 @@ fn run_build_inner<E: From<std::io::Error>>(
                 package_names.push("ridl.std".to_string());
             }
 
+            // The Rust backend's own table: the manifest enables one `ridl-rt`
+            // feature per encoding the backend was asked to emit a codec for,
+            // and none when it was asked for none.
+            let rust_encodings: &[String] = backends.get("rust").map_or(&[], Vec::as_slice);
             write_crate_files(
                 out_dir,
                 &crate_name_for(entry),
                 manifest_package_name(entry).as_deref(),
                 &package_names,
                 codegen_header.as_deref(),
+                rust_encodings,
                 &diagnostics,
             )?;
         }
@@ -1305,6 +1403,7 @@ fn write_crate_files(
     manifest_package: Option<&str>,
     package_names: &[String],
     header: Option<&str>,
+    encodings: &[String],
     diagnostics: &[Diagnostic],
 ) -> std::io::Result<()> {
     if diagnostics
@@ -1325,7 +1424,11 @@ fn write_crate_files(
     )?;
     std::fs::write(
         out_dir.join("Cargo.toml"),
-        render_cargo_toml(crate_name, &codegen::comment_preamble(&marker, header, "#")),
+        render_cargo_toml(
+            crate_name,
+            &codegen::comment_preamble(&marker, header, "#"),
+            encodings,
+        ),
     )?;
     Ok(())
 }
@@ -1402,14 +1505,16 @@ fn refuse_overwrite(
 /// dependency of its own in any feature combination, and every generated named
 /// scalar's constructor names `::ridl_rt::payload::Violation` from it.
 ///
-/// It carries the `flatbuffers` feature, because `generate`'s output now
-/// includes the FlatBuffers payload codec (design note D-1 as
-/// amended), and that codec names the reading and writing helpers the feature
-/// gates. **This makes the generated manifest unbuildable outside this
-/// repository until a `ridl-rt` release carries the feature's contents**,
-/// which is the release coupling design note D-12 records and the generated manifest
-/// settles; nothing here can test it, because a `rustc` proof
-/// links `ridl-rt`'s source rather than a release.
+/// The `ridl-rt` dependency enables one feature per entry of `encodings`, in
+/// order — the manifest's `[backend.rust] encodings` list, whose names are
+/// `ridl-rt`'s feature names — because the codec the Rust backend emits for
+/// an encoding names the reading and writing helpers that feature gates. An
+/// empty list, which is a types-only build, enables none. **A feature makes
+/// the generated manifest unbuildable outside this repository until a
+/// `ridl-rt` release carries the feature's contents**, which is the release
+/// coupling design note D-12 records and the generated manifest settles;
+/// nothing here can test it, because a `rustc` proof links `ridl-rt`'s
+/// source rather than a release.
 ///
 /// The `std` feature, on by default, forwards to `ridl-rt/std`: the generated
 /// face's `blocking` module is under it and is `block_on` over the async
@@ -1433,7 +1538,18 @@ fn refuse_overwrite(
 /// `crates/ridl-rt/Cargo.toml`, because `ridlc` is an installed binary with no
 /// access to this repository's sources at run time; a guard test
 /// (`crates/ridlc/tests/`) keeps the two from drifting apart silently.
-fn render_cargo_toml(crate_name: &str, preamble: &str) -> String {
+fn render_cargo_toml(crate_name: &str, preamble: &str, encodings: &[String]) -> String {
+    const RIDL_RT_REQUIREMENT: &str = "0.8";
+    let ridl_rt = if encodings.is_empty() {
+        format!(r#"ridl-rt = {{ version = "{RIDL_RT_REQUIREMENT}" }}"#)
+    } else {
+        let features = encodings
+            .iter()
+            .map(|name| format!("\"{name}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(r#"ridl-rt = {{ version = "{RIDL_RT_REQUIREMENT}", features = [{features}] }}"#)
+    };
     format!(
         r#"{preamble}[package]
 name = "{crate_name}"
@@ -1449,7 +1565,7 @@ validate-pattern = ["dep:regex"]
 std = ["ridl-rt/std"]
 
 [dependencies]
-ridl-rt = {{ version = "0.8", features = ["flatbuffers"] }}
+{ridl_rt}
 regex = {{ version = "1.13", optional = true }}
 
 [lib]
@@ -1708,6 +1824,8 @@ struct Compiled {
     /// The normalised `[codegen] header-file` text
     /// ([`LoadedWorkspace::codegen_header`]).
     codegen_header: Option<String>,
+    /// The `[backend.<name>]` tables ([`LoadedWorkspace::backends`]).
+    backends: BTreeMap<String, ridl_core::BackendTable>,
     /// The member directory the entry lies in
     /// ([`LoadedWorkspace::report_scope`]).
     report_scope: Option<PathBuf>,
@@ -1738,6 +1856,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         mut sources,
         lints,
         codegen_header,
+        backends,
         report_scope,
         units: _,
     } = loaded;
@@ -1839,6 +1958,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         sources,
         lints,
         codegen_header,
+        backends,
         report_scope,
     }
 }
@@ -1906,9 +2026,10 @@ fn materialize_and_lock(
 /// so the request's `model` is the same JSON value as the
 /// `--emit codegen-model` artifact, one indentation level deeper — the
 /// backend `options`, the artifact base `ridlc` names this package's files
-/// after, and the selected `deployment` section. The one request per package
-/// every in-tree backend and every plugin is handed; a test that wants the
-/// bytes a plugin sees builds it here.
+/// after, and the selected `deployment` section. [`write_emits`] builds it once
+/// per package and hands each in-tree backend and each plugin a copy whose
+/// `options` are those of that backend's own `[backend.<name>]` table; a test
+/// that wants the bytes a plugin sees builds it here.
 pub fn codegen_request(
     base: &str,
     package: &ridl_ir::v2::Package,
@@ -2014,10 +2135,20 @@ pub fn select_deployment(
                 has_system: system.is_some(),
             }
         }),
-        None => match declared {
-            [only] => Ok(lowered(only)),
-            _ => Ok(None),
-        },
+        None => Ok(requested_or_only(declared, None).and_then(lowered)),
+    }
+}
+
+/// The name of the deployment a build selects, before the lowering says
+/// whether it exists: the requested `name`, or, with none, the one deployment
+/// the source declares, and `None` for several declarations or none
+/// ([`select_deployment`] holds the rule in full). RSDL-807 reads this to
+/// know which deployment's links to compare, before the levels are applied.
+fn requested_or_only<'a>(declared: &'a [String], name: Option<&'a str>) -> Option<&'a str> {
+    match (name, declared) {
+        (Some(requested), _) => Some(requested),
+        (None, [only]) => Some(only.as_str()),
+        (None, _) => None,
     }
 }
 
@@ -2151,14 +2282,16 @@ fn write_catalogs(
 /// Every code emit but [`Emit::Catalog`] goes through the backend contract
 /// ([`codegen::Backend`], ADR-0020 decision 9): one [`codegen_request`] is
 /// built for the package — the model lowered once — and each in-tree
-/// backend is called over it as a plugin would be, the response written by
-/// [`write_response`]. The Rust backend is
+/// backend is called, as a plugin would be, over a copy of it whose `options`
+/// are those of the backend's own `[backend.<name>]` table, the response
+/// written by [`write_response`]. The Rust backend is
 /// [`ridl_backend_rust::Backend`] over
 /// [`generate_pipeline`](ridl_backend_rust::generate_pipeline), which emits
 /// the interaction face and the descriptors beside the domain types and the
-/// codec; TypeScript, proto3 and FlatBuffers are their own crates'
-/// `Backend`; `codegen-model` is [`codegen::ModelBackend`], the model
-/// written back. The Rust backend reads the request and never the raw IR, as
+/// codec when the package's `[backend.rust] encodings` names a codec, and
+/// the domain types only otherwise; TypeScript, proto3 and FlatBuffers are
+/// their own crates' `Backend`; `codegen-model` is [`codegen::ModelBackend`],
+/// the model written back. The Rust backend reads the request and never the raw IR, as
 /// `codegen-model` does and as a plugin must; the other three still read the
 /// raw IR, so each is constructed with a [`codegen::RawIr`] — the package and
 /// `others`, the caller's full package list ([`run_build`]), which proto3 and
@@ -2176,9 +2309,10 @@ fn write_catalogs(
 /// that encoding (ADR-0014 decisions 12 and 14) the failure is a diagnostic
 /// and no artifact is written; `ir-binary` has no failure path (decision 7).
 ///
-/// Each plugin runs after the emits, over the same request, through the
-/// process host ([`plugin::run`]); a host failure is an error diagnostic
-/// naming the plugin, and a response is written as an in-tree backend's is.
+/// Each plugin runs after the emits, over a copy of the same request with the
+/// `options` of its own `[backend.<name>]` table, through the process host
+/// ([`plugin::run`]); a host failure is an error diagnostic naming the plugin,
+/// and a response is written as an in-tree backend's is.
 ///
 /// `compatible` is the list of earlier catalog hashes of the package's unit,
 /// carried into the request's `catalog.compatible` as given.
@@ -2197,6 +2331,7 @@ fn write_emits(
     plugin_timeout: Duration,
     deployment: Option<&v1::Deployment>,
     header: Option<&str>,
+    backends: &BTreeMap<String, Vec<String>>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> std::io::Result<()> {
     // One request per package, built only when something reads it: an IR
@@ -2213,6 +2348,14 @@ fn write_emits(
             header,
         )
     });
+    // Each backend is handed the request with its own `[backend.<name>]`
+    // options; a table for another backend is not visible to it.
+    let request_for = |language: &str| {
+        request.as_ref().map(|request| v1::CodegenRequest {
+            options: backend_options(backends, language),
+            ..request.clone()
+        })
+    };
     let raw = codegen::RawIr {
         package: ir,
         others,
@@ -2284,8 +2427,11 @@ fn write_emits(
                 continue;
             }
         };
-        let request = request.as_ref().expect("a code emit builds the request");
-        let response = backend.generate(request);
+        let table = emit
+            .backend_table()
+            .expect("a code emit reads a backend table");
+        let request = request_for(table).expect("a code emit builds the request");
+        let response = backend.generate(&request);
         write_response(
             out_dir,
             Origin::InTree {
@@ -2297,9 +2443,9 @@ fn write_emits(
     }
 
     for plugin in plugins {
-        let request = request.as_ref().expect("a plugin builds the request");
+        let request = request_for(&plugin.language).expect("a plugin builds the request");
         let name = plugin.name();
-        match plugin::run(plugin, request, plugin_timeout) {
+        match plugin::run(plugin, &request, plugin_timeout) {
             Ok(response) => {
                 write_response(
                     out_dir,
@@ -2317,6 +2463,23 @@ fn write_emits(
         }
     }
     Ok(())
+}
+
+/// The options a backend receives for its `[backend.<name>]` table: none when
+/// the manifest has no table for `language` or the table names no encoding,
+/// otherwise one `encodings` option whose value joins the names with `,` in
+/// manifest order.
+fn backend_options(
+    backends: &BTreeMap<String, Vec<String>>,
+    language: &str,
+) -> Vec<v1::BackendOption> {
+    match backends.get(language) {
+        Some(names) if !names.is_empty() => vec![v1::BackendOption {
+            key: "encodings".to_string(),
+            value: names.join(","),
+        }],
+        _ => Vec::new(),
+    }
 }
 
 /// Writes the lowered system (rsdl reference §13) once for each IR dump in
@@ -2547,6 +2710,82 @@ mod render_lib_rs_tests {
                  extern crate alloc as std;\n"
             ),
             "lib.rs was:\n{lib}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod emit_table_tests {
+    use super::Emit;
+
+    /// Each code emit reads the table named after its language, the codegen
+    /// model reads `codegen-model`, and an emit that is not a backend reads
+    /// none. The names are what a manifest's `[backend.<name>]` key spells.
+    #[test]
+    fn each_emit_reads_its_own_backend_table() {
+        assert_eq!(Emit::Rust.backend_table(), Some("rust"));
+        assert_eq!(Emit::TypeScript.backend_table(), Some("typescript"));
+        assert_eq!(Emit::Proto.backend_table(), Some("proto"));
+        assert_eq!(Emit::Flatbuffers.backend_table(), Some("flatbuffers"));
+        assert_eq!(Emit::CodegenModel.backend_table(), Some("codegen-model"));
+        for emit in [Emit::Catalog, Emit::IrJson, Emit::IrText, Emit::IrBinary] {
+            assert_eq!(emit.backend_table(), None, "{emit:?}");
+        }
+    }
+
+    /// Only the Rust emit carries a codec, so RSDL-807 compares only its
+    /// table among the in-tree emits.
+    #[test]
+    fn only_the_rust_emit_carries_a_codec() {
+        assert!(Emit::Rust.carries_codec());
+        for emit in [
+            Emit::TypeScript,
+            Emit::Proto,
+            Emit::Flatbuffers,
+            Emit::CodegenModel,
+            Emit::Catalog,
+            Emit::IrJson,
+            Emit::IrText,
+            Emit::IrBinary,
+        ] {
+            assert!(!emit.carries_codec(), "{emit:?}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod backend_options_tests {
+    use std::collections::BTreeMap;
+
+    use super::backend_options;
+
+    fn tables() -> BTreeMap<String, Vec<String>> {
+        BTreeMap::from([
+            (
+                "rust".to_string(),
+                vec!["flatbuffers".to_string(), "proto3".to_string()],
+            ),
+            ("kotlin".to_string(), vec!["flatbuffers".to_string()]),
+            ("proto".to_string(), Vec::new()),
+        ])
+    }
+
+    fn encodings(language: &str) -> Vec<(String, String)> {
+        backend_options(&tables(), language)
+            .into_iter()
+            .map(|option| (option.key, option.value))
+            .collect()
+    }
+
+    #[test]
+    fn the_rust_request_carries_the_rust_encodings_only() {
+        let pair = |value: &str| vec![("encodings".to_string(), value.to_string())];
+        assert_eq!(encodings("rust"), pair("flatbuffers,proto3"));
+        assert_eq!(encodings("kotlin"), pair("flatbuffers"));
+        assert!(encodings("typescript").is_empty());
+        assert!(
+            encodings("proto").is_empty(),
+            "a table that names no encoding sends no option"
         );
     }
 }

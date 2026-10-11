@@ -1353,6 +1353,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = SpeedFbView<'a>;
     fn encode<'o>(
         &self,
@@ -1497,6 +1499,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = TemperatureFbView<'a>;
     fn encode<'o>(
         &self,
@@ -1644,6 +1648,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RPM {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = RPMFbView<'a>;
     fn encode<'o>(
         &self,
@@ -1788,6 +1794,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Ratio {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = RatioFbView<'a>;
     fn encode<'o>(
         &self,
@@ -1930,6 +1938,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 44usize;
+    type Buffer = [::core::primitive::u8; 44usize];
+    const BUFFER: Self::Buffer = [0u8; 44usize];
     type View<'a> = CounterFbView<'a>;
     fn encode<'o>(
         &self,
@@ -2074,6 +2084,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Gain {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = GainFbView<'a>;
     fn encode<'o>(
         &self,
@@ -2217,6 +2229,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for GearPosit
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
+    type Buffer = [::core::primitive::u8; 50usize];
+    const BUFFER: Self::Buffer = [0u8; 50usize];
     type View<'a> = GearPositionFbView<'a>;
     fn encode<'o>(
         &self,
@@ -2364,6 +2378,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
+    type Buffer = [::core::primitive::u8; 50usize];
+    const BUFFER: Self::Buffer = [0u8; 50usize];
     type View<'a> = WarningFbView<'a>;
     fn encode<'o>(
         &self,
@@ -2513,6 +2529,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for WarningFl
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 43usize;
+    type Buffer = [::core::primitive::u8; 43usize];
+    const BUFFER: Self::Buffer = [0u8; 43usize];
     type View<'a> = WarningFlagsFbView<'a>;
     fn encode<'o>(
         &self,
@@ -2737,6 +2755,8 @@ for SpeedLimitPayload {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 59usize;
+    type Buffer = [::core::primitive::u8; 59usize];
+    const BUFFER: Self::Buffer = [0u8; 59usize];
     type View<'a> = SpeedLimitPayloadFbView<'a>;
     fn encode<'o>(
         &self,
@@ -2990,6 +3010,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelF
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 76usize;
+    type Buffer = [::core::primitive::u8; 76usize];
+    const BUFFER: Self::Buffer = [0u8; 76usize];
     type View<'a> = RawWheelFrameFbView<'a>;
     fn encode<'o>(
         &self,

@@ -61,7 +61,7 @@ pub(super) fn serve(
     let future_doc = format!(
         "The future `serve` returns over interface `{iface_name}`. It holds \
          the handler, the provider, and the claim buffer of \
-         `{iface_name}::MAX_BUFFER_SIZE` bytes. It never resolves to `Ok`, and \
+         `<{iface_name} as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes. It never resolves to `Ok`, and \
          polling it again after it resolved panics."
     );
 
@@ -91,7 +91,9 @@ pub(super) fn serve(
             Serve {
                 handler: h,
                 provider: p,
-                buf: [0u8; super::#iface::MAX_BUFFER_SIZE],
+                buf: <super::#iface as ::ridl_rt::contract::Sizes<
+                    ::ridl_rt::encoding::FlatBuffers,
+                >>::CLAIM_BUFFER,
                 state,
             }
         }
@@ -101,7 +103,9 @@ pub(super) fn serve(
         pub struct Serve<'a, #bounds> {
             handler: H,
             provider: &'a mut P,
-            buf: [u8; super::#iface::MAX_BUFFER_SIZE],
+            buf: <super::#iface as ::ridl_rt::contract::Sizes<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::ClaimBuffer,
             state: ServeState,
         }
 

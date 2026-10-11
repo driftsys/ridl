@@ -143,6 +143,16 @@ decision 10, with no dependency and no `unsafe` code. Nothing calls the hook in
 this version: the generated face still passes `None`. The `trace` module is now
 the second module that links the standard library under `std`.
 
+**Amendment (2026-10-10) — decisions 10, 11, 17 and 19: the size table, the
+payload buffers and `port::Encoded`.** The sizes a generated crate holds move
+from `EncodedSizes` and `Payload::MAX_SIZE` alone to a per-encoding table,
+`contract::Sizes<E>`, and each payload carries its own zeroed buffer. A port
+states the encoding it carries through the new `port::Encoded`. This is a
+breaking change under decision 10, to be released with the workspace in
+`ridl-rt` 0.9.0 (the next minor release after 0.8.0). The change is tracked as
+driftsys/ridl#801; the as-built record is
+[the `ridl-rt` design record](../design/ridl-rt.md).
+
 ## Context
 
 `ridl-rt` 0.1 is the first crate a generated ridl package links and a runtime
@@ -532,6 +542,34 @@ trusted with no `unsafe` and no second verification pass.
     `TraceContext` is a named-field struct a public field cannot be added to,
     and joins the list above.
 
+    **Amended (2026-10-10).** The on-request encodings change is a breaking
+    change under this rule, and it ships in `ridl-rt` 0.9.0, the next minor
+    release. Its `ridl-rt` items are:
+
+    - `contract::EncodedSizes` is removed; `Sizes<E>::RESERVATIONS` replaces it.
+      `EncodedSizes` leaves the list of named-field structs above.
+    - `contract::PayloadInfo::max_size` is removed; `PayloadInfo { type_name }`
+      stays.
+    - `contract::Member::reservation::<E>()` is replaced by
+      `contract::reservation::<X, E>()`, and
+      `contract::table_budget::<E>(&[Member])` by
+      `contract::table_budget::<I, E>()`.
+    - `contract::Unsized` is removed; a payload with no bound makes the backend
+      refuse to generate, and a missing `Sizes<E>` implementation is a compile
+      error.
+    - `contract::Interaction` gains `const ROW: usize`, which breaks an
+      implementor; only generated code implements it.
+    - `contract::Sizes<E>` is added.
+    - `encoding::Encoding::max_size` is removed; the trait keeps `NAME` and
+      stays sealed.
+    - `payload::Payload<E>` gains `type Buffer` and `const BUFFER`, which breaks
+      an implementor: a generated codec.
+    - `port::Encoded` is added.
+
+    `face::Bind`, `face::Events`, `face::Timeout`, `face::Publish`, the existing
+    `port` traits, `MAX_SIZE`, `View`, the three marker types, the cargo
+    features and `rust-version = "1.83"` do not change.
+
     `ridl-rt` supports Rust 1.83 or newer: `rust-version = "1.83"` in
     `crates/ridl-rt/Cargo.toml`. The crate's manifest compiles as edition 2021,
     because its 1.83 minimum predates edition 2024 — Rust cannot build that
@@ -611,6 +649,17 @@ trusted with no `unsafe` and no second verification pass.
     `&mut` (ADR-0023 decision 5), and no runtime or consumer in the tree boxes
     one — and an impl nothing uses is not added. Open question 5 is reworded
     with this.
+
+    **Amendment (2026-10-10) — `port::Encoded`.** `ridl_rt::port` gains
+    `pub trait Encoded { type Encoding: Encoding; }`, which states the encoding
+    of the bytes a port carries, and the forwarding impl
+    `impl<P: Encoded + ?Sized> Encoded for &mut P`, in the form of this
+    decision's other forwarding impls. `Encoded` is a separate trait and not a
+    supertrait of `Attached` or of any other port trait, so the existing port
+    traits and their implementations do not change. The generated face does not
+    use `Encoded` yet; the part that makes the face read its encoding from the
+    port is later work, and until it lands no port in this workspace implements
+    the trait.
 
 12. **Amendment (2026-09-20) — a runtime presents one handle per port role, it
     may also offer an aggregate handle per face, and `ridl-rt` adds no `Send` or
@@ -803,6 +852,21 @@ trusted with no `unsafe` and no second verification pass.
     generated face then returns the channel's init value under that provenance.
     The doc comment says so since this amendment.
 
+    **Amendment (2026-10-10) — the helpers move onto `Sizes<E>`.**
+    `Encoding::max_size`, `Member::reservation::<E>()` and
+    `table_budget::<E>(&[Member])` are removed (decision 10's amendment of the
+    same date lists the whole change). Two functions in `contract` and one trait
+    replace them: `Sizes<E>`, implemented by the generated interface descriptor
+    for each emitted encoding, holds `RESERVATIONS`, `MAX_BUFFER_SIZE`,
+    `EVENT_SOURCE_BUFFER_SIZE`, `ClaimBuffer`, `EventBuffer`, `CLAIM_BUFFER` and
+    `EVENT_BUFFER`; `reservation::<X, E>()` (where `X: Interaction` and
+    `X::Iface: Sizes<E>`) returns the row of one member, and
+    `table_budget::<I, E>()` returns the sum of the rows of an interface. Both
+    functions are `const fn` and cannot fail, because a payload with no bound is
+    refused at generation and a missing `Sizes<E>` implementation is a compile
+    error. The references to `Member::reservation` and `table_budget` in
+    decision 15 read as these functions.
+
 18. **Amendment (2026-09-26) — E11.16 to E11.19 ship as one 0.x minor.** The
     four stories are one release under decision 10, tagged by a maintainer after
     E11.21's first half has merged, so that a generated face has exercised every
@@ -853,6 +917,10 @@ trusted with no `unsafe` and no second verification pass.
     path; a consumer outside it resolves the emitted crate once 0.4.0 is on
     crates.io. Sebastien confirmed the release and its publication on
     2026-09-28.
+
+    **Amendment (2026-10-10).** `Bind` is unchanged. The generated face reads
+    its buffer sizes from `Payload::BUFFER` and `Sizes<FlatBuffers>`, and will
+    read its encoding from its port through `port::Encoded` in later work.
 
 20. **Amendment (2026-09-29) — `payload::View<'a>`: the trait a generated view
     implements, and the 0.5.0 release that carries it.**
@@ -1129,6 +1197,7 @@ trusted with no `unsafe` and no second verification pass.
 | [the `ridl-rt` design record](../design/ridl-rt.md), the API table and the feature paragraph     | `Builder::push_offset_vector` joins the `flatbuffers` row, and the paragraph's claim that a field's inline offset and a table's size are the projection's facts is corrected: they are the codec emitter's, because no other emitter can observe them (2026-09-21, story E11.7, stage K5)                                        |
 | [the roadmap](../ROADMAP.md), story E11.9, then E11.15                                           | its `Done when` gains the handle model of decision 12: the loopback exposes one handle per port role, its reader handle is `Sync`, and it offers the aggregate the generated face is built over. E11.9 was split on 2026-09-20 (driftsys/ridl#445) and that clause moved to story E11.15's row unchanged                         |
 | [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decision 5             | a 2026-09-26 amendment records `correlate` as the seventh unconditional module (decision 15)                                                                                                                                                                                                                                     |
+| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decisions 5 and 9      | a 2026-10-10 amendment records `Sizes<E>`, `Payload::Buffer`, `port::Encoded` and the `encodings` option (decisions 10, 11, 17 and 19 here)                                                                                                                                                                                      |
 | [ADR-0023](ADR-0023-interaction-face-generation.md)                                              | its 2026-09-26 amendment, decision 6, is the face built over decisions 13 to 16; the two records were amended together                                                                                                                                                                                                           |
 | [ADR-0018](ADR-0018-runtime-core-and-generated-surface.md) open question 5                       | a 2026-09-26 note answers it for the generated face (note F-15)                                                                                                                                                                                                                                                                  |
 | [the frame specification](../specification/frame-specification.md) §5.3, §5.4, §5.6, §8 and §9.6 | `Busy` crosses as a `response` outcome (decision 14), written in story E11.16's pull request                                                                                                                                                                                                                                     |

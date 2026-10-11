@@ -1,0 +1,6 @@
+[package]
+name = "veh.tables"
+version = "1.0.0"
+
+[backend.codegen-model]
+encodings = ["flatbuffers"]

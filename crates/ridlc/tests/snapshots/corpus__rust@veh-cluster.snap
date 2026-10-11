@@ -1396,6 +1396,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = SpeedFbView<'a>;
     fn encode<'o>(
         &self,
@@ -1540,6 +1542,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = TemperatureFbView<'a>;
     fn encode<'o>(
         &self,
@@ -1687,6 +1691,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RPM {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = RPMFbView<'a>;
     fn encode<'o>(
         &self,
@@ -1831,6 +1837,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Ratio {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = RatioFbView<'a>;
     fn encode<'o>(
         &self,
@@ -1975,6 +1983,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 44usize;
+    type Buffer = [::core::primitive::u8; 44usize];
+    const BUFFER: Self::Buffer = [0u8; 44usize];
     type View<'a> = CounterFbView<'a>;
     fn encode<'o>(
         &self,
@@ -2119,6 +2129,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Gain {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = GainFbView<'a>;
     fn encode<'o>(
         &self,
@@ -2262,6 +2274,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for GearPosit
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
+    type Buffer = [::core::primitive::u8; 50usize];
+    const BUFFER: Self::Buffer = [0u8; 50usize];
     type View<'a> = GearPositionFbView<'a>;
     fn encode<'o>(
         &self,
@@ -2409,6 +2423,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
+    type Buffer = [::core::primitive::u8; 50usize];
+    const BUFFER: Self::Buffer = [0u8; 50usize];
     type View<'a> = WarningFbView<'a>;
     fn encode<'o>(
         &self,
@@ -2558,6 +2574,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for WarningFl
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 43usize;
+    type Buffer = [::core::primitive::u8; 43usize];
+    const BUFFER: Self::Buffer = [0u8; 43usize];
     type View<'a> = WarningFlagsFbView<'a>;
     fn encode<'o>(
         &self,
@@ -2782,6 +2800,8 @@ for SpeedLimitPayload {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 59usize;
+    type Buffer = [::core::primitive::u8; 59usize];
+    const BUFFER: Self::Buffer = [0u8; 59usize];
     type View<'a> = SpeedLimitPayloadFbView<'a>;
     fn encode<'o>(
         &self,
@@ -3037,6 +3057,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelF
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 76usize;
+    type Buffer = [::core::primitive::u8; 76usize];
+    const BUFFER: Self::Buffer = [0u8; 76usize];
     type View<'a> = RawWheelFrameFbView<'a>;
     fn encode<'o>(
         &self,
@@ -3744,6 +3766,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorPaylo
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 53usize;
+    type Buffer = [::core::primitive::u8; 53usize];
+    const BUFFER: Self::Buffer = [0u8; 53usize];
     type View<'a> = DoorPayloadFbView<'a>;
     fn encode<'o>(
         &self,
@@ -3888,6 +3912,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DiagError
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
+    type Buffer = [::core::primitive::u8; 50usize];
+    const BUFFER: Self::Buffer = [0u8; 50usize];
     type View<'a> = DiagErrorFbView<'a>;
     fn encode<'o>(
         &self,
@@ -4042,6 +4068,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawTickCo
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 44usize;
+    type Buffer = [::core::primitive::u8; 44usize];
+    const BUFFER: Self::Buffer = [0u8; 44usize];
     type View<'a> = RawTickCountFbView<'a>;
     fn encode<'o>(
         &self,
@@ -4309,6 +4337,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelS
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 210usize;
+    type Buffer = [::core::primitive::u8; 210usize];
+    const BUFFER: Self::Buffer = [0u8; 210usize];
     type View<'a> = RawWheelSpanFbView<'a>;
     fn encode<'o>(
         &self,
@@ -4457,6 +4487,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanLevel 
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 43usize;
+    type Buffer = [::core::primitive::u8; 43usize];
+    const BUFFER: Self::Buffer = [0u8; 43usize];
     type View<'a> = FanLevelFbView<'a>;
     fn encode<'o>(
         &self,
@@ -4678,6 +4710,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FilterSta
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 54usize;
+    type Buffer = [::core::primitive::u8; 54usize];
+    const BUFFER: Self::Buffer = [0u8; 54usize];
     type View<'a> = FilterStateFbView<'a>;
     fn encode<'o>(
         &self,
@@ -4822,6 +4856,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for HvacError
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 50usize;
+    type Buffer = [::core::primitive::u8; 50usize];
+    const BUFFER: Self::Buffer = [0u8; 50usize];
     type View<'a> = HvacErrorFbView<'a>;
     fn encode<'o>(
         &self,
@@ -4969,6 +5005,8 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanTag {
     /// because that slack is not expressible in Rust's type
     /// system.
     const MAX_SIZE: ::core::primitive::usize = 186usize;
+    type Buffer = [::core::primitive::u8; 186usize];
+    const BUFFER: Self::Buffer = [0u8; 186usize];
     type View<'a> = FanTagFbView<'a>;
     fn encode<'o>(
         &self,
@@ -5342,5 +5380,740 @@ pub(crate) fn __ridl_fb_decode_RawWheelSpanBurstsElement(
             }
             _ => RawTickCount::new_unchecked(0i64),
         },
+    }
+}
+/// Interface `VehicleStatus` carries no generated interaction face.
+///
+/// The emitter refused it: cannot translate contract clause `position != GearPosition.PARK || currentSpeed == 0.0`: not `<subject> <comparison> <numeric literal>`
+///
+/// A contract clause outside the form the narrow translator accepts — `<subject> <comparison> <numeric literal>`, conjoined with `&&`. driftsys/ridl#704 replaces the translator and removes this.
+///
+/// Its descriptors are absent for the reason above: the refusal is
+/// raised by the descriptor emitter, which the face is built on. The
+/// rest of this package — its domain types, its codec, and every
+/// other interface — is unaffected, which is why the build succeeded
+/// (interaction-face design rule 2).
+#[allow(dead_code, non_upper_case_globals)]
+const __RIDL_NO_FACE_VehicleStatus: () = ();
+/**Descriptor for interface `WheelHistory`.
+
+Its size table in FlatBuffers is `<WheelHistory as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound. The face holds the table's claim and event buffers.*/
+pub struct WheelHistory;
+impl ::ridl_rt::contract::Interface for WheelHistory {
+    const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
+        name: "veh.cluster",
+        hash: ::ridl_rt::contract::CatalogHash([
+            22, 157, 192, 34, 129, 123, 147, 104, 31, 198, 87, 106, 3, 152, 159, 225,
+            248, 100, 177, 160, 198, 152, 10, 45, 28, 54, 132, 182, 31, 254, 207, 35,
+        ]),
+    };
+    const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(3);
+    const PROVISIONAL: ::core::primitive::bool = true;
+    const NAME: &'static ::core::primitive::str = "WheelHistory";
+    const MEMBERS: &'static [::ridl_rt::contract::Member] = &[
+        ::ridl_rt::contract::Member {
+            ordinal: ::ridl_rt::contract::Ordinal(1),
+            kind: ::ridl_rt::contract::Kind::Signal,
+            name: "wheelTicks",
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
+                mode: ::ridl_rt::contract::TimingMode::Range,
+                min: ::core::option::Option::Some(::ridl_rt::sample::Duration(100000)),
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(1000000)),
+            }),
+            payloads: &[
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "FanLevel",
+                },
+            ],
+        },
+        ::ridl_rt::contract::Member {
+            ordinal: ::ridl_rt::contract::Ordinal(3),
+            kind: ::ridl_rt::contract::Kind::Signal,
+            name: "wheelTemp",
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
+                mode: ::ridl_rt::contract::TimingMode::Range,
+                min: ::core::option::Option::Some(::ridl_rt::sample::Duration(1000000)),
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(10000000)),
+            }),
+            payloads: &[
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "veh.common.Temperature",
+                },
+            ],
+        },
+        ::ridl_rt::contract::Member {
+            ordinal: ::ridl_rt::contract::Ordinal(5),
+            kind: ::ridl_rt::contract::Kind::Signal,
+            name: "wheelSlipRate",
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
+                mode: ::ridl_rt::contract::TimingMode::Range,
+                min: ::core::option::Option::Some(::ridl_rt::sample::Duration(500000)),
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(5000000)),
+            }),
+            payloads: &[
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "veh.common.Ratio",
+                },
+            ],
+        },
+    ];
+}
+impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for WheelHistory {
+    const RESERVATIONS: &'static [::core::primitive::u64] = &[
+        <FanLevel as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64,
+        <crate::veh::common::Temperature as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64,
+        <crate::veh::common::Ratio as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64,
+    ];
+    const MAX_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    type ClaimBuffer = [::core::primitive::u8; Self::MAX_BUFFER_SIZE];
+    type EventBuffer = [::core::primitive::u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
+    const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+}
+pub struct WheelHistoryWheelTicks;
+impl ::ridl_rt::contract::Interaction for WheelHistoryWheelTicks {
+    type Iface = WheelHistory;
+    const MEMBER: &'static ::ridl_rt::contract::Member = &<WheelHistory as ::ridl_rt::contract::Interface>::MEMBERS[0];
+    const ROW: ::core::primitive::usize = 0;
+}
+impl ::ridl_rt::contract::Signal for WheelHistoryWheelTicks {
+    type Payload = FanLevel;
+    fn init() -> Self::Payload {
+        <FanLevel as ::core::default::Default>::default()
+    }
+}
+pub struct WheelHistoryWheelTemp;
+impl ::ridl_rt::contract::Interaction for WheelHistoryWheelTemp {
+    type Iface = WheelHistory;
+    const MEMBER: &'static ::ridl_rt::contract::Member = &<WheelHistory as ::ridl_rt::contract::Interface>::MEMBERS[1];
+    const ROW: ::core::primitive::usize = 1;
+}
+impl ::ridl_rt::contract::Signal for WheelHistoryWheelTemp {
+    type Payload = crate::veh::common::Temperature;
+    fn init() -> Self::Payload {
+        <crate::veh::common::Temperature as ::core::default::Default>::default()
+    }
+}
+pub struct WheelHistoryWheelSlipRate;
+impl ::ridl_rt::contract::Interaction for WheelHistoryWheelSlipRate {
+    type Iface = WheelHistory;
+    const MEMBER: &'static ::ridl_rt::contract::Member = &<WheelHistory as ::ridl_rt::contract::Interface>::MEMBERS[2];
+    const ROW: ::core::primitive::usize = 2;
+}
+impl ::ridl_rt::contract::Signal for WheelHistoryWheelSlipRate {
+    type Payload = crate::veh::common::Ratio;
+    fn init() -> Self::Payload {
+        <crate::veh::common::Ratio as ::core::default::Default>::default()
+    }
+}
+///The generated interaction face of interface `WheelHistory`.
+pub mod wheel_history {
+    ///Panics unless `found` is the catalog the face of interface `WheelHistory` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new` of the face, and `serve` where the interface emits one, call it once, before they store or use the port.
+    #[track_caller]
+    fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
+        let expected = <super::WheelHistory as ::ridl_rt::contract::Interface>::CATALOG;
+        if *found != *expected {
+            ::core::panic!(
+                "the face of interface `WheelHistory` was generated from catalog {:?}, but the port is attached to catalog {:?}",
+                expected, found
+            );
+        }
+    }
+    ///The consumer face of interface `WheelHistory`, generic over exactly the ports the interface's interactions need. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, in scope through `prelude`.
+    pub struct Client<P: ::ridl_rt::port::SignalReader> {
+        port: P,
+    }
+    impl<P: ::ridl_rt::port::SignalReader> Client<P> {
+        ///Reads signal `wheelTicks` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        pub fn wheel_ticks(
+            &self,
+        ) -> ::core::result::Result<
+            ::ridl_rt::sample::Sample<super::FanLevel>,
+            ::ridl_rt::port::ReadError,
+        > {
+            let mut buf = <super::FanLevel as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::BUFFER;
+            let raw = self
+                .port
+                .read(
+                    <super::WheelHistory as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(1u32),
+                    &mut buf,
+                )?;
+            let (value, provenance) = match raw.provenance {
+                ::ridl_rt::sample::Provenance::Init
+                | ::ridl_rt::sample::Provenance::Invalid(
+                    ::ridl_rt::sample::Cause::Declared,
+                ) if raw.len == 0 => {
+                    (
+                        <super::WheelHistoryWheelTicks as ::ridl_rt::contract::Signal>::init(),
+                        raw.provenance,
+                    )
+                }
+                _ => {
+                    match ::ridl_rt::payload::Ref::<
+                        super::FanLevel,
+                        ::ridl_rt::encoding::FlatBuffers,
+                    >::verify(&buf[..raw.len]) {
+                        Ok(checked) => (checked.decode(), raw.provenance),
+                        Err(error) => {
+                            (
+                                <super::WheelHistoryWheelTicks as ::ridl_rt::contract::Signal>::init(),
+                                ::ridl_rt::sample::Provenance::Invalid(
+                                    ::ridl_rt::sample::Cause::Detected(
+                                        match error {
+                                            ::ridl_rt::payload::VerifyError::Contract(violation) => {
+                                                ::ridl_rt::sample::Detection::InvalidValue(violation)
+                                            }
+                                            _ => ::ridl_rt::sample::Detection::Corrupt,
+                                        },
+                                    ),
+                                ),
+                            )
+                        }
+                    }
+                }
+            };
+            Ok(::ridl_rt::sample::Sample {
+                value,
+                provenance,
+                freshness: raw.freshness,
+                envelope: raw.envelope,
+            })
+        }
+        ///Reads signal `wheelTemp` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        pub fn wheel_temp(
+            &self,
+        ) -> ::core::result::Result<
+            ::ridl_rt::sample::Sample<crate::veh::common::Temperature>,
+            ::ridl_rt::port::ReadError,
+        > {
+            let mut buf = <crate::veh::common::Temperature as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::BUFFER;
+            let raw = self
+                .port
+                .read(
+                    <super::WheelHistory as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(3u32),
+                    &mut buf,
+                )?;
+            let (value, provenance) = match raw.provenance {
+                ::ridl_rt::sample::Provenance::Init
+                | ::ridl_rt::sample::Provenance::Invalid(
+                    ::ridl_rt::sample::Cause::Declared,
+                ) if raw.len == 0 => {
+                    (
+                        <super::WheelHistoryWheelTemp as ::ridl_rt::contract::Signal>::init(),
+                        raw.provenance,
+                    )
+                }
+                _ => {
+                    match ::ridl_rt::payload::Ref::<
+                        crate::veh::common::Temperature,
+                        ::ridl_rt::encoding::FlatBuffers,
+                    >::verify(&buf[..raw.len]) {
+                        Ok(checked) => (checked.decode(), raw.provenance),
+                        Err(error) => {
+                            (
+                                <super::WheelHistoryWheelTemp as ::ridl_rt::contract::Signal>::init(),
+                                ::ridl_rt::sample::Provenance::Invalid(
+                                    ::ridl_rt::sample::Cause::Detected(
+                                        match error {
+                                            ::ridl_rt::payload::VerifyError::Contract(violation) => {
+                                                ::ridl_rt::sample::Detection::InvalidValue(violation)
+                                            }
+                                            _ => ::ridl_rt::sample::Detection::Corrupt,
+                                        },
+                                    ),
+                                ),
+                            )
+                        }
+                    }
+                }
+            };
+            Ok(::ridl_rt::sample::Sample {
+                value,
+                provenance,
+                freshness: raw.freshness,
+                envelope: raw.envelope,
+            })
+        }
+        ///Reads signal `wheelSlipRate` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        pub fn wheel_slip_rate(
+            &self,
+        ) -> ::core::result::Result<
+            ::ridl_rt::sample::Sample<crate::veh::common::Ratio>,
+            ::ridl_rt::port::ReadError,
+        > {
+            let mut buf = <crate::veh::common::Ratio as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::BUFFER;
+            let raw = self
+                .port
+                .read(
+                    <super::WheelHistory as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(5u32),
+                    &mut buf,
+                )?;
+            let (value, provenance) = match raw.provenance {
+                ::ridl_rt::sample::Provenance::Init
+                | ::ridl_rt::sample::Provenance::Invalid(
+                    ::ridl_rt::sample::Cause::Declared,
+                ) if raw.len == 0 => {
+                    (
+                        <super::WheelHistoryWheelSlipRate as ::ridl_rt::contract::Signal>::init(),
+                        raw.provenance,
+                    )
+                }
+                _ => {
+                    match ::ridl_rt::payload::Ref::<
+                        crate::veh::common::Ratio,
+                        ::ridl_rt::encoding::FlatBuffers,
+                    >::verify(&buf[..raw.len]) {
+                        Ok(checked) => (checked.decode(), raw.provenance),
+                        Err(error) => {
+                            (
+                                <super::WheelHistoryWheelSlipRate as ::ridl_rt::contract::Signal>::init(),
+                                ::ridl_rt::sample::Provenance::Invalid(
+                                    ::ridl_rt::sample::Cause::Detected(
+                                        match error {
+                                            ::ridl_rt::payload::VerifyError::Contract(violation) => {
+                                                ::ridl_rt::sample::Detection::InvalidValue(violation)
+                                            }
+                                            _ => ::ridl_rt::sample::Detection::Corrupt,
+                                        },
+                                    ),
+                                ),
+                            )
+                        }
+                    }
+                }
+            };
+            Ok(::ridl_rt::sample::Sample {
+                value,
+                provenance,
+                freshness: raw.freshness,
+                envelope: raw.envelope,
+            })
+        }
+    }
+    impl<P: ::ridl_rt::port::SignalReader> ::ridl_rt::face::Bind for Client<P> {
+        type Port = P;
+        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <WheelHistory as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `WheelHistory` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
+        fn new(port: P) -> Self {
+            check_catalog(::ridl_rt::port::Attached::catalog(&port));
+            Client { port }
+        }
+    }
+    ///Stages the invalid state of one signal of interface `WheelHistory`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>` (ADR-0023 decision 7); `prelude` brings it into scope anonymously.
+    pub trait Invalidate {
+        ///Stages the invalid state for signal `wheelTicks`, with `Cause::Declared`. It is published by `commit`.
+        fn invalidate_wheel_ticks(
+            &mut self,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError>;
+        ///Stages the invalid state for signal `wheelTemp`, with `Cause::Declared`. It is published by `commit`.
+        fn invalidate_wheel_temp(
+            &mut self,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError>;
+        ///Stages the invalid state for signal `wheelSlipRate`, with `Cause::Declared`. It is published by `commit`.
+        fn invalidate_wheel_slip_rate(
+            &mut self,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError>;
+    }
+    ///The provider face of interface `WheelHistory`'s signals and events. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `commit` is `ridl_rt::face::Publish`'s and `invalidate_<signal>` is this module's `Invalidate`'s, all in scope through `prelude`.
+    pub struct Publisher<W: ::ridl_rt::port::SignalWriter> {
+        port: W,
+    }
+    impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
+        ///Stages a new value for signal `wheelTicks`. It is published by `commit`.
+        pub fn wheel_ticks(
+            &mut self,
+            value: super::FanLevel,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
+            let mut buf = <super::FanLevel as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::BUFFER;
+            let bytes = match ::ridl_rt::payload::Ref::<
+                super::FanLevel,
+                ::ridl_rt::encoding::FlatBuffers,
+            >::encode(&value, &mut buf) {
+                Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                    unreachable!(
+                        "encoding `FanLevel` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<FanLevel as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        needed, available
+                    )
+                }
+                Err(_) => unreachable!("encoding `FanLevel` failed"),
+            };
+            self.port
+                .set(
+                    <super::WheelHistory as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(1u32),
+                    bytes,
+                )
+        }
+        ///Stages a new value for signal `wheelTemp`. It is published by `commit`.
+        pub fn wheel_temp(
+            &mut self,
+            value: crate::veh::common::Temperature,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
+            let mut buf = <crate::veh::common::Temperature as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::BUFFER;
+            let bytes = match ::ridl_rt::payload::Ref::<
+                crate::veh::common::Temperature,
+                ::ridl_rt::encoding::FlatBuffers,
+            >::encode(&value, &mut buf) {
+                Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                    unreachable!(
+                        "encoding `veh.common.Temperature` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<veh.common.Temperature as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        needed, available
+                    )
+                }
+                Err(_) => unreachable!("encoding `veh.common.Temperature` failed"),
+            };
+            self.port
+                .set(
+                    <super::WheelHistory as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(3u32),
+                    bytes,
+                )
+        }
+        ///Stages a new value for signal `wheelSlipRate`. It is published by `commit`.
+        pub fn wheel_slip_rate(
+            &mut self,
+            value: crate::veh::common::Ratio,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
+            let mut buf = <crate::veh::common::Ratio as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::BUFFER;
+            let bytes = match ::ridl_rt::payload::Ref::<
+                crate::veh::common::Ratio,
+                ::ridl_rt::encoding::FlatBuffers,
+            >::encode(&value, &mut buf) {
+                Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                    unreachable!(
+                        "encoding `veh.common.Ratio` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<veh.common.Ratio as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        needed, available
+                    )
+                }
+                Err(_) => unreachable!("encoding `veh.common.Ratio` failed"),
+            };
+            self.port
+                .set(
+                    <super::WheelHistory as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(5u32),
+                    bytes,
+                )
+        }
+    }
+    impl<W: ::ridl_rt::port::SignalWriter> ::ridl_rt::face::Bind for Publisher<W> {
+        type Port = W;
+        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <WheelHistory as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `WheelHistory` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
+        fn new(port: W) -> Self {
+            check_catalog(::ridl_rt::port::Attached::catalog(&port));
+            Publisher { port }
+        }
+    }
+    impl<W: ::ridl_rt::port::SignalWriter> ::ridl_rt::face::Publish for Publisher<W> {
+        /// Publishes every staged signal change.
+        fn commit(&mut self) {
+            self.port.commit()
+        }
+    }
+    impl<W: ::ridl_rt::port::SignalWriter> Invalidate for Publisher<W> {
+        fn invalidate_wheel_ticks(
+            &mut self,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
+            self.port
+                .invalidate(
+                    <super::WheelHistory as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(1u32),
+                )
+        }
+        fn invalidate_wheel_temp(
+            &mut self,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
+            self.port
+                .invalidate(
+                    <super::WheelHistory as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(3u32),
+                )
+        }
+        fn invalidate_wheel_slip_rate(
+            &mut self,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
+            self.port
+                .invalidate(
+                    <super::WheelHistory as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(5u32),
+                )
+        }
+    }
+    ///The traits a consumer of interface `WheelHistory`'s face needs in scope. Glob-import this module, `use <this interface's module>::prelude::*;`, and every method of those traits — `new`, `commit`, `invalidate_<signal>` — is called as an inherent method would be. Only the `ridl-rt` traits are re-exported by name; this module's own traits are re-exported as `_`, so the preludes of two interfaces can share one scope.
+    pub mod prelude {
+        pub use ::ridl_rt::face::Bind;
+        pub use ::ridl_rt::face::Publish;
+        pub use super::Invalidate as _;
+    }
+}
+/// Interface `WheelDiagnostics` carries no generated interaction descriptors.
+///
+/// The emitter refused it: interaction `readTicks` must declare exactly one parameter (the face emits no induced argument struct, driftsys/ridl#713)
+///
+/// The interface is `internal`, so it has no face in any case; only its descriptors are absent, for the reason above.
+///
+/// Nothing else is refused: the
+/// rest of this package — its domain types, its codec, and every
+/// other interface — is unaffected, which is why the build succeeded
+/// (interaction-face design, "The consumer face").
+#[allow(dead_code, non_upper_case_globals)]
+const __RIDL_NO_FACE_WheelDiagnostics: () = ();
+/**Descriptor for interface `WheelSummary`.
+
+Its size table in FlatBuffers is `<WheelSummary as Sizes<FlatBuffers>>`: one reservation row per member of `MEMBERS`, in order, and the two buffer sizes, every one a const expression over `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound. The face holds the table's claim and event buffers.*/
+pub struct WheelSummary;
+impl ::ridl_rt::contract::Interface for WheelSummary {
+    const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
+        name: "veh.cluster",
+        hash: ::ridl_rt::contract::CatalogHash([
+            22, 157, 192, 34, 129, 123, 147, 104, 31, 198, 87, 106, 3, 152, 159, 225,
+            248, 100, 177, 160, 198, 152, 10, 45, 28, 54, 132, 182, 31, 254, 207, 35,
+        ]),
+    };
+    const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(4);
+    const PROVISIONAL: ::core::primitive::bool = true;
+    const NAME: &'static ::core::primitive::str = "WheelSummary";
+    const MEMBERS: &'static [::ridl_rt::contract::Member] = &[
+        ::ridl_rt::contract::Member {
+            ordinal: ::ridl_rt::contract::Ordinal(1),
+            kind: ::ridl_rt::contract::Kind::Signal,
+            name: "wheelHealth",
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
+                mode: ::ridl_rt::contract::TimingMode::Range,
+                min: ::core::option::Option::Some(::ridl_rt::sample::Duration(1000000)),
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(10000000)),
+            }),
+            payloads: &[
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "FanLevel",
+                },
+            ],
+        },
+    ];
+}
+impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for WheelSummary {
+    const RESERVATIONS: &'static [::core::primitive::u64] = &[
+        <FanLevel as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64,
+    ];
+    const MAX_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    type ClaimBuffer = [::core::primitive::u8; Self::MAX_BUFFER_SIZE];
+    type EventBuffer = [::core::primitive::u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
+    const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+}
+pub struct WheelSummaryWheelHealth;
+impl ::ridl_rt::contract::Interaction for WheelSummaryWheelHealth {
+    type Iface = WheelSummary;
+    const MEMBER: &'static ::ridl_rt::contract::Member = &<WheelSummary as ::ridl_rt::contract::Interface>::MEMBERS[0];
+    const ROW: ::core::primitive::usize = 0;
+}
+impl ::ridl_rt::contract::Signal for WheelSummaryWheelHealth {
+    type Payload = FanLevel;
+    fn init() -> Self::Payload {
+        <FanLevel as ::core::default::Default>::default()
+    }
+}
+///The generated interaction face of interface `WheelSummary`.
+pub mod wheel_summary {
+    ///Panics unless `found` is the catalog the face of interface `WheelSummary` was generated from, the interface's `CATALOG` (ADR-0023 decision 8). Every `Bind::new` of the face, and `serve` where the interface emits one, call it once, before they store or use the port.
+    #[track_caller]
+    fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
+        let expected = <super::WheelSummary as ::ridl_rt::contract::Interface>::CATALOG;
+        if *found != *expected {
+            ::core::panic!(
+                "the face of interface `WheelSummary` was generated from catalog {:?}, but the port is attached to catalog {:?}",
+                expected, found
+            );
+        }
+    }
+    ///The consumer face of interface `WheelSummary`, generic over exactly the ports the interface's interactions need. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, in scope through `prelude`.
+    pub struct Client<P: ::ridl_rt::port::SignalReader> {
+        port: P,
+    }
+    impl<P: ::ridl_rt::port::SignalReader> Client<P> {
+        ///Reads signal `wheelHealth` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        pub fn wheel_health(
+            &self,
+        ) -> ::core::result::Result<
+            ::ridl_rt::sample::Sample<super::FanLevel>,
+            ::ridl_rt::port::ReadError,
+        > {
+            let mut buf = <super::FanLevel as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::BUFFER;
+            let raw = self
+                .port
+                .read(
+                    <super::WheelSummary as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(1u32),
+                    &mut buf,
+                )?;
+            let (value, provenance) = match raw.provenance {
+                ::ridl_rt::sample::Provenance::Init
+                | ::ridl_rt::sample::Provenance::Invalid(
+                    ::ridl_rt::sample::Cause::Declared,
+                ) if raw.len == 0 => {
+                    (
+                        <super::WheelSummaryWheelHealth as ::ridl_rt::contract::Signal>::init(),
+                        raw.provenance,
+                    )
+                }
+                _ => {
+                    match ::ridl_rt::payload::Ref::<
+                        super::FanLevel,
+                        ::ridl_rt::encoding::FlatBuffers,
+                    >::verify(&buf[..raw.len]) {
+                        Ok(checked) => (checked.decode(), raw.provenance),
+                        Err(error) => {
+                            (
+                                <super::WheelSummaryWheelHealth as ::ridl_rt::contract::Signal>::init(),
+                                ::ridl_rt::sample::Provenance::Invalid(
+                                    ::ridl_rt::sample::Cause::Detected(
+                                        match error {
+                                            ::ridl_rt::payload::VerifyError::Contract(violation) => {
+                                                ::ridl_rt::sample::Detection::InvalidValue(violation)
+                                            }
+                                            _ => ::ridl_rt::sample::Detection::Corrupt,
+                                        },
+                                    ),
+                                ),
+                            )
+                        }
+                    }
+                }
+            };
+            Ok(::ridl_rt::sample::Sample {
+                value,
+                provenance,
+                freshness: raw.freshness,
+                envelope: raw.envelope,
+            })
+        }
+    }
+    impl<P: ::ridl_rt::port::SignalReader> ::ridl_rt::face::Bind for Client<P> {
+        type Port = P;
+        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <WheelSummary as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `WheelSummary` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
+        fn new(port: P) -> Self {
+            check_catalog(::ridl_rt::port::Attached::catalog(&port));
+            Client { port }
+        }
+    }
+    ///Stages the invalid state of one signal of interface `WheelSummary`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>` (ADR-0023 decision 7); `prelude` brings it into scope anonymously.
+    pub trait Invalidate {
+        ///Stages the invalid state for signal `wheelHealth`, with `Cause::Declared`. It is published by `commit`.
+        fn invalidate_wheel_health(
+            &mut self,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError>;
+    }
+    ///The provider face of interface `WheelSummary`'s signals and events. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `commit` is `ridl_rt::face::Publish`'s and `invalidate_<signal>` is this module's `Invalidate`'s, all in scope through `prelude`.
+    pub struct Publisher<W: ::ridl_rt::port::SignalWriter> {
+        port: W,
+    }
+    impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
+        ///Stages a new value for signal `wheelHealth`. It is published by `commit`.
+        pub fn wheel_health(
+            &mut self,
+            value: super::FanLevel,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
+            let mut buf = <super::FanLevel as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::BUFFER;
+            let bytes = match ::ridl_rt::payload::Ref::<
+                super::FanLevel,
+                ::ridl_rt::encoding::FlatBuffers,
+            >::encode(&value, &mut buf) {
+                Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                    unreachable!(
+                        "encoding `FanLevel` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<FanLevel as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        needed, available
+                    )
+                }
+                Err(_) => unreachable!("encoding `FanLevel` failed"),
+            };
+            self.port
+                .set(
+                    <super::WheelSummary as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(1u32),
+                    bytes,
+                )
+        }
+    }
+    impl<W: ::ridl_rt::port::SignalWriter> ::ridl_rt::face::Bind for Publisher<W> {
+        type Port = W;
+        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <WheelSummary as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `WheelSummary` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
+        fn new(port: W) -> Self {
+            check_catalog(::ridl_rt::port::Attached::catalog(&port));
+            Publisher { port }
+        }
+    }
+    impl<W: ::ridl_rt::port::SignalWriter> ::ridl_rt::face::Publish for Publisher<W> {
+        /// Publishes every staged signal change.
+        fn commit(&mut self) {
+            self.port.commit()
+        }
+    }
+    impl<W: ::ridl_rt::port::SignalWriter> Invalidate for Publisher<W> {
+        fn invalidate_wheel_health(
+            &mut self,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
+            self.port
+                .invalidate(
+                    <super::WheelSummary as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(1u32),
+                )
+        }
+    }
+    ///The traits a consumer of interface `WheelSummary`'s face needs in scope. Glob-import this module, `use <this interface's module>::prelude::*;`, and every method of those traits — `new`, `commit`, `invalidate_<signal>` — is called as an inherent method would be. Only the `ridl-rt` traits are re-exported by name; this module's own traits are re-exported as `_`, so the preludes of two interfaces can share one scope.
+    pub mod prelude {
+        pub use ::ridl_rt::face::Bind;
+        pub use ::ridl_rt::face::Publish;
+        pub use super::Invalidate as _;
     }
 }

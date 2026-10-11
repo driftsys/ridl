@@ -28,19 +28,19 @@ Nine modules, each public item living in exactly one (ADR-0020 decision 5;
 decision 19; `trace` by ADR-0021 decision 21), plus two that a cargo feature
 adds:
 
-| Module        | Contents                                                                                                                                                                                                                                                             |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `encoding`    | `Encoding` (sealed), `FlatBuffers`, `Proto3`, `ReprC`                                                                                                                                                                                                                |
-| `payload`     | `Payload<E>`, `Ref`, `View<'a>`, `Encoded`, `EncodeError`, `VerifyError`, `Malformed`, `Violation`, `Rule`                                                                                                                                                           |
-| `sample`      | `Timestamp`, `Duration`, `Envelope`, `Provenance`, `Cause`, `Detection`, `Freshness`, `Sample`, `Occurrence`, `EventSeqTracker`, `Continuity`, `TrackerFull`                                                                                                         |
-| `contract`    | `Ordinal`, `InterfaceNo`, `CatalogHash`, `CatalogRef`, `Kind`, `Interface`, `Interaction`, `Signal`, `Event`, `Command`, `Query`, `Fixed`, `Member`, `Timing`, `TimingMode`, `PayloadInfo`, `EncodedSizes`, `table_budget`, `Unsized`                                |
-| `port`        | `Attached`, `Clock`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors |
-| `correlate`   | since the call-table move: `Table`, `Settled`, `Forgotten`, `Waiters`                                                                                                                                                                                                |
-| `error`       | `Contract`, `Transport`, `CallError`, `ClientError`, `ProviderError`                                                                                                                                                                                                 |
-| `face`        | since 2026-09-28 (driftsys/ridl#580): `Bind`, `Events`, `Publish`; `Timeout` under the `std` feature — the traits a generated face implements, the section "The face traits" below                                                                                   |
-| `trace`       | `TraceContext`, the optional trace context a call or an event carries across a port (ADR-0021 decision 21); under the `std` feature, `Propagation`, `AlreadySet`, `set_propagation` and `propagation`, the application's hook (decision 22)                          |
-| `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with the Rust codec emitter             |
-| `task`        | under the `std` feature, since 2026-09-25: `block_on`, `noop_waker`; `flag_waker` and `WakeFlag` since 2026-09-28 (driftsys/ridl#568)                                                                                                                                |
+| Module        | Contents                                                                                                                                                                                                                                                                        |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `encoding`    | `Encoding` (sealed), `FlatBuffers`, `Proto3`, `ReprC`                                                                                                                                                                                                                           |
+| `payload`     | `Payload<E>`, `Ref`, `View<'a>`, `Encoded`, `EncodeError`, `VerifyError`, `Malformed`, `Violation`, `Rule`                                                                                                                                                                      |
+| `sample`      | `Timestamp`, `Duration`, `Envelope`, `Provenance`, `Cause`, `Detection`, `Freshness`, `Sample`, `Occurrence`, `EventSeqTracker`, `Continuity`, `TrackerFull`                                                                                                                    |
+| `contract`    | `Ordinal`, `InterfaceNo`, `CatalogHash`, `CatalogRef`, `Kind`, `Interface`, `Interaction`, `Signal`, `Event`, `Command`, `Query`, `Fixed`, `Member`, `Timing`, `TimingMode`, `PayloadInfo`, `Sizes<E>`, `reservation`, `table_budget`                                           |
+| `port`        | `Attached`, `Encoded`, `Clock`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors |
+| `correlate`   | since the call-table move: `Table`, `Settled`, `Forgotten`, `Waiters`                                                                                                                                                                                                           |
+| `error`       | `Contract`, `Transport`, `CallError`, `ClientError`, `ProviderError`                                                                                                                                                                                                            |
+| `face`        | since 2026-09-28 (driftsys/ridl#580): `Bind`, `Events`, `Publish`; `Timeout` under the `std` feature — the traits a generated face implements, the section "The face traits" below                                                                                              |
+| `trace`       | `TraceContext`, the optional trace context a call or an event carries across a port (ADR-0021 decision 21); under the `std` feature, `Propagation`, `AlreadySet`, `set_propagation` and `propagation`, the application's hook (decision 22)                                     |
+| `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with the Rust codec emitter                        |
+| `task`        | under the `std` feature, since 2026-09-25: `block_on`, `noop_waker`; `flag_waker` and `WakeFlag` since 2026-09-28 (driftsys/ridl#568)                                                                                                                                           |
 
 Generated code names every item by its full path and imports none, because
 several names here — `Duration`, `Handler`, `Kind` — are also names in `core` or
@@ -146,7 +146,7 @@ pub trait Interface {
     const NAME: &'static str;
     const MEMBERS: &'static [Member]; // ordinal order; a reserved ordinal has no row
 }
-pub trait Interaction { type Iface: Interface; const MEMBER: &'static Member; }
+pub trait Interaction { type Iface: Interface; const MEMBER: &'static Member; const ROW: usize; }
 pub trait Signal:  Interaction { type Payload; fn init() -> Self::Payload; }
 pub trait Event:   Interaction { type Payload; }
 pub trait Fixed:   Interaction { type Payload; }
@@ -163,12 +163,11 @@ pub struct Member {
     pub kind: Kind,
     pub name: &'static str,
     pub timing: Option<Timing>,           // None: no Timing in the IR (a bare call, a fixed)
-    pub payloads: &'static [PayloadInfo], // one per payload; two for a query (request, then reply)
+    pub payloads: &'static [PayloadInfo], // one per payload; two for a query (request, then reply); a fixed has one, and its size-table row is 0
 }
 pub enum TimingMode { StrictPeriodic, Range }
 pub struct Timing { pub mode: TimingMode, pub min: Option<Duration>, pub max: Option<Duration> }
-pub struct PayloadInfo { pub type_name: &'static str, pub max_size: EncodedSizes }
-pub struct EncodedSizes { pub proto3: Option<u32>, pub flatbuffers: Option<u32>, pub repr_c: Option<u32> }
+pub struct PayloadInfo { pub type_name: &'static str }
 ```
 
 `min` and `max` are each independently optional, because the IR leaves a
@@ -182,20 +181,16 @@ breaking change (ADR-0021 decision 10). `Command` and `Query` return
 `Result<(), ()>` from `require`/`ensure`: the value is decided in ADR-0021
 decision 4.
 
-**An `EncodedSizes` field is `None` when the toolchain cannot size the payload
-for that encoding**, which covers both an encoding that cannot carry the payload
-and one whose size is not derivable yet. The `repr(C)` column is `None` for
-every payload until the C-representable layout is defined (driftsys/ridl#317)
-(`docs/archive/2026-09-13-catalog-descriptor-plan.md`, "Dispositions of the
-spec's open items, settled 2026-10-03", answer 5), and a backend that emits
-descriptors before its codec exists writes `None` for that codec's column as
-well. The first emitter wrote `None` for all three; since driftsys/ridl#380 the
-Rust backend fills the `flatbuffers` column from the codegen model's bound and
-writes `None` for `proto3`, because it emits no proto3 codec, and for `repr_c`.
-The field's own documentation first read `None` as "that encoding cannot carry
-the payload" alone; that is the narrower of the two cases and it made a backend
-with no codec yet unable to say anything true. A consumer that needs to know
-which encodings a payload has asks the catalog descriptor, not this field.
+**A payload's size in an encoding is not in `PayloadInfo`**: it is the member's
+row of the interface's size table (`Sizes<E>`, "The helpers over the envelope
+and the descriptors" below), which derives from `<T as Payload<E>>::MAX_SIZE`.
+Until 2026-10-10 `PayloadInfo` carried an `EncodedSizes` row, one `Option<u32>`
+per core encoding, which the Rust backend filled in its `flatbuffers` column
+only, so a reservation in any other encoding was a run-time `Unsized`. The table
+replaced the row so that an encoding the package does not carry is a compile
+error instead. A consumer that needs to know which encodings a payload has asks
+the catalog descriptor. The `repr(C)` layout is still undefined
+(driftsys/ridl#317), so no backend emits a `Sizes<ReprC>` table.
 
 Not carried by a descriptor: the toolchain version (not identity), retired
 interfaces and reserved ordinals (a runtime answers
@@ -271,8 +266,8 @@ module; the one module added after them, `correlate`, holds storage rather than
 a computation over an existing type. `sample` now imports `InterfaceNo`,
 `Ordinal` and `Timing` from `contract`, which already imported `Duration` from
 `sample`, so the two modules depend on each other; Rust accepts a dependency
-cycle between modules of one crate. `encoding` likewise imports `EncodedSizes`
-from `contract`, which imports `Encoding`.
+cycle between modules of one crate. `contract` also imports `Encoding` from
+`encoding`, which imports nothing from `contract`.
 
 ```rust
 impl Freshness {
@@ -292,11 +287,19 @@ pub struct TrackerFull;
 
 impl Member {
     pub fn call_deadline(&self) -> Option<Duration>;
-    pub fn reservation<E: Encoding>(&self) -> Result<u64, Unsized>;
 }
-pub fn table_budget<E: Encoding>(members: &[Member]) -> Result<u64, Unsized>;
-#[non_exhaustive]
-pub struct Unsized { pub ordinal: Ordinal, pub member: &'static str, pub type_name: &'static str }
+
+pub trait Sizes<E: Encoding>: Interface {
+    const RESERVATIONS: &'static [u64];           // one row per member of MEMBERS, in order
+    const MAX_BUFFER_SIZE: usize;                 // the largest call payload
+    const EVENT_SOURCE_BUFFER_SIZE: usize;        // the largest event payload
+    type ClaimBuffer: AsRef<[u8]> + AsMut<[u8]> + Copy;   // [u8; Self::MAX_BUFFER_SIZE]
+    type EventBuffer: AsRef<[u8]> + AsMut<[u8]> + Copy;   // [u8; Self::EVENT_SOURCE_BUFFER_SIZE]
+    const CLAIM_BUFFER: Self::ClaimBuffer;        // zeroed
+    const EVENT_BUFFER: Self::EventBuffer;        // zeroed
+}
+pub const fn reservation<X: Interaction, E: Encoding>() -> u64 where X::Iface: Sizes<E>;
+pub const fn table_budget<I: Sizes<E>, E: Encoding>() -> u64;
 ```
 
 - **Freshness** (ridl §4, §9;
@@ -320,26 +323,50 @@ pub struct Unsized { pub ordinal: Ordinal, pub member: &'static str, pub type_na
 - **The call deadline** (ridl §9.3): the `max` of the member's timing, `None`
   when the timing or its `max` is absent. It takes no position on what a caller
   does with `None`.
-- **The in-flight budget**: no specification defines it. A member's reservation
-  is the sum of `PayloadInfo::max_size` over its `payloads` for one encoding —
-  two entries for a query, the request then the reply — and `table_budget` sums
-  the reservations of the members it is given, normally `Interface::MEMBERS`. A
-  size that is `None` for that encoding is reported as `Unsized`, naming the
-  member and the payload type, and never estimated. The sum is a `u64`, because
-  the sizes are `u32`. The field of `EncodedSizes` an encoding reads is
-  `Encoding::max_size`, a required item of the sealed trait, so an encoding
-  added without naming its field does not compile.
+- **The size table and the in-flight budget**: no specification defines the
+  budget. `Sizes<E>` is the size table of one interface in one encoding, which
+  generated code implements once per interface per codec the package carries.
+  Every item is a const expression over `<T as Payload<E>>::MAX_SIZE`, never a
+  number, so a table cannot drift from its codec; an encoding the package does
+  not carry has no table, so naming it is a compile error at the call site
+  (`Cabin: Sizes<Proto3>` is not satisfied), not a run-time error.
+  `RESERVATIONS` is one row per member of `Interface::MEMBERS`, in order: the
+  sum, as a `u64`, of `MAX_SIZE` over the member's payloads — the request then
+  the reply for a query, `0` for a fixed, which is never in flight. The codegen
+  model's `Interaction.reservation` and `Interface.table_budget` count a fixed
+  member's payload, so for an interface with a fixed member the model's numbers
+  are larger than this table's by the size of each fixed payload.
+  `Interaction::ROW` is the index of the descriptor's `MEMBER` in `MEMBERS`,
+  which is its row in every table of the interface, so `reservation::<X, E>()`
+  reads an interaction's row without a scan, and `table_budget::<I, E>()` sums
+  the rows, saturating; both are `const fn`, so a runtime whose set of
+  interfaces is known statically sums `table_budget::<I, E>()` terms in a
+  `const` and sizes a `static` table from it at compile time, with no allocator.
+  A runtime driven by data instead takes `<I as Sizes<E>>::RESERVATIONS` — a
+  `&'static [u64]` parallel to `I::MEMBERS` — at the one point where the
+  interface type is known, for example
+  `runtime.register(Cabin::MEMBERS, <Cabin as Sizes<FlatBuffers>>::RESERVATIONS)`,
+  and reaches a row by the member's position from then on. The two buffer types
+  are interface-wide because a face fills them before it knows the payload type:
+  a server reads a claim into `ClaimBuffer` and then matches the ordinal, and
+  `EventSource::next` fills `EventBuffer` and reports the ordinal afterwards;
+  each is an associated type because a generic array length is not expressible
+  on stable Rust. The Rust backend emits `Sizes<FlatBuffers>` for every
+  interface whose descriptors it emits; the two sizes are reached only as
+  `<I as Sizes<E>>::MAX_BUFFER_SIZE` and
+  `<I as Sizes<E>>::EVENT_SOURCE_BUFFER_SIZE`, the descriptor has no inherent
+  constant of either name.
 
 `Continuity` is exhaustive, like `Freshness`: it is not an error enum, so
 ADR-0021 decision 9 does not cover it, and a caller is meant to handle every
 case it names. `TrackerFull` is a unit struct with no `#[non_exhaustive]`, like
 the encoding markers, because a caller compares it as a value; under ADR-0021
-decision 10 a field added to it is a breaking change. `Unsized` is
-`#[non_exhaustive]`, because only this crate builds it, so a field can be added
-to it without a breaking change.
+decision 10 a field added to it is a breaking change.
 
-These public items, and `Encoding::max_size`, are recorded in ADR-0021 decision
-17, its 2026-09-26 amendment.
+These public items are recorded in ADR-0021 decision 17, its 2026-09-26
+amendment. That amendment also recorded `Encoding::max_size`,
+`Member::reservation`, `table_budget` over `&[Member]` and `Unsized`, which the
+size table replaced on 2026-10-10.
 
 ## The payload encodings and the proof type
 
@@ -347,7 +374,6 @@ These public items, and `Encoding::max_size`, are recorded in ADR-0021 decision
 mod sealed { pub trait Sealed {} }
 pub trait Encoding: sealed::Sealed + 'static {
     const NAME: &'static str;
-    fn max_size(sizes: &EncodedSizes) -> Option<u32>; // this encoding's field of `sizes`
 }
 pub struct FlatBuffers; // NAME = "flatbuffers"
 pub struct Proto3;      // NAME = "proto3"
@@ -355,6 +381,8 @@ pub struct ReprC;        // NAME = "repr-c"
 
 pub trait Payload<E: Encoding>: Sized {
     const MAX_SIZE: usize;
+    type Buffer: AsRef<[u8]> + AsMut<[u8]> + Copy; // [u8; MAX_SIZE], as a type so generic code can hold one
+    const BUFFER: Self::Buffer;                    // zeroed
     type View<'a>; // what a successful check leaves behind: bytes, an accessor, or a parsed value
     fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, Self::View<'o>>, EncodeError>;
     fn verify(buf: &[u8]) -> Result<Self::View<'_>, VerifyError>;
@@ -496,6 +524,8 @@ takes an `InterfaceNo` and an `Ordinal`, plus bytes where it carries a payload.
 ```rust
 pub trait Clock { fn now(&self) -> Timestamp; }   // one per runtime; not Attached
 
+pub trait Encoded { type Encoding: Encoding; }    // the bytes' encoding; not a supertrait of Attached
+
 pub trait SignalReader: Attached {
     fn read(&self, iface: InterfaceNo, ord: Ordinal, out: &mut [u8]) -> Result<RawSample, ReadError>;
 }
@@ -571,6 +601,17 @@ pub trait Wakeable {
 }
 pub enum Interest { Outcome(Correlation), Slot, Event(InterfaceNo), Claim(InterfaceNo) }
 ```
+
+`Encoded` (since 2026-10-10) states the payload encoding of the bytes a port
+carries. One session has one encoding (the frame specification's rule), so a
+transport that serves several encodings hands out one port type per session,
+each typed with its own; each transport picks its own default encoding from how
+coupled its two ends are, and the construction of the port can override it — the
+library takes no position on the default. It is a separate trait, not a
+supertrait of `Attached`, so a port that never meets a face, such as a
+conformance fixture, is not forced to name an encoding; it is implemented for
+`&mut P` like every port trait. In this version no port type in this repository
+implements it, and the generated face does not yet require it.
 
 `Watermark`'s generation counter field is named `generation`, not `gen`: `gen`
 is a reserved keyword in the 2024 edition, so the field name the crate's earlier
@@ -785,9 +826,9 @@ call, and at the settlement for a call in flight, which `forget` marks.
 correlation the slot had answers as unknown to `outcome`, `settle`, `forget` and
 `wake_on`, and it credits the slot's reservation back to the budget. The budget
 is the optional byte budget of `new`, debited at `insert` from the member's
-reservation (`Member::reservation`, summed by `table_budget`); with none, only
-the slot count bounds the calls in flight, and `insert` does not read its
-argument.
+reservation (`reservation`, summed by `table_budget`, both over the size table);
+with none, only the slot count bounds the calls in flight, and `insert` does not
+read its argument.
 
 **`Settled` and `Forgotten` are how a runtime learns what to do next**, as enums
 rather than a waker and a flag, because a runtime must tell the three cases
@@ -907,11 +948,13 @@ is a breaking change (ADR-0021 decision 10); streams have no story yet.
 
 ## Versioning
 
-`ridl-rt` carries its own version, independent of the workspace's, and its
-release mechanics — the tag, and that creating it and running `cargo publish`
-are maintainer acts — are [ADR-0007](../decisions/ADR-0007-e1-execution.md)
-decision 14. What counts as a breaking 0.x change, and the crate's still-open
-API questions, are
+`ridl-rt` shares the workspace's single version and travels on the same
+`v<version>` tag as every other published crate
+([ADR-0007](../decisions/ADR-0007-e1-execution.md) decision 14's 2026-09-21
+amendment, [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md)
+decision 10); the release mechanics, including that the tag is a maintainer act,
+are ADR-0007 decision 14. What counts as a breaking 0.x change, and the crate's
+still-open API questions, are
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 10.
 
 ## References

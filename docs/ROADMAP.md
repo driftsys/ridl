@@ -533,9 +533,10 @@ implementation (retired by E11.7's D-11, which moved the face onto the generated
 FlatBuffers codec), test-only ports (retired by E11.15), a zero catalog hash
 (retired by E16.2, which computes it), all-absent encoded sizes (retired one
 column at a time: E16.4, driftsys/ridl#380, filled the `flatbuffers` column from
-the codegen model's bound; `proto3` stays `None` because the Rust backend emits
-no proto3 codec, and `repr_c` stays `None` until E11.12), and a narrow
-contract-clause translator (E5.1). The as-built record is
+the codegen model's bound; the later size table holds one `Sizes<E>`
+implementation per codec the manifest names, so `proto3` has none because the
+Rust backend emits no proto3 codec, and `repr-c` has none until E11.12), and a
+narrow contract-clause translator (E5.1). The as-built record is
 [the interaction-face design record](design/interaction-face.md) and
 [ADR-0023](decisions/ADR-0023-interaction-face-generation.md); its reasoning
 trail is archived at
@@ -559,23 +560,26 @@ those change in this step, and closing the gap is its own story, **E11.14**
 by a consumer who runs the compiler rather than a test in this workspace, and
 the first of the three codecs to land is what unblocks it.
 
-| ID     | Story                                                                                                                                            | Done when                                                                                                                                                                               | Size |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| E11.14 | The face reaches `ridl build` — `--emit rust` writes the descriptors and the face beside the domain types and the codec `generate` already emits | a package built by `ridl build --emit rust` writes a crate that compiles against `ridl-rt`, round-trips a payload through its generated codec, and needs no hand-written implementation | M    |
+| ID     | Story                                                                                                                                           | Done when                                                                                                                                                                               | Size |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E11.14 | The face reaches `ridl build` — `--emit rust` writes the descriptors and the face beside the domain types and the codec `generate` emitted then | a package built by `ridl build --emit rust` writes a crate that compiles against `ridl-rt`, round-trips a payload through its generated codec, and needs no hand-written implementation | M    |
 
 **E11.7 moved two of that row's clauses out of it, 2026-09-21.** The row above
 said `--emit rust` had still to learn to write "a codec's `Payload`
 implementations" and a `Cargo.toml` naming the encoding's `ridl-rt` feature.
 Both are already true. E11.7's design note D-1, as its disposition amended it,
 puts the `Payload<FlatBuffers>` implementations in `generate`'s own output
-rather than behind a third entry point, and `ridlc::run_build` calls `generate`
-— so `ridl build --emit rust` has carried the codec since stage K5
-(driftsys/ridl#465), and `crates/ridlc/src/lib.rs` has rendered
-`ridl-rt = { version = "<major>.<minor>", features = ["flatbuffers"] }` since
-the same stage, where the version is the crate's own at the time — `"0.3"` since
-the 0.3.0 release. What remained to E11.14 was the descriptors and the face,
-which `generate_face` emitted and which `run_build` did not call — and which it
-now calls `generate_pipeline` for.
+rather than behind a third entry point, and `ridlc::run_build` then called
+`generate` — so `ridl build --emit rust` carried the codec from stage K5
+(driftsys/ridl#465), and `crates/ridlc/src/lib.rs` rendered
+`ridl-rt = { version = "<major>.<minor>", features = ["flatbuffers"] }` from the
+same stage, where the version is the crate's own at the time — `"0.3"` since the
+0.3.0 release. Since the on-request encodings change (driftsys/ridl#801), the
+codec and the `flatbuffers` feature appear only when the package's
+`[backend.rust] encodings` names `flatbuffers`; with no list the build is
+types-only. What remained to E11.14 was the descriptors and the face, which
+`generate_face` emitted and which `run_build` did not call — and which it now
+calls `generate_pipeline` for.
 
 **E11.14 landed** (driftsys/ridl#479). `ridlc::run_build` calls
 `generate_pipeline`, so `ridl build --emit rust` writes the descriptors and the
@@ -759,11 +763,11 @@ decision 4 places them in a projection record of the shape of ADR-0017 and
 ADR-0019, written when the backend is — not in that record and not in the
 ADR-0018 amendments.
 
-| ID     | Story                                                                                                                                                                                                                                                                                                                                                                               | Done when                                                                                                                                                                                                                   | Size |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| E11.7  | The FlatBuffers payload codec                                                                                                                                                                                                                                                                                                                                                       | a payload round-trips through the library                                                                                                                                                                                   | L    |
-| E11.8  | The proto3 payload codec plus byte-level conformance against a `prost`-generated implementation through `protox` (steering note decision D, [`2026-10-06-ws-and-payload-formats-steering.md`](wip/2026-10-06-ws-and-payload-formats-steering.md)); it reads an absent non-optional scalar as its default, 0, as the FlatBuffers codec does (driftsys/ridl#472, ADR-0019 decision 9) | our bytes parse there and its bytes parse here                                                                                                                                                                              | L    |
-| E11.12 | The `repr(C)` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type; also removes `#[repr(C)]` from the generated domain structs, which ADR-0020 decision 3 retires                                                                                 | a payload round-trips through the layout struct, the emitted header compiles as C, and no generated domain struct carries `#[repr(C)]` (a scalar newtype keeps `#[repr(transparent)]`, which ADR-0020 decision 3 preserves) | L    |
+| ID     | Story                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Done when                                                                                                                                                                                                                   | Size |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E11.7  | The FlatBuffers payload codec                                                                                                                                                                                                                                                                                                                                                                                                                                               | a payload round-trips through the library                                                                                                                                                                                   | L    |
+| E11.8  | The proto3 payload codec plus byte-level conformance against a `prost`-generated implementation through `protox` (steering note decision D, [`2026-10-06-ws-and-payload-formats-steering.md`](wip/2026-10-06-ws-and-payload-formats-steering.md)); it reads an absent non-optional scalar as its default, 0, as the FlatBuffers codec does (driftsys/ridl#472, ADR-0019 decision 9); it arrives as a `Sizes<Proto3>` implementation and a `Payload<Proto3>` with its buffer | our bytes parse there and its bytes parse here                                                                                                                                                                              | L    |
+| E11.12 | The `repr(C)` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type; also removes `#[repr(C)]` from the generated domain structs, which ADR-0020 decision 3 retires; it arrives as a `Sizes<ReprC>` implementation and a `Payload<ReprC>` with its buffer                                                                                   | a payload round-trips through the layout struct, the emitted header compiles as C, and no generated domain struct carries `#[repr(C)]` (a scalar newtype keeps `#[repr(transparent)]`, which ADR-0020 decision 3 preserves) | L    |
 
 **E11.7's `Done when` is met, and every decision of its design note is built.**
 A payload round-trips through the library, and the conformance obligation the

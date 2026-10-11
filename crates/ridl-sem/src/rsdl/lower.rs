@@ -299,15 +299,7 @@ impl<'a> Lowering<'a> {
                 for producer_instance in &producer.instances {
                     let from = at[&(require.consumer, consumer_instance.as_str())];
                     let to = at[&(require.producer, producer_instance.as_str())];
-                    let crossing = if from.machine == to.machine {
-                        v2::Crossing::SameMachine
-                    } else if decl.machines[from.machine].external
-                        || decl.machines[to.machine].external
-                    {
-                        v2::Crossing::OffBoard
-                    } else {
-                        v2::Crossing::DifferentMachine
-                    };
+                    let crossing = link_crossing(decl, from, to);
                     let link = v2::Link {
                         interface: Some(self.interface_ref(&require.interface)),
                         service: require.service.clone(),
@@ -570,6 +562,21 @@ impl<'a> Lowering<'a> {
 /// `v2::Distribution::qualified_name` of the lowered distribution.
 fn distribution_name(decl: &DistributionDecl) -> String {
     format!("{}.{}", decl.package, decl.name.name)
+}
+
+/// The crossing of the link from the consumer placed at `from` to the
+/// producer placed at `to` in `decl` (rsdl §10): same machine, off-board when
+/// either machine is `external`, different machine otherwise. The lowering
+/// writes it on each link, and `ridlc` reads it for RSDL-807, so there is one
+/// rule.
+pub fn link_crossing(decl: &DeploymentDecl, from: &Placement, to: &Placement) -> v2::Crossing {
+    if from.machine == to.machine {
+        v2::Crossing::SameMachine
+    } else if decl.machines[from.machine].external || decl.machines[to.machine].external {
+        v2::Crossing::OffBoard
+    } else {
+        v2::Crossing::DifferentMachine
+    }
 }
 
 /// The placement of each closure instance in one deployment, by (closure

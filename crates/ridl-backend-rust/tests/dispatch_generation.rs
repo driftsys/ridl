@@ -7,7 +7,7 @@
 //! yet. Task 5 adds the compiled round trip, which is where the settlements
 //! are observed at run time.
 
-use ridl_backend_rust::generate_face;
+use ridl_backend_rust::{WireEncoding, generate_face_with};
 
 #[path = "support/ir.rs"]
 mod ir;
@@ -20,7 +20,9 @@ fn dense(source: &str) -> String {
 /// which is the interface the fixture's calls are declared on.
 fn cabin() -> String {
     let package = ir::compile_fixture("interaction_face.ridl");
-    let source = generate_face(&package).expect("generate_face").rust_source;
+    let source = generate_face_with(&package, &[WireEncoding::FlatBuffers])
+        .expect("generate_face_with")
+        .rust_source;
     let start = source
         .find("pub mod cabin {")
         .unwrap_or_else(|| panic!("generated source has no `pub mod cabin`:\n{source}"));
@@ -95,11 +97,14 @@ fn dispatch_checks_the_caller_owned_buffer_before_it_polls() {
     // returns 0 without consuming a claim, so the caller can retry with a
     // correctly sized buffer.
     assert!(
-        d.contains("ifbuf.len()<super::Cabin::MAX_BUFFER_SIZE{returnOk(0);}"),
+        d.contains("ifbuf.len()<<super::Cabinas::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers,>>::MAX_BUFFER_SIZE{returnOk(0);}"),
         "the buffer precondition returns 0",
     );
     assert!(
-        at(&d, "ifbuf.len()<super::Cabin::MAX_BUFFER_SIZE") < at(&d, "h.next_claim("),
+        at(
+            &d,
+            "ifbuf.len()<<super::Cabinas::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers,>>::MAX_BUFFER_SIZE"
+        ) < at(&d, "h.next_claim("),
         "the precondition is checked before the first poll",
     );
 }
@@ -276,11 +281,11 @@ fn the_two_buffer_constants_are_used_where_each_belongs() {
     let d = cabin();
 
     assert!(
-        d.contains("super::Cabin::MAX_BUFFER_SIZE"),
+        d.contains("<super::Cabinas::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers,>>::MAX_BUFFER_SIZE"),
         "dispatch sizes from the argument-and-reply maximum",
     );
     assert!(
-        d.contains("[0u8;super::Cabin::EVENT_SOURCE_BUFFER_SIZE]"),
+        d.contains("<super::Cabinas::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers,>>::EVENT_BUFFER"),
         "the event poll sizes from the separate event-only maximum",
     );
     // The event constant is not what dispatch checks, and the call constant is
@@ -291,7 +296,7 @@ fn the_two_buffer_constants_are_used_where_each_belongs() {
         "dispatch must not size from the event-only maximum",
     );
     assert!(
-        !d[..at(&d, "[0u8;super::Cabin::EVENT_SOURCE_BUFFER_SIZE]")].contains("MAX_BUFFER_SIZE"),
+        !d[..at(&d, "<super::Cabinas::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers,>>::EVENT_BUFFER")].contains("MAX_BUFFER_SIZE"),
         "the event poll must not size from the argument-and-reply maximum",
     );
 }

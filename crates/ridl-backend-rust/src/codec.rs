@@ -2762,6 +2762,10 @@ impl<'a> Codec<'a> {
                 /// system.
                 const MAX_SIZE: ::core::primitive::usize = #max;
 
+                type Buffer = [::core::primitive::u8; #max];
+
+                const BUFFER: Self::Buffer = [0u8; #max];
+
                 type View<'a> = #view<'a>;
 
                 // The concrete view type, not `Self::View`: an enum value or

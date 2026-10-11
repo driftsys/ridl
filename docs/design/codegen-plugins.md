@@ -29,17 +29,17 @@ parity test proves.
 
 ## 1. Where the code is
 
-| What                                                                                                 | Where                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The schema: `CodegenRequest`, `CodegenResponse`, `GeneratedFile`, `Diagnostic`, `BackendOption`      | `crates/ridl-ir/proto/ridl/codegen/v1/plugin.proto`, with the deployment section's messages in `crates/ridl-ir/proto/ridl/codegen/v1/deployment.proto`, in the package `ridl.codegen.v1` beside `model.proto`, all compiled by the same `build.rs` and registered with the same `pbjson-build` builder                                                                                                |
-| The trait `Backend`, the transitional `RawIr`, `ModelBackend`, `SCHEMA`, the encodings, `check_path` | `crates/ridl-ir/src/codegen/contract.rs`, re-exported from `ridl_ir::codegen`                                                                                                                                                                                                                                                                                                                         |
-| The four in-tree backends behind the trait                                                           | `crates/ridl-backend-{rust,ts,proto,flatbuffers}/src/contract.rs`. Rust is `pub struct Backend` over the request's model alone; the other three are `pub struct Backend<'a>` over `RawIr`, `generate` (TypeScript) or `generate_with` (proto3, FlatBuffers)                                                                                                                                           |
-| The in-process host: one request per package, every emit through the trait, the response written     | `crates/ridlc/src/lib.rs` — `codegen_request`, `write_emits`, `write_response`, `run_build_with`                                                                                                                                                                                                                                                                                                      |
-| The process host: `ridlc-gen-<language>`, `PATH` lookup, the pipe, the timeout, the error            | `crates/ridlc/src/plugin.rs` — `PluginSpec`, `resolve`, `run`, `PluginError`                                                                                                                                                                                                                                                                                                                          |
-| The flags                                                                                            | `crates/ridlc/src/main.rs` and `crates/ridl/src/main.rs`, `--plugin`, `--plugin-timeout` and `--deployment` on `build`; documented in [`docs/book/cli-reference.md`](../book/cli-reference.md)                                                                                                                                                                                                        |
-| The layout test plugin and its fixture                                                               | `crates/ridlc/tests/layout.rs` and `crates/ridlc/tests/fixtures/cabin-layout.json`                                                                                                                                                                                                                                                                                                                    |
-| The reference plugins                                                                                | `crates/ridlc-gen-model/`, a binary over `ModelBackend`, and `crates/ridlc-gen-rust/`, a binary over the Rust backend; both `publish = false`                                                                                                                                                                                                                                                         |
-| The parity tests                                                                                     | `crates/ridlc-gen-model/tests/parity.rs` and `crates/ridlc-gen-rust/tests/parity.rs`, each over every corpus package at the contract's level and every corpus entry at the command's level; the host's failure modes in `crates/ridlc/src/plugin.rs`'s tests; the flag's behaviour in `crates/ridlc/tests/cli.rs`; the messages' encodings and the path rule in `crates/ridl-ir/src/codegen/tests.rs` |
+| What                                                                                                         | Where                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The schema: `CodegenRequest`, `CodegenResponse`, `GeneratedFile`, `Diagnostic`, `BackendOption`              | `crates/ridl-ir/proto/ridl/codegen/v1/plugin.proto`, with the deployment section's messages in `crates/ridl-ir/proto/ridl/codegen/v1/deployment.proto`, in the package `ridl.codegen.v1` beside `model.proto`, all compiled by the same `build.rs` and registered with the same `pbjson-build` builder                                                                                                |
+| The trait `Backend`, the transitional `RawIr`, `ModelBackend`, `SCHEMA`, the encodings, `check_path`         | `crates/ridl-ir/src/codegen/contract.rs`, re-exported from `ridl_ir::codegen`                                                                                                                                                                                                                                                                                                                         |
+| The four in-tree backends behind the trait                                                                   | `crates/ridl-backend-{rust,ts,proto,flatbuffers}/src/contract.rs`. Rust is `pub struct Backend` over the request's model alone; the other three are `pub struct Backend<'a>` over `RawIr`, `generate` (TypeScript) or `generate_with` (proto3, FlatBuffers)                                                                                                                                           |
+| The in-process host: one request per package and backend, every emit through the trait, the response written | `crates/ridlc/src/lib.rs` — `codegen_request`, `write_emits`, `write_response`, `run_build_with`                                                                                                                                                                                                                                                                                                      |
+| The process host: `ridlc-gen-<language>`, `PATH` lookup, the pipe, the timeout, the error                    | `crates/ridlc/src/plugin.rs` — `PluginSpec`, `resolve`, `run`, `PluginError`                                                                                                                                                                                                                                                                                                                          |
+| The flags                                                                                                    | `crates/ridlc/src/main.rs` and `crates/ridl/src/main.rs`, `--plugin`, `--plugin-timeout` and `--deployment` on `build`; documented in [`docs/book/cli-reference.md`](../book/cli-reference.md)                                                                                                                                                                                                        |
+| The layout test plugin and its fixture                                                                       | `crates/ridlc/tests/layout.rs` and `crates/ridlc/tests/fixtures/cabin-layout.json`                                                                                                                                                                                                                                                                                                                    |
+| The reference plugins                                                                                        | `crates/ridlc-gen-model/`, a binary over `ModelBackend`, and `crates/ridlc-gen-rust/`, a binary over the Rust backend; both `publish = false`                                                                                                                                                                                                                                                         |
+| The parity tests                                                                                             | `crates/ridlc-gen-model/tests/parity.rs` and `crates/ridlc-gen-rust/tests/parity.rs`, each over every corpus package at the contract's level and every corpus entry at the command's level; the host's failure modes in `crates/ridlc/src/plugin.rs`'s tests; the flag's behaviour in `crates/ridlc/tests/cli.rs`; the messages' encodings and the path rule in `crates/ridl-ir/src/codegen/tests.rs` |
 
 ## 2. The contract
 
@@ -106,12 +106,16 @@ text, so `GeneratedFile.content` is a `oneof` of `text` (a `string`) and
 note §5 had flagged this for this stage; this is the decision.
 
 **Options** are `{key, value}` pairs, not a `map<>`, because a `map<>` has no
-canonical order (IR specification §3 item 3). The host passes each in-tree
-backend none, and a plugin run from the command line receives an empty list — no
-flag sets an option yet; adding one is additive. What a backend does with a key
-it does not know is its own contract: every in-tree backend and the reference
-plugin refuse it with an error diagnostic, and the Rust backend reads one key,
-`wire-encoding`, whose one value today is `flatbuffers`.
+canonical order (IR specification §3 item 3). The host builds one request per
+package and backend, and each backend receives only the options of its own
+`[backend.<name>]` table in the root manifest. The one key the host sends is
+`encodings`; its value is the table's encoding names joined by `,` in manifest
+order, with no spaces. A backend with no table, or a table with no encoding,
+receives an empty list. A plugin run from the command line receives the table
+named after its `<language>`. What a backend does with a key it does not know,
+or a value it cannot honour, is its own contract: every in-tree backend and the
+reference plugin refuse it with an error diagnostic. The `wire-encoding` key is
+retired and no host sends it.
 
 **A diagnostic** is a severity and a message and nothing else: a backend has no
 source span, because the model carries none. An unset severity is an error, so a
@@ -158,10 +162,12 @@ plugin and the path.
 ## 3. The in-process host
 
 `ridlc::codegen_request(base, package, others, options, deployment)` builds the
-one request per package — the model lowered once, over the same `others` every
+request once per package — the model lowered once, over the same `others` every
 code emit reads, so the request's model is the same JSON value as the artifact,
 and the `deployment` section the build selected once, the same section in every
-request — and `write_emits` hands it to each selected backend through the trait:
+request — and `write_emits` hands each selected backend a copy of it whose
+`options` are those of that backend's own `[backend.<name>]` table, through the
+trait:
 
 ```rust
 pub trait Backend {
@@ -461,6 +467,12 @@ link carries the `repr(C)` encoding: the enum value exists in the schema, and
 nothing selects it until driftsys/ridl#317. The choice between a shared-memory
 store and a local socket on one machine stays the plugin's. Both carry
 FlatBuffers, so the choice does not change a size.
+
+This rule is also what RSDL-807 (`link-encoding-not-emitted`) compares a
+`[backend.<name>] encodings` list against, once per emitted backend that can
+carry a codec — the Rust emit and each plugin, not a schema emit, whose backend
+takes no `encodings` option; it is aligned with the transport defaults when
+`repr(C)` or a shared-memory transport lands.
 
 ### The depth rule
 

@@ -26,9 +26,13 @@ fn derivable_composite_signals_have_valid_generated_defaults() {
         "{:?}",
         output.diagnostics
     );
-    let source = ridl_backend_rust::generate(&output.package)
-        .unwrap()
-        .rust_source;
+    let source = ridl_backend_rust::generate_pipeline(
+        &output.package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        &[],
+    )
+    .unwrap()
+    .rust_source;
     for name in ["Invalid", "InvalidChoice"] {
         assert!(
             !source.contains(&format!("impl ::core::default::Default for {name}")),

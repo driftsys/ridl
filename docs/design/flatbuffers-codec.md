@@ -29,6 +29,12 @@ every declaration has a root table, and a named scalar, an enum and an enum set
 are rooted in a box. What the face does with this codec is
 [the interaction-face design record](interaction-face.md).
 
+**The codec is emitted on request.** `ridl build` emits it, with the descriptors
+and the face, only when the manifest's `[backend.rust] encodings` names
+`flatbuffers`; with no such name the backend emits the domain types alone. The
+size of each payload is `MAX_SIZE`, and each payload also carries its own zeroed
+buffer, `Payload<FlatBuffers>::BUFFER`.
+
 ## Where the code is
 
 | What                                                                 | Where                                                       |
@@ -40,7 +46,7 @@ are rooted in a box. What the face does with this codec is
 | The reader and builder the emitted code calls                        | `crates/ridl-rt/src/flatbuffers.rs`                         |
 | The round trip, run rather than compiled                             | `crates/ridl-backend-rust/tests/flatbuffers_roundtrip.rs`   |
 | Conformance against planus, and the `wasm32` check                   | `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs` |
-| The encoding option (`WireEncoding`) the entry points check          | `crates/ridl-backend-rust/src/lib.rs`                       |
+| The `encodings` list (`WireEncoding`) the entry points take          | `crates/ridl-backend-rust/src/lib.rs`                       |
 | The `View` trait every emitted view implements                       | `crates/ridl-rt/src/payload.rs`                             |
 | The face over this codec, run rather than compiled                   | `crates/ridl-backend-rust/tests/interaction_face.rs`        |
 
@@ -67,15 +73,19 @@ is in `crates/ridl-backend-flatbuffers/src/tests.rs`, over the corpus fixtures.
 
 ## What is emitted, and where
 
-The `Payload<FlatBuffers>` implementations are in `generate`'s own output, not
-behind a third entry point beside `generate_face`. A consumer of a generated
-package needs the codec whether or not it ever dispatches, and `generate`
-already names `ridl-rt`. `ridlc::run_build` calls `generate_pipeline`, whose
-output is `generate`'s plus the descriptors and the face, so
-`ridl build --emit rust` carries the codec, and `crates/ridlc/src/lib.rs`
-renders `ridl-rt = { version = "<major.minor>", features = ["flatbuffers"] }` in
-the manifest it writes (the version is a literal there, and moves with each
-release).
+The `Payload<FlatBuffers>` implementations are emitted by
+`generate_face_with(package, encodings)` and by `generate_pipeline` when
+`encodings` names `flatbuffers`, in the same output as the descriptors and the
+face; `generate` and `generate_with` emit the domain types only. There is one
+codec emitter and one call to it, so the face compiles over the same
+implementations as any other reader of the output. `ridlc::run_build` calls
+`generate_pipeline` with the list the manifest's `[backend.rust] encodings`
+names, so `ridl build --emit rust` carries the codec when that list names
+`flatbuffers`, and `crates/ridlc/src/lib.rs` then renders
+`ridl-rt = { version = "<major.minor>", features = ["flatbuffers"] }` in the
+manifest it writes (the version is a literal there, and moves with each
+release); with no list the manifest names no feature and the package holds the
+types only.
 
 Per table: three free functions — `__ridl_fb_{encode,verify,decode}_<Name>` —
 and one view struct `<T>FbView<'a>`, at the generated package's module scope
@@ -129,10 +139,13 @@ Handing back a borrow instead would mean a second view type for those two
 backings alone, which is not worth the surface; a caller that wants the bytes
 without the allocation reads them off `bytes()`.
 
-Decision 8 narrowed what `generate` accepts, in one direction worth naming. A
-declaration whose box cannot be charged is now refused in its own right, over
-the box's own field: a named scalar with no width, a `string` or `bytes` one
-with no length bound, and an enum set with an unspecified width all answer
+Decision 8 narrowed what the codec accepts, in one direction worth naming. The
+codec is emitted when the package's `encodings` list names `flatbuffers`
+(`generate_pipeline`, `generate_face_with`); `generate`, which emits the domain
+types only, does not apply the refusal below. A declaration whose box cannot be
+charged is now refused in its own right, over the box's own field: a named
+scalar with no width, a `string` or `bytes` one with no length bound, and an
+enum set with an unspecified width all answer
 `` `pkg.Name.value` has no finite FlatBuffers bound ``. A named scalar with **no
 backing at all** — what the front end leaves after a parse error such as
 `type X:` — is told apart from those and answers
@@ -152,9 +165,9 @@ it from a missing fixture. The **vacuous** constructor path — `new` rather tha
 `new_unchecked` — is still live and still tested for a `boolean`, `integer` or
 `float` backing, but for a `string` or a `bytes` one it is now unreachable: such
 a type is vacuous only if it carries no length bound, and a type with no length
-bound has no box bound, so no IR that `generate` accepts can reach it. It is
-dead code rather than an undertested path, and there is no fixture for it
-because there can be none.
+bound has no box bound, so no IR that the codec accepts can reach it. It is dead
+code rather than an undertested path, and there is no fixture for it because
+there can be none.
 
 ## `encode`, `verify`, `decode`, `MAX_SIZE`
 
@@ -235,6 +248,12 @@ largest `Report` a probe could build is 1688 bytes against a bound of 2388 — a
 it is the alignment and vtable slack that keeps the bound sound under any write
 order.
 
+**`Buffer` and `BUFFER` come from the same literal.** The implementation also
+writes `type Buffer = [u8; <literal>]` and the zeroed constant
+`BUFFER = [0u8; <literal>]`, so a payload's buffer is exactly its own `MAX_SIZE`
+bytes long. Code generic over the encoding names the buffer type through
+`Payload`, because a generic array length is not expressible on stable Rust.
+
 **A type with no finite bound carries no codec**, per type rather than per
 package: `check_flatbuffers_bound` is called as each type's implementation is
 about to be emitted. Its refusal names the member, not only the declaration, by
@@ -246,26 +265,28 @@ whole position probed once, so a count or a product of counts is still charged
 even where a foreign reference sits inside the same position; the stand-in can
 prove a position unbounded and never prove one bounded.
 
-## The face names this codec through one alias
+## The face names this codec through `Payload<FlatBuffers>` and `Sizes<FlatBuffers>`
 
-`generate` emits the codec, and `generate_face` appends the interaction face to
-exactly the items `generate` emits. There is one codec emitter and one call to
-it, so a face compiles over the same implementations a consumer of `generate`
-gets rather than over a second set written for it.
+`generate_face_with(package, encodings)` and `generate_pipeline` emit the codec
+when `encodings` names `flatbuffers`, and the interaction face in the same call,
+over exactly those items; `generate` emits the domain types only. There is one
+codec emitter and one call to it, so a face compiles over the same
+implementations every other reader of the output gets rather than over a second
+set written for it.
 
-The face names the encoding by its full path at each site: `MAX_BUFFER_SIZE`,
-`EVENT_SOURCE_BUFFER_SIZE`, every `Ref::encode` and `Ref::verify` the face
-builds name `::ridl_rt::encoding::FlatBuffers`, as the codec's own `Payload`
-implementations do. Until 2026-09-29 they named it through a per-package alias,
-`pub type Wire`, which a declaration or an interface named `Wire` collided with;
-the
+The face names the encoding by its full path at each site: every buffer is
+`<T as ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>>::BUFFER`
+or an item of `<Iface as ::ridl_rt::contract::Sizes<…FlatBuffers>>`, and every
+`Ref::encode` and `Ref::verify` the face builds names
+`::ridl_rt::encoding::FlatBuffers`, as the codec's own `Payload` implementations
+do. The alias is gone: until 2026-09-29 they named it through a per-package
+alias, `pub type Wire`, which a declaration or an interface named `Wire`
+collided with; the
 [generated-name collision design](../technotes/rust-backend-name-collisions.md)
-removed the alias (driftsys/ridl#588). The encoding is stated by
-`ridl_backend_rust::WireEncoding`, which defaults to `FlatBuffers` and reaches
-the entry points through `generate_face_with(package, wire)` and
-`generate_pipeline`; `generate_face(package)` is the defaulted form. The entry
-points check the option against the one variant, so `generate`'s output is
-unchanged by it. The reasoning, and why the face takes no `E: Encoding` type
+removed it (driftsys/ridl#588). The codecs a package carries come from the
+`encodings` list that `ridl_backend_rust::WireEncoding` parses, passed to
+`generate_face_with(package, encodings)` and `generate_pipeline`; an empty list
+emits no codec. The reasoning, and why the face takes no `E: Encoding` type
 parameter, is design note D-11 and
 [the interaction-face design record](interaction-face.md).
 

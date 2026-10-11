@@ -118,13 +118,13 @@ pub(super) fn dispatch(
          settlement is accepted — except an oversized claim whose settlement \
          the handler refused, below — and the pass stops when it reaches 0 \
          without asking for another claim. With a buffer of at least \
-         `{iface_name}::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 \
+         `<{iface_name} as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0 \
          means the handler has no claim waiting, or refused the settlement \
          of an oversized claim that stays waiting; `Ok` with `budget` at 0 means claims \
          may still be waiting; `Err` means `Handler::next_claim` failed, and \
          every claim settled before the failure stays settled. \
          `ReadError::ShortClaim` is not a failure: the claim's arguments do \
-         not fit `{iface_name}::MAX_BUFFER_SIZE`, the interface's largest \
+         not fit `<{iface_name} as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE`, the interface's largest \
          argument or reply payload, so they are larger than any valid \
          encoding of this interface's members, and the claim is settled \
          `Transport::Corrupt` by its id without being read, whichever \
@@ -137,7 +137,7 @@ pub(super) fn dispatch(
          the runtime keeps the unsettled claim the next one; the claims \
          behind it wait until the handler can settle it \
          (driftsys/ridl#569).\n\n`buf` must \
-         be at least `{iface_name}::MAX_BUFFER_SIZE` bytes, because a reply is \
+         be at least `<{iface_name} as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes, because a reply is \
          encoded into the same buffer as the arguments. A shorter buffer \
          returns `Ok(0)` without consuming a claim or changing \
          `budget`.\n\nEvery claim that is taken is \
@@ -167,7 +167,11 @@ pub(super) fn dispatch(
             H: ::ridl_rt::port::Handler,
             P: Provider,
         {
-            if buf.len() < super::#iface::MAX_BUFFER_SIZE {
+            if buf.len()
+                < <super::#iface as ::ridl_rt::contract::Sizes<
+                    ::ridl_rt::encoding::FlatBuffers,
+                >>::MAX_BUFFER_SIZE
+            {
                 return Ok(0);
             }
             let mut settled = 0usize;

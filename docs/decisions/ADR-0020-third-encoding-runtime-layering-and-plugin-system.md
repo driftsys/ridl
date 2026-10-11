@@ -77,6 +77,12 @@ the same JSON value. The request nests the value one indentation level deeper,
 so the two are equal as JSON and not as bytes (driftsys/ridl#751). The amendment
 is written into the open item in place.
 
+**Amended 2026-10-10 — decisions 5 and 9, on-request encodings.** `contract`
+loses `EncodedSizes` and `Unsized` and gains `Sizes<E>`; `payload::Payload<E>`
+gains `Buffer`; `port` gains `Encoded`; a generated package enables one
+`ridl-rt` feature per named encoding. The request carries the `encodings`
+option. The record stays Proposed.
+
 ## Context
 
 Three problems came out of one session, and each has the same shape: a record
@@ -297,6 +303,23 @@ as its public contract.
    planus crate is reachable from `ridl-rt` with every feature on, or is in the
    resolved graph of the crate `ridl build` generates for `examples/cabin`.
 
+   **Amendment (2026-10-10) — the size table, `Buffer` and `Encoded`.** The
+   `contract` module loses `EncodedSizes` and `Unsized`, and gains `Sizes<E>`,
+   the per-interface table of one encoding: `RESERVATIONS`, `MAX_BUFFER_SIZE`,
+   `EVENT_SOURCE_BUFFER_SIZE`, the buffer types `ClaimBuffer` and `EventBuffer`,
+   and their zeroed values `CLAIM_BUFFER` and `EVENT_BUFFER`. A payload with no
+   bound makes the backend refuse to generate, and a codec with no table is a
+   compile error, so `Unsized` has no use. `payload::Payload<E>` gains
+   `type Buffer` and `const BUFFER`, an array of `MAX_SIZE` zero bytes emitted
+   beside `MAX_SIZE`. `port` gains `Encoded`, a trait that states the encoding
+   of the bytes a port carries; it is not a supertrait of the port traits. A
+   generated package enables one `ridl-rt` feature per encoding that
+   `[backend.rust] encodings` names, and none when the list is empty, so a
+   types-only build depends on `ridl-rt` with no feature. The change ships in
+   `ridl-rt` 0.9.0 with the list of
+   [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 10's note of the
+   same date.
+
 6. **The runtimes live outside `ridl-rt`.** The note's RA-03 fixes the
    dependency graph as emitter output → `ridl-rt` ← runtime and nothing else, so
    each runtime is its own crate or package.
@@ -398,6 +421,16 @@ as its public contract.
    against an earlier `ridl-ir` must be rebuilt once. The response reader
    (`response_from_json`) and the IR readers stay strict: ADR-0014 decision 11's
    conformance test relies on that strictness.
+
+   **Amendment (2026-10-10) — the `encodings` option.** A backend that emits a
+   codec reads the request option `encodings`: the encoding names the manifest's
+   `[backend.<name>] encodings` array holds for that backend, joined by `,` in
+   manifest order, and no option when the table is absent or the array is empty
+   (ADR-0002 section 4). The names are `flatbuffers`, `proto3` and `repr-c`. A
+   backend refuses a name it does not implement, with a message that names the
+   name. The option `wire-encoding` is retired. The option is a convention of
+   the existing option map, so the request has no new field and no change to
+   `SCHEMA`.
 
 10. **Two hosts for that contract; the process host is this release's.** The
     in-tree Rust and TypeScript backends implement the contract in-process. The
@@ -561,6 +594,10 @@ as its public contract.
 | [`docs/design/ridl-rt.md`](../design/ridl-rt.md)                                               | the `flatbuffers` feature's paragraph: the FlatBuffers runtime decision 5 permits cannot be planus (decision 5's 2026-10-03 amendment)                                                                                                                                                                                                                                                                                                                                                                                          |
 | [`crates/ridl-rt/src/flatbuffers.rs`](../../crates/ridl-rt/src/flatbuffers.rs)                 | the module documentation: no planus crate may be a dependency of `ridl-rt` (decision 5's 2026-10-03 amendment)                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | [`docs/design/flatbuffers-codec.md`](../design/flatbuffers-codec.md)                           | the conformance test's planus paragraph: `ridl-backend-rust`'s own use of planus is dev-only, the toolchain may depend on planus, and `ridl-rt` and every generated package must not (decision 5's 2026-10-03 amendment)                                                                                                                                                                                                                                                                                                        |
+| [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md)                                            | decisions 10, 17 and the port contract: the `ridl-rt` list of the on-request encodings change (`Sizes<E>`, `Payload::Buffer`, `Encoded`; `EncodedSizes`, `Unsized`, `Member::reservation` and `table_budget(&[Member])` removed)                                                                                                                                                                                                                                                                                                |
+| [ADR-0023](ADR-0023-interaction-face-generation.md)                                            | decision 2: the face is emitted only when an encoding is named; the face reads its buffers from `Payload::BUFFER` and `Sizes<E>`                                                                                                                                                                                                                                                                                                                                                                                                |
+| [`docs/design/interaction-face.md`](../design/interaction-face.md)                             | the size passage, the encoding default and the encoding-selection rule, rewritten for the manifest rule and the size table                                                                                                                                                                                                                                                                                                                                                                                                      |
+| [`docs/design/ridl-rt.md`](../design/ridl-rt.md)                                               | the `contract`, `payload` and `port` item lists, the reservation and budget section, `Encoding` without `max_size`, and the "Versioning" section                                                                                                                                                                                                                                                                                                                                                                                |
 
 ## References
 

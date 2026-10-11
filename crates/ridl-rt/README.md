@@ -34,9 +34,9 @@ the standard library and enables `task::block_on`, `task::noop_waker` and
 not the major version. A public struct whose fields are all public and that
 carries no `#[non_exhaustive]` cannot gain a field without a breaking change,
 because code outside the crate can build it as a struct literal: `CatalogRef`,
-`Member`, `Timing`, `PayloadInfo`, `EncodedSizes`, `Encoded`, `Violation`,
-`RawSample`, `RawOccurrence`, `Claim`, `Watermark`, `Changed`, `Envelope`,
-`Sample`, `Occurrence`, `TraceContext`. The public tuple structs — `Ordinal`,
+`Member`, `Timing`, `PayloadInfo`, `Encoded`, `Violation`, `RawSample`,
+`RawOccurrence`, `Claim`, `Watermark`, `Changed`, `Envelope`, `Sample`,
+`Occurrence`, `TraceContext`. The public tuple structs — `Ordinal`,
 `InterfaceNo`, `CatalogHash`, `Correlation`, `ClaimId`, `Timestamp`, `Duration`
 — follow the same rule. So do the unit structs `FlatBuffers`, `Proto3` and
 `ReprC` (`src/encoding.rs`), `TrackerFull` (`src/sample.rs`) and `AlreadySet`
