@@ -664,6 +664,10 @@ fn uncommenting_the_backend_table_emits_the_codec() {
     let uncommented = manifest
         .replace("# [backend.rust]", "[backend.rust]")
         .replace("# encodings", "encodings");
+    assert_ne!(
+        uncommented, manifest,
+        "the manifest holds the commented table"
+    );
     std::fs::write(&manifest_path, uncommented).expect("write manifest");
     let out = package.join("out-codec");
     assert_clean(
@@ -680,5 +684,46 @@ fn uncommenting_the_backend_table_emits_the_codec() {
     assert!(
         with_codec.contains("Payload<"),
         "the uncommented table emits the codec"
+    );
+    assert!(
+        with_codec.contains("impl ::ridl_rt::contract::Interface"),
+        "the uncommented table emits the descriptors"
+    );
+}
+
+#[test]
+fn uncommenting_the_workspace_root_table_emits_the_members_codec() {
+    let tmp = TempDir::new("backend-hint-workspace");
+    assert_clean(tmp.path(), &["new", "--workspace", "proj"]);
+    let root = tmp.path().join("proj");
+    let manifest_path = root.join("ridl.toml");
+    let manifest = std::fs::read_to_string(&manifest_path).expect("root manifest");
+    let uncommented = manifest
+        .replace("# [backend.rust]", "[backend.rust]")
+        .replace("# encodings", "encodings");
+    assert_ne!(
+        uncommented, manifest,
+        "the root manifest holds the commented table"
+    );
+    std::fs::write(&manifest_path, uncommented).expect("write root manifest");
+    let out = root.join("out");
+    assert_clean(
+        &root,
+        &[
+            "build",
+            "--emit",
+            "rust",
+            "--out-dir",
+            out.to_str().unwrap(),
+        ],
+    );
+    let member = std::fs::read_to_string(out.join("proj.rs")).expect("member module");
+    assert!(
+        member.contains("Payload<"),
+        "the root table emits the member's codec"
+    );
+    assert!(
+        member.contains("impl ::ridl_rt::contract::Interface"),
+        "the root table emits the member's descriptors"
     );
 }
