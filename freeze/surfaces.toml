@@ -1,0 +1,8 @@
+# Baseline rows for the freeze check. Each row names a frozen surface and the
+# git ref its dump is compared against:
+#
+#   [[surface]]
+#   name = "keywords"
+#   baseline = "v0.10.0"
+#
+# A surface with no row is only checked against its committed dump.

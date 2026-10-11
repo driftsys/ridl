@@ -1,0 +1,290 @@
+//! `cargo xtask freeze update|check`: the freeze harness.
+//!
+//! Each frozen surface has a dumper that returns one line per fact. `update`
+//! writes the sorted, deduplicated lines to `freeze/<surface>.txt`. `check`
+//! regenerates every dump and fails when it differs from the committed file,
+//! and fails when a line of a surface's dump at its baseline ref is missing
+//! from the dump at HEAD. A line that was added passes.
+
+use serde::Deserialize;
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+/// One row of `freeze/surfaces.toml`.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Row {
+    pub surface: String,
+    pub baseline: String,
+}
+
+#[derive(Deserialize)]
+struct RawFile {
+    #[serde(default)]
+    surface: Vec<RawRow>,
+}
+
+#[derive(Deserialize)]
+struct RawRow {
+    name: String,
+    baseline: Option<String>,
+}
+
+/// Reads the `[[surface]]` tables of `freeze/surfaces.toml`, in file order.
+pub fn parse_surfaces(toml: &str) -> Result<Vec<Row>, String> {
+    let file: RawFile = toml::from_str(toml).map_err(|e| format!("surfaces.toml: {e}"))?;
+    file.surface
+        .into_iter()
+        .map(|row| match row.baseline {
+            Some(baseline) => Ok(Row {
+                surface: row.name,
+                baseline,
+            }),
+            None => Err(format!(
+                "surfaces.toml: surface `{}` has no `baseline`",
+                row.name
+            )),
+        })
+        .collect()
+}
+
+/// The lines of `baseline` that are not in `head`, compared as sets of
+/// non-empty lines, sorted.
+pub fn missing_lines(baseline: &str, head: &str) -> Vec<String> {
+    let head: BTreeSet<&str> = head.lines().filter(|l| !l.is_empty()).collect();
+    let baseline: BTreeSet<&str> = baseline.lines().filter(|l| !l.is_empty()).collect();
+    baseline
+        .into_iter()
+        .filter(|l| !head.contains(l))
+        .map(str::to_string)
+        .collect()
+}
+
+/// A dumper takes the repository root and returns lines. The harness sorts
+/// and deduplicates them.
+pub type Dumper = fn(&Path) -> Result<Vec<String>, String>;
+
+/// The registry of frozen surfaces.
+pub fn dumpers() -> &'static [(&'static str, Dumper)] {
+    &[]
+}
+
+const USAGE: &str = "usage: cargo xtask freeze <update|check> [--root <dir>] \
+[--dumper-fixture <name>=<file>]\n\
+  --root <dir>                      repository root (default: the workspace root)\n\
+  --dumper-fixture <name>=<file>    test-only: register a surface whose lines \
+are read from <file>";
+
+struct Options {
+    root: PathBuf,
+    fixtures: Vec<(String, PathBuf)>,
+}
+
+fn parse_options(args: &[String]) -> Result<Options, String> {
+    let mut root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map(Path::to_path_buf)
+        .ok_or("cannot find the workspace root")?;
+    let mut fixtures = Vec::new();
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        let value = |iter: &mut std::slice::Iter<String>| {
+            iter.next()
+                .cloned()
+                .ok_or_else(|| format!("{arg} needs a value\n{USAGE}"))
+        };
+        match arg.as_str() {
+            "--root" => root = PathBuf::from(value(&mut iter)?),
+            "--dumper-fixture" => {
+                let spec = value(&mut iter)?;
+                let (name, file) = spec.split_once('=').ok_or_else(|| {
+                    format!("--dumper-fixture expects <name>=<file>, got `{spec}`")
+                })?;
+                fixtures.push((name.to_string(), PathBuf::from(file)));
+            }
+            other => return Err(format!("unknown argument `{other}`\n{USAGE}")),
+        }
+    }
+    Ok(Options { root, fixtures })
+}
+
+fn normalise(mut lines: Vec<String>) -> String {
+    lines.retain(|l| !l.is_empty());
+    lines.sort();
+    lines.dedup();
+    lines.into_iter().map(|l| l + "\n").collect()
+}
+
+/// Every surface name with its dump, from the registry then the fixtures.
+fn dump_all(options: &Options) -> Result<Vec<(String, String)>, String> {
+    let mut dumps = Vec::new();
+    for (name, dumper) in dumpers() {
+        let lines = dumper(&options.root).map_err(|e| format!("surface `{name}`: {e}"))?;
+        dumps.push((name.to_string(), normalise(lines)));
+    }
+    for (name, file) in &options.fixtures {
+        let text = std::fs::read_to_string(file)
+            .map_err(|e| format!("fixture `{name}`: cannot read {}: {e}", file.display()))?;
+        dumps.push((
+            name.clone(),
+            normalise(text.lines().map(str::to_string).collect()),
+        ));
+    }
+    Ok(dumps)
+}
+
+fn dump_path(root: &Path, surface: &str) -> PathBuf {
+    root.join("freeze").join(format!("{surface}.txt"))
+}
+
+fn read_rows(root: &Path) -> Result<Vec<Row>, String> {
+    let path = root.join("freeze").join("surfaces.toml");
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    parse_surfaces(&text)
+}
+
+fn update(options: &Options) -> Result<(), String> {
+    let dir = options.root.join("freeze");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
+    for (name, text) in dump_all(options)? {
+        let path = dump_path(&options.root, &name);
+        std::fs::write(&path, text).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+        println!("wrote {}", path.display());
+    }
+    Ok(())
+}
+
+/// `git show <baseline>:freeze/<surface>.txt` in `root`.
+fn baseline_dump(root: &Path, row: &Row) -> Result<String, String> {
+    let spec = format!("{}:freeze/{}.txt", row.baseline, row.surface);
+    let mut command = Command::new("git");
+    command
+        .arg("-C")
+        .arg(root)
+        .args(["show", &spec])
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_INDEX_FILE")
+        .env_remove("GIT_WORK_TREE");
+    let output = command
+        .output()
+        .map_err(|e| format!("cannot run git: {e}"))?;
+    if output.status.success() {
+        return String::from_utf8(output.stdout).map_err(|e| format!("`{spec}` is not UTF-8: {e}"));
+    }
+    Err(format!(
+        "surface `{}`: cannot read `{spec}` (baseline `{}`): {}",
+        row.surface,
+        row.baseline,
+        String::from_utf8_lossy(&output.stderr).trim()
+    ))
+}
+
+fn check(options: &Options) -> Result<(), String> {
+    let dumps = dump_all(options)?;
+    let rows = read_rows(&options.root)?;
+    let mut failures: Vec<String> = Vec::new();
+
+    for row in &rows {
+        if !dumps.iter().any(|(name, _)| *name == row.surface) {
+            failures.push(format!(
+                "surfaces.toml has a row for `{}` (baseline `{}`) but no dumper has that name",
+                row.surface, row.baseline
+            ));
+        }
+    }
+
+    for (name, text) in &dumps {
+        let path = dump_path(&options.root, name);
+        match std::fs::read_to_string(&path) {
+            Ok(committed) if committed == *text => {}
+            Ok(_) | Err(_) => failures.push(format!(
+                "freeze/{name}.txt is missing or differs from the regenerated dump: \
+run `cargo xtask freeze update` and commit the result"
+            )),
+        }
+        let Some(row) = rows.iter().find(|r| r.surface == *name) else {
+            continue;
+        };
+        match baseline_dump(&options.root, row) {
+            Ok(baseline) => {
+                for line in missing_lines(&baseline, text) {
+                    failures.push(format!(
+                        "surface `{name}`: `{line}` is in the baseline `{}` and missing at HEAD \
+(row: name = \"{name}\", baseline = \"{}\")",
+                        row.baseline, row.baseline
+                    ));
+                }
+            }
+            Err(error) => failures.push(error),
+        }
+    }
+
+    if failures.is_empty() {
+        println!("freeze: {} surface(s) checked.", dumps.len());
+        Ok(())
+    } else {
+        Err(failures.join("\n"))
+    }
+}
+
+pub fn run(args: &[String]) -> Result<(), String> {
+    let Some((subcommand, rest)) = args.split_first() else {
+        return Err(USAGE.to_string());
+    };
+    let options = parse_options(rest)?;
+    match subcommand.as_str() {
+        "update" => update(&options),
+        "check" => check(&options),
+        other => Err(format!("unknown subcommand `{other}`\n{USAGE}")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_lines_reports_a_removed_line() {
+        assert_eq!(missing_lines("a\nb\n", "a\n"), vec!["b"]);
+    }
+
+    #[test]
+    fn missing_lines_accepts_an_added_line() {
+        assert!(missing_lines("a\n", "a\nb\n").is_empty());
+    }
+
+    #[test]
+    fn missing_lines_reports_a_changed_line_as_removed() {
+        assert_eq!(missing_lines("k = 1\n", "k = 2\n"), vec!["k = 1"]);
+    }
+
+    #[test]
+    fn missing_lines_ignores_duplicates() {
+        assert!(missing_lines("a\na\n", "a\n").is_empty());
+    }
+
+    #[test]
+    fn parse_surfaces_reads_rows() {
+        let rows = parse_surfaces(
+            "[[surface]]\nname = \"one\"\nbaseline = \"v1\"\n\n\
+             [[surface]]\nname = \"two\"\nbaseline = \"v2\"\n",
+        )
+        .unwrap();
+        assert_eq!(
+            rows,
+            vec![
+                Row {
+                    surface: "one".into(),
+                    baseline: "v1".into()
+                },
+                Row {
+                    surface: "two".into(),
+                    baseline: "v2".into()
+                },
+            ]
+        );
+        let error = parse_surfaces("[[surface]]\nname = \"lonely\"\n").unwrap_err();
+        assert!(error.contains("lonely"), "{error}");
+    }
+}

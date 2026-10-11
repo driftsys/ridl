@@ -189,6 +189,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # `just freeze-check` reads dumps at baseline refs with `git show`.
+          fetch-depth: 0
       # No `dtolnay/rust-toolchain@stable`: it runs `rustup default`, which a
       # rust-toolchain.toml directory override outranks, so it would install a
       # toolchain on every run that nothing here uses. `rustup show` installs
@@ -216,6 +219,7 @@ jobs:
       # local file:// fixture.
       - run: just install-check
       - run: just fmt-check
+      - run: just freeze-check
       - run: just compile
       - run: just test
       - run: just lint

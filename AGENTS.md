@@ -147,6 +147,11 @@ member; rsdl is the apex.
                          names file:line for each match. The ROADMAP, the
                          backlog, the ADRs, the rest of the specifications,
                          docs/archive/ and docs/wip/ may hold ids
+    just freeze-check    every committed dump under freeze/ matches the
+                         regenerated one, and no line of a dump at its
+                         baseline ref is missing now (the baseline refs are
+                         in freeze/surfaces.toml; repair a stale dump with
+                         cargo xtask freeze update)
     just compile         compile the Rust workspace (--locked)
     just test            run the Rust workspace test suite (--locked), and
                          ridl-descriptor's tests with its default
@@ -187,11 +192,12 @@ member; rsdl is the apex.
                          this workspace cannot reach
     just build           toolchain-check + gate-parity + install-check +
                          fmt-check + book-check + link-check + doc-path-check +
-                         story-id-check + compile + test + lint + wasm-check +
-                         compat-check + demo + check — the full local gate: every member ADR-0008
-                         decision 11 names, the four CI checks ADR-0009 brought
-                         back to this side, and doc-path-check, story-id-check and
-                         demo, which postdate both
+                         story-id-check + freeze-check + compile + test +
+                         lint + wasm-check + compat-check + demo + check — the
+                         full local gate: every member ADR-0008 decision 11
+                         names, the four CI checks ADR-0009 brought back to this
+                         side, and doc-path-check, story-id-check and demo,
+                         which postdate both
     just lint-commits    git std lint over the commits on top of a base branch
                          (BASE defaults to main; CI passes the PR base branch)
     just pre-push        lint-commits + the static-check members of build,
