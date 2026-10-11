@@ -221,6 +221,11 @@ ridl new demo
 ridl check demo
 ```
 
+The manifest ends with a commented-out `[backend.rust]` table. Until you
+uncomment it, `ridl build --emit rust` generates the types only; with it, the
+build also generates the FlatBuffers codec, the descriptors and the interaction
+face. With `--workspace`, the table is in the workspace root's manifest.
+
 `ridl init` does the same inside a directory that exists, and `--workspace`
 writes a workspace root with one member instead of a standalone package. Both
 refuse, and write nothing, when a file they would write exists or when the
