@@ -6636,3 +6636,195 @@ fn doc_link_to_internal_or_absent_target_is_a_code_span() {
         assert!(!source.contains(written), "got:\n{source}");
     }
 }
+
+/// A constant declaration of `type_ref` holding `value`.
+fn const_decl(name: &str, type_ref: &str, value: &str) -> v2::Decl {
+    public_decl(
+        name,
+        v2::decl::Kind::ConstDef(v2::ConstDef {
+            type_ref: Some(type_ref.to_string()),
+            value: value.to_string(),
+            regex: None,
+        }),
+    )
+}
+
+/// The two packages of the foreign-link tests. `other.pkg` declares a struct
+/// `Thing`, a ranged scalar `Speed`, a `bytes` constant `BLOB`, which the
+/// backend does not emit, and a string constant `GREETING`, which it does.
+/// `veh.common` declares the same two constants and a struct `Holder` with a
+/// field of each foreign item, so that the model's foreign declarations
+/// hold all four, and a doc that links each constant and `Thing`.
+fn foreign_link_packages() -> (v2::Package, v2::Package) {
+    let other = package(
+        "other.pkg",
+        vec![
+            struct_with_field("Thing", "level", "Speed"),
+            speed_decl(),
+            const_decl("BLOB", "bytes", "00"),
+            const_decl("GREETING", "string", "hello"),
+        ],
+    );
+    let doc = "Not [BLOB] nor [other.pkg.BLOB], but [GREETING], \
+        [other.pkg.GREETING] and [other.pkg.Thing].";
+    let field = |name: &str, ordinal: u32, type_ref: &str| {
+        field_member(named_field(
+            name,
+            ordinal,
+            type_ref,
+            false,
+            init_value(false, None),
+        ))
+    };
+    let holder = v2::StructDef {
+        members: vec![
+            field("thing", 1, "other.pkg.Thing"),
+            field("speed", 2, "other.pkg.Speed"),
+            field("blob", 3, "other.pkg.BLOB"),
+            field("greeting", 4, "other.pkg.GREETING"),
+        ],
+        fixed_layout: false,
+    };
+    let local = package(
+        "veh.common",
+        vec![
+            const_decl("BLOB", "bytes", "00"),
+            const_decl("GREETING", "string", "hi"),
+            v2::Decl {
+                doc: doc.to_string(),
+                links: vec![
+                    doc_link(doc, "[BLOB]", "veh.common.BLOB"),
+                    doc_link(doc, "[other.pkg.BLOB]", "other.pkg.BLOB"),
+                    doc_link(doc, "[GREETING]", "veh.common.GREETING"),
+                    doc_link(doc, "[other.pkg.GREETING]", "other.pkg.GREETING"),
+                    doc_link(doc, "[other.pkg.Thing]", "other.pkg.Thing"),
+                ],
+                ..public_decl("Holder", v2::decl::Kind::StructDef(holder))
+            },
+        ],
+    );
+    (local, other)
+}
+
+/// A link to a foreign declaration is its path through the module tree; a
+/// link to a constant the backend does not emit, local or foreign, is a
+/// code span, as rustdoc could not resolve a path to it.
+#[test]
+fn doc_links_to_foreign_items_and_to_skipped_constants() {
+    let (local, other) = foreign_link_packages();
+    let source = super::generate_with(&local, &[&other])
+        .expect("generation succeeds")
+        .rust_source;
+    assert!(
+        !source.contains("const BLOB"),
+        "the bytes constant must not be emitted, or this test proves nothing:\n{source}"
+    );
+    assert!(
+        source.contains(
+            "Not `veh.common.BLOB` nor `other.pkg.BLOB`, but \
+             [GREETING](crate::veh::common::GREETING),"
+        ),
+        "got:\n{source}"
+    );
+    assert!(
+        source.contains(
+            "[other.pkg.GREETING](crate::other::pkg::GREETING) and \
+             [other.pkg.Thing](crate::other::pkg::Thing)."
+        ),
+        "got:\n{source}"
+    );
+}
+
+/// What `ridl build --emit rust` relies on: through the backend contract,
+/// over a model lowered with the other packages, a field of a foreign type
+/// carries that type's rules.
+#[test]
+fn a_field_of_a_foreign_type_carries_its_rules_through_the_contract() {
+    use ridl_ir::codegen::{Backend as _, v1};
+
+    let (local, other) = foreign_link_packages();
+    let request = v1::CodegenRequest {
+        model: Some(ridl_ir::codegen::lower(&local, &[&other])),
+        artifact_base: "veh.common".to_string(),
+        ..Default::default()
+    };
+    let response = crate::Backend.generate(&request);
+    assert!(
+        response.diagnostics.is_empty(),
+        "{:?}",
+        response.diagnostics
+    );
+    let source = response
+        .files
+        .iter()
+        .find_map(|file| match &file.content {
+            Some(v1::generated_file::Content::Text(text)) => Some(text.clone()),
+            _ => None,
+        })
+        .expect("the backend writes one text file");
+    let field = source
+        .split_once("pub struct Holder")
+        .map(|(_, rest)| rest)
+        .and_then(|rest| rest.split_once("pub speed:"))
+        .map(|(doc, _)| doc.rsplit_once("pub thing:").map_or(doc, |(_, doc)| doc))
+        .expect("`Holder.speed` is generated");
+    assert!(
+        field.contains("/// # Rules") && field.contains("/// - range 0.0 ..= 250.0"),
+        "the field's rules, got:\n{field}"
+    );
+}
+
+/// A link to an item whose name a child package's module takes is a code
+/// span: the item is reached only through `__ridl_package`, which is
+/// `#[doc(hidden)]`, so rustdoc writes no page for it.
+#[test]
+fn doc_link_to_an_item_a_child_package_hides_is_a_code_span() {
+    let child = package("veh.common.gauge", vec![speed_decl()]);
+    let doc = "Shown on [gauge], next to [Speed].";
+    let local = package(
+        "veh.common",
+        vec![
+            speed_decl(),
+            struct_with_field("gauge", "speed", "Speed"),
+            v2::Decl {
+                doc: doc.to_string(),
+                links: vec![
+                    doc_link(doc, "[gauge]", "veh.common.gauge"),
+                    doc_link(doc, "[Speed]", "veh.common.Speed"),
+                ],
+                ..struct_with_field("Dial", "speed", "Speed")
+            },
+        ],
+    );
+    let source = super::generate_with(&local, &[&child])
+        .expect("generation succeeds")
+        .rust_source;
+    assert!(
+        source.contains("Shown on `veh.common.gauge`, next to [Speed](crate::veh::common::Speed)."),
+        "got:\n{source}"
+    );
+    assert!(!source.contains("__ridl_package::gauge)"), "got:\n{source}");
+}
+
+/// An enum set bit carries its doc on its constant.
+#[test]
+fn an_enum_set_bit_carries_its_doc() {
+    let mut bits = warning_bits();
+    bits[1].doc = "The engine needs a check.".to_string();
+    bits[1].since = vec!["0.2".to_string()];
+    let source = rust_for(vec![public_decl(
+        "Warnings",
+        v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+            backing_enum: None,
+            bits,
+            width: v2::IntWidth::U8 as i32,
+        }),
+    )]);
+    assert!(
+        source.contains(
+            "    /// The engine needs a check.\n    ///\n    /// Available since 0.2.\n    \
+             pub const CHECK_ENGINE: Warnings"
+        ),
+        "got:\n{source}"
+    );
+}

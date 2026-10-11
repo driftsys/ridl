@@ -254,3 +254,115 @@ fn links_into_a_keyword_package_render_as_code_spans() {
     }
     assert!(!source.contains("r#move)"), "{source}");
 }
+
+/// The pipeline's output for `text`, one source file, with the FlatBuffers
+/// codec.
+fn pipeline_source(label: &str, text: &str) -> String {
+    let output = ridlc::compile(&format!("{label}.ridl"), text);
+    ridl_backend_rust::generate_pipeline(
+        &output.package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        &[],
+    )
+    .expect("generate_pipeline skips rather than refuses")
+    .rust_source
+}
+
+/// A link to an interface whose face module the output does not hold
+/// renders as a code span: `Wide` is skipped, because its call has two
+/// parameters, and `Provisioned` declares only a `fixed` member, which the
+/// face carries no method for. A link to `Panel`, which has a face module,
+/// is a link.
+#[test]
+fn links_to_an_interface_with_no_face_module_render_as_code_spans() {
+    let source = pipeline_source(
+        "faces",
+        r#"
+package veh.faces
+
+/// A level, in percent.
+type Level: integer [0..100]
+
+/// Skipped: a call with two parameters has no face.
+interface Wide {
+  command set(first: Level, second: Level) @[..50ms]
+}
+
+/// Only a fixed member, so no face module.
+interface Provisioned {
+  fixed blades: Level
+}
+
+/// A face module.
+interface Panel {
+  /// The current level.
+  signal level: Level @10ms
+}
+
+/// Links to [Wide], [Provisioned] and [Panel].
+struct Links {
+  /// The level.
+  level: Level
+}
+"#,
+    );
+    assert!(
+        source.contains("const __RIDL_NO_FACE_"),
+        "`Wide` must be skipped, or this test proves nothing:\n{source}"
+    );
+    assert!(
+        !source.contains("pub mod provisioned"),
+        "`Provisioned` must have no face module, or this test proves nothing:\n{source}"
+    );
+    assert!(
+        source.contains(
+            "Links to `veh.faces.Wide`, `veh.faces.Provisioned` and \
+             [Panel](crate::veh::faces::panel)."
+        ),
+        "{source}"
+    );
+}
+
+/// A target whose name begins with the name of another declaration or
+/// interface resolves to its own: `[SpeedLimit]` is not `Speed`, and
+/// `[PanelTwo]` is not `Panel`.
+#[test]
+fn a_link_to_a_name_that_extends_another_resolves_to_its_own_item() {
+    let source = pipeline_source(
+        "prefix",
+        r#"
+package veh.prefix
+
+/// A speed.
+type Speed: integer [0..250]
+
+/// A speed limit.
+type SpeedLimit: integer [0..250]
+
+/// The first panel.
+interface Panel {
+  /// The current speed.
+  signal speed: Speed @10ms
+}
+
+/// The second panel.
+interface PanelTwo {
+  /// The current limit.
+  signal limit: SpeedLimit @10ms
+}
+
+/// Links to [SpeedLimit] and [PanelTwo].
+struct Links {
+  /// The speed.
+  speed: Speed
+}
+"#,
+    );
+    assert!(
+        source.contains(
+            "Links to [SpeedLimit](crate::veh::prefix::SpeedLimit) and \
+             [PanelTwo](crate::veh::prefix::panel_two)."
+        ),
+        "{source}"
+    );
+}
