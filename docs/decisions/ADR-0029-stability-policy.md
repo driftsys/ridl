@@ -226,6 +226,18 @@ design in each:
   crate. Frozen fixture copies make the break an explicit change.
 - **Freeze size and budget values.** Rejected: they are tuned as the encodings
   mature, and no user program depends on an exact value.
+- **Index `anyOf` branches of an MCP schema under their own paths.** Rejected:
+  every `anyOf` in the tool schemas wraps one object branch and a `null` branch,
+  which is how a nullable value is written. Indexing them would move every
+  nullable property under `/anyOf/0` and make a reordering of `[T, null]` a
+  break, with no gain. Only `oneOf`, which lists alternative shapes, is indexed.
+- **Fail every `just freeze-check` run while a required surface has no row.**
+  Rejected: `main` would be red between the two pull requests of an approved
+  break, and unrelated pull requests would be blocked. The risk is a release
+  that ships a frozen surface without a baseline, and the release check covers
+  exactly that.
+- **A CI job that counts merges since a row was removed.** Rejected: it needs
+  state outside the tree and is harder to test than a list in `surfaces.toml`.
 
 ## Consequences
 
