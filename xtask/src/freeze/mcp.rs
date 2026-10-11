@@ -1,6 +1,7 @@
 //! The MCP tool surface: the tool names and every property path of each input
-//! and output schema, with each `enum` value and `const` of a path, from
-//! `crates/ridl-mcp/tests/tools.json`.
+//! and output schema, with its type, whether it is required, each `enum` value
+//! and `const` of a path, and its `additionalProperties`, `minimum` and
+//! `format`, from `crates/ridl-mcp/tests/tools.json`.
 
 use serde_json::Value;
 use std::path::Path;
@@ -60,9 +61,11 @@ fn resolve_ref<'a>(node: &Value, defs: &'a Value) -> Option<&'a Value> {
     defs.get(name)
 }
 
-/// Adds a line for each property of `node`, a `<path> enum <value>` line for
-/// each value of its `enum` and a `<path> const <value>` line for its
-/// `const`, and recurses into nested `properties`, `items`, `$ref` targets and
+/// Adds two lines for each property of `node`, its type and whether it is
+/// `required` or `optional`, a `<path> enum <value>` line for each value of its
+/// `enum`, a `<path> const <value>` line for its `const`, a
+/// `<path> <keyword> <value>` line for each of its `additionalProperties`,
+/// `minimum` and `format`, and recurses into nested `properties`, `items`, `$ref` targets and
 /// `anyOf` and `oneOf` branches. `depth` bounds the walk for a recursive
 /// `$ref`.
 fn walk(
@@ -94,18 +97,39 @@ fn walk(
     if let Some(value) = node.get("const") {
         lines.push(format!("{tool} {side} {pointer} const {}", word(value)));
     }
-    if let Some(required) = node.get("required").and_then(Value::as_array) {
-        for name in required.iter().filter_map(Value::as_str) {
-            lines.push(format!(
-                "{tool} {side} {pointer}/properties/{} required",
-                token(name)
-            ));
+    for keyword in ["additionalProperties", "minimum", "format"] {
+        if let Some(value) = node.get(keyword) {
+            lines.push(format!("{tool} {side} {pointer} {keyword} {}", word(value)));
         }
     }
-    if let Some(properties) = node.get("properties").and_then(Value::as_object) {
+    let required: Vec<&str> = node
+        .get("required")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    let properties = node.get("properties").and_then(Value::as_object);
+    // A required name that `properties` does not list still gets its line.
+    for name in required
+        .iter()
+        .filter(|name| !properties.is_some_and(|p| p.contains_key(**name)))
+    {
+        lines.push(format!(
+            "{tool} {side} {pointer}/properties/{} required",
+            token(name)
+        ));
+    }
+    if let Some(properties) = properties {
         for (name, property) in properties {
             let path = format!("{pointer}/properties/{}", token(name));
             lines.push(format!("{tool} {side} {path} {}", type_of(property, defs)));
+            let requirement = if required.contains(&name.as_str()) {
+                "required"
+            } else {
+                "optional"
+            };
+            lines.push(format!("{tool} {side} {path} {requirement}"));
             walk(tool, side, &path, property, defs, depth + 1, lines);
         }
     }
@@ -168,6 +192,56 @@ mod tests {
             "t output /properties/a string",
             "t output /properties/a required",
             "t output /properties/b integer",
+        ] {
+            assert!(
+                lines.iter().any(|l| l == line),
+                "missing `{line}` in {lines:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn each_property_is_required_or_optional() {
+        // A property that becomes required, or one that becomes optional,
+        // removes a line.
+        let lines = walked(
+            "input",
+            serde_json::json!({
+                "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
+                "required": ["a"]
+            }),
+        );
+        for line in [
+            "t input /properties/a required",
+            "t input /properties/b optional",
+        ] {
+            assert!(
+                lines.iter().any(|l| l == line),
+                "missing `{line}` in {lines:?}"
+            );
+        }
+        assert!(
+            !lines
+                .iter()
+                .any(|l| l == "t input /properties/b required"
+                    || l == "t input /properties/a optional"),
+            "{lines:?}"
+        );
+    }
+
+    #[test]
+    fn walk_lists_additional_properties_minimum_and_format() {
+        let lines = walked(
+            "output",
+            serde_json::json!({
+                "additionalProperties": true,
+                "properties": {"n": {"type": "integer", "minimum": 0, "format": "uint32"}}
+            }),
+        );
+        for line in [
+            "t output  additionalProperties true",
+            "t output /properties/n minimum 0",
+            "t output /properties/n format uint32",
         ] {
             assert!(
                 lines.iter().any(|l| l == line),
