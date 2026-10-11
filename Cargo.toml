@@ -19,8 +19,10 @@ members = ["crates/*", "xtask"]
 # workspace the gate builds. This exclusion states that
 # where a reader of this file looks; it is not what enforces it, since
 # `members` above never globbed the directory and `examples/cabin` declares a
-# `[workspace]` of its own.
-exclude = ["examples"]
+# `[workspace]` of its own. `freeze/generated` holds the crates the freeze
+# check commits (freeze/README.md); they are compared with
+# `cargo semver-checks` on copies outside the repository, never built here.
+exclude = ["examples", "freeze/generated"]
 
 [workspace.package]
 # Every crate in the workspace shares this version and moves with it: a

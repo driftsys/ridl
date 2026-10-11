@@ -34,8 +34,13 @@ pub fn binary(root: &Path, name: &str) -> Result<PathBuf, String> {
             }
         })
         .clone()?;
+    Ok(target_dir(root).join("debug").join(name))
+}
+
+/// `${CARGO_TARGET_DIR:-target}`, relative to `root` when it is relative.
+pub fn target_dir(root: &Path) -> PathBuf {
     let target = std::env::var_os("CARGO_TARGET_DIR").unwrap_or_else(|| "target".into());
-    Ok(root.join(target).join("debug").join(name))
+    root.join(target)
 }
 
 /// Runs `exe` with `args` in `dir`.

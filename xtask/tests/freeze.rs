@@ -225,3 +225,122 @@ fn update_writes_sorted_deduplicated_lines() {
     let written = std::fs::read_to_string(repo.dir.join("freeze/fixture.txt")).unwrap();
     assert_eq!(written, "a\nb\nc\n");
 }
+
+/// The fixture crate of xtask/tests/freeze-fixtures/api/.
+fn api_fixture(relative: &str) -> String {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/freeze-fixtures/api")
+        .join(relative);
+    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+}
+
+const API_ROW: &str = "[[surface]]\nname = \"generated-crate\"\nbaseline = \"base\"\n";
+
+/// A repository whose tag `base` holds the fixture crate under
+/// freeze/generated/api/; HEAD holds the row for `generated-crate` and the
+/// crate with `lib_rs` as its source and `cargo_toml` as its manifest.
+fn repo_with_api_baseline(tag: &str, cargo_toml: &str, lib_rs: &str) -> Repo {
+    let repo = Repo::new(tag);
+    std::fs::create_dir_all(repo.dir.join("freeze/generated/api/src")).unwrap();
+    repo.write("freeze/surfaces.toml", "");
+    repo.write(
+        "freeze/generated/api/Cargo.toml",
+        &api_fixture("Cargo.toml"),
+    );
+    repo.write(
+        "freeze/generated/api/src/lib.rs",
+        &api_fixture("src/lib.rs"),
+    );
+    repo.commit();
+    repo.git(&["tag", "base"]);
+    repo.write("freeze/surfaces.toml", API_ROW);
+    repo.write("freeze/generated/api/Cargo.toml", cargo_toml);
+    repo.write("freeze/generated/api/src/lib.rs", lib_rs);
+    repo.commit();
+    repo
+}
+
+/// `cargo xtask freeze check` with only the semver comparison of the
+/// `generated-crate` surface, and a cargo target directory of the repository's
+/// own, so that tests running at the same time do not share one.
+fn check_generated_semver(repo: &Repo) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_xtask"))
+        .args(["freeze", "check", "--fixtures-only", "--api-semver"])
+        .arg("generated-crate")
+        .arg("--root")
+        .arg(&repo.dir)
+        .env("CARGO_TARGET_DIR", repo.dir.join("target"))
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_INDEX_FILE")
+        .env_remove("GIT_WORK_TREE")
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn semver_check_flags_a_removed_item() {
+    // The version also moves from 0.1.0 to 0.2.0. For a crate below 1.0,
+    // cargo-semver-checks accepts a break in such a release unless the check
+    // states the release type itself, and a frozen surface accepts no break.
+    let cargo_toml = api_fixture("Cargo.toml").replace("0.1.0", "0.2.0");
+    let lib_rs = api_fixture("src/lib.rs").replace("pub fn removed() {}", "");
+    assert!(
+        !lib_rs.contains("removed()"),
+        "the fixture changed: {lib_rs}"
+    );
+    let repo = repo_with_api_baseline("semver-removed", &cargo_toml, &lib_rs);
+    let output = check_generated_semver(&repo);
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    // `function_missing` is the cargo-semver-checks lint for a removed
+    // function; the item path is the crate name with `-` read as `_`.
+    assert!(
+        err.contains("surface `generated-crate`")
+            && err.contains("finds a break in the crate freeze/generated/api")
+            && err.contains("the baseline `base`")
+            && err.contains("function_missing")
+            && err.contains("freeze_api_fixture::removed"),
+        "{err}"
+    );
+}
+
+#[test]
+fn semver_check_passes_an_added_item() {
+    let lib_rs = format!(
+        "{}\n/// Added.\npub fn added() {{}}\n",
+        api_fixture("src/lib.rs")
+    );
+    let repo = repo_with_api_baseline("semver-added", &api_fixture("Cargo.toml"), &lib_rs);
+    let output = check_generated_semver(&repo);
+    assert!(output.status.success(), "{}", stderr(&output));
+}
+
+#[test]
+fn semver_check_fails_when_a_crate_is_missing_at_head() {
+    let repo = repo_with_api_baseline(
+        "semver-gone",
+        &api_fixture("Cargo.toml"),
+        &api_fixture("src/lib.rs"),
+    );
+    std::fs::remove_dir_all(repo.dir.join("freeze/generated/api")).unwrap();
+    let output = check_generated_semver(&repo);
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(
+        err.contains("freeze/generated/api") && err.contains("`base`"),
+        "{err}"
+    );
+}
+
+#[test]
+fn check_fails_when_the_semver_tool_fails() {
+    // A manifest cargo cannot read is a failure of the tool, not a break.
+    let repo = repo_with_api_baseline("semver-tool", "[package\n", &api_fixture("src/lib.rs"));
+    let output = check_generated_semver(&repo);
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(
+        err.contains("cargo semver-checks failed") && !err.contains("finds a break"),
+        "{err}"
+    );
+}

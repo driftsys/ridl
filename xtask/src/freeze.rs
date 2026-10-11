@@ -5,6 +5,10 @@
 //! regenerates every dump and fails when it differs from the committed file,
 //! and fails when a line of a surface's dump at its baseline ref is missing
 //! from the dump at HEAD. A line that was added passes.
+//!
+//! The Rust API surfaces have no line dump. Each has a checker in a second
+//! registry, [`api_surfaces`], which compares the API with `cargo
+//! semver-checks` instead (`freeze/rust_api.rs`).
 
 mod bin;
 mod cli;
@@ -14,6 +18,7 @@ mod manifest;
 mod mcp;
 mod msrv;
 mod protocol;
+mod rust_api;
 mod sources;
 mod wire;
 
@@ -99,18 +104,59 @@ pub fn dumpers() -> &'static [(&'static str, Dumper)] {
     ]
 }
 
+/// Rewrites an API surface's committed files under `freeze/`.
+pub type UpdateStep = fn(&Path) -> Result<(), String>;
+
+/// Returns the failures of an API surface's committed files against a
+/// regeneration.
+pub type CurrentStep = fn(&Path) -> Result<Vec<String>, String>;
+
+/// A frozen surface that is compared with `cargo semver-checks`, not as lines.
+pub struct ApiSurface {
+    pub name: &'static str,
+    /// Rewrites the surface's committed files under `freeze/`. `None` for a
+    /// surface that has no committed files.
+    pub update: Option<UpdateStep>,
+    /// The failures of the committed files against a regeneration. Runs with
+    /// or without a row. `None` for a surface that has no committed files.
+    pub current: Option<CurrentStep>,
+    /// The failures of HEAD against the row's baseline. Runs for a row only.
+    pub compare: fn(&Path, &Row) -> Result<Vec<String>, String>,
+}
+
+/// The registry of frozen surfaces that are Rust APIs.
+pub fn api_surfaces() -> &'static [ApiSurface] {
+    &[
+        ApiSurface {
+            name: "generated-crate",
+            update: Some(rust_api::generated_update),
+            current: Some(rust_api::generated_current),
+            compare: rust_api::generated_compare,
+        },
+        ApiSurface {
+            name: "runtime-crates",
+            update: None,
+            current: None,
+            compare: rust_api::runtime_compare,
+        },
+    ]
+}
+
 const USAGE: &str = "usage: cargo xtask freeze <update|check> [--root <dir>] \
-[--dumper-fixture <name>=<file>] [--fixtures-only]\n\
+[--dumper-fixture <name>=<file>] [--fixtures-only] [--api-semver <name>]\n\
   --root <dir>                      repository root (default: the workspace root)\n\
   --dumper-fixture <name>=<file>    test-only: register a surface whose lines \
 are read from <file>\n\
-  --fixtures-only                   test-only: skip the registered dumpers, which \
-read the real repository";
+  --fixtures-only                   test-only: skip the registered dumpers and API \
+checkers, which read the real repository\n\
+  --api-semver <name>               test-only: with --fixtures-only, run the baseline \
+comparison of the API surface <name> on the files under --root";
 
 struct Options {
     root: PathBuf,
     fixtures: Vec<(String, PathBuf)>,
     fixtures_only: bool,
+    api_semver: Vec<String>,
 }
 
 fn parse_options(args: &[String]) -> Result<Options, String> {
@@ -120,6 +166,7 @@ fn parse_options(args: &[String]) -> Result<Options, String> {
         .ok_or("cannot find the workspace root")?;
     let mut fixtures = Vec::new();
     let mut fixtures_only = false;
+    let mut api_semver = Vec::new();
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
         let value = |iter: &mut std::slice::Iter<String>| {
@@ -137,6 +184,13 @@ fn parse_options(args: &[String]) -> Result<Options, String> {
                 fixtures.push((name.to_string(), PathBuf::from(file)));
             }
             "--fixtures-only" => fixtures_only = true,
+            "--api-semver" => {
+                let name = value(&mut iter)?;
+                if !api_surfaces().iter().any(|s| s.name == name) {
+                    return Err(format!("--api-semver: no API surface is named `{name}`"));
+                }
+                api_semver.push(name);
+            }
             other => return Err(format!("unknown argument `{other}`\n{USAGE}")),
         }
     }
@@ -144,6 +198,7 @@ fn parse_options(args: &[String]) -> Result<Options, String> {
         root,
         fixtures,
         fixtures_only,
+        api_semver,
     })
 }
 
@@ -177,6 +232,24 @@ fn dump_all(options: &Options) -> Result<Vec<(String, String)>, String> {
     Ok(dumps)
 }
 
+/// The API surfaces that run, each with whether its `update` and `current`
+/// steps run: every registered surface with both steps, or under
+/// `--fixtures-only` the surfaces `--api-semver` names, without them.
+fn active_api_surfaces(options: &Options) -> Vec<(&'static ApiSurface, bool)> {
+    api_surfaces()
+        .iter()
+        .filter_map(|surface| {
+            if !options.fixtures_only {
+                Some((surface, true))
+            } else if options.api_semver.iter().any(|n| n == surface.name) {
+                Some((surface, false))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
 fn dump_path(root: &Path, surface: &str) -> PathBuf {
     root.join("freeze").join(format!("{surface}.txt"))
 }
@@ -195,6 +268,12 @@ fn update(options: &Options) -> Result<(), String> {
         let path = dump_path(&options.root, &name);
         std::fs::write(&path, text).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
         println!("wrote {}", path.display());
+    }
+    for (surface, regenerate) in active_api_surfaces(options) {
+        if let (true, Some(update)) = (regenerate, surface.update) {
+            update(&options.root).map_err(|e| format!("surface `{}`: {e}", surface.name))?;
+            println!("updated surface `{}`", surface.name);
+        }
     }
     Ok(())
 }
@@ -226,13 +305,17 @@ fn baseline_dump(root: &Path, row: &Row) -> Result<String, String> {
 
 fn check(options: &Options) -> Result<(), String> {
     let dumps = dump_all(options)?;
+    let apis = active_api_surfaces(options);
     let rows = read_rows(&options.root)?;
     let mut failures: Vec<String> = Vec::new();
 
     for row in &rows {
-        if !dumps.iter().any(|(name, _)| *name == row.surface) {
+        if !dumps.iter().any(|(name, _)| *name == row.surface)
+            && !apis.iter().any(|(api, _)| api.name == row.surface)
+        {
             failures.push(format!(
-                "surfaces.toml has a row for `{}` (baseline `{}`) but no dumper has that name",
+                "surfaces.toml has a row for `{}` (baseline `{}`) but no dumper or API checker \
+has that name",
                 row.surface, row.baseline
             ));
         }
@@ -278,8 +361,26 @@ run `cargo xtask freeze update` and commit the result"
         }
     }
 
+    for (surface, regenerate) in &apis {
+        let name = surface.name;
+        if let (true, Some(current)) = (*regenerate, surface.current) {
+            match current(&options.root) {
+                Ok(lines) => {
+                    failures.extend(lines.into_iter().map(|l| format!("surface `{name}`: {l}")))
+                }
+                Err(error) => failures.push(format!("surface `{name}`: {error}")),
+            }
+        }
+        if let Some(row) = rows.iter().find(|r| r.surface == name) {
+            match (surface.compare)(&options.root, row) {
+                Ok(lines) => failures.extend(lines),
+                Err(error) => failures.push(error),
+            }
+        }
+    }
+
     if failures.is_empty() {
-        println!("freeze: {} surface(s) checked.", dumps.len());
+        println!("freeze: {} surface(s) checked.", dumps.len() + apis.len());
         Ok(())
     } else {
         Err(failures.join("\n"))
