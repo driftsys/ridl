@@ -61,8 +61,10 @@ fn resolve_ref<'a>(node: &Value, defs: &'a Value) -> Option<&'a Value> {
     defs.get(name)
 }
 
-/// Adds two lines for each property of `node`, its type and whether it is
-/// `required` or `optional`, a `<path> enum <value>` line for each value of its
+/// Adds one `<path> required-set <names>` line for a schema object that has
+/// `properties` or `required`, holding its required names sorted, two lines
+/// for each property of `node`, its type and whether it is `required` or
+/// `optional`, a `<path> enum <value>` line for each value of its
 /// `enum`, a `<path> const <value>` line for its `const`, a
 /// `<path> <keyword> <value>` line for each of its `additionalProperties`,
 /// `minimum` and `format`, and recurses into nested `properties`, `items`, `$ref` targets and
@@ -110,6 +112,18 @@ fn walk(
         .filter_map(Value::as_str)
         .collect();
     let properties = node.get("properties").and_then(Value::as_object);
+    // One line holds the whole required set of a schema object, so a property
+    // that becomes required, or a new required one, removes it.
+    if properties.is_some() || node.get("required").is_some() {
+        let mut sorted: Vec<String> = required.iter().map(|name| token(name)).collect();
+        sorted.sort();
+        lines.push(
+            std::iter::once(format!("{tool} {side} {pointer} required-set"))
+                .chain(sorted)
+                .collect::<Vec<_>>()
+                .join(" "),
+        );
+    }
     // A required name that `properties` does not list still gets its line.
     for name in required
         .iter()
@@ -227,6 +241,74 @@ mod tests {
                     || l == "t input /properties/a optional"),
             "{lines:?}"
         );
+    }
+
+    #[test]
+    fn a_required_name_without_a_property_has_a_line() {
+        let lines = walked(
+            "input",
+            serde_json::json!({
+                "properties": {"a": {"type": "string"}},
+                "required": ["a", "c"]
+            }),
+        );
+        assert!(
+            lines.iter().any(|l| l == "t input /properties/c required"),
+            "{lines:?}"
+        );
+    }
+
+    fn walked_text(schema: Value) -> String {
+        walked("input", schema)
+            .into_iter()
+            .map(|l| l + "\n")
+            .collect()
+    }
+
+    #[test]
+    fn each_schema_object_has_its_whole_required_set() {
+        let lines = walked(
+            "input",
+            serde_json::json!({
+                "properties": {
+                    "b": {"type": "string"},
+                    "a": {"type": "object", "properties": {"x": {"type": "string"}}}
+                },
+                "required": ["b", "a"]
+            }),
+        );
+        for line in [
+            "t input  required-set a b",
+            "t input /properties/a required-set",
+        ] {
+            assert!(
+                lines.iter().any(|l| l == line),
+                "missing `{line}` in {lines:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_new_required_property_removes_a_line() {
+        use crate::freeze::missing_lines;
+        let baseline = walked_text(serde_json::json!({
+            "properties": {"a": {"type": "string"}},
+            "required": ["a"]
+        }));
+        let head = walked_text(serde_json::json!({
+            "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
+            "required": ["a", "b"]
+        }));
+        assert_eq!(
+            missing_lines(&baseline, &head),
+            vec!["t input  required-set a"]
+        );
+        // A new optional property only adds lines.
+        let head = walked_text(serde_json::json!({
+            "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
+            "required": ["a"]
+        }));
+        assert!(missing_lines(&baseline, &head).is_empty(), "{head}");
     }
 
     #[test]
