@@ -54,11 +54,12 @@ design in each:
   corpus and the catalog hash of the cabin example. It holds no frame vectors
   and no `attach` handshake vectors, so the frame envelope and the handshake are
   frozen by policy with no automated check until the wire dump gains them.
-- The minimum Rust version is checked for `ridl-rt` and `ridl-rt-conformance`
-  only. `ridl-loopback` and `ridl-descriptor` are edition 2024 today, so the
-  minimum does not cover them yet. The generated crate compiles as edition 2021
-  with Rust 1.83, which `just compat-check` checks and `just freeze-check` does
-  not.
+- The minimum of Rust 1.83 and edition 2021 applies to `ridl-rt` and
+  `ridl-rt-conformance` only. The `msrv` dump also records the edition of
+  `ridl-loopback` and `ridl-descriptor`, which are edition 2024 today, so a
+  change of their edition fails the check, but the minimum does not apply to
+  them. The generated crate compiles as edition 2021 with Rust 1.83, which
+  `just compat-check` checks and `just freeze-check` does not.
 
 ## Decision
 
@@ -81,8 +82,13 @@ design in each:
    The frozen minimum of the last row is Rust 1.83 and edition 2021 for
    `ridl-rt` and `ridl-rt-conformance`, checked by the `msrv` dump. The
    generated crate compiles as edition 2021 with that Rust version, checked by
-   `just compat-check`. `ridl-loopback` and `ridl-descriptor` are edition 2024
-   today and are not covered.
+   `just compat-check`. The `msrv` dump also records the edition of
+   `ridl-loopback` and `ridl-descriptor`, so a change of their edition fails the
+   check, but the minimum of Rust 1.83 and edition 2021 does not apply to them.
+
+   The formats of `interfaces.lock` and `.ridl/baseline` are frozen by policy
+   and checked by no tool. Of the exit codes, the check records only those of
+   `ridl check`; the exit codes of the other subcommands are frozen by policy.
 
 2. **These are not frozen.**
    - Size and budget values, for example header sizes and size sums.
@@ -97,41 +103,58 @@ design in each:
    recipe runs `cargo xtask freeze check`. It is a member of `just build`, of
    the `expected` list of `gate-parity` and of the CI workflow (ADR-0009).
    - _Line dumps._ `freeze/<surface>.txt` is the sorted, deduplicated dump of
-     one surface, one fact per line. The dumps are: keywords, accepted sources,
-     manifest keys, diagnostic codes with lint names and default levels, the CLI
-     (subcommands, flags with value kinds, exit codes, the key paths of the JSON
-     and SARIF reports), the codegen protocol fields with the reserved numbers
-     and names, the MCP tool and schema paths with each enum value and const,
-     the wire mapping (encoding names, the `.proto` and `.fbs` lines for the
-     corpus, the catalog hash of the cabin example) and the minimum Rust version
-     and edition. The check fails when a committed dump differs from a
-     regeneration. For a surface with a row in `freeze/surfaces.toml`, it also
-     fails when a line of the dump at the row's `baseline` ref is missing from
-     the dump at `HEAD`. An added line passes. A changed line is a removed line
-     plus an added line, so it fails. The accepted-sources and wire dumps read
-     frozen copies of the packages under `examples/` and `evals/corpus/`, kept
-     under `xtask/tests/freeze-fixtures/sources/` at the path of each original,
-     and the catalog hash is read from the generated-crate copy of
-     `examples/cabin`. An edit to an example or to the corpus therefore changes
-     no dump. A copy is refreshed on purpose: adding a copy adds lines, and
-     replacing a copy so that a line is removed is a break.
+     one surface, one fact per line. The dumps are: keywords with the whole
+     reserved set, accepted sources, manifest keys with their value types,
+     diagnostic codes with lint names and default levels, the CLI (subcommands,
+     flags with value kinds, whether each flag and positional argument is
+     required, the exit codes of `ridl check`, the key paths of the JSON and
+     SARIF reports of `ridl check`), the codegen protocol fields with the
+     reserved numbers and names and the whole value set of each enum, the MCP
+     tool and schema paths with the type of each property, whether it is
+     required, each enum value and const, and each `additionalProperties`,
+     `minimum` and `format`, the wire mapping (encoding names, the `.proto` and
+     `.fbs` lines for the corpus, the catalog hash of the cabin example) and the
+     minimum Rust version and edition. The check fails when a committed dump
+     differs from a regeneration. For a surface with a row in
+     `freeze/surfaces.toml`, it also fails when a line of the dump at the row's
+     `baseline` ref is missing from the dump at `HEAD`. An added line passes. A
+     changed line is a removed line plus an added line, so it fails. The
+     accepted-sources and wire dumps read frozen copies of the packages under
+     `examples/` and `evals/corpus/`, kept under
+     `xtask/tests/freeze-fixtures/sources/` at the path of each original, and
+     the catalog hash is read from the generated-crate copy of `examples/cabin`.
+     An edit to an example or to the corpus therefore changes no dump. A copy is
+     refreshed on purpose: adding a copy adds lines, and replacing a copy so
+     that a line is removed is a break.
+
+     Some lines hold a whole set or a requiredness, so a change that adds to a
+     set, or that makes a requirement looser, also removes a line and fails. A
+     codegen-protocol enum gains a value only in a minor release, such as 0.11,
+     and not in a 0.10.x release, because a plugin rejects an enum value that it
+     does not know. In the same way, a new reserved word, an MCP input property
+     or a CLI flag or argument that becomes optional, and any change of a value
+     in the `msrv` dump each need the approval of decision 4.
    - _Rust API comparison._ The runtime crates and the generated crate are
      compared with `cargo semver-checks`, because a line dump cannot classify a
      Rust API change correctly, for example a new required method on a public
      trait. The runtime crates are compared with the same crates at the baseline
      ref. The generated crates are committed under `freeze/generated/` from the
      frozen fixtures named in the Context, and each is compared with the same
-     crate in the baseline's `freeze/generated/`. The comparison runs offline
-     and with the release type `minor`. Ten lints of `cargo semver-checks` that
-     require a major version but report only a warning are raised to `deny`, so
-     the break they find fails the check.
+     crate in the baseline's `freeze/generated/`. The check first runs
+     `cargo fetch --locked` once with the network allowed, then runs the
+     comparison offline and with the release type `minor`. Ten lints of
+     `cargo semver-checks` that require a major version but report only a
+     warning are raised to `deny`, so the break they find fails the check.
 
    `freeze/surfaces.toml` is the authoritative baseline record: one row per
    surface with a `name` and a `baseline`. Without a row, a line-dump surface is
    checked only against its committed dump, `generated-crate` is checked only
    for equality with a regeneration, and `runtime-crates` is not checked. The
    frame envelope, the `attach` handshake, the output of `ridl diff` and the
-   `ridl-diff` categories are in no dump; they are frozen by policy only.
+   `ridl-diff` categories, the exit codes of every subcommand other than
+   `ridl check`, and the formats of `interfaces.lock` and `.ridl/baseline` are
+   in no dump; they are frozen by policy only. This record is the one that
+   states the status of `ridl diff` and of the `ridl-diff` categories.
 
 4. **A break of a frozen surface is approved by removing its row, then adding
    the row again.** `git show <baseline>:freeze/<surface>.txt` must read a dump
@@ -155,9 +178,10 @@ design in each:
    `rust-version` of `ridl-rt` or `ridl-rt-conformance`, or dropping edition
    2021 for them, is a break, and the `msrv` dump checks both crates. The
    generated crate must compile as edition 2021 with that Rust version, which
-   `just compat-check` checks. `ridl-loopback` and `ridl-descriptor` are edition
-   2024 today and are not covered. This restates ADR-0021 decision 10 as a
-   frozen surface and adds the `msrv` check.
+   `just compat-check` checks. The `msrv` dump also records the edition of
+   `ridl-loopback` and `ridl-descriptor`, so a change of their edition fails the
+   check, but the minimum does not apply to them. This restates ADR-0021
+   decision 10 as a frozen surface and adds the `msrv` check.
 
 6. **The gate table says which gate covers which surface.** The `baseline`
    column is empty on the day this record is accepted. `freeze/surfaces.toml` is
@@ -203,8 +227,9 @@ design in each:
 - Adding a row for a new surface needs two pull requests: the first adds the
   dump, and the second adds the row with the first one's merge commit as its
   baseline.
-- The check reads the cargo cache offline, so a build of the workspace must run
-  before it on a clean machine.
+- Before the Rust API comparison, the check runs `cargo fetch --locked` with the
+  network allowed, so its first run on a machine with an empty cargo cache needs
+  the network. The comparison itself runs offline.
 - ADR-0021 decision 10 and the stability notes of the records listed in the
   Status keep their text. This record owns the policy and the check.
 

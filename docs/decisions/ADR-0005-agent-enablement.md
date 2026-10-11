@@ -11,8 +11,8 @@ are added, and the tool surface becomes a fourth contract surface in §7.
 
 Amended 2026-10-11 by [ADR-0029](ADR-0029-stability-policy.md): the diagnostic
 codes, the IR protocol and the MCP tool names and schemas named here are frozen
-surfaces from 0.10.0, checked by `just freeze-check`. The `ridl-diff` categories
-are not frozen by that record.
+surfaces from 0.10.0, checked by `just freeze-check`. ADR-0029 decision 3 states
+what it says of `ridl diff` and the `ridl-diff` categories.
 
 Assumes ADR-0002 (module system) as accepted and ADR-0004 (implementation
 sequencing and stack) as the direction of record, and depends on the concept

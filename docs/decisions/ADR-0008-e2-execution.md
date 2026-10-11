@@ -374,9 +374,9 @@ it is exempt in whole, the same way the evidence sentences above are.
 note's own history records.
 
 Amended 2026-10-11 by [ADR-0029](ADR-0029-stability-policy.md): the CLI flags
-and exit codes that decision 9 calls stable are a frozen surface from 0.10.0,
-checked by the CLI dump of `just freeze-check`. The output of `ridl diff` is not
-dumped.
+and exit codes that decision 9 calls stable are a frozen surface from 0.10.0.
+The CLI dump of `just freeze-check` checks the flags and the exit codes of
+`ridl check` only. ADR-0029 decision 3 states what it says of `ridl diff`.
 
 ## Context
 
