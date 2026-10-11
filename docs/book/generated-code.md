@@ -339,29 +339,41 @@ is empty:
 A link, or an `@see` target, whose target has no item in the same output is
 written as a code span of the target's qualified name, such as
 `veh.common.Speed`, so that no generated doc holds a link that does not
-resolve. That is the case for a declaration of a package the build does not
-generate and for an `internal` declaration, in both languages. In Rust it is
-also the case for an event, a `fixed`, an interface with no face module, and a
-name that Rust spells as a raw identifier (`r#move`). In TypeScript it is also
-the case for an interface, an interaction and a union arm, which the module
-holds no item for. `@labels` is not rendered.
+resolve. Both backends link only to a declaration of the package itself or to a
+declaration of another package that this package reaches through a type. A
+target that this package does not reach through a type is written as a code
+span. In both languages, so is an `internal` declaration, and a member of a
+named scalar or of a constant, which has no member item. In Rust it is also the
+case for an event, a `fixed`, an interface with no face module, and a target
+whose path Rust spells with a raw identifier (`r#move`). In TypeScript it is
+also the case for an interface, an interaction and a union arm, which the module
+holds no item for, for a constant the module does not emit (such as a `bytes`
+constant), and for a declaration of another package that the module does not
+import. `@labels` is not rendered.
 
-In the Rust face, the doc of an interaction goes on each method a program calls
-or implements for it: the method of the async `Client`, of the blocking
-`Client` and of the `Provider` trait, each of which also carries the
-interaction's `#[deprecated]`. A `Publisher` method carries the doc without
-`#[deprecated]`. The interaction's doc comes first, then a sentence the backend
-writes about the method itself, then, for a command or a query, a
-`# Parameters` section: one bullet per parameter with its name and its doc, and
-the parameter's rules as nested bullets. The doc of an interface goes on its
-face module.
+In the Rust face, the doc of an interaction goes on these methods: for a signal,
+the method of the async `Client`, of the blocking `Client` and of the
+`Publisher`; for a command or a query, the method of the async `Client`, of the
+blocking `Client` and of the `Provider` trait; for an event, the method of the
+`Publisher`. The `Client` and `Provider` methods also carry the interaction's
+`#[deprecated]`; a `Publisher` method carries the doc without `#[deprecated]`.
+The `Subscribe` method of an event and its variant of the `Event` enum carry
+only a sentence the backend writes. The interaction's doc comes first, then a
+sentence the backend writes about the method itself, then, for a command or a
+query, a `# Parameters` section: one bullet per parameter with its name and its
+doc, and the parameter's rules as nested bullets. The doc of an interface goes
+on its face module.
 
 ### What the generated code checks
 
-The docs state the contract, not what the code checks. Every rule the schema
-declares is listed, in the same words in both languages, whether or not the
-generated code checks it. There is one exception: a Rust named scalar with a
-`match` pattern says on the type whether `new` checks the pattern.
+The rules lists state the contract, not what the code checks. On each item the
+backend emits, every rule the schema declares is listed, in the same words in
+both languages, whether or not the generated code checks it. The sentence the
+backend writes about a method describes what that method does, its checks
+included: the doc of a named scalar's `new` says that it enforces the type's
+typl constraints, the doc of a `Client` call method says what happens when a
+`require` clause fails, and the doc of a query's `Provider` method says that
+`serve` discards a reply that breaks an `ensure` clause.
 
 This table records, for each kind of rule, the generated item that checks it:
 
@@ -383,8 +395,9 @@ In the Rust column:
 
 - `new` and `TryFrom` are the constructors of a named scalar. `verify` is the
   FlatBuffers codec's check of a received payload. It also checks a field whose
-  type is written inline, which has no constructor. A struct, an array or a map
-  that the program builds itself is not checked until it is received.
+  type is written inline, which has no constructor. A struct, a variable-length
+  array or a map that the program builds itself is not checked until it is
+  received.
 - The pattern is checked only when the crate is built with the
   `validate-pattern` feature (see [Cargo features](#cargo-features)).
 - A call's future, in the async and in the blocking `Client`, resolves to a
@@ -400,14 +413,18 @@ In the Rust column:
   `[backend.rust] encodings` (see
   [What the crate contains](#what-the-crate-contains)).
 
-The TypeScript module holds types and init functions only, and none of them
-checks a value.
+The TypeScript module holds types, constants, the `<Name>Bits` objects and init
+functions only, and none of them checks a value.
 
 An item that the generated code needs but a program does not name carries no
 doc. In Rust it is `pub(crate)`, such as the constraint check behind `new` and
 the codec's functions for each table, or `pub` under `#[doc(hidden)]` where code
 outside the crate must reach it, such as the descriptor of each interaction,
-which a runtime reads.
+which a runtime reads. Two private Rust constants are notes rather than such
+items: `__RIDL_NO_FACE_<NAME>`, left where an interface's face was not emitted,
+and `__RIDL_FB_NO_CODEC_<Name>`, left where a declaration's FlatBuffers codec
+was not emitted. Each carries a doc that says what was not emitted and why, for
+a reader of the generated source; rustdoc does not show them.
 
 ## Further reading
 

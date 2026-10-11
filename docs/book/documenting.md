@@ -16,8 +16,8 @@ completion. The doc lints of this chapter are reported by `ridl check`,
 `ridl build`, the language server and the MCP tool `ridl_check`, with the levels
 of the project's `[lints]` table.
 
-The Rust and TypeScript backends write the docs, their links, the tags and the
-item's rules into the generated code, as
+The Rust and TypeScript backends write the docs, their links, the `@see`,
+`@since` and `@deprecated` tags and the item's rules into the generated code, as
 [Using the generated Rust code](generated-code.md#documentation-in-the-generated-code)
 describes.
 
