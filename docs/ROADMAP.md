@@ -912,7 +912,8 @@ and completes, follows and renames doc links. An entry inside a workspace member
 now loads its workspace in every entry point. The decisions are
 [ADR-0026](decisions/ADR-0026-doc-comments.md); the user-facing description is
 [the documenting chapter of the book](book/documenting.md). How generated code
-renders the docs is spec 2b.
+renders the docs is built, as
+[ADR-0028](decisions/ADR-0028-docs-in-generated-code.md) records.
 
 **Piece 1b of the devex and agent tracks, design lints and metrics, landed on
 2026-10-06** (design and plan in driftsys/ridl#694; corpus and eval seed in

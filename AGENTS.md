@@ -81,6 +81,9 @@ Proposed draft with no implementation. See
   - ADR-0027 and `docs/design/design-lints.md` — before adding a design lint,
     changing the level or the threshold of one, or changing the corpus, the
     calibration records or an eval task under `evals/`.
+  - ADR-0028 and `docs/book/generated-code.md` — before changing what a backend
+    renders in a generated doc comment, or the doc fields of the codegen
+    `Model`.
 - `docs/ROADMAP.md` — the forward plan: the two steps it structures from the
   2026-09-12 re-scope's release scope (step 1, rsdl finalized plus the Rust
   runtime and codegen; step 2, TypeScript and the codegen plugin system), the

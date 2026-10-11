@@ -235,7 +235,8 @@ than a value no run can reach. A generated enum with no value and a union with
 no arm have no neutral value at all, so the emitter refuses both with a
 `GenerateError`.
 
-**`MAX_SIZE` is a literal with a doc comment naming the rule.** It is the number
+**`MAX_SIZE` is a literal, with a doc comment that states the bound and a `//`
+comment in the generator that names the rule.** It is the number
 `ridl_ir::projection::flatbuffers::max_size` returned — each table charged its
 `soffset`, its inline fields, its vtable and one alignment event per slot; a
 string four bytes per declared character plus a terminator; a collection its

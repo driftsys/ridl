@@ -1239,8 +1239,8 @@ carrier, and `@deprecated` and `@labels` are stored in the IR on the carriers
 that have the field — a declaration, a struct field, an interface, an
 interaction and a service. On an enum value, an enumset bit, a union arm, a
 parameter and an rsdl carrier the two tags are read and dropped, with no
-diagnostic, until the general form's plan to make `deprecated` and `labels`
-attribute keys is implemented (ADR-0026 decision 4).
+diagnostic. Both stay doc tags: ADR-0028 decision 4 declines the general form's
+plan to make `deprecated` and `labels` attribute keys.
 
 ### 14.3 Labels
 
