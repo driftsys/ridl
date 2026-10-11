@@ -50,6 +50,9 @@ the extension, and reaches the agent as a tool error.
 Amended 2026-10-10 (driftsys/ridl#786): `ridlc` no longer depends on
 `ridl-diff`; see [ADR-0008](ADR-0008-e2-execution.md) decision 9.
 
+Amended 2026-10-11 by [ADR-0029](ADR-0029-stability-policy.md): the tool names
+and schemas are a frozen surface from 0.10.0, checked by `just freeze-check`.
+
 ## Context
 
 Before this work `ridl mcp` exposed one tool, `ridl_check(source, profile)`. It

@@ -224,6 +224,11 @@ read it on any command path.
 
 ## 6. The Compatibility Rule
 
+> **Amended 2026-10-11 by
+> [ADR-0029](../decisions/ADR-0029-stability-policy.md).** The codegen protocol
+> messages of §6 and §7 are a frozen surface from 0.10.0, checked by
+> `just freeze-check`.
+
 Within one schema package, a change is **additive** when a reader built against
 the schema before the change reads the writer's output after it and sees the
 meaning it saw before, and a reader built after the change reads output from

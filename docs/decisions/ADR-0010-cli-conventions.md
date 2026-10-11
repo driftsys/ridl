@@ -25,6 +25,10 @@ now carries an amendment note that states what `--version` prints today.
 
 Amended 2026-10-10: decision 1 gained a row for `ridl init` and `ridl new`.
 
+Amended 2026-10-11 by [ADR-0029](ADR-0029-stability-policy.md): the exit codes,
+flags and output shapes of this record are a frozen surface from 0.10.0, checked
+by `just freeze-check`.
+
 ## Context
 
 Issue driftsys/ridl#194, found while writing the book's CLI reference (PR

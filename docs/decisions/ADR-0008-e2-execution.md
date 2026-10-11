@@ -373,6 +373,10 @@ it is exempt in whole, the same way the evidence sentences above are.
 `## Status` and `## Consequences` carry no such exemption and are swept, as this
 note's own history records.
 
+Amended 2026-10-11 by [ADR-0029](ADR-0029-stability-policy.md): the stability of
+`ridl diff`'s flags, output and exit codes in decision 9 is a frozen surface
+from 0.10.0, checked by `just freeze-check`.
+
 ## Context
 
 Epic E2 builds ridl — the interaction profile over the typl spine E1 shipped. It

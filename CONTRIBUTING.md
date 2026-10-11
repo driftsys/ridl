@@ -57,6 +57,25 @@ repairs the new release wants in the same commit.
    `just check` when every changed file is Rust source. A push to `main` runs
    every job.
 
+## Changing a frozen surface
+
+Ten surfaces are frozen from release 0.10.0, and `just freeze-check` compares
+each one with a baseline git ref (ADR-0029). The dumps are in `freeze/`, and the
+baseline of each surface is in `freeze/surfaces.toml`.
+
+1. Run `cargo xtask freeze update` after a change that touches a surface, and
+   commit the changed dumps. An added line is not a break.
+2. If `just freeze-check` reports a missing line or a Rust API break, the change
+   breaks the surface. Before 0.10.0, move the `baseline` of that surface to a
+   newer ref in the same pull request, put `!` in the title, and state the
+   reason in the description. The pull request merges only on the maintainer's
+   explicit approval.
+3. During 0.10.x, do not break a frozen surface. A security fix is the one
+   exception, and its reason is recorded in ADR-0029.
+4. To start checking a new surface, add its dump in one pull request. Add its
+   row to `freeze/surfaces.toml` in a follow-up pull request, with the merge
+   commit of the first as the `baseline`.
+
 ## Writing examples in the book
 
 Every fenced block in `docs/book/` whose info string starts with `ridl`, `typl`

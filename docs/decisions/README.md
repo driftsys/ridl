@@ -443,6 +443,19 @@ other entry below is Accepted.
   their numbers TYPL-223 and RIDL-415 are not reused. Amends ADR-0024 decision 1
   and ADR-0025 decision 9 in place. The as-built description is
   [the design lints design record](../design/design-lints.md).
+- **ADR-0029 — Stability policy.** Six decisions: ten surfaces are frozen from
+  0.10.0 (the language, the manifest, diagnostics and lints, the CLI, the
+  generated Rust crate, the runtime crates, the codegen plugin protocol, the MCP
+  tools, the wire format and the minimum Rust version); size and budget values,
+  message text, additions, new lints and the unpublished crates are not; the
+  gate is `just freeze-check`, with line dumps under `freeze/` and
+  `cargo
+  semver-checks` for the Rust APIs, compared against a baseline git ref
+  per surface in `freeze/surfaces.toml`; a break is approved by moving that
+  baseline, and no break lands in 0.10.x except a security fix; and a table says
+  which gate covers which surface. It owns the stability statements of the IR
+  specification §6 and §7, ADR-0005 §7, ADR-0008 decision 9, ADR-0010, ADR-0021
+  decision 10 and ADR-0025, which each gain a dated note.
 
 - **ADR-0028 — Documentation in generated code.** Seven decisions: the design's
   D-1 to D-4, agreed in the brainstorming session of spec 2b, and its sections 1
