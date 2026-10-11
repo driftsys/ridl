@@ -248,7 +248,8 @@ pub(crate) fn generate_pipeline_over(
     // link resolves to a face module only when this output holds it. The
     // face refuses nothing the descriptors accept (both read the parameter
     // and the reply through the same functions), so an interface whose
-    // descriptors were built is faced.
+    // descriptors were built is faced. `face_refused_after_linking` checks
+    // that claim in the loop below.
     ctx.faced = faced_indices(
         built
             .iter()
@@ -257,7 +258,7 @@ pub(crate) fn generate_pipeline_over(
     );
     let mut faced: Vec<&v1::Interface> = Vec::new();
     let mut interface_items: Vec<TokenStream> = Vec::new();
-    for (_, interface, produced) in built {
+    for (index, interface, produced) in built {
         let produced = produced.and_then(|mut items| {
             items.extend(face::one_interface(interface, &ctx.links())?);
             Ok(items)
@@ -267,7 +268,10 @@ pub(crate) fn generate_pipeline_over(
                 faced.push(interface);
                 interface_items.extend(produced);
             }
-            Err(err) => interface_items.push(skipped_interface_note(interface, &err)),
+            Err(err) => {
+                face_refused_after_linking(&ctx.faced, index, interface, &err)?;
+                interface_items.push(skipped_interface_note(interface, &err));
+            }
         }
     }
     let mut items = package_items(&ctx, &faced, encodings)?;
@@ -276,13 +280,40 @@ pub(crate) fn generate_pipeline_over(
 }
 
 /// `indices`, positions in `model.interfaces`, as the `u32`s [`docs::Links`]
-/// reads. The
-/// model's interface list is far shorter than `u32::MAX`; an index past it
-/// is left out, so a link to that interface renders as a code span.
+/// reads. The model's interface list is far shorter than `u32::MAX`; an index
+/// past it is left out, so a link to that interface renders as a code span.
 fn faced_indices(indices: impl Iterator<Item = usize>) -> BTreeSet<u32> {
     indices
         .filter_map(|index| u32::try_from(index).ok())
         .collect()
+}
+
+/// The internal error returned when the face of the interface at `index` is
+/// refused although `faced` names it.
+///
+/// `faced` is decided before the faces are built, on the claim that the face
+/// refuses nothing the descriptors accept. Doc links to a faced interface
+/// render as links to its face module, so a face refused after that point
+/// would leave links to a module the output does not hold. The whole model
+/// is refused instead, with a message that names the broken claim.
+fn face_refused_after_linking(
+    faced: &BTreeSet<u32>,
+    index: usize,
+    interface: &v1::Interface,
+    err: &GenerateError,
+) -> Result<(), GenerateError> {
+    let linked = u32::try_from(index).is_ok_and(|index| faced.contains(&index));
+    if !linked {
+        return Ok(());
+    }
+    let name = descriptors::declared_name(interface).unwrap_or_default();
+    Err(GenerateError {
+        message: format!(
+            "internal error: the face of interface `{name}` was refused after its \
+             descriptors were accepted, and doc links to it were already rendered: {}",
+            err.message
+        ),
+    })
 }
 
 /// The note left where an interface's face was skipped (design rule 2), or,
@@ -331,7 +362,7 @@ fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> Tok
              `<subject> <comparison> <numeric literal>`, conjoined with `&&`. \
              Write each `require` and `ensure` clause in that form to get a face."
         }
-        FaceGap::Other => " No tracking issue owns this one: the reason above is the whole of it.",
+        FaceGap::Other => " The reason above is the whole of it.",
     };
     // An internal interface has no face, so its trailer cannot say that the
     // face is built on the descriptor emitter, and its owner line already says
@@ -1057,14 +1088,11 @@ fn emit_type_def(
     let name = ident(declared(decl.name.as_ref()));
     let inner = newtype_inner(sc);
     let doc = docs::doc_block(&docs::DocParts::declaration(decl), &ctx.links());
-    let unchecked = unchecked_doc(sc);
-    // A blank doc line keeps the unchecked note out of the declaration's own
-    // doc paragraph.
-    let separator = if doc.is_empty() || unchecked.is_empty() {
-        quote! {}
-    } else {
-        quote! { #[doc = ""] }
-    };
+    // The type's doc states the contract only (the generated-code
+    // documentation design, D-3). Whether `new` checks a `match` pattern is
+    // not written here: `constraint_checks` emits the pattern check only on a
+    // `String` backing and only under the `validate-pattern` feature, and the
+    // book's chapter on generated code records that, per backend.
     let deprecated = deprecated_attr(decl.deprecated.as_deref());
     let allow_deprecated = if decl.deprecated.is_some() {
         quote! { #[allow(deprecated)] }
@@ -1085,8 +1113,6 @@ fn emit_type_def(
 
     quote! {
         #doc
-        #separator
-        #unchecked
         #derived
         #deprecated
         #[repr(transparent)]
@@ -1177,12 +1203,6 @@ fn emit_vacuous_type_def(
     let name = ident(declared(decl.name.as_ref()));
     let inner = newtype_inner(sc);
     let doc = docs::doc_block(&docs::DocParts::declaration(decl), &ctx.links());
-    let unchecked = unchecked_doc(sc);
-    let separator = if doc.is_empty() || unchecked.is_empty() {
-        quote! {}
-    } else {
-        quote! { #[doc = ""] }
-    };
     let deprecated = deprecated_attr(decl.deprecated.as_deref());
     let allow_deprecated = if decl.deprecated.is_some() {
         quote! { #[allow(deprecated)] }
@@ -1194,8 +1214,6 @@ fn emit_vacuous_type_def(
 
     quote! {
         #doc
-        #separator
-        #unchecked
         #derived
         #deprecated
         #[repr(transparent)]
@@ -1502,34 +1520,6 @@ fn scalar_getter(sc: &v1::Scalar, vis: TokenStream, inner: TokenStream) -> Token
             #vis const fn get(self) -> #inner { self.0 }
         },
     }
-}
-
-/// The gaps a generated constructor does not close, named on the type itself
-/// rather than left silent. A literal `match` pattern on a `String` backing is checked by `new`, but only under
-/// the `validate-pattern` feature, so the type names that condition rather
-/// than leaving the guarantee silently variable. On any other backing
-/// `constraint_checks` emits no pattern branch at all (a `regex::Regex`
-/// matches `&str`, and only a `String` backing's value coerces to one), so
-/// the plain "not checked" line applies there instead. `pattern_const` is
-/// read as well as `pattern`, because a pattern constant that did not resolve
-/// leaves `pattern` absent while the type still carries a match constraint,
-/// and no check is emitted for that case either, so it keeps the plain "not
-/// checked" line.
-fn unchecked_doc(sc: &v1::Scalar) -> TokenStream {
-    let Some(c) = sc.constraint.as_ref() else {
-        return quote! {};
-    };
-    let mut lines = Vec::new();
-    if c.pattern.is_some() && class_backing(sc.class) == ScalarBacking::String {
-        lines.push(
-            " The `match` pattern is checked by `new` only when the crate is built with \
-              the `validate-pattern` feature."
-                .to_string(),
-        );
-    } else if c.pattern.is_some() || c.pattern_const.is_some() {
-        lines.push(" The `match` pattern is not checked by `new`.".to_string());
-    }
-    quote! { #(#[doc = #lines])* }
 }
 
 /// A constant becomes a `pub const`. A constant of a `String`-backed named type

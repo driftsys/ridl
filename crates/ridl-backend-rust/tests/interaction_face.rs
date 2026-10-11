@@ -144,8 +144,8 @@ fn send_level_raw(port: &mut Loopback, level: i64) -> Correlation {
               consumer shares, not face- or descriptor-specific."
 )]
 mod generated {
-    // The fixture's `Zone.setLevel` is `@deprecated`. The generated code that
-    // calls its methods allows the lint, so the face draws no `deprecated`
+    // The fixture's `Zone` members are `@deprecated`. The generated code that
+    // calls their methods allows the lint, so the face draws no `deprecated`
     // warning of its own; this attribute turns one into a build failure
     // (`deprecated_interaction_does_not_warn_inside_the_generated_crate`).
     #![deny(deprecated)]
@@ -3121,23 +3121,49 @@ fn face_call_carries_parameter_section() {
     }
 }
 
-/// `Zone.setLevel` is `@deprecated`, so its client methods and its
-/// `Provider` method carry `#[deprecated]`. The test that matters is the
-/// build of this file: `mod generated` above denies the `deprecated` lint,
-/// and the generated `dispatch` and the blocking client call those methods,
-/// so the build fails unless each of them allows the lint.
+/// `Zone.level`, `Zone.setLevel` and `Zone.average` are `@deprecated`, so
+/// their client methods, and the calls' `Provider` methods, carry
+/// `#[deprecated]`. The test that matters is the build of this file:
+/// `mod generated` above denies the `deprecated` lint, and the generated
+/// `dispatch` and the blocking client call those methods, so the build fails
+/// unless each of them allows the lint.
 #[test]
 fn deprecated_interaction_does_not_warn_inside_the_generated_crate() {
-    for (label, attrs) in call_methods("zone", "set_level") {
-        let deprecated: Vec<String> = attrs
-            .iter()
-            .filter(|attr| attr.path().is_ident("deprecated"))
-            .map(|attr| quote::ToTokens::to_token_stream(attr).to_string())
-            .collect();
-        assert_eq!(
-            deprecated,
-            vec![r#"# [deprecated (note = "use Cabin.setLevel")]"#.to_string()],
-            "{label}"
-        );
+    let file = syn::parse_file(FACE_SOURCE).expect("the checked-in face parses");
+    let zone = module_items(&file.items, "zone");
+    let blocking = module_items(zone, "blocking");
+    let signal = [
+        ("async client", client_method(zone, "level").attrs.clone()),
+        (
+            "blocking client",
+            client_method(blocking, "level").attrs.clone(),
+        ),
+    ];
+    let cases = [
+        ("level", "use Cabin.temperature", signal.to_vec()),
+        (
+            "set_level",
+            "use Cabin.setLevel",
+            call_methods("zone", "set_level"),
+        ),
+        (
+            "average",
+            "use Cabin.average",
+            call_methods("zone", "average"),
+        ),
+    ];
+    for (method, note, methods) in cases {
+        for (label, attrs) in methods {
+            let deprecated: Vec<String> = attrs
+                .iter()
+                .filter(|attr| attr.path().is_ident("deprecated"))
+                .map(|attr| quote::ToTokens::to_token_stream(attr).to_string())
+                .collect();
+            assert_eq!(
+                deprecated,
+                vec![format!(r#"# [deprecated (note = "{note}")]"#)],
+                "{label} `{method}`"
+            );
+        }
     }
 }

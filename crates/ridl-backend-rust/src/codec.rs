@@ -924,6 +924,10 @@ impl<'a> Codec<'a> {
             )
         };
         let headline = format!(" `{owner}` carries no `Payload<FlatBuffers>` implementation.");
+        // Withholding the codec is a silent omission in the sense ADR-0016
+        // decision 6 and ADR-0017 decision 4 rule out, and it is deliberate
+        // for now. That is a maintainer's fact, so it stays here rather than
+        // in the generated doc.
         Ok(quote! {
             #[doc = #headline]
             ///
@@ -935,9 +939,6 @@ impl<'a> Codec<'a> {
             /// tree. The causes above are the ones this call could meet.
             /// A type that reaches itself, and a stream, which has no single
             /// value to size, are never resolvable by any caller.
-            ///
-            /// This is a silent omission in the sense ADR-0016 decision 6 and
-            /// ADR-0017 decision 4 rule out, and it is deliberate for now.
             #[allow(dead_code, non_upper_case_globals)]
             const #name: () = ();
         })

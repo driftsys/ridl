@@ -193,8 +193,8 @@ fn each_interaction_descriptor_has_its_row() {
         .collect();
     assert_eq!(
         descriptors.len(),
-        11,
-        "the fixture's eleven interactions have a descriptor each: {descriptors:?}"
+        13,
+        "the fixture's thirteen interactions have a descriptor each: {descriptors:?}"
     );
 
     let checks: String = descriptors

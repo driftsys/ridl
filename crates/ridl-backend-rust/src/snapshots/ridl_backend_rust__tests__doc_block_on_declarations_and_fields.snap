@@ -194,8 +194,6 @@ impl ::core::default::Default for Speed {
 ///
 /// - length 17
 /// - pattern `/[A-HJ-NPR-Z0-9]{17}/`
-///
-/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Vin(::std::string::String);

@@ -1146,8 +1146,8 @@ impl ::ridl_rt::contract::Interface for Cabin {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            0, 254, 25, 102, 164, 165, 151, 88, 247, 246, 237, 143, 185, 145, 65, 126,
-            51, 229, 157, 39, 250, 177, 234, 197, 137, 27, 28, 146, 194, 95, 11, 118,
+            43, 15, 166, 38, 196, 139, 213, 90, 75, 7, 103, 237, 140, 214, 219, 12, 127,
+            233, 1, 103, 97, 104, 101, 27, 130, 196, 155, 191, 49, 217, 231, 223,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(1);
@@ -1356,8 +1356,8 @@ impl ::ridl_rt::contract::Interface for Horn {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            0, 254, 25, 102, 164, 165, 151, 88, 247, 246, 237, 143, 185, 145, 65, 126,
-            51, 229, 157, 39, 250, 177, 234, 197, 137, 27, 28, 146, 194, 95, 11, 118,
+            43, 15, 166, 38, 196, 139, 213, 90, 75, 7, 103, 237, 140, 214, 219, 12, 127,
+            233, 1, 103, 97, 104, 101, 27, 130, 196, 155, 191, 49, 217, 231, 223,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(2);
@@ -1415,8 +1415,8 @@ impl ::ridl_rt::contract::Interface for Siren {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            0, 254, 25, 102, 164, 165, 151, 88, 247, 246, 237, 143, 185, 145, 65, 126,
-            51, 229, 157, 39, 250, 177, 234, 197, 137, 27, 28, 146, 194, 95, 11, 118,
+            43, 15, 166, 38, 196, 139, 213, 90, 75, 7, 103, 237, 140, 214, 219, 12, 127,
+            233, 1, 103, 97, 104, 101, 27, 130, 196, 155, 191, 49, 217, 231, 223,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(3);
@@ -1486,8 +1486,8 @@ impl ::ridl_rt::contract::Interface for Valve {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            0, 254, 25, 102, 164, 165, 151, 88, 247, 246, 237, 143, 185, 145, 65, 126,
-            51, 229, 157, 39, 250, 177, 234, 197, 137, 27, 28, 146, 194, 95, 11, 118,
+            43, 15, 166, 38, 196, 139, 213, 90, 75, 7, 103, 237, 140, 214, 219, 12, 127,
+            233, 1, 103, 97, 104, 101, 27, 130, 196, 155, 191, 49, 217, 231, 223,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(4);
@@ -1610,8 +1610,8 @@ impl ::ridl_rt::contract::Interface for Wiper {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            0, 254, 25, 102, 164, 165, 151, 88, 247, 246, 237, 143, 185, 145, 65, 126,
-            51, 229, 157, 39, 250, 177, 234, 197, 137, 27, 28, 146, 194, 95, 11, 118,
+            43, 15, 166, 38, 196, 139, 213, 90, 75, 7, 103, 237, 140, 214, 219, 12, 127,
+            233, 1, 103, 97, 104, 101, 27, 130, 196, 155, 191, 49, 217, 231, 223,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(5);
@@ -1691,8 +1691,8 @@ impl ::ridl_rt::contract::Interface for Zone {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            0, 254, 25, 102, 164, 165, 151, 88, 247, 246, 237, 143, 185, 145, 65, 126,
-            51, 229, 157, 39, 250, 177, 234, 197, 137, 27, 28, 146, 194, 95, 11, 118,
+            43, 15, 166, 38, 196, 139, 213, 90, 75, 7, 103, 237, 140, 214, 219, 12, 127,
+            233, 1, 103, 97, 104, 101, 27, 130, 196, 155, 191, 49, 217, 231, 223,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(6);
@@ -1701,6 +1701,21 @@ impl ::ridl_rt::contract::Interface for Zone {
     const MEMBERS: &'static [::ridl_rt::contract::Member] = &[
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(1),
+            kind: ::ridl_rt::contract::Kind::Signal,
+            name: "level",
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
+                mode: ::ridl_rt::contract::TimingMode::StrictPeriodic,
+                min: ::core::option::Option::Some(::ridl_rt::sample::Duration(10000)),
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(10000)),
+            }),
+            payloads: &[
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "Level",
+                },
+            ],
+        },
+        ::ridl_rt::contract::Member {
+            ordinal: ::ridl_rt::contract::Ordinal(2),
             kind: ::ridl_rt::contract::Kind::Command,
             name: "setLevel",
             timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
@@ -1714,6 +1729,24 @@ impl ::ridl_rt::contract::Interface for Zone {
                 },
             ],
         },
+        ::ridl_rt::contract::Member {
+            ordinal: ::ridl_rt::contract::Ordinal(3),
+            kind: ::ridl_rt::contract::Kind::Query,
+            name: "average",
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
+                mode: ::ridl_rt::contract::TimingMode::Range,
+                min: ::core::option::Option::None,
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(3000000)),
+            }),
+            payloads: &[
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "Window",
+                },
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "Average",
+                },
+            ],
+        },
     ];
 }
 impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Zone {
@@ -1721,10 +1754,25 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Zone {
         <Level as ::ridl_rt::payload::Payload<
             ::ridl_rt::encoding::FlatBuffers,
         >>::MAX_SIZE as ::core::primitive::u64,
+        <Level as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64,
+        <Window as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64
+            + <Average as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE as ::core::primitive::u64,
     ];
     const MAX_BUFFER_SIZE: ::core::primitive::usize = {
         let sizes = [
             <Level as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
+            <Window as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
+            <Average as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
             >>::MAX_SIZE,
         ];
@@ -1745,15 +1793,48 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Zone {
     const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
 }
 #[doc(hidden)]
-pub struct ZoneSetLevel;
-impl ::ridl_rt::contract::Interaction for ZoneSetLevel {
+pub struct ZoneLevel;
+impl ::ridl_rt::contract::Interaction for ZoneLevel {
     type Iface = Zone;
     const MEMBER: &'static ::ridl_rt::contract::Member = &<Zone as ::ridl_rt::contract::Interface>::MEMBERS[0];
     const ROW: ::core::primitive::usize = 0;
 }
+impl ::ridl_rt::contract::Signal for ZoneLevel {
+    type Payload = Level;
+    fn init() -> Self::Payload {
+        <Level as ::core::default::Default>::default()
+    }
+}
+#[doc(hidden)]
+pub struct ZoneSetLevel;
+impl ::ridl_rt::contract::Interaction for ZoneSetLevel {
+    type Iface = Zone;
+    const MEMBER: &'static ::ridl_rt::contract::Member = &<Zone as ::ridl_rt::contract::Interface>::MEMBERS[1];
+    const ROW: ::core::primitive::usize = 1;
+}
 impl ::ridl_rt::contract::Command for ZoneSetLevel {
     type Args = Level;
     fn require(_args: &Self::Args) -> ::core::result::Result<(), ()> {
+        ::core::result::Result::Ok(())
+    }
+}
+#[doc(hidden)]
+pub struct ZoneAverage;
+impl ::ridl_rt::contract::Interaction for ZoneAverage {
+    type Iface = Zone;
+    const MEMBER: &'static ::ridl_rt::contract::Member = &<Zone as ::ridl_rt::contract::Interface>::MEMBERS[2];
+    const ROW: ::core::primitive::usize = 2;
+}
+impl ::ridl_rt::contract::Query for ZoneAverage {
+    type Args = Window;
+    type Reply = Average;
+    fn require(_args: &Self::Args) -> ::core::result::Result<(), ()> {
+        ::core::result::Result::Ok(())
+    }
+    fn ensure(
+        _args: &Self::Args,
+        _reply: &Self::Reply,
+    ) -> ::core::result::Result<(), ()> {
         ::core::result::Result::Ok(())
     }
 }
@@ -4763,6 +4844,8 @@ Panics when `port` is attached to a catalog other than the one this face was gen
 pub mod zone {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     pub(crate) struct SetLevelCorrelation(pub ::ridl_rt::port::Correlation);
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    pub(crate) struct AverageCorrelation(pub ::ridl_rt::port::Correlation);
     #[track_caller]
     fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
         let expected = <super::Zone as ::ridl_rt::contract::Interface>::CATALOG;
@@ -4775,13 +4858,80 @@ pub mod zone {
     }
     ///The consumer face of interface `Zone`, generic over exactly the ports the interface's interactions need. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, in scope through `prelude`.
     pub struct Client<
-        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+        P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
     > {
         port: P,
     }
     impl<
-        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+        P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
     > Client<P> {
+        /// The zone level.
+        ///
+        /// # Rules
+        ///
+        /// - period 10000 us
+        ///
+        ///Reads signal `level` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        #[deprecated(note = "use Cabin.temperature")]
+        pub fn level(
+            &self,
+        ) -> ::core::result::Result<
+            ::ridl_rt::sample::Sample<super::Level>,
+            ::ridl_rt::port::ReadError,
+        > {
+            let mut buf = <super::Level as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::BUFFER;
+            let raw = self
+                .port
+                .read(
+                    <super::Zone as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(1u32),
+                    &mut buf,
+                )?;
+            let (value, provenance) = match raw.provenance {
+                ::ridl_rt::sample::Provenance::Init
+                | ::ridl_rt::sample::Provenance::Invalid(
+                    ::ridl_rt::sample::Cause::Declared,
+                ) if raw.len == 0 => {
+                    (
+                        <super::ZoneLevel as ::ridl_rt::contract::Signal>::init(),
+                        raw.provenance,
+                    )
+                }
+                _ => {
+                    match ::ridl_rt::payload::Ref::<
+                        super::Level,
+                        ::ridl_rt::encoding::FlatBuffers,
+                    >::verify(&buf[..raw.len]) {
+                        Ok(checked) => (checked.decode(), raw.provenance),
+                        Err(error) => {
+                            (
+                                <super::ZoneLevel as ::ridl_rt::contract::Signal>::init(),
+                                ::ridl_rt::sample::Provenance::Invalid(
+                                    ::ridl_rt::sample::Cause::Detected(
+                                        match error {
+                                            ::ridl_rt::payload::VerifyError::Contract(violation) => {
+                                                ::ridl_rt::sample::Detection::InvalidValue(violation)
+                                            }
+                                            _ => ::ridl_rt::sample::Detection::Corrupt,
+                                        },
+                                    ),
+                                ),
+                            )
+                        }
+                    }
+                }
+            };
+            Ok(::ridl_rt::sample::Sample {
+                value,
+                provenance,
+                freshness: raw.freshness,
+                envelope: raw.envelope,
+            })
+        }
         /// Sets the zone level.
         ///
         /// # Rules
@@ -4815,9 +4965,43 @@ The call's bound is the member's `max`, measured from the port's clock when this
                 deadline,
             }
         }
+        /// The average zone level over a window of samples.
+        ///
+        /// # Rules
+        ///
+        /// - response within 3000000 us
+        ///
+        /**Sends query `average` and returns its future. The call is sent when this method runs, not when the future is first polled, and the future resolves on the outcome. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
+
+The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.*/
+        ///
+        /// # Parameters
+        ///
+        /// - `window`
+        ///   - range 0 ..= 100000
+        #[deprecated(note = "use Cabin.average")]
+        pub fn average(&mut self, window: super::Window) -> AverageCall<'_, P> {
+            let __arg = window;
+            let deadline = <super::ZoneAverage as ::ridl_rt::contract::Interaction>::MEMBER
+                .call_deadline()
+                .map(|max| ::ridl_rt::sample::Timestamp(
+                    self.port.now().0.saturating_add(max.0),
+                ));
+            let phase = match send_average(&mut self.port, &__arg) {
+                Ok(correlation) => AveragePhase::Waiting(correlation),
+                Err(::ridl_rt::port::SendError::Busy) => AveragePhase::Unsent(__arg),
+                Err(error) => AveragePhase::Failed(error),
+            };
+            AverageCall {
+                port: &mut self.port,
+                phase,
+                deadline,
+            }
+        }
     }
     impl<
-        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+        P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
     > ::ridl_rt::face::Bind for Client<P> {
         type Port = P;
         /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
@@ -4946,6 +5130,123 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             }
         }
     }
+    ///The future of query `average`, returned by `Client::average`. It resolves to the decoded reply, or the outcome the provider settled; to `ClientError::Send` when the call was not sent, including `SendError::Busy` when no slot was free within the call's bound; and to the port's own expired outcome when the call was sent and its bound passed. Each poll registers its interest, reads the port once, and returns. Dropping the future while it waits for its outcome calls `Caller::forget` on the call; a future that has taken its outcome has already done so. Polling it again after it resolved panics.
+    #[must_use = "the query was sent, or waits for a slot; its outcome is taken only when the future is polled"]
+    pub struct AverageCall<
+        'a,
+        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > {
+        port: &'a mut P,
+        phase: AveragePhase,
+        deadline: ::core::option::Option<::ridl_rt::sample::Timestamp>,
+    }
+    enum AveragePhase {
+        Unsent(super::Window),
+        Waiting(AverageCorrelation),
+        Failed(::ridl_rt::port::SendError),
+        Done,
+    }
+    impl<
+        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > AverageCall<'_, P> {
+        fn expired(&self) -> bool {
+            self.deadline.is_some_and(|deadline| self.port.now() > deadline)
+        }
+        #[cfg(feature = "std")]
+        fn sent(&self) -> bool {
+            matches!(self.phase, AveragePhase::Waiting(_))
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > ::core::future::Future for AverageCall<'_, P> {
+        type Output = ::core::result::Result<
+            super::Average,
+            ::ridl_rt::error::ClientError,
+        >;
+        fn poll(
+            self: ::core::pin::Pin<&mut Self>,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Self::Output> {
+            let this = self.get_mut();
+            loop {
+                match ::core::mem::replace(&mut this.phase, AveragePhase::Done) {
+                    AveragePhase::Done => panic!("`AverageCall` polled after completion"),
+                    AveragePhase::Failed(error) => {
+                        return ::core::task::Poll::Ready(
+                            Err(::ridl_rt::error::ClientError::Send(error)),
+                        );
+                    }
+                    AveragePhase::Unsent(__arg) => {
+                        if this.expired() {
+                            return ::core::task::Poll::Ready(
+                                Err(
+                                    ::ridl_rt::error::ClientError::Send(
+                                        ::ridl_rt::port::SendError::Busy,
+                                    ),
+                                ),
+                            );
+                        }
+                        this.port.wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
+                        match send_average(&mut *this.port, &__arg) {
+                            Ok(correlation) => {
+                                this.phase = AveragePhase::Waiting(correlation);
+                            }
+                            Err(::ridl_rt::port::SendError::Busy) => {
+                                this.phase = AveragePhase::Unsent(__arg);
+                                return ::core::task::Poll::Pending;
+                            }
+                            Err(error) => {
+                                return ::core::task::Poll::Ready(
+                                    Err(::ridl_rt::error::ClientError::Send(error)),
+                                );
+                            }
+                        }
+                    }
+                    AveragePhase::Waiting(correlation) => {
+                        this.port
+                            .wake_on(
+                                ::ridl_rt::port::Interest::Outcome(correlation.0),
+                                cx.waker(),
+                            );
+                        let outcome = match poll_average_reply(
+                            &mut *this.port,
+                            correlation,
+                        ) {
+                            Ok(Some(outcome)) => {
+                                outcome.map_err(::ridl_rt::error::ClientError::Call)
+                            }
+                            Err(error) => Err(::ridl_rt::error::ClientError::Read(error)),
+                            Ok(None) => {
+                                if !this.expired() {
+                                    this.phase = AveragePhase::Waiting(correlation);
+                                    return ::core::task::Poll::Pending;
+                                }
+                                Err(
+                                    ::ridl_rt::error::ClientError::Call(
+                                        ::ridl_rt::error::CallError::Transport(
+                                            ::ridl_rt::error::Transport::Timeout,
+                                        ),
+                                    ),
+                                )
+                            }
+                        };
+                        this.port.forget(correlation.0);
+                        return ::core::task::Poll::Ready(outcome);
+                    }
+                }
+            }
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > ::core::ops::Drop for AverageCall<'_, P> {
+        fn drop(&mut self) {
+            if let AveragePhase::Waiting(correlation) = &self.phase {
+                self.port.forget(correlation.0);
+            }
+        }
+    }
     pub(crate) fn send_set_level<P: ::ridl_rt::port::Caller>(
         __port: &mut P,
         level: &super::Level,
@@ -4976,7 +5277,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         __port
             .command(
                 <super::Zone as ::ridl_rt::contract::Interface>::NUMBER,
-                ::ridl_rt::contract::Ordinal(1u32),
+                ::ridl_rt::contract::Ordinal(2u32),
                 bytes,
                 ::core::option::Option::None,
             )
@@ -4989,6 +5290,162 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         ::core::result::Result<(), ::ridl_rt::error::CallError>,
     > {
         port.ack(correlation.0)
+    }
+    pub(crate) fn send_average<P: ::ridl_rt::port::Caller>(
+        __port: &mut P,
+        window: &super::Window,
+    ) -> ::core::result::Result<AverageCorrelation, ::ridl_rt::port::SendError> {
+        let __arg = window;
+        <super::ZoneAverage as ::ridl_rt::contract::Query>::require(__arg)
+            .map_err(|()| {
+                ::ridl_rt::port::SendError::Contract(
+                    ::ridl_rt::error::Contract::PreconditionFailed,
+                )
+            })?;
+        let mut buf = <super::Window as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::BUFFER;
+        let bytes = match ::ridl_rt::payload::Ref::<
+            super::Window,
+            ::ridl_rt::encoding::FlatBuffers,
+        >::encode(__arg, &mut buf) {
+            Ok(encoded) => encoded.bytes(),
+            Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                unreachable!(
+                    "encoding `Window` needs {} bytes and the argument buffer has {}; a legal value cannot exceed `<Window as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                    needed, available
+                )
+            }
+            Err(_) => unreachable!("encoding `Window` failed"),
+        };
+        __port
+            .query(
+                <super::Zone as ::ridl_rt::contract::Interface>::NUMBER,
+                ::ridl_rt::contract::Ordinal(3u32),
+                bytes,
+                ::core::option::Option::None,
+            )
+            .map(AverageCorrelation)
+    }
+    pub(crate) fn poll_average_reply<P: ::ridl_rt::port::Caller>(
+        port: &mut P,
+        correlation: AverageCorrelation,
+    ) -> ::core::result::Result<
+        ::core::option::Option<
+            ::core::result::Result<super::Average, ::ridl_rt::error::CallError>,
+        >,
+        ::ridl_rt::port::ReadError,
+    > {
+        let mut buf = <super::Average as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::BUFFER;
+        match port.reply(correlation.0, &mut buf)? {
+            None => Ok(None),
+            Some(Err(error)) => Ok(Some(Err(error))),
+            Some(Ok(len)) => {
+                Ok(
+                    Some(
+                        match ::ridl_rt::payload::Ref::<
+                            super::Average,
+                            ::ridl_rt::encoding::FlatBuffers,
+                        >::verify(&buf[..len]) {
+                            Ok(checked) => Ok(checked.decode()),
+                            Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
+                                Err(
+                                    ::ridl_rt::error::CallError::Contract(
+                                        ::ridl_rt::error::Contract::InvalidValue(violation),
+                                    ),
+                                )
+                            }
+                            Err(_) => {
+                                Err(
+                                    ::ridl_rt::error::CallError::Transport(
+                                        ::ridl_rt::error::Transport::Corrupt,
+                                    ),
+                                )
+                            }
+                        },
+                    ),
+                )
+            }
+        }
+    }
+    ///Stages the invalid state of one signal of interface `Zone`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>` (ADR-0023 decision 7); `prelude` brings it into scope anonymously.
+    pub trait Invalidate {
+        ///Stages the invalid state for signal `level`, with `Cause::Declared`. It is published by `commit`.
+        fn invalidate_level(
+            &mut self,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError>;
+    }
+    ///The provider face of interface `Zone`'s signals and events. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `commit` is `ridl_rt::face::Publish`'s and `invalidate_<signal>` is this module's `Invalidate`'s, all in scope through `prelude`.
+    pub struct Publisher<W: ::ridl_rt::port::SignalWriter> {
+        port: W,
+    }
+    impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
+        /// The zone level.
+        ///
+        /// # Rules
+        ///
+        /// - period 10000 us
+        ///
+        ///Stages a new value for signal `level`. It is published by `commit`.
+        pub fn level(
+            &mut self,
+            value: super::Level,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
+            let mut buf = <super::Level as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::BUFFER;
+            let bytes = match ::ridl_rt::payload::Ref::<
+                super::Level,
+                ::ridl_rt::encoding::FlatBuffers,
+            >::encode(&value, &mut buf) {
+                Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                    unreachable!(
+                        "encoding `Level` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<Level as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        needed, available
+                    )
+                }
+                Err(_) => unreachable!("encoding `Level` failed"),
+            };
+            self.port
+                .set(
+                    <super::Zone as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(1u32),
+                    bytes,
+                )
+        }
+    }
+    impl<W: ::ridl_rt::port::SignalWriter> ::ridl_rt::face::Bind for Publisher<W> {
+        type Port = W;
+        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Zone as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Zone` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
+        fn new(port: W) -> Self {
+            check_catalog(::ridl_rt::port::Attached::catalog(&port));
+            Publisher { port }
+        }
+    }
+    impl<W: ::ridl_rt::port::SignalWriter> ::ridl_rt::face::Publish for Publisher<W> {
+        /// Publishes every staged signal change.
+        fn commit(&mut self) {
+            self.port.commit()
+        }
+    }
+    impl<W: ::ridl_rt::port::SignalWriter> Invalidate for Publisher<W> {
+        fn invalidate_level(
+            &mut self,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
+            self.port
+                .invalidate(
+                    <super::Zone as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(1u32),
+                )
+        }
     }
     /**What an application implements to serve interface `Zone`'s calls.
 
@@ -5008,6 +5465,20 @@ An argument is taken by reference because `serve` reads it again when it evaluat
         ///   - range 0 ..= 100
         #[deprecated(note = "use Cabin.setLevel")]
         fn set_level(&mut self, level: &super::Level);
+        /// The average zone level over a window of samples.
+        ///
+        /// # Rules
+        ///
+        /// - response within 3000000 us
+        ///
+        ///Serves query `average`. A reply that breaks an `ensure` clause is discarded by `serve`, which settles `ContractBroken` instead.
+        ///
+        /// # Parameters
+        ///
+        /// - `window`
+        ///   - range 0 ..= 100000
+        #[deprecated(note = "use Cabin.average")]
+        fn average(&mut self, window: &super::Window) -> super::Average;
     }
     #[allow(deprecated)]
     pub(crate) fn dispatch<H, P>(
@@ -5061,7 +5532,7 @@ An argument is taken by reference because `serve` reads it again when it evaluat
                         )
                     } else {
                         match claim.ord {
-                            ::ridl_rt::contract::Ordinal(1u32) => {
+                            ::ridl_rt::contract::Ordinal(2u32) => {
                                 let decoded = match ::ridl_rt::payload::Ref::<
                                     super::Level,
                                     ::ridl_rt::encoding::FlatBuffers,
@@ -5116,6 +5587,95 @@ An argument is taken by reference because `serve` reads it again when it evaluat
                                     }
                                 }
                             }
+                            ::ridl_rt::contract::Ordinal(3u32) => {
+                                let decoded = match ::ridl_rt::payload::Ref::<
+                                    super::Window,
+                                    ::ridl_rt::encoding::FlatBuffers,
+                                >::verify(&buf[..claim.len]) {
+                                    Ok(checked) => Ok(checked.decode()),
+                                    Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                    Err(
+                                        ::ridl_rt::payload::VerifyError::Contract(violation),
+                                    ) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Contract(
+                                                ::ridl_rt::error::Contract::InvalidValue(violation),
+                                            ),
+                                        )
+                                    }
+                                    Err(_) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                };
+                                match decoded {
+                                    Err(error) => h.settle(claim.id, Err(error)),
+                                    Ok(__arg) => {
+                                        match <super::ZoneAverage as ::ridl_rt::contract::Query>::require(
+                                            &__arg,
+                                        ) {
+                                            Err(()) => {
+                                                h.settle(
+                                                    claim.id,
+                                                    Err(
+                                                        ::ridl_rt::error::CallError::Contract(
+                                                            ::ridl_rt::error::Contract::PreconditionFailed,
+                                                        ),
+                                                    ),
+                                                )
+                                            }
+                                            Ok(()) => {
+                                                let reply = p.average(&__arg);
+                                                match <super::ZoneAverage as ::ridl_rt::contract::Query>::ensure(
+                                                    &__arg,
+                                                    &reply,
+                                                ) {
+                                                    Err(()) => {
+                                                        h.settle(
+                                                            claim.id,
+                                                            Err(
+                                                                ::ridl_rt::error::CallError::Contract(
+                                                                    ::ridl_rt::error::Contract::ContractBroken,
+                                                                ),
+                                                            ),
+                                                        )
+                                                    }
+                                                    Ok(()) => {
+                                                        let bytes = match ::ridl_rt::payload::Ref::<
+                                                            super::Average,
+                                                            ::ridl_rt::encoding::FlatBuffers,
+                                                        >::encode(&reply, buf) {
+                                                            Ok(encoded) => encoded.bytes(),
+                                                            Err(
+                                                                ::ridl_rt::payload::EncodeError::Capacity {
+                                                                    needed,
+                                                                    available,
+                                                                },
+                                                            ) => {
+                                                                unreachable!(
+                                                                    "encoding `Average` needs {} bytes and the dispatch buffer has {}; a legal value cannot exceed `<Average as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                                                                    needed, available
+                                                                )
+                                                            }
+                                                            Err(_) => unreachable!("encoding `Average` failed"),
+                                                        };
+                                                        h.settle(claim.id, Ok(bytes))
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             _ => {
                                 h.settle(
                                     claim.id,
@@ -5153,7 +5713,7 @@ Panics when `h` is attached to a catalog other than the one this face was genera
         let state = match h
             .serve(
                 <super::Zone as ::ridl_rt::contract::Interface>::NUMBER,
-                &[::ridl_rt::contract::Ordinal(1u32)],
+                &[::ridl_rt::contract::Ordinal(2u32), ::ridl_rt::contract::Ordinal(3u32)],
             )
         {
             Ok(()) => ServeState::Serving,
@@ -5248,9 +5808,11 @@ Panics when `h` is attached to a catalog other than the one this face was genera
             }
         }
     }
-    ///The traits a consumer of interface `Zone`'s face needs in scope. Glob-import this module, `use <this interface's module>::prelude::*;`, and every method of those traits — `new`, `with_timeout`, `set_timeout` — is called as an inherent method would be. Only the `ridl-rt` traits are re-exported by name; this module's own traits are re-exported as `_`, so the preludes of two interfaces can share one scope.
+    ///The traits a consumer of interface `Zone`'s face needs in scope. Glob-import this module, `use <this interface's module>::prelude::*;`, and every method of those traits — `new`, `commit`, `invalidate_<signal>`, `with_timeout`, `set_timeout` — is called as an inherent method would be. Only the `ridl-rt` traits are re-exported by name; this module's own traits are re-exported as `_`, so the preludes of two interfaces can share one scope.
     pub mod prelude {
         pub use ::ridl_rt::face::Bind;
+        pub use ::ridl_rt::face::Publish;
+        pub use super::Invalidate as _;
         #[cfg(feature = "std")]
         pub use ::ridl_rt::face::Timeout;
     }
@@ -5264,16 +5826,33 @@ Panics when `h` is attached to a catalog other than the one this face was genera
         }
         ///The blocking consumer face of interface `Zone`: the async `Client` with a timeout, over the same ports. Every call is `ridl_rt::task::block_on` over the async call's future, so a call parks the calling thread until its outcome or this client's timeout. The member's `max` is measured by the future on the port's clock, and read only when the port wakes the call: a runtime that measures the bound and wakes the waiter when it passes ends the call at `max`; one that does not, `ridl-loopback` among them, leaves an unserved call waiting until this client's timeout. The timeout is `None` until `with_timeout` or `set_timeout` sets it, and with none a call returns only with its outcome, or at `max` on a runtime that wakes at it. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `with_timeout` and `set_timeout` are `ridl_rt::face::Timeout`'s, all in scope through the parent module's `prelude`.
         pub struct Client<
-            P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
-                + ::ridl_rt::port::Wakeable,
+            P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::Caller
+                + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
         > {
             inner: super::Client<P>,
             timeout: ::core::option::Option<::std::time::Duration>,
         }
         impl<
-            P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
-                + ::ridl_rt::port::Wakeable,
+            P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::Caller
+                + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
         > Client<P> {
+            /// The zone level.
+            ///
+            /// # Rules
+            ///
+            /// - period 10000 us
+            ///
+            ///Reads signal `level`, as `Client::level` does: a read never waits.
+            #[deprecated(note = "use Cabin.temperature")]
+            #[allow(deprecated)]
+            pub fn level(
+                &self,
+            ) -> ::core::result::Result<
+                ::ridl_rt::sample::Sample<super::super::Level>,
+                ::ridl_rt::port::ReadError,
+            > {
+                self.inner.level()
+            }
             /// Sets the zone level.
             ///
             /// # Rules
@@ -5314,10 +5893,53 @@ Panics when `h` is attached to a catalog other than the one this face was genera
                     }
                 }
             }
+            /// The average zone level over a window of samples.
+            ///
+            /// # Rules
+            ///
+            /// - response within 3000000 us
+            ///
+            ///Sends query `average` and waits for its outcome, as `block_on` over `Client::average`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Timeout`; either way nothing is left waiting at the port.
+            ///
+            /// # Parameters
+            ///
+            /// - `window`
+            ///   - range 0 ..= 100000
+            #[deprecated(note = "use Cabin.average")]
+            #[allow(deprecated)]
+            pub fn average(
+                &mut self,
+                window: super::super::Window,
+            ) -> ::core::result::Result<
+                super::super::Average,
+                ::ridl_rt::error::ClientError,
+            > {
+                let __deadline = __deadline_after(self.timeout);
+                let mut __call = self.inner.average(window);
+                match ::ridl_rt::task::block_on(&mut __call, __deadline) {
+                    Some(outcome) => outcome,
+                    None if __call.sent() => {
+                        Err(
+                            ::ridl_rt::error::ClientError::Call(
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Timeout,
+                                ),
+                            ),
+                        )
+                    }
+                    None => {
+                        Err(
+                            ::ridl_rt::error::ClientError::Send(
+                                ::ridl_rt::port::SendError::Busy,
+                            ),
+                        )
+                    }
+                }
+            }
         }
         impl<
-            P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
-                + ::ridl_rt::port::Wakeable,
+            P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::Caller
+                + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
         > ::ridl_rt::face::Bind for Client<P> {
             type Port = P;
             /**Binds the face to a port, with no timeout. The port is held by value: pass a handle, or a `&mut` borrow of one.
@@ -5334,8 +5956,8 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             }
         }
         impl<
-            P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
-                + ::ridl_rt::port::Wakeable,
+            P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::Caller
+                + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
         > ::ridl_rt::face::Timeout for Client<P> {
             /// Sets the timeout every waiting method of this client is
             /// bounded by, and returns the client. A timeout shorter than a

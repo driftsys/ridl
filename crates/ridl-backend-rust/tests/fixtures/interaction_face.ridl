@@ -114,16 +114,24 @@ interface Wiper {
   signal speed  : Level @10ms
 }
 
-// ------ An interface with a deprecated command, for the deprecation guard ------
+// ------ An interface with deprecated members, for the deprecation guard ------
 //
-// The face marks the command's client methods and its `Provider` method
-// `#[deprecated]`, and every generated item that calls one of them allows the
-// lint, so the include site in `tests/interaction_face.rs` compiles under
-// `deny(deprecated)`. No test calls the command. Named to sort after `Wiper`,
-// for the reason `Siren` gives.
+// The face marks each deprecated member's client methods, and a call's
+// `Provider` method, `#[deprecated]`, and every generated item that calls one
+// of them allows the lint, so the include site in `tests/interaction_face.rs`
+// compiles under `deny(deprecated)`. The three members pin the three sites
+// that allow it: the blocking client's signal read, the blocking client's
+// call, and `dispatch`, once for a command and once for a query. No test calls
+// them. Named to sort after `Wiper`, for the reason `Siren` gives.
 
 interface Zone {
+  /// The zone level.
+  /// @deprecated "use Cabin.temperature"
+  signal level : Level @10ms
   /// Sets the zone level.
   /// @deprecated "use Cabin.setLevel"
   command setLevel(level: Level)
+  /// The average zone level over a window of samples.
+  /// @deprecated "use Cabin.average"
+  query average(window: Window): Average
 }

@@ -835,12 +835,12 @@ fn a_range_without_a_step_names_nothing_unchecked() {
     );
 }
 
-/// An unresolved `pattern_const` names the pattern as unchecked, because no
-/// check is emitted for it (design, "Not validated, and documented as such"
-/// still applies to that case). A length bound alone leaves nothing unchecked
-/// to name.
+/// A type's doc states its contract, not what `new` checks (the generated-code
+/// documentation design, D-3): an unresolved `pattern_const`, for which no
+/// check is emitted, adds no doc line saying so. The book's chapter on
+/// generated code records which rules the Rust backend checks.
 #[test]
-fn an_unresolved_pattern_const_is_named_on_the_type() {
+fn an_unresolved_pattern_const_adds_no_enforcement_doc() {
     let with_pattern = |pattern_const: Option<&str>| {
         rust_for(vec![public_decl(
             "Handle",
@@ -863,23 +863,23 @@ fn an_unresolved_pattern_const_is_named_on_the_type() {
             }),
         )])
     };
-    let source = with_pattern(Some("HANDLE_PATTERN"));
-    assert!(
-        source.contains("/// The `match` pattern is not checked by `new`."),
-        "an unresolved pattern constant must be named as unchecked, got:\n{source}"
-    );
-    let source = with_pattern(None);
-    assert!(
-        !source.contains("is not checked by `new`"),
-        "a length bound alone leaves nothing unchecked to name, got:\n{source}"
-    );
+    for source in [with_pattern(Some("HANDLE_PATTERN")), with_pattern(None)] {
+        assert!(
+            !source.contains("checked by `new`"),
+            "a type's doc must not state what `new` checks, got:\n{source}"
+        );
+        assert!(
+            source.contains("Rule::Length"),
+            "the length bound is still checked, got:\n{source}"
+        );
+    }
 }
 
-/// A literal pattern is checked by `new` under `validate-pattern`, so the
-/// type names that condition instead of claiming the pattern goes unchecked
-/// outright.
+/// A literal pattern is checked by `new` under `validate-pattern`, and the
+/// type's doc does not say so (D-3): the check is emitted, the enforcement
+/// sentence is not.
 #[test]
-fn a_literal_pattern_is_named_as_feature_gated() {
+fn a_literal_pattern_check_carries_no_enforcement_doc() {
     let source = rust_for(vec![public_decl(
         "Handle",
         v2::decl::Kind::TypeDef(v2::TypeDef {
@@ -901,25 +901,20 @@ fn a_literal_pattern_is_named_as_feature_gated() {
         }),
     )]);
     assert!(
-        !source.contains("The `match` pattern is not checked by `new`."),
-        "a literal pattern is checked by `new` under the feature, got:\n{source}"
+        !source.contains("checked by `new`"),
+        "a type's doc must not state what `new` checks, got:\n{source}"
     );
-    // The assertion names the doc line itself. A bare `contains`
-    // ("validate-pattern") is satisfied by the `#[cfg(feature =
-    // "validate-pattern")]` attribute in the constructor body, so deleting
-    // the doc line entirely would leave it green.
     assert!(
-        source.contains(
-            "/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature."
-        ),
-        "the type must name the condition its pattern guarantee depends on, got:\n{source}"
+        source.contains("#[cfg(feature = \"validate-pattern\")]"),
+        "the pattern check is still emitted under the feature, got:\n{source}"
     );
 }
 
-/// A pattern on a string carries the feature condition. A malformed numeric
-/// step on a string in hand-built IR cannot emit a numeric check.
+/// A pattern on a string adds no enforcement sentence to the type's doc
+/// (D-3). A malformed numeric step on a string in hand-built IR cannot emit a
+/// numeric check.
 #[test]
-fn a_string_pattern_names_the_feature_condition() {
+fn a_string_pattern_adds_no_enforcement_doc() {
     let source = rust_for(vec![public_decl(
         "Stepped",
         v2::decl::Kind::TypeDef(v2::TypeDef {
@@ -941,12 +936,7 @@ fn a_string_pattern_names_the_feature_condition() {
         }),
     )]);
     assert!(!source.contains("Quantization (`step`) is not checked"));
-    assert!(!source.contains("The `match` pattern is not checked by `new`."));
-    // The doc line itself, not the `cfg` attribute that also carries the
-    // feature name.
-    assert!(source.contains(
-        "/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature."
-    ));
+    assert!(!source.contains("checked by `new`"));
 }
 
 /// The pattern check is emitted only under `validate-pattern`; the range and
@@ -1353,23 +1343,19 @@ fn bytes_backed_pattern_emits_no_pattern_check() {
     );
 }
 
-/// The doc for a bytes-backed pattern must not claim the feature-gated
-/// guarantee it does not implement: since `constraint_checks` emits no
-/// pattern branch for this backing, the type must carry the plain "not
-/// checked" line instead.
+/// A pattern arriving on a bytes backing, which `constraint_checks` emits no
+/// pattern branch for, is neither checked nor described: the type's doc
+/// states no enforcement (D-3), and nothing names the feature.
 ///
 /// This is about an IR the backend did not lower, not about a typl source.
 /// A bytes type written with a `match` reaches the backend with no pattern
-/// at all, so `unchecked_doc` emits no line for it whatsoever; see
-/// [`bytes_pattern_decl`]. The behaviour pinned here is that a pattern
-/// arriving on a backing the check cannot cover is described accurately
-/// rather than advertised as gated.
+/// at all; see [`bytes_pattern_decl`].
 #[test]
-fn bytes_backed_pattern_is_named_as_unchecked_not_feature_gated() {
+fn bytes_backed_pattern_is_neither_checked_nor_described() {
     let source = rust_for(vec![bytes_pattern_decl()]);
     assert!(
-        source.contains(" The `match` pattern is not checked by `new`."),
-        "a bytes-backed pattern must be named plainly unchecked, got:\n{source}"
+        !source.contains("checked by `new`"),
+        "a type's doc must not state what `new` checks, got:\n{source}"
     );
     assert!(
         !source.contains("validate-pattern"),
@@ -6257,8 +6243,8 @@ fn a_withheld_declaration_claims_no_view_name() {
 }
 
 /// The owner line of a skipped-interface note for a refusal that no owner
-/// claims names the reason and no tracking issue, and cites neither of the
-/// two issues that own the other gaps.
+/// claims points to the reason and mentions no tracking issue, and cites
+/// neither of the two issues that own the other gaps.
 #[test]
 fn a_skipped_interface_note_without_an_owner_names_no_issue() {
     use crate::{GenerateError, skipped_interface_note};
@@ -6272,12 +6258,49 @@ fn a_skipped_interface_note_without_an_owner_names_no_issue() {
     )
     .to_string();
     assert!(
-        note.contains("No tracking issue owns this one"),
+        note.contains("The reason above is the whole of it."),
         "got: {note}"
     );
+    assert!(!note.contains("tracking issue"), "got: {note}");
     assert!(
         !note.contains("driftsys/ridl#713") && !note.contains("driftsys/ridl#704"),
         "got: {note}"
+    );
+}
+
+/// A face refused for an interface that the doc links already treat as faced
+/// is an internal error that refuses the model, not a skip note: the links
+/// would point at a face module the output does not hold. A face refused for
+/// an interface the links do not treat as faced is skipped as before.
+#[test]
+fn a_face_refused_after_linking_is_an_internal_error() {
+    use crate::{GenerateError, face_refused_after_linking};
+    use ridl_ir::codegen::v1;
+    use std::collections::BTreeSet;
+
+    let interface = v1::Interface {
+        identity: Some(v1::interface::Identity::Declared(v1::Spellings {
+            declared: "Cabin".to_string(),
+            ..Default::default()
+        })),
+        ..Default::default()
+    };
+    let err = GenerateError {
+        message: "a refusal".to_string(),
+    };
+    let faced = BTreeSet::from([2_u32]);
+    let refused = face_refused_after_linking(&faced, 2, &interface, &err)
+        .expect_err("a linked interface whose face is refused must refuse the model");
+    assert!(
+        refused.message.starts_with("internal error:")
+            && refused.message.contains("`Cabin`")
+            && refused.message.ends_with("a refusal"),
+        "got: {}",
+        refused.message
+    );
+    assert!(
+        face_refused_after_linking(&faced, 1, &interface, &err).is_ok(),
+        "an interface no link treats as faced is skipped, not refused"
     );
 }
 
@@ -6394,7 +6417,12 @@ mod skipped_interface_note {
         let internal = note(&interface(Vec::new(), true));
         assert!(call_shape.contains("to get a face"), "{call_shape}");
         assert!(!call_shape.contains("driftsys/ridl"), "{call_shape}");
-        assert!(other.contains("No tracking issue owns this one"), "{other}");
+        assert!(
+            other.contains("The reason above is the whole of it."),
+            "{other}"
+        );
+        assert!(!other.contains("tracking issue"), "{other}");
+        assert!(!other.contains("driftsys/ridl"), "{other}");
         for text in [&call_shape, &other] {
             assert!(text.contains("which the face is built on"), "{text}");
             assert!(text.contains("design rule 2"), "{text}");

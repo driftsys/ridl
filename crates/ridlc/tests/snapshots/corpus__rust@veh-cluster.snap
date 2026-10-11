@@ -1247,9 +1247,6 @@ impl ::core::default::Default for SensorBoundsRange {
 /// tree. The causes above are the ones this call could meet.
 /// A type that reaches itself, and a stream, which has no single
 /// value to size, are never resolvable by any caller.
-///
-/// This is a silent omission in the sense ADR-0016 decision 6 and
-/// ADR-0017 decision 4 rule out, and it is deliberate for now.
 #[allow(dead_code, non_upper_case_globals)]
 const __RIDL_FB_NO_CODEC_DriverProfile: () = ();
 /// `SensorBounds` carries no `Payload<FlatBuffers>` implementation.
@@ -1262,9 +1259,6 @@ const __RIDL_FB_NO_CODEC_DriverProfile: () = ();
 /// tree. The causes above are the ones this call could meet.
 /// A type that reaches itself, and a stream, which has no single
 /// value to size, are never resolvable by any caller.
-///
-/// This is a silent omission in the sense ADR-0016 decision 6 and
-/// ADR-0017 decision 4 rule out, and it is deliberate for now.
 #[allow(dead_code, non_upper_case_globals)]
 const __RIDL_FB_NO_CODEC_SensorBounds: () = ();
 /// `SensorResult` carries no `Payload<FlatBuffers>` implementation.
@@ -1277,9 +1271,6 @@ const __RIDL_FB_NO_CODEC_SensorBounds: () = ();
 /// tree. The causes above are the ones this call could meet.
 /// A type that reaches itself, and a stream, which has no single
 /// value to size, are never resolvable by any caller.
-///
-/// This is a silent omission in the sense ADR-0016 decision 6 and
-/// ADR-0017 decision 4 rule out, and it is deliberate for now.
 #[allow(dead_code, non_upper_case_globals)]
 const __RIDL_FB_NO_CODEC_SensorResult: () = ();
 /// `SensorReading` carries no `Payload<FlatBuffers>` implementation.
@@ -1292,9 +1283,6 @@ const __RIDL_FB_NO_CODEC_SensorResult: () = ();
 /// tree. The causes above are the ones this call could meet.
 /// A type that reaches itself, and a stream, which has no single
 /// value to size, are never resolvable by any caller.
-///
-/// This is a silent omission in the sense ADR-0016 decision 6 and
-/// ADR-0017 decision 4 rule out, and it is deliberate for now.
 #[allow(dead_code, non_upper_case_globals)]
 const __RIDL_FB_NO_CODEC_SensorReading: () = ();
 /// `SensorFault` carries no `Payload<FlatBuffers>` implementation.
@@ -1307,9 +1295,6 @@ const __RIDL_FB_NO_CODEC_SensorReading: () = ();
 /// tree. The causes above are the ones this call could meet.
 /// A type that reaches itself, and a stream, which has no single
 /// value to size, are never resolvable by any caller.
-///
-/// This is a silent omission in the sense ADR-0016 decision 6 and
-/// ADR-0017 decision 4 rule out, and it is deliberate for now.
 #[allow(dead_code, non_upper_case_globals)]
 const __RIDL_FB_NO_CODEC_SensorFault: () = ();
 /// An accessor over FlatBuffers bytes `Speed`'s `verify` accepted.
@@ -3351,9 +3336,6 @@ impl ::core::default::Default for RawWheelSpanBurstsElement {
 /// tree. The causes above are the ones this call could meet.
 /// A type that reaches itself, and a stream, which has no single
 /// value to size, are never resolvable by any caller.
-///
-/// This is a silent omission in the sense ADR-0016 decision 6 and
-/// ADR-0017 decision 4 rule out, and it is deliberate for now.
 #[allow(dead_code, non_upper_case_globals)]
 const __RIDL_FB_NO_CODEC_DiagFilter: () = ();
 /// `FaultEvent` carries no `Payload<FlatBuffers>` implementation.
@@ -3366,9 +3348,6 @@ const __RIDL_FB_NO_CODEC_DiagFilter: () = ();
 /// tree. The causes above are the ones this call could meet.
 /// A type that reaches itself, and a stream, which has no single
 /// value to size, are never resolvable by any caller.
-///
-/// This is a silent omission in the sense ADR-0016 decision 6 and
-/// ADR-0017 decision 4 rule out, and it is deliberate for now.
 #[allow(dead_code, non_upper_case_globals)]
 const __RIDL_FB_NO_CODEC_FaultEvent: () = ();
 /// `FaultPage` carries no `Payload<FlatBuffers>` implementation.
@@ -3381,9 +3360,6 @@ const __RIDL_FB_NO_CODEC_FaultEvent: () = ();
 /// tree. The causes above are the ones this call could meet.
 /// A type that reaches itself, and a stream, which has no single
 /// value to size, are never resolvable by any caller.
-///
-/// This is a silent omission in the sense ADR-0016 decision 6 and
-/// ADR-0017 decision 4 rule out, and it is deliberate for now.
 #[allow(dead_code, non_upper_case_globals)]
 const __RIDL_FB_NO_CODEC_FaultPage: () = ();
 /// `ClimateReport` carries no `Payload<FlatBuffers>` implementation.
@@ -3396,9 +3372,6 @@ const __RIDL_FB_NO_CODEC_FaultPage: () = ();
 /// tree. The causes above are the ones this call could meet.
 /// A type that reaches itself, and a stream, which has no single
 /// value to size, are never resolvable by any caller.
-///
-/// This is a silent omission in the sense ADR-0016 decision 6 and
-/// ADR-0017 decision 4 rule out, and it is deliberate for now.
 #[allow(dead_code, non_upper_case_globals)]
 const __RIDL_FB_NO_CODEC_ClimateReport: () = ();
 /// A zero-copy accessor over FlatBuffers bytes `DoorPayload`'s `verify` accepted.
