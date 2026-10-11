@@ -467,8 +467,8 @@ mod tests {
                 !text.contains(&root_text),
                 "surface `{name}` has an absolute path"
             );
-            // The scratch directories of the dumpers are absolute paths
-            // outside the repository.
+            // The dumpers write scratch files under the temporary directory
+            // and the cargo target directory, and a line must not name either.
             for scratch in &scratch_dirs {
                 assert!(
                     !text.contains(scratch.as_str()),

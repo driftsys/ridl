@@ -307,7 +307,7 @@ fn crate_dirs(dir: &Path) -> Result<Vec<String>, String> {
 }
 
 /// The manifest of a copied generated crate, made to build outside the
-/// repository without the network: an empty `[workspace]` table, and the
+/// workspace without the network: an empty `[workspace]` table, and the
 /// `ridl-rt` dependency read from `ridl_rt` (HEAD's crate, for both sides),
 /// and every lint of [`DENIED_LINTS`] at `deny`.
 ///
