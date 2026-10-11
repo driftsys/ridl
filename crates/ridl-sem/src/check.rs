@@ -12781,6 +12781,37 @@ interface I {\n\
     }
 
     #[test]
+    fn freed_words_are_identifiers_in_a_ridl_source() {
+        // driftsys/ridl#370: a word that left the registry is legal in every
+        // identifier position of a ridl source.
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}struct Surface {{\n  view: Speed\n  agent: Speed\n}}\n\
+                 interface Display {{\n  signal input : Speed @10ms\n  \
+                 command navigate(scroll: Speed, drag: Speed) @[..50ms]\n  \
+                 query observe(): Speed @[..50ms]\n  event action : Surface @[100ms..1s]\n}}\n"
+            ),
+        );
+        assert_eq!(
+            codes(&checked),
+            Vec::<&str>::new(),
+            "{:?}",
+            checked.diagnostics
+        );
+        let package = check_ridl(
+            "agent",
+            "package agent\ntype Speed: km/h [0.0..300.0 step 0.5]\n",
+        );
+        assert_eq!(
+            codes(&package),
+            Vec::<&str>::new(),
+            "{:?}",
+            package.diagnostics
+        );
+    }
+
+    #[test]
     fn form_106_107_108_attribute_allow_list() {
         // gf §4.3: in E2 only `require`/`ensure` predicates are consumable —
         // a known key on the wrong kind is FORM-107, an unknown key FORM-106,
@@ -14567,8 +14598,8 @@ interface VehicleStatus {
         assert_eq!(interface_walk(&checked), [("after", 2)]);
     }
 
-    /// FORM-105 — a family reserved word (`view` belongs to uxdl, so it is
-    /// reserved but not an active ridl keyword) used as an interaction name.
+    /// FORM-105 — a family reserved word (`states` is a ridl clause word, so
+    /// it is reserved but not an active ridl keyword) used as an interaction name.
     /// The parser holds it in an `ErrorNode` rather than a `Name`, so the
     /// member reaches the lowering nameless, exactly as FORM-101 does.
     #[test]
@@ -14576,7 +14607,7 @@ interface VehicleStatus {
         let checked = check_ridl(
             "app",
             &format!(
-                "{PRELUDE}interface I {{\n  signal view : Speed @10ms\n  signal after : Speed @10ms\n}}\n"
+                "{PRELUDE}interface I {{\n  signal states : Speed @10ms\n  signal after : Speed @10ms\n}}\n"
             ),
         );
         assert_eq!(interface_walk(&checked), [("after", 2)]);
@@ -14600,7 +14631,7 @@ interface VehicleStatus {
         let checked = check_ridl(
             "app",
             &format!(
-                "{PRELUDE}service veh.a.b {{\n  signal view : Speed @10ms\n  signal after : Speed @10ms\n}}\n"
+                "{PRELUDE}service veh.a.b {{\n  signal states : Speed @10ms\n  signal after : Speed @10ms\n}}\n"
             ),
         );
         assert_eq!(inline_walk(&checked), [("after", 2)]);
@@ -14617,9 +14648,9 @@ interface VehicleStatus {
             "interface I {\n  command (g: Speed)\n  signal after : Speed @10ms\n}\n",
             "interface I {\n  query (): Speed\n  signal after : Speed @10ms\n}\n",
             "interface I {\n  fixed : Speed = 1.0\n  signal after : Speed @10ms\n}\n",
-            "interface I {\n  signal view : Speed @10ms\n  signal after : Speed @10ms\n}\n",
+            "interface I {\n  signal states : Speed @10ms\n  signal after : Speed @10ms\n}\n",
             "service veh.a.b {\n  signal : Speed @10ms\n  signal after : Speed @10ms\n}\n",
-            "service veh.a.b {\n  signal view : Speed @10ms\n  signal after : Speed @10ms\n}\n",
+            "service veh.a.b {\n  signal states : Speed @10ms\n  signal after : Speed @10ms\n}\n",
         ] {
             let checked = check_ridl("app", &format!("{PRELUDE}{body}"));
             let mut interactions: Vec<&v2::Decl> = checked

@@ -611,9 +611,9 @@ impl<'a> Parser<'a> {
     ///   `require`/`ensure`, which are attributes, not declarations, and
     ///   draw **TYPL-303** (`require/ensure attribute in typl context`,
     ///   typl reference §16.4);
-    /// - in a `.ridl` parse, any `ReservedWord` — a behaviour,
-    ///   user-interaction, or architecture word of the uxdl/rmdl/rsdl
-    ///   profiles — draws **RIDL-403**;
+    /// - in a `.ridl` parse, any `ReservedWord` — a behaviour or architecture
+    ///   word of the rmdl/rsdl profiles, or a ridl clause word — draws
+    ///   **RIDL-403**;
     /// - in a `.rsdl` parse, any `ReservedWord` — `interface` and `service`
     ///   first of all — draws **RSDL-604** (rsdl reference §2), with the
     ///   brace-aware recovery of [`Parser::rsdl_foreign_declaration`]. The typl
@@ -3768,7 +3768,7 @@ interface I {{
         let groups = vec!["(a)"; 200].join(" + ");
         let cases = [
             ("a `require`", format!("{numbers}\n    require a == 1")),
-            ("a reserved word", format!("{numbers}\n    view = 1")),
+            ("a reserved word", format!("{numbers}\n    states = 1")),
             ("a key after a number", format!("{numbers}\n    key = 1")),
             ("a key after a name", format!("{names}\n    key = 1")),
             ("a key after a group", format!("{groups}\n    key = 1")),
@@ -3801,7 +3801,7 @@ interface I {{
             let next = attributes[1].trim();
             let starts = match case {
                 "a `require`" => "require a == 1",
-                "a reserved word" => "view = 1",
+                "a reserved word" => "states = 1",
                 _ => "key = 1",
             };
             assert_eq!(next, starts, "{case}");
