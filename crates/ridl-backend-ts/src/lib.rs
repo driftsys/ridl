@@ -84,8 +84,8 @@ const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
 ///
 /// The doc comments are read from the codegen model of `package` lowered
 /// alone, so a doc link to a declaration of another package renders as a
-/// code span; the backend contract hands [`generate_with`] the request's
-/// model, which holds the foreign declarations the package reaches.
+/// code span; the backend contract reads the doc comments from the request's
+/// model instead, which holds the foreign declarations the package reaches.
 ///
 /// The call is total: it returns [`GenerateError`] rather than panicking.
 pub fn generate(package: &v2::Package) -> Result<GeneratedTs, GenerateError> {

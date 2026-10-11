@@ -11,7 +11,8 @@ use ridl_ir::codegen::{self, RawIr, v1};
 use crate::{GenerateError, generate_with};
 
 /// The TypeScript backend as a [`codegen::Backend`]: one file,
-/// `<artifact_base>.ts`, from [`generate`]. It takes no option.
+/// `<artifact_base>.ts`, the module [`crate::generate`] emits with the doc
+/// comments read from the request's model. It takes no option.
 pub struct Backend<'a> {
     raw: RawIr<'a>,
 }
