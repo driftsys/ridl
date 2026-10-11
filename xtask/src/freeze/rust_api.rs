@@ -9,9 +9,10 @@
 //!   must equal a regeneration, and for a row it is compared with the tree at
 //!   the baseline ref (`--baseline-root`).
 //!
-//! `cargo semver-checks` runs with `CARGO_NET_OFFLINE=true`: the check reads
-//! no network, so every dependency must already be in the local cargo cache,
-//! which the workspace build fills. It also runs with `--release-type minor`:
+//! `cargo semver-checks` runs with `CARGO_NET_OFFLINE=true`, so every
+//! dependency must already be in the local cargo cache. Before the first run,
+//! the check runs `cargo fetch --locked` with the network allowed, which puts
+//! every package of `Cargo.lock` there, for every platform. It also runs with `--release-type minor`:
 //! a frozen surface accepts no break, whatever version the crates carry. The
 //! lints of [`DENIED_LINTS`] are raised to `deny` (see there).
 
@@ -20,6 +21,7 @@ use super::bin;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 
 /// The crates of the `runtime-crates` surface.
 pub const RUNTIME_CRATES: [&str; 4] = [
@@ -69,6 +71,7 @@ const BREAK_FOUND: i32 = 100;
 /// Compares the runtime crates with the same crates at the row's baseline,
 /// in one `cargo semver-checks` run.
 pub fn runtime_compare(root: &Path, row: &Row) -> Result<Vec<String>, String> {
+    fetch_dependencies(root)?;
     let command = runtime_command(root, row);
     let what = format!("the crates {}", RUNTIME_CRATES.join(", "));
     Ok(run_semver(command, &row.surface, &row.baseline, &what)?
@@ -123,6 +126,7 @@ fn differences_from_regeneration(
 /// at the row's baseline. A crate of the baseline that is gone at HEAD fails;
 /// a crate added since passes.
 pub fn generated_compare(root: &Path, row: &Row) -> Result<Vec<String>, String> {
+    fetch_dependencies(root)?;
     let head = scratch_dir(root, "head")?;
     copy_tree(&root.join(GENERATED_DIR), &head)?;
     let baseline = scratch_dir(root, "baseline")?;
@@ -348,6 +352,50 @@ fn standalone_manifest(text: &str, ridl_rt: &Path) -> Result<String, String> {
     toml::to_string(&manifest).map_err(|e| e.to_string())
 }
 
+/// `cargo fetch --locked` for the workspace at `root`, with the network
+/// allowed: it downloads every package of `Cargo.lock`, for every platform.
+/// `cargo semver-checks` runs offline and reads `cargo metadata`, which needs
+/// all of them in the local cargo cache, and a build of the workspace
+/// downloads only the packages of the host platform.
+fn fetch_command(root: &Path) -> Command {
+    let mut command = Command::new("cargo");
+    command
+        .current_dir(root)
+        .args(["fetch", "--locked", "--manifest-path"])
+        .arg(root.join("Cargo.toml"))
+        .env_remove("CARGO_NET_OFFLINE");
+    bin::without_git_env(&mut command);
+    command
+}
+
+static FETCH: OnceLock<Result<(), String>> = OnceLock::new();
+
+/// Runs [`fetch_command`] once per process. A `root` without a `Cargo.toml`
+/// (the temporary repositories of the tests that hold only
+/// `freeze/generated/`) has nothing to fetch.
+fn fetch_dependencies(root: &Path) -> Result<(), String> {
+    if !root.join("Cargo.toml").is_file() {
+        return Ok(());
+    }
+    FETCH
+        .get_or_init(|| {
+            let output = fetch_command(root)
+                .stdin(Stdio::null())
+                .output()
+                .map_err(|e| format!("cannot run cargo fetch: {e}"))?;
+            if output.status.success() {
+                Ok(())
+            } else {
+                Err(format!(
+                    "`cargo fetch --locked` failed, so cargo semver-checks cannot run \
+offline:\n{}",
+                    String::from_utf8_lossy(&output.stderr).trim()
+                ))
+            }
+        })
+        .clone()
+}
+
 fn semver_command(root: &Path) -> Command {
     let mut command = Command::new("cargo");
     command
@@ -522,6 +570,27 @@ ridl-rt = { version = \"0.8\", features = [\"flatbuffers\"] }\nregex = \"1\"\n";
                 .get_envs()
                 .any(|(k, v)| k == "CARGO_NET_OFFLINE" && v == Some("true".as_ref())),
             "the check must not read the network"
+        );
+    }
+
+    #[test]
+    fn fetch_command_fetches_the_locked_dependencies_with_the_network() {
+        let command = fetch_command(Path::new("/r"));
+        let args: Vec<String> = command
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            args,
+            ["fetch", "--locked", "--manifest-path", "/r/Cargo.toml"]
+        );
+        // The variable is removed, so a CARGO_NET_OFFLINE of the caller does
+        // not stop the fetch.
+        assert!(
+            command
+                .get_envs()
+                .any(|(k, v)| k == "CARGO_NET_OFFLINE" && v.is_none()),
+            "the fetch must read the network"
         );
     }
 
