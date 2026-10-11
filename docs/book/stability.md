@@ -36,9 +36,10 @@ effect now; release 0.10.0 is not published yet.
 
 - **Additions.** A new subcommand, flag, manifest key, field, tool, cargo
   feature or transport default. A program that does not use an addition is not
-  affected by it. A new flag, command-line argument or MCP tool input is always
-  optional: a 0.10.x release does not add a required one, and does not make an
-  optional one required.
+  affected by it. A new flag, command-line argument or MCP tool input on an
+  existing subcommand or tool is optional: a 0.10.x release does not add a
+  required one to an existing subcommand or tool, and does not make an optional
+  one required. A new subcommand or tool may have required ones.
 - **New lints.** A new lint starts at the `allow` or `info` level, so it does not
   fail a build that passed before.
 - **Message text.** The text of a diagnostic message, of a doc comment and of
