@@ -389,6 +389,11 @@ impl ridl_rt::port::Attached for ReportsInitOverRealBytes {
     }
 }
 
+/// The encoding of the `Loopback` this wrapper reads through.
+impl ridl_rt::port::Encoded for ReportsInitOverRealBytes {
+    type Encoding = ridl_rt::encoding::FlatBuffers;
+}
+
 impl ridl_rt::port::SignalReader for ReportsInitOverRealBytes {
     fn read(
         &self,
@@ -2602,6 +2607,12 @@ impl ridl_rt::port::Attached for MinimalSignalOnlyPort {
     }
 }
 
+/// The encoding the generated fixture codec writes, which the face over this
+/// port encodes and decodes with.
+impl ridl_rt::port::Encoded for MinimalSignalOnlyPort {
+    type Encoding = ridl_rt::encoding::FlatBuffers;
+}
+
 impl ridl_rt::port::SignalReader for MinimalSignalOnlyPort {
     fn read(
         &self,
@@ -2667,6 +2678,12 @@ impl ridl_rt::port::Attached for DistinctiveInitPort {
     fn catalog(&self) -> &ridl_rt::contract::CatalogRef {
         &self.catalog
     }
+}
+
+/// The encoding the generated fixture codec writes, which the face over this
+/// port encodes and decodes with.
+impl ridl_rt::port::Encoded for DistinctiveInitPort {
+    type Encoding = ridl_rt::encoding::FlatBuffers;
 }
 
 impl ridl_rt::port::SignalReader for DistinctiveInitPort {
@@ -3282,4 +3299,23 @@ fn deprecated_interaction_does_not_warn_inside_the_generated_crate() {
             );
         }
     }
+}
+
+/// Every port written by hand in this test suite states the encoding of the
+/// bytes it carries, so that a face generic over the port's encoding can be
+/// built over it. The wrappers over `ridl-loopback` carry the encoding of the
+/// handles they wrap, and the ports that hold no handle carry the one the
+/// generated fixture codec writes: FlatBuffers in both cases.
+#[test]
+fn every_hand_written_port_states_its_encoding() {
+    fn encoding_of<P: ridl_rt::port::Encoded>() -> &'static str {
+        <P::Encoding as ridl_rt::encoding::Encoding>::NAME
+    }
+
+    assert_eq!(encoding_of::<ReportsInitOverRealBytes>(), "flatbuffers");
+    assert_eq!(encoding_of::<MinimalSignalOnlyPort>(), "flatbuffers");
+    assert_eq!(encoding_of::<DistinctiveInitPort>(), "flatbuffers");
+    assert_eq!(encoding_of::<doubles::RecordingPorts>(), "flatbuffers");
+    assert_eq!(encoding_of::<doubles::FailingHandler>(), "flatbuffers");
+    assert_eq!(encoding_of::<doubles::QueuedClaims>(), "flatbuffers");
 }

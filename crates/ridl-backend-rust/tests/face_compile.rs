@@ -528,14 +528,34 @@ interface Cabin {{
 
 /// The bounds of `Cabin`'s two clients in [`fixed_name_face`], with a command
 /// declared; a case without one names a superset, which is accepted.
-const CLIENT_BOUNDS: &str = "::ridl_rt::port::SignalReader \
+const CLIENT_BOUNDS: &str = "::ridl_rt::port::Encoded \
+    + ::ridl_rt::port::SignalReader \
     + ::ridl_rt::port::EventSource \
     + ::ridl_rt::port::Caller \
     + ::ridl_rt::port::Clock \
     + ::ridl_rt::port::Wakeable";
 
 /// The bounds of `Cabin`'s publisher in [`fixed_name_face`].
-const PUBLISHER_BOUNDS: &str = "::ridl_rt::port::SignalWriter + ::ridl_rt::port::EventSink";
+const PUBLISHER_BOUNDS: &str = "::ridl_rt::port::Encoded \
+    + ::ridl_rt::port::SignalWriter \
+    + ::ridl_rt::port::EventSink";
+
+/// The predicates that tie the face of [`fixed_name_face`]'s `Cabin` to the
+/// encoding of its port, with `PORT` standing for the port type parameter:
+/// the interface's `Sizes` bound, and one `Payload` bound per payload type
+/// the face encodes or decodes — `Level`, `Temperature` and `Warning`. A
+/// trait's `where` clause is not assumed by its users, so a consumer that is
+/// itself generic over the port restates these; a consumer over a concrete
+/// port writes none.
+const FACE_WHERE: &str = "super::Cabin: ::ridl_rt::contract::Sizes<PORT::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<PORT::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<PORT::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<PORT::Encoding>";
+
+/// [`FACE_WHERE`] with the port type parameter named `port`.
+fn face_where(port: &str) -> String {
+    FACE_WHERE.replace("PORT", port)
+}
 
 /// A signal named `new` is a read on both clients and a setter on the
 /// publisher: it meets `Bind::new` on all three types. `Client::new(port)` is
@@ -543,6 +563,8 @@ const PUBLISHER_BOUNDS: &str = "::ridl_rt::port::SignalWriter + ::ridl_rt::port:
 /// `client.new()` is the read, and `publisher.new(level)` the set.
 #[test]
 fn a_member_named_new_compiles() {
+    let client_where = face_where("P");
+    let publisher_where = face_where("W");
     face_compiles_with(
         "member_new",
         &fixed_name_face("  signal new : Level @10ms\n"),
@@ -551,19 +573,31 @@ fn a_member_named_new_compiles() {
 pub mod consumer {{
     use super::cabin::prelude::*;
 
-    pub fn client<P: {CLIENT_BOUNDS}>(port: P) {{
+    pub fn client<P>(port: P)
+    where
+        P: {CLIENT_BOUNDS},
+        {client_where},
+    {{
         let client = <super::cabin::Client<P> as Bind>::new(port);
         let _: ::core::result::Result<::ridl_rt::sample::Sample<super::Level>, ::ridl_rt::port::ReadError> =
             client.new();
     }}
 
-    pub fn publisher<W: {PUBLISHER_BOUNDS}>(port: W, level: super::Level) {{
+    pub fn publisher<W>(port: W, level: super::Level)
+    where
+        W: {PUBLISHER_BOUNDS},
+        {publisher_where},
+    {{
         let mut publisher: super::cabin::Publisher<W> = Bind::new(port);
         let _: ::core::result::Result<(), ::ridl_rt::port::WriteError> = publisher.new(level);
     }}
 
     #[cfg(feature = "std")]
-    pub fn blocking<P: {CLIENT_BOUNDS}>(port: P) {{
+    pub fn blocking<P>(port: P)
+    where
+        P: {CLIENT_BOUNDS},
+        {client_where},
+    {{
         let client = <super::cabin::blocking::Client<P> as Bind>::new(port);
         let _: ::core::result::Result<::ridl_rt::sample::Sample<super::Level>, ::ridl_rt::port::ReadError> =
             client.new();
@@ -579,6 +613,7 @@ pub mod consumer {{
 /// `Publish::commit(&mut publisher)` the face's.
 #[test]
 fn a_member_named_commit_compiles() {
+    let publisher_where = face_where("W");
     face_compiles_with(
         "member_commit",
         &fixed_name_face("  signal commit : Level @10ms\n"),
@@ -587,7 +622,11 @@ fn a_member_named_commit_compiles() {
 pub mod consumer {{
     use super::cabin::prelude::*;
 
-    pub fn publisher<W: {PUBLISHER_BOUNDS}>(port: W, level: super::Level) {{
+    pub fn publisher<W>(port: W, level: super::Level)
+    where
+        W: {PUBLISHER_BOUNDS},
+        {publisher_where},
+    {{
         let mut publisher = super::cabin::Publisher::new(port);
         let _: ::core::result::Result<(), ::ridl_rt::port::WriteError> = publisher.commit(level);
         let () = Publish::commit(&mut publisher);
@@ -603,6 +642,7 @@ pub mod consumer {{
 /// `Events::next_event(&mut client)` the face's.
 #[test]
 fn a_member_named_next_event_compiles() {
+    let client_where = face_where("P");
     face_compiles_with(
         "member_next_event",
         &fixed_name_face("  command nextEvent(level: Level) @[..50ms]\n"),
@@ -611,14 +651,22 @@ fn a_member_named_next_event_compiles() {
 pub mod consumer {{
     use super::cabin::prelude::*;
 
-    pub fn client<P: {CLIENT_BOUNDS}>(port: P, level: super::Level) {{
+    pub fn client<P>(port: P, level: super::Level)
+    where
+        P: {CLIENT_BOUNDS},
+        {client_where},
+    {{
         let mut client = super::cabin::Client::new(port);
         let _: super::cabin::NextEventCall<'_, P> = client.next_event(level);
         let _: super::cabin::NextEvent<'_, P> = Events::next_event(&mut client);
     }}
 
     #[cfg(feature = "std")]
-    pub fn blocking<P: {CLIENT_BOUNDS}>(port: P, level: super::Level) {{
+    pub fn blocking<P>(port: P, level: super::Level)
+    where
+        P: {CLIENT_BOUNDS},
+        {client_where},
+    {{
         let mut client = super::cabin::blocking::Client::new(port);
         let _: ::core::result::Result<(), ::ridl_rt::error::ClientError> = client.next_event(level);
         let _: ::core::result::Result<::core::option::Option<super::cabin::Event>, ::ridl_rt::port::ReadError> =
@@ -640,6 +688,7 @@ pub mod consumer {{
 /// which implements no `Timeout`, the dot call is the member.
 #[test]
 fn a_member_named_with_timeout_compiles() {
+    let client_where = face_where("P");
     face_compiles_with(
         "member_with_timeout",
         &fixed_name_face("  command withTimeout(level: Level) @[..50ms]\n"),
@@ -648,13 +697,21 @@ fn a_member_named_with_timeout_compiles() {
 pub mod consumer {{
     use super::cabin::prelude::*;
 
-    pub fn client<P: {CLIENT_BOUNDS}>(port: P, level: super::Level) {{
+    pub fn client<P>(port: P, level: super::Level)
+    where
+        P: {CLIENT_BOUNDS},
+        {client_where},
+    {{
         let mut client = super::cabin::Client::new(port);
         let _: super::cabin::WithTimeoutCall<'_, P> = client.with_timeout(level);
     }}
 
     #[cfg(feature = "std")]
-    pub fn blocking<P: {CLIENT_BOUNDS}>(port: P, level: super::Level) {{
+    pub fn blocking<P>(port: P, level: super::Level)
+    where
+        P: {CLIENT_BOUNDS},
+        {client_where},
+    {{
         let client = super::cabin::blocking::Client::new(port);
         let mut client: super::cabin::blocking::Client<P> =
             client.with_timeout(::std::time::Duration::from_millis(10));
@@ -679,6 +736,7 @@ pub mod consumer {{
 /// async client the dot call is the member.
 #[test]
 fn a_signal_named_with_timeout_compiles() {
+    let client_where = face_where("P");
     face_compiles_with(
         "signal_with_timeout",
         &fixed_name_face("  signal withTimeout : Level @10ms\n"),
@@ -687,14 +745,22 @@ fn a_signal_named_with_timeout_compiles() {
 pub mod consumer {{
     use super::cabin::prelude::*;
 
-    pub fn client<P: {CLIENT_BOUNDS}>(port: P) {{
+    pub fn client<P>(port: P)
+    where
+        P: {CLIENT_BOUNDS},
+        {client_where},
+    {{
         let client = super::cabin::Client::new(port);
         let _: ::core::result::Result<::ridl_rt::sample::Sample<super::Level>, ::ridl_rt::port::ReadError> =
             client.with_timeout();
     }}
 
     #[cfg(feature = "std")]
-    pub fn blocking<P: {CLIENT_BOUNDS}>(port: P) {{
+    pub fn blocking<P>(port: P)
+    where
+        P: {CLIENT_BOUNDS},
+        {client_where},
+    {{
         let client = super::cabin::blocking::Client::new(port);
         let client: super::cabin::blocking::Client<P> =
             client.with_timeout(::std::time::Duration::from_millis(10));
@@ -712,6 +778,7 @@ pub mod consumer {{
 /// and `Timeout::set_timeout(&mut client, None)` the face's.
 #[test]
 fn a_member_named_set_timeout_compiles() {
+    let client_where = face_where("P");
     face_compiles_with(
         "member_set_timeout",
         &fixed_name_face("  command setTimeout(level: Level) @[..50ms]\n"),
@@ -719,7 +786,11 @@ fn a_member_named_set_timeout_compiles() {
             r#"
 pub mod consumer {{
     #[cfg(feature = "std")]
-    pub fn blocking<P: {CLIENT_BOUNDS}>(port: P, level: super::Level) {{
+    pub fn blocking<P>(port: P, level: super::Level)
+    where
+        P: {CLIENT_BOUNDS},
+        {client_where},
+    {{
         use super::cabin::prelude::*;
         let mut client = super::cabin::blocking::Client::new(port);
         let _: ::core::result::Result<(), ::ridl_rt::error::ClientError> = client.set_timeout(level);
@@ -739,6 +810,7 @@ pub mod consumer {{
 /// `Subscribe::subscribe_warning(&mut client)` the face's.
 #[test]
 fn a_member_named_like_a_subscribe_method_compiles() {
+    let client_where = face_where("P");
     face_compiles_with(
         "member_subscribe_warning",
         &fixed_name_face("  command subscribeWarning(level: Level) @[..50ms]\n"),
@@ -747,7 +819,11 @@ fn a_member_named_like_a_subscribe_method_compiles() {
 pub mod consumer {{
     use super::cabin::prelude::*;
 
-    pub fn client<P: {CLIENT_BOUNDS}>(port: P, level: super::Level) {{
+    pub fn client<P>(port: P, level: super::Level)
+    where
+        P: {CLIENT_BOUNDS},
+        {client_where},
+    {{
         let mut client = super::cabin::Client::new(port);
         let _: super::cabin::SubscribeWarningCall<'_, P> = client.subscribe_warning(level);
         let _: ::core::result::Result<(), ::ridl_rt::port::SubscribeError> =
@@ -755,7 +831,11 @@ pub mod consumer {{
     }}
 
     #[cfg(feature = "std")]
-    pub fn blocking<P: {CLIENT_BOUNDS}>(port: P, level: super::Level) {{
+    pub fn blocking<P>(port: P, level: super::Level)
+    where
+        P: {CLIENT_BOUNDS},
+        {client_where},
+    {{
         let mut client = super::cabin::blocking::Client::new(port);
         let _: ::core::result::Result<(), ::ridl_rt::error::ClientError> = client.subscribe_warning(level);
         let _: ::core::result::Result<(), ::ridl_rt::port::SubscribeError> =
@@ -774,6 +854,7 @@ pub mod consumer {{
 /// face's.
 #[test]
 fn a_member_named_like_an_invalidate_method_compiles() {
+    let publisher_where = face_where("W");
     face_compiles_with(
         "member_invalidate_temperature",
         &fixed_name_face("  signal invalidateTemperature : Level @10ms\n"),
@@ -782,7 +863,11 @@ fn a_member_named_like_an_invalidate_method_compiles() {
 pub mod consumer {{
     use super::cabin::prelude::*;
 
-    pub fn publisher<W: {PUBLISHER_BOUNDS}>(port: W, level: super::Level) {{
+    pub fn publisher<W>(port: W, level: super::Level)
+    where
+        W: {PUBLISHER_BOUNDS},
+        {publisher_where},
+    {{
         let mut publisher = super::cabin::Publisher::new(port);
         let _: ::core::result::Result<(), ::ridl_rt::port::WriteError> =
             publisher.invalidate_temperature(level);
@@ -846,11 +931,16 @@ pub mod consumer {
 
     pub fn cabin<P>(port: P) -> Result<(), ::ridl_rt::port::SubscribeError>
     where
-        P: ::ridl_rt::port::SignalReader
+        P: ::ridl_rt::port::Encoded
+            + ::ridl_rt::port::SignalReader
             + ::ridl_rt::port::EventSource
             + ::ridl_rt::port::Caller
             + ::ridl_rt::port::Clock
             + ::ridl_rt::port::Wakeable,
+        super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         let mut client = super::cabin::Client::new(port);
         let _sample = client.temperature();
@@ -861,7 +951,13 @@ pub mod consumer {
 
     pub fn siren<P>(port: P) -> Result<(), ::ridl_rt::port::SubscribeError>
     where
-        P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable,
+        P: ::ridl_rt::port::Encoded
+            + ::ridl_rt::port::SignalReader
+            + ::ridl_rt::port::EventSource
+            + ::ridl_rt::port::Wakeable,
+        super::Siren: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         let mut client = super::siren::Client::new(port);
         let _sample = client.level();
@@ -870,10 +966,17 @@ pub mod consumer {
         Ok(())
     }
 
-    pub fn publish<W: ::ridl_rt::port::SignalWriter + ::ridl_rt::port::EventSink>(
-        cabin: W,
-        siren: W,
-    ) -> Result<(), ::ridl_rt::port::WriteError> {
+    pub fn publish<W>(cabin: W, siren: W) -> Result<(), ::ridl_rt::port::WriteError>
+    where
+        W: ::ridl_rt::port::Encoded
+            + ::ridl_rt::port::SignalWriter
+            + ::ridl_rt::port::EventSink,
+        super::Cabin: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::Siren: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         let mut publisher = super::cabin::Publisher::new(cabin);
         publisher.invalidate_temperature()?;
         publisher.commit();
@@ -886,11 +989,16 @@ pub mod consumer {
     #[cfg(feature = "std")]
     pub fn blocking<P>(port: P) -> Result<(), ::ridl_rt::port::SubscribeError>
     where
-        P: ::ridl_rt::port::SignalReader
+        P: ::ridl_rt::port::Encoded
+            + ::ridl_rt::port::SignalReader
             + ::ridl_rt::port::EventSource
             + ::ridl_rt::port::Caller
             + ::ridl_rt::port::Clock
             + ::ridl_rt::port::Wakeable,
+        super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         let mut client = super::cabin::blocking::Client::new(port)
             .with_timeout(::std::time::Duration::from_millis(10));
@@ -904,9 +1012,13 @@ pub mod consumer {
     /// The qualified forms, on the interface whose member is named `new`.
     pub fn names<P>(port: P, other: P) -> Result<(), ::ridl_rt::port::ReadError>
     where
-        P: ::ridl_rt::port::SignalReader
+        P: ::ridl_rt::port::Encoded
+            + ::ridl_rt::port::SignalReader
             + ::ridl_rt::port::EventSource
             + ::ridl_rt::port::Wakeable,
+        super::Names: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         use super::names::prelude::*;
         let client = <super::names::Client<P> as Bind>::new(port);
@@ -958,14 +1070,24 @@ pub mod consumer {{
     #[cfg(feature = "std")]
     pub fn valve<P>(port: P)
     where
-        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+        P: ::ridl_rt::port::Encoded
+            + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+        super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
     {{
         {valve_preludes}
         let _client = super::valve::blocking::Client::new(port)
             .with_timeout(::std::time::Duration::from_millis(10));
     }}
 
-    pub fn horn<W: ::ridl_rt::port::SignalWriter>(port: W) {{
+    pub fn horn<W>(port: W)
+    where
+        W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter,
+        super::Horn: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<W::Encoding>,
+    {{
         let mut publisher = super::horn::Publisher::new(port);
         publisher.commit();
     }}

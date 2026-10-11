@@ -32,7 +32,7 @@ use ridl_loopback::{CallerHandle, HandlerHandle, Loopback, ReaderHandle, SourceH
 use ridl_rt::contract::{CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::error::CallError;
 use ridl_rt::port::{
-    Attached, Caller, Claim, ClaimId, Clock, Correlation, EventSource, Handler, Interest,
+    Attached, Caller, Claim, ClaimId, Clock, Correlation, Encoded, EventSource, Handler, Interest,
     RawOccurrence, RawSample, ReadError, SendError, ServeError, SettleError, SignalReader,
     SubscribeError, Wakeable,
 };
@@ -134,6 +134,12 @@ impl Attached for RecordingPorts {
     fn catalog(&self) -> &CatalogRef {
         self.reader.catalog()
     }
+}
+
+/// The double carries the encoding of the `Loopback` role handles it wraps,
+/// which is FlatBuffers, the loopback's default.
+impl Encoded for RecordingPorts {
+    type Encoding = ridl_rt::encoding::FlatBuffers;
 }
 
 impl Clock for RecordingPorts {
@@ -282,6 +288,12 @@ impl Attached for FailingHandler {
     }
 }
 
+/// The double carries the encoding of the `HandlerHandle` it wraps, which is
+/// FlatBuffers, the loopback's default.
+impl Encoded for FailingHandler {
+    type Encoding = ridl_rt::encoding::FlatBuffers;
+}
+
 impl Handler for FailingHandler {
     fn serve(&mut self, iface: InterfaceNo, ords: &[Ordinal]) -> Result<(), ServeError> {
         match self.refusal {
@@ -421,6 +433,13 @@ impl Attached for QueuedClaims {
     fn catalog(&self) -> &CatalogRef {
         <crate::generated::Cabin as ridl_rt::contract::Interface>::CATALOG
     }
+}
+
+/// The double wraps no handle: it answers claims of its own. It carries the
+/// encoding the generated fixture face encodes and decodes with, which is
+/// FlatBuffers, the same one the `Loopback` handles of this module carry.
+impl Encoded for QueuedClaims {
+    type Encoding = ridl_rt::encoding::FlatBuffers;
 }
 
 impl Handler for QueuedClaims {
