@@ -196,15 +196,24 @@ fn pointers(value: &Value, prefix: &str, out: &mut Vec<String>) {
     }
 }
 
+/// The fixture whose report the key paths are read from, and the exit code
+/// `ridl check` returns on it. It draws two diagnostics, so that every key a
+/// diagnostic can carry is present: RIDL-401, an error with one secondary
+/// label, and TYPL-406, a warning with one fix. A label appears only on an
+/// error, so the check exits 1.
+const REPORT_FIXTURE: (&str, i32) = ("report", 1);
+
 /// `<kind> <pointer>` for every key path of the report that `ridl check
-/// --format <kind>` prints on the package that draws one warning.
+/// --format <kind>` prints on [`REPORT_FIXTURE`].
 fn report_pointers(root: &Path, kind: &str) -> Result<Vec<String>, String> {
     let ridl = bin::binary(root, "ridl")?;
-    let fixture = root.join("xtask/tests/freeze-fixtures/warn");
+    let (name, code) = REPORT_FIXTURE;
+    let fixture = root.join("xtask/tests/freeze-fixtures").join(name);
     let run = bin::run(&ridl, &fixture, &["check", "--format", kind, "."])?;
-    if run.code != 0 {
+    if run.code != code {
         return Err(format!(
-            "`ridl check --format {kind}` on the warn fixture exited {}:\n{}",
+            "`ridl check --format {kind}` on the `{name}` fixture exited {}, expected \
+{code}:\n{}",
             run.code, run.stderr
         ));
     }
@@ -231,11 +240,22 @@ fn exit_lines(root: &Path) -> Result<Vec<String>, String> {
     for (code, args, fixture) in EXIT_CASES {
         let dir = root.join("xtask/tests/freeze-fixtures").join(fixture);
         let run = bin::run(&ridl, &dir, args)?;
-        if run.code == code {
-            lines.push(format!("exit {code}"));
-        }
+        lines.push(exit_line(code, run.code, fixture, args)?);
     }
     Ok(lines)
+}
+
+/// `exit <code>` when `ridl` returned the expected code for its case, and an
+/// error naming the fixture and both codes when it did not.
+fn exit_line(code: i32, observed: i32, fixture: &str, args: &[&str]) -> Result<String, String> {
+    if observed == code {
+        Ok(format!("exit {code}"))
+    } else {
+        Err(format!(
+            "`ridl {}` on the `{fixture}` fixture exited {observed}, expected {code}",
+            args.join(" ")
+        ))
+    }
 }
 
 pub fn dump(root: &Path) -> Result<Vec<String>, String> {
@@ -300,6 +320,32 @@ mod tests {
             "exit 0",
             "exit 1",
             "exit 2",
+        ] {
+            assert!(has(&lines, line), "missing `{line}`");
+        }
+    }
+
+    #[test]
+    fn an_unexpected_exit_code_is_an_error() {
+        let result = exit_line(1, 0, "error", &["check", "."]);
+        assert!(result.is_err(), "{result:?}");
+        let error = result.unwrap_err();
+        assert!(
+            error.contains("`error` fixture")
+                && error.contains("exited 0")
+                && error.contains("expected 1"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn cli_dump_lists_the_label_and_fix_keys_of_the_reports() {
+        let lines = lines();
+        for line in [
+            "json /*/labels/*/message",
+            "json /*/labels/*/span/path",
+            "json /*/fixes/*/replacement",
+            "sarif /runs/*/results/*/relatedLocations/*/message/text",
         ] {
             assert!(has(&lines, line), "missing `{line}`");
         }
