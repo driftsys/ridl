@@ -137,20 +137,12 @@ v0.2** (§17.11): range-first inference plus `ridl-diff` breaking-change
 detection cover the common case, and forward-compat width-pinning is a niche
 refinement not worth ten keywords in v0.1.
 
-Keywords **reserved family-wide** but rejected by `.typl` (current registry —
-grows with the other profiles): ridl's `interface`, `service`, `signal`,
-`event`, `command`, `query`; the shared `fixed`, spelled the same by ridl and
-rxdl (ADR-0011) and holding one registry entry like every other shared concept;
-the domain spellings `present`, `notify`, `measure`, `detect`, `actuate`,
-`trigger` and the intent operation shapes `activate`, `toggle`, `select`,
-`adjust`, `dismiss`, plus `states` and `during` (rxdl, and ridl's boundary model
-— ADR-0012). **Retired by ADR-0012 but still in the implemented registry until
-E7a executes the removal:** `view`, `display`, `input`, `action`, `fetch`, and
-the uxdl reserved set `navigate`, `scroll`, `drag`, `observe`, `surface`,
-`agent`. They are reserved words in the shipped toolchain today
-(`crates/ridl-syntax/src/keywords.rs`) and no longer name anything; the
-expr-core words `require`, `ensure`; rmdl's `model`, `function`, `let`, `init`,
-`last`, `case`, `if`, `then`, `else`, `when`, `emit` (it also surfaces
+Keywords **reserved family-wide** but rejected by `.typl` (the registry as
+built, `crates/ridl-syntax/src/keywords.rs`): ridl's `interface`, `service`,
+`signal`, `event`, `command`, `query` and `fixed` (family-neutral, ADR-0012
+decision 4); the expr-core words `require`, `ensure`; the ridl clause words
+`states` and `during` (general form §4.8); rmdl's `model`, `function`, `let`,
+`init`, `last`, `case`, `if`, `then`, `else`, `when`, `emit` (it also surfaces
 `signal`/`event` in signatures — same concepts, one registry entry each; `init`
 is rmdl's alone — the memory-seed keyword, needed because a flow has two
 equations; typl/ridl express init as bare `= value`; its ambient time values
@@ -168,6 +160,20 @@ and `returns` were considered and rejected by rmdl — never reserved.) The
 per-profile keyword sections of each language reference enumerate their own
 additions; the union of those sections **is** the registry until the platform
 spec extracts it as a standalone normative list.
+
+**The domain spellings are not reserved words — the member-start rule**
+(ADR-0012 decision 4, as amended on 2026-10-11). `present`, `notify`, `measure`,
+`detect`, `actuate`, `trigger`, the intent operation shapes `activate`,
+`toggle`, `select`, `adjust`, `dismiss`, and the open candidates `supply` and
+`read` are keywords only as the first token of an interface member, in a profile
+that implements the spelling; no profile does in this release. Everywhere else
+each is an identifier: the ROS 2 corpus names a field `present`
+(`evals/corpus/ros2/sensor_msgs/messages.typl`) and a query `trigger`
+(`evals/corpus/ros2/std_srvs/interactions.ridl`). An interface member line never
+starts with an identifier, so a profile that gains a spelling invalidates no
+source that compiled before. The uxdl words ADR-0012 retired — `view`,
+`display`, `input`, `action`, `fetch`, `navigate`, `scroll`, `drag`, `observe`,
+`surface`, `agent` — are ordinary identifiers in every profile.
 
 **Registry admission test — language, never runtime** (family doctrine, audit
 passed). Every registry entry names a _describable property_ — a shape, an
