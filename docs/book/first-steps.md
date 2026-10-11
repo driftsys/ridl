@@ -1,7 +1,7 @@
 # First steps
 
 This chapter takes you from nothing to a checked package and a generated Rust
-crate, in five commands. It states each step once and links to the chapter that
+crate, in five steps. It states each step once and links to the chapter that
 owns the detail. Read [Getting started](getting-started.md) next for the
 language itself.
 
@@ -58,8 +58,8 @@ interface Hello {
 The first line names the package. A package name must equal the directory path
 below the workspace root, and every file in the directory declares the same
 name. `Speed` is a scalar type with a unit and a range, and `Hello` is an
-interface with one signal that the provider publishes every 10 ms. The
-[typl reference](reference/typl.md) and the [ridl reference](reference/ridl.md)
+interface with one signal whose contract requires the provider to publish it
+every 10 ms. The [typl reference](reference/typl.md) and the [ridl reference](reference/ridl.md)
 define every form.
 
 ## 3. Check it
@@ -82,8 +82,8 @@ lower.
 ridl fmt --check demo
 ```
 
-`ridl fmt` rewrites the sources into the canonical layout, and `--check` only
-reports a file that differs. The scaffold already conforms.
+`ridl fmt` rewrites the sources into the canonical layout, and `--check` writes
+nothing and exits 1 when a file differs. The scaffold already conforms.
 
 ## 5. Build it
 
