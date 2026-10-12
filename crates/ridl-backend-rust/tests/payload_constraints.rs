@@ -182,6 +182,39 @@ fn main() {
 }
 
 #[test]
+fn on_grid_decimals_pass_the_step_check_on_both_float_widths() {
+    rustc::run_program(
+        "grid_widths",
+        &program(
+            r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::{Payload, Ref, Rule, VerifyError};
+macro_rules! pin {
+    ($ty:ident, $width:expr, $off:expr) => {{
+        let err = $ty::new(25.35).unwrap_err();
+        assert_eq!(err.rule, Rule::Step);
+        let value = $ty::new(25.3).unwrap();
+        let mut out = vec![0; <$ty as Payload<FlatBuffers>>::MAX_SIZE];
+        let mut bytes = value.encode(&mut out).unwrap().bytes.to_vec();
+        let back = Ref::<'_, $ty, FlatBuffers>::verify(&bytes).unwrap().decode();
+        assert!($ty::check(&back.get()).is_ok());
+        let root = ridl_rt::flatbuffers::root(&bytes).unwrap();
+        let at = ridl_rt::flatbuffers::field(&bytes, root, 0, $width).unwrap().unwrap();
+        bytes[at..at + $width].copy_from_slice(&$off);
+        assert!(matches!(<$ty as Payload<FlatBuffers>>::verify(&bytes),
+            Err(VerifyError::Contract(v)) if v.rule == Rule::Step));
+    }};
+}
+fn main() {
+    pin!(Grid32, 4, 25.35f32.to_le_bytes());
+    pin!(Grid64, 8, 25.35f64.to_le_bytes());
+}
+"#,
+        ),
+    );
+}
+
+#[test]
 fn floating_and_byte_key_equality_is_checked_without_decoding() {
     rustc::run_program(
         "key_equality",
