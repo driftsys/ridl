@@ -88,6 +88,10 @@ pub struct Manifest {
 /// `ridl-rt` spells them. `[backend.<name>] encodings` accepts only these.
 pub const ENCODING_NAMES: [&str; 3] = ["flatbuffers", "proto3", "repr-c"];
 
+/// The key of a `[backend.<name>]` table that lists encodings, and the key of
+/// the backend request option that carries the same list.
+pub const ENCODINGS_KEY: &str = "encodings";
+
 /// One `[backend.<name>]` table (ADR-0002 §4). The table is the same for every
 /// backend name; whether a backend honours it is the backend's concern.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -493,7 +497,7 @@ shape_visitor!(
             if key == TOML_DATETIME_KEY {
                 return datetime(map);
             }
-            if key == "encodings" {
+            if key == ENCODINGS_KEY {
                 table.encodings = Some(map.next_value()?);
             } else {
                 map.next_value::<serde::de::IgnoredAny>()?;
@@ -544,12 +548,13 @@ fn collect_backends(
         return (backends, None);
     };
     let span = backend.span();
+    let known = known_encodings();
     let Shape::Right(tables) = backend.into_inner() else {
         diags.push(error(
             DiagCode::MANI_015,
             file_id,
             span.clone(),
-            format!("`backend` must be a table of `[backend.<name>]` tables; {KNOWN_ENCODINGS}"),
+            format!("`backend` must be a table of `[backend.<name>]` tables; {known}"),
         ));
         return (backends, Some(span));
     };
@@ -560,7 +565,7 @@ fn collect_backends(
                 DiagCode::MANI_015,
                 file_id,
                 table_span,
-                format!("`[backend.{name}]` must be a table; {KNOWN_ENCODINGS}"),
+                format!("`[backend.{name}]` must be a table; {known}"),
             ));
             continue;
         };
@@ -575,7 +580,7 @@ fn collect_backends(
                         file_id,
                         encodings_span,
                         format!(
-                            "`[backend.{name}] encodings` must be an array of encoding names; {KNOWN_ENCODINGS}"
+                            "`[backend.{name}] encodings` must be an array of encoding names; {known}"
                         ),
                     )),
                     Shape::Right(elements) => {
@@ -583,11 +588,11 @@ fn collect_backends(
                             let range = element.span();
                             let message = match element.get_ref().as_str() {
                                 Some(value) if !ENCODING_NAMES.contains(&value) => Some(format!(
-                                    "unknown encoding `{value}` in `[backend.{name}] encodings`; {KNOWN_ENCODINGS}"
+                                    "unknown encoding `{value}` in `[backend.{name}] encodings`; {known}"
                                 )),
                                 Some(value) if entry.encodings.iter().any(|(seen, _)| seen == value) => {
                                     Some(format!(
-                                        "encoding `{value}` is named twice in `[backend.{name}] encodings`; {KNOWN_ENCODINGS}"
+                                        "encoding `{value}` is named twice in `[backend.{name}] encodings`; {known}"
                                     ))
                                 }
                                 Some(value) => {
@@ -595,7 +600,7 @@ fn collect_backends(
                                     None
                                 }
                                 None => Some(format!(
-                                    "`[backend.{name}] encodings` holds `{}`, which is not a string; {KNOWN_ENCODINGS}",
+                                    "`[backend.{name}] encodings` holds `{}`, which is not a string; {known}",
                                     element.get_ref()
                                 )),
                             };
@@ -612,7 +617,10 @@ fn collect_backends(
     (backends, Some(span))
 }
 
-const KNOWN_ENCODINGS: &str = "known encodings: flatbuffers, proto3, repr-c";
+/// The suffix of every MANI-015 message about `[backend.<name>]`.
+fn known_encodings() -> String {
+    format!("known encodings: {}", ENCODING_NAMES.join(", "))
+}
 
 /// Collects the `[imports]` table into the public `name -> URL` map, flagging
 /// any value that is not a valid import URL (MANI-007). A flagged import is
@@ -718,7 +726,7 @@ pub const KNOWN_KEYS: &[(&str, &[(&str, &str)])] = &[
         ],
     ),
     ("codegen", &[("header-file", "string")]),
-    (BACKEND_SECTION, &[("encodings", "array<string>")]),
+    (BACKEND_SECTION, &[(ENCODINGS_KEY, "array<string>")]),
 ];
 
 /// The allowed keys of `section` in [`KNOWN_KEYS`]; empty for an unlisted one.

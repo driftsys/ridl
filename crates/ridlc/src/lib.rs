@@ -2475,7 +2475,7 @@ fn backend_options(
 ) -> Vec<v1::BackendOption> {
     match backends.get(language) {
         Some(names) if !names.is_empty() => vec![v1::BackendOption {
-            key: "encodings".to_string(),
+            key: ridl_core::manifest::ENCODINGS_KEY.to_string(),
             value: names.join(","),
         }],
         _ => Vec::new(),
@@ -2775,6 +2775,17 @@ mod backend_options_tests {
             .into_iter()
             .map(|option| (option.key, option.value))
             .collect()
+    }
+
+    /// The backend request option key is the manifest key; the Rust backend
+    /// reads the key under its own constant, because it cannot depend on
+    /// `ridl-core`.
+    #[test]
+    fn the_option_key_is_the_manifest_key_the_rust_backend_reads() {
+        assert_eq!(
+            ridl_core::manifest::ENCODINGS_KEY,
+            ridl_backend_rust::ENCODINGS_OPTION
+        );
     }
 
     #[test]

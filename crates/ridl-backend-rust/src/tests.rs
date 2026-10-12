@@ -6946,3 +6946,35 @@ fn an_enum_set_bit_carries_its_doc() {
         "got:\n{source}"
     );
 }
+
+/// This crate and `ridl-rt` cannot depend on `ridl-core`, so each spells the
+/// encoding names itself. This test ties both spellings, the option key and
+/// the names in the refusal text to the table in `ridl-core`.
+#[test]
+fn encoding_names_agree_with_the_manifest_table() {
+    use ridl_core::manifest::{ENCODING_NAMES, ENCODINGS_KEY};
+    use ridl_rt::encoding::{Encoding, FlatBuffers, Proto3, ReprC};
+
+    assert_eq!(super::ENCODINGS_OPTION, ENCODINGS_KEY);
+    assert_eq!(
+        [FlatBuffers::NAME, Proto3::NAME, ReprC::NAME],
+        ENCODING_NAMES
+    );
+    assert!(ENCODING_NAMES.contains(&super::WireEncoding::FlatBuffers.name()));
+    assert_eq!(
+        super::WireEncoding::parse("flatbuffers"),
+        Some(super::WireEncoding::FlatBuffers)
+    );
+    let request = ridl_ir::codegen::v1::CodegenRequest {
+        options: vec![ridl_ir::codegen::v1::BackendOption {
+            key: ENCODINGS_KEY.to_string(),
+            value: String::new(),
+        }],
+        ..Default::default()
+    };
+    let response = ridl_ir::codegen::Backend::generate(&crate::Backend, &request);
+    let refusal = response.diagnostics[0].message.clone();
+    let listed = ENCODING_NAMES.map(|name| format!("`{name}`")).join(", ");
+    let listed = listed.replacen(", `repr-c`", " and `repr-c`", 1);
+    assert!(refusal.contains(&listed), "got: {refusal}");
+}

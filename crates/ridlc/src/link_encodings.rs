@@ -129,6 +129,19 @@ mod tests {
 
     use super::*;
 
+    /// Every named codegen-model encoding maps to one name of
+    /// `ENCODING_NAMES`, and every name of it is mapped. The match in
+    /// `encoding_name` is over a generated enum, so this test is what ties it
+    /// to the table.
+    #[test]
+    fn encoding_name_covers_exactly_the_manifest_encoding_names() {
+        let mut mapped: Vec<&str> = (0..64).filter_map(encoding_name).collect();
+        mapped.sort_unstable();
+        let mut table = ridl_core::manifest::ENCODING_NAMES.to_vec();
+        table.sort_unstable();
+        assert_eq!(mapped, table);
+    }
+
     /// The crossing the lowering writes decides the encoding the list must
     /// name: within one machine FlatBuffers, across machines proto3.
     #[test]
