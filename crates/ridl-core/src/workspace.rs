@@ -1149,8 +1149,9 @@ impl Loader {
 
     /// Loads one materialized remote unit: its tree is read as
     /// [`Self::read_remote_unit`] says, then every Warning and Info the read
-    /// drew is dropped — a remote unit's are not the consumer's to fix
-    /// (V-3) — and every Error that points into a file of the unit is
+    /// drew is dropped — a remote unit is a read-only dependency, so its
+    /// Warnings are not the consumer's to fix — and every Error that points
+    /// into a file of the unit is
     /// prefixed with the unit name, so a reader sees which unit the file
     /// path belongs to. A detached Error already names the URL and is kept
     /// as it is. Before the unit's name is known, the first key that names
@@ -1188,7 +1189,9 @@ impl Loader {
     /// URL (MANI-105, detached), every key of its `[imports]` must be a key
     /// of the consumer's union (MANI-106, detached), and its tree then loads
     /// as [`Self::load_package_tree`] loads a member's, with the consumer's
-    /// URL for each key it imports (V-1), its own `[defaults]`, and its own
+    /// URL for each key it imports (the consumer lists every remote unit the
+    /// build needs, so the consumer's pin wins), its own `[defaults]`, and
+    /// its own
     /// `interfaces.lock`. The ordinary rules apply unchanged: MANI-014 when
     /// a consumer unit or an earlier remote unit already claims a package,
     /// and the tree is then not loaded. No lint scope is recorded for the
@@ -1266,7 +1269,7 @@ impl Loader {
                 ));
             }
         }
-        // V-1: the consumer's URL for each key the unit imports. A key the
+        // The consumer's URL for each key the unit imports. A key the
         // consumer does not name was MANI-106 above and resolves nowhere.
         let imports: BTreeMap<String, String> = manifest
             .imports
@@ -4334,7 +4337,7 @@ service:veh.common.climate 2
         }
 
         /// A remote unit's own `[imports]` key is read with the consumer's
-        /// URL for that key (V-1), on every package of the unit.
+        /// URL for that key, on every package of the unit.
         #[test]
         fn a_remote_unit_reads_its_imports_through_the_consumers_urls() {
             let fixture = TempDir::new("remote-v1");
@@ -4588,6 +4591,123 @@ service:veh.common.climate 2
             assert!(loaded.remote_units.is_empty());
             assert_eq!(loaded.imports.len(), 1);
             assert_eq!(loaded.workspace.packages(&db).len(), 1);
+        }
+
+        /// An error-free frozen load never writes `ridl.lock`: a lockfile
+        /// whose bytes differ from what a rewrite would produce (a comment
+        /// line) is left byte for byte as it was.
+        #[test]
+        fn a_frozen_load_leaves_the_lockfile_unchanged() {
+            let fixture = TempDir::new("remote-frozen-unchanged");
+            let root = consumer(&fixture);
+            let cache = cache(&fixture);
+            let entry = store(
+                &cache,
+                URL,
+                &[
+                    ("ridl.toml", COMMON_MANIFEST),
+                    ("common.typl", "package veh.common\n"),
+                ],
+            );
+            let lock_path = root.join("ridl.lock");
+            let text = format!(
+                "# kept as written\n[entries.\"{URL}\"]\nsha256 = \"{}\"\ntree = \"{}\"\n",
+                entry.sha256,
+                entry.tree.as_deref().expect("the entry has a tree")
+            );
+            fs::write(&lock_path, &text).expect("write ridl.lock");
+            let mut regenerated = Lockfile::default();
+            regenerated.entries.insert(URL.into(), entry);
+            write_lockfile(&fixture.path().join("rewritten.lock"), &regenerated)
+                .expect("write the comparison lockfile");
+            assert_ne!(
+                fs::read_to_string(fixture.path().join("rewritten.lock")).expect("read"),
+                text,
+                "a rewrite would change the bytes"
+            );
+
+            let (db, loaded) = load_frozen(&fixture, &root);
+            assert_eq!(codes(&loaded.diagnostics), Vec::<&str>::new());
+            assert_eq!(package_names(&db, &loaded), ["app", "veh.common"]);
+            assert_eq!(
+                fs::read_to_string(&lock_path).expect("read ridl.lock"),
+                text
+            );
+        }
+
+        /// A load that is not frozen but draws a materialization error
+        /// (MANI-107, a cached tree that does not hash to the pinned `tree`)
+        /// leaves `ridl.lock` byte for byte as it was, and loads no remote
+        /// unit.
+        #[test]
+        fn a_load_with_a_materialization_error_leaves_the_lockfile_unchanged() {
+            let fixture = TempDir::new("remote-error-unchanged");
+            let root = consumer(&fixture);
+            let cache = cache(&fixture);
+            let entry = store(
+                &cache,
+                URL,
+                &[
+                    ("ridl.toml", COMMON_MANIFEST),
+                    ("common.typl", "package veh.common\n"),
+                ],
+            );
+            let mut lock = Lockfile::default();
+            lock.entries.insert(
+                URL.into(),
+                LockEntry {
+                    sha256: entry.sha256,
+                    tree: Some("0".repeat(64)),
+                },
+            );
+            let lock_path = root.join("ridl.lock");
+            write_lockfile(&lock_path, &lock).expect("write ridl.lock");
+            let text = fs::read_to_string(&lock_path).expect("read ridl.lock");
+
+            let (db, loaded) = load_with(&fixture, &root, Frozen::No);
+            assert_eq!(codes(&loaded.diagnostics), ["MANI-107"]);
+            assert_eq!(package_names(&db, &loaded), ["app"]);
+            assert!(loaded.remote_units.is_empty());
+            assert_eq!(
+                fs::read_to_string(&lock_path).expect("read ridl.lock"),
+                text
+            );
+        }
+
+        /// The workspace root's own `[imports]` join the union: a member with
+        /// no `[imports]` of its own still gets the unit the root pins.
+        #[test]
+        fn the_workspace_roots_imports_join_the_union() {
+            let fixture = TempDir::new("remote-root-imports");
+            fixture.write(
+                "ridl.toml",
+                &format!(
+                    "[workspace]\nmembers = [\"app\"]\n\n[imports]\n\"veh.common\" = \"{URL}\"\n"
+                ),
+            );
+            fixture.write(
+                "app/ridl.toml",
+                "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+            );
+            fixture.write("app/app.ridl", "package app\n");
+            let root = fixture.path().to_path_buf();
+            seed(
+                &cache(&fixture),
+                &root,
+                URL,
+                &[
+                    ("ridl.toml", COMMON_MANIFEST),
+                    ("common.typl", "package veh.common\n"),
+                ],
+            );
+            let (db, loaded) = load_frozen(&fixture, &root);
+            assert_eq!(codes(&loaded.diagnostics), Vec::<&str>::new());
+            assert_eq!(
+                loaded.imports,
+                BTreeMap::from([(URL.to_string(), BTreeSet::from(["veh.common".to_string()]))])
+            );
+            assert_eq!(package_names(&db, &loaded), ["app", "veh.common"]);
+            assert_eq!(loaded.remote_units["veh.common"].url, URL);
         }
 
         /// Single-file mode has no manifest and loads no remote unit.
