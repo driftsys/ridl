@@ -71,7 +71,7 @@ impl ::core::convert::TryFrom<::core::primitive::i64> for DiagError {
             2 => ::core::result::Result::Ok(Self::AccessDenied),
             _ => {
                 ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "DiagError",
+                    type_name: ::core::option::Option::Some("DiagError"),
                     rule: ::ridl_rt::payload::Rule::Variant,
                 })
             }
@@ -130,13 +130,13 @@ impl RawTickCount {
         let value = *value;
         if value < 0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "RawTickCount",
+                type_name: ::core::option::Option::Some("RawTickCount"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 65535 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "RawTickCount",
+                type_name: ::core::option::Option::Some("RawTickCount"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
@@ -216,13 +216,13 @@ impl FanLevel {
         let value = *value;
         if value < 0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "FanLevel",
+                type_name: ::core::option::Option::Some("FanLevel"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 7 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "FanLevel",
+                type_name: ::core::option::Option::Some("FanLevel"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
@@ -320,7 +320,7 @@ impl ::core::convert::TryFrom<::core::primitive::i64> for HvacError {
             1 => ::core::result::Result::Ok(Self::SensorFault),
             _ => {
                 ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "HvacError",
+                    type_name: ::core::option::Option::Some("HvacError"),
                     rule: ::ridl_rt::payload::Rule::Variant,
                 })
             }
@@ -367,13 +367,13 @@ impl FanTag {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.chars().count() as ::core::primitive::u64) < 1 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "FanTag",
+                type_name: ::core::option::Option::Some("FanTag"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.chars().count() as ::core::primitive::u64) > 32 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "FanTag",
+                type_name: ::core::option::Option::Some("FanTag"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -540,13 +540,13 @@ pub(crate) fn __ridl_fb_verify_DoorPayload(
             let __value = ::core::primitive::i64::from(__raw);
             if __value < 0 {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "DoorPayload",
+                    type_name: ::core::option::Option::Some("DoorPayload"),
                     rule: ::ridl_rt::payload::Rule::Range,
                 });
             }
             if __value > 15 {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "DoorPayload",
+                    type_name: ::core::option::Option::Some("DoorPayload"),
                     rule: ::ridl_rt::payload::Rule::Range,
                 });
             }
@@ -736,13 +736,13 @@ pub(crate) fn __ridl_fb_verify_DiagFilter(
             let __value = ::core::primitive::i64::from(__raw);
             if __value < 0 {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "DiagFilter",
+                    type_name: ::core::option::Option::Some("DiagFilter"),
                     rule: ::ridl_rt::payload::Rule::Range,
                 });
             }
             if __value > 5 {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "DiagFilter",
+                    type_name: ::core::option::Option::Some("DiagFilter"),
                     rule: ::ridl_rt::payload::Rule::Range,
                 });
             }
@@ -957,13 +957,13 @@ pub(crate) fn __ridl_fb_verify_FaultEvent(
             let __value = ::core::primitive::i64::from(__raw);
             if __value < 0 {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "FaultEvent",
+                    type_name: ::core::option::Option::Some("FaultEvent"),
                     rule: ::ridl_rt::payload::Rule::Range,
                 });
             }
             if __value > 65535 {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "FaultEvent",
+                    type_name: ::core::option::Option::Some("FaultEvent"),
                     rule: ::ridl_rt::payload::Rule::Range,
                 });
             }
@@ -1311,7 +1311,7 @@ pub(crate) fn __ridl_fb_verify_FaultPage(
             if __v.len > 64usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
-                        type_name: "FaultPage",
+                        type_name: ::core::option::Option::Some("FaultPage"),
                         rule: ::ridl_rt::payload::Rule::Length,
                     }),
                 );
@@ -1685,7 +1685,7 @@ pub(crate) fn __ridl_fb_verify_RawWheelSpan(
             if __v.len != 2usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
-                        type_name: "RawWheelSpan",
+                        type_name: ::core::option::Option::Some("RawWheelSpan"),
                         rule: ::ridl_rt::payload::Rule::Length,
                     }),
                 );
@@ -2024,13 +2024,13 @@ pub(crate) fn __ridl_fb_verify_FilterState(
             let __value = ::core::primitive::i64::from(__raw);
             if __value < 0 {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "FilterState",
+                    type_name: ::core::option::Option::Some("FilterState"),
                     rule: ::ridl_rt::payload::Rule::Range,
                 });
             }
             if __value > 65535 {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "FilterState",
+                    type_name: ::core::option::Option::Some("FilterState"),
                     rule: ::ridl_rt::payload::Rule::Range,
                 });
             }
