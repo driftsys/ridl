@@ -473,7 +473,7 @@ mod tests {
 
     #[test]
     fn other_profile_words_stay_reserved_in_both_profiles() {
-        for word in ["view", "model", "component", "automaton"] {
+        for word in ["states", "model", "component", "automaton"] {
             for profile in [Profile::Typl, Profile::Ridl] {
                 assert_eq!(
                     kinds_in(profile, word),

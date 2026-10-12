@@ -880,9 +880,12 @@ diag_codes! {
         RIDL_402 = "RIDL-402", Error,
             "duplicate interaction name in one interaction body";
 
-        /// Behaviour, user-interaction, or architecture declaration in a ridl
-        /// context (ridl §16.4): a reserved word of the uxdl/rmdl/rsdl profiles at
-        /// declaration-start position in a `.ridl` parse. Emitted by the parser.
+        /// Behaviour or architecture declaration in a ridl context
+        /// (ridl §16.4): a reserved word of the rmdl/rsdl profiles, or a ridl
+        /// clause word, at declaration-start position in a `.ridl` parse.
+        /// Emitted by the parser. The title keeps the word
+        /// "user-interaction", which `ridl explain` prints; driftsys/ridl#370
+        /// freed the uxdl words but changing a title is a separate change.
         RIDL_403 = "RIDL-403", Error,
             "behaviour, user-interaction, or architecture declaration in a ridl context";
 
