@@ -1306,6 +1306,107 @@ fn a_tuple_field_induces_a_positional_message() {
     compile_with_protox("veh.common.proto", &generated.proto_source);
 }
 
+fn optional(mut ty: v2::FieldType) -> v2::FieldType {
+    ty.optional = true;
+    ty
+}
+
+#[test]
+fn an_optional_tuple_field_takes_the_proto3_optional_keyword() {
+    // A tuple field may carry `?` (typl §11). The schema must state explicit
+    // presence, so that `Some(0)` and `None` stay distinct on the wire.
+    let gear_value = |name: &str, value: i64| v2::EnumValue {
+        name: name.to_string(),
+        value,
+        doc: String::new(),
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
+    };
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Speed".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(speed_type_def())),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Gear".to_string(),
+                kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                    values: vec![gear_value("PARK", 1), gear_value("DRIVE", 2)],
+                    reserved: Vec::new(),
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "S".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member(
+                        "t",
+                        1,
+                        tuple_of(vec![
+                            optional(named_type("Speed")),
+                            optional(named_type("Gear")),
+                        ]),
+                    )],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated.proto_source.contains(
+            "message ST {\n  \
+             // Speed — km/h [0.0..250.0]\n  \
+             optional double field_1 = 1;\n  \
+             optional Gear field_2 = 2;\n}"
+        ),
+        "got:\n{}",
+        generated.proto_source
+    );
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
+fn an_optional_tuple_field_of_array_or_map_type_is_refused() {
+    let array = struct_package(
+        "S",
+        "t",
+        1,
+        tuple_of(vec![optional(array_of(float64_type()))]),
+    );
+    let error = generate(&array).expect_err("must refuse");
+    assert!(
+        error.message.contains("optional array")
+            && error.message.contains("ST.field_1")
+            && error.message.contains("ADR-0013 decision 7"),
+        "got: {}",
+        error.message
+    );
+
+    let map = struct_package(
+        "S",
+        "t",
+        1,
+        tuple_of(vec![optional(map_of(
+            v2::PrimitiveType::String,
+            float64_type(),
+        ))]),
+    );
+    let error = generate(&map).expect_err("must refuse");
+    assert!(
+        error.message.contains("optional map")
+            && error.message.contains("ST.field_1")
+            && error.message.contains("ADR-0013 decision 7"),
+        "got: {}",
+        error.message
+    );
+}
+
 // ==========================================================================
 // Name totality (final whole-branch review): every input below used to
 // return Ok carrying a schema protox rejects. ADR-0016 decision 6's totality

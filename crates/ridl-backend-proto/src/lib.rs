@@ -432,6 +432,43 @@ fn emit_enum(
     Ok(())
 }
 
+/// Refuses an optional array or map at a field position of `owner`: proto3
+/// cannot mark a repeated or map field absent, and no value is spare to carry
+/// the fact in-band, so ADR-0013 decision 7's last clause applies. Any other
+/// type passes, whether optional or not.
+fn refuse_optional_repeated(
+    owner: &str,
+    field_name: &str,
+    ty: &v2::FieldType,
+) -> Result<(), GenerateError> {
+    if !ty.optional {
+        return Ok(());
+    }
+    match ty.kind.as_ref() {
+        Some(v2::field_type::Kind::Array(_)) => Err(GenerateError {
+            message: format!(
+                "{owner}.{field_name} is an optional array, and proto3 cannot mark a \
+                 repeated field absent: an absent list is indistinguishable \
+                 from an empty one, and no value is spare to carry the fact \
+                 in-band, so this backend refuses rather than choosing \
+                 silently (ADR-0013 decision 7). Remove the `?`, or wrap the \
+                 array in a struct, whose absence proto3 can track."
+            ),
+        }),
+        Some(v2::field_type::Kind::Map(_)) => Err(GenerateError {
+            message: format!(
+                "{owner}.{field_name} is an optional map, and proto3 cannot mark a map \
+                 field absent: an absent map is indistinguishable from an \
+                 empty one, and no value is spare to carry the fact in-band, \
+                 so this backend refuses rather than choosing silently \
+                 (ADR-0013 decision 7). Remove the `?`, or wrap the map in a \
+                 struct, whose absence proto3 can track."
+            ),
+        }),
+        _ => Ok(()),
+    }
+}
+
 /// One struct as one `message`: field numbers are the typl §7.4 ordinals, a
 /// tombstone emits proto `reserved`, and a `?` field takes the proto3
 /// `optional` keyword, because proto3 represents absence structurally
@@ -471,36 +508,8 @@ fn emit_struct(
                     &format!("field `{}` of struct `{name}`", field.name),
                 )?;
                 let optional = matches!(&field.r#type, Some(ty) if ty.optional);
-                if optional {
-                    match field.r#type.as_ref().and_then(|ty| ty.kind.as_ref()) {
-                        Some(v2::field_type::Kind::Array(_)) => {
-                            return Err(GenerateError {
-                                message: format!(
-                                    "{name}.{} is an optional array, and proto3 cannot mark a \
-                                     repeated field absent: an absent list is indistinguishable \
-                                     from an empty one, and no value is spare to carry the fact \
-                                     in-band, so this backend refuses rather than choosing \
-                                     silently (ADR-0013 decision 7). Remove the `?`, or wrap the \
-                                     array in a struct, whose absence proto3 can track.",
-                                    field.name
-                                ),
-                            });
-                        }
-                        Some(v2::field_type::Kind::Map(_)) => {
-                            return Err(GenerateError {
-                                message: format!(
-                                    "{name}.{} is an optional map, and proto3 cannot mark a map \
-                                     field absent: an absent map is indistinguishable from an \
-                                     empty one, and no value is spare to carry the fact in-band, \
-                                     so this backend refuses rather than choosing silently \
-                                     (ADR-0013 decision 7). Remove the `?`, or wrap the map in a \
-                                     struct, whose absence proto3 can track.",
-                                    field.name
-                                ),
-                            });
-                        }
-                        _ => {}
-                    }
+                if let Some(ty) = field.r#type.as_ref().filter(|ty| ty.optional) {
+                    refuse_optional_repeated(name, &field.name, ty)?;
                 }
                 let (scalar, comment) = field_type_text(packages, name, field, tuples, imports)?;
                 if let Some(comment) = comment {
@@ -841,7 +850,9 @@ fn emit_induced_tuples(
 /// numbered from 1 (design §3.1). A tuple field is always named in typl
 /// source (typl §11), but positional access is what a tuple actually offers,
 /// so the generated message uses the position rather than carry the source
-/// name onto the wire.
+/// name onto the wire. A `?` field takes the proto3 `optional` keyword, as a
+/// struct field does, so that `Some(0)` and `None` stay distinct on the wire;
+/// an optional array or map is refused (see [`emit_struct`]).
 fn emit_induced_tuple(
     out: &mut String,
     packages: Packages,
@@ -862,6 +873,7 @@ fn emit_induced_tuple(
         let ty = field.r#type.as_ref().ok_or_else(|| GenerateError {
             message: format!("{}.{field_name} carries no type in the IR.", induced.name),
         })?;
+        refuse_optional_repeated(&induced.name, &field_name, ty)?;
         let hint = format!("{}Field{ordinal}", induced.name);
         let (scalar, comment) = resolve_field_type(
             packages,
@@ -875,7 +887,8 @@ fn emit_induced_tuple(
         if let Some(comment) = comment {
             out.push_str(&format!("  {comment}\n"));
         }
-        out.push_str(&format!("  {scalar} {field_name} = {ordinal};\n"));
+        let optional = if ty.optional { "optional " } else { "" };
+        out.push_str(&format!("  {optional}{scalar} {field_name} = {ordinal};\n"));
     }
     out.push_str("}\n");
     Ok(())
