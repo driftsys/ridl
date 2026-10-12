@@ -52,3 +52,16 @@ struct InnerMode {
   speed : Mode
   label : Label
 }
+
+/// A bare `integer`, with no constraint at all: every value is legal, 0
+/// included, so an absent field reads as 0.
+struct InnerBareInteger {
+  speed : integer
+  label : Label
+}
+
+/// A bare `float`, with no constraint at all, read the same way.
+struct InnerBareFloat {
+  speed : float
+  label : Label
+}

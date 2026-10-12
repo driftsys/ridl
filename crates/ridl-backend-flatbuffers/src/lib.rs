@@ -625,7 +625,9 @@ fn push_field(
 
 /// The FlatBuffers type at one field position — tier 1's typl surface: a
 /// bare primitive resolves directly ([`fbs_primitive`]); a named-type
-/// reference resolves through [`named_field_type`]; an array is `[T]`; a map
+/// reference resolves through [`resolve_reference`] and then
+/// [`named_decl_type`], the two halves of [`named_field_type`], so that the
+/// resolved declaration is in hand for the optional rule; an array is `[T]`; a map
 /// is a vector of a generated entry table ([`emit_entry_table`]); and a
 /// tuple induces a positional table ([`emit_tuple_table`]). A stream is
 /// refused: tier 1 covers the typl surface only (ADR-0013 decision 2).
@@ -732,7 +734,7 @@ fn resolve_type_position(
         // no name of its own to comment with, so — mirroring
         // `ridl-backend-proto`'s `InlineScalar` arm — it resolves to its
         // scalar with no comment, unlike a named scalar reference
-        // ([`named_field_type`]), which comments the constraint under the
+        // ([`named_decl_type`]), which comments the constraint under the
         // name that carries it.
         Some(v2::field_type::Kind::InlineScalar(td)) => {
             Ok(Position::scalar_or_offset(fbs_scalar(td).to_string(), None))
@@ -855,9 +857,10 @@ fn resolve_type_position(
 /// qualified `pkg.Name` (`ridl_ir::v2::referenced_packages`'s doc comment
 /// states the canonical form) — to its declaration, and the crossed
 /// package's name when the reference was foreign. Shared by
-/// [`named_field_type`] and [`union_arm_type`]: a field position and a union
-/// arm each name a declaration the same way, and only what they do with the
-/// result differs. A foreign lookup walks `packages.others` for a package
+/// [`named_field_type`], [`union_arm_type`] and the `Named` arm of
+/// [`resolve_field_type`], which resolves first and then calls
+/// [`named_decl_type`]: a field position and a union arm each name a
+/// declaration the same way, and only what they do with the result differs. A foreign lookup walks `packages.others` for a package
 /// named `referenced_package` holding a declaration named `member`; a
 /// same-package lookup walks `packages.package` directly. Either miss is
 /// refused with a `GenerateError` naming `owner`, `member_name` and the

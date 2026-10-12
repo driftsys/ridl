@@ -448,6 +448,8 @@ type Speed : integer [0..300]
 
 type Label : string [0..8]
 
+type Blob : bytes [0..8]
+
 enum Health {
   OK  = 0
   BAD = 1
@@ -475,6 +477,7 @@ struct Holder {
   gear    : Gear?
   flags   : Flags?
   label   : Label?
+  blob    : Blob?
   inner   : Inner?
   pair    : (lo: Speed?, hi: Speed)
   meta    : [Label : Speed?; 0..3]
@@ -499,7 +502,7 @@ struct Holder {
 /// fields typl lets carry a `?` — a struct field, a tuple field and a map
 /// entry's value. An optional string, bytes, table, tuple, array or map field
 /// is an offset, which is absent or present with no default, so it takes no
-/// marker; a non-optional scalar takes none either, and a field typed by an
+/// marker — `label` is the string and `blob` the bytes; a non-optional scalar takes none either, and a field typed by an
 /// enum with no zero member takes one whether or not it is optional (decision
 /// 6).
 ///
@@ -546,6 +549,10 @@ fn an_optional_scalar_or_enum_field_takes_null_in_the_schema_and_the_model() {
         ("Holder", "gear", true),
         ("Holder", "flags", true),
         ("Holder", "label", false),
+        // An optional bytes field is a `[ubyte]` vector: an offset, absent or
+        // present with no default, so it takes no marker (driftsys/ridl#607
+        // item 3).
+        ("Holder", "blob", false),
         ("Holder", "inner", false),
         ("Holder", "pair", false),
         ("Holder", "meta", false),
