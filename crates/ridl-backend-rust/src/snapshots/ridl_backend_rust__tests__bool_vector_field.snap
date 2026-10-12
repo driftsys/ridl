@@ -261,7 +261,7 @@ pub(crate) fn __ridl_fb_encode_Flags(
             if __c.len() > 4usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
-                        type_name: "Flags",
+                        type_name: ::core::option::Option::Some("Flags"),
                         rule: ::ridl_rt::payload::Rule::Length,
                     }),
                 );
@@ -286,7 +286,7 @@ pub(crate) fn __ridl_fb_encode_Flags(
             if __c.len() > 4usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
-                        type_name: "Flags",
+                        type_name: ::core::option::Option::Some("Flags"),
                         rule: ::ridl_rt::payload::Rule::Length,
                     }),
                 );

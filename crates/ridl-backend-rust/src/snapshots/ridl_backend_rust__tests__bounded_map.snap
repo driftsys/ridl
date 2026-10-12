@@ -593,7 +593,7 @@ pub(crate) fn __ridl_fb_encode_Table(
             if __c.len() > 32usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
-                        type_name: "Table",
+                        type_name: ::core::option::Option::Some("Table"),
                         rule: ::ridl_rt::payload::Rule::Length,
                     }),
                 );

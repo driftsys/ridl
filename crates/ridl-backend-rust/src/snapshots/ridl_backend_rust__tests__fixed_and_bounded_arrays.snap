@@ -450,7 +450,7 @@ pub(crate) fn __ridl_fb_encode_Samples(
             if __c.len() < 2usize || __c.len() > 8usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
-                        type_name: "Samples",
+                        type_name: ::core::option::Option::Some("Samples"),
                         rule: ::ridl_rt::payload::Rule::Length,
                     }),
                 );
