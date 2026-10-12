@@ -34,16 +34,6 @@ Rust parity test exists, in `crates/ridlc-gen-rust/tests/parity.rs`, and the
 the as-built record of the contract and the two hosts is
 [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md).
 
-**Amended 2026-10-12 — decision 3, the `#[repr(C)]` removal landed ahead of the
-backend it was sequenced with.** The decision tied the removal to roadmap story
-E11.12, the `repr(C)` backend that replaces the attribute, which is not built.
-It is taken now instead, because [ADR-0029](ADR-0029-stability-policy.md)
-freezes the generated crate and the attribute is part of that surface: removing
-it before the surface's row is added to `freeze/surfaces.toml` costs nothing,
-and removing it after would be a break of a frozen surface. The amendment is
-written into decision 3 in place; what that decision says about the layout
-belonging to decision 1's separate struct is unchanged.
-
 **Amended 2026-10-03 — decision 5, planus is not the FlatBuffers runtime
 `ridl-rt` may take.** Sebastien's decision of 2026-10-03, recorded as answer 8
 in section 4 of the
@@ -98,6 +88,16 @@ encoding.** The `ridl-transport-ws` row said "proto3-framed". The frame
 specification §11.1, version 0.2.0, fixes no encoding for the WebSocket binding:
 a session carries the encoding its `attach` names, and the transport offers
 proto3 when the program names none. The row is changed in place.
+
+**Amended 2026-10-12 — decision 3, the `#[repr(C)]` removal landed ahead of the
+backend it was sequenced with.** The decision tied the removal to roadmap story
+E11.12, the `repr(C)` backend that replaces the attribute, which is not built.
+It is taken now instead, because [ADR-0029](ADR-0029-stability-policy.md)
+freezes the generated crate and the attribute is part of that surface: removing
+it before the surface's row is added to `freeze/surfaces.toml` costs nothing,
+and removing it after would be a break of a frozen surface. The amendment is
+written into decision 3 in place; what that decision says about the layout
+belonging to decision 1's separate struct is unchanged.
 
 ## Context
 
