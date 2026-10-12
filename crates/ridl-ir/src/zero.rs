@@ -111,10 +111,19 @@ struct Decimal {
 
 impl Decimal {
     /// Reads `-`, digits, and an optional `.` followed by digits. Anything
-    /// else, or more than 30 significant digits, is `None`. Thirty is below
-    /// the 38 an `i128` holds exactly, with the margin the rescaling below
-    /// needs: two bounds are brought to a common scale before they are
-    /// compared, which multiplies one coefficient by a power of ten.
+    /// else, or more than 30 digits written, is `None`. The guard counts the
+    /// digits of the text, leading zeros included, not the significant
+    /// digits of the value, so `0.` followed by thirty zeros and a `1` is
+    /// refused although it is one significant digit.
+    ///
+    /// Thirty is a conservative cutoff below the 38 an `i128` holds exactly.
+    /// It is not a bound that makes every rescaling fit: [`Decimal::rescaled`]
+    /// multiplies a coefficient by a power of ten to bring two bounds to a
+    /// common scale, and two bounds whose scales are far apart overflow an
+    /// `i128` even inside this limit. Such a rescaling is refused by the
+    /// checked multiply, and [`range_holds_zero`] then answers `false`, so a
+    /// pair it cannot decide reads as "0 is not legal" and an absent field is
+    /// refused rather than read as a value that may not be legal.
     fn parse(text: &str) -> Option<Self> {
         let (negative, unsigned) = match text.strip_prefix('-') {
             Some(rest) => (true, rest),
@@ -182,6 +191,20 @@ mod tests {
                 "min {min:?}, max {max:?}, step {step:?}"
             );
         }
+    }
+
+    /// A pair this reader cannot decide answers `false`, so an absent field
+    /// is refused rather than read as a value that may not be legal: a `min`
+    /// and a `step` whose scales are far enough apart overflow the rescaling
+    /// even though each is inside the 30-digit limit of `Decimal::parse`.
+    /// 0 is on this grid, and the answer is still `false`.
+    #[test]
+    fn a_rescaling_that_overflows_answers_that_zero_is_not_legal() {
+        let min = format!("-1{}", "0".repeat(29));
+        let step = format!("0.{}1", "0".repeat(28));
+        assert_eq!(min.trim_start_matches('-').len(), 30, "min is at the limit");
+        assert_eq!(step.len() - 2, 29, "step is at the limit");
+        assert!(!range_holds_zero(Some(&min), None, Some(&step)));
     }
 
     #[test]
