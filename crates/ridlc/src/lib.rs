@@ -1067,6 +1067,9 @@ fn run_build_inner<E: From<std::io::Error>>(
             // `None` is a backend with no table: every link is compared, so a
             // build that declared no encodings is reported. `Some` with an
             // empty list is the declaration that the backend emits no codec.
+            // A table written with no `encodings` key at all is the same
+            // declaration: the manifest records the two forms alike
+            // (`BackendTable::encodings`).
             let Some(encodings) = backends.get(table) else {
                 diagnostics.extend(link_encodings::link_encoding_not_emitted(
                     &db,

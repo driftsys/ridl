@@ -496,11 +496,14 @@ encodings = []
 ```
 
 A `[backend.<name>]` table whose `encodings` list is empty says that the backend
-emits no codec, and RSDL-807 does not compare it. A backend with no table at all
-is compared, and every link of the selected deployment that carries an encoding
-warns, so a build that never declared its encodings is still reported. The empty
-list is the per-backend way to silence the warning; the `[lints]` level is
-global and silences it for every backend at once (driftsys/ridl#853).
+emits no codec, and RSDL-807 does not compare it. A table written with no
+`encodings` key at all is the same declaration: the manifest records the two
+forms alike, both meaning types only (`BackendTable::encodings`). A backend with
+no table at all is compared, and every link of the selected deployment that
+carries an encoding warns, so a build that never declared its encodings is still
+reported. The empty list is the per-backend way to silence the warning; the
+`[lints]` level is global and silences it for every backend at once
+(driftsys/ridl#853).
 
 ### The depth rule
 

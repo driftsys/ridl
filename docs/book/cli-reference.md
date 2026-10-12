@@ -847,8 +847,10 @@ and a `--plugin` is compared once. A schema emit (`proto`, `flatbuffers`),
 the `typescript` emit and `codegen-model` are not compared, because their
 backends take no `encodings` option. A `[backend.<name>]` table whose
 `encodings` list is empty declares that the backend emits no codec, and it is
-not compared either; a backend with no table at all is compared, so a build
-that declared no encodings is still reported. An empty list is how a
+not compared either; a table written with no `encodings` key at all is the same
+declaration, as the manifest records the two forms alike. A backend with no
+table at all is compared, so a build that declared no encodings is still
+reported. An empty list is how a
 schema-only plugin silences the lint for its own backend, where the `[lints]`
 level silences it for every backend at once.
 

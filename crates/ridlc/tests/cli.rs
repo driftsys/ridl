@@ -2552,6 +2552,24 @@ fn a_backend_that_declares_no_encoding_is_not_compared() {
     );
 }
 
+/// (driftsys/ridl#853) A `[backend.<name>]` table written with no `encodings`
+/// key at all is the same declaration as an empty list — the manifest records
+/// the two forms alike — so it is not compared either.
+#[test]
+fn a_backend_table_with_no_encodings_key_is_not_compared() {
+    let manifest = "[package]\nname = \"veh.bench\"\nversion = \"1.0.0\"\n\n\
+                    [backend.rust]\n\n\
+                    [lints]\nmissing-docs = \"allow\"\n";
+    let dir = link_encodings_workspace("link-encoding-bare-table", manifest, None);
+    let out = TempDir::new("link-encoding-bare-table-out");
+    let (code, stderr) = build_rust(dir.path(), out.path(), Some("Bench"));
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(
+        !stderr.contains("RSDL-807"),
+        "a table that names no encoding declares no codec, got:\n{stderr}"
+    );
+}
+
 /// (driftsys/ridl#859) `--emit rust` and `--plugin rust` name the same
 /// backend table, and the table is compared once, so each link draws one
 /// RSDL-807 rather than two. Unix only, for the script.
