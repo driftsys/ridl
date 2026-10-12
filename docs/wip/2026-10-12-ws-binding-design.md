@@ -168,7 +168,7 @@ restates none. `InterfaceNo` and `Ordinal` keep 32 bits, so the `u16` fallback
 of ADR-0021 decision 2 stays untriggered and §4's range check at `attach` is
 vacuous for this binding. The unit name on `attach` is UTF-8 with a `u8` byte
 length: at most 255 bytes, never empty, valid UTF-8, so the largest `attach`
-header is 40 + 255 = 295 bytes and the handshake has a fixed maximum (R-W-16).
+header is 39 + 255 = 294 bytes and the handshake has a fixed maximum (R-W-16).
 
 **Reason.** Little-endian is what the FlatBuffers payload and a `repr(C)`
 payload already use on every target in scope, so one message has one byte order;
@@ -327,7 +327,7 @@ message before `attach`, a second `attach`, an `attach` whose `name_len` does
 not match the message length or whose name is empty or not valid UTF-8, a first
 provider-to-consumer message that is not `attached`); 1003 for a text message;
 1009 for a message larger than the receiver's configured limit, which admits at
-least the largest `attach` (295 bytes). §9.5 says an unreadable header is
+least the largest `attach` (294 bytes). §9.5 says an unreadable header is
 "discarded and recorded, never partly applied" and leaves teardown to the
 binding: here the receiver records the frame and closes with 1002, so the
 recording obligation is kept. A frame with a readable header and an absent
@@ -356,12 +356,12 @@ its envelope (`response`: 10 common + 8 `correlation` + 2 `outcome`). A socket
 message's maximum size is therefore 36 + the payload bound (a `publish` is 27 +
 bound, a `request` 26 + bound; the single row is the conservative maximum, as
 the `Binding` message shape requires). The largest header of any message is the
-`attach` at 40 + 255 = 295 bytes; it carries no payload and enters no size sum,
+`attach` at 39 + 255 = 294 bytes; it carries no payload and enters no size sum,
 so the `Known` row stays the data-plane maximum, and the doc comment of
 `Known.frame_header_max_bytes` in `crates/ridl-ir/src/codegen/bindings.rs`
 (today "the largest frame header the binding adds to a message") is amended in
 the same pull request to say "data-plane message". §11.1 states that a
-receiver's message size limit admits at least 295 bytes, so no limit can refuse
+receiver's message size limit admits at least 294 bytes, so no limit can refuse
 a legitimate `attach`. The numbers live in two places: the frame specification
 §11.1 states them (the source), and `KNOWN` gains the row
 `{ name: "websocket", version: "1", frame_header_max_bytes: Some(20),
@@ -582,7 +582,7 @@ in §11.1 and its transport crate is not built yet".
 >
 > | Form                               | Bytes                                                                                                                     | Header size |
 > | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------- |
-> | `attach`                           | `form` u8, `frame_version` u32, `encoding` u8, `hash` 32 bytes, `name_len` u8 (1 to 255), `name` UTF-8 (`name_len` bytes) | 40 + name   |
+> | `attach`                           | `form` u8, `frame_version` u32, `encoding` u8, `hash` 32 bytes, `name_len` u8 (1 to 255), `name` UTF-8 (`name_len` bytes) | 39 + name   |
 > | `attached`                         | `form` u8, `outcome` u8, `detail` u8                                                                                      | 3           |
 > | `subscribe`, `unsubscribe`, `read` | `form` u8, `kind` u8, `interface` u32, `ordinal` u32                                                                      | 10          |
 > | `answer`                           | the common 10, then `outcome` u8, `detail` u8                                                                             | 12          |
@@ -599,8 +599,8 @@ in §11.1 and its transport crate is not built yet".
 > **The sizes.** The envelope is 16 bytes. The largest data-plane header without
 > its envelope is 20 bytes (`response`), so a data-plane message is at most 36
 > bytes plus the payload bound. The largest header of any message is the
-> `attach` at 40 + 255 = 295 bytes; it carries no payload, so a receiver's
-> message size limit admits at least 295 bytes. The codegen model carries the
+> `attach` at 39 + 255 = 294 bytes; it carries no payload, so a receiver's
+> message size limit admits at least 294 bytes. The codegen model carries the
 > data-plane numbers as the `websocket` row, binding version `"1"`,
 > `frame_header_max_bytes` 20, `envelope_bytes` 16
 > (`crates/ridl-ir/src/codegen/bindings.rs`). The row is derived from this
@@ -623,7 +623,7 @@ in §11.1 and its transport crate is not built yet".
 > and closes with 1002, and the session ends as §3 states. A `request` with a
 > readable header and no payload is answered `corrupt` (§9.5); any other frame
 > missing a required payload is discarded and recorded. A message above the
-> receiver's configured size limit, which admits at least 295 bytes, is closed
+> receiver's configured size limit, which admits at least 294 bytes, is closed
 > with 1009. Either side ends the session on purpose with 1000, the provider
 > with 1001 when it shuts down; after `attached(refused)` the provider closes
 > with 1000, and the reason is in the frame. The binding defines no close code
@@ -789,7 +789,7 @@ An adversarial review of the first draft (commit 69163400) raised sixteen
 points; all are applied in this revision: (1) the provider pings and either end
 times out on silence of any kind; (2) the encoding generalisation scoped to
 §11.1, with §1 and §10 item 3 replacement text; (3) the `attach` name length as
-`u8`, the 295-byte handshake maximum, the `Known` doc comment; (4) the code
+`u8`, the 294-byte handshake maximum, the `Known` doc comment; (4) the code
 tables moved to §4 and §9.6; (5) the records list completed (§2 `Violation` row,
 `codegen-plugins.md`, the book chapter, `freeze/README.md`, `CONTRIBUTING.md`,
 the family overview, `ridl-rt.md`); (6) a `Transport` variant, not
