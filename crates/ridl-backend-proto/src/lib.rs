@@ -432,41 +432,52 @@ fn emit_enum(
     Ok(())
 }
 
-/// Refuses an optional array or map at a field position of `owner`: proto3
+/// Where an optional array or map was found: a field of a struct, or a field
+/// of a tuple. The two take different advice.
+#[derive(Clone, Copy)]
+enum FieldSite {
+    Struct,
+    Tuple,
+}
+
+/// Refuses an optional array or map at the field `path` names in the source
+/// (`Owner.field`, or `Owner.field.tupleField` for a tuple field): proto3
 /// cannot mark a repeated or map field absent, and no value is spare to carry
 /// the fact in-band, so ADR-0013 decision 7's last clause applies. Any other
-/// type passes, whether optional or not.
+/// type passes, whether optional or not. The rule is
+/// [`proto3::optional_repeated`], which the proto3 sizer in `ridl-ir` also
+/// reads, so a payload this refuses has no proto3 bound.
 fn refuse_optional_repeated(
-    owner: &str,
-    field_name: &str,
+    path: &str,
+    site: FieldSite,
     ty: &v2::FieldType,
 ) -> Result<(), GenerateError> {
-    if !ty.optional {
+    let Some(repeated) = proto3::optional_repeated(ty) else {
         return Ok(());
-    }
-    match ty.kind.as_ref() {
-        Some(v2::field_type::Kind::Array(_)) => Err(GenerateError {
-            message: format!(
-                "{owner}.{field_name} is an optional array, and proto3 cannot mark a \
-                 repeated field absent: an absent list is indistinguishable \
-                 from an empty one, and no value is spare to carry the fact \
-                 in-band, so this backend refuses rather than choosing \
-                 silently (ADR-0013 decision 7). Remove the `?`, or wrap the \
-                 array in a struct, whose absence proto3 can track."
-            ),
-        }),
-        Some(v2::field_type::Kind::Map(_)) => Err(GenerateError {
-            message: format!(
-                "{owner}.{field_name} is an optional map, and proto3 cannot mark a map \
-                 field absent: an absent map is indistinguishable from an \
-                 empty one, and no value is spare to carry the fact in-band, \
-                 so this backend refuses rather than choosing silently \
-                 (ADR-0013 decision 7). Remove the `?`, or wrap the map in a \
-                 struct, whose absence proto3 can track."
-            ),
-        }),
-        _ => Ok(()),
-    }
+    };
+    let (kind, proto_field) = match repeated {
+        proto3::Repeated::Array => ("array", "repeated"),
+        proto3::Repeated::Map => ("map", "map"),
+    };
+    let advice = match site {
+        FieldSite::Struct => {
+            format!(
+                "Remove the `?`, or wrap the {kind} in a struct, whose absence proto3 can track."
+            )
+        }
+        FieldSite::Tuple => format!(
+            "Remove the `?` from the tuple field, or declare a struct that holds the {kind} \
+             and give the tuple field that struct's type, whose absence proto3 can track."
+        ),
+    };
+    Err(GenerateError {
+        message: format!(
+            "{path} is an optional {kind}, and proto3 cannot mark a {proto_field} field \
+             absent: an absent {kind} is indistinguishable from an empty one, and no value \
+             is spare to carry the fact in-band, so this backend refuses rather than \
+             choosing silently (ADR-0013 decision 7). {advice}"
+        ),
+    })
 }
 
 /// One struct as one `message`: field numbers are the typl §7.4 ordinals, a
@@ -508,8 +519,12 @@ fn emit_struct(
                     &format!("field `{}` of struct `{name}`", field.name),
                 )?;
                 let optional = matches!(&field.r#type, Some(ty) if ty.optional);
-                if let Some(ty) = field.r#type.as_ref().filter(|ty| ty.optional) {
-                    refuse_optional_repeated(name, &field.name, ty)?;
+                if let Some(ty) = &field.r#type {
+                    refuse_optional_repeated(
+                        &format!("{name}.{}", field.name),
+                        FieldSite::Struct,
+                        ty,
+                    )?;
                 }
                 let (scalar, comment) = field_type_text(packages, name, field, tuples, imports)?;
                 if let Some(comment) = comment {
@@ -711,6 +726,7 @@ fn resolve_field_type(
         Some(v2::field_type::Kind::Tuple(tuple)) => {
             tuples.push(InducedTuple {
                 name: hint.to_string(),
+                source: format!("{owner}.{field_name}"),
                 tuple: tuple.clone(),
             });
             Ok((hint.to_string(), None))
@@ -793,6 +809,11 @@ struct InducedTuple {
     /// that name extended for a position reached through the field
     /// ([`resolve_field_type`]).
     name: String,
+    /// The source path of the field that reached the tuple, `Owner.field`,
+    /// extended with a tuple field's name for a tuple nested in a tuple, so
+    /// that a refusal inside the tuple names what the source declares rather
+    /// than the generated message.
+    source: String,
     tuple: v2::TupleType,
 }
 
@@ -873,12 +894,18 @@ fn emit_induced_tuple(
         let ty = field.r#type.as_ref().ok_or_else(|| GenerateError {
             message: format!("{}.{field_name} carries no type in the IR.", induced.name),
         })?;
-        refuse_optional_repeated(&induced.name, &field_name, ty)?;
+        refuse_optional_repeated(
+            &format!("{}.{}", induced.source, field.name),
+            FieldSite::Tuple,
+            ty,
+        )?;
         let hint = format!("{}Field{ordinal}", induced.name);
+        // A refusal inside the field names the source path, so the owner is
+        // the tuple's source path and the field its source name.
         let (scalar, comment) = resolve_field_type(
             packages,
-            &induced.name,
-            &field_name,
+            &induced.source,
+            &field.name,
             &hint,
             ty,
             tuples,
@@ -947,16 +974,16 @@ fn resolve_named<'a, 'r>(
 /// foreign**, because a field never names a declaration of either, so no
 /// field needs another file's import for one (design §3.1, §3.2); the root
 /// box message each gets ([`emit_root_boxes`]) is never a field's type.
-/// `ridl.std` is not a special
-/// case of this: every one of its members is a named scalar (typl reference
-/// Appendix A), so it always takes this same inlining path. A struct
-/// reference names the message it becomes; an enum reference names the
-/// `enum` it becomes ([`emit_enum`]); a union reference names the `message`
-/// it becomes ([`emit_union`]) — a union is legal wherever data is legal
-/// (typl §10), the same as a struct or an enum — and each of those three is
-/// qualified `pkg.Name` when foreign, with `imports` gaining `pkg.proto`
-/// ([`qualified_message_name`]): they are the only typl kinds a field names
-/// as a declaration, so they are the only case an import is needed.
+/// `ridl.std` is not a special case of this: every one of its members is a
+/// named scalar (typl reference Appendix A), so it always takes this same
+/// inlining path. A struct reference names the message it becomes; an enum
+/// reference names the `enum` it becomes ([`emit_enum`]); a union reference
+/// names the `message` it becomes ([`emit_union`]) — a union is legal
+/// wherever data is legal (typl §10), the same as a struct or an enum — and
+/// each of those three is qualified `pkg.Name` when foreign, with `imports`
+/// gaining `pkg.proto` ([`qualified_message_name`]): they are the only typl
+/// kinds a field names as a declaration, so they are the only case an import
+/// is needed.
 ///
 /// A reference is cross-package exactly when it carries a `.` — the IR's
 /// canonical form gives a cross-package reference as the fully qualified

@@ -1097,9 +1097,9 @@ fn an_array_of_maps_is_refused() {
 // foreign one is no different: a field never names a declaration of it, so
 // no field needs another file's import for it. `veh.common` here holds the
 // `Speed` named scalar — never a `message Speed`, only its root box
-// `message SpeedBox`, which no field names — so an import naming `veh.common.proto`
-// would point at a file that does not declare the type it was imported for,
-// which `protoc` rejects. `compile_with_protox` is run on every test below
+// `message SpeedBox`, which no field names — so an import naming
+// `veh.common.proto` would point at a file that does not declare the type it
+// was imported for, which `protoc` rejects. `compile_with_protox` is run on every test below
 // except the unresolvable-reference case, so that defect cannot hide behind
 // a skipped check the way it did before this rework.
 
@@ -1116,8 +1116,8 @@ fn a_foreign_named_scalar_inlines_with_no_import() {
     let generated = generate_with(&package, &[&common]).expect("generate");
     assert!(
         !generated.proto_source.contains("import"),
-        "a named scalar never becomes a declaration another file can hold, so it \
-         needs no import, local or foreign:\n{}",
+        "a field never names a named scalar's declaration or its root box message, \
+         so it needs no import, local or foreign:\n{}",
         generated.proto_source
     );
     assert!(
@@ -1380,9 +1380,12 @@ fn an_optional_tuple_field_of_array_or_map_type_is_refused() {
         tuple_of(vec![optional(array_of(float64_type()))]),
     );
     let error = generate(&array).expect_err("must refuse");
+    // The message names the source path `S.t.f0`, not the generated
+    // `ST.field_1`, and its advice is for a tuple field.
     assert!(
-        error.message.contains("optional array")
-            && error.message.contains("ST.field_1")
+        error.message.contains("S.t.f0 is an optional array")
+            && !error.message.contains("ST.field_1")
+            && error.message.contains("from the tuple field")
             && error.message.contains("ADR-0013 decision 7"),
         "got: {}",
         error.message
@@ -1399,12 +1402,100 @@ fn an_optional_tuple_field_of_array_or_map_type_is_refused() {
     );
     let error = generate(&map).expect_err("must refuse");
     assert!(
-        error.message.contains("optional map")
-            && error.message.contains("ST.field_1")
+        error.message.contains("S.t.f0 is an optional map")
+            && !error.message.contains("ST.field_1")
+            && error.message.contains("from the tuple field")
             && error.message.contains("ADR-0013 decision 7"),
         "got: {}",
         error.message
     );
+}
+
+#[test]
+fn the_backend_refuses_an_optional_collection_exactly_where_the_sizer_gives_no_bound() {
+    // The optional array or map rule is read by two callers: this backend,
+    // which refuses the field, and the proto3 sizer in `ridl-ir`, which gives
+    // the payload no bound. A payload the backend will not emit must have no
+    // proto3 row in the catalog, and one it emits must have one, so the two
+    // answers are compared over every shape the rule distinguishes: a struct
+    // field and a tuple field, of an array, a map and a scalar, optional and
+    // required.
+    use ridl_ir::projection::size::{Ctx, Encoding, PayloadShape, SizeState, size_state};
+
+    let shapes = [
+        ("array", array_of(float64_type())),
+        ("map", map_of(v2::PrimitiveType::Integer, float64_type())),
+        ("scalar", float64_type()),
+    ];
+    for (kind, ty) in shapes {
+        for is_optional in [false, true] {
+            let ty = if is_optional {
+                optional(ty.clone())
+            } else {
+                ty.clone()
+            };
+            for in_tuple in [false, true] {
+                let field = if in_tuple {
+                    tuple_of(vec![ty.clone()])
+                } else {
+                    ty.clone()
+                };
+                let package = struct_package("S", "t", 1, field);
+                let emitted = generate(&package).is_ok();
+                let others: [&v2::Package; 0] = [];
+                let ctx = Ctx::new(&package, &others);
+                let state = size_state(&package, &PayloadShape::Named("S"), &ctx, Encoding::Proto3);
+                assert_eq!(
+                    emitted,
+                    matches!(state, SizeState::Bounded(_)),
+                    "{kind}, optional {is_optional}, in a tuple {in_tuple}: \
+                     the backend emits {emitted}, the sizer answers {state:?}"
+                );
+                assert_eq!(
+                    emitted,
+                    !(is_optional && kind != "scalar"),
+                    "{kind}, optional {is_optional}, in a tuple {in_tuple}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn an_induced_tuple_message_colliding_with_a_root_box_message_is_refused() {
+    // `Wheel.speedBox` induces a message named `WheelSpeedBox`, and the named
+    // scalar `WheelSpeed` generates its root box message of that same name.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "WheelSpeed".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(speed_type_def())),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Wheel".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member("speedBox", 1, tuple_of(vec![float64_type()]))],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("`WheelSpeedBox` is claimed twice"),
+        "got: {}",
+        error.message
+    );
+    assert!(
+        error.message.contains("the proto3 root of `WheelSpeed`"),
+        "got: {}",
+        error.message
+    );
+    assert!(error.message.contains("tuple"), "got: {}", error.message);
 }
 
 #[test]

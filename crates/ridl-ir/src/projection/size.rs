@@ -365,6 +365,11 @@ pub(crate) fn leaf_of_field_type<'a>(
 /// The leaf of a name written in `home`.
 pub(crate) fn leaf_of_name<'a>(name: &str, home: &'a Package, ctx: &Ctx<'a>) -> Option<Leaf<'a>> {
     let (decl, declaring) = ctx.resolve(home, name)?;
+    leaf_of_decl(decl, declaring)
+}
+
+/// The leaf of `decl`, already resolved and declared in `declaring`.
+pub(crate) fn leaf_of_decl<'a>(decl: &'a Decl, declaring: &'a Package) -> Option<Leaf<'a>> {
     match decl.kind.as_ref()? {
         decl::Kind::TypeDef(def) => leaf_of_type_def(def),
         decl::Kind::StructDef(def) => Some(Leaf::Struct {
@@ -616,7 +621,7 @@ mod tests {
         // refuses for the same type. The relation does not hold elsewhere: for
         // a bare `integer` or `float` at a field position, and for an enum set
         // of unspecified width, the projection answers `None` while proto3
-        // emits `int64` or `double`, so a leaf exists there. A string or bytes
+        // emits `sint64` or `double`, so a leaf exists there. A string or bytes
         // whose bound exceeds the projection's `MAX_ENCODABLE` also has a
         // leaf, while the projection answers `None`.
         let string_no_bound = decl("S", Some(decl::Kind::TypeDef(string_def(None))));

@@ -18,9 +18,10 @@
 //! name that does not resolve (`resolve_named`), a nested array or map and a
 //! map value that is an array or a map (`resolve_field_type`), a map key
 //! outside the integral and string scalars (`map_key_text`), an optional
-//! array or map field (`emit_struct`, ADR-0013 decision 7), an enum live or
-//! retired value outside int32 (`emit_enum`), and a field number protobuf
-//! reserves or exceeds (`check_field_number`). The backend's name-collision
+//! array or map field of a struct or a tuple (`emit_struct`,
+//! `emit_induced_tuple`, ADR-0013 decision 7), an enum live or retired value
+//! outside int32 (`emit_enum`), and a field number protobuf reserves or
+//! exceeds (`check_field_number`). The backend's name-collision
 //! refusals, at member and package scope, are **not** reproduced: two struct
 //! field names that coincide after `snake_case` (`emit_struct`); two enum
 //! values that coincide after `SCREAMING_SNAKE_CASE`, one that spells the
@@ -52,7 +53,7 @@ use crate::v2::{
     struct_member,
 };
 
-use super::{AbsentCause, Ctx, Leaf, SizeState, leaf_of_field_type, leaf_of_name};
+use super::{AbsentCause, Ctx, Leaf, SizeState, leaf_of_decl, leaf_of_field_type, leaf_of_name};
 
 /// Nesting deeper than this is treated as unsizable; typl rejects recursion
 /// (§7.3), so this only guards against an IR the checker did not see.
@@ -145,11 +146,12 @@ impl<'a> Walk<'a, '_> {
 /// `NoBound` for a named scalar that no proto3 leaf bounds: a `string` or
 /// `bytes` with no length bound, a type def with no width. `Unresolved` for
 /// a name that does not resolve and for a declaration that has no message at
-/// all, such as a constant or an interaction. `Overflow` when the nesting passes `MAX_DEPTH` or the bound
-/// is above `u32::MAX`. `RefusedMember` for every other failure inside the
-/// message: a member the proto backend refuses, a name inside the message
-/// that does not resolve, a member no proto3 leaf bounds, an enum value
-/// outside int32, and a `u64` sum or product that does not fit.
+/// all, such as a constant or an interaction. `Overflow` when the nesting
+/// passes `MAX_DEPTH` or the bound is above `u32::MAX`. `RefusedMember` for
+/// every other failure inside the message: a member the proto backend
+/// refuses, a name inside the message that does not resolve, a member no
+/// proto3 leaf bounds, an enum value outside int32, and a `u64` sum or
+/// product that does not fit.
 pub(crate) fn state<'a>(home: &'a Package, type_name: &str, ctx: &Ctx<'a>) -> SizeState {
     let Some((decl, declaring)) = ctx.resolve(home, type_name) else {
         return SizeState::Absent(AbsentCause::Unresolved);
@@ -171,7 +173,7 @@ pub(crate) fn state<'a>(home: &'a Package, type_name: &str, ctx: &Ctx<'a>) -> Si
         // field of that type. A named scalar without a leaf has no size at
         // all; an enum and an enum set always have a leaf.
         Some(decl::Kind::TypeDef(_) | decl::Kind::EnumDef(_) | decl::Kind::EnumSetDef(_)) => {
-            let Some(leaf) = leaf_of_name(name, declaring, ctx) else {
+            let Some(leaf) = leaf_of_decl(decl, declaring) else {
                 return SizeState::Absent(AbsentCause::NoBound);
             };
             leaf_field(1, leaf, &mut walk, 0)
@@ -272,15 +274,9 @@ fn struct_size<'a>(
         message_size(def.members.iter().map(|member| match &member.member {
             Some(struct_member::Member::Field(field)) => {
                 let ty = field.r#type.as_ref()?;
-                // proto3 cannot mark a repeated or map field absent, so the
-                // proto backend refuses an optional array or map
+                // The proto backend refuses an optional array or map
                 // (`emit_struct`, ADR-0013 decision 7).
-                if ty.optional
-                    && matches!(
-                        ty.kind,
-                        Some(field_type::Kind::Array(_) | field_type::Kind::Map(_))
-                    )
-                {
+                if proto3_projection::optional_repeated(ty).is_some() {
                     return None;
                 }
                 field_size(field.ordinal, ty, home, walk, depth)
@@ -312,7 +308,9 @@ fn union_size<'a>(
     })
 }
 
-/// A tuple is an induced message with positional fields 1..n.
+/// A tuple is an induced message with positional fields 1..n. The proto
+/// backend refuses an optional array or map tuple field, as it does a struct
+/// field (`emit_induced_tuple`, ADR-0013 decision 7).
 fn tuple_size<'a>(
     tuple: &'a TupleType,
     home: &'a Package,
@@ -320,13 +318,11 @@ fn tuple_size<'a>(
     depth: u32,
 ) -> Option<u64> {
     message_size(tuple.fields.iter().enumerate().map(|(i, f)| {
-        field_size(
-            u32::try_from(i + 1).ok()?,
-            f.r#type.as_ref()?,
-            home,
-            walk,
-            depth,
-        )
+        let ty = f.r#type.as_ref()?;
+        if proto3_projection::optional_repeated(ty).is_some() {
+            return None;
+        }
+        field_size(u32::try_from(i + 1).ok()?, ty, home, walk, depth)
     }))
 }
 
@@ -878,6 +874,50 @@ mod tests {
     }
 
     #[test]
+    fn an_optional_array_or_map_tuple_field_is_refused() {
+        // `emit_induced_tuple` in the proto backend refuses both, as
+        // `emit_struct` does for a struct field (ADR-0013 decision 7).
+        let optional = |mut ty: FieldType| {
+            ty.optional = true;
+            ty
+        };
+        let tuple = |ty: FieldType| {
+            field(field_type::Kind::Tuple(TupleType {
+                fields: vec![TupleField {
+                    name: "x".to_owned(),
+                    r#type: Some(ty),
+                }],
+            }))
+        };
+        let mut package = fixture();
+        package.decls.push(struct_decl(
+            "TupleOptionalArray",
+            vec![("t", 1, tuple(optional(array_u8_max4())))],
+        ));
+        package.decls.push(struct_decl(
+            "TupleOptionalMap",
+            vec![("t", 1, tuple(optional(map_str8_u32_max2())))],
+        ));
+        package.decls.push(struct_decl(
+            "TupleOptionalScalar",
+            vec![("t", 1, tuple(optional(named("Coord"))))],
+        ));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(
+            state_in("TupleOptionalArray", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
+        assert_eq!(
+            state_in("TupleOptionalMap", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
+        // The control: an optional scalar tuple field is admitted. The
+        // induced message is 1 + 5 = 6, and the field holding it 1 + 1 + 6.
+        assert_eq!(state_in("TupleOptionalScalar", &ctx), SizeState::Bounded(8));
+    }
+
+    #[test]
     fn an_enum_value_outside_int32_is_refused() {
         // `emit_enum` in the proto backend refuses the value.
         let mut package = fixture();
@@ -1172,6 +1212,34 @@ mod tests {
     }
 
     #[test]
+    fn a_foreign_named_scalar_is_sized_as_the_root_box_of_its_own_package() {
+        // q's `Speed` is an i16, a `sint32`: its box is 1 + 5 = 6. p declares
+        // a `Speed` of its own, a boolean, whose box is 1 + 1 = 2. Sized from
+        // p as `q.Speed`, the box must be q's; read in p by mistake, it would
+        // be 2.
+        let speed = |primitive: PrimitiveType, width: Option<IntWidth>| Decl {
+            name: "Speed".to_owned(),
+            kind: Some(decl::Kind::TypeDef(TypeDef {
+                backing: Some(Backing {
+                    kind: Some(backing::Kind::Primitive(primitive as i32)),
+                }),
+                width: width.map(|w| type_def::Width::IntWidth(w as i32)),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        let (mut root, mut imported) = two_package_fixture();
+        root.decls.push(speed(PrimitiveType::Boolean, None));
+        imported
+            .decls
+            .push(speed(PrimitiveType::Integer, Some(IntWidth::I16)));
+        let others = [&imported];
+        let ctx = Ctx::new(&root, &others);
+        assert_eq!(state_in("q.Speed", &ctx), SizeState::Bounded(6));
+        assert_eq!(state_in("Speed", &ctx), SizeState::Bounded(2));
+    }
+
+    #[test]
     fn two_fields_whose_sum_wraps_are_absent() {
         // Each `bytes [0..2^63 - 1]` field is 1 + 9 + 2^63 - 1 = 2^63 + 9
         // bytes; the two together are 2^64 + 18, which wraps to 18.
@@ -1376,7 +1444,8 @@ mod tests {
             SizeState::Absent(AbsentCause::RefusedMember),
             "a named float key"
         );
-        // A bare `integer` key is `sint64`: entry (1 + 10) + (1 + 5) = 17; 2 * (1 + 1 + 17).
+        // A bare `integer` key is `sint64`: entry (1 + 10) + (1 + 5) = 17;
+        // 2 * (1 + 1 + 17) = 38.
         assert_eq!(state_in("IntegerKeyed", &ctx), SizeState::Bounded(38));
         assert_eq!(
             state_in("FloatKeyed", &ctx),

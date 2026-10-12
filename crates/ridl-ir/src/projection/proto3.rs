@@ -179,6 +179,34 @@ pub fn primitive(primitive: i32) -> Scalar {
     }
 }
 
+/// A collection proto3 cannot mark absent at a field position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Repeated {
+    /// An array, which projects to a `repeated` field.
+    Array,
+    /// A map, which projects to a `map<K, V>` field.
+    Map,
+}
+
+/// The collection kind of `ty` when `ty` is an optional array or map, and
+/// `None` for every other type, optional or not. proto3 cannot mark a
+/// `repeated` or `map` field absent, and no value is spare to carry the fact
+/// in-band, so ADR-0013 decision 7's last clause applies: the proto backend
+/// refuses such a field of a struct (`emit_struct`) and of an induced tuple
+/// message (`emit_induced_tuple`), and the proto3 sizer gives a payload that
+/// holds one no bound.
+#[must_use]
+pub fn optional_repeated(ty: &v2::FieldType) -> Option<Repeated> {
+    if !ty.optional {
+        return None;
+    }
+    match ty.kind.as_ref()? {
+        v2::field_type::Kind::Array(_) => Some(Repeated::Array),
+        v2::field_type::Kind::Map(_) => Some(Repeated::Map),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
