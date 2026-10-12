@@ -31,3 +31,8 @@ it — for decisions that bind downstream work, see
   (qualify, rename, move to a trait, remove, or claim and refuse), the claim
   tables, the numbered decisions the code comments cite, the rejected
   alternatives, and the test that holds each experiment.
+- **websocket-binding-rationale.md** — why the WebSocket binding of the frame
+  specification (§11.1) is shaped as it is: one session per connection, the
+  subprotocol and its version, the header layout, payload presence, the encoding
+  tag, close codes, the sizes, streams as version 2, and the frozen vectors,
+  each with the alternatives considered and the cost of a wrong choice.

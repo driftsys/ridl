@@ -63,7 +63,14 @@ docs-in-generated-code design, plan and brainstorm handoff
 `2026-10-11-docs-in-generated-code-plan.md`) were archived on 2026-10-11, once
 the work landed; [ADR-0028](../decisions/ADR-0028-docs-in-generated-code.md) and
 the amendment of [ADR-0026](../decisions/ADR-0026-doc-comments.md) are their
-durable records.
+durable records. The WebSocket binding design and plan
+(`2026-10-12-ws-binding-{design,plan}.md`) and the lane W plan
+(`2026-10-11-lane-w-plan.md`) were archived on 2026-10-13, once the binding, the
+minimum Rust versions and the wire freeze landed;
+[the frame specification](../specification/frame-specification.md) §11.1,
+[ADR-0029](../decisions/ADR-0029-stability-policy.md) and
+[the binding rationale technote](../technotes/websocket-binding-rationale.md)
+are their durable records.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the

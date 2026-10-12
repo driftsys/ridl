@@ -882,7 +882,9 @@ decision 6) is its Rust crate, and the TypeScript WebSocket package of decision
 7 is the same binding for Deno and the browser, so the two ends of one
 connection may be a Rust runtime and a TypeScript one. This section is the
 binding document: it states the nine items of §10 and adds nothing to the frame.
-The binding is **version 1** and carries frame version 1.
+The binding is **version 1** and carries frame version 1. The reasoning behind
+each rule, with the alternatives considered, is in
+[the binding rationale technote](../technotes/websocket-binding-rationale.md).
 
 **1. The transport and the session.** One WebSocket connection carries one
 session. The client is the consumer and sends `attach` as its first message; the

@@ -589,3 +589,15 @@ provenance. Nothing here is normative — the current references live in
   that no port implements `Encoded` and that the face reads it in later work.
   The plan's Task 7 is the standing instruction for that rewrite, which waits
   for a separate pull request.
+- **2026-10-12-ws-binding-design.md**, **2026-10-12-ws-binding-plan.md** and
+  **2026-10-11-lane-w-plan.md** — the WebSocket binding of the frame
+  specification (rulings R-W-7 to R-W-19, the plan's R-P-1 to R-P-10) and the
+  wire and runtime plan that preceded it (R-W-1 to R-W-4: the minimum Rust
+  version of `ridl-loopback` and `ridl-descriptor`); archived verbatim. The
+  as-built rules are in
+  [the frame specification](../specification/frame-specification.md) §11.1 and
+  [ADR-0029](../decisions/ADR-0029-stability-policy.md); the reasoning and the
+  alternatives are in
+  [the binding rationale technote](../technotes/websocket-binding-rationale.md).
+  The archived files link to sibling working files that stay in
+  [`../wip/`](../wip/).
