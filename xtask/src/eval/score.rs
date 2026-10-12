@@ -82,6 +82,13 @@ pub fn used_ridl_check(transcript: &str) -> bool {
     })
 }
 
+/// Whether a shell command names the skill's directory, however the agent
+/// spelt the path to it: `skills/ridl-authoring` as a variable's value, or
+/// `skills/.system/../ridl-authoring/SKILL.md`.
+fn names_the_skill_directory(command: &str) -> bool {
+    command.contains("skills/ridl-authoring") || command.contains("ridl-authoring/")
+}
+
 /// Whether the transcript shows that the host made the skill available.
 /// Claude: the `init` line lists `ridl-authoring` among its skills, the
 /// agent called the `Skill` tool on it, or, in a handed-off run, the agent
@@ -116,13 +123,12 @@ pub fn skill_was_loaded(host: Host, transcript: &str) -> bool {
                         .get("input")
                         .and_then(|input| input.get("command"))
                         .and_then(serde_json::Value::as_str)
-                        .is_some_and(|c| c.contains("skills/ridl-authoring"));
+                        .is_some_and(names_the_skill_directory);
                 listed || called || read || shell
             }
             Host::Codex => {
                 str_field(map, "type") == Some("command_execution")
-                    && str_field(map, "command")
-                        .is_some_and(|c| c.contains("skills/ridl-authoring/"))
+                    && str_field(map, "command").is_some_and(names_the_skill_directory)
             }
         })
     })
@@ -259,6 +265,41 @@ mod tests {
         assert!(skill_was_loaded(Host::Claude, cat));
         assert!(!skill_was_loaded(Host::Claude, other));
         assert!(!skill_was_loaded(Host::Claude, ls));
+    }
+
+    #[test]
+    fn a_skill_path_spelt_through_another_directory_still_counts() {
+        let dotted = r#"{"type":"item.completed","item":{"type":"command_execution","command":"cat /h/skills/.system/../ridl-authoring/SKILL.md"}}"#;
+        assert!(skill_was_loaded(Host::Codex, dotted));
+    }
+
+    /// Excerpts of the probe's real transcripts: Claude runs as subagents
+    /// handed off by `--claude-handoff`, Codex runs through `codex exec`.
+    /// `codex-with.jsonl` takes its `ridl_check` call from a separate Codex
+    /// session, because neither probe run on Codex called the tool.
+    #[test]
+    fn the_recorded_transcripts_are_read_as_the_probe_saw_them() {
+        let fixture = |name: &str| {
+            std::fs::read_to_string(
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests/eval-fixtures")
+                    .join(name),
+            )
+            .unwrap()
+        };
+        let cases = [
+            (Host::Claude, "claude-with.jsonl", true, true),
+            (Host::Claude, "claude-without.jsonl", false, true),
+            (Host::Codex, "codex-with.jsonl", true, true),
+            (Host::Codex, "codex-without.jsonl", false, false),
+        ];
+        for (host, name, loaded, checked) in cases {
+            let t = fixture(name);
+            assert_eq!(skill_was_loaded(host, &t), loaded, "{name}");
+            assert_eq!(used_ridl_check(&t), checked, "{name}");
+        }
+        let answer = super::super::judge::claude_final_message(&fixture("claude-with.jsonl"));
+        assert!(answer.starts_with("The workspace compiles"), "{answer}");
     }
 
     #[test]
