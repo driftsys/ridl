@@ -229,15 +229,16 @@ fn a_buffer_holds_the_largest_encoding() {
 
 /// `Violation` admits a value with no type name that keeps its rule, and that
 /// value differs from one with a type name. This pins the type's shape only;
-/// no runtime that receives a frame exists yet to produce such a value.
+/// no runtime that receives a frame exists yet to produce such a value (the
+/// WebSocket transport is tracked as driftsys/ridl#265).
 #[test]
 fn a_violation_admits_no_type_name_and_keeps_its_rule() {
-    let reported = Violation {
+    let decoded = Violation {
         type_name: None,
         rule: Rule::Range,
     };
-    assert_eq!(reported.type_name, None);
+    assert_eq!(decoded.type_name, None);
     assert_eq!(SPEED_RANGE.type_name, Some("Speed"));
-    assert_ne!(reported, SPEED_RANGE);
-    assert_eq!(reported.rule, SPEED_RANGE.rule);
+    assert_ne!(decoded, SPEED_RANGE);
+    assert_eq!(decoded.rule, SPEED_RANGE.rule);
 }

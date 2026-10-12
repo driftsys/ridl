@@ -173,7 +173,11 @@ outcome (the frame specification §9.6) and a `no_std` runtime cannot make a
 `&'static str` from received bytes. Under decision 10 the change is breaking:
 `Violation` is a struct whose fields are all public. A `Rule` variant is added
 only together with a new frame version, although `Rule` is `#[non_exhaustive]`.
-driftsys/ridl#350 item 12.
+driftsys/ridl#350 item 12. Note (2026-10-12): driftsys/ridl#909 corrected this
+amendment's wording in place. The first version said `None` for any violation
+that arrived over a frame; the corrected text limits `None` to a
+`contract(InvalidValue)` outcome decoded from a frame, because a consumer's own
+detection on bytes received in a frame still names its type.
 
 ## Context
 
@@ -1274,7 +1278,7 @@ trusted with no `unsafe` and no second verification pass.
 | [the `ridl-rt` design record](../design/ridl-rt.md), the `payload` item list                     | `Violation.type_name` is `Option<&'static str>` (decision 9's 2026-10-12 amendment)                                                                                                                                                                                                                                              |
 | [the frame specification](../specification/frame-specification.md) §2 and §9.6                   | a violation that arrived over a frame carries the `Rule` alone and has no type name (decision 9's 2026-10-12 amendment)                                                                                                                                                                                                          |
 | [the `ridl-rt` by example technote](../technotes/ridl-rt-by-example.md)                          | a violation the generated code detects names its type; one that arrived over a frame has `type_name` `None` (decision 9's 2026-10-12 amendment)                                                                                                                                                                                  |
-| `crates/ridl-rt/src/payload.rs`                                                                  | the `Violation` and `Rule` docs state that `type_name` is `Some` for a local detection and `None` for a peer report, and that a `Rule` variant is added only together with a new frame version (decision 9's 2026-10-12 amendment)                                                                                               |
+| `crates/ridl-rt/src/payload.rs`                                                                  | the `Violation` and `Rule` docs state that `type_name` is `None` only for a `contract(InvalidValue)` outcome decoded from a frame and `Some` otherwise, and that a `Rule` variant is added only together with a new frame version (decision 9's 2026-10-12 amendment)                                                            |
 
 ## References
 

@@ -240,11 +240,12 @@ pub enum Malformed {
 /// A value that breaks a typl constraint.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Violation {
-    /// The name of the typl type whose constraint failed: `Some` when the
-    /// generated code detected the violation, or when an in-process transport
-    /// such as `ridl-loopback` delivered it; `None` when the violation arrived
-    /// over a frame transport, because a frame carries the [`Rule`] alone (the
-    /// frame specification §9.6).
+    /// The name of the typl type whose constraint failed. `None` only for a
+    /// `contract(InvalidValue)` outcome decoded from a frame, because a frame
+    /// carries the [`Rule`] alone (the frame specification §9.6). It is `Some`
+    /// otherwise: when the generated code detected the violation, including a
+    /// consumer's own detection on bytes received in a frame, and when an
+    /// in-process transport such as `ridl-loopback` delivered it.
     pub type_name: Option<&'static str>,
     /// The kind of constraint that failed.
     pub rule: Rule,
