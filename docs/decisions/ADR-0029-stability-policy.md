@@ -27,7 +27,8 @@ gains one `frame-vector <id> <hex>` line per row of the vector table of the
 frame specification §11.1, so the frame envelope and the `attach` handshake are
 checked by the dump and leave the policy-only list. The Context bullet on the
 wire dump, decision 3 and decision 6's `Wire format` row are changed in place.
-The layouts and codes that no vector shows stay frozen by policy.
+The layouts of the `unsubscribe`, `read` and `occurrence` frames, which no
+vector shows, and the codes no vector carries stay frozen by policy.
 
 ## Context
 
@@ -168,10 +169,11 @@ design in each:
    for equality with a regeneration, and `runtime-crates` is not checked. The
    output of `ridl diff` and the `ridl-diff` categories, the exit codes of every
    subcommand other than `ridl check`, the formats of `interfaces.lock` and
-   `.ridl/baseline`, and the layouts and codes of the frame specification §4 and
-   §11.1 that no test vector shows are in no dump; they are frozen by policy
-   only. This record is the one that states the status of `ridl diff` and of the
-   `ridl-diff` categories.
+   `.ridl/baseline`, the layouts of the `unsubscribe`, `read` and `occurrence`
+   frames, which no test vector of the frame specification §11.1 shows, and the
+   codes of §4 and §9.6 that no vector carries are in no dump; they are frozen
+   by policy only. This record is the one that states the status of `ridl diff`
+   and of the `ridl-diff` categories.
 
 4. **A break of a frozen surface is approved by removing its row, then adding
    the row again.** `git show <baseline>:freeze/<surface>.txt` must read a dump

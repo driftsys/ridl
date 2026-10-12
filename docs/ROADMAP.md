@@ -512,8 +512,9 @@ invalid-payload behaviour, the rule that a binding is written from the document
 alone, and the two bindings by name: E11.9's WebSocket transport and, on
 Android, a runtime's own binder contract. ridl specifies no Binder layout and no
 transaction code; this reverses the lane P driver's decision D-P5, which had the
-Kotlin backend generate an AIDL binding per interface (driftsys/ridl#516). No
-binding is written yet, and nothing in this workspace speaks the frame;
+Kotlin backend generate an AIDL binding per interface (driftsys/ridl#516). The
+WebSocket binding is now specified in §11.1 of the frame specification; its
+transport is not built, nothing in this workspace speaks the frame, and
 `ridl-loopback` runs in process.
 
 **E11.15 landed** (driftsys/ridl#445). `crates/ridl-loopback` is the first
@@ -1115,7 +1116,7 @@ reopening is an observation rather than an argument.
 | E9   | wire SSOT                       | **step 1** — the hash over the IR and the R5 drift removed; the projections landed |
 | E15  | interface identity and the lock | **step 1** — an interface's number is recorded in its package                      |
 | E16  | the catalog descriptor          | **step 1**, landed — an engine reads a catalog without decoding the IR             |
-| E17  | layout inputs for plugins       | **step 1**, landed except the WebSocket binding's overheads (E17.3)                |
+| E17  | layout inputs for plugins       | **step 1**, landed except the check of the WebSocket overheads (E17.3)             |
 | E6   | rsdl, rewritten                 | **step 1** — a system is described and lowered to the IR                           |
 | E11  | the runtime library             | **step 1** — generated code links a library                                        |
 | E14  | typl and ridl finalization      | **step 1** — the references stop being drafts                                      |
