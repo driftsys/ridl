@@ -14,7 +14,8 @@ pub struct Known {
     pub name: &'static str,
     /// The version of the binding document the overheads come from.
     pub version: &'static str,
-    /// The largest frame header the binding adds to a message, in bytes.
+    /// The largest frame header the binding adds to a data-plane message,
+    /// without the envelope, in bytes.
     /// `None` when the binding states no frame header.
     pub frame_header_max_bytes: Option<u32>,
     /// The bytes the binding's envelope adds to a message. `None` when the
@@ -22,10 +23,17 @@ pub struct Known {
     pub envelope_bytes: Option<u32>,
 }
 
-/// Every known binding. The table is empty because no binding document states
-/// a frame layout yet (driftsys/ridl#265); adding a row here adds it to every
+/// Every known binding. A row's numbers come from its binding document: the
+/// `websocket` row from the frame specification §11.1
+/// (`docs/specification/frame-specification.md`), a value derived from the
+/// binding's frozen header layout. Adding a row here adds it to every
 /// deployment section.
-pub const KNOWN: &[Known] = &[];
+pub const KNOWN: &[Known] = &[Known {
+    name: "websocket",
+    version: "1",
+    frame_header_max_bytes: Some(20),
+    envelope_bytes: Some(16),
+}];
 
 /// The known bindings as deployment-section messages, in name order.
 pub fn bindings() -> Vec<v1::Binding> {

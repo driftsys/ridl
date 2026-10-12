@@ -6946,3 +6946,68 @@ fn an_enum_set_bit_carries_its_doc() {
         "got:\n{source}"
     );
 }
+
+/// This crate does not depend on `ridl-core` in its library, and `ridl-rt`
+/// does not depend on it at all, so each spells the encoding names itself.
+/// This test ties to the table in `ridl-core`: the option key, the
+/// `ridl-rt` names, the names `WireEncoding` reads, the no-codec arms of the
+/// option parser, and the list of names in the refusal text.
+#[test]
+fn encoding_names_agree_with_the_manifest_table() {
+    use ridl_core::manifest::{ENCODING_NAMES, ENCODINGS_KEY};
+    use ridl_ir::codegen::v1::{BackendOption, CodegenRequest};
+    use ridl_rt::encoding::{Encoding, FlatBuffers, Proto3, ReprC};
+
+    assert_eq!(super::ENCODINGS_OPTION, ENCODINGS_KEY);
+    assert_eq!(
+        [FlatBuffers::NAME, Proto3::NAME, ReprC::NAME],
+        ENCODING_NAMES
+    );
+    for name in ENCODING_NAMES {
+        let parsed = super::WireEncoding::parse(name);
+        assert!(
+            parsed.is_none_or(|encoding| encoding.name() == name),
+            "`{name}` does not round trip through WireEncoding"
+        );
+    }
+    assert_eq!(
+        super::WireEncoding::parse("flatbuffers"),
+        Some(super::WireEncoding::FlatBuffers)
+    );
+    assert_eq!(super::WireEncoding::parse("fb"), None);
+
+    let refuse = |value: &str| {
+        let request = CodegenRequest {
+            options: vec![BackendOption {
+                key: ENCODINGS_KEY.to_string(),
+                value: value.to_string(),
+            }],
+            ..Default::default()
+        };
+        let response = ridl_ir::codegen::Backend::generate(&crate::Backend, &request);
+        response.diagnostics[0].message.clone()
+    };
+
+    // Every name of the table is accepted or refused for its own reason, never
+    // as an unknown name.
+    for name in ENCODING_NAMES {
+        let message = refuse(name);
+        assert!(
+            !message.contains("which is not an encoding"),
+            "`{name}` is refused as unknown: {message}"
+        );
+    }
+
+    // A name outside the table is refused as unknown, and that refusal is
+    // the text the loop above looks for.
+    assert!(refuse("fb").contains("which is not an encoding"));
+
+    // The refusals that list the names list exactly the table, in the form
+    // "`a`, `b` and `c`".
+    let quoted: Vec<String> = ENCODING_NAMES.iter().map(|n| format!("`{n}`")).collect();
+    let (last, rest) = quoted.split_last().unwrap();
+    let listed = format!("{} and {last}", rest.join(", "));
+    for message in [refuse(""), refuse("bogus")] {
+        assert!(message.ends_with(&listed), "got: {message}");
+    }
+}

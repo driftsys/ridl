@@ -28,9 +28,10 @@ effect now; release 0.10.0 is not published yet.
 - **The wire format.** The frame envelope, the `attach` handshake, the inputs of
   the catalog hash, the emitted `.proto` and `.fbs` mapping and the encoding
   names.
-- **The minimum Rust version.** Rust 1.83 and edition 2021 for `ridl-rt` and
-  `ridl-rt-conformance`, and the generated crate compiles as edition 2021 with
-  that Rust version. A 0.10.x release does not raise either.
+- **The minimum Rust version.** Rust 1.83 and edition 2021 for `ridl-rt`,
+  `ridl-rt-conformance` and `ridl-loopback`, and Rust 1.88 and edition 2024 for
+  `ridl-descriptor`. The generated crate compiles as edition 2021 with Rust 1.83
+  with every cargo feature on. A 0.10.x release does not raise a minimum.
 
 ## What may change in 0.10.x
 
@@ -61,10 +62,15 @@ The releases of 0.9.x and earlier are not covered by this promise.
 The repository checks each frozen surface that has a recorded baseline against
 that baseline, and a change that removes or alters something a user depends on
 fails the build. Some parts are promised by policy and not yet checked by a
-tool: the frame envelope, the `attach` handshake, the formats of
-`interfaces.lock` and `.ridl/baseline`, the exit codes of every subcommand
-other than `ridl check`, the output of `ridl diff`, and the categories that
-`ridl diff` reports. A contributor who must change a frozen
-surface follows the steps in `CONTRIBUTING.md`, "Changing a frozen surface". The
-full policy, with the gate that checks each surface and the rules for approving
-a break, is [ADR-0029](../decisions/ADR-0029-stability-policy.md).
+tool: the formats of `interfaces.lock` and `.ridl/baseline`, the exit codes of
+every subcommand other than `ridl check`, the output of `ridl diff`, the
+categories that `ridl diff` reports, the layouts of the `unsubscribe`, `read`
+and `occurrence` frames, which no test vector of the frame specification §11.1
+shows, the payload-presence rule of §11.1 for a `publish` under `Init` or
+`Invalid(Declared)` and for a `response` under `reply`, which no vector shows,
+and the codes of §4 and §9.6 that no vector carries, among them the `kind`
+values 2 and 5 and the `attach` encodings 2 and 3. A contributor who
+must change a frozen surface follows the steps in `CONTRIBUTING.md`, "Changing a
+frozen surface". The full policy, with the gate that checks each surface and the
+rules for approving a break, is
+[ADR-0029](../decisions/ADR-0029-stability-policy.md).

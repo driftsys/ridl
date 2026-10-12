@@ -491,6 +491,7 @@ mod tests {
                             payload: "Temp".to_string(),
                             // @[100ms..1s] gives ceil(1000000 / 100000) = 10.
                             timing: Some(timing(Some("100000"), Some("1000000"))),
+                            family: v2::Family::Dispatch as i32,
                         }),
                     ),
                     member(
@@ -510,6 +511,7 @@ mod tests {
                             payload: "Speed".to_string(),
                             // An explicit half-open range: no derivable depth.
                             timing: Some(timing(Some("100000"), None)),
+                            family: v2::Family::Dispatch as i32,
                         }),
                     ),
                     member(
@@ -519,6 +521,7 @@ mod tests {
                             payload: "Humidity".to_string(),
                             // @[400ms..1s] gives ceil(1000000 / 400000) = 3.
                             timing: Some(timing(Some("400000"), Some("1000000"))),
+                            family: v2::Family::Dispatch as i32,
                         }),
                     ),
                 ],
@@ -756,9 +759,18 @@ mod tests {
 
     #[test]
     fn the_binding_list_is_the_known_table_in_name_order() {
-        // The table is empty until a binding document exists
-        // (driftsys/ridl#265).
-        assert!(KNOWN.is_empty());
+        // The one row is the WebSocket binding of the frame specification
+        // §11.1: a data-plane header of at most 20 bytes and a 16-byte
+        // envelope.
+        assert_eq!(
+            bindings(),
+            vec![v1::Binding {
+                name: "websocket".to_string(),
+                version: "1".to_string(),
+                frame_header_max_bytes: Some(20),
+                envelope_bytes: Some(16),
+            }]
+        );
         assert_eq!(section().bindings, bindings());
         assert_eq!(bindings().len(), KNOWN.len());
     }
@@ -1913,6 +1925,7 @@ mod tests {
                                 payload: "Temp".to_string(),
                                 // ceil(1000000 / 100000) = 10.
                                 timing: Some(timing(Some("100000"), Some("1000000"))),
+                                family: v2::Family::Dispatch as i32,
                             }),
                         ),
                         member(
@@ -1933,6 +1946,7 @@ mod tests {
                             payload: "Flag".to_string(),
                             // ceil(500000 / 100000) = 5.
                             timing: Some(timing(Some("100000"), Some("500000"))),
+                            family: v2::Family::Dispatch as i32,
                         }),
                     )],
                     ..Default::default()

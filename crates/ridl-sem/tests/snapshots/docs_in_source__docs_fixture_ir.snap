@@ -412,7 +412,8 @@ expression: json
               "minUs": "100000",
               "maxUs": "1000000",
               "defaultApplied": false
-            }
+            },
+            "family": "FAMILY_DISPATCH"
           }
         },
         {
@@ -439,7 +440,8 @@ expression: json
               "minUs": "50000",
               "maxUs": "500000",
               "defaultApplied": false
-            }
+            },
+            "family": "FAMILY_DISPATCH"
           }
         },
         {
@@ -513,7 +515,9 @@ expression: json
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "50000",
               "defaultApplied": false
-            }
+            },
+            "family": "FAMILY_DISPATCH",
+            "shape": "SHAPE_NONE"
           }
         },
         {
@@ -546,7 +550,8 @@ expression: json
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "100000",
               "defaultApplied": false
-            }
+            },
+            "family": "FAMILY_DISPATCH"
           }
         },
         {
@@ -876,7 +881,8 @@ expression: json
         }
       ],
       "see": [],
-      "since": []
+      "since": [],
+      "tier": "TIER_UNSPECIFIED"
     }
   ],
   "deployments": [

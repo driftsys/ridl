@@ -154,7 +154,10 @@ member; rsdl is the apex.
                          regenerated one, and no line of a dump at its
                          baseline ref is missing now (the baseline refs are
                          in freeze/surfaces.toml; repair a stale dump with
-                         cargo xtask freeze update)
+                         cargo xtask freeze update). It also fails on a row
+                         whose surface is not in the `required` list of
+                         surfaces.toml, on an unknown or repeated name there,
+                         and with --release on a required name without a row
     just compile         compile the Rust workspace (--locked)
     just test            run the Rust workspace test suite (--locked), and
                          ridl-descriptor's tests with its default
@@ -169,10 +172,16 @@ member; rsdl is the apex.
                          ridl-rt-conformance crates as edition
                          2021 with the rust-version in crates/ridl-rt/Cargo.toml
                          and as edition 2024 with the rust-toolchain.toml pin,
-                         check both crates' LICENSE files, and check the crate ridl build
-                         emits for examples/cabin as edition 2021 with the
-                         rust-version, the first cell of the codegen build
-                         matrix (ADR-0021 decision 10)
+                         check both crates' LICENSE files, build the packaged
+                         ridl-loopback at that rust-version, build the packaged
+                         ridl-ir and ridl-descriptor at the rust-version in
+                         crates/ridl-descriptor/Cargo.toml, and check the crate
+                         ridl build emits for examples/cabin (built with
+                         rustc, with only the std feature on) and for the
+                         veh-cluster corpus (built with cargo, every feature
+                         on) as edition 2021 with the ridl-rt rust-version,
+                         the first cell of the codegen build matrix (ADR-0021
+                         decision 10)
     just demo            generate examples/cabin's crate with ridl build and run
                          the program that links it — each round trip's value
                          is matched, and a missing one or a non-zero exit
@@ -217,7 +226,8 @@ member; rsdl is the apex.
                          vsce-target)
     just package-vscode  build ridl for this machine and package the extension
                          (local testing)
-    just release         git std bump — version, changelog, tag
+    just release         freeze check --release, then git std bump — version,
+                         changelog, tag
     just install         ./bootstrap — toolchain, git hooks, gate requirements
 
 Full recipe set: `justfile`. The toolchain conventions come from

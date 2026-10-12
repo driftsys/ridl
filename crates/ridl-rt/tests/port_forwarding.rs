@@ -1,5 +1,6 @@
 //! Every port trait is implemented for a mutable borrow of a port, and the
-//! seven whose methods all take `&self` also for a shared borrow. What these
+//! eight whose methods all take `&self`, or have no methods, also for a shared
+//! borrow. What these
 //! impls buy is one thing: a value generic over a port trait can be given a
 //! reference to a port rather than the port itself. A wrapper or a test
 //! double is accepted by such a bound with or without them, because it
@@ -9,7 +10,8 @@
 //! port trait and calls the trait's methods through it, so a removed
 //! forwarding impl fails this build. `Wakeable`'s forwarding is tested in
 //! `tests/ports.rs`, beside its trait-object test, where a recorder checks
-//! that the key and the waker both arrive unchanged.
+//! that the key and the waker both arrive unchanged. `Encoded`'s forwarding is
+//! tested in `tests/encoded.rs`, because it has no methods to call.
 
 #![forbid(unsafe_code)]
 

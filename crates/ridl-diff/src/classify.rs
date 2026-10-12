@@ -134,6 +134,10 @@ pub(crate) fn classify_in(
         Category::TimingChanged => timing(change, old, new),
         Category::RpcBoundChanged => rpc_bound(change, old, new),
         Category::ContractChanged => contract(change, old, new),
+        // A family or shape is part of the contract a consumer compiled
+        // against; a change moves it in both directions (ADR-0012 decision
+        // 12).
+        Category::InteractionClassChanged => Verdict::Breaking,
     }
 }
 
@@ -1322,6 +1326,15 @@ pub fn explain(category: Category) -> &'static str {
             "              its text changed. Clause text is compared verbatim: the\n",
             "              classifier does not prove that one clause implies another\n",
             "              (ADR-0008 d14)"
+        ),
+        Category::InteractionClassChanged => concat!(
+            "A name-paired interaction's family or operation shape changed\n",
+            "(ADR-0012 d6).\n",
+            "  breaking    any change, in either direction: the family selects the\n",
+            "              obligations a consumer compiled against, and the shape\n",
+            "              the gesture an intent command is. No source writes a\n",
+            "              family other than dispatch yet; the walk compares the\n",
+            "              fields from the start so the diff fails closed (ADR-0012 d9)"
         ),
         Category::WidthChanged => concat!(
             "A derived wire width or scalar backing changed.\n",

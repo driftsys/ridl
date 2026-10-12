@@ -10,15 +10,18 @@
 //!
 //! - **Placement changed** — a change in a deployment: a deployment added or
 //!   removed, a machine added, removed or made `external`, an instance moved to
-//!   another machine.
+//!   another machine, or a `labels`, `deprecated` or backend key of the
+//!   deployment, of a machine or of a placement line changed.
 //! - **Composition changed** — a change to the closure or to a component's
 //!   lines: a component added to or removed from the system, an `offers` or
 //!   `requires` line added or removed, `instances` changed, a component made
-//!   `external`.
+//!   `external`, or a `labels`, `deprecated`, `tier` or backend key of the
+//!   system, of a component, of a distribution or of one of their lines
+//!   changed.
 //!
 //! Both read the lowered `System` of each side and nothing else.
 
-use ridl_ir::v2::{Component, Deployment, InterfaceRef, System};
+use ridl_ir::v2::{self, Component, Deployment, InterfaceRef, System};
 
 /// The heading a system change is listed under (rsdl reference §14).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -57,11 +60,34 @@ pub fn heading_text(heading: SystemHeading) -> &'static str {
 /// removed deployments. The doc fields (`doc`, the doc links, `see`,
 /// `since`) are never read: a doc edit is neither a placement nor a
 /// composition change, and a system change has no verdict (ADR-0026). The
-/// sizing fields (`Deployment.sizing`, `Placement.sizing`) are never read
-/// either: a changed `depth`, `slots` or `budget` changes no link and no
-/// contract (rsdl §14).
+/// sizing fields (`Deployment.sizing`, `Placement.sizing`) are never read: the
+/// registry records them as not reported, reason sizing
+/// (`ridl_core::attributes`).
 pub fn diff_systems(old: &System, new: &System) -> Vec<SystemChange> {
     let mut changes = Vec::new();
+    let system_path = format!("{}.{}", new.package, new.name);
+    declaration_attrs(
+        &mut changes,
+        SystemHeading::CompositionChanged,
+        &system_path,
+        (&old.labels, old.deprecated.as_ref(), &old.attributes),
+        (&new.labels, new.deprecated.as_ref(), &new.attributes),
+    );
+    for line in &new.members {
+        if let Some(before) = old
+            .members
+            .iter()
+            .find(|before| before.component == line.component)
+        {
+            line_attrs(
+                &mut changes,
+                SystemHeading::CompositionChanged,
+                &format!("{system_path}/{}", line.component),
+                &before.attributes,
+                &line.attributes,
+            );
+        }
+    }
     for component in &new.components {
         let name = component.qualified_name();
         match old
@@ -81,6 +107,56 @@ pub fn diff_systems(old: &System, new: &System) -> Vec<SystemChange> {
             .any(|after| after.qualified_name() == name)
         {
             composition(&mut changes, name, Some("in the closure"), None);
+        }
+    }
+    for distribution in &new.distributions {
+        let name = distribution.qualified_name();
+        let Some(before) = old
+            .distributions
+            .iter()
+            .find(|before| before.qualified_name() == name)
+        else {
+            // The distribution set is not compared, so a distribution present
+            // on one side only is reported neither as added nor as removed
+            // (driftsys/ridl#884).
+            continue;
+        };
+        value_change(
+            &mut changes,
+            SystemHeading::CompositionChanged,
+            format!("{name}/tier"),
+            tier_text(before.tier),
+            tier_text(distribution.tier),
+        );
+        declaration_attrs(
+            &mut changes,
+            SystemHeading::CompositionChanged,
+            &name,
+            (
+                &before.labels,
+                before.deprecated.as_ref(),
+                &before.attributes,
+            ),
+            (
+                &distribution.labels,
+                distribution.deprecated.as_ref(),
+                &distribution.attributes,
+            ),
+        );
+        for line in &distribution.members {
+            if let Some(before) = before
+                .members
+                .iter()
+                .find(|earlier| earlier.component == line.component)
+            {
+                line_attrs(
+                    &mut changes,
+                    SystemHeading::CompositionChanged,
+                    &format!("{name}/{}", line.component),
+                    &before.attributes,
+                    &line.attributes,
+                );
+            }
         }
     }
     for deployment in &new.deployments {
@@ -159,6 +235,44 @@ fn compare_components(old: &Component, new: &Component, changes: &mut Vec<System
             after: Some(new.external.to_string()),
         });
     }
+    declaration_attrs(
+        changes,
+        SystemHeading::CompositionChanged,
+        &name,
+        (&old.labels, old.deprecated.as_ref(), &old.attributes),
+        (&new.labels, new.deprecated.as_ref(), &new.attributes),
+    );
+    for offer in &new.offers {
+        if let Some(before) = old
+            .offers
+            .iter()
+            .find(|before| before.service == offer.service)
+        {
+            line_attrs(
+                changes,
+                SystemHeading::CompositionChanged,
+                &format!("{name}/offers/{}", offer.service),
+                &before.attributes,
+                &offer.attributes,
+            );
+        }
+    }
+    for require in &new.requires {
+        let interface = interface_text(require.interface.as_ref());
+        if let Some(before) = old
+            .requires
+            .iter()
+            .find(|before| interface_text(before.interface.as_ref()) == interface)
+        {
+            line_attrs(
+                changes,
+                SystemHeading::CompositionChanged,
+                &format!("{name}/requires/{interface}"),
+                &before.attributes,
+                &require.attributes,
+            );
+        }
+    }
 }
 
 /// The lines of one keyword that one side has and the other does not.
@@ -190,6 +304,13 @@ fn lines(
 /// A deployment in both systems: its machines, their `external` flags, and
 /// the machine of every instance placed on both sides.
 fn compare_deployments(old: &Deployment, new: &Deployment, changes: &mut Vec<SystemChange>) {
+    declaration_attrs(
+        changes,
+        SystemHeading::PlacementChanged,
+        &new.name,
+        (&old.labels, old.deprecated.as_ref(), &old.attributes),
+        (&new.labels, new.deprecated.as_ref(), &new.attributes),
+    );
     for machine in &new.machines {
         let path = format!("{}/{}", new.name, machine.name);
         match old
@@ -206,6 +327,27 @@ fn compare_deployments(old: &Deployment, new: &Deployment, changes: &mut Vec<Sys
             Some(_) => {}
             None => placement(changes, path, None, Some("machine")),
         }
+        if let Some(before) = old
+            .machines
+            .iter()
+            .find(|before| before.name == machine.name)
+        {
+            declaration_attrs(
+                changes,
+                SystemHeading::PlacementChanged,
+                &format!("{}/{}", new.name, machine.name),
+                (
+                    &before.labels,
+                    before.deprecated.as_ref(),
+                    &before.attributes,
+                ),
+                (
+                    &machine.labels,
+                    machine.deprecated.as_ref(),
+                    &machine.attributes,
+                ),
+            );
+        }
     }
     for machine in &old.machines {
         if !new.machines.iter().any(|after| after.name == machine.name) {
@@ -218,12 +360,13 @@ fn compare_deployments(old: &Deployment, new: &Deployment, changes: &mut Vec<Sys
         }
     }
     for placed in &new.placements {
-        let moved_from = old.placements.iter().find(|before| {
-            before.component == placed.component
-                && before.instance == placed.instance
-                && before.machine != placed.machine
+        let paired = old.placements.iter().find(|before| {
+            before.component == placed.component && before.instance == placed.instance
         });
-        if let Some(before) = moved_from {
+        let Some(before) = paired else {
+            continue;
+        };
+        if before.machine != placed.machine {
             changes.push(SystemChange {
                 heading: SystemHeading::PlacementChanged,
                 path: format!("{}/{}.{}", new.name, placed.component, placed.instance),
@@ -231,6 +374,13 @@ fn compare_deployments(old: &Deployment, new: &Deployment, changes: &mut Vec<Sys
                 after: Some(placed.machine.clone()),
             });
         }
+        line_attrs(
+            changes,
+            SystemHeading::PlacementChanged,
+            &format!("{}/{}.{}", new.name, placed.component, placed.instance),
+            &before.attributes,
+            &placed.attributes,
+        );
     }
 }
 
@@ -260,6 +410,117 @@ fn placement(
         before: before.map(str::to_string),
         after: after.map(str::to_string),
     });
+}
+
+/// `(A, B)` as `labels` is written; `()` when empty.
+fn label_list(labels: &[String]) -> String {
+    format!("({})", labels.join(", "))
+}
+
+/// `[ ns.key = value, ns.flag ]` as a backend key block is written; `[]`
+/// when empty.
+fn attribute_list(attributes: &[v2::Attribute]) -> String {
+    if attributes.is_empty() {
+        return "[]".to_string();
+    }
+    let items: Vec<String> = attributes
+        .iter()
+        .map(|attribute| match &attribute.value {
+            Some(value) => format!(
+                "{}.{} = {}",
+                attribute.namespace,
+                attribute.key,
+                value_text(value)
+            ),
+            None => format!("{}.{}", attribute.namespace, attribute.key),
+        })
+        .collect();
+    format!("[ {} ]", items.join(", "))
+}
+
+/// An attribute value as written: a scalar as its text, a list as `(a, b)`.
+fn value_text(value: &v2::AttributeValue) -> String {
+    match &value.kind {
+        Some(v2::attribute_value::Kind::Scalar(text)) => text.clone(),
+        Some(v2::attribute_value::Kind::List(list)) => {
+            let items: Vec<String> = list.items.iter().map(value_text).collect();
+            format!("({})", items.join(", "))
+        }
+        None => String::new(),
+    }
+}
+
+/// `PLATFORM` or `APPLICATION`, or `None` when the distribution has no tier.
+/// A value this build does not know renders as `tier(<n>)`, so that a
+/// snapshot written by a later toolchain does not read as "no tier".
+fn tier_text(tier: i32) -> Option<String> {
+    match v2::Tier::try_from(tier) {
+        Ok(v2::Tier::Platform) => Some("PLATFORM".to_string()),
+        Ok(v2::Tier::Application) => Some("APPLICATION".to_string()),
+        Ok(v2::Tier::Unspecified) => None,
+        Err(_) => Some(format!("tier({tier})")),
+    }
+}
+
+/// One before-and-after line when the two values differ.
+fn value_change(
+    changes: &mut Vec<SystemChange>,
+    heading: SystemHeading,
+    path: String,
+    before: Option<String>,
+    after: Option<String>,
+) {
+    if before != after {
+        changes.push(SystemChange {
+            heading,
+            path,
+            before,
+            after,
+        });
+    }
+}
+
+/// The `labels`, `deprecated` and backend keys of a declaration, under
+/// `heading` at `path`.
+fn declaration_attrs(
+    changes: &mut Vec<SystemChange>,
+    heading: SystemHeading,
+    path: &str,
+    old: (&[String], Option<&String>, &[v2::Attribute]),
+    new: (&[String], Option<&String>, &[v2::Attribute]),
+) {
+    value_change(
+        changes,
+        heading,
+        format!("{path}/labels"),
+        Some(label_list(old.0)),
+        Some(label_list(new.0)),
+    );
+    value_change(
+        changes,
+        heading,
+        format!("{path}/deprecated"),
+        old.1.map(|reason| format!("{reason:?}")),
+        new.1.map(|reason| format!("{reason:?}")),
+    );
+    line_attrs(changes, heading, path, old.2, new.2);
+}
+
+/// The backend keys of a line, under `heading` at `path`.
+fn line_attrs(
+    changes: &mut Vec<SystemChange>,
+    heading: SystemHeading,
+    path: &str,
+    old: &[v2::Attribute],
+    new: &[v2::Attribute],
+) {
+    value_change(
+        changes,
+        heading,
+        format!("{path}/attributes"),
+        Some(attribute_list(old)),
+        Some(attribute_list(new)),
+    );
 }
 
 /// `catalog.Name` for a declared interface, the service's dotted name for an
@@ -327,6 +588,7 @@ mod tests {
             links: Vec::new(),
             see: Vec::new(),
             since: Vec::new(),
+            deprecated: None,
         }
     }
 
@@ -340,6 +602,7 @@ mod tests {
             links: Vec::new(),
             see: Vec::new(),
             since: Vec::new(),
+            deprecated: None,
         }
     }
 
@@ -392,6 +655,178 @@ mod tests {
                 line
             })
             .collect()
+    }
+
+    fn backend(namespace: &str, key: &str, value: Option<&str>) -> v2::Attribute {
+        v2::Attribute {
+            namespace: namespace.to_string(),
+            key: key.to_string(),
+            value: value.map(|text| v2::AttributeValue {
+                kind: Some(v2::attribute_value::Kind::Scalar(text.to_string())),
+            }),
+        }
+    }
+
+    /// `base()` plus one distribution and the system's own member lines, so
+    /// that every rsdl site is present.
+    fn with_distribution() -> System {
+        let mut system = base();
+        system.members = vec![
+            v2::MemberLine {
+                component: "veh.topology.Cruise".to_string(),
+                ..Default::default()
+            },
+            v2::MemberLine {
+                component: "veh.topology.Panel".to_string(),
+                ..Default::default()
+            },
+        ];
+        system.distributions.push(v2::Distribution {
+            name: "Adas".to_string(),
+            package: "veh.topology".to_string(),
+            members: vec![v2::MemberLine {
+                component: "veh.topology.Cruise".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
+        system
+    }
+
+    /// Every `Compared` row of the registry with an rsdl site is reported by
+    /// `diff_systems`, and every `NotReported` row is not. The mutation per
+    /// row is written here, so a row added to the registry without diff
+    /// support fails this test on the `panic!` arm.
+    #[test]
+    fn the_registry_rows_are_reported_as_recorded() {
+        use ridl_core::attributes::{ATTRIBUTES, AttrName, Diff, Site};
+        for row in ATTRIBUTES {
+            if !row
+                .sites
+                .iter()
+                .any(|site| !matches!(site, Site::Command | Site::Query))
+            {
+                continue;
+            }
+            let old = with_distribution();
+            let mut new = with_distribution();
+            let key = match row.name {
+                AttrName::Key(key) => key,
+                AttrName::Namespaced => "ns.key",
+            };
+            match key {
+                "instances" => new.components[0].instances = vec!["Unit".to_string()],
+                "external" => new.components[0].external = true,
+                "tier" => new.distributions[0].tier = v2::Tier::Application as i32,
+                "labels" => new.distributions[0].labels = vec!["QM".to_string()],
+                "deprecated" => new.deployments[0].deprecated = Some("use v2".to_string()),
+                "depth" => {
+                    new.deployments[0].sizing = Some(v2::Sizing {
+                        depth: Some(4),
+                        slots: None,
+                        budget: None,
+                    })
+                }
+                "slots" => {
+                    new.deployments[0].placements[0].sizing = Some(v2::Sizing {
+                        depth: None,
+                        slots: Some(4),
+                        budget: None,
+                    })
+                }
+                "budget" => {
+                    new.deployments[0].sizing = Some(v2::Sizing {
+                        depth: None,
+                        slots: None,
+                        budget: Some(4096),
+                    })
+                }
+                "ns.key" => new.deployments[0].machines[0].attributes.push(backend(
+                    "linux",
+                    "cpuset",
+                    Some("(2)"),
+                )),
+                other => panic!("registry row `{other}` has no mutation in this test"),
+            }
+            let changes = diff_systems(&old, &new);
+            match row.diff {
+                Diff::Compared(_) => assert!(!changes.is_empty(), "`{key}` must be reported"),
+                Diff::NotReported(reason) => assert!(
+                    changes.is_empty(),
+                    "`{key}` is recorded as not reported ({reason:?}) but was: {changes:?}"
+                ),
+            }
+        }
+    }
+
+    /// rsdl §14: `labels`, `deprecated`, `tier` and a backend key are listed
+    /// under the heading of the declaration they are on, as a before-and-after
+    /// line. Every site the registry names is exercised here: the system and
+    /// its member lines, a component with its `offers` and `requires` lines, a
+    /// distribution with its member lines, a deployment, a machine and a
+    /// placement line.
+    #[test]
+    fn attribute_changes_are_listed_under_the_heading_of_their_site() {
+        let old = with_distribution();
+        let mut new = with_distribution();
+        new.labels = vec!["QM".to_string()];
+        new.components[0].deprecated = Some("use Cruise2".to_string());
+        new.distributions[0].tier = v2::Tier::Platform as i32;
+        new.members[0]
+            .attributes
+            .push(backend("deb", "section", Some("net")));
+        new.components[0].requires[0]
+            .attributes
+            .push(backend("someip", "clientId", Some("17")));
+        new.distributions[0].members[0]
+            .attributes
+            .push(backend("sign", "key", None));
+        new.components[0].offers[0]
+            .attributes
+            .push(backend("someip", "serviceId", Some("4660")));
+        new.deployments[0]
+            .attributes
+            .push(backend("rust", "crate", Some("\"s\"")));
+        new.deployments[0].machines[0].labels = vec!["ASIL_B".to_string()];
+        new.deployments[0].placements[0]
+            .attributes
+            .push(backend("linux", "cpuset", Some("(2)")));
+        assert_eq!(
+            lines(&diff_systems(&old, &new)),
+            [
+                "composition changed: veh.topology.Vehicle/labels: () -> (QM)",
+                "composition changed: veh.topology.Vehicle/veh.topology.Cruise/attributes: \
+                 [] -> [ deb.section = net ]",
+                "composition changed: veh.topology.Cruise/deprecated: (absent) -> \"use Cruise2\"",
+                "composition changed: veh.topology.Cruise/offers/veh.adas.cruise/attributes: \
+                 [] -> [ someip.serviceId = 4660 ]",
+                "composition changed: veh.topology.Cruise/requires/veh.adas.LaneAssist/attributes: \
+                 [] -> [ someip.clientId = 17 ]",
+                "composition changed: veh.topology.Adas/tier: (absent) -> PLATFORM",
+                "composition changed: veh.topology.Adas/veh.topology.Cruise/attributes: \
+                 [] -> [ sign.key ]",
+                "placement changed: Production/attributes: [] -> [ rust.crate = \"s\" ]",
+                "placement changed: Production/AdasHpc/labels: () -> (ASIL_B)",
+                "placement changed: Production/veh.topology.Cruise.primary/attributes: \
+                 [] -> [ linux.cpuset = (2) ]",
+            ]
+        );
+    }
+
+    /// A value removed is reported, as the mirror of one added.
+    #[test]
+    fn an_attribute_removed_is_reported() {
+        let mut old = with_distribution();
+        old.components[0].deprecated = Some("use Cruise2".to_string());
+        old.distributions[0].tier = v2::Tier::Platform as i32;
+        let new = with_distribution();
+        assert_eq!(
+            lines(&diff_systems(&old, &new)),
+            [
+                "composition changed: veh.topology.Cruise/deprecated: \"use Cruise2\" -> (removed)",
+                "composition changed: veh.topology.Adas/tier: PLATFORM -> (removed)",
+            ]
+        );
     }
 
     #[test]

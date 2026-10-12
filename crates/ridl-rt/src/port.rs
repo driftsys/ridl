@@ -8,9 +8,9 @@
 //!
 //! A port is attached to one catalog ([`Attached`]), and the interface numbers
 //! and ordinals its methods take are scoped by that catalog. A port type may
-//! also state the encoding of the bytes it carries ([`Encoded`]); the
-//! generated face reads that encoding from its port, and a port a face is
-//! bound to implements it.
+//! also state the encoding of the bytes it carries ([`Encoded`]); no port in
+//! this crate's workspace implements it yet, and the generated face does not
+//! read it yet.
 //!
 //! [`ScannableSignals`] and [`CoherentSignals`] are extensions. They describe
 //! mechanisms some runtimes have, not interaction semantics every runtime must
@@ -48,13 +48,14 @@ pub trait Attached {
 ///
 /// A separate trait, not a supertrait of [`Attached`], so a port that never
 /// meets a face — a conformance fixture — is not forced to name an encoding.
-/// The generated face reads a port's encoding through this trait: its types
-/// and functions bound their port parameter on it and take every size through
-/// `P::Encoding`, so a port whose encoding the generated package does not
-/// carry is refused where the face is bound to it. In this crate's workspace
-/// `ridl-loopback` implements it, on its aggregate handle and on each of its
-/// six role handles. The design of the encodings a package carries is tracked
-/// as driftsys/ridl#801.
+/// It forwards through `&P` and `&mut P`, so a face reached over a borrowed
+/// port reads the same encoding. The generated face reads a port's encoding
+/// through this trait: its types and functions bound their port parameter on
+/// it and take every size through `P::Encoding`, so a port whose encoding the
+/// generated package does not carry is refused where the face is bound to it.
+/// In this crate's workspace `ridl-loopback` implements it, on its aggregate
+/// handle and on each of its six role handles. The design of the encodings a
+/// package carries is tracked as driftsys/ridl#801.
 pub trait Encoded {
     /// The encoding of the bytes this port carries.
     type Encoding: Encoding;
@@ -688,10 +689,10 @@ pub enum SettleError {
 
 // Forwarding impls (ADR-0021 decision 11).
 //
-// Every port trait above is implemented for `&mut P`, and the seven whose
-// methods all take `&self` — `Attached`, `Clock`, `SignalReader`,
-// `FixedReader`, `ScannableSignals`, `CoherentSignals` and `Wakeable` — also
-// for `&P`.
+// Every port trait above is implemented for `&mut P`, and the eight whose
+// methods all take `&self`, or that have no methods — `Attached`, `Clock`,
+// `SignalReader`, `FixedReader`, `ScannableSignals`, `CoherentSignals`,
+// `Wakeable` and `Encoded` — also for `&P`.
 // What they buy is one thing: a value generic over a port trait, such as a
 // generated face, can be built over a reference to a port rather than over the
 // port itself. A wrapper that adds tracing and a test double are accepted by
@@ -712,6 +713,10 @@ impl<P: Attached + ?Sized> Attached for &mut P {
     fn catalog(&self) -> &CatalogRef {
         (**self).catalog()
     }
+}
+
+impl<P: Encoded + ?Sized> Encoded for &P {
+    type Encoding = P::Encoding;
 }
 
 impl<P: Encoded + ?Sized> Encoded for &mut P {

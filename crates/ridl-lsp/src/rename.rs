@@ -32,8 +32,9 @@
 //! Three rejections, each surfaced to the client as an error (or a null
 //! `prepareRename`): the new name is a reserved word, it violates the case
 //! convention (general form §3 R7 — a type stays CamelCase, a constant stays
-//! SCREAMING_SNAKE), or it collides with an existing declaration in a package
-//! the rename would touch.
+//! SCREAMING_SNAKE), or it collides with an existing binding in a package the
+//! rename would touch. A binding is a declaration or an import, under its
+//! alias or its last segment; the import the rename rewrites is not counted.
 
 use ridl_core::db::InputFile;
 use ridl_core::package::{Package, Workspace};
@@ -153,10 +154,16 @@ pub fn rename_symbol(
     // Reject: a case-convention violation (general form §3 R7).
     check_case(&target, new_name)?;
 
-    // Reject: a collision in the declaring package.
+    // Reject: a collision in the declaring package. An import counts as well
+    // as a declaration: with `import b.Velocity` in the declaring package,
+    // renaming `Speed` to `Velocity` would leave every bare `Velocity` bound
+    // to the new declaration instead of the import (driftsys/ridl#842).
     let declaring = package_named(db, packages, &target.package);
     if let Some(declaring) = declaring
-        && declares(db, ws, std, declaring, new_name)
+        && (declares(db, ws, std, declaring, new_name)
+            || imports_bind(db, declaring, new_name, |qualified| {
+                import_binds(qualified, &target)
+            }))
     {
         return Err(RenameError::Collision(new_name.to_string()));
     }
@@ -202,10 +209,13 @@ pub fn rename_symbol(
     }
 
     // The separate import-statement pass, with its own collision check: an
-    // importing package that already declares the new name would then have the
-    // rewritten import clash with that declaration.
+    // importing package that already binds the new name — by a declaration or
+    // by another import — would then have the rewritten import clash with that
+    // binding (driftsys/ridl#842). Only an unaliased import of the target is
+    // rewritten into a new binding; `import a.Speed as Pace` keeps binding
+    // `Pace` after the rename, so it cannot collide.
     for &importing in packages {
-        let mut imports_target = false;
+        let mut rebinds_target = false;
         for &import_file in importing.files(db) {
             let source = nav::source_file(db, import_file);
             for import in source.imports() {
@@ -215,7 +225,7 @@ pub fn rename_symbol(
                 if !import_binds(qualified.syntax(), &target) {
                     continue;
                 }
-                imports_target = true;
+                rebinds_target |= import.alias().is_none();
                 if let Some(token) = nav::last_segment_token(&qualified) {
                     edits.push(Edit {
                         file: import_file,
@@ -224,9 +234,12 @@ pub fn rename_symbol(
                 }
             }
         }
-        if imports_target
+        if rebinds_target
             && Some(importing) != declaring
-            && declares(db, ws, std, importing, new_name)
+            && (declares(db, ws, std, importing, new_name)
+                || imports_bind(db, importing, new_name, |qualified| {
+                    import_binds(qualified, &target)
+                }))
         {
             return Err(RenameError::Collision(new_name.to_string()));
         }
@@ -349,4 +362,34 @@ fn import_binds(qualified: &SyntaxNode, target: &Symbol) -> bool {
         return false;
     };
     base == &target.name && path.join(".") == target.package
+}
+
+/// Whether an `import` of `package` binds `name`, under its alias or, with no
+/// alias, under the last segment of its path. An import whose path `skip`
+/// accepts is not counted: that is the import the rename rewrites, so what it
+/// binds now does not decide the collision.
+pub(crate) fn imports_bind(
+    db: &dyn salsa::Database,
+    package: Package,
+    name: &str,
+    skip: impl Fn(&SyntaxNode) -> bool,
+) -> bool {
+    package.files(db).iter().any(|file| {
+        nav::source_file(db, *file).imports().any(|import| {
+            let Some(qualified) = import.qualified_name() else {
+                return false;
+            };
+            if skip(qualified.syntax()) {
+                return false;
+            }
+            let bound = match import.alias() {
+                Some(alias) => alias.syntax().text().to_string(),
+                None => nav::qualified_segments(qualified.syntax())
+                    .last()
+                    .cloned()
+                    .unwrap_or_default(),
+            };
+            bound == name
+        })
+    })
 }

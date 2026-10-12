@@ -386,21 +386,24 @@ of its slot: RSDL-602 (`system`), RSDL-903 (`distribution`), RSDL-702
 
 Every declaration and every line takes the family `[ ]` block (general form
 §4.2). rsdl uses two of its three forms — the flag and the assignment; no rsdl
-key takes the predicate form. The principle (D-6): **an rsdl-owned key is
-allow-listed per declaration kind and has a machine consumer; every other key
-belongs to a backend and is carried uninterpreted.**
+key takes the predicate form. The principle (D-6): **a core key is allow-listed
+per declaration kind and has a machine consumer; every other key belongs to a
+backend and is carried uninterpreted.** The table is the attribute registry as
+built (`ridl_core::attributes`, ADR-0012 decision 8): one row per key, with its
+owner (`core`, or `backend` for the `backend.key` pattern), its form, its sites,
+its consumer and what `ridl diff` does with a change to it.
 
-| Key           | Form                            | Legal on                     | Consumer                                               |
-| ------------- | ------------------------------- | ---------------------------- | ------------------------------------------------------ |
-| `instances`   | `= (a, b, …)` camelCase names   | `component`                  | the instance set, §7                                   |
-| `external`    | flag                            | `component`, `machine`       | placement and the surface set, §9, §13                 |
-| `tier`        | `= PLATFORM` or `= APPLICATION` | `distribution`               | RSDL-901, §3.3                                         |
-| `depth`       | `= N`, integer occurrences      | `deployment`, placement line | the ring depth of an event channel, §13                |
-| `slots`       | `= N`, integer table entries    | `deployment`, placement line | the slot count of a command or query channel, §13      |
-| `budget`      | `= N`, integer bytes            | `deployment`, placement line | the byte budget of a command or query channel, §13     |
-| `labels`      | `= (LABEL, …)`                  | the five declarations        | assurance profiles (typl §14.3, general form §4.7)     |
-| `deprecated`  | `= "reason"`                    | the five declarations        | the family lint (general form §4.7); rsdl adds no rule |
-| `backend.key` | flag or assignment              | every declaration and line   | that backend, uninterpreted                            |
+| Key           | Form                            | Legal on                     | Consumer                                               | Diff                                        |
+| ------------- | ------------------------------- | ---------------------------- | ------------------------------------------------------ | ------------------------------------------- |
+| `instances`   | `= (a, b, …)` camelCase names   | `component`                  | the instance set, §7                                   | reported under the heading of its site, §14 |
+| `external`    | flag                            | `component`, `machine`       | placement and the surface set, §9, §13                 | reported under the heading of its site, §14 |
+| `tier`        | `= PLATFORM` or `= APPLICATION` | `distribution`               | RSDL-901, §3.3                                         | reported under the heading of its site, §14 |
+| `depth`       | `= N`, integer occurrences      | `deployment`, placement line | the ring depth of an event channel, §13                | not reported: sizing, §14                   |
+| `slots`       | `= N`, integer table entries    | `deployment`, placement line | the slot count of a command or query channel, §13      | not reported: sizing, §14                   |
+| `budget`      | `= N`, integer bytes            | `deployment`, placement line | the byte budget of a command or query channel, §13     | not reported: sizing, §14                   |
+| `labels`      | `= (LABEL, …)`                  | the five declarations        | assurance profiles (typl §14.3, general form §4.7)     | reported under the heading of its site, §14 |
+| `deprecated`  | `= "reason"`                    | the five declarations        | the family lint (general form §4.7); rsdl adds no rule | reported under the heading of its site, §14 |
+| `backend.key` | flag or assignment              | every declaration and line   | that backend, uninterpreted                            | reported under the heading of its site, §14 |
 
 - `instances` must be a parenthesised list of one or more camelCase names: `()`
   and `instances = solo` are RSDL-305. `external` is a flag and takes no value:
@@ -779,15 +782,22 @@ still reported.
   added, removed or made `external` — changes every link derived from the old
   placement and leaves the contract untouched. `ridl diff` lists it under its
   own heading, **placement changed**, with no verdict: neither compatible nor
-  breaking. A changed `depth`, `slots` or `budget`, on the deployment or on a
-  placement line, is not listed: `ridl diff` reads neither `Deployment.sizing`
-  nor `Placement.sizing`, because a sizing value changes no link and no
-  contract.
+  breaking. A changed `labels`, `deprecated` or backend key on the deployment,
+  on a machine or on a placement line is listed under the same heading, as a
+  before-and-after line. A changed `depth`, `slots` or `budget`, on the
+  deployment or on a placement line, is not listed: the attribute registry
+  records the three sizing keys as not reported, with the reason that a sizing
+  value changes no link and no contract, and `ridl diff` reads neither
+  `Deployment.sizing` nor `Placement.sizing`.
 - A change to the closure or to a component's lines — a component added to or
   removed from the system, an `offers` or `requires` line added or removed,
-  `instances` changed, a component made `external` — is listed under a second
-  heading, **composition changed**, likewise with no verdict, because it changes
-  the derived links and not the contract.
+  `instances` changed, a component made `external`, a `labels`, `deprecated`,
+  `tier` or backend key changed on the system, on a component, on a distribution
+  or on one of their lines — is listed under a second heading, **composition
+  changed**, likewise with no verdict, because it changes the derived links and
+  not the contract. A distribution one side declares and the other does not is
+  the one gap: the distribution set itself is not compared, so neither the
+  distribution nor its attributes are listed (driftsys/ridl#884).
 - Which of these changes are breaking, and for whom, is decided by the stability
   policy ([IR specification](ir-specification.md)), not here.
 

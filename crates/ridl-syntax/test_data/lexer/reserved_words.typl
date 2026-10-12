@@ -2,8 +2,7 @@
 // lexer maps every one to ReservedWord, so they can never be identifiers in a
 // .typl file even though .typl rejects the declarations they belong to.
 interface service signal event command query
-view display input action activate toggle select adjust dismiss fetch fixed
-states during navigate scroll drag observe surface agent
+fixed states during
 require ensure
 model function let last case if then else when emit merge current state
 transition automaton

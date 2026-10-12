@@ -468,6 +468,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "50"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -540,6 +541,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "60"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -603,6 +605,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "43"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -681,7 +684,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "flatbuffers": {
                   "bounded": 43
                 }
-              }
+              },
+              "shape": "SHAPE_NONE"
             }
           }
         },
@@ -712,6 +716,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "unsized": "readDoor.reply: DoorReport | DoorFault"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -856,6 +861,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "43"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -952,6 +958,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "46"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -1023,6 +1030,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "unsized": "fuelLevel.request: ()"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -1522,6 +1530,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "46"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -1593,6 +1602,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "43"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -1671,7 +1681,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "flatbuffers": {
                   "bounded": 43
                 }
-              }
+              },
+              "shape": "SHAPE_NONE"
             }
           }
         },
@@ -1702,6 +1713,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "89"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -1895,6 +1907,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "43"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -1962,6 +1975,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "unsized": "readDoor.reply: fleet.contracts.DoorReport | fleet.contracts.DoorFault"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -2111,6 +2125,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "unsized": "readLegacyDoor.reply: fleet.contracts.DoorReport | fleet.legacy.DoorFault"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],

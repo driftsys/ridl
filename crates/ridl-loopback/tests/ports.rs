@@ -150,7 +150,7 @@
 //!   a serve, a handler's drop and a withdrawal.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, mpsc};
+use std::sync::{mpsc, Arc};
 use std::task::{Wake, Waker};
 
 use ridl_loopback::{Handles, Loopback};
