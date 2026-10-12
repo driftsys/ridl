@@ -14,7 +14,8 @@ pub struct Known {
     pub name: &'static str,
     /// The version of the binding document the overheads come from.
     pub version: &'static str,
-    /// The largest frame header the binding adds to a message, in bytes.
+    /// The largest frame header the binding adds to a data-plane message,
+    /// without the envelope, in bytes.
     /// `None` when the binding states no frame header.
     pub frame_header_max_bytes: Option<u32>,
     /// The bytes the binding's envelope adds to a message. `None` when the

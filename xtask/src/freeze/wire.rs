@@ -638,6 +638,10 @@ mod tests {
             let err = frame_vectors(&text).expect_err(why);
             assert!(err.contains("name"), "{why}: {err}");
         }
+        assert!(
+            frame_vectors(&spec_with(&["| `short` | x | `01 01000000` |"])).is_err(),
+            "an attach below 39 bytes"
+        );
         let wrong_version =
             "01 02000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 01 61";
         assert!(frame_vectors(&spec_with(&[&format!("| `v` | x | `{wrong_version}` |")])).is_err());
