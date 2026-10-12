@@ -459,6 +459,36 @@ mod tests {
     }
 
     #[test]
+    fn the_sample_sorts_the_runs_of_each_group() {
+        let mut runs = four_labels(5);
+        runs.reverse();
+        let picked = sample(&runs, 4);
+        assert_eq!(
+            picked,
+            [
+                "design-0001/claude-with-1",
+                "design-0001/claude-without-1",
+                "design-0001/codex-with-1",
+                "design-0001/codex-without-1"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_directory_with_no_result_file_has_no_results() {
+        let out = out("no-results");
+        assert!(!has_results(&out).unwrap());
+        std::fs::create_dir_all(out.join("transcripts/design-0001")).unwrap();
+        std::fs::write(
+            out.join("transcripts/design-0001/claude-with-1.jsonl"),
+            "{}",
+        )
+        .unwrap();
+        assert!(!has_results(&out).unwrap());
+        assert!(!has_results(&out.join("missing")).unwrap());
+    }
+
+    #[test]
     fn the_sample_stops_at_its_size_or_when_every_group_is_empty() {
         assert_eq!(sample(&four_labels(12), 20).len(), 20);
         assert_eq!(sample(&four_labels(2), 20).len(), 8);

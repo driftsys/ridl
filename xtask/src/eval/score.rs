@@ -325,6 +325,16 @@ mod tests {
             "/bin/bash -lc 'ridl check --format json .'"
         ));
         assert!(runs_ridl_check("cd /r/ws && /usr/local/bin/ridl check ."));
+        // A new simple command starts after each of these separators.
+        for command in [
+            "echo a; ridl check .",
+            "echo a && ridl check .",
+            "echo a | ridl check .",
+            "echo $(ridl check .)",
+            "echo a\nridl check .",
+        ] {
+            assert!(runs_ridl_check(command), "{command}");
+        }
     }
 
     #[test]

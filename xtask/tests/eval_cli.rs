@@ -19,12 +19,15 @@ fn script(dir: &Path, name: &str, body: &str) -> PathBuf {
 /// line naming `ridl_check`; `claude_body` replaces the fake Claude agent's
 /// script when given. Every fake appends its command line to `calls.log`. A
 /// fake judge saves the prompt it read as `<host>-judge-prompt.txt`, and a
-/// fake host saves the environment it ran with as `<host>.env`.
+/// fake host saves the environment it ran with as `<host>-agent.env` or
+/// `<host>-judge.env`.
 ///
 /// Files in the directory change what a fake prints: `check.json` is the
 /// output of `ridl check` on a workspace with a `ridl.toml`, `diff-verdict`
 /// the verdict of `ridl diff`, and `codex-verdict` the reply of the Codex
-/// judge. The fake `ridl diff` prints nothing and exits 3 unless its third and
+/// judge. With `refresh`, the fake Codex agent and judge write a new
+/// `auth.json` in their home, as a token refresh does; with `judge-sleep`,
+/// the fake Codex judge sleeps for 60 seconds. The fake `ridl diff` prints nothing and exits 3 unless its third and
 /// fourth arguments are the task's starting workspace and the run's workspace.
 /// The directory is removed when the value is dropped.
 struct Fakes {
@@ -85,7 +88,7 @@ fn fakes_with(claude_body: Option<&str>) -> Fakes {
         &dir,
         "claude",
         &format!(
-            "echo \"claude $*\" >> '{d}/calls.log'\n{JUDGE_ITEMS}\nenv > '{d}/claude.env'\ncase \"$*\" in *--json-schema*) printf '%s' \"$prompt\" > '{d}/claude-judge-prompt.txt'; echo \"{{\\\"type\\\":\\\"result\\\",\\\"structured_output\\\":{{\\\"items\\\":[$items]}}}}\"; exit 0;; esac\n{}",
+            "echo \"claude $*\" >> '{d}/calls.log'\n{JUDGE_ITEMS}\ncase \"$*\" in *--json-schema*) env > '{d}/claude-judge.env'; printf '%s' \"$prompt\" > '{d}/claude-judge-prompt.txt'; echo \"{{\\\"type\\\":\\\"result\\\",\\\"structured_output\\\":{{\\\"items\\\":[$items]}}}}\"; exit 0;; esac\nenv > '{d}/claude-agent.env'\n{}",
             claude_body.unwrap_or(
                 r#"[ -f ridl.toml ] || printf '[package]\n' > ridl.toml; echo '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__ridl__ridl_check","input":{}}]}}'; echo '{"type":"result","result":"Done."}'"#,
             )
@@ -97,12 +100,16 @@ fn fakes_with(claude_body: Option<&str>) -> Fakes {
         &format!(
             r#"echo "codex $*" >> '{d}/calls.log'
 {JUDGE_ITEMS}
-env > '{d}/codex.env'
 case "$*" in *--output-schema*)
+  env > '{d}/codex-judge.env'
   printf '%s' "$prompt" > '{d}/codex-judge-prompt.txt'
+  [ -f '{d}/judge-sleep' ] && exec sleep 60
+  [ -f '{d}/refresh' ] && echo refreshed-by-judge > "$CODEX_HOME/auth.json"
   if [ -f '{d}/codex-verdict' ]; then cat '{d}/codex-verdict' > "$out"; else echo "{{\"items\":[$items]}}" > "$out"; fi
   exit 0;;
 esac
+env > '{d}/codex-agent.env'
+[ -f '{d}/refresh' ] && echo refreshed-by-agent > "$CODEX_HOME/auth.json"
 [ -f ridl.toml ] || printf '[package]\n' > ridl.toml
 echo 'The Codex final answer.' > "$out"
 echo '{{"type":"item.completed","item":{{"type":"mcp_tool_call","server":"ridl","tool":"ridl_check"}}}}'"#
@@ -799,7 +806,9 @@ fn a_host_that_cannot_be_started_is_a_setup_error() {
 
 #[test]
 fn a_host_that_runs_past_the_timeout_is_a_setup_error() {
-    let fakes = fakes_with(Some("exec sleep 60"));
+    let fakes = fakes_with(Some(
+        r#"echo '{"type":"system","subtype":"started"}'; exec sleep 60"#,
+    ));
     let start = std::time::Instant::now();
     let result = claude_run(&fakes, &["--timeout", "1"]);
     assert!(start.elapsed() < std::time::Duration::from_secs(30));
@@ -807,6 +816,86 @@ fn a_host_that_runs_past_the_timeout_is_a_setup_error() {
         result.get("setup_error").and_then(toml::Value::as_str),
         Some("the host ran past the timeout")
     );
+    assert_eq!(result["agent_exit"].as_integer(), Some(-1));
+    // What the host wrote before the timeout is kept.
+    let transcript = std::fs::read_to_string(
+        fakes
+            .dir
+            .join("results/transcripts/design-0001/claude-without-1.jsonl"),
+    )
+    .unwrap();
+    assert!(
+        transcript.contains(r#""subtype":"started""#),
+        "{transcript}"
+    );
+}
+
+#[test]
+fn a_host_that_exits_with_an_error_after_writing_a_transcript_is_scored() {
+    let fakes = fakes_with(Some(
+        r#"printf '[package]\n' > ridl.toml; echo '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__ridl__ridl_check","input":{}}]}}'; exit 4"#,
+    ));
+    let result = claude_run(&fakes, &[]);
+    assert!(result.get("setup_error").is_none(), "{result:?}");
+    assert_eq!(result["agent_exit"].as_integer(), Some(4));
+    assert_eq!(result["mechanical"]["passed"].as_bool(), Some(true));
+}
+
+#[test]
+fn a_host_that_exits_cleanly_with_no_transcript_is_scored() {
+    let fakes = fakes_with(Some("exit 0"));
+    let result = claude_run(&fakes, &[]);
+    assert!(result.get("setup_error").is_none(), "{result:?}");
+    assert_eq!(result["agent_exit"].as_integer(), Some(0));
+    assert_eq!(result["mechanical"]["passed"].as_bool(), Some(false));
+}
+
+#[test]
+fn a_judge_that_runs_past_the_timeout_is_a_judge_error() {
+    let fakes = fakes_with(None);
+    std::fs::write(fakes.dir.join("judge-sleep"), "").unwrap();
+    let start = std::time::Instant::now();
+    // A Claude run is judged by Codex, whose fake judge sleeps.
+    let result = claude_run(&fakes, &["--timeout", "2"]);
+    assert!(start.elapsed() < std::time::Duration::from_secs(30));
+    let rubric = result["rubric"].as_table().unwrap();
+    assert_eq!(
+        rubric.get("error").and_then(toml::Value::as_str),
+        Some("the judge ran past the timeout")
+    );
+    assert!(rubric.get("score").is_none(), "{rubric:?}");
+}
+
+#[test]
+fn a_judge_that_cannot_be_started_is_a_judge_error() {
+    let fakes = fakes_with(None);
+    let out = fakes.dir.join("results");
+    let output = command(
+        &fakes,
+        &[
+            "--task",
+            "design-0001",
+            "--host",
+            "claude",
+            "--skill",
+            "without",
+            "--out",
+            out.to_str().unwrap(),
+        ],
+        Logins::Both,
+    )
+    .env("RIDL_EVAL_CODEX", fakes.dir.join("no-such-codex"))
+    .output()
+    .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result = result(&out, "design-0001", "claude-without-1");
+    let error = result["rubric"]["error"].as_str().unwrap();
+    assert!(error.starts_with("the judge did not run: spawn"), "{error}");
+    assert!(result["rubric"].get("score").is_none());
 }
 
 #[test]
@@ -1134,48 +1223,72 @@ fn sample_reports_a_result_without_marks_as_an_error() {
 #[test]
 fn a_host_inherits_only_its_allowed_variables() {
     let fakes = fakes_with(None);
-    let out = fakes.dir.join("results");
-    let output = command(
-        &fakes,
-        &[
-            "--task",
-            "design-0001",
-            "--host",
-            "claude",
-            "--skill",
-            "without",
-            "--out",
-            out.to_str().unwrap(),
-        ],
-        Logins::Both,
-    )
-    .env("ANTHROPIC_MODEL", "stray")
-    .env("CLAUDECODE", "1")
-    .output()
-    .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let read = |name: &str| std::fs::read_to_string(fakes.dir.join(name)).unwrap();
-    let (claude, codex) = (read("claude.env"), read("codex.env"));
-    for env in [&claude, &codex] {
+    // Each host runs as the agent once and as the judge of the other once.
+    for host in ["claude", "codex"] {
+        let out = fakes.dir.join(format!("results-{host}"));
+        let output = command(
+            &fakes,
+            &[
+                "--task",
+                "design-0001",
+                "--host",
+                host,
+                "--skill",
+                "without",
+                "--out",
+                out.to_str().unwrap(),
+            ],
+            Logins::Both,
+        )
+        .env("ANTHROPIC_API_KEY", "fake-key")
+        .env("HOME", fakes.dir.join("home"))
+        .env("LANG", "C.UTF-8")
+        .env("ANTHROPIC_MODEL", "stray")
+        .env("CLAUDECODE", "1")
+        .output()
+        .unwrap();
         assert!(
-            !env.lines()
-                .any(|l| l.starts_with("ANTHROPIC_MODEL=") || l.starts_with("CLAUDECODE=")),
-            "{env}"
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
         );
-        assert!(env.lines().any(|l| l.starts_with("PATH=")), "{env}");
     }
-    assert!(claude.contains("CLAUDE_CODE_OAUTH_TOKEN=fake"), "{claude}");
-    assert!(
-        claude.lines().any(|l| l.starts_with("CLAUDE_CONFIG_DIR=")),
-        "{claude}"
-    );
-    assert!(!codex.contains("CLAUDE_CODE_OAUTH_TOKEN"), "{codex}");
-    assert!(
-        codex.lines().any(|l| l.starts_with("CODEX_HOME=")),
-        "{codex}"
-    );
+    let read = |name: &str| std::fs::read_to_string(fakes.dir.join(name)).unwrap();
+    let has = |env: &str, var: &str| env.lines().any(|l| l.starts_with(&format!("{var}=")));
+    for name in [
+        "claude-agent.env",
+        "claude-judge.env",
+        "codex-agent.env",
+        "codex-judge.env",
+    ] {
+        let env = read(name);
+        for var in ["PATH", "HOME", "TMPDIR", "LANG"] {
+            assert!(has(&env, var), "{name} lacks {var}:\n{env}");
+        }
+        for var in ["ANTHROPIC_MODEL", "CLAUDECODE"] {
+            assert!(!has(&env, var), "{name} has {var}:\n{env}");
+        }
+        let claude = name.starts_with("claude");
+        for var in ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"] {
+            assert_eq!(has(&env, var), claude, "{name} and {var}:\n{env}");
+        }
+        let home = if claude {
+            "CLAUDE_CONFIG_DIR"
+        } else {
+            "CODEX_HOME"
+        };
+        assert!(has(&env, home), "{name} lacks {home}:\n{env}");
+    }
+}
+
+#[test]
+fn a_login_refreshed_by_a_codex_agent_or_judge_is_returned() {
+    let fakes = fakes_with(None);
+    std::fs::write(fakes.dir.join("refresh"), "").unwrap();
+    let stored = || std::fs::read_to_string(fakes.dir.join("auth.json")).unwrap();
+    run_one(&fakes, "design-0001", "codex");
+    assert_eq!(stored(), "refreshed-by-agent\n");
+    // A Claude run is judged by Codex.
+    run_one(&fakes, "design-0001", "claude");
+    assert_eq!(stored(), "refreshed-by-judge\n");
 }

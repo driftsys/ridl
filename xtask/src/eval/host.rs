@@ -692,6 +692,9 @@ mod tests {
         operator.join().unwrap();
         assert_eq!(outcome, Outcome::HandedOff);
         assert_eq!(std::fs::read_to_string(&out).unwrap(), "transcript");
+        // The request was renamed into place, not copied.
+        let partial = request_path(&out).with_extension("partial");
+        assert!(!partial.exists(), "{} is left", partial.display());
     }
 
     #[test]
@@ -733,6 +736,33 @@ mod tests {
         let outcome = receive
             .recv_timeout(Duration::from_secs(10))
             .expect("the wait stops at the timeout");
+        assert_eq!(outcome.unwrap(), Outcome::TimedOut);
+    }
+
+    #[test]
+    fn a_command_that_never_reads_its_stdin_is_still_killed_at_the_timeout() {
+        let dir = scratch("unread-stdin");
+        // Far more than a pipe buffer holds, so a write on this thread would
+        // block until the command read it.
+        let invocation = Invocation {
+            program: "sleep".into(),
+            args: vec!["30".into()],
+            env: vec![],
+            inherit: &["PATH"],
+            cwd: dir.clone(),
+            stdin: "x".repeat(4 << 20),
+        };
+        let (send, receive) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = send.send(run(
+                &invocation,
+                &dir.join("out"),
+                Duration::from_millis(300),
+            ));
+        });
+        let outcome = receive
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the run stops at the timeout");
         assert_eq!(outcome.unwrap(), Outcome::TimedOut);
     }
 

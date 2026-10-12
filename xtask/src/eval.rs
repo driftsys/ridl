@@ -22,8 +22,9 @@
 //! Each host signs in with its CLI's own login. Codex runs get a copy of the
 //! stored `auth.json`. Claude runs read `CLAUDE_CODE_OAUTH_TOKEN`, which
 //! `claude setup-token` prints, or `ANTHROPIC_API_KEY`. With
-//! `--claude-handoff`, no Claude command runs: each Claude agent run and each
-//! Claude judgement is written as a request file, and the eval waits until the
+//! `--claude-handoff`, the only Claude command that runs is `claude --version`,
+//! which records the host version: each Claude agent run and each Claude
+//! judgement is written as a request file, and the eval waits until the
 //! operator has run it with an agent of their own (see `host::execute`).
 
 mod host;
@@ -395,9 +396,8 @@ fn agreement_command(args: &[String]) -> Result<(), String> {
         ));
     }
     // Rounded down to one decimal, so a value below the floor never shows as
-    // the floor. The small offset keeps a value at the floor, such as 0.8,
-    // from showing as 79.9 through a binary rounding error.
-    let percent = (value * 1000.0 + 1e-6).floor() / 10.0;
+    // the floor.
+    let percent = (value * 1000.0).floor() / 10.0;
     text.push_str(&format!(
         "\nAgreement: {percent:.1}% (floor {:.1}%).\n",
         AGREEMENT_FLOOR * 100.0
@@ -544,5 +544,21 @@ mod tests {
         assert_eq!(options.hosts, [Host::Codex]);
         assert_eq!(options.skill, [true]);
         assert_eq!(options.runs, 3);
+    }
+
+    #[test]
+    fn the_timeout_is_a_positive_number_of_seconds() {
+        let parse_timeout = |value: &str| parse(&["--timeout".to_owned(), value.to_owned()]);
+        assert_eq!(
+            parse_timeout("90").unwrap().timeout,
+            std::time::Duration::from_secs(90)
+        );
+        for bad in ["0", "ten", "-1"] {
+            assert_eq!(
+                parse_timeout(bad).err().as_deref(),
+                Some("--timeout takes a number of seconds"),
+                "{bad}"
+            );
+        }
     }
 }
