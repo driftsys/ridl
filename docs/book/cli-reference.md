@@ -621,15 +621,16 @@ Options:
 
       --emit <EMIT>
           Possible values:
-          - rust:          Idiomatic Rust source, written to `<base>.rs`
-          - ir-json:       The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
-          - ir-text:       The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
-          - ir-binary:     The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
-          - typescript:    Idiomatic TypeScript source, written to `<base>.ts`
-          - proto:         The proto3 schema, written to `<base>.proto`
-          - flatbuffers:   The FlatBuffers schema, written to `<base>.fbs`
-          - codegen-model: The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
-          - catalog:       The catalog descriptor an engine reads, written to `<unit>.catalog.binfb` for every unit that declares an interface or a service with an inline body: a FlatBuffers file of the unit's interfaces, their members and their catalog hash
+          - rust:            Idiomatic Rust source, written to `<base>.rs`
+          - ir-json:         The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
+          - ir-text:         The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
+          - ir-binary:       The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
+          - typescript:      Idiomatic TypeScript source, written to `<base>.ts`
+          - proto:           The proto3 schema, written to `<base>.proto`
+          - flatbuffers:     The FlatBuffers schema, written to `<base>.fbs`
+          - codegen-model:   The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
+          - codegen-request: The whole codegen request a build hands a backend, as canonical protobuf JSON, written to `<base>.codegen-request.json`
+          - catalog:         The catalog descriptor an engine reads, written to `<unit>.catalog.binfb` for every unit that declares an interface or a service with an inline body: a FlatBuffers file of the unit's interfaces, their members and their catalog hash
           
           [default: rust]
 
@@ -857,7 +858,9 @@ does not name. It is compared once per emitted backend that can carry a codec:
 the `rust` emit and each `--plugin`, and a backend named by both an `--emit`
 and a `--plugin` is compared once. A schema emit (`proto`, `flatbuffers`),
 the `typescript` emit and `codegen-model` are not compared, because their
-backends take no `encodings` option. A `[backend.<name>]` table whose
+backends take no `encodings` option, and `codegen-request` is not compared
+either, because it writes its options into the request rather than emitting a
+codec from them. A `[backend.<name>]` table whose
 `encodings` list is empty declares that the backend emits no codec, and it is
 not compared either; a table written with no `encodings` key at all is the same
 declaration, as the manifest records the two forms alike. A backend with no
@@ -892,6 +895,18 @@ carries (ADR-0020 decisions 8 and 9), the same JSON value as the request's
 backend reads the model and nothing else. The other three backends above still
 read the IR, and a drift test in each of them asserts that what the backend
 derives and what the model states are the same fact.
+
+**`codegen-request` writes the whole request**, to
+`<base>.codegen-request.json`: the same canonical protobuf JSON a plugin reads
+on its standard input, with `schema`, `toolchain`, `model`, `options`,
+`artifactBase`, `generatedMarker`, `header` and the deployment section. It is
+the artifact a plugin author debugs against — the request their plugin would
+receive for this package, written without running the plugin. Its `model` is
+the value `codegen-model` writes, so the two emits state one fact. Unlike
+`codegen-model`, it accepts the options of its own `[backend.codegen-request]`
+table and writes them into the request's `options`, because those options are
+part of what a plugin receives and an emit that refused them could never show a
+request carrying any.
 
 **`--plugin` runs a codegen plugin beside the emits** — a backend that is an
 executable rather than part of `ridl`, over the contract
@@ -2249,18 +2264,19 @@ Options:
           The directory to write generated artifacts into
 
       --emit <EMIT>
-          The artifacts to emit: `rust` (default), `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`, `flatbuffers`, `codegen-model`, `catalog`
+          The artifacts to emit: `rust` (default), `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`, `flatbuffers`, `codegen-model`, `codegen-request`, `catalog`
 
           Possible values:
-          - rust:          Idiomatic Rust source, written to `<base>.rs`
-          - ir-json:       The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
-          - ir-text:       The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
-          - ir-binary:     The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
-          - typescript:    Idiomatic TypeScript source, written to `<base>.ts`
-          - proto:         The proto3 schema, written to `<base>.proto`
-          - flatbuffers:   The FlatBuffers schema, written to `<base>.fbs`
-          - codegen-model: The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
-          - catalog:       The catalog descriptor an engine reads, written to `<unit>.catalog.binfb` for every unit that declares an interface or a service with an inline body: a FlatBuffers file of the unit's interfaces, their members and their catalog hash
+          - rust:            Idiomatic Rust source, written to `<base>.rs`
+          - ir-json:         The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
+          - ir-text:         The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
+          - ir-binary:       The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
+          - typescript:      Idiomatic TypeScript source, written to `<base>.ts`
+          - proto:           The proto3 schema, written to `<base>.proto`
+          - flatbuffers:     The FlatBuffers schema, written to `<base>.fbs`
+          - codegen-model:   The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
+          - codegen-request: The whole codegen request a build hands a backend, as canonical protobuf JSON, written to `<base>.codegen-request.json`
+          - catalog:         The catalog descriptor an engine reads, written to `<unit>.catalog.binfb` for every unit that declares an interface or a service with an inline body: a FlatBuffers file of the unit's interfaces, their members and their catalog hash
           
           [default: rust]
 

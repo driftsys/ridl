@@ -69,9 +69,10 @@ mod resolve;
 mod unbounded;
 
 pub use contract::{
-    Backend, GENERATED_MARKER_PREFIX, ModelBackend, RawIr, SCHEMA, check_path, comment_preamble,
-    error, generated_marker, has_error, header_control_character, normalise_header,
-    request_from_json, request_to_json, response_from_json, response_to_json, text_file,
+    Backend, GENERATED_MARKER_PREFIX, ModelBackend, RawIr, RequestBackend, SCHEMA, check_path,
+    comment_preamble, error, generated_marker, has_error, header_control_character,
+    normalise_header, request_from_json, request_to_json, response_from_json, response_to_json,
+    text_file,
 };
 pub use deployment::{encoding_of, lower_deployment};
 pub use lower::{lower, lower_with};
