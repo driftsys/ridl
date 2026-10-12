@@ -1,3 +1,9 @@
+# `required` lists the surfaces that must have a row when a release is made.
+# `just freeze-check` prints a notice for a listed surface without a row; the
+# `release` recipe fails on it. A row's name must be listed here, and this key
+# must stay above the first `[[surface]]` table.
+required = ["mcp"]
+
 # Baseline rows for the freeze check. Each row names a frozen surface and the
 # git ref its dump is compared against:
 #
@@ -8,7 +14,3 @@
 # Without a row, a line-dump surface is only checked against its committed
 # dump, `generated-crate` is only checked for equality with a regeneration, and
 # `runtime-crates` is not checked.
-
-[[surface]]
-name = "mcp"
-baseline = "87dc60317319f1799b4a8d4f4389b93c81079fb7"

@@ -166,26 +166,28 @@ ridl_explain
 ridl_explain input  required-set code
 ridl_explain input /properties/code required
 ridl_explain input /properties/code string
-ridl_explain output  required-set category kind text
-ridl_explain output  required-set code kind severity summary
-ridl_explain output /properties/category required
-ridl_explain output /properties/category string
-ridl_explain output /properties/code required
-ridl_explain output /properties/code string
-ridl_explain output /properties/default_level null|string
-ridl_explain output /properties/default_level optional
-ridl_explain output /properties/kind const diagnostic
-ridl_explain output /properties/kind const diff_category
-ridl_explain output /properties/kind required
-ridl_explain output /properties/kind string
-ridl_explain output /properties/lint null|string
-ridl_explain output /properties/lint optional
-ridl_explain output /properties/severity required
-ridl_explain output /properties/severity string
-ridl_explain output /properties/summary required
-ridl_explain output /properties/summary string
-ridl_explain output /properties/text required
-ridl_explain output /properties/text string
+ridl_explain output /oneOf/0 required-set code kind severity summary
+ridl_explain output /oneOf/0/properties/code required
+ridl_explain output /oneOf/0/properties/code string
+ridl_explain output /oneOf/0/properties/default_level null|string
+ridl_explain output /oneOf/0/properties/default_level optional
+ridl_explain output /oneOf/0/properties/kind const diagnostic
+ridl_explain output /oneOf/0/properties/kind required
+ridl_explain output /oneOf/0/properties/kind string
+ridl_explain output /oneOf/0/properties/lint null|string
+ridl_explain output /oneOf/0/properties/lint optional
+ridl_explain output /oneOf/0/properties/severity required
+ridl_explain output /oneOf/0/properties/severity string
+ridl_explain output /oneOf/0/properties/summary required
+ridl_explain output /oneOf/0/properties/summary string
+ridl_explain output /oneOf/1 required-set category kind text
+ridl_explain output /oneOf/1/properties/category required
+ridl_explain output /oneOf/1/properties/category string
+ridl_explain output /oneOf/1/properties/kind const diff_category
+ridl_explain output /oneOf/1/properties/kind required
+ridl_explain output /oneOf/1/properties/kind string
+ridl_explain output /oneOf/1/properties/text required
+ridl_explain output /oneOf/1/properties/text string
 ridl_list_interactions
 ridl_list_interactions input  required-set interface path
 ridl_list_interactions input /properties/from null|string
