@@ -131,11 +131,13 @@ pub(crate) fn tuple_derive_attr(ctx: &Ctx, tuple: &v1::InducedTuple) -> TokenStr
 ///
 /// A variant holds `ridl_rt::sample::Occurrence<T>`, which derives `Debug`,
 /// `Clone`, `Copy`, `PartialEq` and `Eq`, each of them under the matching
-/// bound on `T`. So the enum takes `Debug` unconditionally, because every
-/// generated payload type derives it, and takes the other four when every
-/// payload it carries derives all four — which is this module's eligibility,
-/// read for the payload types rather than restated. A payload that is not
-/// `Copy`, or not `Eq`, leaves the enum with `Debug` alone.
+/// bound on `T`. So each trait is emitted on its own condition, from the one
+/// eligibility traversal this module already performs, read for the payload
+/// types rather than restated: `Debug`, `Clone` and `PartialEq` always,
+/// because every generated type derives all three unconditionally; `Copy`
+/// when every payload is `Copy`; `Eq` when every payload is `Eq`. A payload
+/// that is `Clone` but not `Copy` therefore keeps the enum's `Clone`,
+/// `PartialEq` and `Eq`.
 ///
 /// The enum is not `#[non_exhaustive]`: the generated crate is regenerated
 /// with its consumer, so a new event arrives with a recompile, and the
@@ -145,11 +147,12 @@ pub(crate) fn event_derive_attr(ctx: &Ctx, payloads: &[&v1::TypeRef]) -> TokenSt
         let mut seen = HashSet::new();
         acc.meet(type_ref_eligibility(ctx, reference, &mut seen))
     });
-    let mut traits = vec![quote! { Debug }];
-    if eligibility.copy && eligibility.eq {
-        traits.push(quote! { Clone });
+    let mut traits = vec![quote! { Debug }, quote! { Clone }];
+    if eligibility.copy {
         traits.push(quote! { Copy });
-        traits.push(quote! { PartialEq });
+    }
+    traits.push(quote! { PartialEq });
+    if eligibility.eq {
         traits.push(quote! { Eq });
     }
     quote! { #[derive(#(#traits),*)] }

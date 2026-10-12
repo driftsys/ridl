@@ -1395,3 +1395,88 @@ interface Cabin {
         String::from_utf8_lossy(&compiled.stderr)
     );
 }
+
+/// The `Event` enum derives each trait its payloads allow, independently
+/// (driftsys/ridl#486), so a derive the payload cannot support is a compile
+/// error in the generated crate. This proves the four shapes compile and
+/// that each derived trait is really there: `Reading` is `Copy` and `Eq`,
+/// `Note` is `Eq` and not `Copy`, `Drift` is `Copy` and not `Eq`, and `Mixed`
+/// is neither. The consumer asserts each trait through a bound, so a missing
+/// derive fails the build and a derive the payload refuses fails it too.
+#[test]
+fn each_event_enum_compiles_with_the_derives_its_payloads_allow() {
+    face_compiles_with(
+        "derives",
+        r#"
+package face.derives
+
+type Level : integer [0..100]
+type Tag : string [1..16]
+type Ratio : float [0.0..1.0]
+
+struct Reading {
+  level : Level
+}
+
+struct Note {
+  tag : Tag
+}
+
+struct Drift {
+  ratio : Ratio
+}
+
+struct Mixed {
+  tag : Tag
+  ratio : Ratio
+}
+
+interface Plain {
+  event changed : Reading @[100ms..1s]
+}
+
+interface Noted {
+  event logged : Note @[100ms..1s]
+}
+
+interface Drifted {
+  event measured : Drift @[100ms..1s]
+}
+
+interface Blended {
+  event blended : Mixed @[100ms..1s]
+}
+"#,
+        r#"
+pub mod consumer {
+    fn debug<T: ::core::fmt::Debug>() {}
+    fn clone<T: ::core::clone::Clone>() {}
+    fn copy<T: ::core::marker::Copy>() {}
+    fn partial_eq<T: ::core::cmp::PartialEq>() {}
+    fn eq<T: ::core::cmp::Eq>() {}
+
+    pub fn derives() {
+        debug::<super::plain::Event>();
+        clone::<super::plain::Event>();
+        copy::<super::plain::Event>();
+        partial_eq::<super::plain::Event>();
+        eq::<super::plain::Event>();
+
+        debug::<super::noted::Event>();
+        clone::<super::noted::Event>();
+        partial_eq::<super::noted::Event>();
+        eq::<super::noted::Event>();
+
+        debug::<super::drifted::Event>();
+        clone::<super::drifted::Event>();
+        copy::<super::drifted::Event>();
+        partial_eq::<super::drifted::Event>();
+
+        debug::<super::blended::Event>();
+        clone::<super::blended::Event>();
+        partial_eq::<super::blended::Event>();
+    }
+}
+"#,
+    );
+}

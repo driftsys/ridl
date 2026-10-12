@@ -1123,9 +1123,9 @@ fn the_pipeline_generate_emits_no_face_module() {
     );
 }
 
-/// The face of `event_derives.ridl`, whose two interfaces carry one event
-/// each: one payload that derives all four conditional traits and one that
-/// does not.
+/// The face of `event_derives.ridl`, whose four interfaces carry one event
+/// each, over a payload that is `Copy` and `Eq`, one that is `Eq` alone, one
+/// that is `Copy` alone, and one that is neither.
 fn events_face() -> String {
     let package = ir::compile_fixture("event_derives.ridl");
     generate_face_with(&package, &[WireEncoding::FlatBuffers])
@@ -1144,13 +1144,38 @@ fn the_event_enum_derives_the_full_set_when_every_payload_does() {
 }
 
 #[test]
-fn the_event_enum_derives_debug_alone_when_a_payload_does_not() {
+fn the_event_enum_keeps_the_equality_pair_when_a_payload_is_not_copy() {
     let d = dense(&module(&events_face(), "noted"));
 
-    // `Note` holds a string-backed named scalar, so it is not `Copy`.
+    // `Note` holds a string-backed named scalar, so it is `Eq` and not
+    // `Copy`. The traits are independent, so only `Copy` is lost.
     assert!(
-        d.contains("#[derive(Debug)]pubenumEvent{"),
-        "an Event over a payload that is not Copy takes Debug alone",
+        d.contains("#[derive(Debug,Clone,PartialEq,Eq)]pubenumEvent{"),
+        "an Event over a payload that is not Copy keeps Clone, PartialEq and Eq",
+    );
+}
+
+#[test]
+fn the_event_enum_keeps_copy_when_a_payload_is_not_eq() {
+    let d = dense(&module(&events_face(), "drifted"));
+
+    // `Drift` holds a float-backed named scalar, so it is `Copy` and not
+    // `Eq`. Only `Eq` is lost.
+    assert!(
+        d.contains("#[derive(Debug,Clone,Copy,PartialEq)]pubenumEvent{"),
+        "an Event over a payload that is not Eq keeps Clone, Copy and PartialEq",
+    );
+}
+
+#[test]
+fn the_event_enum_keeps_the_unconditional_three_when_a_payload_has_neither() {
+    let d = dense(&module(&events_face(), "blended"));
+
+    // `Mixed` holds both a string-backed and a float-backed named scalar, so
+    // it is neither `Copy` nor `Eq`. The three unconditional traits remain.
+    assert!(
+        d.contains("#[derive(Debug,Clone,PartialEq)]pubenumEvent{"),
+        "an Event over a payload that is neither Copy nor Eq keeps Debug, Clone and PartialEq",
     );
 }
 

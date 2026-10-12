@@ -192,13 +192,16 @@ consumer side is:
   compile at all.)
 - **`Event`** — one enum per interface that declares an event, with one variant
   per event carrying `Occurrence<T>`, which `next_event` routes into by ordinal.
-  It derives `Debug` always, and `Clone`, `Copy`, `PartialEq` and `Eq` when
-  every payload it carries derives all four, which is the derive eligibility the
-  generated payload types already follow (`src/derives.rs`), read for the
-  payload types rather than restated: a variant holds `Occurrence<T>`, which
-  derives each of those five under the matching bound on `T`. A payload that is
-  not `Copy`, or not `Eq`, leaves the enum with `Debug` alone. The enum is
-  **not** `#[non_exhaustive]`: that attribute protects a consumer who upgrades a
+  `Occurrence<T>` derives `Debug`, `Clone`, `Copy`, `PartialEq` and `Eq`, each
+  under the matching bound on `T`, so the enum emits each trait on its own
+  condition rather than all or none: `Debug`, `Clone` and `PartialEq` always,
+  because every generated payload type derives all three unconditionally; `Copy`
+  when every payload it carries is `Copy`; `Eq` when every payload it carries is
+  `Eq`. The conditions are the derive eligibility the generated payload types
+  already follow (`src/derives.rs`), read for the payload types rather than
+  restated. A payload that is `Clone` but not `Copy` therefore keeps the enum's
+  `Clone`, `PartialEq` and `Eq`, and loses only `Copy`. The enum is **not**
+  `#[non_exhaustive]`: that attribute protects a consumer who upgrades a
   dependency without recompiling against the new source, and the generated crate
   is regenerated with its consumer, so a new event arrives with a recompile and
   the exhaustive `match` failing is the signal that there is one to handle.

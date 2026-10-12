@@ -1,12 +1,13 @@
-// Two events whose payloads differ in what they can derive, for the rule the
-// `Event` enum follows (driftsys/ridl#486): it derives `Debug` always, and
-// `Clone`, `Copy`, `PartialEq` and `Eq` when every payload it carries derives
-// all four.
+// Four events whose payloads differ in what they can derive, for the rule the
+// `Event` enum follows (driftsys/ridl#486): it derives each trait on its own
+// condition — `Debug`, `Clone` and `PartialEq` always, `Copy` when every
+// payload it carries is `Copy`, `Eq` when every payload it carries is `Eq`.
 //
-// `Reading` is a struct of one integer-backed named scalar, so it derives all
-// four. `Note` holds a string-backed named scalar, which is not `Copy`, so it
-// derives fewer. Each payload is carried by an interface of its own, so that
-// each `Event` enum states one answer.
+// `Reading` is a struct of one integer-backed named scalar, so it is both
+// `Copy` and `Eq`. `Note` holds a string-backed named scalar, which is `Eq`
+// and not `Copy`. `Drift` holds a float-backed named scalar, which is `Copy`
+// and not `Eq`. `Mixed` holds both, so it is neither. Each payload is carried
+// by an interface of its own, so that each `Event` enum states one answer.
 
 package face.events
 
@@ -16,6 +17,9 @@ type Level : integer [0..100]
 /// A tag on a note.
 type Tag : string [1..16]
 
+/// A drift ratio.
+type Ratio : float [0.0..1.0]
+
 /// A reading of the control level.
 struct Reading {
   level : Level
@@ -24,6 +28,17 @@ struct Reading {
 /// A note a controller raises.
 struct Note {
   tag : Tag
+}
+
+/// A measured drift.
+struct Drift {
+  ratio : Ratio
+}
+
+/// A note with a measured drift.
+struct Mixed {
+  tag : Tag
+  ratio : Ratio
 }
 
 /// A controller whose event payload derives everything.
@@ -36,4 +51,16 @@ interface Plain {
 interface Noted {
   /// A note was raised.
   event logged : Note @[100ms..1s]
+}
+
+/// A controller whose event payload does not derive `Eq`.
+interface Drifted {
+  /// A drift was measured.
+  event measured : Drift @[100ms..1s]
+}
+
+/// A controller whose event payload derives neither `Copy` nor `Eq`.
+interface Blended {
+  /// A note with a drift was raised.
+  event blended : Mixed @[100ms..1s]
 }
