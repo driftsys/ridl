@@ -1297,7 +1297,7 @@ fn constraint_checks_with_precision(
             checks.push(quote! {
                 if !#value.is_finite() {
                     return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                        type_name: #type_name,
+                        type_name: ::core::option::Option::Some(#type_name),
                         rule: ::ridl_rt::payload::Rule::Range,
                     });
                 }
@@ -1308,7 +1308,7 @@ fn constraint_checks_with_precision(
             checks.push(quote! {
                 if #value < #lit {
                     return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                        type_name: #type_name,
+                        type_name: ::core::option::Option::Some(#type_name),
                         rule: ::ridl_rt::payload::Rule::Range,
                     });
                 }
@@ -1329,7 +1329,7 @@ fn constraint_checks_with_precision(
             checks.push(quote! {
                 if #value > #lit {
                     return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                        type_name: #type_name,
+                        type_name: ::core::option::Option::Some(#type_name),
                         rule: ::ridl_rt::payload::Rule::Range,
                     });
                 }
@@ -1371,7 +1371,7 @@ fn constraint_checks_with_precision(
                 let __step_invalid: ::core::primitive::bool = #invalid;
                 if __step_invalid {
                     return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                        type_name: #type_name,
+                        type_name: ::core::option::Option::Some(#type_name),
                         rule: ::ridl_rt::payload::Rule::Step,
                     });
                 }
@@ -1398,7 +1398,7 @@ fn constraint_checks_with_precision(
             checks.push(quote! {
                 if #len < #lit {
                     return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                        type_name: #type_name,
+                        type_name: ::core::option::Option::Some(#type_name),
                         rule: ::ridl_rt::payload::Rule::Length,
                     });
                 }
@@ -1409,7 +1409,7 @@ fn constraint_checks_with_precision(
             checks.push(quote! {
                 if #len > #lit {
                     return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                        type_name: #type_name,
+                        type_name: ::core::option::Option::Some(#type_name),
                         rule: ::ridl_rt::payload::Rule::Length,
                     });
                 }
@@ -1454,7 +1454,7 @@ fn constraint_checks_with_precision(
                     });
                 if !PATTERN.is_match(#value) {
                     return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                        type_name: #type_name,
+                        type_name: ::core::option::Option::Some(#type_name),
                         rule: ::ridl_rt::payload::Rule::Pattern,
                     });
                 }
@@ -1763,7 +1763,7 @@ fn emit_enum(
                 match value {
                     #(#arms,)*
                     _ => ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                        type_name: #type_name,
+                        type_name: ::core::option::Option::Some(#type_name),
                         rule: ::ridl_rt::payload::Rule::Variant,
                     }),
                 }
@@ -1869,7 +1869,7 @@ fn emit_enum_set(
                 const DECLARED_MASK: ::core::primitive::i64 = #mask_lit;
                 if value & !DECLARED_MASK != 0 {
                     return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                        type_name: #type_name,
+                        type_name: ::core::option::Option::Some(#type_name),
                         rule: ::ridl_rt::payload::Rule::Variant,
                     });
                 }

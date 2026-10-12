@@ -855,10 +855,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
             "labels": [],
             "reservation": {
               "proto3": {
-                "unsized": "doorCount.payload: DoorId"
+                "bytes": "0"
               },
               "flatbuffers": {
-                "bytes": "43"
+                "bytes": "0"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -1901,10 +1901,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
             "labels": [],
             "reservation": {
               "proto3": {
-                "unsized": "mirrorCount.payload: fleet.contracts.DoorId"
+                "bytes": "0"
               },
               "flatbuffers": {
-                "bytes": "43"
+                "bytes": "0"
               }
             },
             "family": "FAMILY_DISPATCH",

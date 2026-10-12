@@ -22,7 +22,7 @@ thread_local! {
 struct Speed(u16);
 
 const SPEED_RANGE: Violation = Violation {
-    type_name: "Speed",
+    type_name: Some("Speed"),
     rule: Rule::Range,
 };
 
@@ -225,4 +225,18 @@ fn a_buffer_holds_the_largest_encoding() {
     let proof = Ref::<Wide, ReprC>::encode(&Wide(u64::MAX), buffer.as_mut())
         .expect("a buffer is as long as the largest encoding");
     assert_eq!(proof.bytes(), &u64::MAX.to_le_bytes());
+}
+
+/// A violation a peer reports over a frame carries the rule alone (frame
+/// specification §9.6); one the generated code detects keeps its type name.
+#[test]
+fn a_violation_a_peer_reports_carries_the_rule_alone() {
+    let reported = Violation {
+        type_name: None,
+        rule: Rule::Range,
+    };
+    assert_eq!(reported.type_name, None);
+    assert_eq!(SPEED_RANGE.type_name, Some("Speed"));
+    assert_ne!(reported, SPEED_RANGE);
+    assert_eq!(reported.rule, SPEED_RANGE.rule);
 }
