@@ -259,7 +259,10 @@ fn parse_hex(text: &str) -> Result<Vec<u8>, String> {
 /// columns are `Id`, `Vector` and `Hex`. The table is the vectors' source;
 /// no encoder exists. A row whose bytes [`check_vector`] rejects, a
 /// malformed row, a separator row that is not one, a duplicate `Id`, a blank
-/// line inside the table and a missing or empty table are errors.
+/// line inside the table and a missing or empty table are errors. The bytes
+/// after a row's header must be the payload that its `Vector` cell names as
+/// ``payload `<hex>` `` ([`named_payload`]), or none when the cell names none;
+/// a row that differs fails.
 fn frame_vectors(spec: &str) -> Result<Vec<String>, String> {
     let (_, section) = spec
         .split_once("### 11.1 WebSocket\n")

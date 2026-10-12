@@ -66,8 +66,11 @@ surfaces are frozen by policy and checked by no tool: the formats of
 `interfaces.lock` and `.ridl/baseline`, the exit codes of every subcommand other
 than `ridl check`, the output of `ridl diff` and the `ridl-diff` categories, the
 layouts of the `unsubscribe`, `read` and `occurrence` frames, which no test
-vector of the frame specification §11.1 shows, and the codes of §4 and §9.6 that
-no vector carries.
+vector of the frame specification §11.1 shows, the payload-presence rule of
+§11.1 for a `publish` under `Init` or `Invalid(Declared)` and for a `response`
+under `reply`, which no vector shows, and the codes of §4 and §9.6 that no
+vector carries, among them the `kind` values 2 and 5 and the `attach` encodings
+2 and 3.
 
 1. Run `cargo xtask freeze update` after a change that touches a surface, and
    commit the changed dumps. An added line is not a break.

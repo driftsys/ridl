@@ -438,8 +438,10 @@ fn frame_header_sizes() -> std::collections::BTreeMap<String, u32> {
 /// of the frame specification §11.1: the envelope is the bytes an
 /// `occurrence` adds to the common 10 bytes of a `subscribe`, and the frame
 /// header bound is the largest data-plane header less the envelope. The
-/// table is also checked against the sizes `cargo xtask freeze` checks the
-/// vectors with (`xtask/src/freeze/wire.rs`), so the row, the table and the
+/// table is checked against the sizes that the vector checker of `xtask`
+/// uses by the unit test
+/// `the_header_table_of_the_frame_specification_is_the_checker_s` in
+/// `xtask/src/freeze/wire.rs`, not by this test, so the row, the table and the
 /// checker cannot disagree without a test failing.
 #[test]
 fn the_websocket_row_is_derived_from_the_frame_specification_header_table() {

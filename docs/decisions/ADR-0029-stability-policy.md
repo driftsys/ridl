@@ -28,7 +28,10 @@ frame specification §11.1, so the frame envelope and the `attach` handshake are
 checked by the dump and leave the policy-only list. The Context bullet on the
 wire dump, decision 3 and decision 6's `Wire format` row are changed in place.
 The layouts of the `unsubscribe`, `read` and `occurrence` frames, which no
-vector shows, and the codes no vector carries stay frozen by policy.
+vector shows, the payload-presence rule for a `publish` under `Init` or
+`Invalid(Declared)` and for a `response` under `reply`, which no vector shows,
+and the codes no vector carries, among them the `kind` values 2 and 5 and the
+`attach` encodings 2 and 3, stay frozen by policy.
 
 ## Context
 
@@ -170,10 +173,13 @@ design in each:
    output of `ridl diff` and the `ridl-diff` categories, the exit codes of every
    subcommand other than `ridl check`, the formats of `interfaces.lock` and
    `.ridl/baseline`, the layouts of the `unsubscribe`, `read` and `occurrence`
-   frames, which no test vector of the frame specification §11.1 shows, and the
-   codes of §4 and §9.6 that no vector carries are in no dump; they are frozen
-   by policy only. This record is the one that states the status of `ridl diff`
-   and of the `ridl-diff` categories.
+   frames, which no test vector of the frame specification §11.1 shows, the
+   payload-presence rule of §11.1 for a `publish` under `Init` or
+   `Invalid(Declared)` and for a `response` under `reply`, which no vector
+   shows, and the codes of §4 and §9.6 that no vector carries, among them the
+   `kind` values 2 and 5 and the `attach` encodings 2 and 3, are in no dump;
+   they are frozen by policy only. This record is the one that states the status
+   of `ridl diff` and of the `ridl-diff` categories.
 
 4. **A break of a frozen surface is approved by removing its row, then adding
    the row again.** `git show <baseline>:freeze/<surface>.txt` must read a dump

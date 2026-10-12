@@ -22,7 +22,10 @@ that the `generated-crate` surface reads. An edit to `examples/` or to
 `evals/corpus/` therefore changes no dump. The `wire` dump also holds the test
 vectors of the WebSocket binding: one `frame-vector <id> <hex>` line per row of
 the vector table in `docs/specification/frame-specification.md` §11.1, read from
-that document by the row's `Id`, so an edit to a vector changes the dump.
+that document by the row's `Id`, so an edit to a vector changes the dump. The
+checker also reads the payload that a row's `Vector` cell names as
+`` payload `<hex>` `` and fails a row whose bytes after the header differ from
+it, or from no bytes when the cell names none.
 
 To refresh a copy on purpose, copy the package's files over it and run
 `cargo xtask freeze update`. A new copy adds lines and passes. A replaced copy
