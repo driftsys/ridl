@@ -571,12 +571,6 @@ trusted with no `unsafe` and no second verification pass.
     `Watermark::seq` — are tracked on that issue; the review debt of
     driftsys/ridl#348 is driftsys/ridl#349.
 
-    **Amended (2026-10-12).** Every one of those questions is now settled: item
-    5 by the WebSocket binding (driftsys/ridl#890), item 12 by decision 9's
-    2026-10-12 amendment, item 13 by the 2026-10-10 amendment, and item 14 and
-    `Watermark::seq` by this decision's 2026-10-12 amendment in the status
-    section, which removes `Watermark::seq`.
-
     **Amended (2026-09-21).** The independent-version sentence above no longer
     holds: ADR-0007 decision 14's 2026-09-21 amendment retires it. `ridl-rt` now
     shares the workspace's single version and travels on the same `v<version>`
@@ -623,6 +617,12 @@ trusted with no `unsafe` and no second verification pass.
     `face::Bind`, `face::Events`, `face::Timeout`, `face::Publish`, the existing
     `port` traits, `MAX_SIZE`, `View`, the three marker types, the cargo
     features and `rust-version = "1.83"` do not change.
+
+    **Amended (2026-10-12).** Every one of those questions is now settled: item
+    5 by the WebSocket binding (driftsys/ridl#890), item 12 by decision 9's
+    2026-10-12 amendment, item 13 by the 2026-10-10 amendment, and item 14 and
+    `Watermark::seq` by this decision's 2026-10-12 amendment in the status
+    section, which removes `Watermark::seq`. driftsys/ridl#349 stays open.
 
     `ridl-rt` supports Rust 1.83 or newer: `rust-version = "1.83"` in
     `crates/ridl-rt/Cargo.toml`. The crate's manifest compiles as edition 2021,
@@ -1239,7 +1239,8 @@ trusted with no `unsafe` and no second verification pass.
    which removed `PayloadInfo::max_size` (driftsys/ridl#801). Item 14 is
    answered by the typl reference §4.3 and driftsys/ridl#654, and
    driftsys/ridl#802 is closed with a test of its example. `Watermark::seq` is
-   removed (the 2026-10-12 amendment of decision 10).
+   removed (the 2026-10-12 amendment of decision 10). driftsys/ridl#349 stays
+   open.
 3. **The view a proto3 codec chooses** (`&[u8]`, an accessor, or an owned parsed
    value) — story E11.8's, not fixed here.
 4. **How a generated binding keeps a signal's last good value with no `alloc`**
@@ -1314,7 +1315,8 @@ trusted with no `unsafe` and no second verification pass.
 | [the `ridl-loopback` design record](../design/ridl-loopback.md)                                  | the `Watermark` bullet states that a mark carries the generation only, and the open `Watermark::seq` question is removed from the open items (decision 10's 2026-10-12 amendment)                                                                                                                                                |
 | `crates/ridl-rt/src/port.rs`                                                                     | the `Watermark` doc states that a mark records only the generation and that each `Changed` entry carries its own sequence number (decision 10's 2026-10-12 amendment)                                                                                                                                                            |
 | `crates/ridl-rt-conformance/src/scannable.rs`                                                    | the scan contract tests no longer build or assert `Watermark::seq` (decision 10's 2026-10-12 amendment)                                                                                                                                                                                                                          |
-| `crates/ridl-rt/README.md`                                                                       | the README says that the open API questions of driftsys/ridl#350 are settled (decision 10's 2026-10-12 amendment)                                                                                                                                                                                                                |
+| `crates/ridl-rt/README.md`                                                                       | the README says that the API questions the reviews of 0.1 raised are settled and links driftsys/ridl#350 (decision 10's 2026-10-12 amendment)                                                                                                                                                                                    |
+| [the `ridl-rt` design record](../design/ridl-rt.md), "Versioning"                                | the section points to this decision's 2026-10-12 amendment as the record that settled driftsys/ridl#350's API questions                                                                                                                                                                                                          |
 
 ## References
 
