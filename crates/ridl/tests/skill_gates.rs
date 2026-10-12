@@ -267,7 +267,7 @@ fn every_relative_link_form_is_rejected() {
         "./typl.md",
         "typl.md",
         "../../docs/book/lints.md",
-        "docs/a.md#x",
+        "notes/a.md#x",
     ] {
         let text = format!("See [x]({target}).\n");
         let failures = link_failures(&file, &text);
