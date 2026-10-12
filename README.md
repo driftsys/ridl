@@ -192,8 +192,9 @@ against `.git-std.toml`. See [`CONTRIBUTING.md`](CONTRIBUTING.md) and
 
 ## Status
 
-The typl reference (v0.1) and the ridl reference (v0.2) are no longer drafts.
-The other documents are working drafts (rxdl, rmdl and rsdl at v0.1–v0.2). The
+The typl reference (v0.1), the ridl reference (v0.2) and the frame specification
+(v0.2) are no longer drafts. The rxdl, rmdl and rsdl references, the expr-core
+specification and the IR specification are working drafts (v0.1–v0.2). The
 design is captured; the typl v0.1 preview toolchain (epic E1 — compiler,
 `ridl fmt`, LSP, and VS Code extension) is built over the shared grammar and IR,
 epic E2 added the ridl interface layer over the same grammar and IR v2, epic E6
