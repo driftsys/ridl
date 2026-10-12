@@ -31,7 +31,20 @@ effect now; release 0.10.0 is not published yet.
 - **The minimum Rust version.** Rust 1.83 and edition 2021 for `ridl-rt`,
   `ridl-rt-conformance` and `ridl-loopback`, and Rust 1.88 and edition 2024 for
   `ridl-descriptor`. The generated crate compiles as edition 2021 with Rust 1.83
-  with every cargo feature on. A 0.10.x release does not raise a minimum.
+  with every cargo feature on, and `ridl build` writes `edition = "2021"` in its
+  manifest, so Rust 1.83 builds it without an edit to that manifest. With its
+  default features off it does not build on Rust 1.83 (driftsys/ridl#874). A
+  0.10.x release does not raise a minimum.
+
+The minimum covers the crates RIDL publishes and emits, not later releases of
+their dependencies. A dependency, such as `regex`, can publish a release that
+requires a later Rust, and cargo 1.83 selects the newest release without reading
+its `rust-version`. To build with Rust 1.83, resolve dependencies with a
+resolver that reads `rust-version`: set `rust-version = "1.83"` in your own
+package, and resolve with cargo 1.84 or later with
+`CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback` set, or build from a
+lockfile resolved that way. `just compat-check` resolves its lockfiles this way
+before it builds with Rust 1.83.
 
 ## What may change in 0.10.x
 

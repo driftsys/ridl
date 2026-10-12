@@ -252,8 +252,10 @@ the codec needs, and no feature for a types-only build. An application that name
 | `repr-c`          | off     | Nothing yet. It names the `repr(C)` encoding.                                                                                                                                     |
 
 `ridl-rt` has no dependency in any feature combination. It builds for `wasm32`,
-and its minimum Rust version is 1.83. The generated crate declares edition 2024,
-so it needs Rust 1.85 or later.
+and its minimum Rust version is 1.83. The generated crate declares edition 2021
+and builds with Rust 1.83 or later with every cargo feature on; with its default
+features off it needs a later Rust (driftsys/ridl#874). To keep Rust 1.83,
+resolve its dependencies as [Stability](stability.md) describes.
 
 ## Failures
 

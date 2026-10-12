@@ -280,7 +280,10 @@ wasm-check:
 # The crate emitted for the veh-cluster corpus is built with cargo, not with
 # rustc as the cabin crate is, and with every cargo feature on. With the default
 # features off it does not build on the minimum (driftsys/ridl#874), so that
-# cell is not here.
+# cell is not here. The recipe reads the edition from the emitted manifest and
+# fails when it is not 2021: `ridl build` writes edition 2021, so a Rust 1.83
+# user builds the emitted crate without editing its manifest (ADR-0029
+# decision 5).
 #
 # ADR-0029 owns the policy; the minimums are frozen by its decisions 1 and 5.
 #
@@ -613,8 +616,10 @@ compat-check: toolchain-check
 
     # The crate `ridl build` emits for the veh-cluster corpus, as edition 2021
     # at the minimum with every feature on, so the regex dependency of
-    # `validate-pattern` is built too. The emitted manifest sets edition 2024
-    # and no rust-version; both are rewritten here. ridl-rt is the packaged
+    # `validate-pattern` is built too. The emitted manifest sets edition 2021
+    # and no rust-version; the edition is checked, not rewritten, and a
+    # rust-version line is added after it, so that the fallback resolver
+    # below resolves for the minimum. ridl-rt is the packaged
     # copy. The lockfile is resolved and the sources are fetched as for
     # ridl-descriptor: resolved with the pin's cargo and the fallback
     # resolver, fetched with the minimum's cargo (cargo 1.83 does not see the
@@ -626,15 +631,18 @@ compat-check: toolchain-check
     corpus="$PWD/target/compat-check/veh-cluster"
     mkdir -p "$corpus"
     "$ridl_bin" build crates/ridlc/tests/corpus/veh-cluster --emit rust --out-dir "$corpus/generated"
+    if ! grep -qxF 'edition = "2021"' "$corpus/generated/Cargo.toml"; then
+        echo "compat-check: the emitted veh-cluster manifest must set edition = \"2021\"" >&2
+        echo "compat-check: (ADR-0029 decision 5); the manifest ridl build wrote does not." >&2
+        exit 1
+    fi
     awk -v minimum="$minimum" '
-        /^edition = "2024"$/ { print "edition = \"2021\""; print "rust-version = \"" minimum "\""; next }
         { print }
+        /^edition = "2021"$/ { print "rust-version = \"" minimum "\"" }
     ' "$corpus/generated/Cargo.toml" > "$corpus/Cargo.toml.new"
     mv "$corpus/Cargo.toml.new" "$corpus/generated/Cargo.toml"
-    if ! grep -qxF 'edition = "2021"' "$corpus/generated/Cargo.toml" \
-        || ! grep -qxF "rust-version = \"$minimum\"" "$corpus/generated/Cargo.toml"; then
-        echo "compat-check: could not set edition 2021 and rust-version $minimum in the emitted" >&2
-        echo "compat-check: veh-cluster manifest; its edition line no longer has the form this recipe edits." >&2
+    if ! grep -qxF "rust-version = \"$minimum\"" "$corpus/generated/Cargo.toml"; then
+        echo "compat-check: could not add rust-version $minimum to the emitted veh-cluster manifest." >&2
         exit 1
     fi
     append_tables "$corpus/generated/Cargo.toml" "ridl-rt=$pkg"

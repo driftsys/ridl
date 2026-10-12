@@ -381,6 +381,8 @@ fn the_emitted_manifest_parses_and_carries_the_declared_structure() {
         name: String,
         version: String,
         edition: String,
+        #[serde(rename = "rust-version")]
+        rust_version: Option<String>,
     }
     #[derive(serde::Deserialize)]
     struct GeneratedLib {
@@ -436,8 +438,14 @@ fn the_emitted_manifest_parses_and_carries_the_declared_structure() {
          `0.0.0.0`) is still TOML that parses and Rust that compiles"
     );
     assert_eq!(
-        manifest.package.edition, "2024",
-        "the generated code is edition 2024"
+        manifest.package.edition, "2021",
+        "the generated crate is edition 2021, so cargo 1.83 reads its manifest (ADR-0029 \
+         decision 5)"
+    );
+    assert_eq!(
+        manifest.package.rust_version, None,
+        "the generated crate declares no rust-version: with its default features off it does \
+         not build on Rust 1.83 (driftsys/ridl#874)"
     );
     assert_eq!(
         manifest.lib.path, "lib.rs",
