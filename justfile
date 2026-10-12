@@ -2562,6 +2562,41 @@ vscode-verify:
                 exit 1
             fi
         done
+        # Every chatSkills and chatInstructions path that package.json
+        # contributes must be a file in the archive.
+        contributed="$(node -e 'const c = require("./package.json").contributes; for (const e of [...(c.chatSkills || []), ...(c.chatInstructions || [])]) console.log(e.path)')"
+        if [ -z "$contributed" ]; then
+            echo "vscode-verify: package.json contributes no chatSkills or chatInstructions path" >&2
+            exit 1
+        fi
+        while IFS= read -r path; do
+            if ! grep -qx "extension/${path#./}" <<<"$listing"; then
+                echo "vscode-verify: $archive lacks $path, which package.json contributes" >&2
+                exit 1
+            fi
+        done <<<"$contributed"
+    done
+    # The skill archive that the editor release attaches: the ridl-authoring/
+    # directory alone, named after the workspace version, which
+    # crates/ridlc/tests/prose_version_pins.rs keeps equal to the skill's
+    # metadata.version.
+    version="$(sed -n 's/^version = "\(.*\)"$/\1/p' ../../Cargo.toml | head -n 1)"
+    skill_zip="$scratch/skill/ridl-authoring-$version.zip"
+    just package-skill "$scratch/skill" >/dev/null
+    if [ ! -f "$skill_zip" ]; then
+        echo "vscode-verify: package-skill did not write $skill_zip" >&2
+        exit 1
+    fi
+    skill_listing="$(unzip -Z1 "$skill_zip")"
+    if grep -qv '^ridl-authoring/' <<<"$skill_listing"; then
+        echo "vscode-verify: $skill_zip holds a path outside ridl-authoring/" >&2
+        exit 1
+    fi
+    for f in SKILL.md rules.md typl.md ridl.md rsdl.md; do
+        if ! grep -qx "ridl-authoring/$f" <<<"$skill_listing"; then
+            echo "vscode-verify: $skill_zip lacks ridl-authoring/$f" >&2
+            exit 1
+        fi
     done
     echo "vscode-verify: packaged ok"
 
