@@ -76,10 +76,7 @@ fn example_dir() -> std::path::PathBuf {
 /// fails. `what` names the artifact, so a failure says which of the four
 /// compilations broke without the reader counting calls.
 fn rustc(what: &str, args: &[&std::ffi::OsStr]) {
-    let output = std::process::Command::new("rustc")
-        .args(args)
-        .output()
-        .expect("rustc must be installed and runnable for this test to be meaningful");
+    let output = rustc_output(args);
     assert!(
         output.status.success(),
         "{what} must compile, rustc said:\n{}",
@@ -87,16 +84,42 @@ fn rustc(what: &str, args: &[&std::ffi::OsStr]) {
     );
 }
 
-#[test]
-fn the_emitted_cabin_crate_runs_six_round_trips_against_a_consumer() {
-    let out = tempfile::tempdir().expect("a temp dir is created");
-    let libs = tempfile::tempdir().expect("a temp dir is created");
-    let out = out.path();
-    let libs = libs.path();
+/// Runs `rustc` with `args` and hands back what it said, success or not. A
+/// proof that a binding must be refused reads the diagnostics instead of
+/// asserting on the exit status alone.
+fn rustc_output(args: &[&std::ffi::OsStr]) -> std::process::Output {
+    std::process::Command::new("rustc")
+        .args(args)
+        .output()
+        .expect("rustc must be installed and runnable for this test to be meaningful")
+}
+
+/// What the build and the two rlib compilations below produce, held together
+/// so that a test can link against them. The two `TempDir` fields are the
+/// directories the paths point into: dropping them removes the artifacts, so
+/// they live as long as the value does.
+struct EmittedCabin {
+    _out_dir: tempfile::TempDir,
+    _libs_dir: tempfile::TempDir,
+    libs: std::path::PathBuf,
+    ridl_rt: std::path::PathBuf,
+    ridl_loopback: std::path::PathBuf,
+    veh_cabin: std::path::PathBuf,
+}
+
+/// Runs the build over `examples/cabin/` and compiles what it wrote, together
+/// with the two runtime crates a consumer names, into linkable rlibs. Both
+/// proofs below start here: one links a program that runs, the other compiles
+/// a program that must be refused.
+fn emit_and_compile_cabin() -> EmittedCabin {
+    let out_dir = tempfile::tempdir().expect("a temp dir is created");
+    let libs_dir = tempfile::tempdir().expect("a temp dir is created");
+    let out = out_dir.path().to_path_buf();
+    let libs = libs_dir.path().to_path_buf();
 
     // 1 — the build under test, through the same entry point the CLI calls.
-    let run =
-        ridlc::run_build(&example_dir(), out, &[Emit::Rust], false.into()).expect("the build runs");
+    let run = ridlc::run_build(&example_dir(), &out, &[Emit::Rust], false.into())
+        .expect("the build runs");
     assert!(
         !run.has_error(),
         "the example must compile clean, diagnostics: {:?}",
@@ -112,8 +135,8 @@ fn the_emitted_cabin_crate_runs_six_round_trips_against_a_consumer() {
 
     // 2 — the runtime crates the generated code and the consumer name,
     // built the way every compile proof in this crate builds `ridl-rt`.
-    let ridl_rt = support::ridl_rt_rlib(libs);
-    let ridl_loopback = support::ridl_loopback_rlib(libs, &ridl_rt);
+    let ridl_rt = support::ridl_rt_rlib(&libs);
+    let ridl_loopback = support::ridl_loopback_rlib(&libs, &ridl_rt);
 
     // 3 — the emitted crate itself, as a linkable rlib rather than the
     // metadata the other proofs stop at: a consumer that runs must link it.
@@ -139,6 +162,28 @@ fn the_emitted_cabin_crate_runs_six_round_trips_against_a_consumer() {
             veh_cabin.as_ref(),
         ],
     );
+
+    EmittedCabin {
+        _out_dir: out_dir,
+        _libs_dir: libs_dir,
+        libs,
+        ridl_rt,
+        ridl_loopback,
+        veh_cabin,
+    }
+}
+
+#[test]
+fn the_emitted_cabin_crate_runs_six_round_trips_against_a_consumer() {
+    let built = emit_and_compile_cabin();
+    let EmittedCabin {
+        libs,
+        ridl_rt,
+        ridl_loopback,
+        veh_cabin,
+        ..
+    } = &built;
+    let dependency = format!("dependency={}", libs.display());
 
     // 4 — the hand-written consumer, which names the generated face and the
     // loopback and nothing of the compiler that produced the crate.
@@ -196,6 +241,123 @@ fn the_emitted_cabin_crate_runs_six_round_trips_against_a_consumer() {
             "the consumer must report the line `{round_trip}`, it said:\n{stdout}"
         );
     }
+}
+
+/// A program that binds a client of the generated `Cabin` face over the
+/// loopback `runtime` builds. The two programs below differ in that
+/// expression alone. The generated prelude is imported for `Bind`, which the
+/// cabin consumer imports the same way; the `ReprC` import is unused in one
+/// of the two programs, which the crate-level attribute covers.
+fn binding_program(runtime: &str) -> String {
+    format!(
+        r#"#![allow(unused_imports)]
+use veh_cabin::veh::cabin as api;
+use api::cabin::prelude::*;
+use ridl_loopback::Loopback;
+use ridl_rt::contract::{{CatalogRef, Interface}};
+use ridl_rt::encoding::ReprC;
+const CATALOG: CatalogRef = *<api::Cabin as Interface>::CATALOG;
+fn main() {{
+    let rt = {runtime};
+    let _client = api::cabin::Client::new(rt.attach());
+}}
+"#
+    )
+}
+
+/// Compiles `source` the way the consumer program above is compiled, and
+/// hands back what `rustc` said.
+fn compile_against_cabin(built: &EmittedCabin, name: &str, source: &str) -> std::process::Output {
+    let path = built.libs.join(format!("{name}.rs"));
+    std::fs::write(&path, source).expect("the program source is written");
+    let dependency = format!("dependency={}", built.libs.display());
+    rustc_output(&[
+        "--edition".as_ref(),
+        "2024".as_ref(),
+        "--crate-name".as_ref(),
+        name.as_ref(),
+        "--extern".as_ref(),
+        format!("veh_cabin={}", built.veh_cabin.display()).as_ref(),
+        "--extern".as_ref(),
+        format!("ridl_rt={}", built.ridl_rt.display()).as_ref(),
+        "--extern".as_ref(),
+        format!("ridl_loopback={}", built.ridl_loopback.display()).as_ref(),
+        "-L".as_ref(),
+        dependency.as_ref(),
+        path.as_ref(),
+        "-o".as_ref(),
+        built.libs.join(name).as_ref(),
+    ])
+}
+
+/// The generated face reads its payload encoding from its port, and the
+/// generated package carries the encoding tables of the encodings it was
+/// built with — for the cabin example, FlatBuffers alone. So a port that
+/// carries `ReprC` has no table in that package, and binding a face over it
+/// must be refused.
+///
+/// What this pins is **where** the refusal lands: at the binding, on the
+/// `Sizes` bound the face declares, and not inside the body of a call that a
+/// reader would have to step into to understand. The port does implement
+/// `Encoded`, so the refusal must not be that the port is not `Encoded`; the
+/// missing item is the package's `Sizes<ReprC>` table.
+///
+/// The same program over `Loopback::new(CATALOG)`, whose encoding is
+/// FlatBuffers, compiles. Without that twin a refusal could come from a
+/// broken compile command rather than from the bound.
+#[test]
+fn a_port_whose_encoding_the_package_lacks_is_refused_at_the_binding() {
+    let built = emit_and_compile_cabin();
+
+    let refused = compile_against_cabin(
+        &built,
+        "encoding_the_package_lacks",
+        &binding_program("Loopback::<ReprC>::with_encoding(CATALOG)"),
+    );
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        !refused.status.success(),
+        "binding a face over a port whose encoding the package lacks must not compile, rustc said:\n{stderr}"
+    );
+    for fragment in ["error[E0277]", "Sizes<", "ReprC"] {
+        assert!(
+            stderr.contains(fragment),
+            "the refusal must name `{fragment}`, rustc said:\n{stderr}"
+        );
+    }
+    // Where the refusal lands: on the binding expression itself. `rustc`
+    // prints the offending source line under each diagnostic, so this holds
+    // only while that line is the one it points at.
+    assert!(
+        stderr.contains("api::cabin::Client::new(rt.attach())"),
+        "the refusal must point at the binding, rustc said:\n{stderr}"
+    );
+    // The port is `Encoded`, so the refusal must not be that it is not. The
+    // word `Encoded` does appear in the output, in the projection path
+    // `<Loopback<ReprC> as Encoded>::Encoding` of the companion type-mismatch
+    // diagnostic and in the `ridl_rt::payload::Encoded` struct the generated
+    // FlatBuffers codec names, which is a different item. What must not
+    // appear is a claim that the bound `Encoded` is unmet.
+    for absent in [
+        "the trait `Encoded` is not implemented",
+        ": Encoded` is not satisfied",
+    ] {
+        assert!(
+            !stderr.contains(absent),
+            "the port is `Encoded`; the missing item is the package's `Sizes` table, so the refusal must not say `{absent}`, rustc said:\n{stderr}"
+        );
+    }
+
+    let accepted = compile_against_cabin(
+        &built,
+        "the_encoding_the_package_carries",
+        &binding_program("Loopback::new(CATALOG)"),
+    );
+    assert!(
+        accepted.status.success(),
+        "the same program over the package's own encoding must compile, rustc said:\n{}",
+        String::from_utf8_lossy(&accepted.stderr)
+    );
 }
 
 /// The cabin workspace declares one system with one deployment, `Bench`, whose
