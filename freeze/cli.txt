@@ -60,6 +60,7 @@ ridl build --emit default rust
 ridl build --emit optional
 ridl build --emit value catalog
 ridl build --emit value codegen-model
+ridl build --emit value codegen-request
 ridl build --emit value flatbuffers
 ridl build --emit value ir-binary
 ridl build --emit value ir-json
@@ -214,6 +215,7 @@ ridlc build --emit default rust
 ridlc build --emit optional
 ridlc build --emit value catalog
 ridlc build --emit value codegen-model
+ridlc build --emit value codegen-request
 ridlc build --emit value flatbuffers
 ridlc build --emit value ir-binary
 ridlc build --emit value ir-json

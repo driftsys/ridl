@@ -418,6 +418,7 @@ fn build_help_documents_every_emit_value() {
             "proto",
             "flatbuffers",
             "codegen-model",
+            "codegen-request",
             "catalog"
         ],
         "`--emit` must offer exactly these artifacts, help:\n{help}"
@@ -565,6 +566,7 @@ fn every_emit_variant_is_classified() {
             | ridlc::Emit::Proto
             | ridlc::Emit::Flatbuffers
             | ridlc::Emit::CodegenModel
+            | ridlc::Emit::CodegenRequest
             | ridlc::Emit::Catalog => false,
             ridlc::Emit::IrJson | ridlc::Emit::IrText | ridlc::Emit::IrBinary => true,
         };
@@ -597,6 +599,7 @@ fn every_emit_variant_names_its_intended_suffix() {
             | ridlc::Emit::Proto
             | ridlc::Emit::Flatbuffers
             | ridlc::Emit::CodegenModel
+            | ridlc::Emit::CodegenRequest
             | ridlc::Emit::Catalog => None,
             ridlc::Emit::IrJson => Some(".ir.json"),
             ridlc::Emit::IrText => Some(".ir.txtpb"),
@@ -678,6 +681,7 @@ fn every_emit_variant_names_its_intended_system_suffix() {
             | ridlc::Emit::Proto
             | ridlc::Emit::Flatbuffers
             | ridlc::Emit::CodegenModel
+            | ridlc::Emit::CodegenRequest
             | ridlc::Emit::Catalog => None,
             ridlc::Emit::IrJson => Some(".system.json"),
             ridlc::Emit::IrText => Some(".system.txtpb"),

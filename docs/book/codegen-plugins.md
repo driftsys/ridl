@@ -135,6 +135,13 @@ The rules are the IR specification's §6 to §8. In short:
 
 ## What the request carries
 
+`ridl build --emit codegen-request` writes the whole request for each package
+to `<base>.codegen-request.json`, so a plugin author can read what their plugin
+would receive without running it. The emit takes its options from a
+`[backend.codegen-request]` table, which is how a request carrying an option is
+written. Every excerpt in this chapter was read from that artifact, built from
+`examples/cabin` and called `request.json` below.
+
 These values are the top-level fields of the request `ridl build` sends for
 `examples/cabin`, with `model` and `deployment` left out of the excerpt.
 `toolchain` is the version of `ridl` that wrote the request, so it changes with
@@ -404,23 +411,6 @@ section carries those facts to a plugin at build time.
   so the reservation of such a member is `unsized`. No single issue tracks
   these cases; each is recorded in [the design record, §7][design-deployment],
   and in [the catalog descriptor record][size-states].
-- **No command writes out the whole request** ([driftsys/ridl#725][i725]).
-  `--emit codegen-model` writes the model, but nothing writes the request with
-  its deployment section. To see it, run a plugin that saves its standard input
-  and answers with an empty response:
-
-  ```sh
-  #!/bin/sh
-  # Save the request, then answer with no file and no diagnostic.
-  cat > "request-$$.json"
-  printf '{"files": [], "diagnostics": []}\n'
-  ```
-
-  Save it as `save-request`, make it executable, and run
-  `ridl build --plugin save=./save-request`. Each package writes one
-  `request-<pid>.json` in the current directory. The excerpts in this chapter
-  were taken from such a file, built from `examples/cabin`.
-
 ## Examples
 
 - [`crates/ridlc-gen-model/src/main.rs`][gen-model] is a complete plugin in
@@ -458,5 +448,4 @@ section carries those facts to a plugin at build time.
 [kotlin]: https://github.com/driftsys/ridlc-gen-kotlin
 [i317]: https://github.com/driftsys/ridl/issues/317
 [i718]: https://github.com/driftsys/ridl/issues/718
-[i725]: https://github.com/driftsys/ridl/issues/725
 [i735]: https://github.com/driftsys/ridl/issues/735
