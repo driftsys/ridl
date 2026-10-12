@@ -610,8 +610,22 @@ coupled its two ends are, and the construction of the port can override it — t
 library takes no position on the default. It is a separate trait, not a
 supertrait of `Attached`, so a port that never meets a face, such as a
 conformance fixture, is not forced to name an encoding; it is implemented for
-`&mut P` like every port trait. In this version no port type in this repository
-implements it, and the generated face does not yet require it.
+`&mut P` like every port trait. `ridl-loopback` implements it on `Loopback<E>`
+and on each of its six role handles, and the generated face requires it: a face
+bounds its port parameter on `Encoded` and takes every size through
+`P::Encoding`.
+
+Each transport's default and its override:
+
+| Transport                     | Default     | Override                                                   |
+| ----------------------------- | ----------- | ---------------------------------------------------------- |
+| `ridl-loopback` (in process)  | FlatBuffers | `Loopback::<E>::with_encoding(catalog)`                    |
+| WebSocket (driftsys/ridl#265) | proto3      | `ws::connect_with::<E>(url)`; `ws::connect(url)` is proto3 |
+| shared memory (later)         | `repr(C)`   | likewise                                                   |
+
+The loopback row is built. The WebSocket and shared-memory rows are the
+specification: neither transport exists in this repository, and the names in
+their override column are the shape planned for them, not an API.
 
 `Watermark`'s generation counter field is named `generation`, not `gen`: `gen`
 is a reserved keyword in the 2024 edition, so the field name the crate's earlier

@@ -167,9 +167,12 @@ here. This list is not a standing count of every crate the workspace holds — s
   formatted with `prettyplease`: it emits the codecs that the request's
   `encodings` option names, and the domain types only when the option is absent
   or empty; named scalar types become `#[repr(transparent)]` newtypes, and
-  structs whose IR `fixed_layout` flag holds become `#[repr(C)]`. Codegen is
-  total — failures return `GenerateError`, never panic. E2's `interact.rs` and
-  the extern-C header are gone:
+  structs whose IR `fixed_layout` flag holds become `#[repr(C)]`. The
+  interaction face it emits reads its encoding from its port: each generated
+  type and function bounds its port parameter on `ridl_rt::port::Encoded` and
+  takes every size through `P::Encoding`, so the face names no encoding itself.
+  Codegen is total — failures return `GenerateError`, never panic. E2's
+  `interact.rs` and the extern-C header are gone:
   [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
   decisions 15 and 6 retract the interaction layer, restoring it in a second
   phase as a client and a server over `ridl-rt`, and drop C as a target.
@@ -284,10 +287,12 @@ here. This list is not a standing count of every crate the workspace holds — s
   runtime implementing `ridl-rt`'s ports in this workspace (ADR-0020 decision
   6). It carries values between a provider and a consumer in one program, over
   one store behind one lock, with a clock a test advances by hand; it has no
-  frame, no socket and no wire format, and `ridl-rt` is its only dependency. The
-  Rust backend's round-trip tests build their generated face over it, and it
-  runs the suite of `ridl-rt-conformance`. See
-  [the design record](../design/ridl-loopback.md).
+  frame, no socket and no wire format, and `ridl-rt` is its only dependency. It
+  is typed by the encoding its ports carry: `Loopback<E>` and all six role
+  handles implement `ridl-rt`'s `Encoded`, with FlatBuffers by default, and
+  `Loopback::<E>::with_encoding(catalog)` names another. The Rust backend's
+  round-trip tests build their generated face over it, and it runs the suite of
+  `ridl-rt-conformance`. See [the design record](../design/ridl-loopback.md).
 
 - **`crates/ridl-rt-conformance`** — the port contract tests, published with
   every crate whose manifest does not set `publish = false`, so that a runtime

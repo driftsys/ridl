@@ -830,9 +830,11 @@ key and an empty list all mean types only. The Rust backend builds only
 `flatbuffers`: it refuses `proto3` ([driftsys/ridl#264][i264]) and `repr-c`
 ([driftsys/ridl#317][i317]). The generated `Cargo.toml` enables one `ridl-rt`
 feature per named encoding, and none for types only. A single-file build has no
-manifest, so it is types only. The emitted code names the codec as
-`::ridl_rt::encoding::FlatBuffers` at each site, and a consumer names the
-encoding from `ridl_rt::encoding`.
+manifest, so it is types only. The emitted codec names the encoding as
+`::ridl_rt::encoding::FlatBuffers`; the face takes its encoding from its port
+type instead, so a program names an encoding only where it builds the runtime —
+over `ridl-loopback`, `Loopback::new` for FlatBuffers and
+`Loopback::<E>::with_encoding` for another.
 
 MANI-015 is an error when the `encodings` value is not an array of the known
 names or repeats a name, and MANI-016 is an error when the manifest of a

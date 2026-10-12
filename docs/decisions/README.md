@@ -207,7 +207,10 @@ other entry below is Accepted.
   and decisions 16 and 17 on the re-scope's other decisions. Amended 2026-10-10
   on decisions 4, 5 and 15: the Rust codec is requested by the manifest's
   `[backend.rust] encodings`, not by a flag, and a build that names no encoding
-  emits the domain types only.
+  emits the domain types only. Amended 2026-10-12 on decision 15: the generated
+  face takes its encoding from its port type (`port::Encoded`, `P::Encoding`),
+  carries the size and payload bounds as generated `where` clauses, and gains no
+  type parameter.
 
 - **ADR-0019 — The FlatBuffers projection.** Seven rules the second wire backend
   needed: a union isolated in a wrapper table, a non-table union arm boxed,
@@ -352,8 +355,12 @@ other entry below is Accepted.
   and any later language backend that follows this precedent. Its 2026-10-10
   amendment, on decisions 2, 6 and 7, emits the face only when the manifest's
   `[backend.rust] encodings` names `flatbuffers` and reads every buffer from
-  `Payload::BUFFER` or `Sizes<FlatBuffers>`. The as-built face this record's
-  decisions produced is
+  `Payload::BUFFER` or `Sizes<FlatBuffers>`. A 2026-10-12 amendment, on
+  decisions 6 and 7, has the face read its encoding from its port: `Client<P>`,
+  `blocking::Client<P>`, `Publisher<W>`, `serve` and `Serve` bound their port
+  parameter on `port::Encoded`, every impl and function carries the generated
+  `where` clause over `P::Encoding`, and the face names no encoding. The
+  as-built face this record's decisions produced is
   [the interaction-face design record](../design/interaction-face.md).
 
 - **ADR-0024 — The lint registry and levels.** Sixteen decisions: seven agreed
