@@ -165,6 +165,7 @@ pub const MAX_JSON_NESTING_LEVELS: usize = MAX_JSON_NESTING;
 /// Renders a lowered model in the protobuf text format — the inspection
 /// encoding, derived from the same descriptor pool the IR's prototext uses.
 pub fn to_text_format(model: &v1::Model) -> Result<String, SerializeError> {
+    crate::class::check_model(model).map_err(SerializeError::Class)?;
     crate::v2::render_text_for(crate::v2::codegen_model_descriptor(), model)
         .map_err(SerializeError::from_v2)
 }

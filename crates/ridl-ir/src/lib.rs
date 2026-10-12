@@ -588,6 +588,7 @@ pub mod v2 {
     /// panicked on. JSON lost this failure mode when it moved off the
     /// transcode (decision 14); prototext keeps it.
     pub fn to_text_format(package: &Package) -> Result<String, SerializeError> {
+        crate::class::check_package(package).map_err(SerializeError::Class)?;
         render_text_for(package_descriptor(), package)
     }
 

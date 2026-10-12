@@ -1405,6 +1405,51 @@ fn with_class(family: v2::Family, shape: v2::Shape) -> v2::Package {
     package
 }
 
+/// A package holding one interaction of `kind`, with `family` written on it.
+/// The four kinds that carry a family, so that every arm of the walk is
+/// exercised; `fixed` carries none.
+fn with_family(kind: &str, family: v2::Family) -> v2::Package {
+    let interaction = match kind {
+        "signal" => signal("s", 1, "Speed"),
+        "event" => event("e", 1, "Speed"),
+        "command" => command("c", 1, vec![], vec![]),
+        "query" => query("q", 1, vec![], value_return("Speed"), vec![]),
+        other => unreachable!("no builder for `{other}`"),
+    };
+    let mut package = pkg(vec![interaction]);
+    match package.interfaces[0].interactions[0].kind.as_mut() {
+        Some(v2::decl::Kind::SignalDef(def)) => def.family = family as i32,
+        Some(v2::decl::Kind::EventDef(def)) => def.family = family as i32,
+        Some(v2::decl::Kind::CommandDef(def)) => def.family = family as i32,
+        Some(v2::decl::Kind::QueryDef(def)) => def.family = family as i32,
+        other => unreachable!("the builder wrote {other:?}"),
+    }
+    package
+}
+
+/// The walk compares `family` on every kind that carries one, not on the
+/// command alone: each arm of `diff_interaction` is pinned here.
+#[test]
+fn a_family_change_is_reported_on_every_kind() {
+    for (kind, family) in [
+        ("signal", v2::Family::Control),
+        ("event", v2::Family::Presentation),
+        ("command", v2::Family::Control),
+        ("query", v2::Family::Acquisition),
+    ] {
+        let dispatch = with_family(kind, v2::Family::Dispatch);
+        let other = with_family(kind, family);
+        let report = diff_packages(&dispatch, &other);
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.category == Category::InteractionClassChanged)
+            .unwrap_or_else(|| panic!("a {kind} family change must be reported: {report:?}"));
+        assert_eq!(change.verdict, Verdict::Breaking, "{kind}");
+        assert_eq!(change.before.as_deref(), Some("dispatch"), "{kind}");
+    }
+}
+
 /// A family or shape change on a name-paired interaction is breaking in both
 /// directions (ADR-0012 decision 12: evolution rules are uniform). No source
 /// can write a family other than dispatch yet; the walk compares the fields

@@ -363,7 +363,7 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-diff/src/classify/classify_tests.rs",
-        lines: 7,
+        lines: 9,
         why: "tests mutating fixture interfaces to provoke each category",
     },
 ];

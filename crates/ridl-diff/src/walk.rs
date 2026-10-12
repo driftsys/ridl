@@ -1486,10 +1486,9 @@ fn member_docs_differ(old: &Option<v2::decl::Kind>, new: &Option<v2::decl::Kind>
     })
 }
 
-/// A declaration body with every member's doc fields cleared, so that the
-/// body comparisons see only what carries contract identity.
 /// `dispatch`, `control`, `intent toggle`: the family, then the shape when
-/// one is set.
+/// one is set. A number outside either enum renders as itself, so a change
+/// to it is never shown as a change to nothing.
 fn class_str(family: i32, shape: i32) -> String {
     let family = v2::Family::try_from(family).map_or_else(
         |_| family.to_string(),
@@ -1501,7 +1500,7 @@ fn class_str(family: i32, shape: i32) -> String {
         },
     );
     match v2::Shape::try_from(shape) {
-        Ok(v2::Shape::None) | Err(_) => family,
+        Ok(v2::Shape::None) => family,
         Ok(shape) => format!(
             "{family} {}",
             shape
@@ -1509,9 +1508,12 @@ fn class_str(family: i32, shape: i32) -> String {
                 .trim_start_matches("SHAPE_")
                 .to_ascii_lowercase()
         ),
+        Err(_) => format!("{family} {shape}"),
     }
 }
 
+/// A declaration body with every member's doc fields cleared, so that the
+/// body comparisons see only what carries contract identity.
 fn without_member_docs(kind: &Option<v2::decl::Kind>) -> Option<v2::decl::Kind> {
     use v2::decl::Kind;
     let mut kind = kind.clone();
