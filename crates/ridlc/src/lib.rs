@@ -52,6 +52,39 @@ pub mod diff_side;
 pub use diff_side::{DiffSide, DiffSideError, load_diff_side};
 pub mod plugin;
 
+/// Serializes the write of a file this test binary then executes against
+/// every child it spawns (driftsys/ridl#729).
+///
+/// `execve` fails with `ETXTBSY` when the file is open for writing in any
+/// process. A plugin test writes a shell script and then runs it, and the
+/// descriptor of that write lives for the length of the write. A child
+/// forked in that instant by another test inherits the descriptor — the
+/// descriptor is close-on-exec, but it is closed at the child's `exec`, not
+/// at its `fork` — and holds it until then, so the plugin test's own `exec`
+/// can land in that gap and fail.
+///
+/// The write side is taken while the script is written; the read side is
+/// taken across every other `Command` this binary spawns. So a script write
+/// excludes every fork, while forks do not exclude each other and a `rustc`
+/// proof still runs beside another. Every spawn site in `src/` takes it: the
+/// plugin host itself is reached only from a test that holds the plugin
+/// tests' own mutex, and the two `rustc` proofs take it here. A test under
+/// `tests/` is a separate process and inherits nothing.
+///
+/// This cannot be exercised on macOS, which does not raise `ETXTBSY` for a
+/// file open for writing — not even one the exec'ing process holds itself —
+/// so no test pins it and the window is removed by construction instead.
+#[cfg(test)]
+pub(crate) static SPAWNS: std::sync::RwLock<()> = std::sync::RwLock::new(());
+
+/// The read side of [`SPAWNS`], held across a `Command` spawn.
+#[cfg(test)]
+pub(crate) fn spawning() -> std::sync::RwLockReadGuard<'static, ()> {
+    SPAWNS
+        .read()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 use ridl_core::TimingDefaults;
 use ridl_core::db::InputFile;
 use ridl_core::diag::{
@@ -2647,6 +2680,9 @@ mod render_lib_rs_tests {
         .expect("the dotted package is written");
         std::fs::write(dir.path().join("lib.rs"), &lib).expect("the crate root is written");
 
+        // Held across the spawn: a fork here must not land inside another
+        // test's write of a script it then executes (`SPAWNS`).
+        let spawning = crate::spawning();
         let status = std::process::Command::new("rustc")
             .args([
                 "--edition",
@@ -2661,6 +2697,7 @@ mod render_lib_rs_tests {
             .arg(dir.path().join("lib.rs"))
             .status()
             .expect("rustc must be installed and runnable for this test to be meaningful");
+        drop(spawning);
         assert!(
             status.success(),
             "a reference to the prefix package must resolve at crate::veh, lib.rs was:\n{lib}"
@@ -2703,13 +2740,17 @@ mod render_lib_rs_tests {
         for cfg in cfgs {
             command.args(["--cfg", cfg]);
         }
-        command
+        // Held across the spawn, as above.
+        let spawning = crate::spawning();
+        let compiled = command
             .arg("-o")
             .arg(dir.path().join("root.rmeta"))
             .arg(dir.path().join("lib.rs"))
             .status()
             .expect("rustc must be installed and runnable for this test to be meaningful")
-            .success()
+            .success();
+        drop(spawning);
+        compiled
     }
 
     /// The crate root is `no_std` exactly when neither `std` nor

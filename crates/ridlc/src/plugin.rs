@@ -492,6 +492,11 @@ mod tests {
         /// its exec, open for writing in two processes, and the exec of the
         /// script then fails with `ETXTBSY`. Holding this for the whole of
         /// each test — the write and the run — keeps the two apart.
+        ///
+        /// This covers the tests here against each other only. A child
+        /// forked by a test elsewhere in this binary is kept out of the
+        /// write by [`crate::SPAWNS`], which every spawn site takes
+        /// (driftsys/ridl#729).
         static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
 
         /// The timeout for every test here that does not test the timeout.
@@ -516,7 +521,15 @@ mod tests {
 
         fn script(dir: &std::path::Path, name: &str, body: &str) -> Plugin {
             let path = dir.join(name);
-            std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+            {
+                // No child of this binary may be forked while the descriptor
+                // of this write is open, or the `exec` below can fail with
+                // `ETXTBSY` (`crate::SPAWNS`, driftsys/ridl#729).
+                let _written = crate::SPAWNS
+                    .write()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+            }
             std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
             Plugin {
                 language: "test".into(),
