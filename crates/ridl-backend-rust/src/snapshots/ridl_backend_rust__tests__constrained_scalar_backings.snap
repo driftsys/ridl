@@ -22,13 +22,13 @@ impl Name {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.chars().count() as ::core::primitive::u64) < 1 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Name",
+                type_name: ::core::option::Option::Some("Name"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.chars().count() as ::core::primitive::u64) > 64 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Name",
+                type_name: ::core::option::Option::Some("Name"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -82,7 +82,7 @@ impl Digest {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.len() as ::core::primitive::u64) > 32 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Digest",
+                type_name: ::core::option::Option::Some("Digest"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -142,19 +142,19 @@ impl Ratio {
         let value = *value;
         if !value.is_finite() {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Ratio",
+                type_name: ::core::option::Option::Some("Ratio"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Ratio",
+                type_name: ::core::option::Option::Some("Ratio"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 1.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Ratio",
+                type_name: ::core::option::Option::Some("Ratio"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }

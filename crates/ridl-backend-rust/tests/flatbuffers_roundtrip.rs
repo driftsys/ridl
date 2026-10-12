@@ -637,7 +637,7 @@ fn main() {
     match Ref::<'_, Report, FlatBuffers>::verify(&bytes).err() {
         Some(VerifyError::Contract(violation)) => {
             assert_eq!(violation.rule, Rule::Range);
-            assert_eq!(violation.type_name, "Speed");
+            assert_eq!(violation.type_name, Some("Speed"));
         }
         other => panic!("a Speed of 9000 is outside [0..300], got {other:?}"),
     }
@@ -654,7 +654,7 @@ fn main() {
     match Ref::<'_, Report, FlatBuffers>::verify(&bytes2).err() {
         Some(VerifyError::Contract(violation)) => {
             assert_eq!(violation.rule, Rule::Length);
-            assert_eq!(violation.type_name, "Label");
+            assert_eq!(violation.type_name, Some("Label"));
         }
         other => panic!("a Label of 20 characters is outside [0..16], got {other:?}"),
     }
@@ -703,7 +703,7 @@ fn refutes(value: &Report, rule: Rule, type_name: &str, case: &str) {
     match Ref::<'_, Report, FlatBuffers>::verify(&bytes).err() {
         Some(VerifyError::Contract(violation)) => {
             assert_eq!(violation.rule, rule, "{case}: wrong rule");
-            assert_eq!(violation.type_name, type_name, "{case}: wrong type");
+            assert_eq!(violation.type_name, Some(type_name), "{case}: wrong type");
         }
         other => panic!("{case}: expected a Contract violation, got {other:?}"),
     }

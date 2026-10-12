@@ -39,13 +39,13 @@ impl Uuid {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.chars().count() as ::core::primitive::u64) < 36 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Uuid",
+                type_name: ::core::option::Option::Some("Uuid"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.chars().count() as ::core::primitive::u64) > 36 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Uuid",
+                type_name: ::core::option::Option::Some("Uuid"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -60,7 +60,7 @@ impl Uuid {
             });
             if !PATTERN.is_match(value) {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Uuid",
+                    type_name: ::core::option::Option::Some("Uuid"),
                     rule: ::ridl_rt::payload::Rule::Pattern,
                 });
             }
@@ -118,13 +118,13 @@ impl Ulid {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.chars().count() as ::core::primitive::u64) < 26 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Ulid",
+                type_name: ::core::option::Option::Some("Ulid"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.chars().count() as ::core::primitive::u64) > 26 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Ulid",
+                type_name: ::core::option::Option::Some("Ulid"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -137,7 +137,7 @@ impl Ulid {
             });
             if !PATTERN.is_match(value) {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Ulid",
+                    type_name: ::core::option::Option::Some("Ulid"),
                     rule: ::ridl_rt::payload::Rule::Pattern,
                 });
             }
@@ -195,13 +195,13 @@ impl Uri {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.chars().count() as ::core::primitive::u64) < 1 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Uri",
+                type_name: ::core::option::Option::Some("Uri"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.chars().count() as ::core::primitive::u64) > 2048 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Uri",
+                type_name: ::core::option::Option::Some("Uri"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -214,7 +214,7 @@ impl Uri {
             });
             if !PATTERN.is_match(value) {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Uri",
+                    type_name: ::core::option::Option::Some("Uri"),
                     rule: ::ridl_rt::payload::Rule::Pattern,
                 });
             }
@@ -272,13 +272,13 @@ impl Url {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.chars().count() as ::core::primitive::u64) < 1 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Url",
+                type_name: ::core::option::Option::Some("Url"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.chars().count() as ::core::primitive::u64) > 2048 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Url",
+                type_name: ::core::option::Option::Some("Url"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -291,7 +291,7 @@ impl Url {
             });
             if !PATTERN.is_match(value) {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Url",
+                    type_name: ::core::option::Option::Some("Url"),
                     rule: ::ridl_rt::payload::Rule::Pattern,
                 });
             }
@@ -349,13 +349,13 @@ impl Email {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.chars().count() as ::core::primitive::u64) < 1 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Email",
+                type_name: ::core::option::Option::Some("Email"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.chars().count() as ::core::primitive::u64) > 254 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Email",
+                type_name: ::core::option::Option::Some("Email"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -368,7 +368,7 @@ impl Email {
             });
             if !PATTERN.is_match(value) {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Email",
+                    type_name: ::core::option::Option::Some("Email"),
                     rule: ::ridl_rt::payload::Rule::Pattern,
                 });
             }
@@ -426,13 +426,13 @@ impl IpV4 {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.chars().count() as ::core::primitive::u64) < 7 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "IpV4",
+                type_name: ::core::option::Option::Some("IpV4"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.chars().count() as ::core::primitive::u64) > 15 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "IpV4",
+                type_name: ::core::option::Option::Some("IpV4"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -445,7 +445,7 @@ impl IpV4 {
             });
             if !PATTERN.is_match(value) {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "IpV4",
+                    type_name: ::core::option::Option::Some("IpV4"),
                     rule: ::ridl_rt::payload::Rule::Pattern,
                 });
             }
@@ -503,13 +503,13 @@ impl IpV6 {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.chars().count() as ::core::primitive::u64) < 2 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "IpV6",
+                type_name: ::core::option::Option::Some("IpV6"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.chars().count() as ::core::primitive::u64) > 39 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "IpV6",
+                type_name: ::core::option::Option::Some("IpV6"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -522,7 +522,7 @@ impl IpV6 {
             });
             if !PATTERN.is_match(value) {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "IpV6",
+                    type_name: ::core::option::Option::Some("IpV6"),
                     rule: ::ridl_rt::payload::Rule::Pattern,
                 });
             }
@@ -580,13 +580,13 @@ impl Label {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.chars().count() as ::core::primitive::u64) < 1 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Label",
+                type_name: ::core::option::Option::Some("Label"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.chars().count() as ::core::primitive::u64) > 64 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Label",
+                type_name: ::core::option::Option::Some("Label"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -599,7 +599,7 @@ impl Label {
             });
             if !PATTERN.is_match(value) {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Label",
+                    type_name: ::core::option::Option::Some("Label"),
                     rule: ::ridl_rt::payload::Rule::Pattern,
                 });
             }
@@ -657,13 +657,13 @@ impl Name {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.chars().count() as ::core::primitive::u64) < 1 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Name",
+                type_name: ::core::option::Option::Some("Name"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.chars().count() as ::core::primitive::u64) > 128 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Name",
+                type_name: ::core::option::Option::Some("Name"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -676,7 +676,7 @@ impl Name {
             });
             if !PATTERN.is_match(value) {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Name",
+                    type_name: ::core::option::Option::Some("Name"),
                     rule: ::ridl_rt::payload::Rule::Pattern,
                 });
             }
@@ -734,13 +734,13 @@ impl Message {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.chars().count() as ::core::primitive::u64) < 1 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Message",
+                type_name: ::core::option::Option::Some("Message"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.chars().count() as ::core::primitive::u64) > 256 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Message",
+                type_name: ::core::option::Option::Some("Message"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -753,7 +753,7 @@ impl Message {
             });
             if !PATTERN.is_match(value) {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Message",
+                    type_name: ::core::option::Option::Some("Message"),
                     rule: ::ridl_rt::payload::Rule::Pattern,
                 });
             }
@@ -814,7 +814,7 @@ impl Timestamp {
         let value = *value;
         if value < 0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Timestamp",
+                type_name: ::core::option::Option::Some("Timestamp"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
@@ -874,19 +874,19 @@ impl Duration {
         let value = *value;
         if !value.is_finite() {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Duration",
+                type_name: ::core::option::Option::Some("Duration"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Duration",
+                type_name: ::core::option::Option::Some("Duration"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 9223372036854775807.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Duration",
+                type_name: ::core::option::Option::Some("Duration"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
@@ -945,13 +945,13 @@ impl Date {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.chars().count() as ::core::primitive::u64) < 10 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Date",
+                type_name: ::core::option::Option::Some("Date"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.chars().count() as ::core::primitive::u64) > 10 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Date",
+                type_name: ::core::option::Option::Some("Date"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -964,7 +964,7 @@ impl Date {
             });
             if !PATTERN.is_match(value) {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Date",
+                    type_name: ::core::option::Option::Some("Date"),
                     rule: ::ridl_rt::payload::Rule::Pattern,
                 });
             }
@@ -1022,13 +1022,13 @@ impl TimeOfDay {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.chars().count() as ::core::primitive::u64) < 8 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "TimeOfDay",
+                type_name: ::core::option::Option::Some("TimeOfDay"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.chars().count() as ::core::primitive::u64) > 15 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "TimeOfDay",
+                type_name: ::core::option::Option::Some("TimeOfDay"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -1041,7 +1041,7 @@ impl TimeOfDay {
             });
             if !PATTERN.is_match(value) {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "TimeOfDay",
+                    type_name: ::core::option::Option::Some("TimeOfDay"),
                     rule: ::ridl_rt::payload::Rule::Pattern,
                 });
             }
@@ -1099,13 +1099,13 @@ impl Version {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.chars().count() as ::core::primitive::u64) < 5 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Version",
+                type_name: ::core::option::Option::Some("Version"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.chars().count() as ::core::primitive::u64) > 32 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Version",
+                type_name: ::core::option::Option::Some("Version"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -1118,7 +1118,7 @@ impl Version {
             });
             if !PATTERN.is_match(value) {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Version",
+                    type_name: ::core::option::Option::Some("Version"),
                     rule: ::ridl_rt::payload::Rule::Pattern,
                 });
             }
@@ -1176,13 +1176,13 @@ impl CountryCode {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.chars().count() as ::core::primitive::u64) < 2 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "CountryCode",
+                type_name: ::core::option::Option::Some("CountryCode"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.chars().count() as ::core::primitive::u64) > 2 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "CountryCode",
+                type_name: ::core::option::Option::Some("CountryCode"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -1195,7 +1195,7 @@ impl CountryCode {
             });
             if !PATTERN.is_match(value) {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "CountryCode",
+                    type_name: ::core::option::Option::Some("CountryCode"),
                     rule: ::ridl_rt::payload::Rule::Pattern,
                 });
             }
@@ -1253,13 +1253,13 @@ impl LanguageCode {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.chars().count() as ::core::primitive::u64) < 2 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "LanguageCode",
+                type_name: ::core::option::Option::Some("LanguageCode"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.chars().count() as ::core::primitive::u64) > 5 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "LanguageCode",
+                type_name: ::core::option::Option::Some("LanguageCode"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -1272,7 +1272,7 @@ impl LanguageCode {
             });
             if !PATTERN.is_match(value) {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "LanguageCode",
+                    type_name: ::core::option::Option::Some("LanguageCode"),
                     rule: ::ridl_rt::payload::Rule::Pattern,
                 });
             }
@@ -1329,13 +1329,13 @@ impl Sha256Hash {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.len() as ::core::primitive::u64) < 32 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Sha256Hash",
+                type_name: ::core::option::Option::Some("Sha256Hash"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.len() as ::core::primitive::u64) > 32 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Sha256Hash",
+                type_name: ::core::option::Option::Some("Sha256Hash"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -1391,13 +1391,13 @@ impl Sha512Hash {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.len() as ::core::primitive::u64) < 64 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Sha512Hash",
+                type_name: ::core::option::Option::Some("Sha512Hash"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.len() as ::core::primitive::u64) > 64 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Sha512Hash",
+                type_name: ::core::option::Option::Some("Sha512Hash"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -1453,13 +1453,13 @@ impl Signature {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.len() as ::core::primitive::u64) < 64 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Signature",
+                type_name: ::core::option::Option::Some("Signature"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.len() as ::core::primitive::u64) > 64 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Signature",
+                type_name: ::core::option::Option::Some("Signature"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -1515,13 +1515,13 @@ impl Certificate {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.len() as ::core::primitive::u64) < 1 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Certificate",
+                type_name: ::core::option::Option::Some("Certificate"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.len() as ::core::primitive::u64) > 4096 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Certificate",
+                type_name: ::core::option::Option::Some("Certificate"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
