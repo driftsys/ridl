@@ -2532,6 +2532,59 @@ fn bounded_map() {
     insta::assert_snapshot!(rust_with_codec(decls));
 }
 
+/// A map whose declared count is exact is still a `Vec<(K, V)>`, so a value of
+/// another length is representable and the encoder checks it. A list with an
+/// exact count is `[T; N]`, whose length no sender can get wrong, and draws no
+/// check; the two shapes differ, so the map is pinned here
+/// (driftsys/ridl#829).
+#[test]
+fn fixed_map_is_checked_before_encoding() {
+    let map_field = v2::Field {
+        r#type: Some(v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
+                key: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Named("Counter".to_string())),
+                })),
+                value: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Named("Speed".to_string())),
+                })),
+                min: 3,
+                max: 3,
+            }))),
+        }),
+        ..named_field("meta", 1, "", false, init_value(true, None))
+    };
+    let struct_def = v2::StructDef {
+        members: vec![field_member(map_field)],
+        fixed_layout: false,
+    };
+    let decls = vec![
+        speed_decl(),
+        counter_decl(),
+        public_decl("Table", v2::decl::Kind::StructDef(struct_def)),
+    ];
+    let rust = rust_with_codec(decls);
+
+    // The encoder refuses a map of another length, with the rule and the owner
+    // the verifier reports for the same value.
+    assert!(
+        rust.contains("__c.len() != 3usize"),
+        "the encoder must check the exact count, emitted:\n{rust}"
+    );
+    assert!(
+        rust.contains("EncodeError::Contract"),
+        "the refusal must be a contract error, emitted:\n{rust}"
+    );
+    // And the verifier keeps its own check, so the two sides agree.
+    assert!(
+        rust.contains("__v.len != 3usize"),
+        "the verifier must keep its check, emitted:\n{rust}"
+    );
+}
+
 #[test]
 fn deprecated_and_internal_visibility() {
     let decls = vec![

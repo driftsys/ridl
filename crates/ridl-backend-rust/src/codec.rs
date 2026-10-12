@@ -1776,7 +1776,14 @@ impl<'a> Codec<'a> {
             }
             Wire::Vector { element, min, max } => {
                 let stride = Literal::usize_suffixed(element.inline_width());
-                let count = encode_count_check(owner, *min, *max, &quote! { __c });
+                // An exact count makes the Rust type `[T; N]`, whose length is
+                // `N` for every value, so there is nothing for the sender to
+                // get wrong and no check to emit.
+                let count = if min == max {
+                    TokenStream::new()
+                } else {
+                    encode_count_check(owner, *min, *max, &quote! { __c })
+                };
                 match element.as_ref() {
                     Wire::Scalar(scalar) => {
                         let raw = scalar.raw(quote! { __s });
@@ -2885,14 +2892,15 @@ fn count_check(owner: &str, min: u64, max: u64) -> TokenStream {
 /// caller of a generated `encode` discards the buffer when it returns an
 /// error.
 ///
-/// A fixed collection draws no check: its Rust type is `[T; N]`, whose length
-/// is `N` for every value, so the comparison is a constant the sender cannot
-/// fail. The verifier keeps its own check for that shape, because the bytes
-/// it reads carry a length of their own.
+/// A list whose declared count is exact draws no check, because its Rust type
+/// is `[T; N]`, whose length is `N` for every value, so the comparison is a
+/// constant the sender cannot fail. That is a property of the emitted type and
+/// not of the bound, so the caller decides it: a map is a
+/// `Vec<(K, V)>` whatever its bound, so an exact count is as
+/// representable as any other and is checked here. The verifier keeps its own
+/// check for both shapes, because the bytes it reads carry a length of their
+/// own.
 fn encode_count_check(owner: &str, min: u64, max: u64, collection: &TokenStream) -> TokenStream {
-    if min == max {
-        return TokenStream::new();
-    }
     let condition = count_condition(&Length::collection(collection), min, max);
     quote! {
         if #condition {
