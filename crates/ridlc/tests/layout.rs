@@ -332,10 +332,18 @@ fn a_layout_plugin_computes_cabin_from_the_request_alone() {
     let actual: Value = serde_json::from_str(text).expect("layout.json is JSON");
     assert_eq!(actual, fixture());
 
-    // No binding has a row yet (driftsys/ridl#265), so every
-    // `max_message_bytes` in the fixture is null.
+    // The request carries the `websocket` row of the frame specification
+    // §11.1, so `Cabin.warning`'s `max_message_bytes` is 20 + 16 + 8.
     let deployment = request.deployment.as_ref().expect("a deployment");
-    assert!(deployment.bindings.is_empty());
+    assert_eq!(
+        deployment.bindings,
+        vec![v1::Binding {
+            name: "websocket".to_string(),
+            version: "1".to_string(),
+            frame_header_max_bytes: Some(20),
+            envelope_bytes: Some(16),
+        }]
+    );
 }
 
 /// The file `layout.json` the plugin writes for a request, as JSON.
@@ -355,24 +363,12 @@ fn layout_json(request: &v1::CodegenRequest) -> Value {
     serde_json::from_str(text).expect("layout.json is JSON")
 }
 
-/// With a `websocket` binding row, a message's `max_message_bytes` is the
-/// row's frame header bound plus its envelope plus the message's proto3
-/// bound. The row is added to cabin's request by the test, because no binding
-/// has a row yet (driftsys/ridl#265).
+/// A message's `max_message_bytes` is the `websocket` row's frame header
+/// bound plus its envelope plus the message's proto3 bound. The row is the
+/// one the toolchain puts in every deployment section.
 #[test]
 fn a_websocket_row_adds_its_frame_header_and_envelope_to_the_proto3_bound() {
-    let (mut request, _) = request_for(&cabin(), "veh.cabin");
-    request
-        .deployment
-        .as_mut()
-        .expect("a deployment")
-        .bindings
-        .push(v1::Binding {
-            name: "websocket".to_string(),
-            version: "1".to_string(),
-            frame_header_max_bytes: Some(14),
-            envelope_bytes: Some(2),
-        });
+    let (request, _) = request_for(&cabin(), "veh.cabin");
     let actual = layout_json(&request);
     let max_message_bytes = |member: &str| {
         actual["messages"]
@@ -383,8 +379,8 @@ fn a_websocket_row_adds_its_frame_header_and_envelope_to_the_proto3_bound() {
             .unwrap_or_else(|| panic!("a message for {member}"))["max_message_bytes"]
             .clone()
     };
-    // `Warning`'s proto3 bound is 8 (the fixture derives it): 14 + 2 + 8.
-    assert_eq!(max_message_bytes("warning"), json!(24));
+    // `Warning`'s proto3 bound is 8 (the fixture derives it): 20 + 16 + 8.
+    assert_eq!(max_message_bytes("warning"), json!(44));
     // `Temperature` has no proto3 bound, so the sum has no value.
     assert_eq!(max_message_bytes("temperature"), Value::Null);
 }

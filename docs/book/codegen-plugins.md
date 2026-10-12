@@ -332,7 +332,9 @@ behind each state and each sum are in
 [the catalog descriptor record, "The size states"][size-states]. A plugin that
 sizes a socket message adds the frame header and the envelope of the transport
 binding to the payload bound; the deployment section's `bindings` list carries
-those values, and it is empty today (see below).
+those values: the `websocket` row of
+[the frame specification §11.1](reference/frame.md#111-websocket), a frame
+header of at most 20 bytes and an envelope of 16 bytes.
 
 ## The catalog hash
 
@@ -387,10 +389,9 @@ section carries those facts to a plugin at build time.
 
 ## What is not available yet
 
-- **Transport binding overheads.** The deployment section's `bindings` list is
-  empty, because no binding document states a frame layout yet. A socket
-  message's maximum size cannot be computed until it has rows
-  ([driftsys/ridl#718][i718]).
+- **A check of the binding overheads against a frame.** The `websocket`
+  row's sum is not yet checked against a frame a transport writes, because
+  no transport in this repository writes one ([driftsys/ridl#718][i718]).
 - **`repr(C)`.** The `ENCODING_REPR_C` value exists in the schema, but no
   consumer link carries it and no payload has a `repr(C)` size state
   ([driftsys/ridl#317][i317]).
