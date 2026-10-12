@@ -1631,7 +1631,7 @@ impl<'a> Codec<'a> {
         table: &Table,
     ) -> Result<TokenStream, GenerateError> {
         let name = encode_ident(owner);
-        let body = self.table_encode_body(table, &quote! { value })?;
+        let body = self.table_encode_body(owner, table, &quote! { value })?;
         // Writes the value as a FlatBuffers table and returns its position.
         // An internal: no doc.
         Ok(quote! {
@@ -1654,6 +1654,7 @@ impl<'a> Codec<'a> {
     /// is what a back-to-front builder needs.
     fn table_encode_body(
         &self,
+        owner: &str,
         table: &Table,
         value: &TokenStream,
     ) -> Result<TokenStream, GenerateError> {
@@ -1671,7 +1672,8 @@ impl<'a> Codec<'a> {
             let id = Literal::u16_suffixed(slot.id);
             let offset = Literal::u16_suffixed(slot.offset);
             if slot.optional {
-                let field = self.encode_field(&slot.wire, &Operand::borrowed(quote! { __v }))?;
+                let field =
+                    self.encode_field(owner, &slot.wire, &Operand::borrowed(quote! { __v }))?;
                 let access = slot.operand(value).place;
                 writes.push(quote! {
                     if let ::core::option::Option::Some(__v) = &#access {
@@ -1684,7 +1686,7 @@ impl<'a> Codec<'a> {
                     }
                 });
             } else {
-                let field = self.encode_field(&slot.wire, &slot.operand(value))?;
+                let field = self.encode_field(owner, &slot.wire, &slot.operand(value))?;
                 writes.push(quote! {
                     __fields[__n] = ::ridl_rt::flatbuffers::TableField {
                         slot: #id,
@@ -1710,7 +1712,12 @@ impl<'a> Codec<'a> {
         })
     }
 
-    fn encode_field(&self, wire: &Wire, expr: &Operand) -> Result<TokenStream, GenerateError> {
+    fn encode_field(
+        &self,
+        owner: &str,
+        wire: &Wire,
+        expr: &Operand,
+    ) -> Result<TokenStream, GenerateError> {
         Ok(match wire {
             Wire::Scalar(scalar) => {
                 let variant = format_ident!("{}", scalar.prim.field_variant());
@@ -1727,7 +1734,7 @@ impl<'a> Codec<'a> {
                 }
             }
             other => {
-                let pos = self.encode_pos(other, expr)?;
+                let pos = self.encode_pos(owner, other, expr)?;
                 quote! { ::ridl_rt::flatbuffers::Field::Offset(#pos) }
             }
         })
@@ -1735,7 +1742,12 @@ impl<'a> Codec<'a> {
 
     /// An out-of-line object: the expression writes it and evaluates to its
     /// position.
-    fn encode_pos(&self, wire: &Wire, expr: &Operand) -> Result<TokenStream, GenerateError> {
+    fn encode_pos(
+        &self,
+        owner: &str,
+        wire: &Wire,
+        expr: &Operand,
+    ) -> Result<TokenStream, GenerateError> {
         let reference = &expr.reference;
         let receiver = expr.receiver();
         Ok(match wire {
@@ -1762,8 +1774,9 @@ impl<'a> Codec<'a> {
                 let call = encode_path(name);
                 quote! { #call(#reference, builder)? }
             }
-            Wire::Vector { element, .. } => {
+            Wire::Vector { element, min, max } => {
                 let stride = Literal::usize_suffixed(element.inline_width());
+                let count = encode_count_check(owner, *min, *max, &quote! { __c });
                 match element.as_ref() {
                     Wire::Scalar(scalar) => {
                         let raw = scalar.raw(quote! { __s });
@@ -1781,6 +1794,7 @@ impl<'a> Codec<'a> {
                         quote! {
                             {
                                 let __c = #reference;
+                                #count
                                 let mut __bytes: ::std::vec::Vec<::core::primitive::u8> =
                                     ::std::vec::Vec::with_capacity(__c.len() * #stride);
                                 for __e in __c.iter() {
@@ -1793,10 +1807,12 @@ impl<'a> Codec<'a> {
                         }
                     }
                     other => {
-                        let pos = self.encode_pos(other, &Operand::borrowed(quote! { __e }))?;
+                        let pos =
+                            self.encode_pos(owner, other, &Operand::borrowed(quote! { __e }))?;
                         quote! {
                             {
                                 let __c = #reference;
+                                #count
                                 let mut __offsets: ::std::vec::Vec<::ridl_rt::flatbuffers::Pos> =
                                     ::std::vec::Vec::with_capacity(__c.len());
                                 for __e in __c.iter() {
@@ -1808,11 +1824,13 @@ impl<'a> Codec<'a> {
                     }
                 }
             }
-            Wire::Map { entry, .. } => {
-                let body = self.table_encode_body(entry, &quote! { __e })?;
+            Wire::Map { entry, min, max } => {
+                let body = self.table_encode_body(owner, entry, &quote! { __e })?;
+                let count = encode_count_check(owner, *min, *max, &quote! { __c });
                 quote! {
                     {
                         let __c = #reference;
+                        #count
                         let mut __offsets: ::std::vec::Vec<::ridl_rt::flatbuffers::Pos> =
                             ::std::vec::Vec::with_capacity(__c.len());
                         for __e in __c.iter() {
@@ -2470,7 +2488,7 @@ impl<'a> Codec<'a> {
         let align = Literal::usize_suffixed(align);
         let width_lit = Literal::usize_suffixed(width);
 
-        let field = self.encode_field(wire, value)?;
+        let field = self.encode_field(owner, wire, value)?;
         let inner_verify = self.verify_at(owner, wire, &quote! { __p })?;
         let inner_decode = self.decode_expr(wire, &quote! { buf }, &quote! { __p })?;
         let absent_verify = verify_absent(wire);
@@ -2538,7 +2556,7 @@ impl<'a> Codec<'a> {
             Wire::Table(_) | Wire::Union(_) => Ok(UnionArm {
                 name: name.to_string(),
                 tag,
-                encode: self.encode_pos(&wire, &Operand::borrowed(quote! { __a }))?,
+                encode: self.encode_pos(owner, &wire, &Operand::borrowed(quote! { __a }))?,
                 verify: self.verify_at(owner, &wire, &quote! { __value })?,
                 decode: self.decode_expr(&wire, &quote! { buf }, &quote! { __value })?,
             }),
@@ -2841,35 +2859,97 @@ struct UnionArm {
 /// array is one equality instead of two comparisons, and it is what keeps
 /// `decode`'s `[T; N]` from being built out of a vector of another length.
 fn count_check(owner: &str, min: u64, max: u64) -> TokenStream {
-    let violation = quote! {
-        return ::core::result::Result::Err(::ridl_rt::payload::VerifyError::Contract(
-            ::ridl_rt::payload::Violation {
-                type_name: #owner,
-                rule: ::ridl_rt::payload::Rule::Length,
-            },
-        ));
-    };
-    let high = Literal::usize_suffixed(max as usize);
-    if min == max {
-        return quote! {
-            if __v.len != #high {
-                #violation
-            }
-        };
-    }
-    if min == 0 {
-        return quote! {
-            if __v.len > #high {
-                #violation
-            }
-        };
-    }
-    let low = Literal::usize_suffixed(min as usize);
+    let condition = count_condition(&Length::field(quote! { __v.len }), min, max);
     quote! {
-        if __v.len < #low || __v.len > #high {
-            #violation
+        if #condition {
+            return ::core::result::Result::Err(::ridl_rt::payload::VerifyError::Contract(
+                ::ridl_rt::payload::Violation {
+                    type_name: #owner,
+                    rule: ::ridl_rt::payload::Rule::Length,
+                },
+            ));
         }
     }
+}
+
+/// The statement the encoder runs before it writes a bounded collection, as
+/// the twin of [`count_check`]: the same declared bound, the same rule and the
+/// same owner, so the encoder refuses what the verifier would refuse.
+///
+/// A bounded collection is a plain field of the generated type, so a value
+/// longer than its declared bound is representable, and the encoder is where
+/// it is refused (driftsys/ridl#829). The check runs before the collection's
+/// elements are written, so a refused value leaves the output buffer as it
+/// was.
+///
+/// A fixed collection draws no check: its Rust type is `[T; N]`, whose length
+/// is `N` for every value, so the comparison is a constant the sender cannot
+/// fail. The verifier keeps its own check for that shape, because the bytes
+/// it reads carry a length of their own.
+fn encode_count_check(owner: &str, min: u64, max: u64, collection: &TokenStream) -> TokenStream {
+    if min == max {
+        return TokenStream::new();
+    }
+    let condition = count_condition(&Length::collection(collection), min, max);
+    quote! {
+        if #condition {
+            return ::core::result::Result::Err(::ridl_rt::payload::EncodeError::Contract(
+                ::ridl_rt::payload::Violation {
+                    type_name: #owner,
+                    rule: ::ridl_rt::payload::Rule::Length,
+                },
+            ));
+        }
+    }
+}
+
+/// How a check site reads a collection's length.
+struct Length {
+    /// The number of elements.
+    len: TokenStream,
+    /// The test for "no elements", where the site has one. The encoder reads
+    /// a Rust collection, where `len() < 1` is what `clippy::len_zero`
+    /// refuses in a consumer's build; the verifier reads a field of the
+    /// vector header, which has no such method.
+    is_empty: Option<TokenStream>,
+}
+
+impl Length {
+    /// A length read as a field, with no emptiness test.
+    fn field(len: TokenStream) -> Self {
+        Length {
+            len,
+            is_empty: None,
+        }
+    }
+
+    /// The length of a Rust collection.
+    fn collection(collection: &TokenStream) -> Self {
+        Length {
+            len: quote! { #collection.len() },
+            is_empty: Some(quote! { #collection.is_empty() }),
+        }
+    }
+}
+
+/// The condition under which a collection of that length breaks its declared
+/// bound. The one place the comparisons are written, so the encoder and the
+/// verifier cannot drift apart.
+fn count_condition(length: &Length, min: u64, max: u64) -> TokenStream {
+    let len = &length.len;
+    let high = Literal::usize_suffixed(max as usize);
+    if min == max {
+        return quote! { #len != #high };
+    }
+    if min == 0 {
+        return quote! { #len > #high };
+    }
+    let low = Literal::usize_suffixed(min as usize);
+    let below = match (min, length.is_empty.as_ref()) {
+        (1, Some(is_empty)) => quote! { #is_empty },
+        _ => quote! { #len < #low },
+    };
+    quote! { #below || #len > #high }
 }
 
 fn scalar_repr(named: Option<NamedScalar>, backing: ScalarBacking) -> Repr {

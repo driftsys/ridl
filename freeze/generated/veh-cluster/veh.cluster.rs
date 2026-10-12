@@ -1285,6 +1285,14 @@ pub(crate) fn __ridl_fb_encode_FaultPage(
         offset: 4u16,
         value: ::ridl_rt::flatbuffers::Field::Offset({
             let __c = &value.faults;
+            if __c.len() > 64usize {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                        type_name: "FaultPage",
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
             let mut __offsets: ::std::vec::Vec<::ridl_rt::flatbuffers::Pos> = ::std::vec::Vec::with_capacity(
                 __c.len(),
             );
@@ -3352,9 +3360,16 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                 W::Encoding,
             >::encode(&value, buf) {
                 Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::port::WriteError::Contract(
+                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                        ),
+                    );
+                }
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `FanLevel` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `FanLevel` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -3387,9 +3402,16 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                 W::Encoding,
             >::encode(&value, buf) {
                 Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::port::WriteError::Contract(
+                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                        ),
+                    );
+                }
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `veh.common.Temperature` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `veh.common.Temperature` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -3422,9 +3444,16 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                 W::Encoding,
             >::encode(&value, buf) {
                 Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::port::WriteError::Contract(
+                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                        ),
+                    );
+                }
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `veh.common.Ratio` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `veh.common.Ratio` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -3740,9 +3769,16 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                 W::Encoding,
             >::encode(&value, buf) {
                 Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::port::WriteError::Contract(
+                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                        ),
+                    );
+                }
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `FanLevel` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `FanLevel` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }

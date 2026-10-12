@@ -1977,9 +1977,16 @@ The interface number is checked before the ordinal, for the reason `serve` check
             P::Encoding,
         >::encode(__arg, buf) {
             Ok(encoded) => encoded.bytes(),
+            Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::port::SendError::Contract(
+                        ::ridl_rt::error::Contract::InvalidValue(__violation),
+                    ),
+                );
+            }
             Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                 unreachable!(
-                    "encoding `Level` needs {} bytes and the argument buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                    "encoding `Level` needs {} bytes and the argument buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                     needed, available
                 )
             }
@@ -2040,9 +2047,16 @@ The interface number is checked before the ordinal, for the reason `serve` check
             P::Encoding,
         >::encode(__arg, buf) {
             Ok(encoded) => encoded.bytes(),
+            Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::port::SendError::Contract(
+                        ::ridl_rt::error::Contract::InvalidValue(__violation),
+                    ),
+                );
+            }
             Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                 unreachable!(
-                    "encoding `Window` needs {} bytes and the argument buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                    "encoding `Window` needs {} bytes and the argument buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                     needed, available
                 )
             }
@@ -2224,9 +2238,16 @@ The interface number is checked before the ordinal, for the reason `serve` check
                 W::Encoding,
             >::encode(&value, buf) {
                 Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::port::WriteError::Contract(
+                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                        ),
+                    );
+                }
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `Temperature` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `Temperature` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -2261,9 +2282,16 @@ The interface number is checked before the ordinal, for the reason `serve` check
                 W::Encoding,
             >::encode(&value, buf) {
                 Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::port::RaiseError::Contract(
+                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                        ),
+                    );
+                }
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `Warning` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `Warning` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -2548,11 +2576,26 @@ An argument is taken by reference because `serve` reads it again when it evaluat
                                                         )
                                                     }
                                                     Ok(()) => {
-                                                        let bytes = match ::ridl_rt::payload::Ref::<
+                                                        match ::ridl_rt::payload::Ref::<
                                                             super::Average,
                                                             H::Encoding,
                                                         >::encode(&reply, buf) {
-                                                            Ok(encoded) => encoded.bytes(),
+                                                            Ok(encoded) => {
+                                                                let bytes = encoded.bytes();
+                                                                h.settle(claim.id, Ok(bytes))
+                                                            }
+                                                            Err(
+                                                                ::ridl_rt::payload::EncodeError::Contract(__violation),
+                                                            ) => {
+                                                                h.settle(
+                                                                    claim.id,
+                                                                    Err(
+                                                                        ::ridl_rt::error::CallError::Contract(
+                                                                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                                                                        ),
+                                                                    ),
+                                                                )
+                                                            }
                                                             Err(
                                                                 ::ridl_rt::payload::EncodeError::Capacity {
                                                                     needed,
@@ -2560,13 +2603,12 @@ An argument is taken by reference because `serve` reads it again when it evaluat
                                                                 },
                                                             ) => {
                                                                 unreachable!(
-                                                                    "encoding `Average` needs {} bytes and the dispatch buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                                                                    "encoding `Average` needs {} bytes and the dispatch buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                                                                     needed, available
                                                                 )
                                                             }
                                                             Err(_) => unreachable!("encoding `Average` failed"),
-                                                        };
-                                                        h.settle(claim.id, Ok(bytes))
+                                                        }
                                                     }
                                                 }
                                             }
@@ -3237,9 +3279,16 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                 W::Encoding,
             >::encode(&value, buf) {
                 Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::port::WriteError::Contract(
+                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                        ),
+                    );
+                }
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `Health` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `Health` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }

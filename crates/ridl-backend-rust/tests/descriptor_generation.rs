@@ -209,8 +209,8 @@ fn each_interaction_descriptor_has_its_row() {
         .collect();
     assert_eq!(
         descriptors.len(),
-        13,
-        "the fixture's thirteen interactions have a descriptor each: {descriptors:?}"
+        17,
+        "the fixture's seventeen interactions have a descriptor each: {descriptors:?}"
     );
 
     let checks: String = descriptors
@@ -233,7 +233,7 @@ fn each_interaction_descriptor_has_its_row() {
 fn the_fixture_compiles_clean() {
     let package = ir::compile_fixture("interaction_face.ridl");
     assert_eq!(package.name, "face.demo");
-    assert_eq!(package.shapes().count(), 6);
+    assert_eq!(package.shapes().count(), 7);
 }
 
 #[test]
