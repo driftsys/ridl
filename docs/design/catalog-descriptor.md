@@ -276,7 +276,10 @@ differing only in the list have the same hash. The rule is
   a note that a unit's list covers the workspace's own packages only.
 - **No runtime reads the list.** The generated face compares only its own
   `CATALOG` (ADR-0023 decision 8), and no runtime in this workspace speaks the
-  frame, so nothing here accepts an `attach` on the strength of the list.
+  frame, so nothing here accepts an `attach` on the strength of the list. The
+  frame specification §11.1 names the descriptor as the source a providing
+  runtime reads the list from; the first WebSocket provider holds no descriptor
+  and applies the exact-match rule.
 
 It is computed in `ridl-ir`, not in `ridl-descriptor`, because three artifacts
 carry it and `ridl-ir` is below all of them:

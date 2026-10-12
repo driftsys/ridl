@@ -247,10 +247,10 @@ E3.1–E3.3 · E9.10 · E9.12 · E8 — a thread beside all of it
 stories (2026-10-09).** A new step, the manifest naming the encodings a build
 emits (driftsys/ridl#801), now sits before E11.8, E11.9 and E11.12. After it,
 those three are independent of each other. E11.9 lands over FlatBuffers, and
-`frame-specification.md` section 11.1 (the WebSocket fixed to proto3, encoding
-tag 2) is amended when E11.9 lands; the specification is unchanged until then.
-E11.8's conformance oracle is `prost` through `protox` instead of `protoc`
-(steering note decision D). E11.12 starts with its projection record. See
+`frame-specification.md` section 11.1 was amended before 0.10.0 by the binding
+document; E11.9 implements it. E11.8's conformance oracle is `prost` through
+`protox` instead of `protoc` (steering note decision D). E11.12 starts with its
+projection record. See
 [`2026-10-06-ws-and-payload-formats-steering.md`](wip/2026-10-06-ws-and-payload-formats-steering.md)
 sections 2 and 4.
 
