@@ -40,16 +40,16 @@ open to streams (#336) in 0.11.
 
 **What 0.10 freezes** (ADR-0029 decision 1, "Wire format"): the frame envelope
 and the `attach` handshake, which after this note means the byte layout of
-section 3.2 for frame version 1 and binding version 1, the code tables, and the
-test vectors of section 4. The inputs of the catalog hash, the `.proto` and
+section 3.1 for frame version 1 and binding version 1, the code tables, and the
+test vectors of section 3.1. The inputs of the catalog hash, the `.proto` and
 `.fbs` mapping and the encoding names are already in the `wire` dump and are not
 changed here.
 
 **What 0.10.x adds** (not frozen, ADR-0029 decision 2): the crate
 `ridl-transport-ws`, the TypeScript WebSocket package, the `websocket` row's
-numbers in the codegen model (size values are not frozen), the crate's
-configuration (ping interval, liveness timeout, message size limit), and plain
-`connect` (proto3 default) when #264 lands.
+numbers in the codegen model (a value derived from the frozen layout, R-W-16),
+the crate's configuration (ping interval, liveness timeout, message size limit),
+and plain `connect` (proto3 default) when #264 lands.
 
 **Non-goals.** The transport code; the proto3 codec; a relay or a bridge; a
 session multiplexed over one connection; authentication beyond what TLS and the
@@ -69,11 +69,14 @@ that opens the connection (the WebSocket client) is the consumer and sends
 provider. The URL is the deployment's: the binding puts nothing in the path, the
 query or a header, and `ws://` and `wss://` are both allowed. The session ends
 when either side sends a close frame, when the TCP connection fails, or when the
-liveness check fails (the consumer sends WebSocket pings; a side that receives
-no pong, and no other message, within its liveness timeout ends the session). At
-the end of the session every port of the consuming runtime reports `Detached`
-and every call in flight reports `Transport::Down` (§3). A consumer that needs
-two catalogs opens two connections.
+liveness check fails: the provider (the server end) sends WebSocket pings, and
+either end treats "no message of any kind, data or control, within the liveness
+timeout" as the end of the session. The provider pings because the browser
+WebSocket API cannot send a ping, and the TypeScript package for the browser is
+a named end of this binding. At the end of the session every port of the
+consuming runtime reports `Detached` and every call in flight reports
+`Transport::Down` (§3). A consumer that needs two catalogs opens two
+connections.
 
 **Reason.** §3 already says a boundary carrying several catalogs carries several
 sessions, and a connection is the cheapest session boundary a WebSocket offers:
@@ -97,15 +100,16 @@ an additive binding version, not a break.
 version relate to `frame_version`.
 
 **Decision.** The client offers `ridl-ws-v1` in `Sec-WebSocket-Protocol`; the
-server selects it, or the client closes with 1002 and the session never opens.
-The number in the subprotocol name is the binding version: the byte layout and
-code tables of section 3.2. `attach.frame_version` stays the frame
-specification's version of the logical frame, `1`. Binding version 1 carries
-frame version 1 only, so on a `ridl-ws-v1` connection an `attach` whose
-`frame_version` is not 1 is refused `frame_version_unsupported`. A later binding
-version is offered as a list, newest first (`ridl-ws-v2, ridl-ws-v1`), and the
-server picks the newest it serves; see R-W-18 for how that carries frame
-version 2. The codegen model's `Binding.version` is the binding version, `"1"`.
+server selects it, or the client fails the connection and the session never
+opens (a client that can choose a close code uses 1002; a browser client
+cannot). The number in the subprotocol name is the binding version: the byte
+layout of section 3.1. `attach.frame_version` stays the frame specification's
+version of the logical frame, `1`. Binding version 1 carries frame version 1
+only, so on a `ridl-ws-v1` connection an `attach` whose `frame_version` is not 1
+is refused `frame_version_unsupported`. A later binding version is offered as a
+list, newest first (`ridl-ws-v2, ridl-ws-v1`), and the server picks the newest
+it serves; see R-W-18 for how that carries frame version 2. The codegen model's
+`Binding.version` is the binding version, `"1"`.
 
 **Reason.** The subprotocol is the one place a WebSocket negotiates before any
 message, so a peer that does not know the binding fails before `attach` and the
@@ -127,7 +131,7 @@ exists in §6.1 and is transport-neutral.
 the payload length carried; what about a commit's frames.
 
 **Decision.** One frame of §4 is one WebSocket message with the binary opcode.
-The header is the fixed-order prefix of section 3.2 and the payload is every
+The header is the fixed-order prefix of section 3.1 and the payload is every
 byte after it, so no length field is carried: the payload length is the message
 length minus the header length. WebSocket fragmentation is below the binding and
 invisible to it. A text message is a protocol violation (close 1003). No
@@ -156,11 +160,15 @@ signal publication; recoverable additively.
 
 **Decision.** Every header integer is fixed-width little-endian; `stamp` is a
 two's-complement `i64`; no varint, no padding, no alignment. The field order and
-the sizes are in section 3.2; the code tables (form, kind, provenance, encoding
-tag, outcome and detail) are there too. `InterfaceNo` and `Ordinal` keep 32
-bits, so the `u16` fallback of ADR-0021 decision 2 stays untriggered and §4's
-range check at `attach` is vacuous for this binding. The unit name on `attach`
-is UTF-8 with a `u16` byte length.
+the sizes are in section 3.1. The numeric codes (form, provenance, outcome,
+detail, `Rule`, refusal reason) are frame-level facts, stated once in §4 and
+§9.6 beside the `Kind` values and the encoding tags that §2 and §3 already fix,
+as the values every binding that carries codes uses; §11.1 references them and
+restates none. `InterfaceNo` and `Ordinal` keep 32 bits, so the `u16` fallback
+of ADR-0021 decision 2 stays untriggered and §4's range check at `attach` is
+vacuous for this binding. The unit name on `attach` is UTF-8 with a `u8` byte
+length: at most 255 bytes, never empty, valid UTF-8, so the largest `attach`
+header is 40 + 255 = 295 bytes and the handshake has a fixed maximum (R-W-16).
 
 **Reason.** Little-endian is what the FlatBuffers payload and a `repr(C)`
 payload already use on every target in scope, so one message has one byte order;
@@ -176,8 +184,8 @@ forbids, and loses canonical form (field order is the encoder's). (c) A varint
 header: smaller by a few bytes, not fixed-size, more code in a `no_std` runtime.
 
 **Cost if wrong.** A layout defect found after 0.10.0 is a break of the wire
-surface and needs 0.11. Mitigation: the vectors of section 4 are frozen now and
-#265 must reproduce them; a defect found before 0.10.0 is free.
+surface and needs 0.11. Mitigation: the vectors of section 3.1 are frozen now
+and #265 must reproduce them; a defect found before 0.10.0 is free.
 
 ### R-W-11 — The encoding tag (§10 item 3)
 
@@ -213,12 +221,15 @@ word for word; the binding adds no check and removes none. The provider's source
 of the list is the unit's catalog descriptor (`Catalog.compatible`,
 `docs/design/catalog-descriptor.md`), read once at start; a provider that holds
 no descriptor applies the exact-match rule, which §6.1 already states is the
-rule with an empty list (the first `ridl-transport-ws` provider, which holds
-only the generated `CATALOG`, is in that case). `attach` travels in-band as the
-first binary message after the HTTP upgrade, never in the URL or a header, and
-`attached` is the first message the provider sends; a provider that receives any
-other first message, or a second `attach`, closes with 1002. After
-`attached(refused)` the provider closes with 1000; the reason is in the frame.
+rule with an empty list. The first `ridl-transport-ws` provider holds only the
+generated `CATALOG` and is in that case: it applies exact match, and so it does
+not meet conformance item 1 of §12 (an `attach` naming a listed earlier hash is
+accepted) until it reads a descriptor; the As-built note of the frame
+specification says so. `attach` travels in-band as the first binary message
+after the HTTP upgrade, never in the URL or a header, and `attached` is the
+first message the provider sends; a provider that receives any other first
+message, or a second `attach`, closes with 1002. After `attached(refused)` the
+provider closes with 1000; the reason is in the frame.
 
 **Reason.** ADR-0018 decision 7 makes the control plane uniform across bindings;
 moving `attach` into the HTTP handshake would make the WebSocket the one binding
@@ -273,10 +284,11 @@ the liveness timeout; that value is the crate's configuration.
 runtime cannot fill it from an error a remote peer sends, unless the frame
 carries a type identifier the receiver looks up in the shared catalog. — E11.1"
 
-**Decision.** The type name does not cross. On a `response` or an `answer` whose
-outcome is `contract(InvalidValue(violation))`, the frame carries the `Rule` as
-a one-byte code (section 3.2) and nothing else of the violation. The receiving
-runtime reports `Contract::InvalidValue(Violation { type_name: None,
+**Decision.** The type name does not cross. On a `response` whose outcome is
+`contract(InvalidValue(violation))` (the one form that carries it: an `answer`
+never does, §6.2 and §6.3), the frame carries the `Rule` as a one-byte code
+(§9.6, section 3.1) and nothing else of the violation. The receiving runtime
+reports `Contract::InvalidValue(Violation { type_name: None,
 rule })`:
 `Violation.type_name` becomes `Option<&'static str>`, `Some` when the violation
 was detected locally by the generated binding and `None` when it was reported by
@@ -284,7 +296,9 @@ a peer. This is a breaking `ridl-rt` change, made in lane W step 2 with the
 other #350 rulings, before the `runtime-crates` gate is switched on; the Kotlin
 plugin receives a heads-up. A new `Rule` variant adds a code to the table and is
 a frame version bump (R-W-18), because a receiver cannot construct a variant it
-does not know.
+does not know; the ADR-0021 amendment states that a `Rule` variant is added only
+together with a frame version, although `Rule` is `#[non_exhaustive]`
+(`crates/ridl-rt/src/payload.rs`).
 
 **Reason.** The type name is diagnostic: the contract fact is that the argument
 broke a constraint, and the caller already knows which interaction and which
@@ -310,9 +324,14 @@ provider after `attached(refused)`); 1001 when the provider shuts down; 1002 for
 a protocol violation (a message shorter than its header, an unknown form, kind,
 provenance or outcome code, a field out of its domain such as `interface` 0, a
 message before `attach`, a second `attach`, an `attach` whose `name_len` does
-not match the message length); 1003 for a text message; 1009 for a message
-larger than the receiver's configured limit. A frame with a readable header and
-an absent payload where the form requires one is answered `corrupt` when it is a
+not match the message length or whose name is empty or not valid UTF-8, a first
+provider-to-consumer message that is not `attached`); 1003 for a text message;
+1009 for a message larger than the receiver's configured limit, which admits at
+least the largest `attach` (295 bytes). §9.5 says an unreadable header is
+"discarded and recorded, never partly applied" and leaves teardown to the
+binding: here the receiver records the frame and closes with 1002, so the
+recording obligation is kept. A frame with a readable header and an absent
+payload where the form requires one is answered `corrupt` when it is a
 `request`, as §9.5 states, and discarded and recorded otherwise; the session
 continues.
 
@@ -331,29 +350,44 @@ kept; the peer reconnects.
 
 ### R-W-16 — The header and envelope sizes (#718)
 
-**Decision.** The numbers, from section 3.2: `envelope_bytes` = 16 (`stamp` 8 +
+**Decision.** The numbers, from section 3.1: `envelope_bytes` = 16 (`stamp` 8 +
 `seq` 8); `frame_header_max_bytes` = 20, the largest data-plane header without
 its envelope (`response`: 10 common + 8 `correlation` + 2 `outcome`). A socket
 message's maximum size is therefore 36 + the payload bound (a `publish` is 27 +
 bound, a `request` 26 + bound; the single row is the conservative maximum, as
-the `Binding` message shape requires). They live in two places: the frame
-specification §11.1 states them (the source), and
-`crates/ridl-ir/src/codegen/bindings.rs` `KNOWN` gains the row
+the `Binding` message shape requires). The largest header of any message is the
+`attach` at 40 + 255 = 295 bytes; it carries no payload and enters no size sum,
+so the `Known` row stays the data-plane maximum, and the doc comment of
+`Known.frame_header_max_bytes` in `crates/ridl-ir/src/codegen/bindings.rs`
+(today "the largest frame header the binding adds to a message") is amended in
+the same pull request to say "data-plane message". §11.1 states that a
+receiver's message size limit admits at least 295 bytes, so no limit can refuse
+a legitimate `attach`. The numbers live in two places: the frame specification
+§11.1 states them (the source), and `KNOWN` gains the row
 `{ name: "websocket", version: "1", frame_header_max_bytes: Some(20),
 envelope_bytes: Some(16) }`
 in the same pull request as the §11.1 amendment, so every deployment section
-carries it (#718's first half). The layout test's synthetic 14 + 2 row is
-replaced by the real row and the cabin layout fixture's `max_message_bytes`
-becomes non-null for the proto3-bounded members. The test that checks the sum
-against a frame the binding writes lands with #265 (#718's second half; #718
-stays open until then). Size values are not frozen (ADR-0029 decision 2).
+carries it (#718's first half). This changes steering decision H, which had #265
+fill the `KNOWN` row and #718's row: the row moves from #265 to the amendment
+pull request, because the document that defines the numbers exists before the
+crate. The layout test's synthetic 14 + 2 row is replaced by the real row and
+the cabin layout fixture's `max_message_bytes` becomes non-null for the
+proto3-bounded members. The test that checks the sum against a frame the binding
+writes lands with #265 (#718's second half; #718 stays open until then). The row
+is a value derived from the layout: if it is wrong it is corrected in a patch
+release, while the layout it is derived from is frozen through the vectors
+(R-W-19).
 
-**Alternatives.** Add the row with #265 only: the deployment section stays
-without a binding for the whole 0.10.0 cycle although the document that defines
-the numbers exists.
+**Alternatives.** Add the row with #265 only (steering decision H as written):
+the deployment section stays without a binding for the whole 0.10.0 cycle
+although the document that defines the numbers exists. A `u16` name length: the
+handshake would have no fixed maximum, and a receiver's 1009 limit could refuse
+a legitimate `attach`.
 
 **Cost if wrong.** A plugin sizes a socket buffer from a wrong constant; the row
-is a size value and is corrected in a patch release.
+is a derived value and is corrected in a patch release. A unit name longer than
+255 bytes of UTF-8 cannot attach; no unit name in the corpus or the examples is
+near that length.
 
 ### R-W-17 — The frame specification's version
 
@@ -376,9 +410,11 @@ offered `ridl-ws-v1` only, gets `ridl-ws-v1` as before. The version 1 layout,
 code tables and vectors are never edited; version 2 is a new section beside
 them. A contract that declares a stream (`<T>`) therefore needs frame version 2
 on both ends, and a 0.11 consumer of such a contract that is given version 1
-reports the interactions that use a stream as `UnknownInteraction` locally and
-uses the rest. The same path serves any later addition to the frame (a new
-`Rule` code, a new form, a new field).
+reports a call that uses a stream through a new `Transport` variant (additive:
+`Transport` is `#[non_exhaustive]`, `crates/ridl-rt/src/error.rs`), not as
+`UnknownInteraction`, which would misname a disagreement about the catalog, and
+uses the rest of the contract. The same path serves any later addition to the
+frame (a new `Rule` code, a new form, a new field).
 
 **Reason.** The subprotocol list plus `frame_version` is a negotiation the
 binding already has (R-W-8), so additions need no new mechanism; freezing
@@ -392,14 +428,16 @@ provider cannot know that a 0.11 consumer will never subscribe a stream.
 
 ### R-W-19 — Frame vectors in the `wire` dump now
 
-**Decision.** The `wire` dump gains one line per vector of section 3.2's vector
-table, `frame-vector <name> <hex>`, read by `xtask/src/freeze/wire.rs` from the
-frame specification itself (the table is the source; no encoder exists), with a
-structural check that each vector's length equals the header size of its form
-plus its payload. The dump gains them in the pull request that applies section
-3, so they are frozen at 0.10.0 and ADR-0029's "frozen by policy with no
-automated check" sentence is retired for the envelope and the handshake. #265's
-crate must encode and decode every vector in its tests.
+**Decision.** The `wire` dump gains one line per vector of section 3.1's vector
+table, `frame-vector <id> <hex>`, where `<id>` is the table's stable `Id` column
+(`attach-1`, `publish-live`, ...), never the caption, read by
+`xtask/src/freeze/wire.rs` from the frame specification itself (the table is the
+source; no encoder exists), with a structural check that each vector's length
+equals the header size of its form plus its payload. The dump gains them in the
+pull request that applies section 3, so they are frozen at 0.10.0 and ADR-0029's
+"frozen by policy with no automated check" sentence is retired for the envelope
+and the handshake. #265's crate must encode and decode every vector in its
+tests.
 
 **Reason.** R-3 wants a WebSocket user to get a wire promise in 0.10; a promise
 with no check is what ADR-0029 calls policy only. Reading the table from the
@@ -419,18 +457,60 @@ it.
 
 **The version line** becomes `Version: 0.2.0 — Draft`.
 
+**The As-built note** gains, after "and no runtime in this workspace reads it at
+`attach`": "The first WebSocket provider (driftsys/ridl#265) holds no descriptor
+and applies the exact-match rule of §6.1, so it does not meet conformance item 1
+of §12 until it reads one."
+
+**§1, the table's binding row.** The "What it fixes" cell becomes: "how the
+frame's fields are carried over that transport, and whether the binding carries
+any of the three payload encodings or fixes one".
+
+**§1, the paragraph after the table.** Replace "and which encoding a path
+carries is the encoding matrix of ADR-0020 decision 2: proto3 serialized into a
+stream, FlatBuffers mapped or passed within a node." with:
+
+> and which encoding a session uses is named at `attach` (§3). A binding either
+> carries any of the three, the `attach` tag naming the session's, or fixes one;
+> the
+> [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+> decision 2 matrix — proto3 serialized into a stream, FlatBuffers mapped or
+> passed within a node — gives the default a transport offers when it carries
+> any, and the one encoding when it fixes one. §11.1 carries any; §11.2 fixes
+> FlatBuffers.
+
+**§2, the `Violation` row.** The meaning becomes: "the `Rule` that failed and,
+for a violation detected locally, the name of the typl type whose constraint
+failed; a violation a peer reports carries the rule alone (§9.6)".
+
 **§3, the encoding paragraph.** Replace the sentence "The encoding is the one
 the path takes under the ADR-0020 decision 2 matrix, so a binding knows it
 before the session exists; `attach` carries it so that a mismatch is a refusal
 rather than a stream of corrupt payloads." with:
 
-> A binding carries any of the three encodings and fixes none; which one a
-> session uses is the consuming program's choice at construction, with a default
-> per transport taken from how coupled its two ends are (the
+> A binding either carries any of the three encodings, in which case the
+> consuming program names one at construction and the transport offers a default
+> taken from the
 > [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
-> decision 2 matrix: proto3 for a stream, FlatBuffers within a node). `attach`
-> carries the tag so that a mismatch is a refusal rather than a stream of
-> corrupt payloads.
+> decision 2 matrix, or fixes one (§1, §10 item 3); §11.1 carries any and §11.2
+> fixes FlatBuffers. `attach` carries the tag in both cases, so that a mismatch
+> is a refusal rather than a stream of corrupt payloads.
+
+**§4, after "The ten forms" table, a new paragraph.** The numeric codes every
+binding that carries codes uses; `Kind` (§2) and the encoding tag (§3) are
+already fixed:
+
+> **The codes.** A binding that carries a field as a numeric code uses these
+> values. `form`: `attach` 1, `attached` 2, `subscribe` 3, `answer` 4,
+> `unsubscribe` 5, `read` 6, `publish` 7, `occurrence` 8, `request` 9,
+> `response` 10 — the order of the table above. `provenance`: `Init` 1, `Live`
+> 2, `Invalid(Declared)` 3. `outcome`: `accepted` 1, `reply` 2,
+> `contract(InvalidValue)` 3, `contract(PreconditionFailed)` 4,
+> `contract(ContractBroken)` 5, `contract(UnknownInteraction)` 6, `corrupt` 7,
+> `busy` 8, `refused` 9. A `refused` reason: `unknown_catalog` 1,
+> `catalog_mismatch` 2, `encoding_unsupported` 3, `frame_version_unsupported` 4,
+> `range` 5. The `Rule` of an `InvalidValue`: §9.6. A new value in any of these
+> tables is a new frame version.
 
 **§4, the `outcome` row.** Append to the row's domain: "§9.6 for what
 `contract(InvalidValue)` carries".
@@ -439,11 +519,21 @@ rather than a stream of corrupt payloads." with:
 
 > **What a violation carries.** `contract(InvalidValue(violation))` crosses as
 > the violation's `Rule` alone; the name of the typl type whose constraint
-> failed does not cross. The receiving runtime reports the violation with no
+> failed does not cross. The `Rule` codes: `Range` 1, `Step` 2, `Length` 3,
+> `Pattern` 4, `Variant` 5, `Unique` 6; a new `Rule` variant is added only
+> together with a new frame version, because a receiver cannot construct a
+> variant it does not know. The receiving runtime reports the violation with no
 > type name, which `ridl_rt::payload::Violation` represents as
 > `type_name: None`; a violation the generated binding detects locally keeps its
 > name. A type identifier was rejected because the catalog descriptor carries no
 > type table, and the name is diagnostic, not contractual.
+
+**§10 item 3** becomes:
+
+> 3. **The encoding tag.** Whether the binding carries any of the three
+>    encodings, the `attach` tag naming the session's, or fixes one; when it
+>    fixes one, which, under the ADR-0020 decision 2 matrix, as a value of the
+>    table in §3; when it carries any, which default its transport offers.
 
 **§11, the opening paragraph.** Replace "The WebSocket transport is planned in
 this repository and is not built yet" with "The WebSocket binding is specified
@@ -469,54 +559,53 @@ in §11.1 and its transport crate is not built yet".
 > is the deployment's; the binding places nothing in the path, the query or a
 > header; `ws://` and `wss://` are both allowed, and what `wss://` provides is
 > the security the deployment relies on (§13). The session ends when either side
-> sends a close frame, when the connection fails, or when a side receives no
-> message and no pong within its liveness timeout after its last ping; the
-> consumer sends pings. A consumer that needs two catalogs opens two
-> connections.
+> sends a close frame, when the connection fails, or when the liveness check
+> fails: the provider sends WebSocket pings, and either end treats no message of
+> any kind, data or control, within its liveness timeout as the end of the
+> session. The provider pings because a browser client cannot. A consumer that
+> needs two catalogs opens two connections.
 >
 > **The subprotocol.** The client offers `ridl-ws-v1` in
 > `Sec-WebSocket-Protocol`; a client offering several versions lists the newest
-> first, and the server selects the newest it serves. A server that selects none
-> is closed by the client with 1002. On a `ridl-ws-v1` connection,
-> `attach.frame_version` is 1 or the `attach` is refused
-> `frame_version_unsupported`.
+> first, and the server selects the newest it serves. When the server selects
+> none, the client fails the connection; a client that can choose a close code
+> uses 1002. On a `ridl-ws-v1` connection, `attach.frame_version` is 1 or the
+> `attach` is refused `frame_version_unsupported`.
 >
 > **2. The header encoding.** Every integer is fixed-width little-endian;
 > `stamp` is a two's-complement `i64`. There is no padding, no alignment and no
 > length field: the header is the prefix below and the payload is every byte
-> after it. Fields are in this order, and a form carries exactly the fields §4
-> gives it:
+> after it. Every code is the value §4 and §9.6 give it (`form`, `provenance`,
+> `outcome`, a refusal reason, a `Rule`), `kind` is the `Kind` value of §2 and
+> `encoding` the tag of §3; this section restates none. Fields are in this
+> order, and a form carries exactly the fields §4 gives it:
 >
-> | Form                               | Bytes                                                                                                           | Header size |
-> | ---------------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------- |
-> | `attach`                           | `form` u8, `frame_version` u32, `encoding` u8, `hash` 32 bytes, `name_len` u16, `name` UTF-8 (`name_len` bytes) | 40 + name   |
-> | `attached`                         | `form` u8, `outcome` u8, `detail` u8                                                                            | 3           |
-> | `subscribe`, `unsubscribe`, `read` | `form` u8, `kind` u8, `interface` u32, `ordinal` u32                                                            | 10          |
-> | `answer`                           | the common 10, then `outcome` u8, `detail` u8                                                                   | 12          |
-> | `publish`                          | the common 10, then `stamp` i64, `seq` u64, `provenance` u8                                                     | 27          |
-> | `occurrence`, `request`            | the common 10, then `stamp` i64, `seq` u64                                                                      | 26          |
-> | `response`                         | the common 10, then `stamp` i64, `seq` u64, `correlation` u64, `outcome` u8, `detail` u8                        | 36          |
+> | Form                               | Bytes                                                                                                                     | Header size |
+> | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------- |
+> | `attach`                           | `form` u8, `frame_version` u32, `encoding` u8, `hash` 32 bytes, `name_len` u8 (1 to 255), `name` UTF-8 (`name_len` bytes) | 40 + name   |
+> | `attached`                         | `form` u8, `outcome` u8, `detail` u8                                                                                      | 3           |
+> | `subscribe`, `unsubscribe`, `read` | `form` u8, `kind` u8, `interface` u32, `ordinal` u32                                                                      | 10          |
+> | `answer`                           | the common 10, then `outcome` u8, `detail` u8                                                                             | 12          |
+> | `publish`                          | the common 10, then `stamp` i64, `seq` u64, `provenance` u8                                                               | 27          |
+> | `occurrence`, `request`            | the common 10, then `stamp` i64, `seq` u64                                                                                | 26          |
+> | `response`                         | the common 10, then `stamp` i64, `seq` u64, `correlation` u64, `outcome` u8, `detail` u8                                  | 36          |
 >
-> The codes: `form` — `attach` 1, `attached` 2, `subscribe` 3, `answer` 4,
-> `unsubscribe` 5, `read` 6, `publish` 7, `occurrence` 8, `request` 9,
-> `response` 10. `kind` — the `Kind` values of §2. `provenance` — `Init` 1,
-> `Live` 2, `Invalid(Declared)` 3. `encoding` — the tag of §3. `outcome` —
-> `accepted` 1, `reply` 2, `contract(InvalidValue)` 3,
-> `contract(PreconditionFailed)` 4, `contract(ContractBroken)` 5,
-> `contract(UnknownInteraction)` 6, `corrupt` 7, `busy` 8, `refused` 9. `detail`
-> — with `outcome` 3 the `Rule`: `Range` 1, `Step` 2, `Length` 3, `Pattern` 4,
-> `Variant` 5, `Unique` 6; with `outcome` 9 the reason: `unknown_catalog` 1,
-> `catalog_mismatch` 2, `encoding_unsupported` 3, `frame_version_unsupported` 4,
-> `range` 5; 0 with every other outcome. A value outside its table is a protocol
-> violation (item 4). `InterfaceNo` and `Ordinal` keep their 32-bit range, so
-> §4's range check at `attach` always passes on this binding.
+> `detail` is the `Rule` code (§9.6) with `outcome` 3, the refusal reason code
+> (§4) with `outcome` 9, and 0 with every other outcome. The `name` is at least
+> one byte and valid UTF-8. A value outside its table is a protocol violation
+> (item 4). `InterfaceNo` and `Ordinal` keep their 32-bit range, so §4's range
+> check at `attach` always passes on this binding.
 >
 > **The sizes.** The envelope is 16 bytes. The largest data-plane header without
-> its envelope is 20 bytes (`response`), so a message is at most 36 bytes plus
-> the payload bound. The codegen model carries these as the `websocket` row,
-> binding version `"1"`, `frame_header_max_bytes` 20, `envelope_bytes` 16
-> (`crates/ridl-ir/src/codegen/bindings.rs`). The sizes are facts of this
-> layout, and a size value is not a frozen surface
+> its envelope is 20 bytes (`response`), so a data-plane message is at most 36
+> bytes plus the payload bound. The largest header of any message is the
+> `attach` at 40 + 255 = 295 bytes; it carries no payload, so a receiver's
+> message size limit admits at least 295 bytes. The codegen model carries the
+> data-plane numbers as the `websocket` row, binding version `"1"`,
+> `frame_header_max_bytes` 20, `envelope_bytes` 16
+> (`crates/ridl-ir/src/codegen/bindings.rs`). The row is derived from this
+> layout: the layout is frozen through the vectors below, and the row is a
+> derived value, corrected in a patch release if it is wrong
 > ([ADR-0029](../decisions/ADR-0029-stability-policy.md) decision 2).
 >
 > **3. The encoding tag.** The binding fixes no encoding: a session uses the
@@ -528,11 +617,13 @@ in §11.1 and its transport crate is not built yet".
 > WebSocket fragmentation is below this binding. A text message is closed
 > with 1003. A message the receiver cannot read — shorter than its header, a
 > code outside its table, `interface` or `ordinal` 0, a message before `attach`,
-> a second `attach`, a `name_len` that does not match the message — is a
-> protocol violation: the receiver closes with 1002, and the session ends as §3
-> states. A `request` with a readable header and no payload is answered
-> `corrupt` (§9.5); any other frame missing a required payload is discarded and
-> recorded. A message above the receiver's configured size limit is closed
+> a second `attach`, a `name_len` that does not match the message, a `name` that
+> is empty or not valid UTF-8, a first provider-to-consumer message that is not
+> `attached` — is a protocol violation: the receiver records the frame (§9.5)
+> and closes with 1002, and the session ends as §3 states. A `request` with a
+> readable header and no payload is answered `corrupt` (§9.5); any other frame
+> missing a required payload is discarded and recorded. A message above the
+> receiver's configured size limit, which admits at least 295 bytes, is closed
 > with 1009. Either side ends the session on purpose with 1000, the provider
 > with 1001 when it shuts down; after `attached(refused)` the provider closes
 > with 1000, and the reason is in the frame. The binding defines no close code
@@ -566,22 +657,23 @@ in §11.1 and its transport crate is not built yet".
 > Streams (ridl §12, driftsys/ridl#336) arrive this way.
 >
 > **Test vectors.** Each line is one complete message in hexadecimal, spaces for
-> reading only; `xtask` reads this table into the `wire` freeze dump. The stamp
-> in every data-plane vector is `0x0123456789AB` microseconds (and
-> `0x0123456789AC` on the responses), chosen to show the byte order; the hash in
-> `attach` is the bytes `00` to `1f`; the unit name is `veh.cabin`.
+> reading only; `xtask` reads this table into the `wire` freeze dump by its `Id`
+> column, which is stable and never renamed. The stamp in every data-plane
+> vector is `0x0123456789AB` microseconds (and `0x0123456789AC` on the
+> responses), chosen to show the byte order; the hash in `attach` is the bytes
+> `00` to `1f`; the unit name is `veh.cabin`.
 >
-> | Vector                                                          | Hex                                                                                                       |
-> | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-> | `attach` frame 1, FlatBuffers, `veh.cabin`                      | `01 01000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 0900 7665682e636162696e` |
-> | `attached` accepted                                             | `02 01 00`                                                                                                |
-> | `attached` refused `catalog_mismatch`                           | `02 09 02`                                                                                                |
-> | `subscribe` signal, interface 1, ordinal 2                      | `03 01 01000000 02000000`                                                                                 |
-> | `answer` accepted, signal, interface 1, ordinal 2               | `04 01 01000000 02000000 01 00`                                                                           |
-> | `publish` `Live`, seq 7, payload `ff01`                         | `07 01 01000000 02000000 ab89674523010000 0700000000000000 02 ff01`                                       |
-> | `request` command, interface 1, ordinal 3, seq 1, payload `01`  | `09 03 01000000 03000000 ab89674523010000 0100000000000000 01`                                            |
-> | `response` command accepted, correlation 1, provider seq 1      | `0a 03 01000000 03000000 ac89674523010000 0100000000000000 0100000000000000 01 00`                        |
-> | `response` query `contract(InvalidValue(Range))`, correlation 2 | `0a 04 01000000 04000000 ac89674523010000 0200000000000000 0200000000000000 03 01`                        |
+> | Id                   | Vector                                                          | Hex                                                                                                     |
+> | -------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+> | `attach-1`           | `attach` frame 1, FlatBuffers, `veh.cabin`                      | `01 01000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 09 7665682e636162696e` |
+> | `attached-accepted`  | `attached` accepted                                             | `02 01 00`                                                                                              |
+> | `attached-mismatch`  | `attached` refused `catalog_mismatch`                           | `02 09 02`                                                                                              |
+> | `subscribe-signal`   | `subscribe` signal, interface 1, ordinal 2                      | `03 01 01000000 02000000`                                                                               |
+> | `answer-accepted`    | `answer` accepted, signal, interface 1, ordinal 2               | `04 01 01000000 02000000 01 00`                                                                         |
+> | `publish-live`       | `publish` `Live`, seq 7, payload `ff01`                         | `07 01 01000000 02000000 ab89674523010000 0700000000000000 02 ff01`                                     |
+> | `request-command`    | `request` command, interface 1, ordinal 3, seq 1, payload `01`  | `09 03 01000000 03000000 ab89674523010000 0100000000000000 01`                                          |
+> | `response-accepted`  | `response` command accepted, correlation 1, provider seq 1      | `0a 03 01000000 03000000 ac89674523010000 0100000000000000 0100000000000000 01 00`                      |
+> | `response-violation` | `response` query `contract(InvalidValue(Range))`, correlation 2 | `0a 04 01000000 04000000 ac89674523010000 0200000000000000 0200000000000000 03 01`                      |
 
 **§13, the Streams bullet** becomes:
 
@@ -602,10 +694,42 @@ response bound, §11.1 item 5)" and "The WebSocket binding's rulings:
   dated note in its Status records the change.
 - **ADR-0021**: a dated amendment under the decision that fixes `Violation` (the
   payload module): `Violation.type_name` becomes `Option<&'static str>`, `None`
-  for a violation a peer reported (frame specification §9.6); it lands with lane
-  W step 2's `ridl-rt` change, and the Kotlin plugin gets a heads-up. Lane C's
-  1b rewrite of ADR-0021 starts after this note is merged (lanes plan section 5)
-  and carries the amendment through.
+  for a violation a peer reported (frame specification §9.6), and a `Rule`
+  variant is added only together with a frame version, although `Rule` is
+  `#[non_exhaustive]`; it lands with lane W step 2's `ridl-rt` change, and the
+  Kotlin plugin gets a heads-up. Lane C's 1b rewrite of ADR-0021 starts after
+  this note is merged (lanes plan section 5) and carries the amendment through.
+- **`docs/design/ridl-rt.md`**, the `payload` item list
+  (`pub struct Violation
+  { pub type_name: &'static str, pub rule: Rule }`):
+  the field becomes `Option<&'static str>` with the step 2 change, one line.
+- **Frame specification §2, the `Violation` row**: section 3.1 above.
+- **Steering decision H**
+  (`docs/wip/2026-10-06-ws-and-payload-formats-steering.md`, "Recorded, not
+  asked"): a dated note that the `KNOWN` row and #718's first half move from
+  #265 to the amendment pull request (R-W-16); #265 keeps the sum test.
+- **`crates/ridl-ir/src/codegen/bindings.rs`**: the `KNOWN` row (R-W-16) and the
+  doc comment of `Known.frame_header_max_bytes`, "the largest frame header the
+  binding adds to a data-plane message, in bytes".
+- **`docs/design/codegen-plugins.md`**, "Bindings, and what is not built": "The
+  `bindings` list is empty today ... because no binding's frame layout is
+  specified" becomes "The `bindings` list holds the `websocket` row (binding
+  version 1, frame header at most 20 bytes, envelope 16), from the frame
+  specification §11.1"; and the test paragraph "A second test adds a `websocket`
+  row ... 14 + 2 + 8 = 24" becomes the real row's sum, 20 + 16 + 8 = 44 for
+  `Cabin.warning`, with the fixture no longer `null` for the proto3-bounded
+  members.
+- **`docs/book/codegen-plugins.md`**, "What is not available yet": the
+  "Transport binding overheads" bullet is removed, or reduced to "the sum is not
+  yet checked against a frame a transport writes (driftsys/ridl#718)".
+- **`freeze/README.md`**, "The frozen source copies": one sentence that the
+  `wire` dump also holds the frame vectors of the frame specification §11.1,
+  read from the document by their `Id`.
+- **`CONTRIBUTING.md`**, "Changing a frozen surface": "the frame envelope and
+  the `attach` handshake" leave the policy-only list when the vectors land.
+- **`docs/specification/ridl-family-overview.md`**, the Frame Specification row:
+  "0.1 draft" becomes "0.2 draft" and "no binding is built" becomes "the
+  WebSocket binding is specified (§11.1), none is built".
 - **ADR-0029**: the Context bullet "It holds no frame vectors and no `attach`
   handshake vectors" and decision 3's list are updated when the vectors land
   (R-W-19), and decision 6's `wire` row loses "frames are policy only now".
@@ -627,9 +751,9 @@ response bound, §11.1 item 5)" and "The WebSocket binding's rulings:
 
 Today `freeze/wire.txt` holds `encoding <name>`, `proto`/`fbs` schema lines and
 `catalog-hash veh.cabin <hex>`. After section 3 is applied it also holds one
-`frame-vector <name> <hex>` line per row of the §11.1 vector table, where
-`<name>` is the row's first cell with spaces replaced by `-` and `<hex>` is the
-second cell with spaces removed; `xtask/src/freeze/wire.rs` reads the table from
+`frame-vector <id> <hex>` line per row of the §11.1 vector table, where `<id>`
+is the row's `Id` cell (stable, never the caption) and `<hex>` is the `Hex` cell
+with spaces removed; `xtask/src/freeze/wire.rs` reads the table from
 `docs/specification/frame-specification.md` and fails the dump when a vector's
 length does not equal its form's header size plus its payload, or when a code is
 outside its table. Both frame vectors and the `attach` handshake vectors are
@@ -658,3 +782,22 @@ R-W-15), and the `Violation.type_name` change is lane W step 2's (R-W-14).
 - Lane H: `docs/archive/2026-10-09-catalog-compat-design.md`; ADR-0014 decision
   15; `docs/design/catalog-descriptor.md`
 - Issues: driftsys/ridl#350 (items 5, 12), #718, #336, #265, #264
+
+## 7. Review
+
+An adversarial review of the first draft (commit 69163400) raised sixteen
+points; all are applied in this revision: (1) the provider pings and either end
+times out on silence of any kind; (2) the encoding generalisation scoped to
+§11.1, with §1 and §10 item 3 replacement text; (3) the `attach` name length as
+`u8`, the 295-byte handshake maximum, the `Known` doc comment; (4) the code
+tables moved to §4 and §9.6; (5) the records list completed (§2 `Violation` row,
+`codegen-plugins.md`, the book chapter, `freeze/README.md`, `CONTRIBUTING.md`,
+the family overview, `ridl-rt.md`); (6) a `Transport` variant, not
+`UnknownInteraction`, for a stream on a version 1 session; (7) "or an `answer`"
+dropped from R-W-14; (8) the `Rule`-with-frame-version clause in the ADR-0021
+amendment; (9) §9.5's recording obligation kept in R-W-15; (10) a browser client
+fails the connection without choosing a code; (11) steering decision H named as
+changed; (12) the `Id` column of the vector table; (13) the first provider's
+exact match and conformance item 1 stated, in the As-built note too; (14) the
+two additions to the 1002 list; (15) the section 3.2 → 3.1 cross-references;
+(16) the derived-value wording for the row.
