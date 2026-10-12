@@ -227,10 +227,11 @@ fn a_buffer_holds_the_largest_encoding() {
     assert_eq!(proof.bytes(), &u64::MAX.to_le_bytes());
 }
 
-/// A violation a peer reports over a frame carries the rule alone (frame
-/// specification §9.6); one the generated code detects keeps its type name.
+/// `Violation` admits a value with no type name that keeps its rule, and that
+/// value differs from one with a type name. This pins the type's shape only;
+/// no runtime that receives a frame exists yet to produce such a value.
 #[test]
-fn a_violation_a_peer_reports_carries_the_rule_alone() {
+fn a_violation_admits_no_type_name_and_keeps_its_rule() {
     let reported = Violation {
         type_name: None,
         rule: Rule::Range,
