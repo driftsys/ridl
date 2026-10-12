@@ -2,6 +2,12 @@
 //! every diagnostic code it cites is in the catalogue dump, every section of a
 //! reference file links the heading of the language reference it summarises,
 //! and the frontmatter names the skill after its directory.
+//!
+//! A section links the published book,
+//! `https://driftsys.github.io/ridl/<page>.html#<anchor>`, because a relative
+//! link to `docs/` resolves nowhere the skill is installed. The gate stays offline: it maps the page to its source under
+//! `docs/book/`, expands the `{{#include}}` that a language reference page
+//! wraps, and looks for the anchor among the headings of the result.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -112,47 +118,95 @@ fn a_hash_line_in_a_code_block_is_not_a_heading() {
     assert_eq!(anchors, ["after", "title"]);
 }
 
-/// For each `## ` section of a reference file: the targets
-/// `../../docs/specification/<file>#<anchor>` its links name.
-fn section_links(text: &str) -> Vec<(String, Vec<(String, String)>)> {
-    let link = regex::Regex::new(r"\]\((\.\./\.\./docs/specification/[^)#]+)#([^)]+)\)")
-        .expect("a valid pattern");
-    let mut sections: Vec<(String, Vec<(String, String)>)> = Vec::new();
+/// Where the book is published; `docs/book/<page>.md` is served as
+/// `<BOOK_URL><page>.html`.
+const BOOK_URL: &str = "https://driftsys.github.io/ridl/";
+
+/// A link in a skill file: a book page and an anchor, or a link into the
+/// repository that resolves nowhere the skill is installed.
+enum Link {
+    Book { page: String, anchor: String },
+    Relative(String),
+}
+
+/// For each `## ` section of a reference file: the book and relative links
+/// it holds.
+fn section_links(text: &str) -> Vec<(String, Vec<Link>)> {
+    let book = regex::Regex::new(&format!(
+        r"\]\({}([^)#]+)\.html#([^)]+)\)",
+        regex::escape(BOOK_URL)
+    ))
+    .expect("a valid pattern");
+    let relative = regex::Regex::new(r"\]\((\.\.?/[^)]*)\)").expect("a valid pattern");
+    let mut sections: Vec<(String, Vec<Link>)> = Vec::new();
     for line in text.lines() {
         if let Some(title) = line.strip_prefix("## ") {
             sections.push((title.to_owned(), Vec::new()));
         } else if let Some((_, links)) = sections.last_mut() {
-            for c in link.captures_iter(line) {
-                links.push((c[1].to_owned(), c[2].to_owned()));
+            for c in book.captures_iter(line) {
+                links.push(Link::Book {
+                    page: c[1].to_owned(),
+                    anchor: c[2].to_owned(),
+                });
+            }
+            for c in relative.captures_iter(line) {
+                links.push(Link::Relative(c[1].to_owned()));
             }
         }
     }
     sections
 }
 
+/// The source of a book page with its `{{#include}}` directives replaced by
+/// the files they name, or `None` when the page or an included file does not
+/// exist.
+fn book_source(page: &str) -> Option<String> {
+    let path = Path::new(ROOT).join("docs/book").join(format!("{page}.md"));
+    let text = std::fs::read_to_string(&path).ok()?;
+    let include =
+        regex::Regex::new(r"\{\{#include ([^}:]+)(?::[^}]*)?\}\}").expect("a valid pattern");
+    let mut expanded = String::new();
+    for line in text.lines() {
+        match include.captures(line) {
+            Some(c) => {
+                let target = path.parent()?.join(c[1].trim());
+                expanded.push_str(&std::fs::read_to_string(target).ok()?);
+            }
+            None => expanded.push_str(line),
+        }
+        expanded.push('\n');
+    }
+    Some(expanded)
+}
+
 fn section_failures(file: &Path, text: &str) -> Vec<String> {
     let mut failures = Vec::new();
     for (title, links) in section_links(text) {
-        if links.is_empty() {
+        if !links.iter().any(|l| matches!(l, Link::Book { .. })) {
             failures.push(format!(
-                "{}: section `{title}` links no language reference heading",
+                "{}: section `{title}` links no language reference heading as {BOOK_URL}<page>.html#<anchor>",
                 file.display()
             ));
         }
-        for (target, fragment) in links {
-            let path = file
-                .parent()
-                .expect("a skill file has a parent")
-                .join(&target);
-            let Ok(reference) = std::fs::read_to_string(&path) else {
-                failures.push(format!("{}: `{target}` does not exist", file.display()));
-                continue;
-            };
-            if !anchors_of(&reference).contains(&fragment) {
-                failures.push(format!(
-                    "{}: `{target}#{fragment}` names no heading",
+        for link in links {
+            match link {
+                Link::Relative(target) => failures.push(format!(
+                    "{}: `{target}` is a relative link, which resolves nowhere the skill is installed; link {BOOK_URL}<page>.html#<anchor>",
                     file.display()
-                ));
+                )),
+                Link::Book { page, anchor } => match book_source(&page) {
+                    None => failures.push(format!(
+                        "{}: `{BOOK_URL}{page}.html` has no source docs/book/{page}.md",
+                        file.display()
+                    )),
+                    Some(source) if !anchors_of(&source).contains(&anchor) => {
+                        failures.push(format!(
+                            "{}: `{BOOK_URL}{page}.html#{anchor}` names no heading",
+                            file.display()
+                        ))
+                    }
+                    Some(_) => {}
+                },
             }
         }
     }
@@ -173,17 +227,46 @@ fn every_reference_section_links_an_existing_heading() {
 #[test]
 fn a_link_to_a_missing_heading_is_reported() {
     let file = skill_dir().join("typl.md");
-    let text = "## Ranges\n\nSee [ranges](../../docs/specification/typl-language-reference.md#no-such-heading).\n";
+    let text = "## Ranges\n\nSee [ranges](https://driftsys.github.io/ridl/reference/typl.html#no-such-heading).\n";
     let failures = section_failures(&file, text);
     assert_eq!(failures.len(), 1, "{failures:?}");
     assert!(failures[0].contains("names no heading"));
 }
 
 #[test]
-fn a_link_to_an_existing_heading_is_accepted() {
+fn a_link_to_a_heading_of_an_included_reference_is_accepted() {
+    // `reference/typl.md` wraps the typl language reference with an include.
     let file = skill_dir().join("typl.md");
-    let text = "## Primitives\n\nSee [primitives](../../docs/specification/typl-language-reference.md#4-primitives).\n";
+    let text = "## Primitives\n\nSee [primitives](https://driftsys.github.io/ridl/reference/typl.html#4-primitives).\n";
     assert_eq!(section_failures(&file, text), Vec::<String>::new());
+}
+
+#[test]
+fn a_link_to_a_heading_of_a_book_chapter_is_accepted() {
+    let file = skill_dir().join("typl.md");
+    let text = "## Lints\n\nSee [lints](https://driftsys.github.io/ridl/lints.html#lints).\n";
+    assert_eq!(section_failures(&file, text), Vec::<String>::new());
+}
+
+#[test]
+fn a_link_to_a_page_with_no_source_is_reported() {
+    let file = skill_dir().join("typl.md");
+    let text =
+        "## Ranges\n\nSee [ranges](https://driftsys.github.io/ridl/reference/nope.html#ranges).\n";
+    let failures = section_failures(&file, text);
+    assert_eq!(failures.len(), 1, "{failures:?}");
+    assert!(failures[0].contains("has no source"), "{failures:?}");
+}
+
+#[test]
+fn a_relative_link_into_the_repository_is_rejected() {
+    let file = skill_dir().join("typl.md");
+    let text = "## Primitives\n\nSee [primitives](https://driftsys.github.io/ridl/reference/typl.html#4-primitives) and [the source](../../docs/specification/typl-language-reference.md#4-primitives).\n";
+    let failures = section_failures(&file, text);
+    assert_eq!(failures.len(), 1, "{failures:?}");
+    assert!(failures[0].contains("relative link"), "{failures:?}");
+    let only_relative = "## Primitives\n\nSee [the source](../../docs/specification/typl-language-reference.md#4-primitives).\n";
+    assert_eq!(section_failures(&file, only_relative).len(), 2);
 }
 
 #[test]
