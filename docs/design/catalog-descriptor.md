@@ -339,18 +339,18 @@ is sized, through the projection the wire backend emits:
   `ridl_ir::codegen::fb_unbounded`, the function the codegen model uses. The row
   is absent for a name that does not resolve or a declaration with no root
   table.
-- **proto3** follows ADR-0017. A row is present only for a struct or a union
-  payload, and it is always `Bounded`: typl bounds every collection, so proto3
-  has no unbounded state. A named scalar and an enum set are inlined into their
-  field (ADR-0017 decision 1, with decision 2 rejecting a wrapper message), and
-  an enum is a declared `enum`, so none of the three has a message of its own,
-  and their proto3 state is absent. The row is also absent when a member is one
-  the proto backend refuses (a map key outside the integral and string scalars,
-  a map value that is an array or a map, an optional array or map, an enum value
-  outside int32, a field number protobuf reserves or exceeds), when a member has
-  no proto3 bound (a `string` or `bytes` with no length bound, a type def with
-  no width), when the nesting passes `MAX_DEPTH`, or when the bound overflows
-  `u64` or exceeds `u32::MAX`. The rustdoc of `state` in
+- **proto3** follows ADR-0017. A row is present for a struct, a union, a named
+  scalar, an enum set or an enum payload, and it is always `Bounded`: typl
+  bounds every collection, so proto3 has no unbounded state. A named scalar, an
+  enum set and an enum are inlined into a field that uses them, but each also
+  has a root message `<Name>Box { <type> value = 1; }` that a codec can encode,
+  and the row is the bound of that box. The row is also absent when a member is
+  one the proto backend refuses (a map key outside the integral and string
+  scalars, a map value that is an array or a map, an optional array or map, an
+  enum value outside int32, a field number protobuf reserves or exceeds), when a
+  member has no proto3 bound (a `string` or `bytes` with no length bound, a type
+  def with no width), when the nesting passes `MAX_DEPTH`, or when the bound
+  overflows `u64` or exceeds `u32::MAX`. The rustdoc of `state` in
   `crates/ridl-ir/src/projection/size/proto3.rs` has the full list. The proto3
   sizer counts tags and varint widths at their maximum, and remembers each named
   struct and union it has sized within one call, so a type that several paths
@@ -457,6 +457,12 @@ An excerpt of the corpus snapshot
     {
       "max_sizes": [
         {
+          "bytes": 5,
+          "cause": "Unspecified",
+          "encoding": "Proto3",
+          "state": "Bounded"
+        },
+        {
           "bytes": 46,
           "cause": "Unspecified",
           "encoding": "FlatBuffers",
@@ -475,7 +481,8 @@ An excerpt of the corpus snapshot
 }
 ```
 
-`Speed` is a named scalar, so it has no proto3 row.
+`Speed` is a named scalar, so its proto3 row is the bound of its box message
+`SpeedBox`, 5 bytes.
 
 ## The port's catalog check
 
