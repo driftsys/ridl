@@ -275,27 +275,75 @@ pub fn codex_login_path() -> PathBuf {
 }
 
 /// Copies the stored Codex login, and nothing else of the user's Codex home,
-/// into a run's home.
-pub fn copy_login(stored: &Path, home: &Path) -> Result<(), String> {
-    std::fs::copy(stored, home.join("auth.json"))
-        .map(|_| ())
-        .map_err(|e| {
-            format!(
-                "no stored Codex login at {} ({e}); run `codex login`",
-                stored.display()
-            )
-        })
+/// into a run's home, and returns the bytes it wrote.
+pub fn copy_login(stored: &Path, home: &Path) -> Result<Vec<u8>, String> {
+    let login = std::fs::read(stored).map_err(|e| {
+        format!(
+            "no stored Codex login at {} ({e}); run `codex login`",
+            stored.display()
+        )
+    })?;
+    std::fs::write(home.join("auth.json"), &login).map_err(|e| e.to_string())?;
+    Ok(login)
 }
 
 /// Copies a run's login back when the run refreshed its token, so the stored
-/// login is not left with a token the refresh revoked.
-pub fn return_login(home: &Path, stored: &Path) -> Result<(), String> {
-    let used = home.join("auth.json");
-    let changed = std::fs::read(&used).ok() != std::fs::read(stored).ok();
-    if changed && used.is_file() {
-        std::fs::copy(&used, stored).map_err(|e| e.to_string())?;
+/// login is not left with a token the refresh revoked. The run's `auth.json`
+/// is compared with `lent`, the bytes `copy_login` wrote: a copy the run did
+/// not change is never written back, so a login refreshed meanwhile by
+/// another Codex process is kept. A run that deleted its `auth.json` leaves
+/// the stored login as it is.
+pub fn return_login(home: &Path, stored: &Path, lent: &[u8]) -> Result<(), String> {
+    let Ok(used) = std::fs::read(home.join("auth.json")) else {
+        return Ok(());
+    };
+    if used != lent {
+        std::fs::write(stored, used).map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+/// The stored Codex login, lent to one run's home. Dropping it returns a
+/// refreshed login and deletes the run's copy, also when the run ended with
+/// an error or a panic.
+pub struct LentLogin {
+    home: PathBuf,
+    stored: PathBuf,
+    lent: Vec<u8>,
+}
+
+impl LentLogin {
+    pub fn lend(stored: &Path, home: &Path) -> Result<LentLogin, String> {
+        Ok(LentLogin {
+            home: home.to_owned(),
+            stored: stored.to_owned(),
+            lent: copy_login(stored, home)?,
+        })
+    }
+}
+
+impl Drop for LentLogin {
+    fn drop(&mut self) {
+        if let Err(e) = return_login(&self.home, &self.stored, &self.lent) {
+            eprintln!(
+                "eval: could not return the Codex login to {}: {e}",
+                self.stored.display()
+            );
+        }
+        let _ = std::fs::remove_file(self.home.join("auth.json"));
+    }
+}
+
+/// A fresh directory for one run or one judgement, under the system
+/// temporary directory, so that no git repository, `AGENTS.md` or
+/// `CLAUDE.md` is above it.
+pub fn scratch_dir(task: &str, label: &str) -> Result<PathBuf, String> {
+    let dir = std::env::temp_dir().join(format!("ridl-eval-{}-{task}-{label}", std::process::id()));
+    if dir.exists() {
+        std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+    }
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
 }
 
 fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
@@ -438,18 +486,62 @@ mod tests {
 
     #[test]
     fn a_codex_run_gets_only_the_stored_login_and_returns_a_refreshed_one() {
-        let stored = scratch("stored").join("auth.json");
+        let stored_dir = scratch("stored");
+        let stored = stored_dir.join("auth.json");
         std::fs::write(&stored, "old").unwrap();
+        std::fs::write(stored_dir.join("config.toml"), "model = \"x\"\n").unwrap();
         let home = scratch("home");
-        copy_login(&stored, &home).unwrap();
+        let lent = copy_login(&stored, &home).unwrap();
+        assert_eq!(lent, b"old");
         assert_eq!(
             std::fs::read_to_string(home.join("auth.json")).unwrap(),
             "old"
         );
         assert_eq!(std::fs::read_dir(&home).unwrap().count(), 1);
         std::fs::write(home.join("auth.json"), "refreshed").unwrap();
-        return_login(&home, &stored).unwrap();
+        return_login(&home, &stored, &lent).unwrap();
         assert_eq!(std::fs::read_to_string(&stored).unwrap(), "refreshed");
+    }
+
+    #[test]
+    fn an_unchanged_run_copy_keeps_a_login_refreshed_meanwhile() {
+        let stored = scratch("stored").join("auth.json");
+        std::fs::write(&stored, "old").unwrap();
+        let home = scratch("home");
+        let lent = copy_login(&stored, &home).unwrap();
+        // Another Codex process refreshes the stored login during the run.
+        std::fs::write(&stored, "refreshed elsewhere").unwrap();
+        return_login(&home, &stored, &lent).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&stored).unwrap(),
+            "refreshed elsewhere"
+        );
+    }
+
+    #[test]
+    fn a_deleted_run_copy_leaves_the_stored_login() {
+        let stored = scratch("stored").join("auth.json");
+        std::fs::write(&stored, "old").unwrap();
+        let home = scratch("home");
+        let lent = copy_login(&stored, &home).unwrap();
+        std::fs::remove_file(home.join("auth.json")).unwrap();
+        return_login(&home, &stored, &lent).unwrap();
+        assert_eq!(std::fs::read_to_string(&stored).unwrap(), "old");
+    }
+
+    #[test]
+    fn a_lent_login_is_returned_and_deleted_when_the_run_panics() {
+        let stored = scratch("stored").join("auth.json");
+        std::fs::write(&stored, "old").unwrap();
+        let home = scratch("home");
+        let run = std::panic::catch_unwind(|| {
+            let _login = LentLogin::lend(&stored, &home).unwrap();
+            std::fs::write(home.join("auth.json"), "refreshed").unwrap();
+            panic!("the run failed");
+        });
+        assert!(run.is_err());
+        assert_eq!(std::fs::read_to_string(&stored).unwrap(), "refreshed");
+        assert!(!home.join("auth.json").exists());
     }
 
     #[test]
@@ -494,10 +586,14 @@ mod tests {
 
     #[test]
     fn a_run_directory_is_outside_any_git_repository() {
-        let mut dir = Some(std::env::temp_dir());
+        let run = scratch_dir("design-0001", "outside-test").unwrap();
+        let mut dir = Some(run.as_path());
         while let Some(d) = dir {
-            assert!(!d.join(".git").exists(), "{} holds .git", d.display());
-            dir = d.parent().map(Path::to_owned);
+            for name in [".git", "AGENTS.md", "CLAUDE.md"] {
+                assert!(!d.join(name).exists(), "{} holds {name}", d.display());
+            }
+            dir = d.parent();
         }
+        std::fs::remove_dir_all(&run).unwrap();
     }
 }

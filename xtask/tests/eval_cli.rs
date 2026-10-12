@@ -13,10 +13,19 @@ fn script(dir: &Path, name: &str, body: &str) -> PathBuf {
     path
 }
 
-/// A fresh directory with fake `claude`, `codex` and `ridl` scripts. The fake
-/// agents write a `ridl.toml` when the workspace has none and print one
-/// tool-call line naming `ridl_check`; `claude_body` replaces
-/// the fake Claude agent's script when given.
+/// A fresh directory with fake `claude`, `codex` and `ridl` scripts, and the
+/// `tmp/` directory the eval's run directories are made in. The fake agents
+/// write a `ridl.toml` when the workspace has none and print one tool-call
+/// line naming `ridl_check`; `claude_body` replaces the fake Claude agent's
+/// script when given. Every fake appends its command line to `calls.log`. A
+/// fake judge saves the prompt it read as `<host>-judge-prompt.txt`.
+///
+/// Files in the directory change what a fake prints: `check.json` is the
+/// output of `ridl check` on a workspace with a `ridl.toml`, `diff-verdict`
+/// the verdict of `ridl diff`, and `codex-verdict` the reply of the Codex
+/// judge. The fake `ridl diff` prints nothing and exits 3 unless its third and
+/// fourth arguments are the task's starting workspace and the run's workspace.
+/// The directory is removed when the value is dropped.
 struct Fakes {
     dir: PathBuf,
     claude: PathBuf,
@@ -24,12 +33,42 @@ struct Fakes {
     ridl: PathBuf,
 }
 
+impl Drop for Fakes {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+impl Fakes {
+    /// The command lines the fakes ran, one per line.
+    fn calls(&self) -> String {
+        std::fs::read_to_string(self.dir.join("calls.log")).unwrap_or_default()
+    }
+
+    /// Every path under the eval's temporary directory.
+    fn scratch(&self) -> Vec<PathBuf> {
+        let mut found = Vec::new();
+        let mut stack = vec![self.dir.join("tmp")];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).unwrap().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path.clone());
+                }
+                found.push(path);
+            }
+        }
+        found
+    }
+}
+
 /// Reads the prompt from stdin and sets `$items` to a verdict entry marking
 /// every rubric item the prompt holds as met, so a fake host can act as the
-/// judge.
+/// judge. `$out` is the value of the `-o` argument, if any.
 const JUDGE_ITEMS: &str = r#"[ "$1" = --version ] && { echo "fake-host 1.0"; exit 0; }
 prompt=$(cat)
-items=$(printf '%s\n' "$prompt" | grep -E '^[0-9]+\. \*\*' | awk -F. '{printf "%s{\"n\":%s,\"met\":true,\"reason\":\"r\"}", (NR>1?",":""), $1}')"#;
+items=$(printf '%s\n' "$prompt" | grep -E '^[0-9]+\. \*\*' | awk -F. '{printf "%s{\"n\":%s,\"met\":true,\"reason\":\"r\"}", (NR>1?",":""), $1}')
+out=""; prev=""; for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done"#;
 
 fn fakes_with(claude_body: Option<&str>) -> Fakes {
     static NEXT: AtomicUsize = AtomicUsize::new(0);
@@ -38,12 +77,14 @@ fn fakes_with(claude_body: Option<&str>) -> Fakes {
         std::process::id(),
         NEXT.fetch_add(1, Ordering::Relaxed)
     ));
-    std::fs::create_dir_all(&dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("tmp")).unwrap();
+    let d = dir.display();
     let claude = script(
         &dir,
         "claude",
         &format!(
-            "{JUDGE_ITEMS}\ncase \"$*\" in *--json-schema*) echo \"{{\\\"type\\\":\\\"result\\\",\\\"structured_output\\\":{{\\\"items\\\":[$items]}}}}\"; exit 0;; esac\n{}",
+            "echo \"claude $*\" >> '{d}/calls.log'\n{JUDGE_ITEMS}\ncase \"$*\" in *--json-schema*) printf '%s' \"$prompt\" > '{d}/claude-judge-prompt.txt'; echo \"{{\\\"type\\\":\\\"result\\\",\\\"structured_output\\\":{{\\\"items\\\":[$items]}}}}\"; exit 0;; esac\n{}",
             claude_body.unwrap_or(
                 r#"[ -f ridl.toml ] || printf '[package]\n' > ridl.toml; echo '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__ridl__ridl_check","input":{}}]}}'; echo '{"type":"result","result":"Done."}'"#,
             )
@@ -53,19 +94,32 @@ fn fakes_with(claude_body: Option<&str>) -> Fakes {
         &dir,
         "codex",
         &format!(
-            "{JUDGE_ITEMS}\n{}",
-            r#"case "$*" in *--output-schema*)
-  out=""; prev=""; for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done
-  echo "{\"items\":[$items]}" > "$out"; exit 0;;
+            r#"echo "codex $*" >> '{d}/calls.log'
+{JUDGE_ITEMS}
+case "$*" in *--output-schema*)
+  printf '%s' "$prompt" > '{d}/codex-judge-prompt.txt'
+  if [ -f '{d}/codex-verdict' ]; then cat '{d}/codex-verdict' > "$out"; else echo "{{\"items\":[$items]}}" > "$out"; fi
+  exit 0;;
 esac
 [ -f ridl.toml ] || printf '[package]\n' > ridl.toml
-echo '{"type":"item.completed","item":{"type":"mcp_tool_call","server":"ridl","tool":"ridl_check"}}'"#
+echo 'The Codex final answer.' > "$out"
+echo '{{"type":"item.completed","item":{{"type":"mcp_tool_call","server":"ridl","tool":"ridl_check"}}}}'"#
         ),
     );
     let ridl = script(
         &dir,
         "ridl",
-        r#"case "$1" in check) if [ -f "$4/ridl.toml" ]; then echo '[]'; else echo "error: no ridl.toml in $4" >&2; exit 2; fi;; diff) echo '{"verdict":"compatible","changes":[]}';; esac"#,
+        &format!(
+            r#"echo "ridl $*" >> '{d}/calls.log'
+case "$1" in
+check) if [ -f "$4/ridl.toml" ]; then if [ -f '{d}/check.json' ]; then cat '{d}/check.json'; else echo '[]'; fi; else echo "error: no ridl.toml in $4" >&2; exit 2; fi;;
+diff)
+  case "$4" in */evals/corpus/*|*/start) ;; *) exit 3;; esac
+  case "$5" in */ws) ;; *) exit 3;; esac
+  verdict=compatible; [ -f '{d}/diff-verdict' ] && verdict=$(cat '{d}/diff-verdict')
+  echo "{{\"verdict\":\"$verdict\",\"changes\":[]}}";;
+esac"#
+        ),
     );
     Fakes {
         dir,
@@ -93,6 +147,7 @@ fn command(fakes: &Fakes, args: &[&str], logins: Logins) -> Command {
         .env("RIDL_EVAL_CODEX", &fakes.codex)
         .env("RIDL_EVAL_RIDL", &fakes.ridl)
         .env("RIDL_EVAL_CODEX_LOGIN", &stored)
+        .env("TMPDIR", fakes.dir.join("tmp"))
         .env_remove("ANTHROPIC_API_KEY")
         .env_remove("CLAUDE_CODE_OAUTH_TOKEN");
     match logins {
@@ -171,8 +226,7 @@ fn a_codex_run_copies_its_transcript() {
 
 #[test]
 fn a_missing_codex_login_stops_the_run_before_any_host_is_called() {
-    let marker_dir = fakes_with(None).dir;
-    let fakes = fakes_with(Some(&format!("touch {}/called", marker_dir.display())));
+    let fakes = fakes_with(None);
     let output = eval(
         &fakes,
         &[
@@ -187,7 +241,65 @@ fn a_missing_codex_login_stops_the_run_before_any_host_is_called() {
     );
     assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&output.stderr).contains("run `codex login`"));
-    assert!(!marker_dir.join("called").exists());
+    // Not even `--version`: no host command runs before both logins are found.
+    assert_eq!(fakes.calls(), "");
+}
+
+#[test]
+fn a_finished_run_and_its_judgement_leave_no_scratch_directory() {
+    let fakes = fakes_with(None);
+    for host in ["claude", "codex"] {
+        let out = fakes.dir.join(format!("results-{host}"));
+        let output = eval(
+            &fakes,
+            &[
+                "--task",
+                "design-0001",
+                "--host",
+                host,
+                "--skill",
+                "without",
+                "--out",
+                out.to_str().unwrap(),
+            ],
+            true,
+        );
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    assert_eq!(fakes.scratch(), Vec::<PathBuf>::new());
+}
+
+#[test]
+fn a_run_that_stops_with_an_error_leaves_no_login_copy() {
+    // The fake Codex agent never reads the skill, so the "with" run stops
+    // with a setup error after the agent ran.
+    let fakes = fakes_with(None);
+    let output = eval(
+        &fakes,
+        &[
+            "--task",
+            "design-0001",
+            "--host",
+            "codex",
+            "--skill",
+            "with",
+            "--out",
+            fakes.dir.join("results").to_str().unwrap(),
+        ],
+        true,
+    );
+    assert_eq!(output.status.code(), Some(2));
+    assert!(fakes.calls().contains("codex exec"), "{}", fakes.calls());
+    let logins: Vec<_> = fakes
+        .scratch()
+        .into_iter()
+        .filter(|p| p.ends_with("auth.json"))
+        .collect();
+    assert_eq!(logins, Vec::<PathBuf>::new());
 }
 
 #[test]

@@ -118,18 +118,16 @@ pub fn run(args: &[String]) -> Result<(), String> {
                         host.name(),
                         if with_skill { "with" } else { "without" }
                     );
-                    let base = scratch_dir(&task.id, &label)?;
+                    let base = host::scratch_dir(&task.id, &label)?;
                     let dirs = host::prepare_run(&base, task, host, with_skill, &skill)?;
-                    if host == Host::Codex {
-                        host::copy_login(&host::codex_login_path(), &dirs.home)?;
-                    }
+                    let login = (host == Host::Codex)
+                        .then(|| host::LentLogin::lend(&host::codex_login_path(), &dirs.home))
+                        .transpose()?;
                     let invocation =
                         host::agent_invocation(host, host.model(&models), &dirs, &prompt);
                     let handoff = options.claude_handoff && host == Host::Claude;
                     let code = host::execute(&invocation, &dirs.transcript, handoff)?;
-                    if host == Host::Codex {
-                        host::return_login(&dirs.home, &host::codex_login_path())?;
-                    }
+                    drop(login);
                     eprintln!("eval: {} {label}: agent exited {code:?}", task.id);
                     let transcript = std::fs::read_to_string(&dirs.transcript).unwrap_or_default();
                     if with_skill && !score::skill_was_loaded(host, &transcript) {
@@ -181,6 +179,9 @@ pub fn run(args: &[String]) -> Result<(), String> {
                     std::fs::create_dir_all(&transcripts).map_err(|e| e.to_string())?;
                     std::fs::copy(&dirs.transcript, transcripts.join(format!("{label}.jsonl")))
                         .map_err(|e| e.to_string())?;
+                    // The result and the transcript are under `out`; nothing
+                    // in the run's directory is read again.
+                    std::fs::remove_dir_all(&base).map_err(|e| e.to_string())?;
                 }
             }
         }
@@ -358,12 +359,12 @@ fn judge_run(
         &judge::workspace_files(&dirs.workspace),
         &judge::final_message(host, transcript, dirs),
     );
-    let dir = scratch_dir(&task.id, &format!("{label}-judge"))?;
+    let dir = host::scratch_dir(&task.id, &format!("{label}-judge"))?;
     std::fs::create_dir_all(dir.join("home")).map_err(|e| e.to_string())?;
     judge::write_schema(&dir)?;
-    if judge == Host::Codex {
-        host::copy_login(&host::codex_login_path(), &dir.join("home"))?;
-    }
+    let login = (judge == Host::Codex)
+        .then(|| host::LentLogin::lend(&host::codex_login_path(), &dir.join("home")))
+        .transpose()?;
     let invocation = judge::judge_invocation(judge, judge.model(models), &dir, &text);
     let stdout = dir.join("stdout.json");
     host::execute(
@@ -371,13 +372,12 @@ fn judge_run(
         &stdout,
         claude_handoff && judge == Host::Claude,
     )?;
-    if judge == Host::Codex {
-        host::return_login(&dir.join("home"), &host::codex_login_path())?;
-    }
+    drop(login);
     let reply = match judge {
         Host::Claude => read(&stdout).and_then(|out| judge::claude_reply(&out)),
         Host::Codex => read(&dir.join("verdict.json")),
     };
+    std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
     let mut table = toml::Table::new();
     table.insert("judge_host".into(), judge.name().into());
     table.insert("judge_model".into(), judge.model(models).into());
@@ -429,17 +429,6 @@ fn check_logins(claude_handoff: bool) -> Result<(), String> {
         return Err("CLAUDE_CODE_OAUTH_TOKEN is not set (run `claude setup-token`), nor ANTHROPIC_API_KEY; or pass --claude-handoff".to_owned());
     }
     Ok(())
-}
-
-/// A fresh directory under the system temporary directory, outside any git
-/// repository.
-fn scratch_dir(task: &str, label: &str) -> Result<PathBuf, String> {
-    let dir = std::env::temp_dir().join(format!("ridl-eval-{}-{task}-{label}", std::process::id()));
-    if dir.exists() {
-        std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
-    }
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir)
 }
 
 /// Today's date as YYYY-MM-DD, from `date`, so xtask needs no date crate.
