@@ -68,6 +68,22 @@ changes, and `depth`, `slots` and `budget` are recorded as not reported, with
 the reason that a sizing value changes no link and no contract. Recorded under
 decisions 8 and 9. Issues driftsys/ridl#268 and driftsys/ridl#269.
 
+**Amendment, 2026-10-11 — the two enums as built (decision 6).** `Family` and
+`Shape` are enums of `ir.proto`, mirrored in the codegen model. `family` is a
+field of `SignalDef`, `EventDef`, `CommandDef` and `QueryDef`; `FixedDef` has
+none, because `fixed` is family-neutral (decision 4). `shape` is a field of
+`CommandDef` only, so a shaped signal, event or query cannot be expressed; in
+the codegen model it sits on `CommandShape`, because `Interaction`'s oneof is
+named `shape`. The zero values are `FAMILY_DISPATCH` and `SHAPE_NONE`, a
+departure from the `_UNSPECIFIED = 0` convention of the schema, so that every
+existing interaction encodes to the same bytes, its catalog hash does not
+change, and an IR written before the fields decodes correctly. The valid (kind,
+family, shape) combinations are one table, `ridl_ir::class`, with the open cells
+of decision 4 counted as valid; the IR readers and writers call it, so
+`(command, intent, none)` is refused where the IR is read, as decision 6 asks.
+`ridl diff` reports a family or shape change as `interaction_class_changed`,
+breaking in both directions. Issue driftsys/ridl#270.
+
 The exploration that produced it is recorded in
 `docs/archive/ridl-boundary-model-review.md`; where that record and this ADR
 disagree, this ADR is authoritative.
@@ -314,6 +330,10 @@ review and retracted for exactly this reason (decision 10).
    desugaring that could drift and produce a spurious diff against a stored
    baseline. `(command, intent, no shape)` is simply an invalid combination —
    decision 5 expressed structurally rather than as a lint.
+
+   _Amended 2026-10-11:_ built. `family` on the four interaction kinds, `shape`
+   on the command only, zero values dispatch and none, the valid combinations in
+   `ridl_ir::class`, the diff category `interaction_class_changed`.
 
 7. **An extension is a spelling table plus backends. It has no grammar, no IR
    nodes, and no semantics.** All semantics — the kinds, the families, the

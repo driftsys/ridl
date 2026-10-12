@@ -34,6 +34,7 @@ fn signal(name: &str, ordinal: u32, payload: &str) -> v2::Decl {
             declared_init: None,
             init: None,
             timing: None,
+            family: ridl_ir::v2::Family::Dispatch as i32,
         }),
     )
 }
@@ -45,6 +46,7 @@ fn event(name: &str, ordinal: u32, payload: &str) -> v2::Decl {
         v2::decl::Kind::EventDef(v2::EventDef {
             payload: payload.to_string(),
             timing: None,
+            family: ridl_ir::v2::Family::Dispatch as i32,
         }),
     )
 }

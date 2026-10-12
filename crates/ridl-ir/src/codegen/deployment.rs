@@ -491,6 +491,7 @@ mod tests {
                             payload: "Temp".to_string(),
                             // @[100ms..1s] gives ceil(1000000 / 100000) = 10.
                             timing: Some(timing(Some("100000"), Some("1000000"))),
+                            family: v2::Family::Dispatch as i32,
                         }),
                     ),
                     member(
@@ -510,6 +511,7 @@ mod tests {
                             payload: "Speed".to_string(),
                             // An explicit half-open range: no derivable depth.
                             timing: Some(timing(Some("100000"), None)),
+                            family: v2::Family::Dispatch as i32,
                         }),
                     ),
                     member(
@@ -519,6 +521,7 @@ mod tests {
                             payload: "Humidity".to_string(),
                             // @[400ms..1s] gives ceil(1000000 / 400000) = 3.
                             timing: Some(timing(Some("400000"), Some("1000000"))),
+                            family: v2::Family::Dispatch as i32,
                         }),
                     ),
                 ],
@@ -1913,6 +1916,7 @@ mod tests {
                                 payload: "Temp".to_string(),
                                 // ceil(1000000 / 100000) = 10.
                                 timing: Some(timing(Some("100000"), Some("1000000"))),
+                                family: v2::Family::Dispatch as i32,
                             }),
                         ),
                         member(
@@ -1933,6 +1937,7 @@ mod tests {
                             payload: "Flag".to_string(),
                             // ceil(500000 / 100000) = 5.
                             timing: Some(timing(Some("100000"), Some("500000"))),
+                            family: v2::Family::Dispatch as i32,
                         }),
                     )],
                     ..Default::default()
