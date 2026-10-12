@@ -108,6 +108,46 @@ impl Backend for ModelBackend {
     }
 }
 
+/// The backend behind `--emit codegen-request`: the whole request, written
+/// as canonical protobuf JSON to `<artifact_base>.codegen-request.json`.
+///
+/// It is [`ModelBackend`]'s neighbour — the request carries the model, so
+/// the `model` field of what this backend writes is the value
+/// `--emit codegen-model` writes — and it exists so that a plugin author can
+/// read the request the toolchain would hand their plugin without running
+/// one (driftsys/ridl#725).
+///
+/// **It accepts options where [`ModelBackend`] refuses them.** The model is
+/// the same value whatever a backend is configured with, so an option would
+/// be meaningless to it. `options` is a field of the request, so a request
+/// emit that refused options could never write a request with any, which is
+/// most of the requests a plugin receives. The options reach the artifact
+/// from the `[backend.codegen-request]` table, as the request's own options
+/// reach a plugin from its `[backend.<language>]` table.
+pub struct RequestBackend;
+
+impl Backend for RequestBackend {
+    fn language(&self) -> &str {
+        "request"
+    }
+
+    fn generate(&self, request: &v1::CodegenRequest) -> v1::CodegenResponse {
+        match request_to_json(request) {
+            Ok(json) => v1::CodegenResponse {
+                files: vec![text_file(
+                    format!("{}.codegen-request.json", request.artifact_base),
+                    json,
+                )],
+                diagnostics: Vec::new(),
+            },
+            Err(err) => v1::CodegenResponse {
+                files: Vec::new(),
+                diagnostics: vec![error(err.to_string())],
+            },
+        }
+    }
+}
+
 /// A generated text file, for a backend building its response.
 pub fn text_file(path: String, text: String) -> v1::GeneratedFile {
     v1::GeneratedFile {
