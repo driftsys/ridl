@@ -301,7 +301,8 @@ wasm-check:
 #
 # The lockfiles of ridl-descriptor and of the veh-cluster crate are resolved
 # with the pin's cargo and CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback,
-# so that a dependency release with a higher minimum is not selected; the
+# so that a dependency release with a higher minimum is not selected, and the
+# recipe fails unless cargo reports that it resolved for the crate's minimum; the
 # sources are fetched with the cargo of the crate's minimum, and the build is
 # offline and locked. Each of these two cells uses its own empty CARGO_HOME
 # under target/compat-check, so that a warm cache (the CI cache of
@@ -574,9 +575,28 @@ compat-check: toolchain-check
     # downloaded, and the mistake would show only on a machine with a cold
     # cache. Toolchains come from RUSTUP_HOME, not CARGO_HOME, and the rustup
     # proxies on PATH are unchanged, so `cargo +version` still resolves.
+    #
+    # resolve_for <cargo home> <manifest> <rust version> <label> resolves the
+    # lockfile with the pin's cargo and the fallback resolver, and fails
+    # unless cargo reports that it resolved for <rust version>: a lost
+    # rust-version line or a lost fallback setting makes cargo name the pin or
+    # no version. cargo's output is printed in both cases, its error included.
+    resolve_for() {
+        local report
+        if ! report="$(CARGO_HOME="$1" CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback \
+            cargo "+$pin" generate-lockfile --manifest-path "$2" 2>&1)"; then
+            printf '%s\n' "$report" >&2
+            echo "compat-check: could not resolve the $4 lockfile." >&2
+            exit 1
+        fi
+        printf '%s\n' "$report"
+        if ! grep -qF "latest Rust $3 compatible version" <<<"$report"; then
+            echo "compat-check: the $4 lockfile was not resolved for Rust $3." >&2
+            exit 1
+        fi
+    }
     descriptor_home="$PWD/target/compat-check/cargo-home-descriptor"
-    CARGO_HOME="$descriptor_home" CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback \
-        cargo "+$pin" generate-lockfile --manifest-path "$pkg_descriptor/Cargo.toml"
+    resolve_for "$descriptor_home" "$pkg_descriptor/Cargo.toml" "$descriptor_minimum" ridl-descriptor
     CARGO_HOME="$descriptor_home" \
         cargo "+$descriptor_minimum" fetch --locked --manifest-path "$pkg_descriptor/Cargo.toml"
 
@@ -652,16 +672,7 @@ compat-check: toolchain-check
         exit 1
     fi
     append_tables "$corpus/generated/Cargo.toml" "ridl-rt=$pkg"
-    # The resolution must target the minimum, not the pin: cargo names the Rust
-    # version it resolved for, and a lost rust-version line or a lost fallback
-    # setting would name the pin or no version.
-    lock_report="$(CARGO_HOME="$corpus_home" CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback \
-        cargo "+$pin" generate-lockfile --manifest-path "$corpus/generated/Cargo.toml" 2>&1)"
-    printf '%s\n' "$lock_report"
-    if ! printf '%s\n' "$lock_report" | grep -qF "latest Rust $minimum compatible versions"; then
-        echo "compat-check: the veh-cluster lockfile was not resolved for Rust $minimum." >&2
-        exit 1
-    fi
+    resolve_for "$corpus_home" "$corpus/generated/Cargo.toml" "$minimum" veh-cluster
     CARGO_HOME="$corpus_home" \
         cargo "+$minimum" fetch --locked --manifest-path "$corpus/generated/Cargo.toml"
     echo "compat-check: $minimum, edition 2021 (the emitted veh-cluster crate, all features)"
