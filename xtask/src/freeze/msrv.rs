@@ -90,6 +90,48 @@ mod tests {
     }
 
     #[test]
+    fn lowering_the_minimum_rust_version_removes_a_line() {
+        let baseline = text("edition = \"2021\"\nrust-version = \"1.85\"");
+        let head = text("edition = \"2021\"\nrust-version = \"1.83\"");
+        assert_eq!(
+            missing_lines(&baseline, &head),
+            vec!["c rust-version=1.85"],
+            "{head}"
+        );
+    }
+
+    #[test]
+    fn changing_the_edition_removes_a_line() {
+        let baseline = text("edition = \"2021\"");
+        let head = text("edition = \"2024\"");
+        assert_eq!(
+            missing_lines(&baseline, &head),
+            vec!["c edition=2021"],
+            "{head}"
+        );
+    }
+
+    #[test]
+    fn workspace_inherited_values_resolve_against_the_workspace_table() {
+        let package: Value =
+            toml::from_str("edition.workspace = true\nrust-version.workspace = true").unwrap();
+        let workspace: Value =
+            toml::from_str("[workspace.package]\nedition = \"2021\"\nrust-version = \"1.83\"")
+                .unwrap();
+        assert_eq!(
+            crate_lines("c", &package, &workspace).unwrap(),
+            vec!["c edition=2021", "c rust-version=1.83"]
+        );
+    }
+
+    #[test]
+    fn a_workspace_inherited_edition_without_a_workspace_value_is_an_error() {
+        let package: Value = toml::from_str("edition.workspace = true").unwrap();
+        let workspace = Value::Table(toml::Table::new());
+        assert!(crate_lines("c", &package, &workspace).is_err());
+    }
+
+    #[test]
     fn msrv_dump_reads_every_runtime_crate() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         let lines = dump(root).unwrap();
