@@ -610,8 +610,8 @@ coupled its two ends are, and the construction of the port can override it — t
 library takes no position on the default. It is a separate trait, not a
 supertrait of `Attached`, so a port that never meets a face, such as a
 conformance fixture, is not forced to name an encoding; it is implemented for
-`&mut P` like every port trait. In this version no port type in this repository
-implements it, and the generated face does not yet require it.
+`&P` and `&mut P`. In this version no port type in this repository implements
+it, and the generated face does not yet require it.
 
 `Watermark`'s generation counter field is named `generation`, not `gen`: `gen`
 is a reserved keyword in the 2024 edition, so the field name the crate's earlier
@@ -740,18 +740,20 @@ none to offer and does not implement the trait;
 **Every port trait is implemented for `&mut P`, and the `&self`-only traits also
 for `&P`.** For each port trait `T`, the crate provides
 `impl<P: T + ?Sized> T for &mut P`; for the traits whose methods all take
-`&self` — `Attached`, `Clock`, `SignalReader`, `FixedReader`,
-`ScannableSignals`, `CoherentSignals` and `Wakeable` — it also provides
-`impl<P: T + ?Sized> T for &P`. A generated face holds its port by value
-([ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 5),
-so these impls are what let it be built over a borrow of a handle. An owned
-handle, a `Clone` handle and a wrapper that adds tracing or a test double are
-accepted by the face's trait bounds with or without them, because such a type
-implements the port traits itself rather than borrowing through them. The impls
-are additive and need no `alloc`; `Box<P>` is not forwarded, under `std` either,
-although that feature brings `alloc` in: nothing needs a boxed port, because a
-face holds its port by value or by `&mut`, and an impl nothing uses is not added
-(ADR-0021 decision 11, amended 2026-09-26).
+`&self`, or that have no methods — `Attached`, `Clock`, `SignalReader`,
+`FixedReader`, `ScannableSignals`, `CoherentSignals`, `Wakeable` and `Encoded` —
+it also provides `impl<P: T + ?Sized> T for &P`. A generated face holds its port
+by value ([ADR-0023](../decisions/ADR-0023-interaction-face-generation.md)
+decision 5), so these impls are what let it be built over a borrow of a handle.
+An owned handle, a `Clone` handle and a wrapper that adds tracing or a test
+double are accepted by the face's trait bounds with or without them, because
+such a type implements the port traits itself rather than borrowing through
+them. The impls are additive, except that the `&P` impl of `Encoded` is recorded
+as a break for a downstream impl that overlaps with it (ADR-0021 decision 11,
+amended 2026-10-12), and need no `alloc`; `Box<P>` is not forwarded, under `std`
+either, although that feature brings `alloc` in: nothing needs a boxed port,
+because a face holds its port by value or by `&mut`, and an impl nothing uses is
+not added (ADR-0021 decision 11, amended 2026-09-26).
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 11
 records them and the reasoning.
 
