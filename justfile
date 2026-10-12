@@ -380,6 +380,14 @@ compat-check: toolchain-check
         exit 1
     fi
 
+    # ridl-descriptor states its edition as a literal, so that a change to the
+    # workspace edition does not change it.
+    descriptor_edition_manifest="crates/ridl-descriptor/Cargo.toml"
+    if ! grep -qxF 'edition = "2024"' "$descriptor_edition_manifest"; then
+        echo "compat-check: $descriptor_edition_manifest must set edition = \"2024\" as a literal." >&2
+        exit 1
+    fi
+
     # ridl-descriptor has its own minimum. The toolchain that resolves the
     # lockfiles and runs the other checks is the pin, so a minimum above it
     # cannot be a minimum. This guard runs before the toolchain is installed,
