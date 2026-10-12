@@ -38,6 +38,7 @@ fn signal(name: &str, ordinal: u32, payload: &str) -> v2::Decl {
             declared_init: None,
             init: None,
             timing: Some(range(Some("10000"), Some("100000"))),
+            family: ridl_ir::v2::Family::Dispatch as i32,
         }),
     )
 }
@@ -49,6 +50,7 @@ fn event(name: &str, ordinal: u32, payload: &str) -> v2::Decl {
         v2::decl::Kind::EventDef(v2::EventDef {
             payload: payload.to_string(),
             timing: Some(range(Some("10000"), Some("100000"))),
+            family: ridl_ir::v2::Family::Dispatch as i32,
         }),
     )
 }
@@ -142,6 +144,8 @@ fn command(
             params,
             contracts,
             timing: None,
+            family: ridl_ir::v2::Family::Dispatch as i32,
+            shape: ridl_ir::v2::Shape::None as i32,
         }),
     )
 }
@@ -161,6 +165,7 @@ fn query(
             return_type: Some(return_type),
             contracts,
             timing: None,
+            family: ridl_ir::v2::Family::Dispatch as i32,
         }),
     )
 }
@@ -869,6 +874,7 @@ fn timed(timing: v2::Timing) -> v2::Package {
             declared_init: None,
             init: None,
             timing: Some(timing),
+            family: ridl_ir::v2::Family::Dispatch as i32,
         }),
     )])
 }
@@ -894,6 +900,7 @@ fn timed_event(timing: v2::Timing) -> v2::Package {
         v2::decl::Kind::EventDef(v2::EventDef {
             payload: "T".to_string(),
             timing: Some(timing),
+            family: ridl_ir::v2::Family::Dispatch as i32,
         }),
     )])
 }
@@ -1040,6 +1047,8 @@ fn bounded_command(timing: Option<v2::Timing>) -> v2::Package {
             params: Vec::new(),
             contracts: Vec::new(),
             timing,
+            family: ridl_ir::v2::Family::Dispatch as i32,
+            shape: ridl_ir::v2::Shape::None as i32,
         }),
     )])
 }
@@ -1055,6 +1064,7 @@ fn bounded_query(timing: Option<v2::Timing>) -> v2::Package {
             return_type: Some(value_return("T")),
             contracts: Vec::new(),
             timing,
+            family: ridl_ir::v2::Family::Dispatch as i32,
         }),
     )])
 }
@@ -1378,6 +1388,104 @@ fn an_ensure_added_is_compatible() {
     let old = with_contracts(vec![]);
     let new = with_contracts(vec![clause(v2::ContractKind::Ensure, "result > 0")]);
     assert_row(&old, &new, Category::ContractChanged, Verdict::Compatible);
+}
+
+// ==========================================================================
+// Family and shape.
+// ==========================================================================
+
+fn with_class(family: v2::Family, shape: v2::Shape) -> v2::Package {
+    let mut package = pkg(vec![command("c", 1, vec![], vec![])]);
+    let Some(v2::decl::Kind::CommandDef(def)) = package.interfaces[0].interactions[0].kind.as_mut()
+    else {
+        unreachable!("the builder wrote a command");
+    };
+    def.family = family as i32;
+    def.shape = shape as i32;
+    package
+}
+
+/// A package holding one interaction of `kind`, with `family` written on it.
+/// The four kinds that carry a family, so that every arm of the walk is
+/// exercised; `fixed` carries none.
+fn with_family(kind: &str, family: v2::Family) -> v2::Package {
+    let interaction = match kind {
+        "signal" => signal("s", 1, "Speed"),
+        "event" => event("e", 1, "Speed"),
+        "command" => command("c", 1, vec![], vec![]),
+        "query" => query("q", 1, vec![], value_return("Speed"), vec![]),
+        other => unreachable!("no builder for `{other}`"),
+    };
+    let mut package = pkg(vec![interaction]);
+    match package.interfaces[0].interactions[0].kind.as_mut() {
+        Some(v2::decl::Kind::SignalDef(def)) => def.family = family as i32,
+        Some(v2::decl::Kind::EventDef(def)) => def.family = family as i32,
+        Some(v2::decl::Kind::CommandDef(def)) => def.family = family as i32,
+        Some(v2::decl::Kind::QueryDef(def)) => def.family = family as i32,
+        other => unreachable!("the builder wrote {other:?}"),
+    }
+    package
+}
+
+/// The walk compares `family` on every kind that carries one, not on the
+/// command alone: each arm of `diff_interaction` is pinned here.
+#[test]
+fn a_family_change_is_reported_on_every_kind() {
+    for (kind, family) in [
+        ("signal", v2::Family::Control),
+        ("event", v2::Family::Presentation),
+        ("command", v2::Family::Control),
+        ("query", v2::Family::Acquisition),
+    ] {
+        let dispatch = with_family(kind, v2::Family::Dispatch);
+        let other = with_family(kind, family);
+        let report = diff_packages(&dispatch, &other);
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.category == Category::InteractionClassChanged)
+            .unwrap_or_else(|| panic!("a {kind} family change must be reported: {report:?}"));
+        assert_eq!(change.verdict, Verdict::Breaking, "{kind}");
+        assert_eq!(change.before.as_deref(), Some("dispatch"), "{kind}");
+    }
+}
+
+/// A family or shape change on a name-paired interaction is breaking in both
+/// directions (ADR-0012 decision 12: evolution rules are uniform). No source
+/// can write a family other than dispatch yet; the walk compares the fields
+/// from the start so the diff fails closed.
+#[test]
+fn a_family_or_shape_change_is_breaking_both_ways() {
+    let dispatch = with_class(v2::Family::Dispatch, v2::Shape::None);
+    let control = with_class(v2::Family::Control, v2::Shape::None);
+    assert_row(
+        &dispatch,
+        &control,
+        Category::InteractionClassChanged,
+        Verdict::Breaking,
+    );
+    assert_row(
+        &control,
+        &dispatch,
+        Category::InteractionClassChanged,
+        Verdict::Breaking,
+    );
+    let toggle = with_class(v2::Family::Intent, v2::Shape::Toggle);
+    let select = with_class(v2::Family::Intent, v2::Shape::Select);
+    assert_row(
+        &toggle,
+        &select,
+        Category::InteractionClassChanged,
+        Verdict::Breaking,
+    );
+    let report = diff_packages(&toggle, &select);
+    let change = report
+        .changes
+        .iter()
+        .find(|change| change.category == Category::InteractionClassChanged)
+        .expect("the change is listed");
+    assert_eq!(change.before.as_deref(), Some("intent toggle"));
+    assert_eq!(change.after.as_deref(), Some("intent select"));
 }
 
 /// The mirror of the `require` rule, for the same reason.
@@ -2788,6 +2896,7 @@ fn an_init_change_is_breaking() {
                 declared_init: Some(init.to_string()),
                 init: None,
                 timing: Some(range(Some("10000"), Some("100000"))),
+                family: ridl_ir::v2::Family::Dispatch as i32,
             }),
         )])
     };

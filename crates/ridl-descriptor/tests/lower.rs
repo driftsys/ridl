@@ -144,6 +144,7 @@ fn package() -> Package {
                     decl::Kind::EventDef(EventDef {
                         payload: "Point".to_owned(),
                         timing: Some(range(Some("100000"), Some("1000000"))),
+                        family: ridl_ir::v2::Family::Dispatch as i32,
                     }),
                 ),
                 interaction(
@@ -523,6 +524,7 @@ fn unbounded_payload_package() -> Package {
                 decl::Kind::EventDef(EventDef {
                     payload: "Open".to_owned(),
                     timing: None,
+                    family: ridl_ir::v2::Family::Dispatch as i32,
                 }),
             )],
             ..Default::default()

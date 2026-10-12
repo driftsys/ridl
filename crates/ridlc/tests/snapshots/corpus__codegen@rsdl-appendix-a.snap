@@ -61,6 +61,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "bytes": "43"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -133,6 +134,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "bytes": "46"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -204,6 +206,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "bytes": "50"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -274,7 +277,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "flatbuffers": {
                   "bounded": 50
                 }
-              }
+              },
+              "shape": "SHAPE_NONE"
             }
           }
         }
@@ -334,6 +338,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "bytes": "43"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -1101,6 +1106,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "unsized": "readFaults.request: ()"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],

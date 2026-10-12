@@ -189,9 +189,13 @@ design in each:
    - Before 0.10.0, the pull request that breaks a surface deletes that
      surface's row from `freeze/surfaces.toml`, carries `!` in its title, states
      the approval in its description, and merges only on the maintainer's
-     explicit approval. A follow-up pull request adds the row again with that
-     merge commit as its `baseline`. The surface is unchecked between the two
-     pull requests.
+     explicit approval. The name of the surface stays in the `required` list of
+     `freeze/surfaces.toml`. A follow-up pull request adds the row again with
+     that merge commit as its `baseline`. The surface is unchecked between the
+     two pull requests. While its name is in `required` and it has no row,
+     `just freeze-check` prints a notice, and `just release` fails. The check
+     guards only a forgotten re-add: removing a name from `required` is an edit
+     of `freeze/surfaces.toml` that review must catch.
    - At 0.10.0, the release pull request moves every baseline to `v0.10.0`.
    - During 0.10.x, no break lands. The one exception is a security fix; its
      reason is recorded in this record, in the same pull request that makes the
@@ -242,16 +246,31 @@ design in each:
   crate. Frozen fixture copies make the break an explicit change.
 - **Freeze size and budget values.** Rejected: they are tuned as the encodings
   mature, and no user program depends on an exact value.
+- **Index `anyOf` branches of an MCP schema under their own paths.** Rejected:
+  every `anyOf` in the tool schemas wraps one value branch and a `null` branch,
+  which is how a nullable value is written. Indexing them would move every
+  nullable property under `/anyOf/0` and make a reordering of `[T, null]` a
+  break, with no gain. Only `oneOf`, which lists alternative shapes, is indexed.
+- **Fail every `just freeze-check` run while a required surface has no row.**
+  Rejected: `main` would be red between the two pull requests of an approved
+  break, and unrelated pull requests would be blocked. The risk is a release
+  that ships a frozen surface without a baseline, and the release check covers
+  exactly that.
+- **A CI job that counts merges since a row was removed.** Rejected: it needs
+  state outside the tree and is harder to test than a list in `surfaces.toml`.
 
 ## Consequences
 
 - A pull request that breaks a frozen surface fails `just freeze-check` while
   the surface has a row. The pull request deletes the row, and the deleted row
-  is the visible approval. A follow-up pull request adds the row again at the
-  merge commit of the first.
+  is the visible approval, and the name stays in the `required` list. A
+  follow-up pull request adds the row again at the merge commit of the first.
+  `just release` fails while a name in `required` has no row.
 - Adding a row for a new surface needs two pull requests: the first adds the
   dump, and the second adds the row with the first one's merge commit as its
-  baseline.
+  baseline. The pull request that adds a surface's row also adds its name to
+  `required` in `freeze/surfaces.toml`, and the check fails when a row's name is
+  not in `required`.
 - Before the Rust API comparison, the check runs `cargo fetch --locked` with the
   network allowed, so its first run on a machine with an empty cargo cache needs
   the network. The comparison itself runs offline.

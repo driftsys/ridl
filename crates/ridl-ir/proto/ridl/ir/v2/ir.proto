@@ -563,6 +563,30 @@ enum TimingMode {
   TIMING_MODE_RANGE = 2;
 }
 
+// The interaction family (ADR-0012 decisions 2 and 6). The zero value is
+// `FAMILY_DISPATCH`, not an `_UNSPECIFIED` value: every interaction that
+// exists today is dispatch, proto3 encodes no byte for a zero enum field, so
+// the catalog hash of every existing source is unchanged and an IR written
+// before this field decodes as dispatch.
+enum Family {
+  FAMILY_DISPATCH = 0;
+  FAMILY_PRESENTATION = 1;
+  FAMILY_INTENT = 2;
+  FAMILY_ACQUISITION = 3;
+  FAMILY_CONTROL = 4;
+}
+
+// The operation shape of an intent command (ADR-0012 decisions 5 and 6).
+// The zero value is `SHAPE_NONE` for the reason `Family` gives.
+enum Shape {
+  SHAPE_NONE = 0;
+  SHAPE_ACTIVATE = 1;
+  SHAPE_TOGGLE = 2;
+  SHAPE_SELECT = 3;
+  SHAPE_ADJUST = 4;
+  SHAPE_DISMISS = 5;
+}
+
 // Resolved timing (ridl §9, gf §6.2, ADR-0008 decision 12). min = rate
 // floor, max = staleness bound; per-kind behavior is derived from the
 // declaring keyword, not stored. Bounds are exact-decimal MICROSECOND
@@ -586,6 +610,9 @@ message SignalDef {
   // Resolved channel init (RIDL-109).
   InitValue init = 3;
   Timing timing = 4;
+  // The family (ADR-0012 decision 6); dispatch for every spelling the
+  // toolchain reads today.
+  Family family = 5;
 }
 
 // A discrete occurrence interaction (ridl §5).
@@ -593,6 +620,9 @@ message EventDef {
   // Canonical named-type reference to the payload type (ridl §5).
   string payload = 1;
   Timing timing = 2;
+  // The family (ADR-0012 decision 6); dispatch for every spelling the
+  // toolchain reads today.
+  Family family = 3;
 }
 
 // A fire-and-forget imperative interaction (ridl §6) — returns () always,
@@ -609,6 +639,12 @@ message CommandDef {
   // value, then the built-in [..1s]), and default_applied is then true
   // (ridl §9.3).
   Timing timing = 3;
+  // The family (ADR-0012 decision 6); dispatch for every spelling the
+  // toolchain reads today.
+  Family family = 4;
+  // The operation shape; none unless the family is intent. The valid
+  // (kind, family, shape) combinations are checked by ridl_ir::class.
+  Shape shape = 5;
 }
 
 // A request/response interaction (ridl §7).
@@ -623,6 +659,9 @@ message QueryDef {
   // value, then the built-in [..3s]), and default_applied is then true
   // (ridl §9.3).
   Timing timing = 4;
+  // The family (ADR-0012 decision 6); dispatch for every spelling the
+  // toolchain reads today.
+  Family family = 5;
 }
 
 // A provisioned-constant interaction (ridl §8).

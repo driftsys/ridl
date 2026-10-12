@@ -1,7 +1,8 @@
 //! The MCP tool surface: the tool names and every property path of each input
 //! and output schema, with its type, whether it is required, each `enum` value
 //! and `const` of a path, and its `additionalProperties`, `minimum` and
-//! `format`, from `crates/ridl-mcp/tests/tools.json`.
+//! `format`, from `crates/ridl-mcp/tests/tools.json`. A path inside a `oneOf`
+//! branch carries `/oneOf/<n>`; an `anyOf` branch adds nothing to the path.
 
 use serde_json::Value;
 use std::path::Path;
@@ -67,9 +68,13 @@ fn resolve_ref<'a>(node: &Value, defs: &'a Value) -> Option<&'a Value> {
 /// `optional`, a `<path> enum <value>` line for each value of its
 /// `enum`, a `<path> const <value>` line for its `const`, a
 /// `<path> <keyword> <value>` line for each of its `additionalProperties`,
-/// `minimum` and `format`, and recurses into nested `properties`, `items`, `$ref` targets and
-/// `anyOf` and `oneOf` branches. `depth` bounds the walk for a recursive
-/// `$ref`.
+/// `minimum` and `format`, and recurses into nested `properties`, `items`,
+/// `$ref` targets and `anyOf` and `oneOf` branches. An `anyOf` branch is
+/// walked on the parent path, because each `anyOf` in the schemas wraps one
+/// value and `null`. A `oneOf` branch is walked on `<pointer>/oneOf/<n>`,
+/// because its branches are alternative shapes: a property that moves between
+/// branches, or a reordering of the branches, removes a line. `depth` bounds
+/// the walk for a recursive `$ref`.
 fn walk(
     tool: &str,
     side: &str,
@@ -85,8 +90,23 @@ fn walk(
     if let Some(target) = resolve_ref(node, defs) {
         walk(tool, side, pointer, target, defs, depth + 1, lines);
     }
-    for branch in branches(node) {
+    for branch in node
+        .get("anyOf")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
         walk(tool, side, pointer, branch, defs, depth + 1, lines);
+    }
+    for (index, branch) in node
+        .get("oneOf")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .enumerate()
+    {
+        let path = format!("{pointer}/oneOf/{index}");
+        walk(tool, side, &path, branch, defs, depth + 1, lines);
     }
     for value in node
         .get("enum")
@@ -203,15 +223,79 @@ mod tests {
             }),
         );
         for line in [
-            "t output /properties/a string",
-            "t output /properties/a required",
-            "t output /properties/b integer",
+            "t output /oneOf/0/properties/a string",
+            "t output /oneOf/0/properties/a required",
+            "t output /oneOf/1/properties/b integer",
         ] {
             assert!(
                 lines.iter().any(|l| l == line),
                 "missing `{line}` in {lines:?}"
             );
         }
+    }
+
+    #[test]
+    fn a_property_that_moves_between_one_of_branches_removes_a_line() {
+        let before = walked(
+            "output",
+            serde_json::json!({"oneOf": [
+                {"type": "object", "properties": {"a": {"type": "string"}}},
+                {"type": "object", "properties": {"b": {"type": "string"}}}
+            ]}),
+        );
+        let after = walked(
+            "output",
+            serde_json::json!({"oneOf": [
+                {"type": "object", "properties": {}},
+                {"type": "object", "properties": {"a": {"type": "string"}, "b": {"type": "string"}}}
+            ]}),
+        );
+        let line = "t output /oneOf/0/properties/a string";
+        assert!(before.iter().any(|l| l == line), "{before:?}");
+        assert!(!after.iter().any(|l| l == line), "{after:?}");
+    }
+
+    #[test]
+    fn a_nested_one_of_carries_both_indices() {
+        let lines = walked(
+            "output",
+            serde_json::json!({"oneOf": [
+                {"type": "object"},
+                {"type": "object", "properties": {"x": {"oneOf": [
+                    {"type": "object", "properties": {"y": {"type": "integer"}}}
+                ]}}}
+            ]}),
+        );
+        let line = "t output /oneOf/1/properties/x/oneOf/0/properties/y integer";
+        assert!(lines.iter().any(|l| l == line), "{lines:?}");
+    }
+
+    #[test]
+    fn a_one_of_branch_that_is_a_ref_uses_the_branch_path() {
+        let lines = walked(
+            "output",
+            serde_json::json!({
+                "$defs": {"A": {"type": "object", "properties": {"z": {"type": "boolean"}}}},
+                "oneOf": [{"$ref": "#/$defs/A"}]
+            }),
+        );
+        let line = "t output /oneOf/0/properties/z boolean";
+        assert!(lines.iter().any(|l| l == line), "{lines:?}");
+    }
+
+    #[test]
+    fn any_of_branches_stay_on_the_parent_path() {
+        let lines = walked(
+            "input",
+            serde_json::json!({"type": "object", "properties": {"n": {"anyOf": [
+                {"type": "object", "properties": {"m": {"type": "string"}}},
+                {"type": "null"}
+            ]}}}),
+        );
+        let line = "t input /properties/n/properties/m string";
+        assert!(lines.iter().any(|l| l == line), "{lines:?}");
+        assert!(!lines.iter().any(|l| l.contains("/oneOf/")), "{lines:?}");
+        assert!(!lines.iter().any(|l| l.contains("/anyOf")), "{lines:?}");
     }
 
     #[test]
@@ -378,6 +462,63 @@ mod tests {
         );
     }
 
+    /// The paths of the `anyOf` nodes under `node` that are not a nullable
+    /// wrapper: exactly one `{"type": "null"}` branch and one other branch.
+    fn non_nullable_any_ofs(node: &Value, path: &str, found: &mut Vec<String>) {
+        match node {
+            Value::Object(map) => {
+                if let Some(Value::Array(branches)) = map.get("anyOf") {
+                    let nulls = branches
+                        .iter()
+                        .filter(|b| **b == serde_json::json!({"type": "null"}))
+                        .count();
+                    if branches.len() != 2 || nulls != 1 {
+                        found.push(format!("{path}/anyOf"));
+                    }
+                }
+                for (key, value) in map {
+                    non_nullable_any_ofs(value, &format!("{path}/{key}"), found);
+                }
+            }
+            Value::Array(items) => {
+                for (index, value) in items.iter().enumerate() {
+                    non_nullable_any_ofs(value, &format!("{path}/{index}"), found);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn the_any_of_check_flags_a_second_non_null_branch() {
+        let schema = serde_json::json!({"properties": {
+            "ok": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+            "bad": {"anyOf": [{"type": "string"}, {"type": "integer"}]},
+            "three": {"anyOf": [{"type": "string"}, {"type": "integer"}, {"type": "null"}]},
+        }});
+        let mut found = Vec::new();
+        non_nullable_any_ofs(&schema, "", &mut found);
+        found.sort();
+        assert_eq!(
+            found,
+            vec!["/properties/bad/anyOf", "/properties/three/anyOf"]
+        );
+    }
+
+    #[test]
+    fn every_any_of_in_the_tool_schemas_is_a_nullable_wrapper() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let text = std::fs::read_to_string(root.join("crates/ridl-mcp/tests/tools.json")).unwrap();
+        let tools: Value = serde_json::from_str(&text).unwrap();
+        let mut found = Vec::new();
+        non_nullable_any_ofs(&tools, "", &mut found);
+        assert!(
+            found.is_empty(),
+            "`anyOf` branches share their parent's path, so a second non-null shape needs \
+indexing like `oneOf`; these `anyOf` nodes have one: {found:?}"
+        );
+    }
+
     #[test]
     fn mcp_dump_lists_every_tool() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
@@ -412,9 +553,9 @@ mod tests {
         );
         // `ridl_explain`'s output schema is a top-level `oneOf`.
         for line in [
-            "ridl_explain output /properties/kind const diagnostic",
-            "ridl_explain output /properties/kind const diff_category",
-            "ridl_explain output /properties/category string",
+            "ridl_explain output /oneOf/0/properties/kind const diagnostic",
+            "ridl_explain output /oneOf/1/properties/kind const diff_category",
+            "ridl_explain output /oneOf/1/properties/category string",
             "ridl_check input /properties/profile enum rsdl",
         ] {
             assert!(lines.iter().any(|l| l == line), "missing `{line}`");

@@ -7,7 +7,12 @@ which release each surface is frozen against (ADR-0029).
   fact. A dump is generated, never edited by hand.
 - `surfaces.toml` has one `[[surface]]` table per frozen surface, with a `name`
   and a `baseline` (a git ref). The check fails when a line of the dump at the
-  baseline is missing from the dump at HEAD. An added line passes.
+  baseline is missing from the dump at HEAD. An added line passes. The optional
+  top-level `required` key lists the surfaces that must have a row; it stays
+  above the first table. The check fails when a row's name is not in `required`,
+  when `required` names a surface that no dumper or API checker has, or when
+  `required` lists a name twice. `check --release` also fails when a name in
+  `required` has no row.
 
 ## The frozen source copies
 
@@ -76,7 +81,11 @@ needs the steps of "Approve a break":
   line and fails. A new optional property only adds lines and passes. The rule
   is the same for an output schema: a new required property in an output schema
   also fails, although it does not break a client, and needs the steps of
-  "Approve a break".
+  "Approve a break". A path inside a `oneOf` branch carries `/oneOf/<n>`, so a
+  property that moves between branches, or a reordering of the branches, removes
+  a line. Inserting a branch before another, or wrapping a schema in a `oneOf`,
+  also changes the paths and removes lines, so it is a break too. An `anyOf`
+  branch adds nothing to the path.
 - `cli`: each flag has a `required` or an `optional` line, and each command has
   one `<path> requires <words>` line that holds every required flag and
   argument. A flag or an argument that becomes optional removes a line. A new
@@ -114,8 +123,16 @@ squash merge. To accept a break:
 
 1. In the pull request that makes the break, delete that surface's row from
    `surfaces.toml`, and state the approval and the reason in the pull request
-   description. The deleted row is the visible record of the approval.
+   description. The deleted row is the visible record of the approval. Leave the
+   surface's name in the `required` list of `surfaces.toml`, so that the missing
+   row stays visible.
 2. After that pull request merges, add the row again in a follow-up pull
    request, with the merge commit of the first as the `baseline`.
 
-The surface is unchecked between the two pull requests.
+The surface is unchecked between the two pull requests. While its name is in
+`required` and it has no row, `just freeze-check` prints a notice, and
+`just release` fails.
+
+A row and the name in `required` go together: the check fails when a row's name
+is not in `required`. The pull request that adds the row of a new surface also
+adds its name to `required`.
