@@ -496,16 +496,21 @@ argument for it in the command case.
    **Amendment (2026-10-12) — the face reads the encoding from its port, as
    built.** The three sentences of the 2026-10-10 amendment after its first are
    superseded; decision 6 still keeps `Client<P>` and adds no type parameter for
-   the encoding. `Client<P>`, `blocking::Client<P>` and `Publisher<W>` carry
-   `::ridl_rt::port::Encoded` first in their bound lists, before the port roles
-   the interface needs, and so do the call futures, `NextEvent`, `serve` and
-   `Serve`. Every impl and every free function of the face carries a generated
-   `where` clause naming `Iface: Sizes<P::Encoding>` and one
-   `T: Payload<P::Encoding>` per payload type that face uses, because a trait's
-   `where` clause is not assumed by its users on stable Rust. `Serve<'a, H, P>`
-   carries the `Iface: Sizes<H::Encoding>` predicate on the struct itself,
-   because its claim buffer field has the type that impl names. The face names
-   no encoding: the port states it (driftsys/ridl#801).
+   the encoding. Every generated item that is generic over a face port carries
+   `::ridl_rt::port::Encoded` first in that parameter's bound list, before the
+   port roles the interface needs: `Client<P>`, `blocking::Client<P>`,
+   `Publisher<W>`, the call futures, `NextEvent`, `dispatch`, `serve` and
+   `Serve`. Every impl and every free function among them that encodes, decodes
+   or projects through `Sizes` carries a generated `where` clause naming
+   `Iface: Sizes<P::Encoding>` and one `T: Payload<P::Encoding>` per payload
+   type that face uses, because a trait's `where` clause is not assumed by its
+   users on stable Rust. The items with no port parameter take neither the bound
+   nor the predicates: the `Provider`, `Subscribe` and `Invalidate` traits, the
+   descriptors, the prelude, and free functions such as the catalog check and
+   the blocking module's deadline helper. `Serve<'a, H, P>` carries the
+   `Iface: Sizes<H::Encoding>` predicate on the struct itself, because its claim
+   buffer field has the type that impl names. The face names no encoding: the
+   port states it (driftsys/ridl#801).
 
 7. **Amendment (2026-09-28) — the fixed methods of the face are trait methods;
    the member methods stay inherent.** Rust gives one type one inherent

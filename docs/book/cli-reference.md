@@ -832,9 +832,12 @@ key and an empty list all mean types only. The Rust backend builds only
 feature per named encoding, and none for types only. A single-file build has no
 manifest, so it is types only. The emitted codec names the encoding as
 `::ridl_rt::encoding::FlatBuffers`; the face takes its encoding from its port
-type instead, so a program names an encoding only where it builds the runtime —
-over `ridl-loopback`, `Loopback::new` for FlatBuffers and
-`Loopback::<E>::with_encoding` for another.
+type instead, so a consumer that binds a generated face to a runtime it did not
+write names an encoding only where it builds that runtime — over
+`ridl-loopback`, `Loopback::new` for FlatBuffers and
+`Loopback::<E>::with_encoding` for another. A program that writes its own port
+names the encoding in that port's `Encoded` implementation instead
+([Writing a port](writing-a-port.md)).
 
 MANI-015 is an error when the `encodings` value is not an array of the known
 names or repeats a name, and MANI-016 is an error when the manifest of a

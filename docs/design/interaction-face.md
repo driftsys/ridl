@@ -613,34 +613,43 @@ that purpose alone.
 
 ## The encoding and the ports
 
-**The face takes its encoding from its port.** Each generated type and free
-function of the face bounds its port parameter on `::ridl_rt::port::Encoded`,
+**The face takes its encoding from its port.** Every generated item that is
+generic over a face port bounds that parameter on `::ridl_rt::port::Encoded`,
 before the port roles its interface needs, and names `P::Encoding` wherever an
-encoding is required. The face declares no type parameter for the encoding and
-writes no encoding path: a `Client<E: Encoding, ...>` would put `E` on every
-descriptor, every provider trait and every caller, and application code would
-name the wire encoding, which is the transport's property.
+encoding is required: `Client`, `blocking::Client`, `Publisher`, the call
+futures, `NextEvent`, `dispatch`, `serve` and `Serve`. The rest of the face
+takes no port parameter, and no encoding with it — the provider, subscribe and
+invalidate traits, the descriptors, the prelude, and free functions such as the
+catalog check and the blocking module's deadline helper. The face declares no
+type parameter for the encoding and writes no encoding path: a
+`Client<E: Encoding, ...>` would put `E` on every descriptor, every provider
+trait and every caller, and application code would name the wire encoding, which
+is the transport's property.
 
 A buffer is named through that associated type: a payload's buffer is
 `<T as Payload<P::Encoding>>::BUFFER`, and the claim and event buffers are
 `<Iface as Sizes<P::Encoding>>::CLAIM_BUFFER` and `EVENT_BUFFER`.
 
-**The bounds are written out on each impl and each function.** Generic code that
-encodes or decodes a payload `T` needs `T: Payload<P::Encoding>`, and a trait's
-`where` clause is not assumed by its users on stable Rust, so the emitter
-writes, as a generated `where` clause, `Iface: Sizes<P::Encoding>` and one
-`T: Payload<P::Encoding>` per payload type that face uses. A program pays
-nothing for this: its port's encoding is one the emitted codecs satisfy, and it
-writes no bound. The cost falls on a consumer who writes a helper generic over
-the port, which has to restate the same clause, and on the length of the
-generated signatures.
+**The bounds are written out on each impl and each function that needs them.**
+Generic code that encodes or decodes a payload `T` needs
+`T: Payload<P::Encoding>`, and a trait's `where` clause is not assumed by its
+users on stable Rust, so the emitter writes, as a generated `where` clause on
+each impl and each free function that encodes, decodes or projects through
+`Sizes`, `Iface: Sizes<P::Encoding>` and one `T: Payload<P::Encoding>` per
+payload type that face uses. A program pays nothing for this: its port's
+encoding is one the emitted codecs satisfy, and it writes no bound. The cost
+falls on a consumer who writes a helper generic over the port, which has to
+restate the same clause, and on the length of the generated signatures.
 
 A port whose encoding the generated package does not carry is refused where the
-face is bound to it, because the `Sizes<P::Encoding>` predicate has no impl. The
-encoding is named once in a program, where the runtime or the transport is
-built: `Loopback::new(catalog)` is the loopback's FlatBuffers default, and
-`Loopback::<E>::with_encoding(catalog)` names another. Each transport picks its
-own default from how coupled its two ends are; the table of defaults is in
+face is bound to it, because the `Sizes<P::Encoding>` predicate has no impl. A
+consumer that binds a generated face to a runtime it did not write names an
+encoding only where it builds that runtime: `Loopback::new(catalog)` is the
+loopback's FlatBuffers default, and `Loopback::<E>::with_encoding(catalog)`
+names another. A program that writes its own port names the encoding in that
+port's `Encoded` implementation, and one that writes its own `Payload<E>` or
+`Sizes<E>` implementation names it there. Each transport picks its own default
+from how coupled its two ends are; the table of defaults is in
 [the `ridl-rt` design record](ridl-rt.md), which owns the `Encoded` trait, and
 the loopback is the one row of it that is built.
 
