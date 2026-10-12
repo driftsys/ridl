@@ -14,8 +14,10 @@ restate it.
 `ridl-loopback` as well, and `ridl-descriptor` has its own minimum, Rust 1.88,
 because its dependency `planus` is pinned to 1.3.0, which declares 1.88.
 `just compat-check` builds the packaged manifests of both crates at those
-versions. The generated crate is checked with every cargo feature on, because it
-does not build on 1.83 with the default features off.
+versions. The generated crate is checked at 1.83 as the crate emitted for the
+`veh-cluster` corpus with every cargo feature on, and as the crate emitted for
+`examples/cabin` with its `std` feature on, because it does not build on 1.83
+with the default features off.
 
 Written from the release 0.10 design (2026-10-11), whose decisions R-2, R-8 and
 R-9 Sebastien took in the brainstorming session of the same day. The design's
@@ -66,7 +68,9 @@ design in each:
   `ridl-rt-conformance` and `ridl-loopback`. `ridl-descriptor` has its own
   minimum, Rust 1.88 and edition 2024, because `planus` 1.3.0 declares 1.88. The
   generated crate compiles as edition 2021 with Rust 1.83 with every cargo
-  feature on, which `just compat-check` checks and `just freeze-check` does not.
+  feature on. `just compat-check` checks this for the crate emitted for the
+  `veh-cluster` corpus with every feature on, and for the crate emitted for
+  `examples/cabin` with its `std` feature on; `just freeze-check` does not.
 
 ## Decision
 
@@ -91,7 +95,9 @@ design in each:
    edition 2024 for `ridl-descriptor`, because `planus` 1.3.0 declares 1.88. The
    `msrv` dump checks the edition and the `rust-version` of each crate. The
    generated crate compiles as edition 2021 with Rust 1.83 with every cargo
-   feature on, checked by `just compat-check`.
+   feature on. `just compat-check` checks the crate emitted for the
+   `veh-cluster` corpus with every feature on, and the crate emitted for
+   `examples/cabin` with its `std` feature on.
 
    The formats of `interfaces.lock` and `.ridl/baseline` are frozen by policy
    and checked by no tool. Of the exit codes, the check records only those of
@@ -193,11 +199,12 @@ design in each:
    dropping edition 2021 for them, is a break. Raising the `rust-version` of
    `ridl-descriptor` above 1.88, or changing its edition, is a break. The `msrv`
    dump checks all four crates. The generated crate must compile as edition 2021
-   with Rust 1.83 with every cargo feature on, which `just compat-check` checks.
-   With the default features off it does not compile on 1.83
-   (driftsys/ridl#874), and `just compat-check` does not check that combination.
-   This restates ADR-0021 decision 10 as a frozen surface and adds the `msrv`
-   check.
+   with Rust 1.83 with every cargo feature on. `just compat-check` checks the
+   crate emitted for the `veh-cluster` corpus with every feature on, and the
+   crate emitted for `examples/cabin` with its `std` feature on. With the
+   default features off it does not compile on 1.83 (driftsys/ridl#874), and
+   `just compat-check` does not check that combination. This restates ADR-0021
+   decision 10 as a frozen surface and adds the `msrv` check.
 
 6. **The gate table says which gate covers which surface.** The `baseline`
    column is empty on the day this record is accepted. `freeze/surfaces.toml` is
