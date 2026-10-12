@@ -4013,3 +4013,64 @@ fn a_tuple_in_a_parameter_is_named_from_its_interaction() {
         "the induced name is spelled from the interface and the interaction: {names:?}"
     );
 }
+
+/// A call with two parameters induces one argument struct, with one field
+/// per parameter in declaration order (driftsys/ridl#713).
+#[test]
+fn a_two_parameter_command_induces_an_argument_struct() {
+    let model = lower(&call_package(), &[]);
+    let v1::interaction::Shape::Command(command) = call_shape(&model, 0) else {
+        panic!("the `two` command");
+    };
+    let reference = command
+        .request_tuple
+        .as_ref()
+        .expect("a two-parameter call induces an argument struct");
+    assert!(command.request.is_none(), "and carries no named request");
+    let induced = &model.tuples[reference.index as usize];
+    assert_eq!(
+        induced.name.as_ref().expect("a name").rust,
+        "CallsTwoParams"
+    );
+    let fields: Vec<&str> = induced
+        .fields
+        .iter()
+        .map(|field| field.name.as_ref().expect("a name").declared.as_str())
+        .collect();
+    assert_eq!(fields, vec!["a", "b"]);
+}
+
+/// A call with exactly one named parameter keeps the payload it has today
+/// and induces nothing, so no existing face renames a type.
+#[test]
+fn a_one_parameter_command_induces_nothing() {
+    let model = lower(&call_package(), &[]);
+    let v1::interaction::Shape::Command(command) = call_shape(&model, 1) else {
+        panic!("the `one` command");
+    };
+    assert!(command.request.is_some());
+    assert!(command.request_tuple.is_none());
+}
+
+/// A call with no parameter induces an argument struct with no field: the
+/// shape that skipped `readTicks` and `fuelLevel` before this change.
+#[test]
+fn a_zero_parameter_command_induces_an_empty_argument_struct() {
+    let mut package = call_package();
+    calls_interface(&mut package).interactions.push(call_decl(
+        "ping",
+        v2::decl::Kind::CommandDef(v2::CommandDef::default()),
+    ));
+    let model = lower(&package, &[]);
+    let induced = model
+        .tuples
+        .iter()
+        .find(|tuple| {
+            tuple
+                .name
+                .as_ref()
+                .is_some_and(|name| name.rust == "CallsPingParams")
+        })
+        .expect("the induced argument struct");
+    assert!(induced.fields.is_empty());
+}

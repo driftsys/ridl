@@ -857,6 +857,15 @@ impl<'a> Lowering<'a> {
                 );
                 let request = single_param_type(&command.params)
                     .map(|reference| self.payload(home, reference));
+                let request_tuple = self.request_tuple(
+                    home,
+                    &command.params,
+                    interface,
+                    slot,
+                    visibility,
+                    owner,
+                    decl.name.as_str(),
+                );
                 let request_sizes = self.sizes(
                     home,
                     &PayloadShape::Params(&command.params),
@@ -877,7 +886,7 @@ impl<'a> Lowering<'a> {
                         clauses,
                         request_sizes: Some(request_sizes),
                         shape: command.shape,
-                        request_tuple: None,
+                        request_tuple,
                     })),
                     Some(payloads),
                     command.family,
@@ -1009,6 +1018,35 @@ impl<'a> Lowering<'a> {
             since: decl.since.clone(),
             rules: model_rules(home, &self.deps, ItemRef::Decl(decl)),
         }
+    }
+
+    /// The induced argument struct for a call's parameters, written where the
+    /// parameters are not exactly one named type — that one shape is the
+    /// payload the face sends as it is, and induces nothing
+    /// (driftsys/ridl#713).
+    #[allow(clippy::too_many_arguments)]
+    fn request_tuple(
+        &mut self,
+        home: &'a v2::Package,
+        params: &[v2::Param],
+        interface: u32,
+        slot: u32,
+        visibility: i32,
+        owner: &str,
+        member: &str,
+    ) -> Option<v1::TupleRef> {
+        if single_param_type(params).is_some() {
+            return None;
+        }
+        let tuple = params_as_tuple(params)?;
+        // `Path::step` appends the role word to the segments and to both
+        // induced names at once, which gives segments `["Params"]` and the
+        // Rust name `<Interface><Interaction>Params`.
+        let at = Path::interaction(interface, slot, visibility, owner, member, Vec::new())
+            .step("Params");
+        Some(v1::TupleRef {
+            index: self.tuple_ref(home, &tuple, &at),
+        })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1538,8 +1576,28 @@ fn decl_kind(decl: &v2::Decl) -> v1::DeclKind {
     }
 }
 
-/// The single declared parameter's named type — the one call shape the
-/// generated face carries today.
+/// The parameter list as a tuple: the shape of the induced argument struct,
+/// one field per declared parameter in declaration order. A parameter with no
+/// declared type, and a stream parameter, have no struct field, so a list
+/// holding either induces nothing (interaction face design, the request-shape
+/// rule).
+fn params_as_tuple(params: &[v2::Param]) -> Option<v2::TupleType> {
+    let mut fields = Vec::with_capacity(params.len());
+    for param in params {
+        let ty = param.r#type.as_ref()?;
+        if matches!(ty.kind.as_ref()?, v2::field_type::Kind::Stream(_)) {
+            return None;
+        }
+        fields.push(v2::TupleField {
+            name: param.name.clone(),
+            r#type: Some(ty.clone()),
+        });
+    }
+    Some(v2::TupleType { fields })
+}
+
+/// The single declared parameter's named type — the one call shape whose
+/// payload the generated face sends as it is.
 fn single_param_type(params: &[v2::Param]) -> Option<&str> {
     let [param] = params else {
         return None;
