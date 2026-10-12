@@ -24,6 +24,7 @@
 use std::ops::Range;
 
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
+use ridl_core::diag::lines as text_lines;
 use ridl_syntax::SyntaxToken;
 use rowan::{TextRange, TextSize};
 
@@ -451,7 +452,10 @@ fn comment_lines(token: &SyntaxToken) -> Vec<Line<'_>> {
     };
     let mut lines = Vec::new();
     let mut offset = 3usize;
-    let mut raw = inner.split('\n');
+    // A line ends at an LF, a CRLF pair or a lone CR, as it does for the lexer
+    // and the diagnostic positions (driftsys/ridl#788). Every separator is one
+    // byte, so the running offset still advances by `line.len() + 1`.
+    let mut raw = text_lines(inner);
     let first = raw.next().unwrap_or_default();
     lines.push(after_marker(first, base + TextSize::from(offset as u32)));
     offset += first.len() + 1;
