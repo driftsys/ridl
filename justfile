@@ -637,7 +637,7 @@ compat-check: toolchain-check
         echo "compat-check: (ADR-0029 decision 5); the manifest ridl build wrote does not." >&2
         exit 1
     fi
-    if grep -q '^rust-version' "$corpus/generated/Cargo.toml"; then
+    if grep -q '^[[:space:]]*rust-version' "$corpus/generated/Cargo.toml"; then
         echo "compat-check: the emitted veh-cluster manifest now declares a rust-version;" >&2
         echo "compat-check: check it instead of adding one here." >&2
         exit 1
@@ -652,8 +652,16 @@ compat-check: toolchain-check
         exit 1
     fi
     append_tables "$corpus/generated/Cargo.toml" "ridl-rt=$pkg"
-    CARGO_HOME="$corpus_home" CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback \
-        cargo "+$pin" generate-lockfile --manifest-path "$corpus/generated/Cargo.toml"
+    # The resolution must target the minimum, not the pin: cargo names the Rust
+    # version it resolved for, and a lost rust-version line or a lost fallback
+    # setting would name the pin or no version.
+    lock_report="$(CARGO_HOME="$corpus_home" CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback \
+        cargo "+$pin" generate-lockfile --manifest-path "$corpus/generated/Cargo.toml" 2>&1)"
+    printf '%s\n' "$lock_report"
+    if ! printf '%s\n' "$lock_report" | grep -qF "latest Rust $minimum compatible versions"; then
+        echo "compat-check: the veh-cluster lockfile was not resolved for Rust $minimum." >&2
+        exit 1
+    fi
     CARGO_HOME="$corpus_home" \
         cargo "+$minimum" fetch --locked --manifest-path "$corpus/generated/Cargo.toml"
     echo "compat-check: $minimum, edition 2021 (the emitted veh-cluster crate, all features)"
