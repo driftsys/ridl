@@ -1630,6 +1630,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
         }
     }
     ///One occurrence of an event of interface `Cabin`.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum Event {
         ///An occurrence of event `warning`.
         Warning(::ridl_rt::sample::Occurrence<super::Warning>),

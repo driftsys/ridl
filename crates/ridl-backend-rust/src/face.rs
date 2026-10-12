@@ -109,7 +109,9 @@ use crate::descriptors::{
     single_param_type,
 };
 use crate::docs::{self, DocLines, DocParts, Links};
-use crate::{GenerateError, camel_of, declared, deprecated_attr, ident, snake_of, type_path};
+use crate::{
+    Ctx, GenerateError, camel_of, declared, deprecated_attr, derives, ident, snake_of, type_path,
+};
 use proc_macro2::{Ident, Literal, TokenStream};
 use quote::quote;
 use ridl_ir::codegen::v1;
@@ -133,6 +135,7 @@ use self::serve::serve;
 /// inline shape is skipped, for the same two reasons the descriptor layer
 /// gives.
 pub(crate) fn interface_items(
+    ctx: &Ctx,
     model: &v1::Model,
     links: &Links<'_>,
 ) -> Result<Vec<TokenStream>, GenerateError> {
@@ -141,7 +144,7 @@ pub(crate) fn interface_items(
         if declared_name(interface).is_none() {
             continue;
         }
-        if let Some(module) = one_interface(interface, links)? {
+        if let Some(module) = one_interface(ctx, interface, links)? {
             items.push(module);
         }
     }
@@ -223,6 +226,7 @@ fn allow_deprecated<'a>(mut members: impl Iterator<Item = &'a Member<'a>>) -> To
 /// so the crate compiles, and a consumer reaches the face as
 /// `veh::__ridl_package::climate`.
 pub(crate) fn one_interface(
+    ctx: &Ctx,
     interface: &v1::Interface,
     links: &Links<'_>,
 ) -> Result<Option<TokenStream>, GenerateError> {
@@ -237,6 +241,11 @@ pub(crate) fn one_interface(
     // the declared type directly (the face emits no induced argument struct).
     let mut signals: Vec<(Member, &str)> = Vec::new();
     let mut events: Vec<(Member, &str)> = Vec::new();
+    // The payload references of the events, kept beside their names because
+    // the `Event` enum's derive set follows what each payload type derives
+    // (driftsys/ridl#486), which is read from the declaration a reference
+    // resolves to.
+    let mut event_payloads: Vec<&v1::TypeRef> = Vec::new();
     let mut commands: Vec<Call> = Vec::new();
     let mut queries: Vec<Call> = Vec::new();
 
@@ -263,6 +272,13 @@ pub(crate) fn one_interface(
             }
             Some(v1::interaction::Shape::Event(event)) => {
                 events.push((member, payload_reference(event.payload.as_ref())));
+                if let Some(reference) = event
+                    .payload
+                    .as_ref()
+                    .and_then(|payload| payload.r#type.as_ref())
+                {
+                    event_payloads.push(reference);
+                }
             }
             Some(v1::interaction::Shape::Command(command)) => {
                 commands.push(Call {
@@ -307,7 +323,7 @@ pub(crate) fn one_interface(
         ));
     }
     if !events.is_empty() {
-        body.push(event_enum(iface_name, &events));
+        body.push(event_enum(ctx, iface_name, &events, &event_payloads));
     }
     body.extend(futures(
         &iface, iface_name, &payloads, &events, &commands, &queries,
@@ -881,7 +897,12 @@ fn call_method(call: &Call, kind: &str) -> TokenStream {
 }
 
 /// The occurrence enum one `next_event` routes into.
-fn event_enum(iface_name: &str, events: &[(Member, &str)]) -> TokenStream {
+fn event_enum(
+    ctx: &Ctx,
+    iface_name: &str,
+    events: &[(Member, &str)],
+    payloads: &[&v1::TypeRef],
+) -> TokenStream {
     let variants = events.iter().map(|(member, payload)| {
         let variant = ident(member.camel);
         let path = ty(payload);
@@ -892,8 +913,10 @@ fn event_enum(iface_name: &str, events: &[(Member, &str)]) -> TokenStream {
         }
     });
     let doc = format!("One occurrence of an event of interface `{iface_name}`.");
+    let derives = derives::event_derive_attr(ctx, payloads);
     quote! {
         #[doc = #doc]
+        #derives
         pub enum Event {
             #(#variants),*
         }

@@ -1116,3 +1116,45 @@ fn the_pipeline_generate_emits_no_face_module() {
         "the pipeline emits no publisher"
     );
 }
+
+/// The face of `event_derives.ridl`, whose two interfaces carry one event
+/// each: one payload that derives all four conditional traits and one that
+/// does not.
+fn events_face() -> String {
+    let package = ir::compile_fixture("event_derives.ridl");
+    generate_face_with(&package, &[WireEncoding::FlatBuffers])
+        .expect("generate_face_with")
+        .rust_source
+}
+
+#[test]
+fn the_event_enum_derives_the_full_set_when_every_payload_does() {
+    let d = dense(&module(&events_face(), "plain"));
+
+    assert!(
+        d.contains("#[derive(Debug,Clone,Copy,PartialEq,Eq)]pubenumEvent{"),
+        "an Event over a payload that derives all four takes all five",
+    );
+}
+
+#[test]
+fn the_event_enum_derives_debug_alone_when_a_payload_does_not() {
+    let d = dense(&module(&events_face(), "noted"));
+
+    // `Note` holds a string-backed named scalar, so it is not `Copy`.
+    assert!(
+        d.contains("#[derive(Debug)]pubenumEvent{"),
+        "an Event over a payload that is not Copy takes Debug alone",
+    );
+}
+
+#[test]
+fn the_event_enum_is_not_non_exhaustive() {
+    // The generated crate is regenerated with its consumer, so a new event
+    // arrives with a recompile and an exhaustive match failing is the signal
+    // that there is one to handle (driftsys/ridl#486).
+    assert!(
+        !dense(&events_face()).contains("#[non_exhaustive]pubenumEvent"),
+        "the Event enum is not non_exhaustive",
+    );
+}

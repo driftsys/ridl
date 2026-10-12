@@ -192,6 +192,20 @@ consumer side is:
   compile at all.)
 - **`Event`** — one enum per interface that declares an event, with one variant
   per event carrying `Occurrence<T>`, which `next_event` routes into by ordinal.
+  It derives `Debug` always, and `Clone`, `Copy`, `PartialEq` and `Eq` when
+  every payload it carries derives all four, which is the derive eligibility the
+  generated payload types already follow (`src/derives.rs`), read for the
+  payload types rather than restated: a variant holds `Occurrence<T>`, which
+  derives each of those five under the matching bound on `T`. A payload that is
+  not `Copy`, or not `Eq`, leaves the enum with `Debug` alone. The enum is
+  **not** `#[non_exhaustive]`: that attribute protects a consumer who upgrades a
+  dependency without recompiling against the new source, and the generated crate
+  is regenerated with its consumer, so a new event arrives with a recompile and
+  the exhaustive `match` failing is the signal that there is one to handle.
+  Marking it `#[non_exhaustive]` would replace that signal with a wildcard arm
+  that drops the new event. `ridl diff` calls adding an event a compatible
+  evolution of the interface, which is a statement about the wire and not about
+  a generated Rust `match` (driftsys/ridl#486).
 - **One future type per command and per query, `<Name>Call<'a, P>`**, and
   **`NextEvent<'a, P>`** when the interface declares an event.
 - **`blocking::Client<P>`**, under the emitted crate's `std` feature — the

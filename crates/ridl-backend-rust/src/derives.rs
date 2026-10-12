@@ -126,6 +126,35 @@ pub(crate) fn tuple_derive_attr(ctx: &Ctx, tuple: &v1::InducedTuple) -> TokenStr
     attr(tuple_eligibility(ctx, tuple, &mut seen), false)
 }
 
+/// The `#[derive(...)]` attribute for a per-interface `Event` enum
+/// (driftsys/ridl#486), over the payload types of the events it carries.
+///
+/// A variant holds `ridl_rt::sample::Occurrence<T>`, which derives `Debug`,
+/// `Clone`, `Copy`, `PartialEq` and `Eq`, each of them under the matching
+/// bound on `T`. So the enum takes `Debug` unconditionally, because every
+/// generated payload type derives it, and takes the other four when every
+/// payload it carries derives all four — which is this module's eligibility,
+/// read for the payload types rather than restated. A payload that is not
+/// `Copy`, or not `Eq`, leaves the enum with `Debug` alone.
+///
+/// The enum is not `#[non_exhaustive]`: the generated crate is regenerated
+/// with its consumer, so a new event arrives with a recompile, and the
+/// exhaustive `match` failing is the signal that there is one to handle.
+pub(crate) fn event_derive_attr(ctx: &Ctx, payloads: &[&v1::TypeRef]) -> TokenStream {
+    let eligibility = payloads.iter().fold(Eligibility::ALL, |acc, reference| {
+        let mut seen = HashSet::new();
+        acc.meet(type_ref_eligibility(ctx, reference, &mut seen))
+    });
+    let mut traits = vec![quote! { Debug }];
+    if eligibility.copy && eligibility.eq {
+        traits.push(quote! { Clone });
+        traits.push(quote! { Copy });
+        traits.push(quote! { PartialEq });
+        traits.push(quote! { Eq });
+    }
+    quote! { #[derive(#(#traits),*)] }
+}
+
 /// Assembles the attribute. The order is the one Rust is conventionally
 /// written in: `Debug`, then `Clone` with `Copy` beside it, then `PartialEq`
 /// with the equality pair after it, then the ordering pair. The three
