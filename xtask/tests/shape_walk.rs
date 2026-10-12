@@ -225,6 +225,22 @@ const ALLOWED: &[Allowed] = &[
               interface into a service's inline shape",
     },
     Allowed {
+        path: "crates/ridl-ir/src/class.rs",
+        lines: 1,
+        why: "the interaction-class check walks the codegen model's own \
+              `Model.interfaces` field, which the model lowering already \
+              filled from a `shapes()` walk; the package side of the same \
+              check is a `shapes()` walk",
+    },
+    Allowed {
+        path: "crates/ridl-ir/src/codegen/tests.rs",
+        lines: 2,
+        why: "one test fixture sets a package's named interfaces and reads \
+              the lowered model's own `Model.interfaces` field back, to pin \
+              that the model copies the interaction's family and an intent \
+              command's shape",
+    },
+    Allowed {
         path: "crates/ridl-ir/src/lib.rs",
         lines: 9,
         why: "the IR-side `shapes()` helper itself; `referenced_packages`, \
@@ -347,7 +363,7 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-diff/src/classify/classify_tests.rs",
-        lines: 7,
+        lines: 9,
         why: "tests mutating fixture interfaces to provoke each category",
     },
 ];

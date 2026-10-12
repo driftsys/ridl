@@ -158,9 +158,9 @@ here. This list is not a standing count of every crate the workspace holds — s
   `ridl_ir::codegen` holds the codegen request's deployment section:
   `lower_deployment` in `codegen/deployment.rs` is an emitter over the lowered
   system IR, and `codegen/bindings.rs` holds the table of transport binding
-  overheads, which has no row yet
-  ([the codegen plugin design](../design/codegen-plugins.md), "The deployment
-  section").
+  overheads, whose one row is the `websocket` binding of the frame specification
+  §11.1 ([the codegen plugin design](../design/codegen-plugins.md), "The
+  deployment section").
 
 - **`crates/ridl-backend-rust`** — one IR v2 package to
   `Generated { rust_source }`. Rust is built as a `quote` token stream and

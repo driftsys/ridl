@@ -277,11 +277,14 @@ mod tests {
                 }),
                 timing: None,
                 contracts,
+                family: ridl_ir::v2::Family::Dispatch as i32,
             }),
             None => v2::decl::Kind::CommandDef(v2::CommandDef {
                 params,
                 timing: None,
                 contracts,
+                family: ridl_ir::v2::Family::Dispatch as i32,
+                shape: ridl_ir::v2::Shape::None as i32,
             }),
         };
         v2::Package {

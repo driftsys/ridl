@@ -242,6 +242,7 @@ fn signal(payload: &str) -> v2::decl::Kind {
         declared_init: None,
         init: None,
         timing: Some(range_timing("10000", "500000")),
+        family: v2::Family::Dispatch as i32,
     })
 }
 
@@ -411,6 +412,8 @@ fn base_package(shape: &BaseShape) -> v2::Package {
                 observer_id: "Ctrl.apply.require[0]".to_string(),
             }],
             timing: Some(range_timing("1000", "2000")),
+            family: v2::Family::Dispatch as i32,
+            shape: v2::Shape::None as i32,
         }),
     ));
     let ctrl = v2::Interface {

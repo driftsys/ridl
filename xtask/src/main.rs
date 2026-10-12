@@ -64,3 +64,45 @@ fn main() -> ExitCode {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    /// The `ridl-rt` features that are not payload encodings.
+    const NON_ENCODING_FEATURES: [&str; 1] = ["std"];
+
+    /// `render_cargo_toml` writes each manifest encoding name as a feature of
+    /// `ridl-rt`, so the encoding names and the encoding features of
+    /// `ridl-rt` are the same set, apart from the listed exceptions. The test
+    /// lives here because it reads a sibling crate's manifest, which a
+    /// packaged crate does not have.
+    #[test]
+    fn ridl_rt_encoding_features_are_the_manifest_encoding_names() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let text = std::fs::read_to_string(root.join("crates/ridl-rt/Cargo.toml"))
+            .expect("ridl-rt's manifest is readable");
+        let manifest: toml::Table = text.parse().expect("ridl-rt's manifest parses");
+        let features = manifest["features"].as_table().expect("a [features] table");
+        let names = ridl_core::manifest::ENCODING_NAMES;
+        for exception in NON_ENCODING_FEATURES {
+            assert!(
+                features.contains_key(exception),
+                "the listed exception `{exception}` is no longer a ridl-rt feature"
+            );
+        }
+        for name in names {
+            assert!(
+                features.contains_key(name),
+                "ridl-rt has no feature `{name}`"
+            );
+        }
+        for feature in features.keys() {
+            assert!(
+                names.contains(&feature.as_str())
+                    || NON_ENCODING_FEATURES.contains(&feature.as_str()),
+                "ridl-rt feature `{feature}` is neither an encoding name nor a listed exception"
+            );
+        }
+    }
+}

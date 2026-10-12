@@ -91,6 +91,10 @@ jobs:
       # from its earlier run on main: a crates.io publish cannot be retracted,
       # only yanked, so the version number is spent either way.
       - run: just build
+      # `just build` runs the freeze check without `--release`. A crates.io
+      # publish cannot be retracted, so a surface in `required` that has no row
+      # must stop the publish here.
+      - run: just freeze-check --release
 
   publish:
     name: publish to crates.io

@@ -24,8 +24,11 @@ accessors. Their drift tests compare generated output with the committed files.
 `cargo xtask freeze check`, which `just freeze-check` runs, fails when a
 committed dump differs from a regeneration, when a line of a surface's dump at
 its baseline ref is missing, or when `cargo semver-checks` finds a Rust API
-break against the baseline. [`freeze/README.md`](../freeze/README.md) describes
-the dumps and the baseline table, and ADR-0029 is the policy.
+break against the baseline. It also fails when a row's surface is not in the
+`required` list of `surfaces.toml`, when `required` names an unknown surface or
+lists a name twice, and, with `--release`, when a name in `required` has no row.
+[`freeze/README.md`](../freeze/README.md) describes the dumps and the baseline
+table, and ADR-0029 is the policy.
 
 ## Run the eval tasks
 

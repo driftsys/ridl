@@ -426,7 +426,7 @@ satisfy the constant's own type constraints, and that is checked.
 
 The split between `signal` and `event` is the load-bearing distinction in ridl.
 It is a distinction in _meaning_, which the specification then turns into
-demands on a binding (see the note above — no binding exists yet):
+demands on a binding (see the note above — no binding is built yet):
 
 - A **signal** is continuous state. The latest sample is the truth, and an
   intermediate sample may be missed. The contract requires the channel never to
@@ -734,7 +734,7 @@ the fallible return as a `Result<T, E>`, so exhaustive handling is enforced by
 the compiler you already use. The other half is specified only — a binding is
 required to split the union mechanically, sending the success arm as the reply
 payload and mapping the error arm onto the transport's own error channel. No
-binding exists to do it.
+binding is built to do it.
 
 Two other failure kinds never appear in source at all, and both belong entirely
 to that unbuilt layer. **Contract violations** — a payload outside its declared
