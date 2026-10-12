@@ -442,6 +442,87 @@ impl ::core::default::Default for RawWheelSpanBurstsElement {
         }
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
+pub(crate) struct WheelDiagnosticsReadTicksParams {}
+#[allow(dead_code)]
+impl ::core::default::Default for WheelDiagnosticsReadTicksParams {
+    fn default() -> Self {
+        WheelDiagnosticsReadTicksParams {}
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
+pub(crate) struct WheelDiagnosticsReadSpanParams {}
+#[allow(dead_code)]
+impl ::core::default::Default for WheelDiagnosticsReadSpanParams {
+    fn default() -> Self {
+        WheelDiagnosticsReadSpanParams {}
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
+pub(crate) struct WheelDiagnosticsReadSpan {
+    pub min: RawTickCount,
+    pub max: RawTickCount,
+}
+#[allow(dead_code)]
+impl ::core::default::Default for WheelDiagnosticsReadSpan {
+    fn default() -> Self {
+        WheelDiagnosticsReadSpan {
+            min: <RawTickCount as ::core::default::Default>::default(),
+            max: <RawTickCount as ::core::default::Default>::default(),
+        }
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
+pub(crate) struct WheelDiagnosticsTickBoundsElement {
+    pub low: RawTickCount,
+    pub high: RawTickCount,
+}
+#[allow(dead_code)]
+impl ::core::default::Default for WheelDiagnosticsTickBoundsElement {
+    fn default() -> Self {
+        WheelDiagnosticsTickBoundsElement {
+            low: <RawTickCount as ::core::default::Default>::default(),
+            high: <RawTickCount as ::core::default::Default>::default(),
+        }
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct VehHvacCabinGetBoundsParams {}
+impl ::core::default::Default for VehHvacCabinGetBoundsParams {
+    fn default() -> Self {
+        VehHvacCabinGetBoundsParams {}
+    }
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct VehHvacCabinGetBounds {
+    pub min: crate::veh::common::Temperature,
+    pub max: crate::veh::common::Temperature,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct VehHvacCabinGetClimateParams {}
+impl ::core::default::Default for VehHvacCabinGetClimateParams {
+    fn default() -> Self {
+        VehHvacCabinGetClimateParams {}
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct VehHvacCabinGetCabinTempParams {}
+impl ::core::default::Default for VehHvacCabinGetCabinTempParams {
+    fn default() -> Self {
+        VehHvacCabinGetCabinTempParams {}
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct VehHvacCabinScaledFanParams {}
+impl ::core::default::Default for VehHvacCabinScaledFanParams {
+    fn default() -> Self {
+        VehHvacCabinScaledFanParams {}
+    }
+}
 /// A `DoorPayload` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
