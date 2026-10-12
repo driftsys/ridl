@@ -53,7 +53,8 @@
 //! declaration-start position emits **TYPL-304**, and a `require`/`ensure`
 //! attribute emits **TYPL-303** with the same recovery. In a `.ridl` parse durations and `@` are ordinary tokens,
 //! and a `ReservedWord` at declaration-start position — a word of the
-//! uxdl/rmdl/rsdl profiles — emits **RIDL-403** (ridl reference §16.4). In a
+//! rmdl/rsdl profiles, or a ridl clause word — emits **RIDL-403** (ridl
+//! reference §16.4). In a
 //! `.rsdl` parse a declaration of another profile at declaration-start position
 //! — a typl definition, `interface`, `service`, or any other `ReservedWord` —
 //! emits **RSDL-604** (rsdl reference §2), and an `internal` or `error`
