@@ -1269,6 +1269,35 @@ fn crate_name_replaces_dots_with_underscores() {
     );
 }
 
+/// (driftsys/ridl#760) An entry inside a workspace member gets the same crate
+/// name as an entry at the workspace root: `find_root` walks from the member
+/// up to the workspace, and a `[workspace]` manifest names no package, so the
+/// name falls back to `ridl_generated` rather than taking the member's. This
+/// is the path the root-package name now travels on `LoadedWorkspace`, so it
+/// is pinned here rather than left to the two cases either side of it.
+#[test]
+fn crate_name_of_a_member_entry_is_the_workspace_fallback() {
+    let out = tempfile::tempdir().expect("temp dir");
+    let run = ridlc::run_build(
+        Path::new("tests/corpus/workspace-two-members/member-common"),
+        out.path(),
+        &[Emit::Rust],
+        false.into(),
+    )
+    .expect("build runs");
+    assert!(
+        !run.has_error(),
+        "expected no error, got: {:?}",
+        run.diagnostics
+    );
+
+    let manifest = std::fs::read_to_string(out.path().join("Cargo.toml")).unwrap();
+    assert!(
+        manifest.contains("name = \"ridl_generated\""),
+        "manifest was:\n{manifest}"
+    );
+}
+
 /// A `[workspace]` manifest names no package, so the generated crate falls
 /// back to `ridl_generated`.
 #[test]
