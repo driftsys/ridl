@@ -72,9 +72,18 @@ is natively that. The other four each lose a normative property:
 - **`fixed`** — a provisioning-time constant becomes a runtime getter call.
 
 The deeper mismatch reaches `query` as well: §3.1's implicit envelope
-(sender-stamped timestamp, per-channel monotonic sequence number) is what TTL,
-debounce, freshness, duplicate suppression, loss detection, E2E protection, and
+(sender-stamped timestamp, monotonic sequence number) is what TTL, debounce,
+freshness, duplicate suppression, loss detection, E2E protection, and
 deterministic replay all run on. Neither proto3 nor FlatBuffers has an envelope.
+
+> **Note, 2026-10-12 (driftsys/ridl#548).** The context above said "per-channel
+> monotonic sequence number". The scope of `seq` is per channel on a signal and
+> on an event only; a caller has one counter over every call it sends on every
+> channel, so a call's `seq` is not per channel
+> ([frame specification](../specification/frame-specification.md) §7). The word
+> is dropped above. The decision itself does not turn on the scope of the
+> counter, only on the absence of an envelope in proto3 and FlatBuffers, so this
+> is a correction to context text, not a change of decision.
 
 SOME/IP and DDS map cleanly in ridl Appendix B because each has a native
 primitive for continuous state with a retained current value — SOME/IP fields

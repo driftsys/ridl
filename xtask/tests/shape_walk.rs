@@ -234,11 +234,14 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-ir/src/codegen/tests.rs",
-        lines: 2,
+        lines: 3,
         why: "one test fixture sets a package's named interfaces and reads \
               the lowered model's own `Model.interfaces` field back, to pin \
               that the model copies the interaction's family and an intent \
-              command's shape",
+              command's shape; a third walks the same fixture's interfaces to \
+              retype one member's payload, so that a `fixed` member with an \
+              unbounded payload can be built from the fixture the budget \
+              tests already use",
     },
     Allowed {
         path: "crates/ridl-ir/src/lib.rs",

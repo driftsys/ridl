@@ -911,13 +911,6 @@ impl<'a> Lowering<'a> {
                     .as_ref()
                     .and_then(named_type)
                     .map(|reference| self.payload(home, reference));
-                let sizes = fixed.payload.as_ref().map_or_else(absent_sizes, |ty| {
-                    self.sizes(home, &PayloadShape::Field(ty), named_type(ty))
-                });
-                let text = fixed
-                    .payload
-                    .as_ref()
-                    .map_or_else(|| "no payload".to_string(), field_text);
                 (
                     v1::Kind::Fixed,
                     None,
@@ -925,7 +918,12 @@ impl<'a> Lowering<'a> {
                         payload,
                         named,
                     })),
-                    Some(vec![("payload", text, Some(sizes))]),
+                    // A fixed is provisioned, never in flight, so it reserves
+                    // nothing and adds nothing to the table budget, whatever
+                    // its payload. The runtime's `Sizes` row carries 0 for a
+                    // fixed for the same reason, and the two sums describe
+                    // the same interface (driftsys/ridl#852).
+                    Some(Vec::new()),
                     // A fixed is family-neutral (ADR-0012 decision 4), so the
                     // model carries the zero value for it.
                     v2::Family::Dispatch as i32,

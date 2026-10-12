@@ -241,6 +241,19 @@ differing only in the list have the same hash. The rule is
   a unit with a snapshot in the replaced baseline is read, and one that cannot
   be read or parsed stops the publication, exit 2, naming the file and the line;
   the file of a unit with no such snapshot is not read.
+- **A chain is carried only when its head describes the snapshots beside it.**
+  Before any of the rules above carries a file, its first line is compared with
+  the hash recomputed from the replaced baseline's own snapshots of the unit.
+  When the two differ, the file does not describe the baseline it sits in — a
+  partially hand-edited baseline, for instance, where a unit's root package
+  snapshot was deleted and a sub-package snapshot left behind — and the chain
+  restarts from the one new hash. Restarting is the safe direction: the cost is
+  that a toolchain change that moves the hash restarts every chain once, and the
+  gain is that no hash is carried past a breaking change the edit hid. This is a
+  check on the pair, not a recorded value, so the rule above stands: the hashes
+  that are carried are still read from the file and never recomputed.
+  `ridl build` applies the same check to the published baseline it reads
+  (driftsys/ridl#808).
 - **The verdict is per unit.** `ridl_diff::unit_verdict` takes the maximum
   verdict over the changes of a `DiffReport` that concern the unit: a change in
   one of the unit's source packages, on either side, or in a declaration that an
@@ -264,16 +277,18 @@ differing only in the list have the same hash. The rule is
   verdict from the baseline to the tree is `Compatible` or `Identical`, or when
   the current catalog's hash is the file's first hash. The list is empty for a
   `Breaking` verdict when the current hash is not the file's first hash, for a
-  workspace with no `.ridl/baseline/` directory or one holding no `.ir.json`
-  snapshot, for a unit with no package in the baseline (a file left under its
-  name is not read), and for a unit with no file. A tree whose catalog changed
-  and that is breaking relative to the baseline is built with an empty list, and
-  the recorded chain is not changed until the next publication. A baseline with
-  at least one `<unit>.catalogs` file that cannot be loaded, and a file that
-  cannot be read, are exit 2; a baseline with no such file is not loaded. A
-  compile with an error diagnostic gets no list, and its baseline is not read.
-  When the workspace names `[imports]` and a list is computed, the build prints
-  a note that a unit's list covers the workspace's own packages only.
+  file whose first hash is not the hash recomputed from the baseline's own
+  snapshots of the unit, for a workspace with no `.ridl/baseline/` directory or
+  one holding no `.ir.json` snapshot, for a unit with no package in the baseline
+  (a file left under its name is not read), and for a unit with no file. A tree
+  whose catalog changed and that is breaking relative to the baseline is built
+  with an empty list, and the recorded chain is not changed until the next
+  publication. A baseline with at least one `<unit>.catalogs` file that cannot
+  be loaded, and a file that cannot be read, are exit 2; a baseline with no such
+  file is not loaded. A compile with an error diagnostic gets no list, and its
+  baseline is not read. When the workspace names `[imports]` and a list is
+  computed, the build prints a note that a unit's list covers the workspace's
+  own packages only.
 - **No runtime reads the list.** The generated face compares only its own
   `CATALOG` (ADR-0023 decision 8), and no runtime in this workspace speaks the
   frame, so nothing here accepts an `attach` on the strength of the list. The
@@ -408,18 +423,17 @@ table: `ridl_rt::contract::reservation::<X, E>()` for a member `X`, and
 states its sums per wire encoding, so a plugin reads them without walking the
 members itself.
 
-The two sides differ for a `fixed` member. The runtime row of a `fixed` is `0`,
-because a fixed value is never in flight, while the model's reservation counts
-the fixed member's payload, and so does its table budget. For an interface with
-a `fixed` member the model's numbers are therefore larger than the runtime's by
-the size of each fixed payload. For every other kind of member the two sides
-agree only where the runtime holds the same per-payload sizes the model holds.
-Today the Rust backend emits a `Sizes<E>` table for FlatBuffers alone, so only
-that column has a runtime counterpart; the model's proto3 column can carry a
-byte count with no table to compare it with. The catalog descriptor this record
-describes is a different artifact, and it does write a proto3 row (`lower.rs` in
+The two sides agree for a `fixed` member: the runtime row of a `fixed` is `0`,
+because a fixed value is never in flight, and the model's reservation and table
+budget count it as `0` for the same reason, whatever its payload
+(driftsys/ridl#852). For every other kind of member the two sides agree only
+where the runtime holds the same per-payload sizes the model holds. Today the
+Rust backend emits a `Sizes<E>` table for FlatBuffers alone, so only that column
+has a runtime counterpart; the model's proto3 column can carry a byte count with
+no table to compare it with. The catalog descriptor this record describes is a
+different artifact, and it does write a proto3 row (`lower.rs` in
 `ridl-descriptor`). The FlatBuffers column is the one where the runtime table
-and the model read the same number for a member that is not a `fixed`.
+and the model read the same number for a member.
 
 ## Verification before access, and `ridl describe`
 

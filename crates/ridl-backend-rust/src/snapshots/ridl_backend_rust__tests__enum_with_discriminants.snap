@@ -22,7 +22,7 @@ impl ::core::convert::TryFrom<::core::primitive::i64> for GearPosition {
             3 => ::core::result::Result::Ok(Self::Neutral),
             _ => {
                 ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "GearPosition",
+                    type_name: ::core::option::Option::Some("GearPosition"),
                     rule: ::ridl_rt::payload::Rule::Variant,
                 })
             }

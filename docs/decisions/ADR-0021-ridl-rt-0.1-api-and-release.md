@@ -153,6 +153,10 @@ breaking change under decision 10, to be released with the workspace in
 driftsys/ridl#801; the as-built record is
 [the `ridl-rt` design record](../design/ridl-rt.md).
 
+Amended 2026-10-11 by [ADR-0029](ADR-0029-stability-policy.md): the public API
+of `ridl-rt` and the minimum Rust version of decision 10 are frozen surfaces
+from 0.10.0, checked by `just freeze-check`.
+
 **Amendment (2026-10-12) — decision 11: `port::Encoded` forwards for `&P`.**
 `Encoded` is also implemented for a shared reference, in the same form as the
 `&mut P` impl. This is a breaking change under decision 10 for a crate that
@@ -160,9 +164,15 @@ implemented `Encoded` for a shared reference to a type that itself implements
 `Encoded`, or to a generic type that can. It is tracked as driftsys/ridl#855 and
 is made before 0.10.0 freezes the runtime crates.
 
-Amended 2026-10-11 by [ADR-0029](ADR-0029-stability-policy.md): the public API
-of `ridl-rt` and the minimum Rust version of decision 10 are frozen surfaces
-from 0.10.0, checked by `just freeze-check`.
+**Amendment (2026-10-12) — decision 9: a violation a peer reports carries no
+type name.** `payload::Violation.type_name` becomes `Option<&'static str>`:
+`Some` when the generated code detects the violation locally, `None` when a peer
+reports it, because the frame carries only the `Rule` of a
+`contract(InvalidValue)` outcome (the frame specification §9.6) and a `no_std`
+runtime cannot make a `&'static str` from received bytes. Under decision 10 the
+change is breaking: `Violation` is a struct whose fields are all public. A
+`Rule` variant is added only together with a new frame version, although `Rule`
+is `#[non_exhaustive]`. driftsys/ridl#350 item 12.
 
 ## Context
 
@@ -511,6 +521,13 @@ trusted with no `unsafe` and no second verification pass.
    requirement and does not change the exhaustive `Contract` or `CallError`
    vocabularies. `Step` remains the rule for a failed quantization check; NaN
    membership in a declared range is `Range` (typl §4.3 and §5.5).
+
+   **Amended (2026-10-12, driftsys/ridl#350 item 12).** A `Rule` variant is
+   added only together with a new frame version, because a receiver cannot
+   construct a variant it does not know (the frame specification §9.6).
+   `#[non_exhaustive]` stays, so that a match outside the crate keeps its
+   fallback arm. `Violation.type_name` is `Option<&'static str>`, `None` for a
+   violation a peer reports.
 
 10. **A breaking `ridl-rt` change is a 0.x minor release, and a public struct
     whose fields are all public and that carries no `#[non_exhaustive]` cannot
@@ -1253,6 +1270,10 @@ trusted with no `unsafe` and no second verification pass.
 | `crates/ridl-rt/src/lib.rs`, `crates/ridl-rt/README.md`                                          | the crate documentation and the README name the `trace` module (decision 21)                                                                                                                                                                                                                                                     |
 | [the `ridl-rt` design record](../design/ridl-rt.md)                                              | the `trace` row of the module table lists `Propagation`, `AlreadySet`, `set_propagation` and `propagation` (decision 22)                                                                                                                                                                                                         |
 | `crates/ridl-rt/src/lib.rs`, `crates/ridl-rt/README.md`, `crates/ridl-rt/Cargo.toml`             | the crate documentation names the `trace` hook and no longer calls `task` the one module that links the standard library; the README and the feature comment name the hook (decision 22)                                                                                                                                         |
+| [the `ridl-rt` design record](../design/ridl-rt.md), the `payload` item list                     | `Violation.type_name` is `Option<&'static str>` (decision 9's 2026-10-12 amendment)                                                                                                                                                                                                                                              |
+| [the frame specification](../specification/frame-specification.md) §2 and §9.6                   | a violation a peer reports carries the `Rule` alone and has no type name (decision 9's 2026-10-12 amendment)                                                                                                                                                                                                                     |
+| [the `ridl-rt` by example technote](../technotes/ridl-rt-by-example.md)                          | a violation the generated code detects names its type; one a peer reports has `type_name` `None` (decision 9's 2026-10-12 amendment)                                                                                                                                                                                             |
+| `crates/ridl-rt/src/payload.rs`                                                                  | the `Violation` and `Rule` docs state that `type_name` is `Some` for a local detection and `None` for a peer report, and that a `Rule` variant is added only together with a new frame version (decision 9's 2026-10-12 amendment)                                                                                               |
 
 ## References
 
