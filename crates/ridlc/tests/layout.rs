@@ -448,7 +448,11 @@ fn the_websocket_row_is_derived_from_the_frame_specification_header_table() {
         .find(|binding| binding.name == "websocket")
         .expect("a websocket row");
     assert_eq!(row.envelope_bytes, Some(envelope), "{sizes:?}");
-    assert_eq!(row.frame_header_max_bytes, Some(largest - envelope), "{sizes:?}");
+    assert_eq!(
+        row.frame_header_max_bytes,
+        Some(largest - envelope),
+        "{sizes:?}"
+    );
 }
 
 /// The proto3 size states of one payload: `proto3` bounded at `bound`, or
