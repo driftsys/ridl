@@ -1029,6 +1029,23 @@ caller-supplied buffer variant of each method, which is the shape `dispatch`
 already has, or a runtime that hands the face a buffer it owns. Neither is
 built.
 
+**A bounded collection is a plain field, not a newtype.** A field declared
+`labels : [Label; 1..16]` is emitted as a `Vec`, so a value that breaks the
+declared bound is representable; the generated `encode` refuses it with
+`Rule::Length`, the same rule the verifier reports, so it does not reach the
+wire (driftsys/ridl#829). Making it unrepresentable instead, by emitting a
+newtype with a checked constructor, is declined (driftsys/ridl#889). A named
+constrained type — `type Serial : string [4..8]` — is a newtype because the
+author named it, and an author who wants a collection checked at construction
+declares a named type for it. The bound of `[Label; 1..16]` belongs to the
+field, and no type carries it, so the newtype would need a name this emitter
+invented: one the author never wrote, cannot change, and would meet in its own
+code, its rustdoc, every diagnostic and the frozen surface.
+[ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md)
+pins the name transform so that this emitter does not invent names. The cost
+accepted is that such a value is refused when it is encoded rather than when it
+is built.
+
 ## What is provisional
 
 | Placeholder                                                                                            | Replaced by                                  |
