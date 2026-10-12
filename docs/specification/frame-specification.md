@@ -6,7 +6,7 @@ kinds, stated once and independently of any transport. A **binding** carries
 this frame over one transport; a **runtime** presents what crosses through the
 ports of `ridl-rt`. This document is what both are written from.
 
-Version: 0.2.0 — Draft
+Version: 0.2.0
 
 > **Provenance.** This document is the frame specification (driftsys/ridl#257).
 > It writes down what
