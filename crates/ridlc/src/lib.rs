@@ -181,6 +181,9 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
             units: BTreeMap::new(),
             // No manifest: no root package name.
             root_package: None,
+            // No manifest: no `[imports]` and no remote unit.
+            imports: BTreeMap::new(),
+            remote_units: BTreeMap::new(),
         },
     );
     // The callers, `check_source` and `compile`, report their diagnostics, so
@@ -1925,6 +1928,8 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         report_scope,
         units: _,
         root_package,
+        imports: _,
+        remote_units: _,
     } = loaded;
 
     let packages = workspace.packages(db).clone();

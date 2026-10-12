@@ -26,6 +26,7 @@ use crate::diag::{DiagCode, Diagnostic, FileId, Severity, Span};
 use crate::lock::{LockEntry, Lockfile};
 use crate::tree_hash::{TreeHashError, tree_hash};
 use crate::workspace::ImportUnion;
+pub use crate::workspace::MaterializedUnit;
 
 /// A remote fetch failure: the human-readable reason. It carries no source span
 /// because it concerns a URL, not a byte range.
@@ -153,15 +154,6 @@ pub fn materialize_imports(
         }
     }
     (units, regenerated, diagnostics)
-}
-
-/// One remote unit the read path found: its URL, the directory that holds its
-/// tree, and the `tree` hash the directory was verified against.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MaterializedUnit {
-    pub url: String,
-    pub dir: PathBuf,
-    pub tree: String,
 }
 
 /// The cache-or-fetch step for one URL: the verified unit and the lock entry
@@ -329,8 +321,9 @@ fn verify_tree(
 }
 
 /// Builds a detached error [`Diagnostic`] for a URL-scoped problem: no source
-/// span, since a fetch or lockfile problem has no meaningful byte range.
-fn detached(code: DiagCode, message: String) -> Diagnostic {
+/// span, since a fetch, lockfile or remote-unit problem has no meaningful
+/// byte range. The loader raises MANI-105 and MANI-106 through it.
+pub(crate) fn detached(code: DiagCode, message: String) -> Diagnostic {
     Diagnostic {
         code,
         severity: Severity::Error,
