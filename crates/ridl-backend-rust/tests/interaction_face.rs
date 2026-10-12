@@ -3750,3 +3750,351 @@ fn a_second_codec_is_read_from_the_port_type() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// The encode-side bound of a bounded collection (driftsys/ridl#829).
+// ---------------------------------------------------------------------------
+//
+// A bounded list and a bounded map are plain public fields of the generated
+// struct, so a value longer than the declared bound is representable. The
+// generated `encode` refuses such a value and reports the rule the generated
+// `verify` reports for the same collection, and each face path that encodes a
+// payload returns that violation as the typed error it already returns.
+
+/// The violation the generated `encode` reports for an over-long `Log`.
+const LOG_LENGTH: ridl_rt::payload::Violation = ridl_rt::payload::Violation {
+    type_name: "Log",
+    rule: ridl_rt::payload::Rule::Length,
+};
+
+/// The violation the generated `encode` reports for an over-long `Tally`.
+const TALLY_LENGTH: ridl_rt::payload::Violation = ridl_rt::payload::Violation {
+    type_name: "Tally",
+    rule: ridl_rt::payload::Rule::Length,
+};
+
+/// `Log`'s encoded maximum: the size of every buffer the face gives the
+/// encoder for this payload.
+const LOG_MAX: usize =
+    <generated::Log as ridl_rt::payload::Payload<ridl_rt::encoding::FlatBuffers>>::MAX_SIZE;
+
+/// `ZoneLog`'s claim-buffer maximum, the buffer size `dispatch` is given.
+const ZONE_LOG_MAX: usize = <generated::ZoneLog as ridl_rt::contract::Sizes<
+    ridl_rt::encoding::FlatBuffers,
+>>::MAX_BUFFER_SIZE;
+
+fn tag(text: &str) -> generated::Tag {
+    generated::Tag::new(text.to_string()).expect("a tag within its length bounds")
+}
+
+fn samples(count: usize) -> Vec<generated::Window> {
+    (0..count)
+        .map(|_| generated::Window::new_unchecked(1))
+        .collect()
+}
+
+/// A legal `Log`: the list at its lower bound.
+fn legal_log() -> generated::Log {
+    generated::Log {
+        samples: samples(2),
+        note: None,
+    }
+}
+
+/// A `Log` whose list holds one element more than its bound of 8, and whose
+/// encoding is inside `MAX_SIZE`: `note` is absent, and `MAX_SIZE` provisions
+/// a sixteen-character string for it.
+fn over_long_list_inside_max_size() -> generated::Log {
+    generated::Log {
+        samples: samples(9),
+        note: None,
+    }
+}
+
+/// A `Log` whose list is long enough that its encoding cannot fit `MAX_SIZE`.
+fn over_long_list_beyond_max_size() -> generated::Log {
+    generated::Log {
+        samples: samples(LOG_MAX * 4),
+        note: None,
+    }
+}
+
+/// A legal `Tally`: the map empty.
+fn legal_tally() -> generated::Tally {
+    generated::Tally {
+        entries: Vec::new(),
+    }
+}
+
+/// A `Tally` whose map holds one entry more than its bound of 3, with keys
+/// short enough that its encoding is inside `MAX_SIZE`, which provisions
+/// three sixteen-character keys.
+fn over_long_map_inside_max_size() -> generated::Tally {
+    generated::Tally {
+        entries: ["a", "b", "c", "d"]
+            .into_iter()
+            .map(|key| (tag(key), generated::Level::new_unchecked(1)))
+            .collect(),
+    }
+}
+
+#[test]
+fn encode_refuses_an_over_long_bounded_list() {
+    use ridl_rt::payload::{EncodeError, Ref};
+
+    let mut buf = [0u8; LOG_MAX];
+    assert!(
+        Ref::<generated::Log, ridl_rt::encoding::FlatBuffers>::encode(&legal_log(), &mut buf)
+            .is_ok(),
+        "a value within the bound encodes"
+    );
+    assert_eq!(
+        Ref::<generated::Log, ridl_rt::encoding::FlatBuffers>::encode(
+            &over_long_list_inside_max_size(),
+            &mut buf,
+        )
+        .err(),
+        Some(EncodeError::Contract(LOG_LENGTH)),
+        "an over-long list whose encoding fits the buffer is still refused"
+    );
+    assert_eq!(
+        Ref::<generated::Log, ridl_rt::encoding::FlatBuffers>::encode(
+            &over_long_list_beyond_max_size(),
+            &mut buf,
+        )
+        .err(),
+        Some(EncodeError::Contract(LOG_LENGTH)),
+        "the bound is checked before the buffer runs out"
+    );
+}
+
+#[test]
+fn encode_refuses_an_over_long_bounded_map() {
+    use ridl_rt::payload::{EncodeError, Ref};
+
+    let mut buf = [0u8; <generated::Tally as ridl_rt::payload::Payload<
+        ridl_rt::encoding::FlatBuffers,
+    >>::MAX_SIZE];
+    assert!(
+        Ref::<generated::Tally, ridl_rt::encoding::FlatBuffers>::encode(&legal_tally(), &mut buf)
+            .is_ok(),
+        "a value within the bound encodes"
+    );
+    assert_eq!(
+        Ref::<generated::Tally, ridl_rt::encoding::FlatBuffers>::encode(
+            &over_long_map_inside_max_size(),
+            &mut buf,
+        )
+        .err(),
+        Some(EncodeError::Contract(TALLY_LENGTH)),
+        "an over-long map whose encoding fits the buffer is still refused"
+    );
+}
+
+/// A provider whose replies are test-controlled, so a test can make it hand
+/// the face a bounded collection longer than its declared bound.
+struct LogProvider {
+    log: generated::Log,
+    tally: generated::Tally,
+    recorded: usize,
+}
+
+impl LogProvider {
+    fn new() -> Self {
+        LogProvider {
+            log: legal_log(),
+            tally: legal_tally(),
+            recorded: 0,
+        }
+    }
+}
+
+impl generated::zone_log::Provider for LogProvider {
+    fn record(&mut self, _entry: &generated::Log) {
+        self.recorded += 1;
+    }
+
+    fn recall(&mut self, _window: &generated::Window) -> generated::Log {
+        self.log.clone()
+    }
+
+    fn tally(&mut self, _window: &generated::Window) -> generated::Tally {
+        self.tally.clone()
+    }
+}
+
+/// Sends one of `ZoneLog`'s queries through the raw port, bypassing the
+/// generated client, so that `dispatch` can be called directly with a buffer
+/// the test owns. The client's future holds the port for as long as it lives.
+fn send_zone_log_query_raw(port: &mut Loopback, ordinal: Ordinal) -> Correlation {
+    use ridl_rt::payload::Ref;
+
+    let window = generated::Window::new_unchecked(10);
+    let mut buf = [0u8; ZONE_LOG_MAX];
+    let bytes = Ref::<generated::Window, ridl_rt::encoding::FlatBuffers>::encode(&window, &mut buf)
+        .expect("encode")
+        .bytes();
+    port.query(
+        <generated::ZoneLog as ridl_rt::contract::Interface>::NUMBER,
+        ordinal,
+        bytes,
+        None,
+    )
+    .expect("send")
+}
+
+/// The provider replies with an over-long collection whose encoding fits
+/// inside `MAX_SIZE`, so the buffer's size cannot be what refuses it.
+///
+/// The dispatch buffer is the discriminating observation. A FlatBuffers
+/// builder fills a buffer from its end, and `dispatch` reads the claim's
+/// argument bytes into the front of the same buffer, so the buffer's tail is
+/// written only by the reply's encoder. The control run with a legal reply
+/// leaves that tail non-zero; the over-long reply must leave it as it was.
+/// The settlement alone does not separate the two, because the receiver
+/// checks the same bound and reports the same violation for a value that was
+/// sent.
+#[test]
+fn a_query_reply_with_an_over_long_collection_inside_max_size_is_never_encoded() {
+    use ridl_rt::contract::Interaction;
+
+    /// The bytes at the end of the dispatch buffer, which only the reply's
+    /// encoder writes.
+    fn tail(buf: &[u8]) -> &[u8] {
+        &buf[buf.len() - 8..]
+    }
+
+    let recall = <generated::ZoneLogRecall as Interaction>::MEMBER.ordinal;
+    let tally = <generated::ZoneLogTally as Interaction>::MEMBER.ordinal;
+
+    // The control: a legal reply is encoded, and the encoding is in the
+    // buffer's tail.
+    for ordinal in [recall, tally] {
+        let mut port = loopback();
+        send_zone_log_query_raw(&mut port, ordinal);
+        let mut provider = LogProvider::new();
+        let mut buf = [0u8; ZONE_LOG_MAX];
+        assert_eq!(
+            generated::zone_log::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound()),
+            Ok(1),
+        );
+        assert!(
+            tail(&buf).iter().any(|byte| *byte != 0),
+            "a legal reply is encoded into the buffer's tail"
+        );
+    }
+
+    for (ordinal, provider, violation) in [
+        (
+            recall,
+            LogProvider {
+                log: over_long_list_inside_max_size(),
+                ..LogProvider::new()
+            },
+            LOG_LENGTH,
+        ),
+        (
+            tally,
+            LogProvider {
+                tally: over_long_map_inside_max_size(),
+                ..LogProvider::new()
+            },
+            TALLY_LENGTH,
+        ),
+    ] {
+        let mut port = loopback();
+        let correlation = send_zone_log_query_raw(&mut port, ordinal);
+        let mut provider = provider;
+        let mut buf = [0u8; ZONE_LOG_MAX];
+        assert_eq!(
+            generated::zone_log::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound()),
+            Ok(1),
+            "the claim was settled"
+        );
+        assert!(
+            tail(&buf).iter().all(|byte| *byte == 0),
+            "the encoder wrote the over-long value into the dispatch buffer"
+        );
+
+        let mut out = [0u8; ZONE_LOG_MAX];
+        assert_eq!(
+            port.reply(correlation, &mut out).expect("read"),
+            Some(Err(CallError::Contract(Contract::InvalidValue(violation)))),
+        );
+    }
+}
+
+/// The same reply, long enough that its encoding cannot fit `MAX_SIZE`, over
+/// `serve` rather than over `dispatch` directly. Before the encode-side check
+/// this reached the face's `unreachable!` and panicked the provider.
+#[test]
+fn a_query_reply_with_an_over_long_list_beyond_max_size_settles_invalid_value() {
+    let mut rt = loopback();
+    let handler = rt.handler();
+    let mut provider = LogProvider {
+        log: over_long_list_beyond_max_size(),
+        ..LogProvider::new()
+    };
+    let mut serve = generated::zone_log::serve(handler, &mut provider);
+
+    let mut client = generated::zone_log::Client::new(&mut rt);
+    let mut call = client.recall(generated::Window::new_unchecked(10));
+    assert!(poll_once(&mut call).is_pending());
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!(
+        poll_once(&mut call),
+        Poll::Ready(Err(ClientError::Call(CallError::Contract(
+            Contract::InvalidValue(LOG_LENGTH)
+        )))),
+    );
+}
+
+/// The publisher's signal setter returns the violation as its own error type
+/// instead of panicking, and stages nothing.
+#[test]
+fn a_signal_set_with_an_over_long_collection_returns_invalid_value() {
+    let mut port = loopback();
+    let mut publisher = generated::zone_log::Publisher::new(&mut port);
+    for value in [
+        over_long_list_inside_max_size(),
+        over_long_list_beyond_max_size(),
+    ] {
+        assert_eq!(
+            publisher.recent(value),
+            Err(ridl_rt::port::WriteError::Contract(Contract::InvalidValue(
+                LOG_LENGTH
+            ))),
+        );
+    }
+    assert_eq!(
+        publisher.recent(legal_log()),
+        Ok(()),
+        "a legal value stages"
+    );
+}
+
+/// A client's command argument takes the same path through the internal send:
+/// the violation is a send failure, and nothing is sent.
+#[test]
+fn a_command_argument_with_an_over_long_collection_is_a_send_failure() {
+    let mut port = loopback();
+    {
+        let mut client = generated::zone_log::Client::new(&mut port);
+        let mut call = client.record(over_long_list_inside_max_size());
+        assert_eq!(
+            poll_once(&mut call),
+            Poll::Ready(Err(ClientError::Send(SendError::Contract(
+                Contract::InvalidValue(LOG_LENGTH)
+            )))),
+        );
+    }
+
+    let mut provider = LogProvider::new();
+    let mut buf = [0u8; ZONE_LOG_MAX];
+    assert_eq!(
+        generated::zone_log::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound()),
+        Ok(0),
+        "nothing was sent to the port",
+    );
+    assert_eq!(provider.recorded, 0);
+}

@@ -78,6 +78,11 @@ fn send(
         quote! { buf },
         "the argument buffer",
         &port,
+        quote! {
+            ::core::result::Result::Err(::ridl_rt::port::SendError::Contract(
+                ::ridl_rt::error::Contract::InvalidValue(__violation),
+            ))
+        },
     );
     // The send is an internal, so it carries no doc. It sends the call once
     // and returns the correlation of its outcome, or the send's failure. A
@@ -105,7 +110,7 @@ fn send(
                 )
             })?;
             #buffer
-            let bytes = #encode;
+            #encode
             __port
                 .#port_method(#number, #ordinal, bytes, ::core::option::Option::None)
                 .map(#correlation)

@@ -4,7 +4,8 @@
 //! described in the documentation of the parent module, `face.rs`.
 
 use super::{
-    Call, allow_deprecated, decode_args, encode_into, encoding_bounds, ident, interface_number,
+    Call, allow_deprecated, decode_args, encode_into_settled, encoding_bounds, ident,
+    interface_number,
 };
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
@@ -70,12 +71,21 @@ pub(super) fn dispatch(
         let method = &member.method;
         let descriptor = &member.descriptor;
         let decode = decode_args(call.arg_type, &port);
-        let encode = encode_into(
+        let encode = encode_into_settled(
             call.reply_type.unwrap_or(call.arg_type),
             quote! { &reply },
             quote! { buf },
             "the dispatch buffer",
             &port,
+            quote! { h.settle(claim.id, Ok(bytes)) },
+            quote! {
+                h.settle(
+                    claim.id,
+                    Err(::ridl_rt::error::CallError::Contract(
+                        ::ridl_rt::error::Contract::InvalidValue(__violation),
+                    )),
+                )
+            },
         );
         quote! {
             #ordinal => {
@@ -102,10 +112,7 @@ pub(super) fn dispatch(
                                             ::ridl_rt::error::Contract::ContractBroken,
                                         )),
                                     ),
-                                    Ok(()) => {
-                                        let bytes = #encode;
-                                        h.settle(claim.id, Ok(bytes))
-                                    }
+                                    Ok(()) => #encode,
                                 }
                             }
                         }

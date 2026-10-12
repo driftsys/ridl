@@ -526,9 +526,16 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             P::Encoding,
         >::encode(__arg, buf) {
             Ok(encoded) => encoded.bytes(),
+            Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::port::SendError::Contract(
+                        ::ridl_rt::error::Contract::InvalidValue(__violation),
+                    ),
+                );
+            }
             Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                 unreachable!(
-                    "encoding `veh.common.LeverCmd` needs {} bytes and the argument buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                    "encoding `veh.common.LeverCmd` needs {} bytes and the argument buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                     needed, available
                 )
             }
@@ -599,9 +606,16 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                 W::Encoding,
             >::encode(&value, buf) {
                 Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::port::WriteError::Contract(
+                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                        ),
+                    );
+                }
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `veh.common.Engaged` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `veh.common.Engaged` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -634,9 +648,16 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                 W::Encoding,
             >::encode(&value, buf) {
                 Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::port::WriteError::Contract(
+                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                        ),
+                    );
+                }
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `veh.common.Speed` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `veh.common.Speed` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -1383,9 +1404,16 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                 W::Encoding,
             >::encode(&value, buf) {
                 Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::port::WriteError::Contract(
+                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                        ),
+                    );
+                }
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `veh.common.Engaged` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `veh.common.Engaged` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }

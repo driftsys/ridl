@@ -935,6 +935,11 @@ fn publisher(
             quote! { buf },
             "the payload buffer",
             &port,
+            quote! {
+                ::core::result::Result::Err(::ridl_rt::port::WriteError::Contract(
+                    ::ridl_rt::error::Contract::InvalidValue(__violation),
+                ))
+            },
         );
         let set_doc = format!(
             "Stages a new value for signal `{}`. It is published by `commit`.",
@@ -948,7 +953,7 @@ fn publisher(
                 value: #path,
             ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
                 #buffer
-                let bytes = #encode;
+                #encode
                 self.port.set(#number, #ordinal, bytes)
             }
         });
@@ -965,6 +970,11 @@ fn publisher(
             quote! { buf },
             "the payload buffer",
             &port,
+            quote! {
+                ::core::result::Result::Err(::ridl_rt::port::RaiseError::Contract(
+                    ::ridl_rt::error::Contract::InvalidValue(__violation),
+                ))
+            },
         );
         let doc = format!("Raises one occurrence of event `{}`.", member.declared);
         let doc = member_doc(member, &doc);
@@ -975,7 +985,7 @@ fn publisher(
                 value: #path,
             ) -> ::core::result::Result<(), ::ridl_rt::port::RaiseError> {
                 #buffer
-                let bytes = #encode;
+                #encode
                 self.port.raise(#number, #ordinal, bytes, ::core::option::Option::None)
             }
         });
@@ -1279,50 +1289,113 @@ fn buffer_prologue(buffer: TokenStream) -> TokenStream {
     }
 }
 
-/// Encodes `value` into `target` and evaluates to the encoded bytes.
+/// Encodes `value` into `target` and binds the encoded bytes as `bytes`, or
+/// leaves the enclosing function with `contract` when the encoder refuses the
+/// value.
 ///
-/// The expression evaluates to `Encoded::bytes`, the subslice of `target` the
-/// encoder actually wrote, and a call site passes that slice on unchanged. It
-/// is **not** a length, and the bytes are **not** necessarily a prefix of
-/// `target`: a FlatBuffers builder fills a buffer from its end, which is why
+/// `bytes` is `Encoded::bytes`, the subslice of `target` the encoder actually
+/// wrote, and a call site passes that slice on unchanged. It is **not** a
+/// length, and the bytes are **not** necessarily a prefix of `target`: a
+/// FlatBuffers builder fills a buffer from its end, which is why
 /// [`Encoded::bytes`](ridl_rt::payload::Encoded::bytes) is documented as a
 /// subslice. A call site that reconstructed `&target[..len]` would send the
 /// wrong bytes for any such encoding.
 ///
-/// `target` is at least `<T as Payload<P::Encoding>>::MAX_SIZE` bytes at every
-/// call site, and `MAX_SIZE` is the largest encoded size of any legal value, so
-/// `EncodeError::Capacity` cannot arise from a legal value. Reaching it means
-/// the value is outside its own type's range or its `Payload` implementation
-/// does not honor `MAX_SIZE` — a provider-side implementation defect, not one
-/// of the five protocol outcomes. It is therefore an explicit `unreachable!`
-/// naming the type, the needed size and the available size, and never a
-/// manufactured contract error: `EncodeError::Capacity` carries no received
-/// bytes and no violated rule to report.
+/// The encode is a `let` statement and not a tail expression. Its scrutinee is
+/// a temporary that borrows the buffer, and under edition 2021 a tail
+/// expression's temporaries outlive the block's locals, so the payload buffer
+/// declared beside it would be dropped while still borrowed.
 fn encode_into(
     type_name: &str,
     value: TokenStream,
     target: TokenStream,
     target_name: &str,
     port: &Ident,
+    contract: TokenStream,
 ) -> TokenStream {
     let path = ty(type_name);
-    let capacity = format!(
-        "encoding `{type_name}` needs {{}} bytes and {target_name} has {{}}; a legal value \
-         cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value is \
-         outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`"
-    );
-    let other = format!("encoding `{type_name}` failed");
+    let failures = encode_failures(type_name, target_name);
+    quote! {
+        let bytes = match ::ridl_rt::payload::Ref::<#path, #port::Encoding>::encode(
+            #value,
+            #target,
+        ) {
+            Ok(encoded) => encoded.bytes(),
+            Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                return #contract;
+            }
+            #failures
+        };
+    }
+}
+
+/// The same encode where the outcome is a settlement rather than a return:
+/// the expression evaluates to `ok`, with the encoded bytes bound as `bytes`,
+/// or to `contract`, with the encoder's violation bound as `__violation`.
+///
+/// `dispatch` settles a claim on every path and returns the pass's own
+/// result, so a refused reply is settled here and not returned.
+fn encode_into_settled(
+    type_name: &str,
+    value: TokenStream,
+    target: TokenStream,
+    target_name: &str,
+    port: &Ident,
+    ok: TokenStream,
+    contract: TokenStream,
+) -> TokenStream {
+    let path = ty(type_name);
+    let failures = encode_failures(type_name, target_name);
     quote! {
         match ::ridl_rt::payload::Ref::<#path, #port::Encoding>::encode(
             #value,
             #target,
         ) {
-            Ok(encoded) => encoded.bytes(),
-            Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
-                unreachable!(#capacity, needed, available)
+            Ok(encoded) => {
+                let bytes = encoded.bytes();
+                #ok
             }
-            Err(_) => unreachable!(#other),
+            Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => #contract,
+            #failures
         }
+    }
+}
+
+/// The arms both encode shapes carry for a failure that is not a contract
+/// error.
+///
+/// `target` is at least `<T as Payload<P::Encoding>>::MAX_SIZE` bytes at every
+/// call site, and `MAX_SIZE` is the largest encoded size of any legal value, so
+/// `EncodeError::Capacity` cannot arise from a value the encoder accepted.
+/// Reaching it means the value breaks a constraint the encoder does not check,
+/// such as a named scalar built through `new_unchecked`, or its `Payload`
+/// implementation does not honor `MAX_SIZE` — a provider-side implementation
+/// defect, not one of the five protocol outcomes. It is therefore an explicit
+/// `unreachable!` naming the type, the needed size and the available size, and
+/// never a manufactured contract error: `EncodeError::Capacity` carries no
+/// received bytes and no violated rule to report.
+///
+/// `EncodeError::Contract` is handled by each shape above, and is not a panic:
+/// a bounded collection is a plain field of the generated type, so a value
+/// longer than its declared bound is representable (driftsys/ridl#829), and
+/// the encoder refusing it is a contract error the call site carries as the
+/// typed error that path already returns.
+///
+/// The violation's binding carries the emitter-owned name `__violation`, which
+/// no ridl identifier can be, so a ridl parameter cannot shadow it.
+fn encode_failures(type_name: &str, target_name: &str) -> TokenStream {
+    let capacity = format!(
+        "encoding `{type_name}` needs {{}} bytes and {target_name} has {{}}; a legal value \
+         cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value \
+         breaks a constraint the encoder does not check or its `Payload` implementation does \
+         not honor `MAX_SIZE`"
+    );
+    let other = format!("encoding `{type_name}` failed");
+    quote! {
+        Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+            unreachable!(#capacity, needed, available)
+        }
+        Err(_) => unreachable!(#other),
     }
 }
 
