@@ -859,8 +859,13 @@ fn main() {{
 /// more, so the vtable is read instead.
 ///
 /// Every non-optional field of `Report` is set to its default — every scalar
-/// kind at 0, false, the empty set or the zero member, every string, bytes
-/// and collection empty — and so are the scalars one table down: `inner`'s,
+/// kind at 0, false, the empty set or the zero member, every string and bytes
+/// empty, and every collection empty — with two exceptions that the case
+/// needs: `readings` is `[Speed; 3]`, an array of exactly three, so its
+/// shortest legal value is three zeroes; and `meta` holds one entry, at its
+/// default, because an empty map induces no entry table and the scalars of a
+/// map entry are one of the positions under test. So are the scalars one
+/// table down: `inner`'s,
 /// the tuple `range`'s, a map entry's value, and the union arm's box. Each of
 /// those slots must carry a non-zero `voffset`. A `SpeedBox` root of 0 is
 /// checked the same way.
@@ -1352,10 +1357,12 @@ fn main() {{
 /// and members** (driftsys/ridl#472, decision (a1)).
 ///
 /// One buffer planus writes for an `Inner` whose `speed` is 0 carries no slot
-/// at id 0. `flatbuffers_zero_legality.ridl` declares five structs of that
+/// at id 0. `flatbuffers_zero_legality.ridl` declares seven structs of that
 /// shape, which differ only in the type of the field at id 0, and the same
 /// bytes are read as each of them:
 ///
+/// - a bare `integer` and a bare `float`, with no constraint at all, read as
+///   0 and 0.0: a type with no constraint holds 0 (driftsys/ridl#607 item 1);
 /// - `integer [0..10]` and `Even` (`[-1.0..1.0 step 1.0]`, whose grid holds 0)
 ///   read as 0;
 /// - `Mode`, whose zero member `OFF` is declared after `ON`, reads as `OFF`,
@@ -1424,6 +1431,16 @@ fn main() {{
         proof.decode(),
         InnerEven {{ speed: Even::new_unchecked(0.0), label: label() }},
     );
+
+    let proof: Ref<'_, InnerBareInteger, FlatBuffers> =
+        Ref::verify(&inner).expect("an absent bare integer reads as 0");
+    assert_eq!(proof.view().speed(), 0, "the `speed` accessor of a bare integer");
+    assert_eq!(proof.decode(), InnerBareInteger {{ speed: 0, label: label() }});
+
+    let proof: Ref<'_, InnerBareFloat, FlatBuffers> =
+        Ref::verify(&inner).expect("an absent bare float reads as 0.0");
+    assert_eq!(proof.view().speed(), 0.0, "the `speed` accessor of a bare float");
+    assert_eq!(proof.decode(), InnerBareFloat {{ speed: 0.0, label: label() }});
 
     refused("an absent integer [1..10]", Ref::<'_, InnerRange, FlatBuffers>::verify(&inner));
     refused("an absent Odd", Ref::<'_, InnerOdd, FlatBuffers>::verify(&inner));

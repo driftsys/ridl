@@ -111,7 +111,10 @@ struct Decimal {
 
 impl Decimal {
     /// Reads `-`, digits, and an optional `.` followed by digits. Anything
-    /// else, or more digits than an `i128` holds exactly, is `None`.
+    /// else, or more than 30 significant digits, is `None`. Thirty is below
+    /// the 38 an `i128` holds exactly, with the margin the rescaling below
+    /// needs: two bounds are brought to a common scale before they are
+    /// compared, which multiplies one coefficient by a power of ten.
     fn parse(text: &str) -> Option<Self> {
         let (negative, unsigned) = match text.strip_prefix('-') {
             Some(rest) => (true, rest),
