@@ -61,8 +61,8 @@ where
 {
     let mut rt = runtime::<F>();
     // OTHER is published twice and ORD once, so the two signals carry
-    // different sequence numbers, and neither equals the interface
-    // generation (2) at the scan.
+    // different sequence numbers. At the first scan ORD's sequence number (1)
+    // differs from the interface generation (2); OTHER's (2) equals it.
     rt.set(IFACE, OTHER, &[1]).expect("set");
     rt.commit();
     rt.set(IFACE, ORD, &[1]).expect("set");
@@ -136,4 +136,44 @@ where
     let mut two = [blank_change(); 2];
     assert_eq!(rt.scan(&mut marks, &mut two), 2);
     assert_eq!(marks[0].generation, 1);
+}
+
+/// The scan serves the marks in order and stops at the first interface whose
+/// changes do not fit in what is left of `out`: the interfaces before it are
+/// written and their marks move, it and every interface after it are left
+/// alone.
+pub fn scan_stops_at_the_first_interface_that_does_not_fit<F: Factory>()
+where
+    F::Runtime: ScannableSignals,
+{
+    let (first, second, third) = (IFACE, InterfaceNo(2), InterfaceNo(3));
+    let mut rt = runtime::<F>();
+    rt.set(first, ORD, &[1]).expect("set");
+    rt.commit();
+    rt.set(second, ORD, &[2]).expect("set");
+    rt.set(second, OTHER, &[3]).expect("set");
+    rt.commit();
+    rt.set(third, ORD, &[4]).expect("set");
+    rt.commit();
+
+    let mark = |iface| Watermark {
+        iface,
+        generation: 0,
+    };
+    let mut marks = [mark(first), mark(second), mark(third)];
+    // After the first interface's one change, one entry is left. The second
+    // interface needs two, and the third would fit in the one that is left.
+    let mut out = [blank_change(); 2];
+    assert_eq!(
+        rt.scan(&mut marks, &mut out),
+        1,
+        "the scan stops at the second interface and does not serve the third"
+    );
+    assert_eq!(out[0].iface, first);
+    assert_eq!(marks[0].generation, 1, "the written interface's mark moved");
+    assert_eq!(
+        marks[1].generation, 0,
+        "the blocked interface's mark did not"
+    );
+    assert_eq!(marks[2].generation, 0, "nor did the one after it");
 }
