@@ -84,7 +84,9 @@ and `occurrence` frames, which no test vector of the frame specification §11.1
 shows, the payload-presence rule of §11.1 for a `publish` under `Init` or
 `Invalid(Declared)` and for a `response` under `reply`, which no vector shows,
 and the codes of §4 and §9.6 that no vector carries, among them the `kind`
-values 2 and 5 and the `attach` encodings 2 and 3. A contributor who
+values 2 and 5 and the `attach` encodings 2 and 3, and the `ridl-ir` items
+that `ridl-descriptor` re-exports or takes in its signatures
+([#934](https://github.com/driftsys/ridl/issues/934)). A contributor who
 must change a frozen surface follows the steps in `CONTRIBUTING.md`, "Changing a
 frozen surface". The full policy, with the gate that checks each surface and the
 rules for approving a break, is

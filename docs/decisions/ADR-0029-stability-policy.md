@@ -183,9 +183,12 @@ design in each:
      compared with `cargo semver-checks`, because a line dump cannot classify a
      Rust API change correctly, for example a new required method on a public
      trait. The runtime crates are compared with the same crates at the baseline
-     ref. The generated crates are committed under `freeze/generated/` from the
-     frozen fixtures named in the Context, and each is compared with the same
-     crate in the baseline's `freeze/generated/`. The check first runs
+     ref. Each crate's own items are compared; the `ridl-ir` items that
+     `ridl-descriptor` re-exports or takes in its signatures are not, so a break
+     in them is frozen by policy only until driftsys/ridl#934 is fixed. The
+     generated crates are committed under `freeze/generated/` from the frozen
+     fixtures named in the Context, and each is compared with the same crate in
+     the baseline's `freeze/generated/`. The check first runs
      `cargo fetch --locked` once with the network allowed, then runs the
      comparison offline and with the release type `minor`. Ten lints of
      `cargo semver-checks` that require a major version but report only a
@@ -265,8 +268,8 @@ design in each:
    | Manifest                | `manifest`                                                                     | the language lane                    |            |
    | Diagnostics and lints   | `diagnostics`                                                                  | the language lane                    |            |
    | CLI                     | `cli`                                                                          | the developer-experience lane        |            |
-   | Generated Rust crate    | `generated-crate` (`cargo semver-checks`)                                      | the codegen lane                     |            |
-   | Runtime crates          | `runtime-crates` (`cargo semver-checks`)                                       | the wire and runtime lane            |            |
+   | Generated Rust crate    | `generated-crate` (`cargo semver-checks`)                                      | the codegen lane                     | `2e3a3c9c` |
+   | Runtime crates          | `runtime-crates` (`cargo semver-checks`)                                       | the wire and runtime lane            | `69d23ab7` |
    | Codegen plugin protocol | `codegen-protocol`                                                             | the codegen lane                     | `a3a0ac21` |
    | MCP tools               | `mcp`                                                                          | the release and policy lane, at once | `3c3301df` |
    | Wire format             | `wire`: encoding names, `.proto` and `.fbs` lines, catalog hash, frame vectors | the wire and runtime lane            | `e6620b0e` |
