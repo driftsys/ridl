@@ -2000,8 +2000,8 @@ amended 2026-09-12).
 | `uint8`   | `uint32`* | `uint8`     | `UINT8`   | 8 bits         | `int`    |
 | `uint16`  | `uint32`* | `uint16`    | `UINT16`  | 16 bits        | `int`    |
 | `uint32`  | `uint32`  | `uint32`    | `UINT32`  | 32 bits        | `int`    |
-| `int32`   | `int32`   | `int32`     | `SINT32`  | 32 bits signed | `int`    |
-| `int64`   | `int64`   | `int64`     | `SINT64`  | 64 bits signed | `long`   |
+| `int32`   | `sint32`  | `int32`     | `SINT32`  | 32 bits signed | `int`    |
+| `int64`   | `sint64`  | `int64`     | `SINT64`  | 64 bits signed | `long`   |
 | `float32` | `float`   | `float32`   | `FLOAT`   | 32 bits        | `float`  |
 | `float64` | `double`  | `float64`   | `FLOAT64` | 64 bits        | `double` |
 

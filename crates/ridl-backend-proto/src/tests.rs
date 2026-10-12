@@ -168,7 +168,7 @@ fn a_struct_emits_a_message_numbered_by_typl_ordinals() {
         generated.proto_source.contains(
             "message SensorReading {\n  \
          double current_speed = 1;\n  \
-         int64 sensor_id = 2;\n  \
+         sint64 sensor_id = 2;\n  \
          reserved 3;\n}"
         ),
         "got:\n{}",
@@ -206,7 +206,7 @@ fn a_named_scalar_inlines_and_leaves_its_constraint_in_a_comment() {
 
     // The named type does not become a declaration of its own: it inlines.
     assert!(
-        !generated.proto_source.contains("message Speed"),
+        !generated.proto_source.contains("message Speed {"),
         "got:\n{}",
         generated.proto_source
     );
@@ -1092,13 +1092,14 @@ fn an_array_of_maps_is_refused() {
 }
 
 // A named scalar inlines whether it is local or foreign — Task 3 already
-// established that for the local case (`!contains("message Speed")` in
+// established that for the local case (`!contains("message Speed {")` in
 // `a_named_scalar_inlines_and_leaves_its_constraint_in_a_comment`), and a
-// foreign one is no different: it never becomes a declaration of its own for
-// another file to import. `veh.common` here holds only the `Speed` named
-// scalar — never a `message Speed` — so an import naming `veh.common.proto`
-// would point at a file that does not declare the type it was imported for,
-// which `protoc` rejects. `compile_with_protox` is run on every test below
+// foreign one is no different: a field never names a declaration of it, so
+// no field needs another file's import for it. `veh.common` here holds the
+// `Speed` named scalar — never a `message Speed`, only its root box
+// `message SpeedBox`, which no field names — so an import naming
+// `veh.common.proto` would point at a file that does not declare the type it
+// was imported for, which `protoc` rejects. `compile_with_protox` is run on every test below
 // except the unresolvable-reference case, so that defect cannot hide behind
 // a skipped check the way it did before this rework.
 
@@ -1115,8 +1116,8 @@ fn a_foreign_named_scalar_inlines_with_no_import() {
     let generated = generate_with(&package, &[&common]).expect("generate");
     assert!(
         !generated.proto_source.contains("import"),
-        "a named scalar never becomes a declaration another file can hold, so it \
-         needs no import, local or foreign:\n{}",
+        "a field never names a named scalar's declaration or its root box message, \
+         so it needs no import, local or foreign:\n{}",
         generated.proto_source
     );
     assert!(
@@ -1128,6 +1129,58 @@ fn a_foreign_named_scalar_inlines_with_no_import() {
     );
     assert!(
         generated.proto_source.contains("double value = 1;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    compile_with_protox("veh.cluster.proto", &generated.proto_source);
+}
+
+#[test]
+fn a_foreign_enum_set_inlines_with_no_import() {
+    // An enum set, like a named scalar, has a root box message in its own
+    // file, and a field never names it, so a foreign enum set field inlines
+    // to its width's scalar and needs no import.
+    let common = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "Warnings".to_string(),
+            kind: Some(v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+                backing_enum: None,
+                bits: vec![v2::EnumValue {
+                    name: "LOW_FUEL".to_string(),
+                    value: 0,
+                    doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
+                }],
+                width: v2::IntWidth::U32 as i32,
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let common_source = generate(&common).expect("generate common").proto_source;
+    assert!(
+        common_source.contains("message WarningsBox {"),
+        "got:\n{common_source}"
+    );
+    let package = struct_package_in(
+        "veh.cluster",
+        "Status",
+        "warnings",
+        1,
+        named_type("veh.common.Warnings"),
+    );
+    let generated = generate_with(&package, &[&common]).expect("generate");
+    assert!(
+        !generated.proto_source.contains("import"),
+        "a field never names an enum set's root box message, so it needs no \
+         import:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        generated.proto_source.contains("uint32 warnings = 1;"),
         "got:\n{}",
         generated.proto_source
     );
@@ -1305,6 +1358,212 @@ fn a_tuple_field_induces_a_positional_message() {
     compile_with_protox("veh.common.proto", &generated.proto_source);
 }
 
+fn optional(mut ty: v2::FieldType) -> v2::FieldType {
+    ty.optional = true;
+    ty
+}
+
+#[test]
+fn an_optional_tuple_field_takes_the_proto3_optional_keyword() {
+    // A tuple field may carry `?` (typl §11). The schema must state explicit
+    // presence, so that `Some(0)` and `None` stay distinct on the wire.
+    let gear_value = |name: &str, value: i64| v2::EnumValue {
+        name: name.to_string(),
+        value,
+        doc: String::new(),
+        links: Vec::new(),
+        see: Vec::new(),
+        since: Vec::new(),
+    };
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Speed".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(speed_type_def())),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Gear".to_string(),
+                kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                    values: vec![gear_value("PARK", 1), gear_value("DRIVE", 2)],
+                    reserved: Vec::new(),
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "S".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member(
+                        "t",
+                        1,
+                        tuple_of(vec![
+                            optional(named_type("Speed")),
+                            optional(named_type("Gear")),
+                        ]),
+                    )],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated.proto_source.contains(
+            "message ST {\n  \
+             // Speed — km/h [0.0..250.0]\n  \
+             optional double field_1 = 1;\n  \
+             optional Gear field_2 = 2;\n}"
+        ),
+        "got:\n{}",
+        generated.proto_source
+    );
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
+fn an_optional_tuple_field_of_array_or_map_type_is_refused() {
+    let array = struct_package(
+        "S",
+        "t",
+        1,
+        tuple_of(vec![optional(array_of(float64_type()))]),
+    );
+    let error = generate(&array).expect_err("must refuse");
+    // The message names the source path `S.t.f0`, not the generated
+    // `ST.field_1`, and its advice is for a tuple field.
+    assert!(
+        error.message.contains("S.t.f0 is an optional array")
+            && !error.message.contains("ST.field_1")
+            && error.message.contains("from the tuple field")
+            && error.message.contains("ADR-0013 decision 7"),
+        "got: {}",
+        error.message
+    );
+
+    let map = struct_package(
+        "S",
+        "t",
+        1,
+        tuple_of(vec![optional(map_of(
+            v2::PrimitiveType::String,
+            float64_type(),
+        ))]),
+    );
+    let error = generate(&map).expect_err("must refuse");
+    assert!(
+        error.message.contains("S.t.f0 is an optional map")
+            && !error.message.contains("ST.field_1")
+            && error.message.contains("from the tuple field")
+            && error.message.contains("ADR-0013 decision 7"),
+        "got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn the_backend_refuses_an_optional_collection_exactly_where_the_sizer_gives_no_bound() {
+    // The optional array or map rule is read by two callers: this backend,
+    // which refuses the field, and the proto3 sizer in `ridl-ir`, which gives
+    // the payload no bound. A payload the backend will not emit must have no
+    // proto3 row in the catalog. Over the shapes below, which hold no other
+    // member the sizer leaves unbounded, the backend emits exactly the
+    // payloads the sizer bounds: an array, a map and a scalar, optional and
+    // required, as a struct field, a tuple field, and a field of a tuple
+    // nested in a tuple.
+    use ridl_ir::projection::size::{Ctx, Encoding, PayloadShape, SizeState, size_state};
+
+    let shapes = [
+        ("array", array_of(float64_type())),
+        ("map", map_of(v2::PrimitiveType::Integer, float64_type())),
+        ("scalar", float64_type()),
+    ];
+    for (kind, ty) in shapes {
+        for is_optional in [false, true] {
+            let ty = if is_optional {
+                optional(ty.clone())
+            } else {
+                ty.clone()
+            };
+            for depth in 0..3 {
+                let mut field = ty.clone();
+                for _ in 0..depth {
+                    field = tuple_of(vec![field]);
+                }
+                let package = struct_package("S", "t", 1, field);
+                let emitted = generate(&package).is_ok();
+                let others: [&v2::Package; 0] = [];
+                let ctx = Ctx::new(&package, &others);
+                let state = size_state(&package, &PayloadShape::Named("S"), &ctx, Encoding::Proto3);
+                assert_eq!(
+                    emitted,
+                    matches!(state, SizeState::Bounded(_)),
+                    "{kind}, optional {is_optional}, tuple depth {depth}: \
+                     the backend emits {emitted}, the sizer answers {state:?}"
+                );
+                assert_eq!(
+                    emitted,
+                    !(is_optional && kind != "scalar"),
+                    "{kind}, optional {is_optional}, tuple depth {depth}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn an_induced_tuple_message_colliding_with_a_root_box_message_is_refused() {
+    // `Wheel.speedBox` induces a message named `WheelSpeedBox`, and the named
+    // scalar `WheelSpeed` generates its root box message of that same name.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "WheelSpeed".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(speed_type_def())),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Wheel".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member("speedBox", 1, tuple_of(vec![float64_type()]))],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("`WheelSpeedBox` is claimed twice"),
+        "got: {}",
+        error.message
+    );
+    assert!(
+        error.message.contains("the proto3 root of `WheelSpeed`"),
+        "got: {}",
+        error.message
+    );
+    assert!(error.message.contains("tuple"), "got: {}", error.message);
+}
+
+#[test]
+fn a_bare_integer_field_projects_to_sint64() {
+    // A named scalar over `integer` is `sint64`; the bare spelling must agree
+    // (ADR-0013 decision 4, typl Appendix D).
+    let package = struct_package("S", "a", 1, int64_type());
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated.proto_source.contains("sint64 a = 1;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
 // ==========================================================================
 // Name totality (final whole-branch review): every input below used to
 // return Ok carrying a schema protox rejects. ADR-0016 decision 6's totality
@@ -1321,7 +1580,11 @@ fn an_optional_array_field_is_refused() {
     let package = struct_package("Trace", "samples", 1, ty);
     let error = generate(&package).expect_err("must refuse");
     assert!(
-        error.message.contains("optional array"),
+        error.message.contains("Trace.samples is an optional array")
+            && error
+                .message
+                .contains("cannot mark a repeated field absent")
+            && error.message.contains("wrap the array in a struct"),
         "got: {}",
         error.message
     );
@@ -1336,7 +1599,50 @@ fn an_optional_map_field_is_refused() {
     let package = struct_package("Index", "byName", 1, ty);
     let error = generate(&package).expect_err("must refuse");
     assert!(
-        error.message.contains("optional map"),
+        error.message.contains("Index.byName is an optional map")
+            && error.message.contains("cannot mark a map field absent")
+            && error.message.contains("wrap the map in a struct"),
+        "got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn a_refusal_inside_a_nested_tuple_names_the_source_path() {
+    // `S.t` holds a tuple whose field `f0` is a tuple whose field `f0` is an
+    // optional array. The refusal names that source path, not the generated
+    // `STField1.field_1`.
+    let package = struct_package(
+        "S",
+        "t",
+        1,
+        tuple_of(vec![tuple_of(vec![optional(array_of(float64_type()))])]),
+    );
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("S.t.f0.f0 is an optional array")
+            && error
+                .message
+                .contains("cannot mark a repeated field absent")
+            && error.message.contains("from the tuple field"),
+        "got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn an_array_of_arrays_in_a_tuple_field_names_the_source_path() {
+    // A refusal raised while resolving a tuple field's type names the tuple
+    // field's source path, `S.t.f0`, not the generated `ST.field_1`.
+    let package = struct_package(
+        "S",
+        "t",
+        1,
+        tuple_of(vec![array_of(array_of(float64_type()))]),
+    );
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("S.t.f0 is an array of arrays"),
         "got: {}",
         error.message
     );
@@ -2121,4 +2427,151 @@ fn tuple_of(fields: Vec<v2::FieldType>) -> v2::FieldType {
                 .collect(),
         })),
     }
+}
+
+#[test]
+fn a_named_scalar_an_enum_and_an_enum_set_each_get_a_root_box_message() {
+    // A payload of a named scalar, an enum or an enum set needs a message a
+    // codec can encode, as FlatBuffers' box table gives one (ADR-0019
+    // decision 8). The box holds one field `value = 1` of exactly the type and
+    // comment a struct field of that type gets; a struct has a message of its
+    // own and gets no box.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Speed".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(speed_type_def())),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "GearPosition".to_string(),
+                kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                    values: vec![v2::EnumValue {
+                        name: "PARK".to_string(),
+                        value: 1,
+                        doc: String::new(),
+                        links: Vec::new(),
+                        see: Vec::new(),
+                        since: Vec::new(),
+                    }],
+                    reserved: Vec::new(),
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Warnings".to_string(),
+                kind: Some(v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+                    backing_enum: None,
+                    bits: vec![
+                        v2::EnumValue {
+                            name: "LOW_FUEL".to_string(),
+                            value: 0,
+                            doc: String::new(),
+                            links: Vec::new(),
+                            see: Vec::new(),
+                            since: Vec::new(),
+                        },
+                        v2::EnumValue {
+                            name: "DOOR_AJAR".to_string(),
+                            value: 1,
+                            doc: String::new(),
+                            links: Vec::new(),
+                            see: Vec::new(),
+                            since: Vec::new(),
+                        },
+                    ],
+                    width: v2::IntWidth::U32 as i32,
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Reading".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![
+                        field_member("speed", 1, named_type("Speed")),
+                        field_member("pair", 2, tuple_of(vec![float64_type(), float64_type()])),
+                    ],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let generated = generate(&package).expect("generate");
+    let source = &generated.proto_source;
+
+    let speed_box = "\nmessage SpeedBox {\n  \
+                     // Speed — km/h [0.0..250.0]\n  \
+                     double value = 1;\n}\n";
+    let gear_box = "\nmessage GearPositionBox {\n  GearPosition value = 1;\n}\n";
+    let warnings_box = "\nmessage WarningsBox {\n  \
+                        // LOW_FUEL = bit 0\n  \
+                        // DOOR_AJAR = bit 1\n  \
+                        uint32 value = 1;\n}\n";
+    for expected in [speed_box, gear_box, warnings_box] {
+        assert_eq!(
+            source.matches(expected).count(),
+            1,
+            "expected exactly one of {expected:?}, got:\n{source}"
+        );
+    }
+    assert!(!source.contains("ReadingBox"), "got:\n{source}");
+
+    // Declared messages and enums first, then the boxes in declaration
+    // order, then the induced tuple messages.
+    let position = |needle: &str| {
+        source
+            .find(needle)
+            .unwrap_or_else(|| panic!("{needle:?} is missing from:\n{source}"))
+    };
+    assert!(position("message Reading {") < position("message SpeedBox {"));
+    assert!(position("message SpeedBox {") < position("message GearPositionBox {"));
+    assert!(position("message GearPositionBox {") < position("message WarningsBox {"));
+    assert!(position("message WarningsBox {") < position("message ReadingPair {"));
+
+    compile_with_protox("veh.common.proto", source);
+}
+
+#[test]
+fn a_declared_type_colliding_with_a_root_box_message_is_refused() {
+    // `type Speed` generates `message SpeedBox`, and nothing keeps a package
+    // from also declaring a struct of that name.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Speed".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(speed_type_def())),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "SpeedBox".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member("x", 1, float64_type())],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("`SpeedBox` is claimed twice"),
+        "got: {}",
+        error.message
+    );
+    assert!(
+        error.message.contains("struct `SpeedBox`"),
+        "got: {}",
+        error.message
+    );
+    assert!(
+        error.message.contains("the proto3 root of `Speed`"),
+        "got: {}",
+        error.message
+    );
 }

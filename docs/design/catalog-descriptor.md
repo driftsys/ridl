@@ -357,22 +357,24 @@ is sized, through the projection the wire backend emits:
   `ridl_ir::codegen::fb_unbounded`, the function the codegen model uses. The row
   is absent for a name that does not resolve or a declaration with no root
   table.
-- **proto3** follows ADR-0017. A row is present only for a struct or a union
-  payload, and it is always `Bounded`: typl bounds every collection, so proto3
-  has no unbounded state. A named scalar and an enum set are inlined into their
-  field (ADR-0017 decision 1, with decision 2 rejecting a wrapper message), and
-  an enum is a declared `enum`, so none of the three has a message of its own,
-  and their proto3 state is absent. The row is also absent when a member is one
-  the proto backend refuses (a map key outside the integral and string scalars,
-  a map value that is an array or a map, an optional array or map, an enum value
-  outside int32, a field number protobuf reserves or exceeds), when a member has
-  no proto3 bound (a `string` or `bytes` with no length bound, a type def with
-  no width), when the nesting passes `MAX_DEPTH`, or when the bound overflows
-  `u64` or exceeds `u32::MAX`. The rustdoc of `state` in
-  `crates/ridl-ir/src/projection/size/proto3.rs` has the full list. The proto3
-  sizer counts tags and varint widths at their maximum, and remembers each named
-  struct and union it has sized within one call, so a type that several paths
-  share is walked once.
+- **proto3** follows ADR-0017. A row is present for a struct, a union, a named
+  scalar, an enum set or an enum payload, and a row that is present is always
+  `Bounded`: typl bounds every collection, so proto3 has no unbounded state. A
+  named scalar that no proto3 leaf bounds (a `string` or `bytes` with no length
+  bound, a type def with no width) has no row. A named scalar, an enum set and
+  an enum are inlined into a field that uses them, but each also has a root
+  message `<Name>Box { <type> value = 1; }` that a codec can encode, and the row
+  is the bound of that box. The row is also absent when a member is one the
+  proto backend refuses (a map key outside the integral and string scalars, a
+  map value that is an array or a map, an optional array or map field of a
+  struct or a tuple, an enum value outside int32, a field number protobuf
+  reserves or exceeds), when a member has no proto3 bound (a `string` or `bytes`
+  with no length bound, a type def with no width), when the nesting passes
+  `MAX_DEPTH`, or when the bound overflows `u64` or exceeds `u32::MAX`. The
+  rustdoc of `state` in `crates/ridl-ir/src/projection/size/proto3.rs` has the
+  full list. The proto3 sizer counts tags and varint widths at their maximum,
+  and remembers each named struct and union it has sized within one call, so a
+  type that several paths share is walked once.
 - **repr(C)** has no row until driftsys/ridl#317 defines the layout.
 
 **Absent by shape.** A stream payload (`<T>`), a request of zero or of several
@@ -476,6 +478,12 @@ An excerpt of the corpus snapshot
     {
       "max_sizes": [
         {
+          "bytes": 5,
+          "cause": "Unspecified",
+          "encoding": "Proto3",
+          "state": "Bounded"
+        },
+        {
           "bytes": 46,
           "cause": "Unspecified",
           "encoding": "FlatBuffers",
@@ -494,7 +502,8 @@ An excerpt of the corpus snapshot
 }
 ```
 
-`Speed` is a named scalar, so it has no proto3 row.
+`Speed` is a named scalar, so its proto3 row is the bound of its box message
+`SpeedBox`, 5 bytes.
 
 ## The port's catalog check
 
@@ -583,18 +592,18 @@ For these, the archived design note is the record of the agreed direction.
 
 ## Open items and debt
 
-| Item                                                                                      | Issue             |
-| ----------------------------------------------------------------------------------------- | ----------------- |
-| Narrow a string's byte capacity from an ASCII-only match pattern, after #597              | driftsys/ridl#665 |
-| ridl-rt: streams (ridl §12) have no port; the stream flag and per-element bound follow it | driftsys/ridl#336 |
-| The repr(C) payload codec, which gives the `ReprC` column its rows                        | driftsys/ridl#317 |
-| debt(ridl-descriptor): Windows schema paths and an unpinned guard in the schema tooling   | driftsys/ridl#670 |
-| debt(ridl-ir): catalog hash follow-ups deferred from the review of #676                   | driftsys/ridl#679 |
-| debt: review follow-ups — one name resolver, one proto3 width table                       | driftsys/ridl#684 |
-| debt: review follow-ups — shared proto3 refusal rules, agreement tests                    | driftsys/ridl#690 |
-| debt: deferred review items from PR #692 (the lowering and the catalog check)             | driftsys/ridl#693 |
-| debt: deferred review items from PR #696 (ridl describe)                                  | driftsys/ridl#697 |
-| debt: deferred review items from PR #699 (the catalog hash per region)                    | driftsys/ridl#701 |
+| Item                                                                                                 | Issue             |
+| ---------------------------------------------------------------------------------------------------- | ----------------- |
+| Narrow a string's byte capacity from an ASCII-only match pattern, after #597                         | driftsys/ridl#665 |
+| ridl-rt: streams (ridl §12) have no port; the stream flag and per-element bound follow it            | driftsys/ridl#336 |
+| The repr(C) payload codec, which gives the `ReprC` column its rows                                   | driftsys/ridl#317 |
+| debt(ridl-descriptor): Windows schema paths and an unpinned guard in the schema tooling              | driftsys/ridl#670 |
+| debt(ridl-ir): catalog hash follow-ups deferred from the review of #676                              | driftsys/ridl#679 |
+| debt: review follow-ups — one name resolver, one proto3 width table                                  | driftsys/ridl#684 |
+| debt: review follow-ups — shared proto3 refusal rules (all but `optional_repeated`), agreement tests | driftsys/ridl#690 |
+| debt: deferred review items from PR #692 (the lowering and the catalog check)                        | driftsys/ridl#693 |
+| debt: deferred review items from PR #696 (ridl describe)                                             | driftsys/ridl#697 |
+| debt: deferred review items from PR #699 (the catalog hash per region)                               | driftsys/ridl#701 |
 
 ## Trace
 

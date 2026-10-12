@@ -37,6 +37,101 @@ typl is qualified in place: ADR-0008 decision 14 now calls an appended
 non-optional field breaking unless its type is a scalar, enum or enum set that
 allows the value 0. The rule decision 3 chose does not change.
 
+**Amended 2026-10-12 — the emitted mapping is reviewed and frozen for 0.10.**
+Before 0.10 freezes the wire surface ([ADR-0029](ADR-0029-stability-policy.md);
+the `wire` dump in `freeze/wire.txt` holds every `.proto` and `.fbs` line of the
+frozen corpus), the `.proto` and `.fbs` output of both wire backends was
+reviewed, declaration form by declaration form, against what a proto3 codec
+checked against `prost` (driftsys/ridl#264) and the FlatBuffers codec need. The
+corpus was the frozen copies of `evals/corpus/` (mavlink, ros2, vss),
+`examples/cabin` and `crates/ridlc/tests/corpus/veh-cluster`, plus probe
+packages for the forms the corpus lacks. Every emitted `.proto` compiled with
+`protox` 0.9.1, and every message in it round-tripped through `prost` 0.14.4 by
+reflection with each field set; every emitted `.fbs` parsed with `planus` 1.3.0,
+except the ros2 corpus, which the FlatBuffers backend refuses as below. The
+FlatBuffers mapping did not change, and decisions 1 to 9 hold as written. Three
+proto3 changes were made, recorded as
+[ADR-0017](ADR-0017-proto3-projection-rules.md) decisions 6 to 8; they added 387
+lines to the `wire` dump and removed none. The rulings, each with its reason and
+what it costs if wrong:
+
+1. proto3 gets a root rule: a named scalar, an enum and an enum set are rooted
+   in `message <Name>Box { <type> value = 1; }`, a struct and a union in their
+   own message (ADR-0017 decision 6) — the codec needs a message for every
+   payload the face admits, and the VSS corpus had none — a package that
+   declares `<Name>Box` beside `<Name>` is refused by the proto backend, as it
+   already was by this one.
+2. The proto3 box's `value` is not `optional`, and the box is never referenced
+   from a field — the same reading as this record's decision 8 box, and ADR-0017
+   decision 2 holds at field positions — an empty payload reads as 0, or is
+   refused when the type excludes 0.
+3. The proto3 sizer bounds the box, and `NoMessage` is no longer produced but
+   stays defined — the size state must describe the emitted projection, and the
+   codegen protocol is frozen — a plugin that keyed on `NO_MESSAGE` for a named
+   scalar now reads a bound; the catalog descriptor gained proto3 rows, and the
+   catalog hash, computed over the IR, did not change.
+4. An optional tuple field takes `optional` in proto3, and an optional array or
+   map tuple field is refused (ADR-0017 decision 7) — without the keyword a
+   `prost` peer turns a present 0 into absent — a package with such a tuple
+   field, which the schema mapped silently, is now refused.
+5. A bare `integer` projects to `sint64` (ADR-0017 decision 8) — the same typl
+   type spelled as a named scalar already did, and ADR-0013 decision 4 rules out
+   `int64` for a range containing negatives — a consumer of a schema from an
+   earlier release regenerates; no proto3 codec existed, so no data is affected.
+6. An optional array element and an optional map value keep a schema without
+   presence in both targets; the FlatBuffers codec refuses the shape, and the
+   proto3 codec is to refuse it — neither target has a construct for the
+   absence, and no program this toolchain builds writes it — a consumer that
+   reads only the schema sees an element that is always present.
+7. proto3 enums stay open in the schema, with the synthesized
+   `<PREFIX>_UNSPECIFIED = 0` where no zero is declared; a typl enum is closed,
+   and the proto3 codec is to refuse an undeclared value — the schema cannot
+   state closedness, so the rule belongs to the codec — none for the mapping.
+8. The proto3 scalar table is frozen as built: `uint32` for the unsigned widths
+   up to 32 bits, `uint64`, `sint32` and `sint64` for the signed widths, `float`
+   and `double`, `bool`, `string`, `bytes`; no `fixed32` or `fixed64` — varint
+   keeps small values small (ADR-0013 decision 4) — a value near the top of a
+   32-bit range costs 5 bytes where a fixed encoding costs 4.
+9. Field numbers are the typl ordinals, tombstones emit `reserved`, a union's
+   reserved arms are reserved at message level, and a retired enum name is
+   reserved as `"<PREFIX>_<NAME>"` — ADR-0016 decision 6's stability property,
+   checked by `protox` — none.
+10. proto3 enum value names stay `<ENUM>_<VALUE>` in upper snake case, unchanged
+    by the Rust backend's PascalCase variants (ADR-0016's 2026-09-26 amendment)
+    — proto3 scopes values as siblings of their enum, and a peer reads these
+    names — none.
+11. The package is the ridl package, the file is `<package>.proto`, an import
+    names a sibling file, and `ridl.std.proto` holds only its boxes — every
+    reference resolves with `protox` over one directory — a consumer that wants
+    a directory tree per package renames the files.
+12. The identity tables (`<Interface>Ordinal`) and the absence of a `service`
+    block are frozen as ADR-0013 decisions 2 and 3 state — none.
+13. Constraint comments are not frozen: comment lines are not in the `wire` dump
+    — ADR-0017 decision 3 makes them informative only — none.
+14. A payload that is not one declared named type (an inline array such as
+    `fixed capabilities : [Label; 0..32]`, a call with several parameters) has
+    no root in either schema; the face refuses it today, and its root rule is
+    left to the face's induced-argument follow-up — that rule adds generated
+    names, which is a decision about the face, not about this mapping — when it
+    comes, the generated name it chooses may refuse a package that declares the
+    same name.
+15. The FlatBuffers mapping is frozen as decisions 1 to 9 state, including
+    `long` as the underlying type of every enum and the refusal of a vector
+    whose element is itself a vector (the ros2 corpus's `UInt64MultiArray.data`)
+    — the proto3 codec needs no FlatBuffers change, and changing an emitted line
+    now breaks the shipped FlatBuffers codec's data — an enum field costs 8
+    bytes whatever its range.
+16. The proto3 rules are recorded in ADR-0017, the projection record decision 8
+    of this record names for them, and the review in this record; ADR-0016 is
+    not amended, because no change touches the name transform — a reader follows
+    one link.
+17. typl Appendix D's proto3 column is corrected to `sint32` and `sint64` for
+    the signed widths, which its own note and the emitter already used — none.
+18. The `prost` round trip of the review is not added as a test: the proto3
+    codec's conformance suite brings the `prost` oracle (driftsys/ridl#264), and
+    the existing `protox` and `planus` checks already guard validity — until
+    then, a `prost`-level regression in the schema is caught only by `protox`.
+
 Written from roadmap story E9.9, which built `crates/ridl-backend-flatbuffers`.
 The reasoning trail is
 [`docs/archive/2026-08-08-flatbuffers-projection-design.md`](../archive/2026-08-08-flatbuffers-projection-design.md)
@@ -302,6 +397,10 @@ refused.
    The same question binds E11.8 (proto3) and E11.12 (`repr(C)`); each answers
    it in its own projection record in its own terms, and nothing here decides
    for them.
+
+   _Amended 2026-10-12._ proto3 answers it in
+   [ADR-0017](ADR-0017-proto3-projection-rules.md) decision 6, with the same box
+   shape and name: `message <Name>Box { <type> value = 1; }`.
 
 9. **An optional table field that holds a scalar or an enum takes `= null`** —
    added 2026-09-29, from the decision on driftsys/ridl#472. A FlatBuffers

@@ -16,7 +16,9 @@
 //! `<enum screaming>_<value screaming>` at its own number, with the
 //! synthesized `_UNSPECIFIED` exactly where the model states no zero member;
 //! each `oneof` arm against `Arm.name.snake` at `Arm.ordinal`; each identity
-//! table against `<joined CamelCase name>Ordinal`; and each `import` against
+//! table against `<joined CamelCase name>Ordinal`; each root box message
+//! against `<Name>Box` with one field `value` numbered 1, for each named
+//! scalar, enum and enum set; and each `import` against
 //! a package the model lists as foreign.
 //!
 //! It is the form of drift test that the model's own tests cannot write. When this backend stops
@@ -223,10 +225,31 @@ fn assert_messages_agree(label: &str, model: &v1::Model, schema: &Schema) {
                 }
                 checked += 1;
             }
-            // A named scalar, an enum set and a constant become no
-            // declaration of their own in proto3 (design §3.1, ADR-0013
-            // decision 5).
+            // A named scalar and an enum set become no declaration of their
+            // own in proto3 (design §3.1), and a constant is not emitted
+            // (ADR-0013 decision 5).
             _ => {}
+        }
+        // A named scalar, an enum and an enum set each get a root box
+        // message: `<Name>Box`, with one field `value` numbered 1.
+        if matches!(
+            declaration.kind,
+            Some(
+                v1::declaration::Kind::Scalar(_)
+                    | v1::declaration::Kind::Enum(_)
+                    | v1::declaration::Kind::EnumSet(_)
+            )
+        ) {
+            let box_name = format!("{name}Box");
+            let fields = schema.messages.get(&box_name).unwrap_or_else(|| {
+                panic!("{label}: the schema declares no root box message `{box_name}`")
+            });
+            assert_eq!(
+                *fields,
+                vec![("value".to_string(), 1)],
+                "{label}: root box message `{box_name}` holds one field `value = 1`"
+            );
+            checked += 1;
         }
     }
     assert!(
