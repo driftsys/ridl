@@ -282,6 +282,10 @@ placement changed
 The contracts did not move, so the verdict is `identical` and the exit code 0.
 A `requires` line added, a component added to the system, `instances` changed or
 a component made `external` are listed under `composition changed` instead.
+A changed `labels`, `deprecated`, `tier` or backend key is listed under the
+heading of the declaration it is on, as a before-and-after line; a changed
+sizing key (`depth`, `slots`, `budget`) is not listed, because it changes no
+link and no contract.
 Which of these changes break an already deployed system, and for whom, is not
 something the compiler decides.
 

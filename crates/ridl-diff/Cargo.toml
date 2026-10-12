@@ -10,3 +10,6 @@ description = "The `ridl diff` engine: compares two resolved IR snapshots and cl
 ridl-ir.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+ridl-core = { path = "../ridl-core", version = "0.9.0", default-features = false }

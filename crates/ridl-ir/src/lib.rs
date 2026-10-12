@@ -3026,6 +3026,7 @@ mod system_round_trip {
                     links: vec![doc_link()],
                     see: vec![doc_link()],
                     since: vec!["1.2".to_string()],
+                    deprecated: Some("superseded".to_string()),
                 },
                 v2::Component {
                     name: "veh.diag.access".to_string(),
@@ -3048,6 +3049,7 @@ mod system_round_trip {
                     links: vec![doc_link()],
                     see: vec![doc_link()],
                     since: vec!["1.2".to_string()],
+                    deprecated: Some("superseded".to_string()),
                 },
             ],
             producers: vec![v2::Producer {
@@ -3090,6 +3092,8 @@ mod system_round_trip {
                 links: vec![doc_link()],
                 see: vec![doc_link()],
                 since: vec!["1.2".to_string()],
+                tier: v2::Tier::Platform as i32,
+                deprecated: Some("superseded".to_string()),
             }],
             deployments: vec![v2::Deployment {
                 name: "Production".to_string(),
@@ -3105,6 +3109,7 @@ mod system_round_trip {
                     links: vec![doc_link()],
                     see: vec![doc_link()],
                     since: vec!["1.2".to_string()],
+                    deprecated: Some("superseded".to_string()),
                 }],
                 placements: vec![v2::Placement {
                     component: "veh.topology.Cruise".to_string(),
@@ -3144,11 +3149,13 @@ mod system_round_trip {
                     slots: Some(8),
                     budget: Some(4096),
                 }),
+                deprecated: Some("superseded".to_string()),
             }],
             doc: "Documented, see [Cruise].".to_string(),
             see: vec![doc_link()],
             since: vec!["1.2".to_string()],
             links: vec![doc_link()],
+            deprecated: Some("superseded".to_string()),
         }
     }
 

@@ -168,8 +168,12 @@ vocabulary (`error` types, result unions — typl §10.1–10.2), not interactio
 syntax (§10.1).
 
 (`reserved` and the evolution machinery are inherited from typl §7.4.
-`require`/`ensure` are expr-core words activated here. All family keywords
-remain reserved in every profile — typl §1.4.)
+`require`/`ensure` are expr-core words activated here. Every registry word
+remains reserved in every profile, and the registry as built is the list in typl
+§1.4. The ADR-0012 domain spellings — `present`, `trigger` and the rest — are
+not in it: each is a keyword only as the first token of an interface member, in
+a profile that implements it, and an identifier everywhere else — the
+member-start rule, typl §1.4.)
 
 ---
 
@@ -1374,6 +1378,14 @@ query getAverageSpeed(window: Duration): Speed [
 | ---------------- | ------------------------------------------------------------ | ------------------ |
 | `require <expr>` | precondition over parameters and the interface's own signals | `command`, `query` |
 | `ensure <expr>`  | postcondition over `result` (and parameters)                 | `query` only       |
+
+Both predicates are rows of the attribute registry (`ridl_core::attributes`,
+ADR-0012 decision 8): owner `core`, form predicate, sites as the table above
+says, consumer the clause check, and a change to either reported by `ridl diff`
+as `contract_changed`. The registry is the one allow-list the checker reads for
+a plain key: a plain key on a member draws FORM-107 when the registry has a row
+for it on an rsdl site and FORM-106 when it has none. No plain key is accepted
+on a member today.
 
 - Expressions are type-checked, unquoted, side-effect-free; they reference
   parameters, `result`, constants, enum values, and the interface's own signals

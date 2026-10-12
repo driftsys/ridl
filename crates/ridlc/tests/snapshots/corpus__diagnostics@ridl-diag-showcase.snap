@@ -54,11 +54,11 @@ error[FORM-101]: a return type must be a named type, a named-field tuple `(a: A,
 17 │   query listLevels(): [Level; 0..8] @[..50ms]
    │                       ^
 
-error[RIDL-403]: `view` is reserved by another profile of the family, so it cannot start a declaration here — a `.ridl` file declares `interface` and `service`. Move the declaration to the profile that owns the word, or, if `view` was meant as a name, choose one the family does not reserve (ridl reference §16.4)
+error[RIDL-403]: `automaton` is reserved by another profile of the family, so it cannot start a declaration here — a `.ridl` file declares `interface` and `service`. Move the declaration to the profile that owns the word, or, if `automaton` was meant as a name, choose one the family does not reserve (ridl reference §16.4)
   ┌─ tests/corpus/ridl-diag-showcase/main/profile_boundary.ridl:7:1
   │
-7 │ view MediaHome {
-  │ ^^^^
+7 │ automaton MediaHome {
+  │ ^^^^^^^^^
 
 error[TYPL-304]: interaction declaration in typl context: `signal`
    ┌─ tests/corpus/ridl-diag-showcase/main/profile_boundary.typl:10:1
@@ -78,28 +78,34 @@ error[MANI-009]: invalid `[defaults].timing` in the package manifest: expected a
 1 │ // Attribute allow-list diagnostics (general form §4.3): FORM-106, FORM-107,
   │ ^
 
-error[FORM-107]: attribute `persist` not valid on command
-   ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:13:5
-   │
-13 │     persist
-   │     ^^^^^^^
-
-error[FORM-107]: attribute `persist` not valid on command
+error[FORM-107]: attribute `tier` not valid on command
    ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:14:5
    │
-14 │     persist
-   │     ^^^^^^^
+14 │     tier = PLATFORM
+   │     ^^^^^^^^^^^^^^^
 
-error[FORM-108]: duplicate attribute key `persist`
-   ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:14:5
+error[FORM-107]: attribute `tier` not valid on command
+   ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:15:5
    │
-14 │     persist
+15 │     tier = PLATFORM
+   │     ^^^^^^^^^^^^^^^
+
+error[FORM-108]: duplicate attribute key `tier`
+   ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:15:5
+   │
+15 │     tier = PLATFORM
+   │     ^^^^^^^^^^^^^^^
+
+error[FORM-106]: unknown attribute key `persist`
+   ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:20:5
+   │
+20 │     persist
    │     ^^^^^^^
 
 error[FORM-106]: unknown attribute key `frobnicate`
-   ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:19:5
+   ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:21:5
    │
-19 │     frobnicate = 3
+21 │     frobnicate = 3
    │     ^^^^^^^^^^^^^^
 
 error[RIDL-301]: `require` not valid on signal — contracts belong to `command` and `query`

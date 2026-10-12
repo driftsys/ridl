@@ -1,7 +1,33 @@
-reserved action
-reserved activate
-reserved adjust
-reserved agent
+attribute budget deployment assignment
+attribute budget placement assignment
+attribute deprecated component assignment
+attribute deprecated deployment assignment
+attribute deprecated distribution assignment
+attribute deprecated machine assignment
+attribute deprecated system assignment
+attribute depth deployment assignment
+attribute depth placement assignment
+attribute ensure query predicate
+attribute external component flag
+attribute external machine flag
+attribute instances component assignment
+attribute labels component assignment
+attribute labels deployment assignment
+attribute labels distribution assignment
+attribute labels machine assignment
+attribute labels system assignment
+attribute ns.key component flag-or-assignment
+attribute ns.key deployment flag-or-assignment
+attribute ns.key distribution flag-or-assignment
+attribute ns.key line flag-or-assignment
+attribute ns.key machine flag-or-assignment
+attribute ns.key placement flag-or-assignment
+attribute ns.key system flag-or-assignment
+attribute require command predicate
+attribute require query predicate
+attribute slots deployment assignment
+attribute slots placement assignment
+attribute tier distribution assignment
 reserved as
 reserved automaton
 reserved boolean
@@ -12,10 +38,7 @@ reserved component
 reserved const
 reserved current
 reserved deployment
-reserved dismiss
-reserved display
 reserved distribution
-reserved drag
 reserved during
 reserved else
 reserved emit
@@ -25,7 +48,6 @@ reserved enumset
 reserved error
 reserved event
 reserved false
-reserved fetch
 reserved fixed
 reserved float
 reserved for
@@ -33,7 +55,6 @@ reserved function
 reserved if
 reserved import
 reserved init
-reserved input
 reserved integer
 reserved interface
 reserved internal
@@ -43,16 +64,12 @@ reserved machine
 reserved match
 reserved merge
 reserved model
-reserved navigate
-reserved observe
 reserved offers
 reserved package
 reserved query
 reserved require
 reserved requires
 reserved reserved
-reserved scroll
-reserved select
 reserved service
 reserved signal
 reserved state
@@ -60,17 +77,14 @@ reserved states
 reserved step
 reserved string
 reserved struct
-reserved surface
 reserved system
 reserved then
-reserved toggle
 reserved transition
 reserved true
 reserved type
 reserved union
-reserved view
 reserved when
-reserved-set action activate adjust agent as automaton boolean bytes case command component const current deployment dismiss display distribution drag during else emit ensure enum enumset error event false fetch fixed float for function if import init input integer interface internal last let machine match merge model navigate observe offers package query require requires reserved scroll select service signal state states step string struct surface system then toggle transition true type union view when
+reserved-set as automaton boolean bytes case command component const current deployment distribution during else emit ensure enum enumset error event false fixed float for function if import init integer interface internal last let machine match merge model offers package query require requires reserved service signal state states step string struct system then transition true type union when
 ridl as
 ridl boolean
 ridl bytes
