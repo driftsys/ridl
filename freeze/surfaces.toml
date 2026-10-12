@@ -2,7 +2,7 @@
 # `just freeze-check` prints a notice for a listed surface without a row; the
 # `release` recipe fails on it. A row's name must be listed here, and this key
 # must stay above the first `[[surface]]` table.
-required = ["mcp", "msrv"]
+required = ["mcp", "msrv", "codegen-protocol"]
 
 # Baseline rows for the freeze check. Each row names a frozen surface and the
 # git ref its dump is compared against:
@@ -22,3 +22,7 @@ baseline = "3c3301dff1a5c2b9d13c6192c9f84f71d85c88c2"
 [[surface]]
 name = "msrv"
 baseline = "7e83024dedb766a70c665f01607cf496a6007c42"
+
+[[surface]]
+name = "codegen-protocol"
+baseline = "a3a0ac21a4b6ea55421cfd3dfbbe65ebb16bdfe8"
