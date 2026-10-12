@@ -135,3 +135,41 @@ interface Zone {
   /// @deprecated "use Cabin.average"
   query average(window: Window): Average
 }
+
+// ------ An interface carrying bounded collections, for the encode check ------
+//
+// A bounded list and a bounded map are plain public fields, so a provider can
+// hold a value longer than the declared bound. Each sits in a payload of its
+// own, as that payload's first field, so a value refused by the encoder is
+// refused before anything is written to the output buffer. `Log.note` is
+// never set by a test; it is there so that `Log`'s `MAX_SIZE` provisions a
+// string, which leaves room for a list one element longer than its bound to
+// encode within `MAX_SIZE`. `Tally` needs no such field: its map's declared
+// maximum provisions three sixteen-character keys. The signal, the command
+// and the two queries reach the three sites that encode a payload: the
+// publisher's setter, a client's send, and `dispatch`'s reply. Named to sort
+// after `Zone`, for the reason `Siren` gives. `Log.samples` holds `Window`
+// rather than `Level` because a vector of a one-byte element makes the codec
+// emit `__c.len() * 1usize`, which `clippy::identity_op` refuses in this
+// crate's own test build.
+
+/// A tag on a log entry.
+type Tag : string [1..16]
+
+/// A log of recent levels.
+struct Log {
+  samples : [Window; 2..8]
+  note    : Tag?
+}
+
+/// A count of levels by tag.
+struct Tally {
+  entries : [Tag : Level; 0..3]
+}
+
+interface ZoneLog {
+  signal  recent : Log @10ms
+  command record(entry: Log)
+  query   recall(window: Window): Log @[..200ms]
+  query   tally(window: Window): Tally @[..200ms]
+}

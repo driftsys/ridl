@@ -78,6 +78,12 @@ codec is requested by the manifest's `[backend.rust] encodings`, not by a
 `Sizes<E>`, and the encoding it uses from its port once that part lands. Each
 decision carries the amendment in place. The record stays Proposed.
 
+**Amended 2026-10-12 — decision 15, the face reads the encoding from its port.**
+The generated face takes its encoding from its port type
+(`P: ::ridl_rt::port::Encoded`, `P::Encoding`) and carries the payload bounds as
+generated `where` clauses; it gains no type parameter and names no encoding. The
+decision carries the amendment in place. The record stays Proposed.
+
 ## Context
 
 The Rust backend has shipped an interaction layer since E2 — consumer and
@@ -448,6 +454,32 @@ be generated, and in what order", which is what this record answers.
     application code. Until then the face stays monomorphic over FlatBuffers and
     reads every buffer size from `Payload::BUFFER` and the `Sizes<FlatBuffers>`
     table, and it is emitted only when the manifest names `flatbuffers`.
+
+    **Amendment (2026-10-12) — the face reads the encoding from its port, as
+    built.** The sentence above that begins "Until then the face stays
+    monomorphic over FlatBuffers" is superseded; the rest of the 2026-10-10
+    amendment stands. Each generated face item that is generic over a face port
+    names that parameter `P: ::ridl_rt::port::Encoded` beside the port roles its
+    interface needs, and takes every size through `P::Encoding`: a payload
+    buffer from `<T as Payload<P::Encoding>>::BUFFER`, and the claim and event
+    buffers from `<Iface as Sizes<P::Encoding>>::CLAIM_BUFFER` and
+    `EVENT_BUFFER`. Each impl and each free function that encodes, decodes or
+    projects through `Sizes` carries a generated `where` clause naming
+    `Iface: Sizes<P::Encoding>` and one `T: Payload<P::Encoding>` per payload
+    type that face uses, because a trait's `where` clause is not assumed by its
+    users. The items with no port parameter — the provider, subscribe and
+    invalidate traits, the descriptors and the prelude among them — take neither
+    the bound nor the predicates. The face gains no type parameter of its own
+    and names no encoding; a consumer that binds a generated face to a runtime
+    it did not write names an encoding only where it builds that runtime, and a
+    program that writes its own port names it in that port's `Encoded`
+    implementation instead. The face is still emitted only when the manifest
+    names `flatbuffers`, which is the one codec the Rust backend emits.
+    `ridl-loopback` is the port side of this:
+    `Loopback<E: Encoding = FlatBuffers>` and each of its six role handles
+    implement `Encoded`, so `Loopback::new(catalog)` carries FlatBuffers and
+    `Loopback::<E>::with_encoding(catalog)` names another encoding
+    (driftsys/ridl#801).
 
 16. **`ridl-rt` becomes an epic at the ridl layer, in V1.** The runtime core —
     store, control plane, frame protocol, subscriptions, the sans-IO loop, the

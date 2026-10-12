@@ -535,10 +535,12 @@ provenance. Nothing here is normative — the current references live in
   default, the per-encoding size table `Sizes<E>` and the payload buffers, the
   lint RSDL-807, and the generic face. The plan is archived verbatim; the design
   is archived with its section 8 amended, for the RSDL-807 fact stated below.
-  The plan covers sub-stage 1a only, which landed; the design's sub-stage 1b
-  (the face reads its encoding from the port, section 7.1 and 7.2) is not built,
-  and its sections are copied to
-  [`../wip/2026-10-10-on-request-encodings-1b-design.md`](../wip/2026-10-10-on-request-encodings-1b-design.md).
+  The plan covers sub-stage 1a only; the design's sub-stage 1b (the face reads
+  its encoding from the port, section 7.1 and 7.2) was built separately, from
+  the residual design and plan archived below
+  ([`2026-10-10-on-request-encodings-1b-design.md`](2026-10-10-on-request-encodings-1b-design.md)
+  and
+  [`2026-10-11-on-request-encodings-1b-plan.md`](2026-10-11-on-request-encodings-1b-plan.md)).
   Two facts differ from the design as written: the `ridl-rt` break ships in
   0.9.0, not 0.8.0, because 0.8.0 was released before the work landed; and
   RSDL-807 compares only the backends that can carry a codec, the Rust emit and
@@ -564,3 +566,26 @@ provenance. Nothing here is normative — the current references live in
   [ADR-0028](../decisions/ADR-0028-docs-in-generated-code.md), the amendment of
   [ADR-0026](../decisions/ADR-0026-doc-comments.md), and
   [the codegen plugins design record](../design/codegen-plugins.md).
+- **2026-10-10-on-request-encodings-1b-design.md** and
+  **2026-10-11-on-request-encodings-1b-plan.md** — sub-stage 1b of the
+  on-request encodings design (driftsys/ridl#801): the generated interaction
+  face reads its payload encoding from its port type (`P: port::Encoded`,
+  `P::Encoding`) with generated `where` clauses instead of naming
+  `::ridl_rt::encoding::FlatBuffers`, and `ridl-loopback` is typed by the
+  encoding its ports carry (`Loopback<E = FlatBuffers>`, the six role handles,
+  `Handles<E>`, `with_encoding`). The design holds the sections of the archived
+  full design that describe 1b, copied verbatim, with its own list of what
+  changed since it was written; both files are archived verbatim. The plan's
+  question Q-1 was answered (a): all six role handles carry `E`. The as-built
+  behaviour is in
+  [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
+  decision 15, [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md)
+  decisions 6 and 7,
+  [the interaction-face design record](../design/interaction-face.md),
+  [the `ridl-rt` design record](../design/ridl-rt.md) and
+  [the `ridl-loopback` design record](../design/ridl-loopback.md). One record is
+  not amended yet:
+  [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) still says
+  that no port implements `Encoded` and that the face reads it in later work.
+  The plan's Task 7 is the standing instruction for that rewrite, which waits
+  for a separate pull request.

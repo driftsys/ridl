@@ -11,14 +11,17 @@
 //! holds the same `Arc<Mutex<Store>>` and its own copy of the
 //! [`CatalogRef`](ridl_rt::contract::CatalogRef) the runtime was built with,
 //! so `Attached::catalog` can return a reference without reaching through the
-//! lock.
+//! lock. Every handle also carries the encoding its runtime's ports carry, as
+//! the type parameter `E` it shares with [`Loopback`](crate::Loopback), and
+//! implements `Encoded` with it; the parameter is a `PhantomData` field and
+//! takes part in no method, because the bytes are opaque to this runtime.
 //!
 //! Every handle implements `Attached`, which every port trait but `Clock` and
-//! `Wakeable` has as a supertrait, and `Wakeable`. The table lists what each
-//! handle adds to them, and the split follows the receiver of those methods,
-//! as ADR-0021 decision 12 derives it:
+//! `Wakeable` has as a supertrait, `Encoded`, and `Wakeable`. The table lists
+//! what each handle adds to them, and the split follows the receiver of those
+//! methods, as ADR-0021 decision 12 derives it:
 //!
-//! | Handle            | Port roles beside `Attached` and `Wakeable`                                   | Kinds of key it stores                            | Threading     |
+//! | Handle            | Port roles beside `Attached`, `Encoded` and `Wakeable`                        | Kinds of key it stores                            | Threading     |
 //! | ----------------- | ----------------------------------------------------------------------------- | ------------------------------------------------- | ------------- |
 //! | [`ReaderHandle`]  | `Clock`, `SignalReader`, `FixedReader`, `ScannableSignals`, `CoherentSignals` | none                                              | `Send + Sync` |
 //! | [`WriterHandle`]  | `SignalWriter`                                                                | none                                              | `Send`        |
@@ -48,15 +51,17 @@
 //! `crates/ridl-loopback/src/lib.rs` asserts them at compile time.
 
 use std::collections::BTreeMap;
+use std::marker::PhantomData;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::Waker;
 
 use ridl_rt::contract::{CatalogRef, InterfaceNo, Ordinal};
+use ridl_rt::encoding::{Encoding, FlatBuffers};
 use ridl_rt::error::CallError;
 use ridl_rt::port::{
-    Attached, Caller, Changed, Claim, ClaimId, Clock, CoherentSignals, Correlation, EventSink,
-    EventSource, FixedReader, Handler, Interest, RaiseError, RawOccurrence, RawSample, ReadError,
-    ScannableSignals, SendError, ServeError, SettleError, SignalReader, SignalWriter,
+    Attached, Caller, Changed, Claim, ClaimId, Clock, CoherentSignals, Correlation, Encoded,
+    EventSink, EventSource, FixedReader, Handler, Interest, RaiseError, RawOccurrence, RawSample,
+    ReadError, ScannableSignals, SendError, ServeError, SettleError, SignalReader, SignalWriter,
     SubscribeError, Wakeable, Watermark, WriteError,
 };
 use ridl_rt::sample::Timestamp;
@@ -113,37 +118,47 @@ fn wake_at_once(waker: &Waker) {
 ///
 /// It is `Send + Sync`, so several threads may hold one and read at once, and
 /// a face that needs only `SignalReader` can be built over this handle
-/// directly rather than over the aggregate.
-pub struct ReaderHandle {
+/// directly rather than over the aggregate: like every handle, it carries the
+/// runtime's encoding `E`, which such a face reads from it.
+pub struct ReaderHandle<E: Encoding = FlatBuffers> {
     shared: Shared,
     catalog: CatalogRef,
+    encoding: PhantomData<E>,
 }
 
-impl ReaderHandle {
+impl<E: Encoding> ReaderHandle<E> {
     pub(crate) fn new(shared: Shared, catalog: CatalogRef) -> Self {
-        ReaderHandle { shared, catalog }
+        ReaderHandle {
+            shared,
+            catalog,
+            encoding: PhantomData,
+        }
     }
 }
 
-impl Attached for ReaderHandle {
+impl<E: Encoding> Attached for ReaderHandle<E> {
     fn catalog(&self) -> &CatalogRef {
         &self.catalog
     }
 }
 
-impl Clock for ReaderHandle {
+impl<E: Encoding> Encoded for ReaderHandle<E> {
+    type Encoding = E;
+}
+
+impl<E: Encoding> Clock for ReaderHandle<E> {
     fn now(&self) -> Timestamp {
         lock(&self.shared).now()
     }
 }
 
-impl Wakeable for ReaderHandle {
+impl<E: Encoding> Wakeable for ReaderHandle<E> {
     fn wake_on(&self, _: Interest, waker: &Waker) {
         wake_at_once(waker);
     }
 }
 
-impl SignalReader for ReaderHandle {
+impl<E: Encoding> SignalReader for ReaderHandle<E> {
     fn read(
         &self,
         iface: InterfaceNo,
@@ -154,7 +169,7 @@ impl SignalReader for ReaderHandle {
     }
 }
 
-impl FixedReader for ReaderHandle {
+impl<E: Encoding> FixedReader for ReaderHandle<E> {
     fn read_fixed(
         &self,
         iface: InterfaceNo,
@@ -165,7 +180,7 @@ impl FixedReader for ReaderHandle {
     }
 }
 
-impl ScannableSignals for ReaderHandle {
+impl<E: Encoding> ScannableSignals for ReaderHandle<E> {
     fn generation(&self, iface: InterfaceNo) -> u64 {
         lock(&self.shared).generation(iface)
     }
@@ -175,7 +190,7 @@ impl ScannableSignals for ReaderHandle {
     }
 }
 
-impl CoherentSignals for ReaderHandle {
+impl<E: Encoding> CoherentSignals for ReaderHandle<E> {
     fn read_coherent(
         &self,
         iface: InterfaceNo,
@@ -196,31 +211,37 @@ impl CoherentSignals for ReaderHandle {
 /// The staged changes and the per channel sequence counters live on the
 /// handle, not in the store: staging is one provider's private state until its
 /// `commit`, and a sequence number is assigned by the sender (ridl §3.1).
-pub struct WriterHandle {
+pub struct WriterHandle<E: Encoding = FlatBuffers> {
     shared: Shared,
     catalog: CatalogRef,
     staged: BTreeMap<Key, Staged>,
     seqs: BTreeMap<Key, u64>,
+    encoding: PhantomData<E>,
 }
 
-impl WriterHandle {
+impl<E: Encoding> WriterHandle<E> {
     pub(crate) fn new(shared: Shared, catalog: CatalogRef) -> Self {
         WriterHandle {
             shared,
             catalog,
             staged: BTreeMap::new(),
             seqs: BTreeMap::new(),
+            encoding: PhantomData,
         }
     }
 }
 
-impl Attached for WriterHandle {
+impl<E: Encoding> Attached for WriterHandle<E> {
     fn catalog(&self) -> &CatalogRef {
         &self.catalog
     }
 }
 
-impl SignalWriter for WriterHandle {
+impl<E: Encoding> Encoded for WriterHandle<E> {
+    type Encoding = E;
+}
+
+impl<E: Encoding> SignalWriter for WriterHandle<E> {
     fn set(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8]) -> Result<(), WriteError> {
         self.staged
             .insert((iface, ord), Staged::Set(bytes.to_vec()));
@@ -249,7 +270,7 @@ impl SignalWriter for WriterHandle {
     }
 }
 
-impl Wakeable for WriterHandle {
+impl<E: Encoding> Wakeable for WriterHandle<E> {
     fn wake_on(&self, _: Interest, waker: &Waker) {
         wake_at_once(waker);
     }
@@ -265,19 +286,21 @@ impl Wakeable for WriterHandle {
 /// Each source handle receives its own copy of every occurrence raised while
 /// it is subscribed, so two consumers of one event never consume each other's
 /// occurrences.
-pub struct SourceHandle {
+pub struct SourceHandle<E: Encoding = FlatBuffers> {
     shared: Shared,
     catalog: CatalogRef,
     id: usize,
+    encoding: PhantomData<E>,
 }
 
-impl SourceHandle {
+impl<E: Encoding> SourceHandle<E> {
     pub(crate) fn new(shared: Shared, catalog: CatalogRef) -> Self {
         let id = lock(&shared).open_source();
         SourceHandle {
             shared,
             catalog,
             id,
+            encoding: PhantomData,
         }
     }
 }
@@ -285,20 +308,24 @@ impl SourceHandle {
 /// The source's waker is dropped after the lock is released: it may be the
 /// last reference to a task that owns another handle of this runtime, and
 /// that handle's own `Drop` takes the lock.
-impl Drop for SourceHandle {
+impl<E: Encoding> Drop for SourceHandle<E> {
     fn drop(&mut self) {
         let waiters = lock(&self.shared).close_source(self.id);
         drop(waiters);
     }
 }
 
-impl Attached for SourceHandle {
+impl<E: Encoding> Attached for SourceHandle<E> {
     fn catalog(&self) -> &CatalogRef {
         &self.catalog
     }
 }
 
-impl EventSource for SourceHandle {
+impl<E: Encoding> Encoded for SourceHandle<E> {
+    type Encoding = E;
+}
+
+impl<E: Encoding> EventSource for SourceHandle<E> {
     fn subscribe(&mut self, iface: InterfaceNo, ords: &[Ordinal]) -> Result<(), SubscribeError> {
         lock(&self.shared).subscribe(self.id, iface, ords);
         Ok(())
@@ -315,7 +342,7 @@ impl EventSource for SourceHandle {
 
 /// Stores one `Event` waker, whatever interface it was registered under, woken
 /// by any raise that queues an occurrence for this source.
-impl Wakeable for SourceHandle {
+impl<E: Encoding> Wakeable for SourceHandle<E> {
     fn wake_on(&self, what: Interest, waker: &Waker) {
         match what {
             Interest::Event(_) => locked(&self.shared, |store, wake| {
@@ -334,18 +361,20 @@ impl Wakeable for SourceHandle {
 /// would make a consumer subscribed to some of this sink's events see a gap in
 /// `seq` where nothing was lost, and `EventSource::next` states that a gap is
 /// a loss.
-pub struct SinkHandle {
+pub struct SinkHandle<E: Encoding = FlatBuffers> {
     shared: Shared,
     catalog: CatalogRef,
     seqs: BTreeMap<Key, u64>,
+    encoding: PhantomData<E>,
 }
 
-impl SinkHandle {
+impl<E: Encoding> SinkHandle<E> {
     pub(crate) fn new(shared: Shared, catalog: CatalogRef) -> Self {
         SinkHandle {
             shared,
             catalog,
             seqs: BTreeMap::new(),
+            encoding: PhantomData,
         }
     }
 
@@ -356,13 +385,17 @@ impl SinkHandle {
     }
 }
 
-impl Attached for SinkHandle {
+impl<E: Encoding> Attached for SinkHandle<E> {
     fn catalog(&self) -> &CatalogRef {
         &self.catalog
     }
 }
 
-impl EventSink for SinkHandle {
+impl<E: Encoding> Encoded for SinkHandle<E> {
+    type Encoding = E;
+}
+
+impl<E: Encoding> EventSink for SinkHandle<E> {
     fn raise(
         &mut self,
         iface: InterfaceNo,
@@ -378,7 +411,7 @@ impl EventSink for SinkHandle {
     }
 }
 
-impl Wakeable for SinkHandle {
+impl<E: Encoding> Wakeable for SinkHandle<E> {
     fn wake_on(&self, _: Interest, waker: &Waker) {
         wake_at_once(waker);
     }
@@ -399,14 +432,15 @@ impl Wakeable for SinkHandle {
 /// [`Loopback::SLOTS`](crate::Loopback::SLOTS) calls sent and not forgotten,
 /// a send answers [`SendError::Busy`] and draws no sequence number, because
 /// nothing was sent.
-pub struct CallerHandle {
+pub struct CallerHandle<E: Encoding = FlatBuffers> {
     shared: Shared,
     catalog: CatalogRef,
     id: usize,
     next_seq: u64,
+    encoding: PhantomData<E>,
 }
 
-impl CallerHandle {
+impl<E: Encoding> CallerHandle<E> {
     pub(crate) fn new(shared: Shared, catalog: CatalogRef) -> Self {
         let id = lock(&shared).open_caller();
         CallerHandle {
@@ -414,6 +448,7 @@ impl CallerHandle {
             catalog,
             id,
             next_seq: 0,
+            encoding: PhantomData,
         }
     }
 
@@ -439,7 +474,7 @@ impl CallerHandle {
 /// A dropped caller's `Slot` waker leaves the store, and every call it sent
 /// and did not forget is forgotten, so its slot comes back. The waker is
 /// dropped after the lock is released, as the source's is.
-impl Drop for CallerHandle {
+impl<E: Encoding> Drop for CallerHandle<E> {
     fn drop(&mut self) {
         let waiters = locked(&self.shared, |store, wake| {
             store.close_caller(self.id, wake)
@@ -448,15 +483,19 @@ impl Drop for CallerHandle {
     }
 }
 
-impl Attached for CallerHandle {
+impl<E: Encoding> Attached for CallerHandle<E> {
     fn catalog(&self) -> &CatalogRef {
         &self.catalog
     }
 }
 
+impl<E: Encoding> Encoded for CallerHandle<E> {
+    type Encoding = E;
+}
+
 /// The caller reads the runtime's one clock, so a generated async `Client`
 /// can compute a call's deadline over this handle alone.
-impl Clock for CallerHandle {
+impl<E: Encoding> Clock for CallerHandle<E> {
     fn now(&self) -> Timestamp {
         lock(&self.shared).now()
     }
@@ -466,7 +505,7 @@ impl Clock for CallerHandle {
 /// settlement, its `forget`, the drop of this handle, or a displacement by
 /// another task. Stores one `Slot` waker, woken at once while a slot is free
 /// and otherwise by the next reclaim.
-impl Wakeable for CallerHandle {
+impl<E: Encoding> Wakeable for CallerHandle<E> {
     fn wake_on(&self, what: Interest, waker: &Waker) {
         match what {
             Interest::Outcome(c) => locked(&self.shared, |store, wake| {
@@ -480,7 +519,7 @@ impl Wakeable for CallerHandle {
     }
 }
 
-impl Caller for CallerHandle {
+impl<E: Encoding> Caller for CallerHandle<E> {
     fn command(
         &mut self,
         iface: InterfaceNo,
@@ -538,14 +577,15 @@ impl Caller for CallerHandle {
 /// the store, where `next_claim` filters by it and a caller's send reads it to
 /// know which handler to wake. `serve` is the one method that changes it, and
 /// it changes both.
-pub struct HandlerHandle {
+pub struct HandlerHandle<E: Encoding = FlatBuffers> {
     shared: Shared,
     catalog: CatalogRef,
     id: usize,
     served: Vec<Key>,
+    encoding: PhantomData<E>,
 }
 
-impl HandlerHandle {
+impl<E: Encoding> HandlerHandle<E> {
     pub(crate) fn new(shared: Shared, catalog: CatalogRef) -> Self {
         let id = lock(&shared).open_handler();
         HandlerHandle {
@@ -553,6 +593,7 @@ impl HandlerHandle {
             catalog,
             id,
             served: Vec::new(),
+            encoding: PhantomData,
         }
     }
 
@@ -571,7 +612,7 @@ impl HandlerHandle {
 /// call the caller forgot is withdrawn instead: its slot is reclaimed, and no
 /// handler is presented it again or woken for it. The handler's waker is
 /// dropped after the lock is released, as the source's is.
-impl Drop for HandlerHandle {
+impl<E: Encoding> Drop for HandlerHandle<E> {
     fn drop(&mut self) {
         let waiters = locked(&self.shared, |store, wake| {
             store.close_handler(self.id, wake)
@@ -580,13 +621,17 @@ impl Drop for HandlerHandle {
     }
 }
 
-impl Attached for HandlerHandle {
+impl<E: Encoding> Attached for HandlerHandle<E> {
     fn catalog(&self) -> &CatalogRef {
         &self.catalog
     }
 }
 
-impl Handler for HandlerHandle {
+impl<E: Encoding> Encoded for HandlerHandle<E> {
+    type Encoding = E;
+}
+
+impl<E: Encoding> Handler for HandlerHandle<E> {
     fn serve(&mut self, iface: InterfaceNo, ords: &[Ordinal]) -> Result<(), ServeError> {
         for ord in ords {
             if !self.served.contains(&(iface, *ord)) {
@@ -618,7 +663,7 @@ impl Handler for HandlerHandle {
 /// by a send of a member this handler serves, by a `serve` that admits a call
 /// already waiting, or by another handler's drop that returns a claim this
 /// handler serves.
-impl Wakeable for HandlerHandle {
+impl<E: Encoding> Wakeable for HandlerHandle<E> {
     fn wake_on(&self, what: Interest, waker: &Waker) {
         match what {
             Interest::Claim(_) => locked(&self.shared, |store, wake| {

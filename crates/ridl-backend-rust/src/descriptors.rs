@@ -203,6 +203,14 @@ fn one_interface_public(
     // The size table in the one codec this backend emits. The rows and the
     // two maxima are const expressions over the codec's `MAX_SIZE`, never a
     // number this emitter would have to keep equal to it.
+    //
+    // A size this table names in an array length is reached through the whole
+    // path `<Self as Sizes<FlatBuffers>>::`, not through `Self::`: a program
+    // may implement `Sizes` for this interface in a second encoding, and then
+    // `Self::MAX_BUFFER_SIZE` names no one table (rustc E0283).
+    let table = quote! {
+        <Self as ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers>>
+    };
     items.push(quote! {
         impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for #iface_ident {
             const RESERVATIONS: &'static [::core::primitive::u64] = &[
@@ -210,10 +218,10 @@ fn one_interface_public(
             ];
             const MAX_BUFFER_SIZE: ::core::primitive::usize = #max_buffer;
             const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = #event_buffer;
-            type ClaimBuffer = [::core::primitive::u8; Self::MAX_BUFFER_SIZE];
-            type EventBuffer = [::core::primitive::u8; Self::EVENT_SOURCE_BUFFER_SIZE];
-            const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
-            const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+            type ClaimBuffer = [::core::primitive::u8; #table::MAX_BUFFER_SIZE];
+            type EventBuffer = [::core::primitive::u8; #table::EVENT_SOURCE_BUFFER_SIZE];
+            const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; #table::MAX_BUFFER_SIZE];
+            const EVENT_BUFFER: Self::EventBuffer = [0u8; #table::EVENT_SOURCE_BUFFER_SIZE];
         }
     });
 

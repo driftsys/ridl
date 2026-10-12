@@ -144,7 +144,7 @@ pub fn generate_face_with(
     );
     let mut items = package_items(&ctx, &interfaces, encodings)?;
     items.extend(descriptors::interface_items(&ctx)?);
-    items.extend(face::interface_items(&model, &ctx.links())?);
+    items.extend(face::interface_items(&ctx, &model, &ctx.links())?);
     render(items)
 }
 
@@ -260,7 +260,7 @@ pub(crate) fn generate_pipeline_over(
     let mut interface_items: Vec<TokenStream> = Vec::new();
     for (index, interface, produced) in built {
         let produced = produced.and_then(|mut items| {
-            items.extend(face::one_interface(interface, &ctx.links())?);
+            items.extend(face::one_interface(&ctx, interface, &ctx.links())?);
             Ok(items)
         });
         match produced {

@@ -51,8 +51,12 @@ use ridl_rt::trace::TraceContext;
 /// One interaction, addressed the way every port method addresses one.
 pub(crate) type Key = (InterfaceNo, Ordinal);
 
+/// The number of slots of the call table. `Loopback::SLOTS` is this value,
+/// and its documentation says why sixteen.
+pub(crate) const SLOTS: usize = 16;
+
 /// The caller-side call table: sixteen slots and no byte budget.
-type Calls = Table<{ crate::Loopback::SLOTS }>;
+type Calls = Table<SLOTS>;
 
 /// A signal channel's published state.
 struct SignalEntry {
@@ -771,7 +775,7 @@ impl Store {
     /// Stores a caller's `Interest::Slot` waker, or wakes it at once when a
     /// slot is free.
     pub(crate) fn wait_slot(&mut self, id: usize, waker: &Waker, wake: &mut Vec<Waker>) {
-        let ready = self.calls.len() < crate::Loopback::SLOTS;
+        let ready = self.calls.len() < SLOTS;
         let Some(waiters) = self.callers.get_mut(&id) else {
             wake.push(waker.clone());
             return;

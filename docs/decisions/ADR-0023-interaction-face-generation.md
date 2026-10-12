@@ -155,6 +155,14 @@ companion entry point of decision 2 is `generate_face_with(package, encodings)`;
 The change is tracked as driftsys/ridl#801; the as-built record is
 [the interaction-face design record](../design/interaction-face.md).
 
+**Amendment (2026-10-12) — decisions 6 and 7: the face reads the encoding from
+its port.** The face takes its encoding from its port type
+(`P: ::ridl_rt::port::Encoded`, `P::Encoding`) and carries the size and payload
+bounds as generated `where` clauses; it gains no type parameter and names no
+encoding. `ridl-loopback` is the port side of it:
+`Loopback<E: Encoding = FlatBuffers>` and all six role handles implement
+`Encoded`. Decisions 6 and 7 carry the amendment in place; driftsys/ridl#801.
+
 ## Context
 
 The approved M1 design (archived at
@@ -485,6 +493,25 @@ argument for it in the command case.
    bound and reads the encoding from `P::Encoding` is later work, and until it
    lands the face encodes with FlatBuffers.
 
+   **Amendment (2026-10-12) — the face reads the encoding from its port, as
+   built.** The three sentences of the 2026-10-10 amendment after its first are
+   superseded; decision 6 still keeps `Client<P>` and adds no type parameter for
+   the encoding. Every generated item that is generic over a face port carries
+   `::ridl_rt::port::Encoded` first in that parameter's bound list, before the
+   port roles the interface needs: `Client<P>`, `blocking::Client<P>`,
+   `Publisher<W>`, the call futures, `NextEvent`, `dispatch`, `serve` and
+   `Serve`. Every impl and every free function among them that encodes, decodes
+   or projects through `Sizes` carries a generated `where` clause naming
+   `Iface: Sizes<P::Encoding>` and one `T: Payload<P::Encoding>` per payload
+   type that face uses, because a trait's `where` clause is not assumed by its
+   users on stable Rust. The items with no port parameter take neither the bound
+   nor the predicates: the `Provider`, `Subscribe` and `Invalidate` traits, the
+   descriptors, the prelude, and free functions such as the catalog check and
+   the blocking module's deadline helper. `Serve<'a, H, P>` carries the
+   `Iface: Sizes<H::Encoding>` predicate on the struct itself, because its claim
+   buffer field has the type that impl names. The face names no encoding: the
+   port states it (driftsys/ridl#801).
+
 7. **Amendment (2026-09-28) — the fixed methods of the face are trait methods;
    the member methods stay inherent.** Rust gives one type one inherent
    namespace, and a trait its own; a member and a fixed method of one name
@@ -633,6 +660,14 @@ argument for it in the command case.
    `<Iface as Sizes<FlatBuffers>>::CLAIM_BUFFER` and `EVENT_BUFFER`. The
    inherent `MAX_BUFFER_SIZE` and `EVENT_SOURCE_BUFFER_SIZE` constants of the
    generated descriptor are removed; `Sizes<E>` holds them.
+
+   **Amendment (2026-10-12) — the face no longer names the encoding.** The
+   2026-10-10 amendment's first sentence is superseded for the face: the codec
+   and the descriptor's `Sizes` impl still name
+   `::ridl_rt::encoding::FlatBuffers`, because the Rust backend emits one codec,
+   but the face names `P::Encoding` instead, where `P` is its port parameter
+   (decision 6's 2026-10-12 amendment). The buffer sources are unchanged, with
+   `P::Encoding` in place of `FlatBuffers`. The `Wire` alias stays removed.
 
 8. **Amendment (2026-10-04) — the generated face checks the port's catalog when
    it binds to the port, and panics on a mismatch.**

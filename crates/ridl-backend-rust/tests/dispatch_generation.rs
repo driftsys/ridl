@@ -62,7 +62,17 @@ fn dispatch_has_the_settled_signature() {
         ),
         "dispatch signature",
     );
-    assert!(d.contains("H:::ridl_rt::port::Handler"), "handler bound");
+    // The handler port states the encoding of the bytes this step checks and
+    // writes, so the step is bounded on `Encoded` and carries the face's
+    // encoding predicates.
+    assert!(
+        d.contains("H:::ridl_rt::port::Encoded+::ridl_rt::port::Handler"),
+        "handler bound"
+    );
+    assert!(
+        d.contains("super::Cabin:::ridl_rt::contract::Sizes<H::Encoding>"),
+        "the interface's size table in the handler port's encoding",
+    );
     assert!(d.contains("P:Provider"), "provider bound");
     assert!(
         d.contains("while*budget>0{letsettlement=matchh.next_claim(buf){Ok(None)=>break,"),
@@ -97,13 +107,13 @@ fn dispatch_checks_the_caller_owned_buffer_before_it_polls() {
     // returns 0 without consuming a claim, so the caller can retry with a
     // correctly sized buffer.
     assert!(
-        d.contains("ifbuf.len()<<super::Cabinas::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers,>>::MAX_BUFFER_SIZE{returnOk(0);}"),
+        d.contains("ifbuf.len()<<super::Cabinas::ridl_rt::contract::Sizes<H::Encoding>>::MAX_BUFFER_SIZE{returnOk(0);}"),
         "the buffer precondition returns 0",
     );
     assert!(
         at(
             &d,
-            "ifbuf.len()<<super::Cabinas::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers,>>::MAX_BUFFER_SIZE"
+            "ifbuf.len()<<super::Cabinas::ridl_rt::contract::Sizes<H::Encoding>>::MAX_BUFFER_SIZE"
         ) < at(&d, "h.next_claim("),
         "the precondition is checked before the first poll",
     );
@@ -281,11 +291,11 @@ fn the_two_buffer_constants_are_used_where_each_belongs() {
     let d = cabin();
 
     assert!(
-        d.contains("<super::Cabinas::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers,>>::MAX_BUFFER_SIZE"),
+        d.contains("<super::Cabinas::ridl_rt::contract::Sizes<H::Encoding>>::MAX_BUFFER_SIZE"),
         "dispatch sizes from the argument-and-reply maximum",
     );
     assert!(
-        d.contains("<super::Cabinas::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers,>>::EVENT_BUFFER"),
+        d.contains("<super::Cabinas::ridl_rt::contract::Sizes<P::Encoding,>>::EVENT_BUFFER"),
         "the event poll sizes from the separate event-only maximum",
     );
     // The event constant is not what dispatch checks, and the call constant is
@@ -296,7 +306,11 @@ fn the_two_buffer_constants_are_used_where_each_belongs() {
         "dispatch must not size from the event-only maximum",
     );
     assert!(
-        !d[..at(&d, "<super::Cabinas::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers,>>::EVENT_BUFFER")].contains("MAX_BUFFER_SIZE"),
+        !d[..at(
+            &d,
+            "<super::Cabinas::ridl_rt::contract::Sizes<P::Encoding,>>::EVENT_BUFFER"
+        )]
+            .contains("MAX_BUFFER_SIZE"),
         "the event poll must not size from the argument-and-reply maximum",
     );
 }
