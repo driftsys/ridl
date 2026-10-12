@@ -996,6 +996,36 @@ ADR-0023 decision 7 and ADR-0021 decision 19 record it; the design note is
 archived as
 [`2026-09-28-face-fixed-methods-traits-design.md`](../archive/2026-09-28-face-fixed-methods-traits-design.md).
 
+## The crate paths and the payload buffers (driftsys/ridl#487)
+
+**The crate root of a single-package build gains no re-export.** The path a
+consumer writes repeats what the crate name already carries —
+`veh_cabin::veh::cabin::cabin::Client` repeats `veh` and `cabin` — and the cure
+proposed for it was a re-export at the crate root, emitted when the build holds
+exactly one package. That is declined, because the re-export's presence would
+depend on a property of the build rather than on the package being built: a
+consumer writes `veh_cabin::cabin::Client`, someone adds a second, unrelated
+package to the workspace, and the short path disappears from a change that has
+nothing to do with the package the consumer uses. A generated API that changes
+shape because of its neighbours is worse than one that is verbose. The
+repetition is also not this emitter's to remove: it comes from the crate name
+being derived from the package name, so if the verbosity is worth addressing,
+the place is how `ridlc` names the crate and its module tree, for every
+workspace alike, and not a special case for one.
+
+**Every face method sizes its payload buffer from `MAX_SIZE` and puts it on the
+stack.** That follows from two decisions the records already hold: the face
+allocates nothing
+([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md)), and the
+declared bound is the buffer size ([the codec design](flatbuffers-codec.md)). So
+a payload such as `[string [0..256]; 0..1000]` gives a stack frame on the order
+of a megabyte, whatever the actual value carries. This is recorded as a known
+property rather than a defect, and nothing in the corpus meets it. The two ways
+out are named here so that a consumer who does meet it finds them stated: a
+caller-supplied buffer variant of each method, which is the shape `dispatch`
+already has, or a runtime that hands the face a buffer it owns. Neither is
+built.
+
 ## What is provisional
 
 | Placeholder                                                                                            | Replaced by                                  |
