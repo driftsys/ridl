@@ -243,7 +243,7 @@ design in each:
    | Diagnostics and lints   | `diagnostics`                                                                  | the language lane                    |            |
    | CLI                     | `cli`                                                                          | the developer-experience lane        |            |
    | Generated Rust crate    | `generated-crate` (`cargo semver-checks`)                                      | the codegen lane                     |            |
-   | Runtime crates          | `runtime-crates` (`cargo semver-checks`)                                       | the wire and runtime lane            |            |
+   | Runtime crates          | `runtime-crates` (`cargo semver-checks`)                                       | the wire and runtime lane            | `69d23ab7` |
    | Codegen plugin protocol | `codegen-protocol`                                                             | the codegen lane                     | `a3a0ac21` |
    | MCP tools               | `mcp`                                                                          | the release and policy lane, at once | `3c3301df` |
    | Wire format             | `wire`: encoding names, `.proto` and `.fbs` lines, catalog hash, frame vectors | the wire and runtime lane            | `e6620b0e` |
