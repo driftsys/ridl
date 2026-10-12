@@ -133,7 +133,7 @@ pub fn weighted_score(items: &[Item], met: &[bool]) -> f64 {
 }
 
 /// The JSON Schema of a verdict.
-pub const SCHEMA: &str = r#"{"type":"object","required":["items"],"properties":{"items":{"type":"array","items":{"type":"object","required":["n","met","reason"],"properties":{"n":{"type":"integer"},"met":{"type":"boolean"},"reason":{"type":"string"}}}}}}"#;
+pub const SCHEMA: &str = r#"{"type":"object","additionalProperties":false,"required":["items"],"properties":{"items":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["n","met","reason"],"properties":{"n":{"type":"integer"},"met":{"type":"boolean"},"reason":{"type":"string"}}}}}}"#;
 
 /// Writes the verdict schema where the Codex judge reads it.
 pub fn write_schema(dir: &Path) -> Result<(), String> {
@@ -203,9 +203,10 @@ pub fn claude_reply(stdout: &str) -> Result<String, String> {
         .ok_or_else(|| "the Claude judge printed no result".to_owned())
 }
 
-/// The final message of a Claude run: the `result` of its last `result` line,
-/// or, in a handed-off run's transcript, which has no `result` line, the text
-/// of its last assistant message that holds text.
+/// The final message of a Claude run: the `result` of its last `result` line.
+/// A handed-off run's transcript has none: its final message is the
+/// `message` of its last `SubagentHandback` call, else the text of its last
+/// assistant message that holds text.
 pub fn claude_final_message(transcript: &str) -> String {
     let lines: Vec<serde_json::Value> = transcript
         .lines()
@@ -216,6 +217,15 @@ pub fn claude_final_message(transcript: &str) -> String {
         .filter(|v| v["type"] == "result")
         .filter_map(|v| v["result"].as_str())
         .next_back();
+    let handback = || {
+        lines
+            .iter()
+            .filter(|v| v["type"] == "assistant")
+            .flat_map(|v| v["message"]["content"].as_array().into_iter().flatten())
+            .filter(|block| block["type"] == "tool_use" && block["name"] == "SubagentHandback")
+            .filter_map(|block| block["input"]["message"].as_str().map(str::to_owned))
+            .next_back()
+    };
     let assistant_text = || {
         lines
             .iter()
@@ -233,6 +243,7 @@ pub fn claude_final_message(transcript: &str) -> String {
     };
     result
         .map(str::to_owned)
+        .or_else(handback)
         .or_else(assistant_text)
         .unwrap_or_default()
 }
@@ -402,6 +413,46 @@ mod tests {
             "\n"
         );
         assert_eq!(claude_final_message(t), "last");
+    }
+
+    #[test]
+    fn a_subagent_transcript_ends_with_its_handback_message() {
+        let t = concat!(
+            r#"{"type":"assistant","message":{"content":[{"type":"text","text":"Let me move it there."}]}}"#,
+            "\n",
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"SubagentHandback","input":{"message":"The answer."}}]}}"#,
+            "\n"
+        );
+        assert_eq!(claude_final_message(t), "The answer.");
+    }
+
+    #[test]
+    fn every_object_of_the_schema_is_closed_and_requires_all_its_properties() {
+        // OpenAI's strict structured output refuses any other schema.
+        let schema: serde_json::Value = serde_json::from_str(SCHEMA).unwrap();
+        let mut stack = vec![&schema];
+        let mut objects = 0;
+        while let Some(v) = stack.pop() {
+            if v["type"] == "object" {
+                objects += 1;
+                assert_eq!(v["additionalProperties"], false, "{v}");
+                let mut props: Vec<&String> = v["properties"].as_object().unwrap().keys().collect();
+                let mut required: Vec<&str> = v["required"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|r| r.as_str().unwrap())
+                    .collect();
+                props.sort();
+                required.sort();
+                assert_eq!(props, required, "{v}");
+                stack.extend(v["properties"].as_object().unwrap().values());
+            }
+            if v["type"] == "array" {
+                stack.push(&v["items"]);
+            }
+        }
+        assert_eq!(objects, 2);
     }
 
     #[test]

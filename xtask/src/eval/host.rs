@@ -119,7 +119,11 @@ pub fn prepare_run(
             }
         }
         Host::Codex => {
-            let config = format!("[mcp_servers.ridl]\ncommand = {ridl:?}\nargs = [\"mcp\"]\n");
+            // `codex exec` never asks for approval, so a tool that needs it is
+            // refused; every ridl tool is read-only.
+            let config = format!(
+                "[mcp_servers.ridl]\ncommand = {ridl:?}\nargs = [\"mcp\"]\ndefault_tools_approval_mode = \"approve\"\n"
+            );
             std::fs::write(dirs.home.join("config.toml"), config).map_err(|e| e.to_string())?;
             if with_skill {
                 copy_tree(skill, &dirs.home.join("skills/ridl-authoring"))?;
@@ -411,6 +415,12 @@ mod tests {
             std::fs::read_to_string(codex.home.join("config.toml"))
                 .unwrap()
                 .contains("[mcp_servers.ridl]")
+        );
+        // `codex exec` never asks, so a tool that needs approval is refused.
+        assert!(
+            std::fs::read_to_string(codex.home.join("config.toml"))
+                .unwrap()
+                .contains("default_tools_approval_mode = \"approve\"")
         );
     }
 

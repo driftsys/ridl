@@ -63,7 +63,8 @@ fn str_field<'a>(
 
 /// True when the transcript holds a tool call whose name is `ridl_check`, or
 /// ends with `__ridl_check` (Claude names an MCP tool `mcp__<server>__<tool>`).
-/// Text that only mentions the name does not count.
+/// Text that only mentions the name does not count, nor does a call refused
+/// before it reached the server.
 pub fn used_ridl_check(transcript: &str) -> bool {
     json_lines(transcript).any(|line| {
         objects(&line).into_iter().any(|map| {
@@ -72,7 +73,11 @@ pub fn used_ridl_check(transcript: &str) -> bool {
                 .iter()
                 .filter_map(|key| str_field(map, key))
                 .any(|n| n == "ridl_check" || n.ends_with("__ridl_check"));
-            is_call && named
+            // Codex records a call its approval policy refused with a null
+            // result; that call never reached the server.
+            let refused = map.get("result").is_some_and(serde_json::Value::is_null)
+                && map.get("error").is_some_and(|e| !e.is_null());
+            is_call && named && !refused
         })
     })
 }
@@ -213,6 +218,14 @@ mod tests {
     fn a_tool_call_to_ridl_check_is_found_on_each_host() {
         assert!(used_ridl_check(CLAUDE_CALL));
         assert!(used_ridl_check(CODEX_CALL));
+    }
+
+    #[test]
+    fn a_codex_call_refused_before_the_server_does_not_count() {
+        let refused = r#"{"type":"item.completed","item":{"type":"mcp_tool_call","server":"ridl","tool":"ridl_check","result":null,"error":{"message":"MCP tool call requires approval, but approval policy is never"},"status":"failed"}}"#;
+        let tool_error = r#"{"type":"item.completed","item":{"type":"mcp_tool_call","server":"ridl","tool":"ridl_check","result":{"content":[{"type":"text","text":"no `ridl.toml` found"}]},"error":null,"status":"failed"}}"#;
+        assert!(!used_ridl_check(refused));
+        assert!(used_ridl_check(tool_error));
     }
 
     #[test]
