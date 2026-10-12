@@ -900,12 +900,13 @@ connection, `attach.frame_version` is 1 or the `attach` is refused
 `frame_version_unsupported`.
 
 **2. The header encoding.** Every integer is fixed-width little-endian; `stamp`
-is a two's-complement `i64`. There is no padding, no alignment and no length
-field: the header is the prefix below and the payload is every byte after it.
-Every code is the value §4 and §9.6 give it (`form`, `provenance`, `outcome`, a
-refusal reason, a `Rule`), `kind` is the `Kind` value of §2 and `encoding` the
-tag of §3; this section restates none. Fields are in this order, and a form
-carries exactly the fields §4 gives it:
+is a two's-complement `i64`. There is no padding and no alignment, and no field
+carries the payload's length: the header is the prefix below, and on a frame
+that carries a payload, the payload is every byte after it. Every code is the
+value §4 and §9.6 give it (`form`, `provenance`, `outcome`, a refusal reason, a
+`Rule`), `kind` is the `Kind` value of §2 and `encoding` the tag of §3; this
+section restates none. Fields are in this order, and a form carries exactly the
+fields §4 gives it:
 
 | Form                               | Bytes                                                                                                                     | Header size |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------- |
@@ -919,9 +920,23 @@ carries exactly the fields §4 gives it:
 
 `detail` is the `Rule` code (§9.6) with `outcome` 3, the refusal reason code
 (§4) with `outcome` 9, and 0 with every other outcome. The `name` is at least
-one byte and valid UTF-8. A value outside its table is a protocol violation
-(item 4). `InterfaceNo` and `Ordinal` keep their 32-bit range, so §4's range
-check at `attach` always passes on this binding.
+one byte and valid UTF-8. A consuming runtime whose unit name is longer than 255
+bytes of UTF-8 cannot attach over this binding: it reports an error when the
+session is opened and sends nothing, so no refusal reason exists for that case.
+A value outside its table is a protocol violation (item 4). `InterfaceNo` and
+`Ordinal` keep their 32-bit range, so §4's range check at `attach` always passes
+on this binding.
+
+**Whether a frame carries a payload** is decided by its header, never by whether
+bytes follow the header: by its `form`, by the `provenance` of a `publish` and
+by the `outcome` of a `response`. From §5: an `occurrence` and a `request`
+always carry one; a `publish` carries one under `Live` (a signal's publication,
+and every `publish` of a `fixed`) and none under `Init` or `Invalid(Declared)`;
+a `response` carries one under `reply` and none under any other outcome;
+`attach`, `attached`, `subscribe`, `answer`, `unsubscribe` and `read` never
+carry one. `kind` does not change the answer. A payload that is present may be
+zero bytes long — a proto3 value whose fields all hold their defaults encodes to
+no bytes — and is handed to the generated binding as it is.
 
 **The sizes.** The envelope is 16 bytes. The largest data-plane header without
 its envelope is 20 bytes (`response`), so a data-plane message is at most 36
@@ -940,15 +955,20 @@ encoding its `attach` names, and a provider that does not serve it refuses
 transport's, proto3, and the construction can name another.
 
 **4. Framing.** One frame is one WebSocket message with the binary opcode;
-WebSocket fragmentation is below this binding. A text message is closed
-with 1003. A message the receiver cannot read — shorter than its header, a code
+WebSocket fragmentation is below this binding. A text message is closed with
+1003. A message the receiver cannot read — shorter than its header, a
+control-plane message other than `attach` that is longer than its header, a code
 outside its table, `interface` or `ordinal` 0, a message before `attach`, a
 second `attach`, a `name_len` that does not match the message, a `name` that is
 empty or not valid UTF-8, a first provider-to-consumer message that is not
 `attached` — is a protocol violation: the receiver records the frame (§9.5) and
-closes with 1002, and the session ends as §3 states. A `request` with a readable
-header and no payload is answered `corrupt` (§9.5); any other frame missing a
-required payload is discarded and recorded. A message above the receiver's
+closes with 1002, and the session ends as §3 states. A `publish` or a `response`
+whose header says it carries no payload and which has bytes after its header is
+discarded and recorded (§9.5). A frame whose header says it carries a payload is
+never answered or discarded for the payload's length: the payload, zero bytes
+included, goes to `Payload::verify`, and a payload that fails to decode follows
+§9 — a `request`'s is answered `corrupt` (§5.3). So the `request` of §9.5 whose
+payload is absent does not occur on this binding. A message above the receiver's
 configured size limit, which admits at least 294 bytes, is closed with 1009.
 Either side ends the session on purpose with 1000, the provider with 1001 when
 it shuts down; after `attached(refused)` the provider closes with 1000, and the
