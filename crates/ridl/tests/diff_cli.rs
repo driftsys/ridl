@@ -439,8 +439,7 @@ fn source_dir_vs_source_dir_breaking_exits_one() {
 /// `ridl diff` over two sources that differ only in a range's maximum: the
 /// narrowed range is a breaking `constraint_changed` row and exits 1, and the
 /// widened range is a compatible row and exits 0. Each assertion names the
-/// row's own tag, so a wrongly tagged row behind another breaking row fails.
-/// The facets one by one are pinned in `ridl-diff`'s own classify tests.
+/// row's own tag, so the rendered tag is checked, not only the headline.
 #[test]
 fn a_narrowed_range_exits_one_and_a_widened_range_exits_zero() {
     const WIDE: &str = "package veh.cluster\n\n/// Vehicle speed.\ntype Speed: integer [0..250]\n";
