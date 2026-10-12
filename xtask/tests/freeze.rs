@@ -60,10 +60,20 @@ impl Repo {
         self.run("check", fixture)
     }
 
+    fn check_release(&self, fixture: Option<(&str, &Path)>) -> Output {
+        self.run_with("check", &["--release"], fixture)
+    }
+
     fn run(&self, subcommand: &str, fixture: Option<(&str, &Path)>) -> Output {
+        self.run_with(subcommand, &[], fixture)
+    }
+
+    fn run_with(&self, subcommand: &str, extra: &[&str], fixture: Option<(&str, &Path)>) -> Output {
         let mut command = Command::new(env!("CARGO_BIN_EXE_xtask"));
         command
-            .args(["freeze", subcommand, "--fixtures-only", "--root"])
+            .args(["freeze", subcommand, "--fixtures-only"])
+            .args(extra)
+            .arg("--root")
             .arg(&self.dir);
         if let Some((name, file)) = fixture {
             command
@@ -94,12 +104,158 @@ fn check_fails_on_a_row_without_a_dumper() {
     let repo = Repo::new("no-dumper");
     repo.write(
         "freeze/surfaces.toml",
-        "[[surface]]\nname = \"ghost\"\nbaseline = \"HEAD\"\n",
+        "required = [\"ghost\"]\n\n[[surface]]\nname = \"ghost\"\nbaseline = \"HEAD\"\n",
     );
     repo.commit();
     let output = repo.check(None);
     assert!(!output.status.success());
-    assert!(stderr(&output).contains("ghost"), "{}", stderr(&output));
+    let err = stderr(&output);
+    assert!(
+        err.contains("has a row for `ghost`") && err.contains("no dumper or API checker"),
+        "{err}"
+    );
+}
+
+/// A repository whose `surfaces.toml` holds `toml`, with the dump of the
+/// registered fixture surface `fixture` committed, and the fixture file.
+fn repo_with_surfaces(tag: &str, toml: &str) -> (Repo, PathBuf) {
+    let repo = Repo::new(tag);
+    let fixture = repo.dir.join("fixture-lines.txt");
+    std::fs::write(&fixture, "a\n").unwrap();
+    repo.write("freeze/surfaces.toml", toml);
+    repo.write("freeze/fixture.txt", "a\n");
+    repo.commit();
+    (repo, fixture)
+}
+
+#[test]
+fn check_notes_a_required_surface_without_a_row() {
+    let (repo, fixture) = repo_with_surfaces("required-note", "required = [\"fixture\"]\n");
+    let output = repo.check(Some(("fixture", &fixture)));
+    assert!(output.status.success(), "{}", stderr(&output));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("surface `fixture` is required but has no row"),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn release_check_fails_on_a_required_surface_without_a_row() {
+    let (repo, fixture) = repo_with_surfaces("required-release", "required = [\"fixture\"]\n");
+    let output = repo.check_release(Some(("fixture", &fixture)));
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(
+        err.contains("surface `fixture` is required but has no row: a release cannot leave a frozen surface without a baseline"),
+        "{err}"
+    );
+}
+
+#[test]
+fn release_check_passes_with_an_empty_required_list() {
+    let (repo, fixture) = repo_with_surfaces("required-empty", "required = []\n");
+    let output = repo.check_release(Some(("fixture", &fixture)));
+    assert!(output.status.success(), "{}", stderr(&output));
+}
+
+#[test]
+fn check_fails_on_a_row_whose_surface_is_not_required() {
+    let (repo, fixture) = repo_with_surfaces(
+        "row-not-required",
+        "required = []\n\n[[surface]]\nname = \"fixture\"\nbaseline = \"HEAD\"\n",
+    );
+    let output = repo.check(Some(("fixture", &fixture)));
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(
+        err.contains(
+            "has a row for `fixture` but `fixture` is not in `required`: add it to `required`"
+        ),
+        "{err}"
+    );
+}
+
+#[test]
+fn check_passes_a_row_whose_surface_is_required() {
+    let (repo, fixture) = repo_with_surfaces(
+        "row-required",
+        "required = [\"fixture\"]\n\n[[surface]]\nname = \"fixture\"\nbaseline = \"HEAD\"\n",
+    );
+    let output = repo.check(Some(("fixture", &fixture)));
+    assert!(output.status.success(), "{}", stderr(&output));
+    let output = repo.check_release(Some(("fixture", &fixture)));
+    assert!(output.status.success(), "{}", stderr(&output));
+}
+
+#[test]
+fn check_fails_on_an_unknown_name_in_required() {
+    let (repo, fixture) = repo_with_surfaces("required-unknown", "required = [\"no-such\"]\n");
+    let output = repo.check(Some(("fixture", &fixture)));
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(
+        err.contains("lists `no-such` in `required` but no dumper"),
+        "{err}"
+    );
+    // The name has no surface, so no row can be added for it: the missing-row
+    // message would be wrong and is not printed.
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains("no-such"), "{stdout}");
+    assert!(!err.contains("has no row"), "{err}");
+    let output = repo.check_release(Some(("fixture", &fixture)));
+    assert!(
+        !stderr(&output).contains("has no row"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn update_rejects_the_release_flag() {
+    let repo = Repo::new("update-release");
+    let fixture = repo.dir.join("fixture-lines.txt");
+    std::fs::write(&fixture, "a\n").unwrap();
+    let output = repo.run_with("update", &["--release"], Some(("fixture", &fixture)));
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(err.contains("--release applies to `check` only"), "{err}");
+    let dumps: Vec<_> = std::fs::read_dir(repo.dir.join("freeze"))
+        .into_iter()
+        .flatten()
+        .map(|entry| entry.unwrap().file_name())
+        .filter(|name| name.to_string_lossy().ends_with(".txt"))
+        .collect();
+    assert!(dumps.is_empty(), "update wrote dumps: {dumps:?}");
+}
+
+#[test]
+fn release_check_fails_on_a_required_api_surface_without_a_row() {
+    let repo = Repo::new("required-api-release");
+    repo.write("freeze/surfaces.toml", "required = [\"runtime-crates\"]\n");
+    repo.commit();
+    let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
+        .args([
+            "freeze",
+            "check",
+            "--release",
+            "--fixtures-only",
+            "--api-semver",
+            "runtime-crates",
+        ])
+        .arg("--root")
+        .arg(&repo.dir)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_INDEX_FILE")
+        .env_remove("GIT_WORK_TREE")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(
+        err.contains("surface `runtime-crates` is required but has no row"),
+        "{err}"
+    );
 }
 
 #[test]
@@ -160,7 +316,8 @@ fn assert_unknown_ref_hint(err: &str, surface: &str) {
     );
 }
 
-const ROW: &str = "[[surface]]\nname = \"fixture\"\nbaseline = \"base\"\n";
+const ROW: &str =
+    "required = [\"fixture\"]\n\n[[surface]]\nname = \"fixture\"\nbaseline = \"base\"\n";
 
 /// A repository whose tag `base` holds freeze/fixture.txt = `baseline`; HEAD
 /// holds the row, the committed dump `committed` and the fixture lines `head`
@@ -257,7 +414,7 @@ fn api_fixture(relative: &str) -> String {
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 
-const API_ROW: &str = "[[surface]]\nname = \"generated-crate\"\nbaseline = \"base\"\n";
+const API_ROW: &str = "required = [\"generated-crate\"]\n\n[[surface]]\nname = \"generated-crate\"\nbaseline = \"base\"\n";
 
 /// A repository whose tag `base` holds the fixture crate under
 /// freeze/generated/api/; HEAD holds the row for `generated-crate` and the
@@ -477,7 +634,7 @@ fn repo_with_runtime_baseline(tag: &str, lib_rs: &str) -> Repo {
     repo.git(&["tag", "base"]);
     repo.write(
         "freeze/surfaces.toml",
-        "[[surface]]\nname = \"runtime-crates\"\nbaseline = \"base\"\n",
+        "required = [\"runtime-crates\"]\n\n[[surface]]\nname = \"runtime-crates\"\nbaseline = \"base\"\n",
     );
     repo.commit();
     repo.write("crates/ridl-rt/src/lib.rs", lib_rs);

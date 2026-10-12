@@ -503,6 +503,7 @@ mod tests {
                     Some("10000"),
                     Some("10000"),
                 )),
+                family: v2::Family::Dispatch as i32,
             }),
         );
         let pkg = package("app", vec![]);

@@ -97,9 +97,10 @@ compile:
 # Check the frozen surfaces: each committed dump under freeze/ matches the
 # regenerated one, and no line of a dump at its baseline ref is missing now
 # (freeze/README.md). The baseline refs are read with `git show`, so the
-# checkout needs the tags and the history (fetch-depth: 0 in CI).
-freeze-check: toolchain-check
-    cargo run --locked --package xtask -- freeze check
+# checkout needs the tags and the history (fetch-depth: 0 in CI). Flags go to
+# the check; `--release` also fails on a required surface without a row.
+freeze-check *flags: toolchain-check
+    cargo run --locked --package xtask -- freeze check {{flags}}
 
 # Run the Rust workspace test suite (same defensive guard as `compile`).
 #
@@ -2732,7 +2733,9 @@ pre-push: lint-commits toolchain-check gate-parity fmt-check check doc-path-chec
 verify: lint-commits build
 
 # Cut a release: git-std bumps the version, writes the changelog, tags.
-release:
+# The release check of the freeze gate runs first.
+release: toolchain-check
+    cargo run --locked --package xtask -- freeze check --release
     git std bump
 
 # Set up a clone or worktree: git-std, prim, the git hooks, the Rust toolchain

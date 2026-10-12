@@ -365,7 +365,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "doc": "",
       "links": [],
       "see": [],
-      "since": []
+      "since": [],
+      "tier": "TIER_PLATFORM"
     },
     {
       "name": "Hmi",
@@ -388,7 +389,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "doc": "",
       "links": [],
       "see": [],
-      "since": []
+      "since": [],
+      "tier": "TIER_APPLICATION"
     }
   ],
   "deployments": [

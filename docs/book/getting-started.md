@@ -1042,11 +1042,12 @@ past-tense occurrences (`doorOpened`), commands as imperatives (`setGear`), and
 queries as `get…` or `stream…`. A query named like a mutation draws a
 `RIDL-404` warning, because it probably wanted to be a command.
 
-Every family keyword is reserved in every profile, including keywords this
-profile does not accept. `state`, `input`, `target`, `model`,
-`component` and the rest of the registry are not available as identifiers even
-in a `.ridl` file — the
-typl language reference §1.4 lists the whole set.
+Every registry word is reserved in every profile, including words this profile
+does not accept. `state`, `states`, `model`, `component` and the rest of the
+registry are not available as identifiers even in a `.ridl` file — the typl
+language reference §1.4 lists the whole set. The domain spellings of ADR-0012
+(`present`, `trigger`, …) are not in the registry; they are identifiers until a
+profile implements one.
 
 ## Next steps
 

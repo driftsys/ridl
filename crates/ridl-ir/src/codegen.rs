@@ -89,6 +89,9 @@ pub enum SerializeError {
     /// Prototext: the transcode into the dynamic message goes through the
     /// wire encoding, whose decoder enforces prost's fixed recursion limit.
     Text(prost::DecodeError),
+    /// An interaction holds a (kind, family, shape) combination the model
+    /// does not admit (`ridl_ir::class`).
+    Class(crate::class::InteractionClassError),
 }
 
 impl std::fmt::Display for SerializeError {
@@ -104,6 +107,7 @@ impl std::fmt::Display for SerializeError {
                 "cannot render the codegen model as prototext: {source}; the known cause is \
                  composite nesting deeper than the transcoding decoder's recursion limit"
             ),
+            Self::Class(source) => write!(f, "{source}"),
         }
     }
 }
@@ -116,6 +120,7 @@ impl SerializeError {
         match error {
             crate::v2::SerializeError::Json(source) => Self::Json(source),
             crate::v2::SerializeError::Text(source) => Self::Text(source),
+            crate::v2::SerializeError::Class(source) => Self::Class(source),
         }
     }
 }
@@ -125,6 +130,7 @@ impl std::error::Error for SerializeError {
         match self {
             Self::Json(source) => Some(source),
             Self::Text(source) => Some(source),
+            Self::Class(source) => Some(source),
         }
     }
 }
@@ -134,6 +140,7 @@ impl std::error::Error for SerializeError {
 /// value as its `model`, nested one indentation level deeper by
 /// `request_to_json`.
 pub fn to_json_pretty(model: &v1::Model) -> Result<String, SerializeError> {
+    crate::class::check_model(model).map_err(SerializeError::Class)?;
     render_json(model).map_err(SerializeError::from_v2)
 }
 
@@ -146,7 +153,9 @@ pub fn to_json_pretty(model: &v1::Model) -> Result<String, SerializeError> {
 /// the map shape at the front end's own type-depth limit (design note §6.2),
 /// so the ceiling of 1,000 leaves a factor of 3.8.
 pub fn from_json(text: &str) -> Result<v1::Model, serde_json::Error> {
-    read_json(text)
+    let model: v1::Model = read_json(text)?;
+    crate::class::check_model(&model).map_err(serde::de::Error::custom)?;
+    Ok(model)
 }
 
 /// The nesting ceiling [`from_json`] enforces, in JSON bracket levels — the
@@ -156,6 +165,7 @@ pub const MAX_JSON_NESTING_LEVELS: usize = MAX_JSON_NESTING;
 /// Renders a lowered model in the protobuf text format — the inspection
 /// encoding, derived from the same descriptor pool the IR's prototext uses.
 pub fn to_text_format(model: &v1::Model) -> Result<String, SerializeError> {
+    crate::class::check_model(model).map_err(SerializeError::Class)?;
     crate::v2::render_text_for(crate::v2::codegen_model_descriptor(), model)
         .map_err(SerializeError::from_v2)
 }
@@ -168,7 +178,14 @@ pub fn to_binary(model: &v1::Model) -> Vec<u8> {
 
 /// Decodes a lowered model from the protobuf binary wire format.
 pub fn from_binary(bytes: &[u8]) -> Result<v1::Model, prost::DecodeError> {
-    prost::Message::decode(bytes)
+    let model: v1::Model = prost::Message::decode(bytes)?;
+    crate::class::check_model(&model).map_err(|err| {
+        // `DecodeError::new` is the only way to build one: prost exposes no
+        // other constructor, and this reader's error type is prost's.
+        #[allow(deprecated)]
+        prost::DecodeError::new(err.to_string())
+    })?;
+    Ok(model)
 }
 
 #[cfg(test)]
