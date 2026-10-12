@@ -403,15 +403,17 @@ no return type takes the same absent state, with the cause
 both per encoding:
 
 - **`Interaction.reservation`** is the saturating `u64` sum, in bytes, of the
-  bounded sizes of the member's payloads, in order: a signal, an event or a
-  fixed member has its one payload, a command has its request, and a query has
-  its request and then its reply. The first payload whose state is not bounded
-  makes the reservation `unsized`, naming `<member>.<role>: <payload>`, where
-  `<payload>` is the type's reference when the payload is one named type and
-  otherwise what the shape is — a kind word, a parameter list or `()`. A member
-  of a kind this toolchain does not know is `unsized` naming
-  `<member>: no known payload shape`, never summed as zero. The field's own
-  comment in `ridl/codegen/v1/model.proto` lists every shape.
+  bounded sizes of the member's payloads, in order: a signal or an event has its
+  one payload, a command has its request, and a query has its request and then
+  its reply. A fixed member counts no payload and reserves 0 whatever its
+  payload, which is what the runtime's row carries for it (driftsys/ridl#852).
+  The first payload whose state is not bounded makes the reservation `unsized`,
+  naming `<member>.<role>: <payload>`, where `<payload>` is the type's reference
+  when the payload is one named type and otherwise what the shape is — a kind
+  word, a parameter list or `()`. A member of a kind this toolchain does not
+  know is `unsized` naming `<member>: no known payload shape`, never summed as
+  zero. The field's own comment in `ridl/codegen/v1/model.proto` lists every
+  shape.
 - **`Interface.table_budget`** is the saturating sum of the reservations of the
   live members in `MEMBERS` order. It is `unsized`, naming the first member
   whose reservation is unsized. A tombstone does not count, and an interface

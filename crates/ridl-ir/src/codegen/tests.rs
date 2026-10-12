@@ -2276,8 +2276,8 @@ fn an_unsized_reply_states_the_kind_of_its_type() {
         ("count", "count.reply: inline scalar"),
         ("table", "table.reply: map"),
         ("list", "list.reply: array of Pair"),
-        // A field position with no kind at all: its own word, not `map` and
-        // not `no payload`, which is the member that carries no payload.
+        // A field position with no kind at all gets its own word, not the
+        // `map` of a position that does carry a kind.
         ("void", "void.reply: no type"),
     ];
     for (member, text) in expected {
