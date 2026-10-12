@@ -398,8 +398,9 @@ fn a_websocket_row_adds_its_frame_header_and_envelope_to_the_proto3_bound() {
     ];
     // `Warning`'s proto3 bound is 8 (the fixture derives it): 100 + 7 + 8.
     assert_eq!(max_message_bytes(&request, "warning"), json!(115));
-    // `Temperature` has no proto3 bound, so the sum has no value.
-    assert_eq!(max_message_bytes(&request, "temperature"), Value::Null);
+    // `Temperature`'s proto3 bound is its root box message's, 6 (the
+    // fixture derives it): 100 + 7 + 6.
+    assert_eq!(max_message_bytes(&request, "temperature"), json!(113));
     request.deployment.as_mut().expect("a deployment").bindings = Vec::new();
     assert_eq!(max_message_bytes(&request, "warning"), Value::Null);
 }
@@ -483,8 +484,8 @@ fn proto3_sizes(bound: Option<u32>) -> Option<v1::PayloadSizes> {
 
 /// The proto3 bound of a command is its request's, and the bound of a query
 /// is the larger of its request's and its reply's. A missing bound gives no
-/// bound. Cabin's calls carry named scalars, which have no proto3 bound, so
-/// these interactions are built by the test.
+/// bound. The interactions are built by the test so that the absent cases are
+/// covered.
 #[test]
 fn a_call_s_proto3_bound_is_its_request_s_or_the_larger_of_a_query_s_two() {
     let command = |request: Option<u32>| v1::Interaction {
