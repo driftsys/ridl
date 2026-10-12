@@ -504,7 +504,7 @@ enum PackageSource {
 
 /// Resolves `package_path` per ADR-0002 §5: workspace member (step 1) → the
 /// referencing package's own `[imports]` (step 2) → the workspace `[imports]`
-/// (step 3) → error (step 4).
+/// (step 3, for a workspace member only) → error (step 4).
 fn resolve_source(
     db: &dyn salsa::Database,
     ws: Workspace,
@@ -522,8 +522,14 @@ fn resolve_source(
     {
         return PackageSource::Member(member);
     }
-    let url = longest_import_prefix(pkg.imports(db), package_path)
-        .or_else(|| longest_import_prefix(ws.imports(db), package_path));
+    // Step 3 applies to a workspace member only: a package of a remote unit
+    // resolves through its own unit (step 1) and its own `[imports]` (step
+    // 2), so that the unit compiles here only when it compiles alone.
+    let url = longest_import_prefix(pkg.imports(db), package_path).or_else(|| {
+        matches!(pkg.origin(db), PackageOrigin::WorkspaceMember)
+            .then(|| longest_import_prefix(ws.imports(db), package_path))
+            .flatten()
+    });
     match url {
         Some(url) => {
             let package = ws.packages(db).iter().copied().find(|candidate| {
@@ -1170,7 +1176,6 @@ mod package_tests {
     use super::*;
     use ridl_core::TimingDefaults;
     use ridl_core::db::RidlDatabase;
-    use ridl_core::package::PackageOrigin;
     use ridl_core::std_lib::std_package;
     use salsa::Setter;
 
@@ -2106,13 +2111,30 @@ mod package_tests {
     }
 
     /// A key is found by the longest dot-separated prefix of the import
-    /// path: `import veh.common.types.Speed` finds the key `veh.common`,
-    /// and binds to the package `veh.common.types` of the unit loaded for
-    /// that key's URL.
+    /// path: with the keys `veh` and `veh.common` pinning two units that
+    /// both hold a package `veh.common.types`, `import veh.common.types.Speed`
+    /// finds the key `veh.common` and binds to that unit's declaration.
     #[test]
     fn a_key_is_found_by_the_longest_prefix_of_the_path() {
         let mut db = RidlDatabase::default();
         let std = std_package(&mut db);
+        const SHORT_URL: &str = "https://registry.example.com/veh@v1";
+        let short_types = Package::new(
+            &db,
+            "veh.common.types".to_string(),
+            "veh".to_string(),
+            vec![input(
+                &db,
+                "cache/veh/common/types.typl",
+                "package veh.common.types\ntype Speed: m/s\n",
+            )],
+            PackageOrigin::Remote {
+                url: SHORT_URL.to_string(),
+            },
+            BTreeMap::new(),
+            TimingDefaults::default(),
+            None,
+        );
         let common = remote_package(&db, "veh.common", URL, "package veh.common\n");
         let types = remote_package(
             &db,
@@ -2123,11 +2145,17 @@ mod package_tests {
         let app = app_package(
             &db,
             "package app\nimport veh.common.types.Speed\nstruct Fast { v: Speed }\n",
-            &[("veh.common", URL)],
+            &[("veh", SHORT_URL), ("veh.common", URL)],
         );
-        let ws = Workspace::new(&db, vec![app, common, types], BTreeMap::new());
+        let ws = Workspace::new(&db, vec![app, short_types, common, types], BTreeMap::new());
         let resolution = resolve_package(&db, ws, app, std);
-        assert_eq!(resolution.symbols["Speed"].package, "veh.common.types");
+        let speed = &resolution.symbols["Speed"];
+        assert_eq!(speed.package, "veh.common.types");
+        assert_eq!(
+            speed.file,
+            types.files(&db)[0],
+            "the binding is the declaration of the unit the longer key pins"
+        );
         assert!(
             codes(&resolution).is_empty(),
             "got: {:?}",
@@ -2160,6 +2188,74 @@ mod package_tests {
         assert_eq!(resolution.symbols["Speed"].package, "veh.common");
         assert!(
             codes(&resolution).is_empty(),
+            "got: {:?}",
+            resolution.diagnostics
+        );
+    }
+
+    /// A package of one remote unit reaches a package of another remote
+    /// unit only through a key of its own (rewritten) `[imports]`: with no
+    /// key, the import is the step-4 error; with the key, it binds to the
+    /// unit loaded for that key's URL.
+    #[test]
+    fn a_remote_unit_reaches_another_remote_unit_through_its_own_imports() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        const URL_B: &str = "https://registry.example.com/lib/b@v1";
+        let b = remote_package(&db, "lib.b", URL_B, "package lib.b\ntype T: km/h\n");
+        let a = remote_package(
+            &db,
+            "lib.a",
+            URL,
+            "package lib.a\nimport lib.b.T\nstruct S { t: T }\n",
+        );
+        let app = app_package(&db, "package app\n", &[("lib.a", URL), ("lib.b", URL_B)]);
+        let ws = Workspace::new(&db, vec![app, a, b], BTreeMap::new());
+
+        let unresolved = resolve_package(&db, ws, a, std);
+        assert!(!unresolved.symbols.contains_key("T"));
+        assert!(
+            unresolved.diagnostics.iter().any(|d| d
+                .message
+                .starts_with("unresolved import: `lib.b` is not a workspace member")),
+            "got: {:?}",
+            unresolved.diagnostics
+        );
+
+        a.set_imports(&mut db).to(imports_map(&[("lib.b", URL_B)]));
+        let bound = resolve_package(&db, ws, a, std);
+        assert_eq!(bound.symbols["T"].package, "lib.b");
+        assert!(codes(&bound).is_empty(), "got: {:?}", bound.diagnostics);
+    }
+
+    /// The workspace `[imports]` (ADR-0002 §5 step 3) does not apply to a
+    /// package of a remote unit: a key only the consumer's root pins does
+    /// not resolve an import of the remote unit, so the unit compiles here
+    /// only when it compiles alone.
+    #[test]
+    fn the_workspace_imports_do_not_apply_to_a_remote_unit() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        const URL_B: &str = "https://registry.example.com/lib/b@v1";
+        let b = remote_package(&db, "lib.b", URL_B, "package lib.b\ntype T: km/h\n");
+        let a = remote_package(
+            &db,
+            "lib.a",
+            URL,
+            "package lib.a\nimport lib.b.T\nstruct S { t: T }\n",
+        );
+        let app = app_package(&db, "package app\n", &[("lib.a", URL)]);
+        let ws = Workspace::new(
+            &db,
+            vec![app, a, b],
+            imports_map(&[("lib.a", URL), ("lib.b", URL_B)]),
+        );
+        let resolution = resolve_package(&db, ws, a, std);
+        assert!(!resolution.symbols.contains_key("T"));
+        assert!(
+            resolution.diagnostics.iter().any(|d| d
+                .message
+                .starts_with("unresolved import: `lib.b` is not a workspace member")),
             "got: {:?}",
             resolution.diagnostics
         );

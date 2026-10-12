@@ -74,7 +74,7 @@ baseline:
   Use `ridl_diff` with `old: "<root>/.ridl/baseline"` and `new: "<root>"` to
   compare the baseline explicitly.
 
-The tools load no remote unit, so in both faces an import under an `[imports]`
+The tools load no remote unit, so in path mode an import under an `[imports]`
 key is the resolver's uncoded Error: the path is not a package of the remote
 unit at the key's URL. Path loading and overlay failures are tool errors.
 
