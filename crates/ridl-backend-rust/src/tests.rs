@@ -6970,6 +6970,11 @@ fn encoding_names_agree_with_the_manifest_table() {
             "`{name}` does not round trip through WireEncoding"
         );
     }
+    assert_eq!(
+        super::WireEncoding::parse("flatbuffers"),
+        Some(super::WireEncoding::FlatBuffers)
+    );
+    assert_eq!(super::WireEncoding::parse("fb"), None);
 
     let refuse = |value: &str| {
         let request = CodegenRequest {
@@ -6992,6 +6997,10 @@ fn encoding_names_agree_with_the_manifest_table() {
             "`{name}` is refused as unknown: {message}"
         );
     }
+
+    // A name outside the table is refused as unknown, and that refusal is
+    // the text the loop above looks for.
+    assert!(refuse("fb").contains("which is not an encoding"));
 
     // The refusals that list the names list exactly the table, in the form
     // "`a`, `b` and `c`".

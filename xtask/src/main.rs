@@ -75,6 +75,12 @@ mod tests {
         let manifest: toml::Table = text.parse().expect("ridl-rt's manifest parses");
         let features = manifest["features"].as_table().expect("a [features] table");
         let names = ridl_core::manifest::ENCODING_NAMES;
+        for exception in NON_ENCODING_FEATURES {
+            assert!(
+                features.contains_key(exception),
+                "the listed exception `{exception}` is no longer a ridl-rt feature"
+            );
+        }
         for name in names {
             assert!(
                 features.contains_key(name),

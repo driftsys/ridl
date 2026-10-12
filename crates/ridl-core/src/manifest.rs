@@ -1508,6 +1508,28 @@ version = \"1.0.0\"
         );
     }
 
+    /// Every MANI-015 message about `[backend.<name>]` ends with the list of
+    /// known encodings built from `ENCODING_NAMES`, at each of the sites that
+    /// writes one.
+    #[test]
+    fn every_backend_message_ends_with_the_known_encodings() {
+        let suffix = format!("; known encodings: {}", ENCODING_NAMES.join(", "));
+        let cases = [
+            format!("backend = 1\n{PACKAGE_HEAD}"),
+            format!("{PACKAGE_HEAD}[backend]\nrust = 1\n"),
+            format!("{PACKAGE_HEAD}[backend.rust]\nencodings = \"flatbuffers\"\n"),
+            format!("{PACKAGE_HEAD}[backend.rust]\nencodings = [\"nope\"]\n"),
+            format!("{PACKAGE_HEAD}[backend.rust]\nencodings = [\"proto3\", \"proto3\"]\n"),
+            format!("{PACKAGE_HEAD}[backend.rust]\nencodings = [1]\n"),
+        ];
+        for text in cases {
+            let (_, diags) = parse(&text);
+            assert_eq!(codes(&diags), vec!["MANI-015"], "{text}");
+            let message = &diags[0].message;
+            assert!(message.ends_with(&suffix), "{message}");
+        }
+    }
+
     /// An invalid element is dropped and the elements around it are kept, in
     /// their order.
     #[test]

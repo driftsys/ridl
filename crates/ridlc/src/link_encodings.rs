@@ -129,33 +129,26 @@ mod tests {
 
     use super::*;
 
-    /// Every codegen-model encoding variant that a list can name maps to the
-    /// name of `ENCODING_NAMES` that spells it, and every name of the table
-    /// is reached. The match in `encoding_name` is over a generated enum, so
-    /// this test ties it to the table. The generated enum has no variant
-    /// iterator; the exhaustive `match` below stops compiling when a variant
-    /// is added, which forces `variants` to be extended.
+    /// Every codegen-model discriminant maps to the name of `ENCODING_NAMES`
+    /// that spells its variant, or to `None` when it is the unspecified
+    /// encoding or no variant, and every name of the table is reached.
+    /// `expected` has no wildcard arm, so a variant added to the generated
+    /// enum does not compile until it has an entry here.
     #[test]
     fn encoding_name_covers_exactly_the_manifest_encoding_names() {
-        fn exhaustive(encoding: v1::Encoding) {
+        fn expected(encoding: v1::Encoding) -> Option<&'static str> {
             match encoding {
-                v1::Encoding::Unspecified
-                | v1::Encoding::Proto3
-                | v1::Encoding::Flatbuffers
-                | v1::Encoding::ReprC => {}
+                v1::Encoding::Unspecified => None,
+                v1::Encoding::Flatbuffers => Some("flatbuffers"),
+                v1::Encoding::Proto3 => Some("proto3"),
+                v1::Encoding::ReprC => Some("repr-c"),
             }
         }
-        exhaustive(v1::Encoding::Unspecified);
-        let variants = [
-            (v1::Encoding::Unspecified, None),
-            (v1::Encoding::Flatbuffers, Some("flatbuffers")),
-            (v1::Encoding::Proto3, Some("proto3")),
-            (v1::Encoding::ReprC, Some("repr-c")),
-        ];
         let mut reached = Vec::new();
-        for (variant, expected) in variants {
-            let name = encoding_name(variant as i32);
-            assert_eq!(name, expected, "{variant:?}");
+        for discriminant in -4..64 {
+            let want = v1::Encoding::try_from(discriminant).ok().and_then(expected);
+            let name = encoding_name(discriminant);
+            assert_eq!(name, want, "discriminant {discriminant}");
             reached.extend(name);
         }
         reached.sort_unstable();

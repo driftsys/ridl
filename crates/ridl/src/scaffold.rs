@@ -338,9 +338,13 @@ mod tests {
     /// this test ties its spelling to the manifest's constant.
     #[test]
     fn the_backend_hint_spells_the_manifest_encodings_key() {
-        let line = format!("# {} = [", ridl_core::manifest::ENCODINGS_KEY);
-        assert!(BACKEND_HINT.contains(&line), "{BACKEND_HINT}");
-        assert!(BACKEND_HINT.contains(ridl_core::manifest::ENCODING_NAMES[0]));
+        let line = format!("# {} = [\"", ridl_core::manifest::ENCODINGS_KEY);
+        let (_, after) = BACKEND_HINT.split_once(&line).expect(BACKEND_HINT);
+        let (element, _) = after.split_once('"').expect(BACKEND_HINT);
+        assert!(
+            ridl_core::manifest::ENCODING_NAMES.contains(&element),
+            "`{element}` is not an encoding name"
+        );
     }
 
     #[test]
