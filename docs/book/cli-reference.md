@@ -431,7 +431,11 @@ still applies, whatever the verdict. The scope is the unit's own source
 packages and every declaration its interfaces reach, in the unit or in another
 one, so a breaking change in a package that the unit does not reach leaves the
 unit's chain as it was. A breaking change that changes the catalog restarts the
-chain: the file then holds the one new hash. A unit with no published snapshot,
+chain: the file then holds the one new hash. The file being replaced is carried
+only when its first hash is the hash recomputed from the snapshots published
+beside it; a file that does not describe those snapshots, as a partially
+hand-edited baseline leaves behind, restarts the chain instead of carrying a
+hash that may reach past a breaking change. A unit with no published snapshot,
 or with no `<unit>.catalogs` file in the replaced baseline, also starts a chain
 with the one new hash, and a file left under the name of a unit that had no
 published snapshot is not carried, nor read. The file of a unit with a published
@@ -678,7 +682,10 @@ when the unit has no `<unit>.catalogs` file (or the baseline has none at all), a
 scoped to the unit, judges the change from the baseline to the tree breaking
 and the current catalog hash is not the file's first hash. When the two hashes
 are equal the catalog did not change, and the list holds the file's other
-hashes whatever the verdict. The recorded file is not changed by the build. An
+hashes whatever the verdict. The file is used at all only when its first hash
+is the hash recomputed from the baseline's own snapshots of the unit; a file
+that does not describe those snapshots gives an empty list. The recorded file
+is not changed by the build. An
 IR dump reads no baseline. A baseline with at least one `<unit>.catalogs` file that cannot be loaded, or
 a `<unit>.catalogs` file that cannot be read, is exit 2; a baseline with no
 `<unit>.catalogs` file is not loaded. A compile with an error diagnostic gets no
@@ -842,9 +849,17 @@ MANI-005. The table is not the `backend.` attribute namespace of an rsdl
 declaration. The lint RSDL-807 `link-encoding-not-emitted` warns when a link of
 the selected deployment carries an encoding that the emitted backend's list
 does not name. It is compared once per emitted backend that can carry a codec:
-the `rust` emit and each `--plugin`. A schema emit (`proto`, `flatbuffers`),
+the `rust` emit and each `--plugin`, and a backend named by both an `--emit`
+and a `--plugin` is compared once. A schema emit (`proto`, `flatbuffers`),
 the `typescript` emit and `codegen-model` are not compared, because their
-backends take no `encodings` option.
+backends take no `encodings` option. A `[backend.<name>]` table whose
+`encodings` list is empty declares that the backend emits no codec, and it is
+not compared either; a table written with no `encodings` key at all is the same
+declaration, as the manifest records the two forms alike. A backend with no
+table at all is compared, so a build that declared no encodings is still
+reported. An empty list is how a
+schema-only plugin silences the lint for its own backend, where the `[lints]`
+level silences it for every backend at once.
 
 **`proto` is a wire backend** (ADR-0013 decision 2): it emits the typl
 surface — structs, enums, enum sets and unions, projected to proto3 messages

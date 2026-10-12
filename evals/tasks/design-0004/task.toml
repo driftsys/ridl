@@ -1,0 +1,7 @@
+id = "design-0004"
+kind = "design"
+title = "Add a seat-heating subsystem to the cabin system"
+
+[expect]
+compiles = true
+lints = []

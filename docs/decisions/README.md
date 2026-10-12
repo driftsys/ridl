@@ -197,7 +197,11 @@ other entry below is Accepted.
   numbers. Its decision 1 fixes `generate_with` as the API every later wire
   backend inherits. Decisions 1 and 4 bind every backend that projects onto a
   namespaced target and are not proto3-scoped; decision 3 is proto3-scoped. Read
-  decision 1 before writing another wire backend.
+  decision 1 before writing another wire backend. Amended 2026-10-12, adding
+  decisions 6 to 8 from the review of the emitted mapping before 0.10 freezes
+  it: a named scalar, an enum and an enum set are rooted in
+  `message <Name>Box { <type> value = 1; }`, an optional tuple field takes
+  `optional`, and a bare `integer` projects to `sint64`.
 
 - **ADR-0018 — The runtime core, two encodings, and what the backends emit.**
   _Proposed._ Retracts the interaction layer the language backends shipped and
@@ -225,7 +229,10 @@ other entry below is Accepted.
   an optional table field that holds a scalar or an enum takes `= null`, so a
   present 0 survives a round trip through another implementation. Amended
   2026-09-30 from driftsys/ridl#598: decision 3's premise that every struct
-  field append is compatible is qualified, and its rule does not change.
+  field append is compatible is qualified, and its rule does not change. Amended
+  2026-10-12: the `.proto` and `.fbs` mapping both backends emit is reviewed and
+  frozen for 0.10; the status lists the review's rulings, and the FlatBuffers
+  decisions do not change.
 
 - **ADR-0020 — The third payload encoding, the runtime layering, and the codegen
   plugin system.** _Proposed._ `repr(C)` joins proto3 and FlatBuffers as a

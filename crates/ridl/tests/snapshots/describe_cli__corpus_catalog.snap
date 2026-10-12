@@ -49,6 +49,12 @@ expression: stdout
             {
               "max_sizes": [
                 {
+                  "bytes": 5,
+                  "cause": "Unspecified",
+                  "encoding": "Proto3",
+                  "state": "Bounded"
+                },
+                {
                   "bytes": 46,
                   "cause": "Unspecified",
                   "encoding": "FlatBuffers",
@@ -72,6 +78,12 @@ expression: stdout
           "payloads": [
             {
               "max_sizes": [
+                {
+                  "bytes": 6,
+                  "cause": "Unspecified",
+                  "encoding": "Proto3",
+                  "state": "Bounded"
+                },
                 {
                   "bytes": 43,
                   "cause": "Unspecified",
@@ -97,6 +109,12 @@ expression: stdout
             {
               "max_sizes": [
                 {
+                  "bytes": 6,
+                  "cause": "Unspecified",
+                  "encoding": "Proto3",
+                  "state": "Bounded"
+                },
+                {
                   "bytes": 43,
                   "cause": "Unspecified",
                   "encoding": "FlatBuffers",
@@ -121,6 +139,12 @@ expression: stdout
             {
               "max_sizes": [
                 {
+                  "bytes": 6,
+                  "cause": "Unspecified",
+                  "encoding": "Proto3",
+                  "state": "Bounded"
+                },
+                {
                   "bytes": 43,
                   "cause": "Unspecified",
                   "encoding": "FlatBuffers",
@@ -144,6 +168,12 @@ expression: stdout
           "payloads": [
             {
               "max_sizes": [
+                {
+                  "bytes": 5,
+                  "cause": "Unspecified",
+                  "encoding": "Proto3",
+                  "state": "Bounded"
+                },
                 {
                   "bytes": 46,
                   "cause": "Unspecified",
@@ -177,6 +207,12 @@ expression: stdout
             {
               "max_sizes": [
                 {
+                  "bytes": 5,
+                  "cause": "Unspecified",
+                  "encoding": "Proto3",
+                  "state": "Bounded"
+                },
+                {
                   "bytes": 46,
                   "cause": "Unspecified",
                   "encoding": "FlatBuffers",
@@ -200,6 +236,12 @@ expression: stdout
           "payloads": [
             {
               "max_sizes": [
+                {
+                  "bytes": 6,
+                  "cause": "Unspecified",
+                  "encoding": "Proto3",
+                  "state": "Bounded"
+                },
                 {
                   "bytes": 43,
                   "cause": "Unspecified",

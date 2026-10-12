@@ -158,9 +158,9 @@ here. This list is not a standing count of every crate the workspace holds — s
   `ridl_ir::codegen` holds the codegen request's deployment section:
   `lower_deployment` in `codegen/deployment.rs` is an emitter over the lowered
   system IR, and `codegen/bindings.rs` holds the table of transport binding
-  overheads, which has no row yet
-  ([the codegen plugin design](../design/codegen-plugins.md), "The deployment
-  section").
+  overheads, whose one row is the `websocket` binding of the frame specification
+  §11.1 ([the codegen plugin design](../design/codegen-plugins.md), "The
+  deployment section").
 
 - **`crates/ridl-backend-rust`** — one IR v2 package to
   `Generated { rust_source }`. Rust is built as a `quote` token stream and
@@ -327,6 +327,10 @@ here. This list is not a standing count of every crate the workspace holds — s
   is not a workspace member and holds no crate; see
   [`evals/README.md`](../../evals/README.md).
 
+- **`skills/`** — the `ridl-authoring` agent skill, Markdown only. The VS Code
+  extension and the editor release package it, and
+  `crates/ridl/tests/skill_gates.rs` checks it against the compiler.
+
 - **`editors/vscode`** — the VS Code extension: an LSP client plus TextMate
   grammars for `.typl`, `.ridl` and `.rsdl`, built with npm/tsc.
 
@@ -337,6 +341,11 @@ here. This list is not a standing count of every crate the workspace holds — s
 
   `cargo xtask calibrate` dumps the design lints' findings over `evals/` and
   derives the calibration summary ([`xtask/README.md`](../../xtask/README.md)).
+
+  `cargo xtask eval` runs the eval tasks under `evals/tasks/` on Claude Code and
+  on Codex, with and without the skill under `skills/`, scores and judges each
+  run, and writes the results under `evals/results/`
+  ([`evals/README.md`](../../evals/README.md#running-the-eval-tasks)).
 
   `cargo xtask freeze update` writes the dumps of the frozen surfaces under
   `freeze/`, and `cargo xtask freeze check`, which `just freeze-check` runs,

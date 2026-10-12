@@ -214,9 +214,11 @@ pub enum AbsentCause {
     /// reply that is a bare scalar some proto3 leaf bounds, which has a size
     /// of its own but no defined payload encoding.
     EncodingUndefined,
-    /// proto3 only: the type has no message of its own. ADR-0017 decision 1
-    /// inlines a named scalar and an enum set into their field (decision 2
-    /// rejects a wrapper message), and an enum is a declared `enum`.
+    /// proto3 only: the type has no message of its own. Kept because it is
+    /// part of the codegen protocol, but no declaration kind the proto3 sizer
+    /// reads produces it: a struct and a union are messages, and a named
+    /// scalar, an enum and an enum set each have the root box message
+    /// `<Name>Box` the proto backend emits for them.
     NoMessage,
     /// proto3 only: a failure inside the message other than the depth limit
     /// and an overflowing bound, which are [`AbsentCause::Overflow`]. Every
@@ -363,6 +365,11 @@ pub(crate) fn leaf_of_field_type<'a>(
 /// The leaf of a name written in `home`.
 pub(crate) fn leaf_of_name<'a>(name: &str, home: &'a Package, ctx: &Ctx<'a>) -> Option<Leaf<'a>> {
     let (decl, declaring) = ctx.resolve(home, name)?;
+    leaf_of_decl(decl, declaring)
+}
+
+/// The leaf of `decl`, already resolved and declared in `declaring`.
+pub(crate) fn leaf_of_decl<'a>(decl: &'a Decl, declaring: &'a Package) -> Option<Leaf<'a>> {
     match decl.kind.as_ref()? {
         decl::Kind::TypeDef(def) => leaf_of_type_def(def),
         decl::Kind::StructDef(def) => Some(Leaf::Struct {
@@ -403,7 +410,7 @@ pub(crate) fn leaf_of_name<'a>(name: &str, home: &'a Package, ctx: &Ctx<'a>) -> 
 }
 
 /// A bare primitive at a field position, as the proto backend projects it
-/// (`proto_primitive`): an integer is `int64`, a float `double`. A bare
+/// (`proto_primitive`): an integer is `sint64`, a float `double`. A bare
 /// `string` or `bytes` carries no length bound, and the FlatBuffers
 /// projection answers `None` for a whole type that holds one, so neither has
 /// a leaf. The compiler keeps both out of a field position (TYPL-208); a map
@@ -614,9 +621,10 @@ mod tests {
         // refuses for the same type. The relation does not hold elsewhere: for
         // a bare `integer` or `float` at a field position, and for an enum set
         // of unspecified width, the projection answers `None` while proto3
-        // emits `int64` or `double`, so a leaf exists there. A string or bytes
-        // whose bound exceeds the projection's `MAX_ENCODABLE` also has a
-        // leaf, while the projection answers `None`.
+        // emits `sint64`, `double` and `int64` respectively, so a leaf exists
+        // there. A string or bytes whose bound exceeds the projection's
+        // `MAX_ENCODABLE` also has a leaf, while the projection answers
+        // `None`.
         let string_no_bound = decl("S", Some(decl::Kind::TypeDef(string_def(None))));
         let bytes_no_bound = decl("B", Some(decl::Kind::TypeDef(bytes_def(None))));
         let bytes_bound = decl("B32", Some(decl::Kind::TypeDef(bytes_def(Some(32)))));
@@ -782,7 +790,7 @@ mod tests {
 
     #[test]
     fn every_primitive_is_a_leaf_or_unsizable() {
-        // The scalar is the proto backend's (`proto_primitive`): `int64` for
+        // The scalar is the proto backend's (`proto_primitive`): `sint64` for
         // a bare integer, `double` for a bare float.
         assert!(matches!(
             leaf_of_primitive(PrimitiveType::Boolean as i32),
@@ -790,7 +798,7 @@ mod tests {
         ));
         assert!(matches!(
             leaf_of_primitive(PrimitiveType::Integer as i32),
-            Some(Leaf::Scalar(Scalar::Int64))
+            Some(Leaf::Scalar(Scalar::Sint64))
         ));
         assert!(matches!(
             leaf_of_primitive(PrimitiveType::Float as i32),
@@ -1349,18 +1357,18 @@ mod tests {
     }
 
     #[test]
-    fn a_named_scalar_has_no_proto3_message() {
-        // ADR-0017 decision 1 inlines a named scalar into its field and
-        // decision 2 rejects a wrapper message, so proto3 has no message to
-        // size. ADR-0019 decision 8 gives the same scalar a box table, so
-        // FlatBuffers does have a bound.
+    fn a_named_scalar_has_a_root_box_in_both_encodings() {
+        // The proto backend gives a named scalar the root message
+        // `VinBox { string value = 1; }`, and ADR-0019 decision 8 gives it a
+        // box table, so both encodings have a bound. `Vin` is
+        // `string [17..17]`, at most 68 bytes: 1 + varint_len(68) + 68 = 70.
         let package = tests_support::fixture();
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
         let shape = PayloadShape::Named("Vin");
         assert_eq!(
             size_state(&package, &shape, &ctx, Encoding::Proto3),
-            SizeState::Absent(AbsentCause::NoMessage)
+            SizeState::Bounded(70)
         );
         assert!(matches!(
             size_state(&package, &shape, &ctx, Encoding::FlatBuffers),

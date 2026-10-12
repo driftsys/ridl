@@ -15,6 +15,19 @@ and its plan; read the design note as a design, not as a description of what
 shipped — decision 2 below reverses a mapping the note specified and execution
 implemented.
 
+**Amended 2026-10-12 — decisions 6 to 8, from the review of the emitted mapping
+before 0.10 freezes it.** The review is recorded in
+[ADR-0019](ADR-0019-flatbuffers-projection-rules.md)'s status, with every ruling
+it made. Three changes to this projection came out of it, each made because the
+proto3 payload codec (driftsys/ridl#264) would otherwise have had to change a
+schema that 0.10 freezes: a root message for a named scalar, an enum and an enum
+set (decision 6), the `optional` keyword on an optional tuple field (decision
+7), and `sint64` for a bare `integer` (decision 8). Decisions 1 to 5 are
+unchanged, except that decision 1's statement that a named scalar emits no
+declaration is corrected in place by decision 6. Decision 2's rejection of a
+wrapper message still holds: it is about a field position, and decision 6's
+message is never referenced from one.
+
 This ADR was accepted under the delegated authority recorded in
 [ADR-0005](ADR-0005-agent-enablement.md)'s working model.
 
@@ -54,6 +67,12 @@ distinct reachable cases.
    `union` — the kinds that emit a declaration another file can reference. A
    named scalar emits no declaration at all, so importing one names a type that
    does not exist in the imported file, which `protoc` rejects.
+
+   **Corrected 2026-10-12 by decision 6.** A named scalar and an enum set now
+   each emit one declaration, the root box message `<Name>Box`. No field names a
+   box, so the rule above is unchanged: a field of one of the two kinds still
+   inlines and still needs no import, and importing the file for the scalar's
+   own name still names a type the file does not declare.
 
    This requires the backend to see the referenced packages, so `generate` gains
    a companion: `generate_with(package, others)`, with `generate(package)`
@@ -142,6 +161,64 @@ distinct reachable cases.
    `<PREFIX>_UNSPECIFIED`. Those stay with decision 4's backend check, which is
    unchanged.
 
+6. **Every declaration that projects a type has a root message, and a named
+   scalar, an enum and an enum set are rooted in a box** — added 2026-10-12. A
+   struct's root is its message; a union's is its message with the `oneof`; a
+   named scalar, an enum and an enum set are rooted in
+   `message <Name>Box { <type> value = 1; }`, where `<type>` and the constraint
+   comment are exactly what a field of type `<Name>` gets in the same package.
+   The emitter writes the box for every declaration of the three kinds, in
+   declaration order after the declared messages and enums, whether or not an
+   interaction carries it, and claims `<Name>Box` in the package scope of
+   decision 4, so a declared type of that name is refused. The `value` field is
+   not `optional`: an absent value reads as any absent non-optional field does,
+   as 0 when 0 is a legal value of the type and as missing when it is not. The
+   proto3 size state of the three kinds is the bound of the box
+   (`crates/ridl-ir/src/projection/size/proto3.rs`), so `NoMessage` is no longer
+   produced; it stays defined, because the codegen protocol is frozen.
+
+   This answers for proto3 the question ADR-0019 decision 8 answered for
+   FlatBuffers, in the same shape and with the same name. Before it, no
+   interaction whose payload is a named scalar or an enum had a proto3 message —
+   every interaction of the VSS corpus, `signal currentSpeed : Speed`,
+   `command setGear(position: GearPosition)` — so a codec had nothing to encode
+   and a `prost` peer nothing to decode. Adding the box after the freeze would
+   add a name to every package scope and refuse a package that declares it,
+   which is why it is decided now. A box's bytes are those of the protobuf
+   wrapper types (`google.protobuf.FloatValue` and its siblings), but those are
+   not used, for decision 2's reason: an enum and a constrained scalar have
+   none, and the wrapper names a different contract.
+
+7. **An optional tuple field takes the `optional` keyword** — added 2026-10-12.
+   A tuple field may carry `?` (typl §7.1, §11), and the FlatBuffers projection
+   states it with `= null` (ADR-0019 decision 9). The induced tuple message
+   emitted the field without `optional`, so a conforming writer omitted a
+   present 0 and a `prost` peer read it as absent. The field is now emitted the
+   way a struct field is, and an optional tuple field whose type is an array or
+   a map is refused as the struct field is, because proto3 cannot mark a
+   repeated or map field absent ([ADR-0013](ADR-0013-codegen-backend-scope.md)
+   decision 7); the message names the tuple field's source path. One helper
+   holds the refusal for both positions, and the rule it reads,
+   `ridl_ir::projection::proto3::optional_repeated`, is the one the proto3 sizer
+   reads, so a payload that holds such a field has no proto3 bound.
+
+   An optional **array element** and an optional **map value** are not changed.
+   proto3 has no construct for an absent element or an absent map value, so the
+   schema emits the element type without presence, as the FlatBuffers schema
+   does; the codec refuses the shape (the FlatBuffers codec already does, and
+   the proto3 codec is to do the same), so no program this toolchain builds
+   writes it.
+
+8. **A bare `integer` projects to `sint64`** — added 2026-10-12. A field written
+   `a : integer`, with no constraint, projected to `int64`, while
+   `type Big : integer` — the same typl type — is given width `i64` by the
+   checker and projected to `sint64`. One type had two wire encodings depending
+   on its spelling, and `int64` costs ten bytes for every negative value, which
+   ADR-0013 decision 4 rules out for a range that contains negatives. An
+   unconstrained integer's range does. The largest encoding is ten bytes either
+   way, so no size bound changes. The fallback for an integer width the IR does
+   not define stays `int64`; the compiler produces no such width.
+
 ## Alternatives considered
 
 | Candidate                                                       | Verdict                                                                                                            | Reason                                                                                                                                                                                                                           |
@@ -151,6 +228,9 @@ distinct reachable cases.
 | Refusing every cross-package reference in v0.1                  | rejected                                                                                                           | the repository's own corpus is multi-package, so the backend would refuse real source                                                                                                                                            |
 | An options extension carrying constraints structurally          | deferred                                                                                                           | serves a consumer that does not exist; reopened by a consumer that must validate without the IR (decision 3)                                                                                                                     |
 | Extending RIDL-149 to enum values and union arms                | union arms taken 2026-09-20 (driftsys/ridl#451); enum values taken 2026-09-26 (driftsys/ridl#506), within one enum | the collision is a property of one target's namespace, and the extension carries a churn measurement of its own (decisions 4 and 5) — for union arms that churn turned out to be one word on four snapshot lines                 |
+| A proto3 root only for the declarations an interaction carries  | rejected                                                                                                           | the projection would depend on which interactions exist, against ADR-0016 decision 6's totality — the reason ADR-0019 decision 8 gives for FlatBuffers (decision 6)                                                              |
+| Leaving the proto3 root to the payload codec, after the freeze  | rejected                                                                                                           | the box adds a name to each package scope, so adding it later refuses a package 0.10 accepts and changes a frozen schema (decision 6)                                                                                            |
+| Refusing an optional array element or map value in the schema   | rejected                                                                                                           | no program this toolchain builds writes the shape, because the codecs refuse it; a refusal in the schema emitter would reject a package for a schema-only consumer and gain nothing (decision 7)                                 |
 
 ## Consequences
 
@@ -170,6 +250,14 @@ distinct reachable cases.
   written `pressure : integer [0..100]` directly, rather than through a named
   type, has no name to attach a comment to, so its constraint is absent from the
   schema. Recorded as open below.
+- **Positive — every declaration a payload can name has a proto3 message.** A
+  proto3 codec and a `prost` peer agree on the root of every payload the face
+  admits (decision 6).
+- **Negative — every emitted schema gained a message per named scalar, enum and
+  enum set**, and a package that declares `<Name>Box` beside `<Name>` is refused
+  by this backend, as the FlatBuffers backend already refused it.
+- **Negative — a package with an optional array or map tuple field is refused**,
+  where the schema lost the `?` silently before (decision 7).
 
 ## Open
 

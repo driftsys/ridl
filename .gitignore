@@ -40,3 +40,7 @@ editors/vscode/node_modules
 editors/vscode/*.vsix
 editors/vscode/out
 editors/vscode/bin/
+editors/vscode/skills/
+
+# Raw eval transcripts stay local; the result files are committed.
+evals/results/*/transcripts/

@@ -256,12 +256,12 @@ fn build_emit_typescript_writes_the_backend_module() {
 /// of whatever the emit happens to write.
 #[test]
 fn build_emit_proto_writes_the_backend_schema() {
-    // A bare named scalar alone would not do: unlike the Rust and TypeScript
-    // backends, the proto3 backend gives a named scalar no declaration of its
-    // own — it inlines only where a field references it (the design this
-    // crate's own `ridl-backend-proto` tests already pin) — so `SPEED_SOURCE`
-    // alone would emit nothing past the file header, and the equality below
-    // would prove nothing.
+    // A bare named scalar alone would prove less: the proto3 backend gives a
+    // named scalar only its root box message `SpeedBox`, and inlines it where
+    // a field references it (the design this crate's own `ridl-backend-proto`
+    // tests already pin). `SPEED_SOURCE` alone would emit `SpeedBox` and
+    // nothing else, so `Reading` adds a struct whose field takes the inlined
+    // scalar and its constraint comment.
     const PROTO_SOURCE: &str = "package veh.common\n\
          type Speed: km/h [0.0..250.0 step 0.5]\n\
          struct Reading {\n  value: Speed\n}\n";
@@ -2156,6 +2156,11 @@ interface VehicleStatus {
 /// whose deployment `Lab` places everything on one machine.
 const LINK_ENCODINGS_FIXTURE: &str = "tests/fixtures/link-encodings";
 
+/// The fixture's own manifest, as the fixture directory holds it.
+const LINK_ENCODINGS_MANIFEST: &str = "[package]\nname = \"veh.bench\"\nversion = \"1.0.0\"\n\n\
+                                       [backend.rust]\nencodings = [\"flatbuffers\"]\n\n\
+                                       [lints]\nmissing-docs = \"allow\"\n";
+
 /// The fixture's manifest without its `[backend.rust]` table.
 const LINK_ENCODINGS_TYPES_ONLY: &str = "[package]\nname = \"veh.bench\"\nversion = \"1.0.0\"\n\n\
                                          [lints]\nmissing-docs = \"allow\"\n";
@@ -2494,6 +2499,110 @@ fn a_single_deployment_is_selected_without_the_flag() {
         stderr.matches("warning[RSDL-807]").count(),
         1,
         "the only deployment is selected, stderr:\n{stderr}"
+    );
+}
+
+/// (driftsys/ridl#853) A backend that emits no codec says so with an empty
+/// `encodings` list, and RSDL-807 does not compare its table. A schema-only
+/// plugin needs this: it cannot name an encoding, and the global `allow` is
+/// the only other way to silence the warning, which also hides a real finding
+/// for every other backend. Unix only, for the script.
+#[cfg(unix)]
+#[test]
+fn a_backend_that_declares_no_encoding_is_not_compared() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let manifest = "[package]\nname = \"veh.bench\"\nversion = \"1.0.0\"\n\n\
+                    [backend.rust]\nencodings = [\"flatbuffers\"]\n\n\
+                    [backend.kotlin]\nencodings = []\n\n\
+                    [lints]\nmissing-docs = \"allow\"\n";
+    let dir = link_encodings_workspace("link-encoding-no-codec", manifest, None);
+    let script = dir.write(
+        "ridlc-gen-kotlin",
+        "#!/bin/sh\nprintf '{\"files\": [], \"diagnostics\": []}\\n'\n",
+    );
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let out = TempDir::new("link-encoding-no-codec-out");
+    let plugin = format!("kotlin={}", script.display());
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        dir.path().as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "rust".as_ref(),
+        "--plugin".as_ref(),
+        plugin.as_ref(),
+        "--deployment".as_ref(),
+        "Bench".as_ref(),
+    ]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(
+        !stderr.contains("[backend.kotlin]"),
+        "the empty list silences the plugin's table, got:\n{stderr}"
+    );
+    assert_eq!(
+        stderr.matches("warning[RSDL-807]").count(),
+        1,
+        "the Rust table is still compared, stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("`[backend.rust] encodings`"),
+        "the one warning is the Rust table's, got:\n{stderr}"
+    );
+}
+
+/// (driftsys/ridl#853) A `[backend.<name>]` table written with no `encodings`
+/// key at all is the same declaration as an empty list — the manifest records
+/// the two forms alike — so it is not compared either.
+#[test]
+fn a_backend_table_with_no_encodings_key_is_not_compared() {
+    let manifest = "[package]\nname = \"veh.bench\"\nversion = \"1.0.0\"\n\n\
+                    [backend.rust]\n\n\
+                    [lints]\nmissing-docs = \"allow\"\n";
+    let dir = link_encodings_workspace("link-encoding-bare-table", manifest, None);
+    let out = TempDir::new("link-encoding-bare-table-out");
+    let (code, stderr) = build_rust(dir.path(), out.path(), Some("Bench"));
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(
+        !stderr.contains("RSDL-807"),
+        "a table that names no encoding declares no codec, got:\n{stderr}"
+    );
+}
+
+/// (driftsys/ridl#859) `--emit rust` and `--plugin rust` name the same
+/// backend table, and the table is compared once, so each link draws one
+/// RSDL-807 rather than two. Unix only, for the script.
+#[cfg(unix)]
+#[test]
+fn an_emit_and_a_plugin_of_the_same_name_are_compared_once() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let dir = link_encodings_workspace("link-encoding-same-name", LINK_ENCODINGS_MANIFEST, None);
+    let script = dir.write(
+        "ridlc-gen-rust",
+        "#!/bin/sh\nprintf '{\"files\": [], \"diagnostics\": []}\\n'\n",
+    );
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let out = TempDir::new("link-encoding-same-name-out");
+    let plugin = format!("rust={}", script.display());
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        dir.path().as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "rust".as_ref(),
+        "--plugin".as_ref(),
+        plugin.as_ref(),
+        "--deployment".as_ref(),
+        "Bench".as_ref(),
+    ]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_eq!(
+        stderr.matches("warning[RSDL-807]").count(),
+        1,
+        "the `rust` table is compared once, stderr:\n{stderr}"
     );
 }
 

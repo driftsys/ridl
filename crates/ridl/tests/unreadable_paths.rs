@@ -292,3 +292,62 @@ fn an_unreadable_manifest_is_named_in_the_normalised_form_of_the_entry() {
         );
     }
 }
+
+/// (driftsys/ridl#845) A file entry whose package manifest cannot be read
+/// reports the manifest and exits 2, as a directory entry in the same place
+/// does. Before the fix the file entry fell back to single-file mode and
+/// reported the file's own type errors with exit 1.
+#[test]
+fn a_file_entry_with_an_unreadable_manifest_reports_the_manifest() {
+    let fixture = Fixture::new("file-entry-manifest");
+    std::os::unix::fs::symlink("ridl.toml", fixture.root.join("ridl.toml")).unwrap();
+    std::fs::write(
+        fixture.root.join("a.ridl"),
+        "package p\n\nstruct S {\n    x: Nope,\n}\n",
+    )
+    .unwrap();
+    for args in [&["check"] as &[&str], &["build"], &["baseline"], &["lock"]] {
+        let output = Command::new(RIDL)
+            .args(args)
+            .arg("a.ridl")
+            .current_dir(&fixture.root)
+            .output()
+            .expect("the binary must run");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(2), "ridl {args:?}: {stderr}");
+        assert!(
+            stderr.contains("cannot read `./ridl.toml`"),
+            "ridl {args:?} names the manifest: {stderr}"
+        );
+        assert!(
+            stderr.contains("Too many levels of symbolic links"),
+            "ridl {args:?} names the cause: {stderr}"
+        );
+    }
+}
+
+/// (driftsys/ridl#847) A workspace manifest above a package that cannot be
+/// read stops the upward walk and is reported. Before the fix the walk tested
+/// `is_file()`, which is false for a symbolic link loop, so the manifest was
+/// skipped and the member loaded standalone with exit 0.
+#[test]
+fn an_unreadable_workspace_manifest_above_a_package_is_reported() {
+    let fixture = Fixture::new("workspace-above");
+    std::os::unix::fs::symlink("ridl.toml", fixture.root.join("ridl.toml")).unwrap();
+    std::fs::create_dir(fixture.root.join(".git")).unwrap();
+    std::fs::create_dir(fixture.root.join("a")).unwrap();
+    std::fs::write(fixture.root.join("a/ridl.toml"), MANIFEST).unwrap();
+    std::fs::write(fixture.root.join("a/x.ridl"), SOURCE).unwrap();
+
+    let output = Command::new(RIDL)
+        .args(["check", "a"])
+        .current_dir(&fixture.root)
+        .output()
+        .expect("the binary must run");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(2), "{stderr}");
+    assert!(
+        stderr.contains("cannot read `./ridl.toml`"),
+        "the manifest above the package is named: {stderr}"
+    );
+}

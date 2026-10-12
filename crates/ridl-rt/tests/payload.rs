@@ -22,7 +22,7 @@ thread_local! {
 struct Speed(u16);
 
 const SPEED_RANGE: Violation = Violation {
-    type_name: "Speed",
+    type_name: Some("Speed"),
     rule: Rule::Range,
 };
 
@@ -225,4 +225,27 @@ fn a_buffer_holds_the_largest_encoding() {
     let proof = Ref::<Wide, ReprC>::encode(&Wide(u64::MAX), buffer.as_mut())
         .expect("a buffer is as long as the largest encoding");
     assert_eq!(proof.bytes(), &u64::MAX.to_le_bytes());
+}
+
+/// `Violation` admits a value with no type name that keeps its rule, and that
+/// value differs from one with a type name. This pins the type's shape only;
+/// no runtime that receives a frame exists yet to produce such a value (the
+/// WebSocket transport is tracked as driftsys/ridl#265).
+#[test]
+fn a_violation_admits_no_type_name_and_keeps_its_rule() {
+    let decoded = Violation {
+        type_name: None,
+        rule: Rule::Range,
+    };
+    assert_eq!(decoded.type_name, None);
+    assert_eq!(SPEED_RANGE.type_name, Some("Speed"));
+    assert_ne!(decoded, SPEED_RANGE);
+    assert_eq!(decoded.rule, SPEED_RANGE.rule);
+
+    let other_rule = Violation {
+        type_name: None,
+        rule: Rule::Length,
+    };
+    assert_ne!(decoded, other_rule);
+    assert_eq!(other_rule.rule, Rule::Length);
 }

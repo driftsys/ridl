@@ -842,6 +842,15 @@ fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs namespace vehicle.cabin.hv
 fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs table AirDistributionBox {
 fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs table FanSpeedBox {
 fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs table TemperatureBox {
+frame-vector answer-accepted 040101000000020000000100
+frame-vector attach-1 010100000001000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f097665682e636162696e
+frame-vector attached-accepted 020100
+frame-vector attached-mismatch 020902
+frame-vector publish-live 07010100000002000000ab89674523010000070000000000000002ff01
+frame-vector request-command 09030100000003000000ab89674523010000010000000000000001
+frame-vector response-accepted 0a030100000003000000ac89674523010000010000000000000001000000000000000100
+frame-vector response-violation 0a040100000004000000ac89674523010000020000000000000002000000000000000301
+frame-vector subscribe-signal 03010100000002000000
 proto mavlink/common.proto [Attitude] double pitch = 3;
 proto mavlink/common.proto [Attitude] double pitchspeed = 6;
 proto mavlink/common.proto [Attitude] double roll = 2;
@@ -850,6 +859,8 @@ proto mavlink/common.proto [Attitude] double time_boot_ms = 1;
 proto mavlink/common.proto [Attitude] double yaw = 4;
 proto mavlink/common.proto [Attitude] double yawspeed = 7;
 proto mavlink/common.proto [Attitude] }
+proto mavlink/common.proto [Char16Box] bytes value = 1;
+proto mavlink/common.proto [Char16Box] }
 proto mavlink/common.proto [CommandAck] MavCmd command_value = 1;
 proto mavlink/common.proto [CommandAck] MavResult result = 2;
 proto mavlink/common.proto [CommandAck] double progress = 3;
@@ -893,6 +904,18 @@ proto mavlink/common.proto [CommandProtocolOrdinal] COMMAND_PROTOCOL_ORDINAL_COM
 proto mavlink/common.proto [CommandProtocolOrdinal] COMMAND_PROTOCOL_ORDINAL_COMMAND_LONG = 2;
 proto mavlink/common.proto [CommandProtocolOrdinal] COMMAND_PROTOCOL_ORDINAL_UNSPECIFIED = 0;
 proto mavlink/common.proto [CommandProtocolOrdinal] }
+proto mavlink/common.proto [Float32Box] double value = 1;
+proto mavlink/common.proto [Float32Box] }
+proto mavlink/common.proto [Float32MetersBox] double value = 1;
+proto mavlink/common.proto [Float32MetersBox] }
+proto mavlink/common.proto [Float32MetersPerSecondBox] double value = 1;
+proto mavlink/common.proto [Float32MetersPerSecondBox] }
+proto mavlink/common.proto [Float32MicrosecondsBox] double value = 1;
+proto mavlink/common.proto [Float32MicrosecondsBox] }
+proto mavlink/common.proto [Float32SecondsBox] double value = 1;
+proto mavlink/common.proto [Float32SecondsBox] }
+proto mavlink/common.proto [GpsFixTypeBox] GpsFixType value = 1;
+proto mavlink/common.proto [GpsFixTypeBox] }
 proto mavlink/common.proto [GpsFixType] GPS_FIX_TYPE_GPS_FIX_TYPE_2_D_FIX = 2;
 proto mavlink/common.proto [GpsFixType] GPS_FIX_TYPE_GPS_FIX_TYPE_3_D_FIX = 3;
 proto mavlink/common.proto [GpsFixType] GPS_FIX_TYPE_GPS_FIX_TYPE_DGPS = 4;
@@ -920,6 +943,16 @@ proto mavlink/common.proto [GpsRawInt] uint32 hdg_acc = 15;
 proto mavlink/common.proto [GpsRawInt] uint32 satellites_visible = 10;
 proto mavlink/common.proto [GpsRawInt] uint32 yaw = 16;
 proto mavlink/common.proto [GpsRawInt] }
+proto mavlink/common.proto [Int16Box] sint32 value = 1;
+proto mavlink/common.proto [Int16Box] }
+proto mavlink/common.proto [Int16CentiamperesBox] double value = 1;
+proto mavlink/common.proto [Int16CentiamperesBox] }
+proto mavlink/common.proto [Int32Box] sint32 value = 1;
+proto mavlink/common.proto [Int32Box] }
+proto mavlink/common.proto [Int32MillimetersBox] double value = 1;
+proto mavlink/common.proto [Int32MillimetersBox] }
+proto mavlink/common.proto [Int8PercentBox] double value = 1;
+proto mavlink/common.proto [Int8PercentBox] }
 proto mavlink/common.proto [LocalPositionNed] double time_boot_ms = 1;
 proto mavlink/common.proto [LocalPositionNed] double vx = 5;
 proto mavlink/common.proto [LocalPositionNed] double vy = 6;
@@ -928,6 +961,8 @@ proto mavlink/common.proto [LocalPositionNed] double x = 2;
 proto mavlink/common.proto [LocalPositionNed] double y = 3;
 proto mavlink/common.proto [LocalPositionNed] double z = 4;
 proto mavlink/common.proto [LocalPositionNed] }
+proto mavlink/common.proto [MavCmdBox] MavCmd value = 1;
+proto mavlink/common.proto [MavCmdBox] }
 proto mavlink/common.proto [MavCmd] MAV_CMD_MAV_CMD_COMPONENT_ARM_DISARM = 400;
 proto mavlink/common.proto [MavCmd] MAV_CMD_MAV_CMD_DO_SET_MISSION_CURRENT = 224;
 proto mavlink/common.proto [MavCmd] MAV_CMD_MAV_CMD_NAV_WAYPOINT = 16;
@@ -935,6 +970,8 @@ proto mavlink/common.proto [MavCmd] MAV_CMD_MAV_CMD_REQUEST_MESSAGE = 512;
 proto mavlink/common.proto [MavCmd] MAV_CMD_MAV_CMD_SET_MESSAGE_INTERVAL = 511;
 proto mavlink/common.proto [MavCmd] MAV_CMD_UNSPECIFIED = 0;
 proto mavlink/common.proto [MavCmd] }
+proto mavlink/common.proto [MavFrameBox] MavFrame value = 1;
+proto mavlink/common.proto [MavFrameBox] }
 proto mavlink/common.proto [MavFrame] MAV_FRAME_MAV_FRAME_BODY_FRD = 12;
 proto mavlink/common.proto [MavFrame] MAV_FRAME_MAV_FRAME_BODY_NED = 8;
 proto mavlink/common.proto [MavFrame] MAV_FRAME_MAV_FRAME_BODY_OFFSET_NED = 9;
@@ -958,6 +995,8 @@ proto mavlink/common.proto [MavFrame] MAV_FRAME_MAV_FRAME_RESERVED_17 = 17;
 proto mavlink/common.proto [MavFrame] MAV_FRAME_MAV_FRAME_RESERVED_18 = 18;
 proto mavlink/common.proto [MavFrame] MAV_FRAME_MAV_FRAME_RESERVED_19 = 19;
 proto mavlink/common.proto [MavFrame] }
+proto mavlink/common.proto [MavMissionResultBox] MavMissionResult value = 1;
+proto mavlink/common.proto [MavMissionResultBox] }
 proto mavlink/common.proto [MavMissionResult] MAV_MISSION_RESULT_MAV_MISSION_ACCEPTED = 0;
 proto mavlink/common.proto [MavMissionResult] MAV_MISSION_RESULT_MAV_MISSION_DENIED = 14;
 proto mavlink/common.proto [MavMissionResult] MAV_MISSION_RESULT_MAV_MISSION_ERROR = 1;
@@ -975,11 +1014,15 @@ proto mavlink/common.proto [MavMissionResult] MAV_MISSION_RESULT_MAV_MISSION_OPE
 proto mavlink/common.proto [MavMissionResult] MAV_MISSION_RESULT_MAV_MISSION_UNSUPPORTED = 3;
 proto mavlink/common.proto [MavMissionResult] MAV_MISSION_RESULT_MAV_MISSION_UNSUPPORTED_FRAME = 2;
 proto mavlink/common.proto [MavMissionResult] }
+proto mavlink/common.proto [MavMissionTypeBox] MavMissionType value = 1;
+proto mavlink/common.proto [MavMissionTypeBox] }
 proto mavlink/common.proto [MavMissionType] MAV_MISSION_TYPE_MAV_MISSION_TYPE_ALL = 255;
 proto mavlink/common.proto [MavMissionType] MAV_MISSION_TYPE_MAV_MISSION_TYPE_FENCE = 1;
 proto mavlink/common.proto [MavMissionType] MAV_MISSION_TYPE_MAV_MISSION_TYPE_MISSION = 0;
 proto mavlink/common.proto [MavMissionType] MAV_MISSION_TYPE_MAV_MISSION_TYPE_RALLY = 2;
 proto mavlink/common.proto [MavMissionType] }
+proto mavlink/common.proto [MavParamErrorBox] MavParamError value = 1;
+proto mavlink/common.proto [MavParamErrorBox] }
 proto mavlink/common.proto [MavParamError] MAV_PARAM_ERROR_MAV_PARAM_ERROR_COMPONENT_NOT_FOUND = 4;
 proto mavlink/common.proto [MavParamError] MAV_PARAM_ERROR_MAV_PARAM_ERROR_DOES_NOT_EXIST = 1;
 proto mavlink/common.proto [MavParamError] MAV_PARAM_ERROR_MAV_PARAM_ERROR_NO_ERROR = 0;
@@ -990,6 +1033,8 @@ proto mavlink/common.proto [MavParamError] MAV_PARAM_ERROR_MAV_PARAM_ERROR_TYPE_
 proto mavlink/common.proto [MavParamError] MAV_PARAM_ERROR_MAV_PARAM_ERROR_TYPE_UNSUPPORTED = 6;
 proto mavlink/common.proto [MavParamError] MAV_PARAM_ERROR_MAV_PARAM_ERROR_VALUE_OUT_OF_RANGE = 2;
 proto mavlink/common.proto [MavParamError] }
+proto mavlink/common.proto [MavParamTypeBox] MavParamType value = 1;
+proto mavlink/common.proto [MavParamTypeBox] }
 proto mavlink/common.proto [MavParamType] MAV_PARAM_TYPE_MAV_PARAM_TYPE_INT16 = 4;
 proto mavlink/common.proto [MavParamType] MAV_PARAM_TYPE_MAV_PARAM_TYPE_INT32 = 6;
 proto mavlink/common.proto [MavParamType] MAV_PARAM_TYPE_MAV_PARAM_TYPE_INT64 = 8;
@@ -1002,6 +1047,8 @@ proto mavlink/common.proto [MavParamType] MAV_PARAM_TYPE_MAV_PARAM_TYPE_UINT64 =
 proto mavlink/common.proto [MavParamType] MAV_PARAM_TYPE_MAV_PARAM_TYPE_UINT8 = 1;
 proto mavlink/common.proto [MavParamType] MAV_PARAM_TYPE_UNSPECIFIED = 0;
 proto mavlink/common.proto [MavParamType] }
+proto mavlink/common.proto [MavResultBox] MavResult value = 1;
+proto mavlink/common.proto [MavResultBox] }
 proto mavlink/common.proto [MavResult] MAV_RESULT_MAV_RESULT_ACCEPTED = 0;
 proto mavlink/common.proto [MavResult] MAV_RESULT_MAV_RESULT_CANCELLED = 6;
 proto mavlink/common.proto [MavResult] MAV_RESULT_MAV_RESULT_COMMAND_INT_ONLY = 8;
@@ -1014,6 +1061,10 @@ proto mavlink/common.proto [MavResult] MAV_RESULT_MAV_RESULT_NOT_IN_CONTROL = 10
 proto mavlink/common.proto [MavResult] MAV_RESULT_MAV_RESULT_TEMPORARILY_REJECTED = 1;
 proto mavlink/common.proto [MavResult] MAV_RESULT_MAV_RESULT_UNSUPPORTED = 3;
 proto mavlink/common.proto [MavResult] }
+proto mavlink/common.proto [MavSysStatusSensorBox] uint32 value = 1;
+proto mavlink/common.proto [MavSysStatusSensorBox] }
+proto mavlink/common.proto [MavSysStatusSensorExtendedBox] uint32 value = 1;
+proto mavlink/common.proto [MavSysStatusSensorExtendedBox] }
 proto mavlink/common.proto [MissionAck] MavMissionResult type_value = 3;
 proto mavlink/common.proto [MissionAck] MavMissionType mission_type = 4;
 proto mavlink/common.proto [MissionAck] uint32 opaque_id = 5;
@@ -1103,6 +1154,8 @@ proto mavlink/common.proto [MissionSetCurrent] uint32 seq = 3;
 proto mavlink/common.proto [MissionSetCurrent] uint32 target_component = 2;
 proto mavlink/common.proto [MissionSetCurrent] uint32 target_system = 1;
 proto mavlink/common.proto [MissionSetCurrent] }
+proto mavlink/common.proto [MissionStateBox] MissionState value = 1;
+proto mavlink/common.proto [MissionStateBox] }
 proto mavlink/common.proto [MissionState] MISSION_STATE_MISSION_STATE_ACTIVE = 3;
 proto mavlink/common.proto [MissionState] MISSION_STATE_MISSION_STATE_COMPLETE = 5;
 proto mavlink/common.proto [MissionState] MISSION_STATE_MISSION_STATE_NOT_STARTED = 2;
@@ -1168,8 +1221,28 @@ proto mavlink/common.proto [TelemetryOrdinal] TELEMETRY_ORDINAL_SYS_STATUS = 1;
 proto mavlink/common.proto [TelemetryOrdinal] TELEMETRY_ORDINAL_UNSPECIFIED = 0;
 proto mavlink/common.proto [TelemetryOrdinal] TELEMETRY_ORDINAL_VFR_HUD = 6;
 proto mavlink/common.proto [TelemetryOrdinal] }
+proto mavlink/common.proto [Uint16Box] uint32 value = 1;
+proto mavlink/common.proto [Uint16Box] }
+proto mavlink/common.proto [Uint16CentimetersPerSecondBox] double value = 1;
+proto mavlink/common.proto [Uint16CentimetersPerSecondBox] }
+proto mavlink/common.proto [Uint16MillivoltsBox] double value = 1;
+proto mavlink/common.proto [Uint16MillivoltsBox] }
+proto mavlink/common.proto [Uint16PercentBox] double value = 1;
+proto mavlink/common.proto [Uint16PercentBox] }
+proto mavlink/common.proto [Uint32Box] uint32 value = 1;
+proto mavlink/common.proto [Uint32Box] }
+proto mavlink/common.proto [Uint32MillimetersBox] double value = 1;
+proto mavlink/common.proto [Uint32MillimetersBox] }
+proto mavlink/common.proto [Uint32MillimetersPerSecondBox] double value = 1;
+proto mavlink/common.proto [Uint32MillimetersPerSecondBox] }
+proto mavlink/common.proto [Uint32MillisecondsBox] double value = 1;
+proto mavlink/common.proto [Uint32MillisecondsBox] }
 proto mavlink/common.proto [Uint64Bytes] repeated uint32 data = 1;
 proto mavlink/common.proto [Uint64Bytes] }
+proto mavlink/common.proto [Uint8Box] uint32 value = 1;
+proto mavlink/common.proto [Uint8Box] }
+proto mavlink/common.proto [Uint8PercentBox] double value = 1;
+proto mavlink/common.proto [Uint8PercentBox] }
 proto mavlink/common.proto [VfrHud] double airspeed = 1;
 proto mavlink/common.proto [VfrHud] double alt = 5;
 proto mavlink/common.proto [VfrHud] double climb = 6;
@@ -1191,12 +1264,33 @@ proto mavlink/common.proto enum MissionState {
 proto mavlink/common.proto enum ParameterProtocolOrdinal {
 proto mavlink/common.proto enum TelemetryOrdinal {
 proto mavlink/common.proto message Attitude {
+proto mavlink/common.proto message Char16Box {
 proto mavlink/common.proto message CommandAck {
 proto mavlink/common.proto message CommandCancel {
 proto mavlink/common.proto message CommandInt {
 proto mavlink/common.proto message CommandLong {
+proto mavlink/common.proto message Float32Box {
+proto mavlink/common.proto message Float32MetersBox {
+proto mavlink/common.proto message Float32MetersPerSecondBox {
+proto mavlink/common.proto message Float32MicrosecondsBox {
+proto mavlink/common.proto message Float32SecondsBox {
+proto mavlink/common.proto message GpsFixTypeBox {
 proto mavlink/common.proto message GpsRawInt {
+proto mavlink/common.proto message Int16Box {
+proto mavlink/common.proto message Int16CentiamperesBox {
+proto mavlink/common.proto message Int32Box {
+proto mavlink/common.proto message Int32MillimetersBox {
+proto mavlink/common.proto message Int8PercentBox {
 proto mavlink/common.proto message LocalPositionNed {
+proto mavlink/common.proto message MavCmdBox {
+proto mavlink/common.proto message MavFrameBox {
+proto mavlink/common.proto message MavMissionResultBox {
+proto mavlink/common.proto message MavMissionTypeBox {
+proto mavlink/common.proto message MavParamErrorBox {
+proto mavlink/common.proto message MavParamTypeBox {
+proto mavlink/common.proto message MavResultBox {
+proto mavlink/common.proto message MavSysStatusSensorBox {
+proto mavlink/common.proto message MavSysStatusSensorExtendedBox {
 proto mavlink/common.proto message MissionAck {
 proto mavlink/common.proto message MissionClearAll {
 proto mavlink/common.proto message MissionCount {
@@ -1208,13 +1302,24 @@ proto mavlink/common.proto message MissionRequest {
 proto mavlink/common.proto message MissionRequestInt {
 proto mavlink/common.proto message MissionRequestList {
 proto mavlink/common.proto message MissionSetCurrent {
+proto mavlink/common.proto message MissionStateBox {
 proto mavlink/common.proto message ParamError {
 proto mavlink/common.proto message ParamRequestList {
 proto mavlink/common.proto message ParamRequestRead {
 proto mavlink/common.proto message ParamSet {
 proto mavlink/common.proto message ParamValue {
 proto mavlink/common.proto message SysStatus {
+proto mavlink/common.proto message Uint16Box {
+proto mavlink/common.proto message Uint16CentimetersPerSecondBox {
+proto mavlink/common.proto message Uint16MillivoltsBox {
+proto mavlink/common.proto message Uint16PercentBox {
+proto mavlink/common.proto message Uint32Box {
+proto mavlink/common.proto message Uint32MillimetersBox {
+proto mavlink/common.proto message Uint32MillimetersPerSecondBox {
+proto mavlink/common.proto message Uint32MillisecondsBox {
 proto mavlink/common.proto message Uint64Bytes {
+proto mavlink/common.proto message Uint8Box {
+proto mavlink/common.proto message Uint8PercentBox {
 proto mavlink/common.proto message VfrHud {
 proto mavlink/common.proto package common;
 proto mavlink/common.proto syntax = "proto3";
@@ -1228,6 +1333,8 @@ proto mavlink/minimal.proto [Heartbeat] uint32 base_mode = 3;
 proto mavlink/minimal.proto [Heartbeat] uint32 custom_mode = 4;
 proto mavlink/minimal.proto [Heartbeat] uint32 mavlink_version = 6;
 proto mavlink/minimal.proto [Heartbeat] }
+proto mavlink/minimal.proto [MavAutopilotBox] MavAutopilot value = 1;
+proto mavlink/minimal.proto [MavAutopilotBox] }
 proto mavlink/minimal.proto [MavAutopilot] MAV_AUTOPILOT_MAV_AUTOPILOT_AEROB = 16;
 proto mavlink/minimal.proto [MavAutopilot] MAV_AUTOPILOT_MAV_AUTOPILOT_AIRRAILS = 19;
 proto mavlink/minimal.proto [MavAutopilot] MAV_AUTOPILOT_MAV_AUTOPILOT_ARDUPILOTMEGA = 3;
@@ -1251,6 +1358,10 @@ proto mavlink/minimal.proto [MavAutopilot] MAV_AUTOPILOT_MAV_AUTOPILOT_SMACCMPIL
 proto mavlink/minimal.proto [MavAutopilot] MAV_AUTOPILOT_MAV_AUTOPILOT_SMARTAP = 18;
 proto mavlink/minimal.proto [MavAutopilot] MAV_AUTOPILOT_MAV_AUTOPILOT_UDB = 10;
 proto mavlink/minimal.proto [MavAutopilot] }
+proto mavlink/minimal.proto [MavModeFlagBox] uint32 value = 1;
+proto mavlink/minimal.proto [MavModeFlagBox] }
+proto mavlink/minimal.proto [MavStateBox] MavState value = 1;
+proto mavlink/minimal.proto [MavStateBox] }
 proto mavlink/minimal.proto [MavState] MAV_STATE_MAV_STATE_ACTIVE = 4;
 proto mavlink/minimal.proto [MavState] MAV_STATE_MAV_STATE_BOOT = 1;
 proto mavlink/minimal.proto [MavState] MAV_STATE_MAV_STATE_CALIBRATING = 2;
@@ -1261,6 +1372,8 @@ proto mavlink/minimal.proto [MavState] MAV_STATE_MAV_STATE_POWEROFF = 7;
 proto mavlink/minimal.proto [MavState] MAV_STATE_MAV_STATE_STANDBY = 3;
 proto mavlink/minimal.proto [MavState] MAV_STATE_MAV_STATE_UNINIT = 0;
 proto mavlink/minimal.proto [MavState] }
+proto mavlink/minimal.proto [MavTypeBox] MavType value = 1;
+proto mavlink/minimal.proto [MavTypeBox] }
 proto mavlink/minimal.proto [MavType] MAV_TYPE_MAV_TYPE_ADSB = 27;
 proto mavlink/minimal.proto [MavType] MAV_TYPE_MAV_TYPE_AIRSHIP = 7;
 proto mavlink/minimal.proto [MavType] MAV_TYPE_MAV_TYPE_ANTENNA_TRACKER = 5;
@@ -1312,11 +1425,21 @@ proto mavlink/minimal.proto [MavType] MAV_TYPE_MAV_TYPE_VTOL_TILTROTOR = 21;
 proto mavlink/minimal.proto [MavType] MAV_TYPE_MAV_TYPE_VTOL_TILTWING = 24;
 proto mavlink/minimal.proto [MavType] MAV_TYPE_MAV_TYPE_WINCH = 42;
 proto mavlink/minimal.proto [MavType] }
+proto mavlink/minimal.proto [MavlinkVersionBox] uint32 value = 1;
+proto mavlink/minimal.proto [MavlinkVersionBox] }
+proto mavlink/minimal.proto [Uint32Box] uint32 value = 1;
+proto mavlink/minimal.proto [Uint32Box] }
 proto mavlink/minimal.proto enum HeartbeatProtocolOrdinal {
 proto mavlink/minimal.proto enum MavAutopilot {
 proto mavlink/minimal.proto enum MavState {
 proto mavlink/minimal.proto enum MavType {
 proto mavlink/minimal.proto message Heartbeat {
+proto mavlink/minimal.proto message MavAutopilotBox {
+proto mavlink/minimal.proto message MavModeFlagBox {
+proto mavlink/minimal.proto message MavStateBox {
+proto mavlink/minimal.proto message MavTypeBox {
+proto mavlink/minimal.proto message MavlinkVersionBox {
+proto mavlink/minimal.proto message Uint32Box {
 proto mavlink/minimal.proto package minimal;
 proto mavlink/minimal.proto syntax = "proto3";
 proto mavlink/standard.proto [GlobalPositionInt] double alt = 4;
@@ -1329,20 +1452,44 @@ proto mavlink/standard.proto [GlobalPositionInt] sint32 lat = 2;
 proto mavlink/standard.proto [GlobalPositionInt] sint32 lon = 3;
 proto mavlink/standard.proto [GlobalPositionInt] uint32 hdg = 9;
 proto mavlink/standard.proto [GlobalPositionInt] }
+proto mavlink/standard.proto [Int16CentimetersPerSecondBox] double value = 1;
+proto mavlink/standard.proto [Int16CentimetersPerSecondBox] }
+proto mavlink/standard.proto [Int32Box] sint32 value = 1;
+proto mavlink/standard.proto [Int32Box] }
+proto mavlink/standard.proto [Int32MillimetersBox] double value = 1;
+proto mavlink/standard.proto [Int32MillimetersBox] }
+proto mavlink/standard.proto [MavBoolBox] MavBool value = 1;
+proto mavlink/standard.proto [MavBoolBox] }
 proto mavlink/standard.proto [MavBool] MAV_BOOL_MAV_BOOL_FALSE = 0;
 proto mavlink/standard.proto [MavBool] MAV_BOOL_MAV_BOOL_TRUE = 1;
 proto mavlink/standard.proto [MavBool] }
+proto mavlink/standard.proto [Uint16Box] uint32 value = 1;
+proto mavlink/standard.proto [Uint16Box] }
+proto mavlink/standard.proto [Uint32MillisecondsBox] double value = 1;
+proto mavlink/standard.proto [Uint32MillisecondsBox] }
 proto mavlink/standard.proto enum MavBool {
 proto mavlink/standard.proto message GlobalPositionInt {
+proto mavlink/standard.proto message Int16CentimetersPerSecondBox {
+proto mavlink/standard.proto message Int32Box {
+proto mavlink/standard.proto message Int32MillimetersBox {
+proto mavlink/standard.proto message MavBoolBox {
+proto mavlink/standard.proto message Uint16Box {
+proto mavlink/standard.proto message Uint32MillisecondsBox {
 proto mavlink/standard.proto package standard;
 proto mavlink/standard.proto syntax = "proto3";
 proto ros2/builtininterfaces.proto [Duration] sint32 sec = 1;
 proto ros2/builtininterfaces.proto [Duration] uint32 nanosec = 2;
 proto ros2/builtininterfaces.proto [Duration] }
+proto ros2/builtininterfaces.proto [RosInt32Box] sint32 value = 1;
+proto ros2/builtininterfaces.proto [RosInt32Box] }
+proto ros2/builtininterfaces.proto [RosNanosecondsBox] uint32 value = 1;
+proto ros2/builtininterfaces.proto [RosNanosecondsBox] }
 proto ros2/builtininterfaces.proto [Time] sint32 sec = 1;
 proto ros2/builtininterfaces.proto [Time] uint32 nanosec = 2;
 proto ros2/builtininterfaces.proto [Time] }
 proto ros2/builtininterfaces.proto message Duration {
+proto ros2/builtininterfaces.proto message RosInt32Box {
+proto ros2/builtininterfaces.proto message RosNanosecondsBox {
 proto ros2/builtininterfaces.proto message Time {
 proto ros2/builtininterfaces.proto package builtininterfaces;
 proto ros2/builtininterfaces.proto syntax = "proto3";
@@ -1415,6 +1562,18 @@ proto ros2/geometrymsgs.proto [Quaternion] double x = 1;
 proto ros2/geometrymsgs.proto [Quaternion] double y = 2;
 proto ros2/geometrymsgs.proto [Quaternion] double z = 3;
 proto ros2/geometrymsgs.proto [Quaternion] }
+proto ros2/geometrymsgs.proto [RosFloat32Box] double value = 1;
+proto ros2/geometrymsgs.proto [RosFloat32Box] }
+proto ros2/geometrymsgs.proto [RosFloat64Box] double value = 1;
+proto ros2/geometrymsgs.proto [RosFloat64Box] }
+proto ros2/geometrymsgs.proto [RosInertiaTensorBox] double value = 1;
+proto ros2/geometrymsgs.proto [RosInertiaTensorBox] }
+proto ros2/geometrymsgs.proto [RosInt64Box] sint64 value = 1;
+proto ros2/geometrymsgs.proto [RosInt64Box] }
+proto ros2/geometrymsgs.proto [RosKilogramsBox] double value = 1;
+proto ros2/geometrymsgs.proto [RosKilogramsBox] }
+proto ros2/geometrymsgs.proto [RosStringBox] string value = 1;
+proto ros2/geometrymsgs.proto [RosStringBox] }
 proto ros2/geometrymsgs.proto [TransformStamped] Transform transform = 3;
 proto ros2/geometrymsgs.proto [TransformStamped] stdmsgs.Header header = 1;
 proto ros2/geometrymsgs.proto [TransformStamped] string child_frame_id = 2;
@@ -1478,6 +1637,12 @@ proto ros2/geometrymsgs.proto message PoseWithCovariance {
 proto ros2/geometrymsgs.proto message PoseWithCovarianceStamped {
 proto ros2/geometrymsgs.proto message Quaternion {
 proto ros2/geometrymsgs.proto message QuaternionStamped {
+proto ros2/geometrymsgs.proto message RosFloat32Box {
+proto ros2/geometrymsgs.proto message RosFloat64Box {
+proto ros2/geometrymsgs.proto message RosInertiaTensorBox {
+proto ros2/geometrymsgs.proto message RosInt64Box {
+proto ros2/geometrymsgs.proto message RosKilogramsBox {
+proto ros2/geometrymsgs.proto message RosStringBox {
 proto ros2/geometrymsgs.proto message Transform {
 proto ros2/geometrymsgs.proto message TransformStamped {
 proto ros2/geometrymsgs.proto message Twist {
@@ -1625,6 +1790,24 @@ proto ros2/nav2msgs.proto [ParticleCloud] }
 proto ros2/nav2msgs.proto [Particle] double weight = 2;
 proto ros2/nav2msgs.proto [Particle] geometrymsgs.Pose pose = 1;
 proto ros2/nav2msgs.proto [Particle] }
+proto ros2/nav2msgs.proto [RosBooleanBox] bool value = 1;
+proto ros2/nav2msgs.proto [RosBooleanBox] }
+proto ros2/nav2msgs.proto [RosFloat32Box] double value = 1;
+proto ros2/nav2msgs.proto [RosFloat32Box] }
+proto ros2/nav2msgs.proto [RosFloat64Box] double value = 1;
+proto ros2/nav2msgs.proto [RosFloat64Box] }
+proto ros2/nav2msgs.proto [RosInt16Box] sint32 value = 1;
+proto ros2/nav2msgs.proto [RosInt16Box] }
+proto ros2/nav2msgs.proto [RosInt32Box] sint32 value = 1;
+proto ros2/nav2msgs.proto [RosInt32Box] }
+proto ros2/nav2msgs.proto [RosStringBox] string value = 1;
+proto ros2/nav2msgs.proto [RosStringBox] }
+proto ros2/nav2msgs.proto [RosUInt16Box] uint32 value = 1;
+proto ros2/nav2msgs.proto [RosUInt16Box] }
+proto ros2/nav2msgs.proto [RosUInt32Box] uint32 value = 1;
+proto ros2/nav2msgs.proto [RosUInt32Box] }
+proto ros2/nav2msgs.proto [RosUInt8Box] uint32 value = 1;
+proto ros2/nav2msgs.proto [RosUInt8Box] }
 proto ros2/nav2msgs.proto [SaveMapRequest] double free_thresh = 5;
 proto ros2/nav2msgs.proto [SaveMapRequest] double occupied_thresh = 6;
 proto ros2/nav2msgs.proto [SaveMapRequest] string image_format = 3;
@@ -1715,6 +1898,15 @@ proto ros2/nav2msgs.proto message NavigateToPoseGoal {
 proto ros2/nav2msgs.proto message NavigateToPoseResult {
 proto ros2/nav2msgs.proto message Particle {
 proto ros2/nav2msgs.proto message ParticleCloud {
+proto ros2/nav2msgs.proto message RosBooleanBox {
+proto ros2/nav2msgs.proto message RosFloat32Box {
+proto ros2/nav2msgs.proto message RosFloat64Box {
+proto ros2/nav2msgs.proto message RosInt16Box {
+proto ros2/nav2msgs.proto message RosInt32Box {
+proto ros2/nav2msgs.proto message RosStringBox {
+proto ros2/nav2msgs.proto message RosUInt16Box {
+proto ros2/nav2msgs.proto message RosUInt32Box {
+proto ros2/nav2msgs.proto message RosUInt8Box {
 proto ros2/nav2msgs.proto message SaveMapRequest {
 proto ros2/nav2msgs.proto message SaveMapResponse {
 proto ros2/nav2msgs.proto message SpeedLimit {
@@ -1775,6 +1967,20 @@ proto ros2/navmsgs.proto [Odometry] }
 proto ros2/navmsgs.proto [Path] repeated geometrymsgs.PoseStamped poses = 2;
 proto ros2/navmsgs.proto [Path] stdmsgs.Header header = 1;
 proto ros2/navmsgs.proto [Path] }
+proto ros2/navmsgs.proto [RosBooleanBox] bool value = 1;
+proto ros2/navmsgs.proto [RosBooleanBox] }
+proto ros2/navmsgs.proto [RosFloat32Box] double value = 1;
+proto ros2/navmsgs.proto [RosFloat32Box] }
+proto ros2/navmsgs.proto [RosInt8Box] sint32 value = 1;
+proto ros2/navmsgs.proto [RosInt8Box] }
+proto ros2/navmsgs.proto [RosMetresBox] double value = 1;
+proto ros2/navmsgs.proto [RosMetresBox] }
+proto ros2/navmsgs.proto [RosStringBox] string value = 1;
+proto ros2/navmsgs.proto [RosStringBox] }
+proto ros2/navmsgs.proto [RosUInt32Box] uint32 value = 1;
+proto ros2/navmsgs.proto [RosUInt32Box] }
+proto ros2/navmsgs.proto [RosUInt8Box] uint32 value = 1;
+proto ros2/navmsgs.proto [RosUInt8Box] }
 proto ros2/navmsgs.proto [SetMapRequest] OccupancyGrid map = 1;
 proto ros2/navmsgs.proto [SetMapRequest] geometrymsgs.PoseWithCovarianceStamped initial_pose = 2;
 proto ros2/navmsgs.proto [SetMapRequest] }
@@ -1805,6 +2011,13 @@ proto ros2/navmsgs.proto message MapMetaData {
 proto ros2/navmsgs.proto message OccupancyGrid {
 proto ros2/navmsgs.proto message Odometry {
 proto ros2/navmsgs.proto message Path {
+proto ros2/navmsgs.proto message RosBooleanBox {
+proto ros2/navmsgs.proto message RosFloat32Box {
+proto ros2/navmsgs.proto message RosInt8Box {
+proto ros2/navmsgs.proto message RosMetresBox {
+proto ros2/navmsgs.proto message RosStringBox {
+proto ros2/navmsgs.proto message RosUInt32Box {
+proto ros2/navmsgs.proto message RosUInt8Box {
 proto ros2/navmsgs.proto message SetMapRequest {
 proto ros2/navmsgs.proto message SetMapResponse {
 proto ros2/navmsgs.proto message Trajectory {
@@ -1969,6 +2182,42 @@ proto ros2/sensormsgs.proto [RelativeHumidity] double relative_humidity = 2;
 proto ros2/sensormsgs.proto [RelativeHumidity] double variance = 3;
 proto ros2/sensormsgs.proto [RelativeHumidity] stdmsgs.Header header = 1;
 proto ros2/sensormsgs.proto [RelativeHumidity] }
+proto ros2/sensormsgs.proto [RosAmpereHoursBox] double value = 1;
+proto ros2/sensormsgs.proto [RosAmpereHoursBox] }
+proto ros2/sensormsgs.proto [RosAmperesBox] double value = 1;
+proto ros2/sensormsgs.proto [RosAmperesBox] }
+proto ros2/sensormsgs.proto [RosBooleanBox] bool value = 1;
+proto ros2/sensormsgs.proto [RosBooleanBox] }
+proto ros2/sensormsgs.proto [RosCelsiusBox] double value = 1;
+proto ros2/sensormsgs.proto [RosCelsiusBox] }
+proto ros2/sensormsgs.proto [RosFloat32Box] double value = 1;
+proto ros2/sensormsgs.proto [RosFloat32Box] }
+proto ros2/sensormsgs.proto [RosFloat64Box] double value = 1;
+proto ros2/sensormsgs.proto [RosFloat64Box] }
+proto ros2/sensormsgs.proto [RosInt32Box] sint32 value = 1;
+proto ros2/sensormsgs.proto [RosInt32Box] }
+proto ros2/sensormsgs.proto [RosInt8Box] sint32 value = 1;
+proto ros2/sensormsgs.proto [RosInt8Box] }
+proto ros2/sensormsgs.proto [RosLuxBox] double value = 1;
+proto ros2/sensormsgs.proto [RosLuxBox] }
+proto ros2/sensormsgs.proto [RosMetresBox] double value = 1;
+proto ros2/sensormsgs.proto [RosMetresBox] }
+proto ros2/sensormsgs.proto [RosPascalsBox] double value = 1;
+proto ros2/sensormsgs.proto [RosPascalsBox] }
+proto ros2/sensormsgs.proto [RosSecondsBox] double value = 1;
+proto ros2/sensormsgs.proto [RosSecondsBox] }
+proto ros2/sensormsgs.proto [RosSquareMetresBox] double value = 1;
+proto ros2/sensormsgs.proto [RosSquareMetresBox] }
+proto ros2/sensormsgs.proto [RosStringBox] string value = 1;
+proto ros2/sensormsgs.proto [RosStringBox] }
+proto ros2/sensormsgs.proto [RosUInt16Box] uint32 value = 1;
+proto ros2/sensormsgs.proto [RosUInt16Box] }
+proto ros2/sensormsgs.proto [RosUInt32Box] uint32 value = 1;
+proto ros2/sensormsgs.proto [RosUInt32Box] }
+proto ros2/sensormsgs.proto [RosUInt8Box] uint32 value = 1;
+proto ros2/sensormsgs.proto [RosUInt8Box] }
+proto ros2/sensormsgs.proto [RosVoltsBox] double value = 1;
+proto ros2/sensormsgs.proto [RosVoltsBox] }
 proto ros2/sensormsgs.proto [SensorMsgsInteractionsOrdinal] SENSOR_MSGS_INTERACTIONS_ORDINAL_SET_CAMERA_INFO = 1;
 proto ros2/sensormsgs.proto [SensorMsgsInteractionsOrdinal] SENSOR_MSGS_INTERACTIONS_ORDINAL_UNSPECIFIED = 0;
 proto ros2/sensormsgs.proto [SensorMsgsInteractionsOrdinal] }
@@ -2014,6 +2263,24 @@ proto ros2/sensormsgs.proto message PointField {
 proto ros2/sensormsgs.proto message Range {
 proto ros2/sensormsgs.proto message RegionOfInterest {
 proto ros2/sensormsgs.proto message RelativeHumidity {
+proto ros2/sensormsgs.proto message RosAmpereHoursBox {
+proto ros2/sensormsgs.proto message RosAmperesBox {
+proto ros2/sensormsgs.proto message RosBooleanBox {
+proto ros2/sensormsgs.proto message RosCelsiusBox {
+proto ros2/sensormsgs.proto message RosFloat32Box {
+proto ros2/sensormsgs.proto message RosFloat64Box {
+proto ros2/sensormsgs.proto message RosInt32Box {
+proto ros2/sensormsgs.proto message RosInt8Box {
+proto ros2/sensormsgs.proto message RosLuxBox {
+proto ros2/sensormsgs.proto message RosMetresBox {
+proto ros2/sensormsgs.proto message RosPascalsBox {
+proto ros2/sensormsgs.proto message RosSecondsBox {
+proto ros2/sensormsgs.proto message RosSquareMetresBox {
+proto ros2/sensormsgs.proto message RosStringBox {
+proto ros2/sensormsgs.proto message RosUInt16Box {
+proto ros2/sensormsgs.proto message RosUInt32Box {
+proto ros2/sensormsgs.proto message RosUInt8Box {
+proto ros2/sensormsgs.proto message RosVoltsBox {
 proto ros2/sensormsgs.proto message SetCameraInfoRequest {
 proto ros2/sensormsgs.proto message SetCameraInfoResponse {
 proto ros2/sensormsgs.proto message Temperature {
@@ -2075,6 +2342,34 @@ proto ros2/stdmsgs.proto [MultiArrayDimension] }
 proto ros2/stdmsgs.proto [MultiArrayLayout] repeated MultiArrayDimension dim = 1;
 proto ros2/stdmsgs.proto [MultiArrayLayout] uint32 data_offset = 2;
 proto ros2/stdmsgs.proto [MultiArrayLayout] }
+proto ros2/stdmsgs.proto [RosBooleanBox] bool value = 1;
+proto ros2/stdmsgs.proto [RosBooleanBox] }
+proto ros2/stdmsgs.proto [RosByteBox] uint32 value = 1;
+proto ros2/stdmsgs.proto [RosByteBox] }
+proto ros2/stdmsgs.proto [RosCharBox] uint32 value = 1;
+proto ros2/stdmsgs.proto [RosCharBox] }
+proto ros2/stdmsgs.proto [RosFloat32Box] double value = 1;
+proto ros2/stdmsgs.proto [RosFloat32Box] }
+proto ros2/stdmsgs.proto [RosFloat64Box] double value = 1;
+proto ros2/stdmsgs.proto [RosFloat64Box] }
+proto ros2/stdmsgs.proto [RosInt16Box] sint32 value = 1;
+proto ros2/stdmsgs.proto [RosInt16Box] }
+proto ros2/stdmsgs.proto [RosInt32Box] sint32 value = 1;
+proto ros2/stdmsgs.proto [RosInt32Box] }
+proto ros2/stdmsgs.proto [RosInt64Box] sint64 value = 1;
+proto ros2/stdmsgs.proto [RosInt64Box] }
+proto ros2/stdmsgs.proto [RosInt8Box] sint32 value = 1;
+proto ros2/stdmsgs.proto [RosInt8Box] }
+proto ros2/stdmsgs.proto [RosStringBox] string value = 1;
+proto ros2/stdmsgs.proto [RosStringBox] }
+proto ros2/stdmsgs.proto [RosUInt16Box] uint32 value = 1;
+proto ros2/stdmsgs.proto [RosUInt16Box] }
+proto ros2/stdmsgs.proto [RosUInt32Box] uint32 value = 1;
+proto ros2/stdmsgs.proto [RosUInt32Box] }
+proto ros2/stdmsgs.proto [RosUInt64Box] bytes value = 1;
+proto ros2/stdmsgs.proto [RosUInt64Box] }
+proto ros2/stdmsgs.proto [RosUInt8Box] uint32 value = 1;
+proto ros2/stdmsgs.proto [RosUInt8Box] }
 proto ros2/stdmsgs.proto [String] string data = 1;
 proto ros2/stdmsgs.proto [String] }
 proto ros2/stdmsgs.proto [UInt16MultiArray] MultiArrayLayout layout = 1;
@@ -2119,6 +2414,20 @@ proto ros2/stdmsgs.proto message Int8 {
 proto ros2/stdmsgs.proto message Int8MultiArray {
 proto ros2/stdmsgs.proto message MultiArrayDimension {
 proto ros2/stdmsgs.proto message MultiArrayLayout {
+proto ros2/stdmsgs.proto message RosBooleanBox {
+proto ros2/stdmsgs.proto message RosByteBox {
+proto ros2/stdmsgs.proto message RosCharBox {
+proto ros2/stdmsgs.proto message RosFloat32Box {
+proto ros2/stdmsgs.proto message RosFloat64Box {
+proto ros2/stdmsgs.proto message RosInt16Box {
+proto ros2/stdmsgs.proto message RosInt32Box {
+proto ros2/stdmsgs.proto message RosInt64Box {
+proto ros2/stdmsgs.proto message RosInt8Box {
+proto ros2/stdmsgs.proto message RosStringBox {
+proto ros2/stdmsgs.proto message RosUInt16Box {
+proto ros2/stdmsgs.proto message RosUInt32Box {
+proto ros2/stdmsgs.proto message RosUInt64Box {
+proto ros2/stdmsgs.proto message RosUInt8Box {
 proto ros2/stdmsgs.proto message String {
 proto ros2/stdmsgs.proto message UInt16 {
 proto ros2/stdmsgs.proto message UInt16MultiArray {
@@ -2132,6 +2441,10 @@ proto ros2/stdmsgs.proto package stdmsgs;
 proto ros2/stdmsgs.proto syntax = "proto3";
 proto ros2/stdsrvs.proto [EmptyRequest] }
 proto ros2/stdsrvs.proto [EmptyResponse] }
+proto ros2/stdsrvs.proto [RosBooleanBox] bool value = 1;
+proto ros2/stdsrvs.proto [RosBooleanBox] }
+proto ros2/stdsrvs.proto [RosStringBox] string value = 1;
+proto ros2/stdsrvs.proto [RosStringBox] }
 proto ros2/stdsrvs.proto [SetBoolRequest] bool data = 1;
 proto ros2/stdsrvs.proto [SetBoolRequest] }
 proto ros2/stdsrvs.proto [SetBoolResponse] bool success = 1;
@@ -2149,12 +2462,18 @@ proto ros2/stdsrvs.proto [TriggerResponse] }
 proto ros2/stdsrvs.proto enum StdSrvsInteractionsOrdinal {
 proto ros2/stdsrvs.proto message EmptyRequest {
 proto ros2/stdsrvs.proto message EmptyResponse {
+proto ros2/stdsrvs.proto message RosBooleanBox {
+proto ros2/stdsrvs.proto message RosStringBox {
 proto ros2/stdsrvs.proto message SetBoolRequest {
 proto ros2/stdsrvs.proto message SetBoolResponse {
 proto ros2/stdsrvs.proto message TriggerRequest {
 proto ros2/stdsrvs.proto message TriggerResponse {
 proto ros2/stdsrvs.proto package stdsrvs;
 proto ros2/stdsrvs.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.proto [AmbientAirTemperatureBox] double value = 1;
+proto vss/vehicle.cabin.hvac.proto [AmbientAirTemperatureBox] }
+proto vss/vehicle.cabin.hvac.proto [BooleanBox] bool value = 1;
+proto vss/vehicle.cabin.hvac.proto [BooleanBox] }
 proto vss/vehicle.cabin.hvac.proto [HVACOrdinal] HVAC_ORDINAL_AMBIENT_AIR_TEMPERATURE = 9;
 proto vss/vehicle.cabin.hvac.proto [HVACOrdinal] HVAC_ORDINAL_IS_AIR_CONDITIONING_ACTIVE = 7;
 proto vss/vehicle.cabin.hvac.proto [HVACOrdinal] HVAC_ORDINAL_IS_AUTO_POWER_OPTIMIZE = 12;
@@ -2170,7 +2489,12 @@ proto vss/vehicle.cabin.hvac.proto [HVACOrdinal] HVAC_ORDINAL_SET_IS_RECIRCULATI
 proto vss/vehicle.cabin.hvac.proto [HVACOrdinal] HVAC_ORDINAL_SET_POWER_OPTIMIZE_LEVEL = 11;
 proto vss/vehicle.cabin.hvac.proto [HVACOrdinal] HVAC_ORDINAL_UNSPECIFIED = 0;
 proto vss/vehicle.cabin.hvac.proto [HVACOrdinal] }
+proto vss/vehicle.cabin.hvac.proto [PowerOptimizeLevelBox] uint32 value = 1;
+proto vss/vehicle.cabin.hvac.proto [PowerOptimizeLevelBox] }
 proto vss/vehicle.cabin.hvac.proto enum HVACOrdinal {
+proto vss/vehicle.cabin.hvac.proto message AmbientAirTemperatureBox {
+proto vss/vehicle.cabin.hvac.proto message BooleanBox {
+proto vss/vehicle.cabin.hvac.proto message PowerOptimizeLevelBox {
 proto vss/vehicle.cabin.hvac.proto package vehicle.cabin.hvac;
 proto vss/vehicle.cabin.hvac.proto syntax = "proto3";
 proto vss/vehicle.cabin.hvac.station.proto [StationOrdinal] STATION_ORDINAL_UNSPECIFIED = 0;
@@ -2178,6 +2502,8 @@ proto vss/vehicle.cabin.hvac.station.proto [StationOrdinal] }
 proto vss/vehicle.cabin.hvac.station.proto enum StationOrdinal {
 proto vss/vehicle.cabin.hvac.station.proto package vehicle.cabin.hvac.station;
 proto vss/vehicle.cabin.hvac.station.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto [AirDistributionBox] AirDistribution value = 1;
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto [AirDistributionBox] }
 proto vss/vehicle.cabin.hvac.station.row1.driver.proto [AirDistribution] AIR_DISTRIBUTION_DOWN = 2;
 proto vss/vehicle.cabin.hvac.station.row1.driver.proto [AirDistribution] AIR_DISTRIBUTION_MIDDLE = 1;
 proto vss/vehicle.cabin.hvac.station.row1.driver.proto [AirDistribution] AIR_DISTRIBUTION_UP = 0;
@@ -2190,14 +2516,25 @@ proto vss/vehicle.cabin.hvac.station.row1.driver.proto [DriverOrdinal] DRIVER_OR
 proto vss/vehicle.cabin.hvac.station.row1.driver.proto [DriverOrdinal] DRIVER_ORDINAL_TEMPERATURE = 3;
 proto vss/vehicle.cabin.hvac.station.row1.driver.proto [DriverOrdinal] DRIVER_ORDINAL_UNSPECIFIED = 0;
 proto vss/vehicle.cabin.hvac.station.row1.driver.proto [DriverOrdinal] }
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto [FanSpeedBox] uint32 value = 1;
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto [FanSpeedBox] }
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto [TemperatureBox] double value = 1;
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto [TemperatureBox] }
 proto vss/vehicle.cabin.hvac.station.row1.driver.proto enum AirDistribution {
 proto vss/vehicle.cabin.hvac.station.row1.driver.proto enum DriverOrdinal {
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto message AirDistributionBox {
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto message FanSpeedBox {
+proto vss/vehicle.cabin.hvac.station.row1.driver.proto message TemperatureBox {
 proto vss/vehicle.cabin.hvac.station.row1.driver.proto package vehicle.cabin.hvac.station.row1.driver;
 proto vss/vehicle.cabin.hvac.station.row1.driver.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto [AirDistributionBox] AirDistribution value = 1;
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto [AirDistributionBox] }
 proto vss/vehicle.cabin.hvac.station.row1.passenger.proto [AirDistribution] AIR_DISTRIBUTION_DOWN = 2;
 proto vss/vehicle.cabin.hvac.station.row1.passenger.proto [AirDistribution] AIR_DISTRIBUTION_MIDDLE = 1;
 proto vss/vehicle.cabin.hvac.station.row1.passenger.proto [AirDistribution] AIR_DISTRIBUTION_UP = 0;
 proto vss/vehicle.cabin.hvac.station.row1.passenger.proto [AirDistribution] }
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto [FanSpeedBox] uint32 value = 1;
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto [FanSpeedBox] }
 proto vss/vehicle.cabin.hvac.station.row1.passenger.proto [PassengerOrdinal] PASSENGER_ORDINAL_AIR_DISTRIBUTION = 5;
 proto vss/vehicle.cabin.hvac.station.row1.passenger.proto [PassengerOrdinal] PASSENGER_ORDINAL_FAN_SPEED = 1;
 proto vss/vehicle.cabin.hvac.station.row1.passenger.proto [PassengerOrdinal] PASSENGER_ORDINAL_SET_AIR_DISTRIBUTION = 6;
@@ -2206,8 +2543,13 @@ proto vss/vehicle.cabin.hvac.station.row1.passenger.proto [PassengerOrdinal] PAS
 proto vss/vehicle.cabin.hvac.station.row1.passenger.proto [PassengerOrdinal] PASSENGER_ORDINAL_TEMPERATURE = 3;
 proto vss/vehicle.cabin.hvac.station.row1.passenger.proto [PassengerOrdinal] PASSENGER_ORDINAL_UNSPECIFIED = 0;
 proto vss/vehicle.cabin.hvac.station.row1.passenger.proto [PassengerOrdinal] }
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto [TemperatureBox] double value = 1;
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto [TemperatureBox] }
 proto vss/vehicle.cabin.hvac.station.row1.passenger.proto enum AirDistribution {
 proto vss/vehicle.cabin.hvac.station.row1.passenger.proto enum PassengerOrdinal {
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto message AirDistributionBox {
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto message FanSpeedBox {
+proto vss/vehicle.cabin.hvac.station.row1.passenger.proto message TemperatureBox {
 proto vss/vehicle.cabin.hvac.station.row1.passenger.proto package vehicle.cabin.hvac.station.row1.passenger;
 proto vss/vehicle.cabin.hvac.station.row1.passenger.proto syntax = "proto3";
 proto vss/vehicle.cabin.hvac.station.row1.proto [Row1Ordinal] ROW1_ORDINAL_UNSPECIFIED = 0;
@@ -2215,6 +2557,8 @@ proto vss/vehicle.cabin.hvac.station.row1.proto [Row1Ordinal] }
 proto vss/vehicle.cabin.hvac.station.row1.proto enum Row1Ordinal {
 proto vss/vehicle.cabin.hvac.station.row1.proto package vehicle.cabin.hvac.station.row1;
 proto vss/vehicle.cabin.hvac.station.row1.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto [AirDistributionBox] AirDistribution value = 1;
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto [AirDistributionBox] }
 proto vss/vehicle.cabin.hvac.station.row2.driver.proto [AirDistribution] AIR_DISTRIBUTION_DOWN = 2;
 proto vss/vehicle.cabin.hvac.station.row2.driver.proto [AirDistribution] AIR_DISTRIBUTION_MIDDLE = 1;
 proto vss/vehicle.cabin.hvac.station.row2.driver.proto [AirDistribution] AIR_DISTRIBUTION_UP = 0;
@@ -2227,14 +2571,25 @@ proto vss/vehicle.cabin.hvac.station.row2.driver.proto [DriverOrdinal] DRIVER_OR
 proto vss/vehicle.cabin.hvac.station.row2.driver.proto [DriverOrdinal] DRIVER_ORDINAL_TEMPERATURE = 3;
 proto vss/vehicle.cabin.hvac.station.row2.driver.proto [DriverOrdinal] DRIVER_ORDINAL_UNSPECIFIED = 0;
 proto vss/vehicle.cabin.hvac.station.row2.driver.proto [DriverOrdinal] }
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto [FanSpeedBox] uint32 value = 1;
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto [FanSpeedBox] }
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto [TemperatureBox] double value = 1;
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto [TemperatureBox] }
 proto vss/vehicle.cabin.hvac.station.row2.driver.proto enum AirDistribution {
 proto vss/vehicle.cabin.hvac.station.row2.driver.proto enum DriverOrdinal {
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto message AirDistributionBox {
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto message FanSpeedBox {
+proto vss/vehicle.cabin.hvac.station.row2.driver.proto message TemperatureBox {
 proto vss/vehicle.cabin.hvac.station.row2.driver.proto package vehicle.cabin.hvac.station.row2.driver;
 proto vss/vehicle.cabin.hvac.station.row2.driver.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto [AirDistributionBox] AirDistribution value = 1;
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto [AirDistributionBox] }
 proto vss/vehicle.cabin.hvac.station.row2.passenger.proto [AirDistribution] AIR_DISTRIBUTION_DOWN = 2;
 proto vss/vehicle.cabin.hvac.station.row2.passenger.proto [AirDistribution] AIR_DISTRIBUTION_MIDDLE = 1;
 proto vss/vehicle.cabin.hvac.station.row2.passenger.proto [AirDistribution] AIR_DISTRIBUTION_UP = 0;
 proto vss/vehicle.cabin.hvac.station.row2.passenger.proto [AirDistribution] }
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto [FanSpeedBox] uint32 value = 1;
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto [FanSpeedBox] }
 proto vss/vehicle.cabin.hvac.station.row2.passenger.proto [PassengerOrdinal] PASSENGER_ORDINAL_AIR_DISTRIBUTION = 5;
 proto vss/vehicle.cabin.hvac.station.row2.passenger.proto [PassengerOrdinal] PASSENGER_ORDINAL_FAN_SPEED = 1;
 proto vss/vehicle.cabin.hvac.station.row2.passenger.proto [PassengerOrdinal] PASSENGER_ORDINAL_SET_AIR_DISTRIBUTION = 6;
@@ -2243,8 +2598,13 @@ proto vss/vehicle.cabin.hvac.station.row2.passenger.proto [PassengerOrdinal] PAS
 proto vss/vehicle.cabin.hvac.station.row2.passenger.proto [PassengerOrdinal] PASSENGER_ORDINAL_TEMPERATURE = 3;
 proto vss/vehicle.cabin.hvac.station.row2.passenger.proto [PassengerOrdinal] PASSENGER_ORDINAL_UNSPECIFIED = 0;
 proto vss/vehicle.cabin.hvac.station.row2.passenger.proto [PassengerOrdinal] }
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto [TemperatureBox] double value = 1;
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto [TemperatureBox] }
 proto vss/vehicle.cabin.hvac.station.row2.passenger.proto enum AirDistribution {
 proto vss/vehicle.cabin.hvac.station.row2.passenger.proto enum PassengerOrdinal {
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto message AirDistributionBox {
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto message FanSpeedBox {
+proto vss/vehicle.cabin.hvac.station.row2.passenger.proto message TemperatureBox {
 proto vss/vehicle.cabin.hvac.station.row2.passenger.proto package vehicle.cabin.hvac.station.row2.passenger;
 proto vss/vehicle.cabin.hvac.station.row2.passenger.proto syntax = "proto3";
 proto vss/vehicle.cabin.hvac.station.row2.proto [Row2Ordinal] ROW2_ORDINAL_UNSPECIFIED = 0;
@@ -2252,6 +2612,8 @@ proto vss/vehicle.cabin.hvac.station.row2.proto [Row2Ordinal] }
 proto vss/vehicle.cabin.hvac.station.row2.proto enum Row2Ordinal {
 proto vss/vehicle.cabin.hvac.station.row2.proto package vehicle.cabin.hvac.station.row2;
 proto vss/vehicle.cabin.hvac.station.row2.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto [AirDistributionBox] AirDistribution value = 1;
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto [AirDistributionBox] }
 proto vss/vehicle.cabin.hvac.station.row3.driver.proto [AirDistribution] AIR_DISTRIBUTION_DOWN = 2;
 proto vss/vehicle.cabin.hvac.station.row3.driver.proto [AirDistribution] AIR_DISTRIBUTION_MIDDLE = 1;
 proto vss/vehicle.cabin.hvac.station.row3.driver.proto [AirDistribution] AIR_DISTRIBUTION_UP = 0;
@@ -2264,14 +2626,25 @@ proto vss/vehicle.cabin.hvac.station.row3.driver.proto [DriverOrdinal] DRIVER_OR
 proto vss/vehicle.cabin.hvac.station.row3.driver.proto [DriverOrdinal] DRIVER_ORDINAL_TEMPERATURE = 3;
 proto vss/vehicle.cabin.hvac.station.row3.driver.proto [DriverOrdinal] DRIVER_ORDINAL_UNSPECIFIED = 0;
 proto vss/vehicle.cabin.hvac.station.row3.driver.proto [DriverOrdinal] }
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto [FanSpeedBox] uint32 value = 1;
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto [FanSpeedBox] }
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto [TemperatureBox] double value = 1;
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto [TemperatureBox] }
 proto vss/vehicle.cabin.hvac.station.row3.driver.proto enum AirDistribution {
 proto vss/vehicle.cabin.hvac.station.row3.driver.proto enum DriverOrdinal {
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto message AirDistributionBox {
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto message FanSpeedBox {
+proto vss/vehicle.cabin.hvac.station.row3.driver.proto message TemperatureBox {
 proto vss/vehicle.cabin.hvac.station.row3.driver.proto package vehicle.cabin.hvac.station.row3.driver;
 proto vss/vehicle.cabin.hvac.station.row3.driver.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto [AirDistributionBox] AirDistribution value = 1;
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto [AirDistributionBox] }
 proto vss/vehicle.cabin.hvac.station.row3.passenger.proto [AirDistribution] AIR_DISTRIBUTION_DOWN = 2;
 proto vss/vehicle.cabin.hvac.station.row3.passenger.proto [AirDistribution] AIR_DISTRIBUTION_MIDDLE = 1;
 proto vss/vehicle.cabin.hvac.station.row3.passenger.proto [AirDistribution] AIR_DISTRIBUTION_UP = 0;
 proto vss/vehicle.cabin.hvac.station.row3.passenger.proto [AirDistribution] }
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto [FanSpeedBox] uint32 value = 1;
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto [FanSpeedBox] }
 proto vss/vehicle.cabin.hvac.station.row3.passenger.proto [PassengerOrdinal] PASSENGER_ORDINAL_AIR_DISTRIBUTION = 5;
 proto vss/vehicle.cabin.hvac.station.row3.passenger.proto [PassengerOrdinal] PASSENGER_ORDINAL_FAN_SPEED = 1;
 proto vss/vehicle.cabin.hvac.station.row3.passenger.proto [PassengerOrdinal] PASSENGER_ORDINAL_SET_AIR_DISTRIBUTION = 6;
@@ -2280,8 +2653,13 @@ proto vss/vehicle.cabin.hvac.station.row3.passenger.proto [PassengerOrdinal] PAS
 proto vss/vehicle.cabin.hvac.station.row3.passenger.proto [PassengerOrdinal] PASSENGER_ORDINAL_TEMPERATURE = 3;
 proto vss/vehicle.cabin.hvac.station.row3.passenger.proto [PassengerOrdinal] PASSENGER_ORDINAL_UNSPECIFIED = 0;
 proto vss/vehicle.cabin.hvac.station.row3.passenger.proto [PassengerOrdinal] }
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto [TemperatureBox] double value = 1;
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto [TemperatureBox] }
 proto vss/vehicle.cabin.hvac.station.row3.passenger.proto enum AirDistribution {
 proto vss/vehicle.cabin.hvac.station.row3.passenger.proto enum PassengerOrdinal {
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto message AirDistributionBox {
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto message FanSpeedBox {
+proto vss/vehicle.cabin.hvac.station.row3.passenger.proto message TemperatureBox {
 proto vss/vehicle.cabin.hvac.station.row3.passenger.proto package vehicle.cabin.hvac.station.row3.passenger;
 proto vss/vehicle.cabin.hvac.station.row3.passenger.proto syntax = "proto3";
 proto vss/vehicle.cabin.hvac.station.row3.proto [Row3Ordinal] ROW3_ORDINAL_UNSPECIFIED = 0;
@@ -2289,6 +2667,8 @@ proto vss/vehicle.cabin.hvac.station.row3.proto [Row3Ordinal] }
 proto vss/vehicle.cabin.hvac.station.row3.proto enum Row3Ordinal {
 proto vss/vehicle.cabin.hvac.station.row3.proto package vehicle.cabin.hvac.station.row3;
 proto vss/vehicle.cabin.hvac.station.row3.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto [AirDistributionBox] AirDistribution value = 1;
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto [AirDistributionBox] }
 proto vss/vehicle.cabin.hvac.station.row4.driver.proto [AirDistribution] AIR_DISTRIBUTION_DOWN = 2;
 proto vss/vehicle.cabin.hvac.station.row4.driver.proto [AirDistribution] AIR_DISTRIBUTION_MIDDLE = 1;
 proto vss/vehicle.cabin.hvac.station.row4.driver.proto [AirDistribution] AIR_DISTRIBUTION_UP = 0;
@@ -2301,14 +2681,25 @@ proto vss/vehicle.cabin.hvac.station.row4.driver.proto [DriverOrdinal] DRIVER_OR
 proto vss/vehicle.cabin.hvac.station.row4.driver.proto [DriverOrdinal] DRIVER_ORDINAL_TEMPERATURE = 3;
 proto vss/vehicle.cabin.hvac.station.row4.driver.proto [DriverOrdinal] DRIVER_ORDINAL_UNSPECIFIED = 0;
 proto vss/vehicle.cabin.hvac.station.row4.driver.proto [DriverOrdinal] }
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto [FanSpeedBox] uint32 value = 1;
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto [FanSpeedBox] }
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto [TemperatureBox] double value = 1;
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto [TemperatureBox] }
 proto vss/vehicle.cabin.hvac.station.row4.driver.proto enum AirDistribution {
 proto vss/vehicle.cabin.hvac.station.row4.driver.proto enum DriverOrdinal {
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto message AirDistributionBox {
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto message FanSpeedBox {
+proto vss/vehicle.cabin.hvac.station.row4.driver.proto message TemperatureBox {
 proto vss/vehicle.cabin.hvac.station.row4.driver.proto package vehicle.cabin.hvac.station.row4.driver;
 proto vss/vehicle.cabin.hvac.station.row4.driver.proto syntax = "proto3";
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto [AirDistributionBox] AirDistribution value = 1;
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto [AirDistributionBox] }
 proto vss/vehicle.cabin.hvac.station.row4.passenger.proto [AirDistribution] AIR_DISTRIBUTION_DOWN = 2;
 proto vss/vehicle.cabin.hvac.station.row4.passenger.proto [AirDistribution] AIR_DISTRIBUTION_MIDDLE = 1;
 proto vss/vehicle.cabin.hvac.station.row4.passenger.proto [AirDistribution] AIR_DISTRIBUTION_UP = 0;
 proto vss/vehicle.cabin.hvac.station.row4.passenger.proto [AirDistribution] }
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto [FanSpeedBox] uint32 value = 1;
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto [FanSpeedBox] }
 proto vss/vehicle.cabin.hvac.station.row4.passenger.proto [PassengerOrdinal] PASSENGER_ORDINAL_AIR_DISTRIBUTION = 5;
 proto vss/vehicle.cabin.hvac.station.row4.passenger.proto [PassengerOrdinal] PASSENGER_ORDINAL_FAN_SPEED = 1;
 proto vss/vehicle.cabin.hvac.station.row4.passenger.proto [PassengerOrdinal] PASSENGER_ORDINAL_SET_AIR_DISTRIBUTION = 6;
@@ -2317,8 +2708,13 @@ proto vss/vehicle.cabin.hvac.station.row4.passenger.proto [PassengerOrdinal] PAS
 proto vss/vehicle.cabin.hvac.station.row4.passenger.proto [PassengerOrdinal] PASSENGER_ORDINAL_TEMPERATURE = 3;
 proto vss/vehicle.cabin.hvac.station.row4.passenger.proto [PassengerOrdinal] PASSENGER_ORDINAL_UNSPECIFIED = 0;
 proto vss/vehicle.cabin.hvac.station.row4.passenger.proto [PassengerOrdinal] }
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto [TemperatureBox] double value = 1;
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto [TemperatureBox] }
 proto vss/vehicle.cabin.hvac.station.row4.passenger.proto enum AirDistribution {
 proto vss/vehicle.cabin.hvac.station.row4.passenger.proto enum PassengerOrdinal {
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto message AirDistributionBox {
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto message FanSpeedBox {
+proto vss/vehicle.cabin.hvac.station.row4.passenger.proto message TemperatureBox {
 proto vss/vehicle.cabin.hvac.station.row4.passenger.proto package vehicle.cabin.hvac.station.row4.passenger;
 proto vss/vehicle.cabin.hvac.station.row4.passenger.proto syntax = "proto3";
 proto vss/vehicle.cabin.hvac.station.row4.proto [Row4Ordinal] ROW4_ORDINAL_UNSPECIFIED = 0;

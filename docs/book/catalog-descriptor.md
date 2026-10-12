@@ -153,7 +153,10 @@ does not read, makes `ridl describe` exit with code 2. The
   has no size computed by this toolchain. A stream payload, a request of zero
   or of several parameters, and an inline `T | E` reply have no row in any
   encoding. A `repr(C)` payload has no row, and a proto3 row is present only
-  for a payload that is a struct or a union.
+  for a payload that is a struct, a union, a named scalar, an enum or an enum
+  set, the kinds the proto3 schema gives a message of their own. A named
+  scalar, an enum and an enum set are sized as their root message
+  `<Name>Box`.
 
 The descriptor does not contain type layouts, field lists, constraints other
 than the ones that bound a payload's size, contract clauses, or initial values.
@@ -176,12 +179,15 @@ The list comes from the published baseline. `ridl baseline` records, for each
 unit with an interface, a `<unit>.catalogs` file beside the snapshots, and
 `ridl build` reads it. The list is empty when there is no baseline, when the
 unit has no file, and after a breaking change that changes the catalog, which
-restarts the chain. A breaking change that leaves the catalog hash as it was,
-such as the removal of a declaration no interface reaches, keeps the chain. A
-change in another unit counts for this unit only when an interface of this unit
-reaches the changed declaration. `ridlc build` reads no baseline and writes an
-empty list. The [CLI reference](cli-reference.md#ridl-baseline) states the file
-format and the rules.
+restarts the chain. A file is used only when its newest hash is the hash
+recomputed from the snapshots published beside it; a file that does not
+describe those snapshots, such as one left behind by a hand-edited baseline,
+restarts the chain instead. A breaking change that leaves the catalog hash as
+it was, such as the removal of a declaration no interface reaches, keeps the
+chain. A change in another unit counts for this unit only when an interface of
+this unit reaches the changed declaration. `ridlc build` reads no baseline and
+writes an empty list. The [CLI reference](cli-reference.md#ridl-baseline)
+states the file format and the rules.
 
 ## The catalog and the face
 

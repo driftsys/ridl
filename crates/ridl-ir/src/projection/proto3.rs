@@ -166,16 +166,44 @@ pub fn enum_set_scalar(width: i32) -> Scalar {
 }
 
 /// The proto3 scalar for a bare primitive at a field position: an integer
-/// with no declared width is `int64`, a float `double`; a tag the IR does
-/// not define is `string`.
+/// with no declared width is `sint64`, the same as a named scalar over
+/// `integer`, a float `double`; a tag the IR does not define is `string`.
 #[must_use]
 pub fn primitive(primitive: i32) -> Scalar {
     match v2::PrimitiveType::try_from(primitive) {
         Ok(v2::PrimitiveType::Boolean) => Scalar::Bool,
-        Ok(v2::PrimitiveType::Integer) => Scalar::Int64,
+        Ok(v2::PrimitiveType::Integer) => Scalar::Sint64,
         Ok(v2::PrimitiveType::Float) => Scalar::Double,
         Ok(v2::PrimitiveType::Bytes) => Scalar::Bytes,
         _ => Scalar::String,
+    }
+}
+
+/// A collection proto3 cannot mark absent at a field position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Repeated {
+    /// An array, which projects to a `repeated` field.
+    Array,
+    /// A map, which projects to a `map<K, V>` field.
+    Map,
+}
+
+/// The collection kind of `ty` when `ty` is an optional array or map, and
+/// `None` for every other type, optional or not. proto3 cannot mark a
+/// `repeated` or `map` field absent, and no value is spare to carry the fact
+/// in-band, so ADR-0013 decision 7's last clause applies: the proto backend
+/// refuses such a field of a struct (`emit_struct`) and of an induced tuple
+/// message (`emit_induced_tuple`), and the proto3 sizer gives a payload that
+/// holds one no bound.
+#[must_use]
+pub fn optional_repeated(ty: &v2::FieldType) -> Option<Repeated> {
+    if !ty.optional {
+        return None;
+    }
+    match ty.kind.as_ref()? {
+        v2::field_type::Kind::Array(_) => Some(Repeated::Array),
+        v2::field_type::Kind::Map(_) => Some(Repeated::Map),
+        _ => None,
     }
 }
 
@@ -301,7 +329,7 @@ mod tests {
     #[test]
     fn a_bare_primitive_has_its_own_table() {
         assert_eq!(primitive(PrimitiveType::Boolean as i32).as_str(), "bool");
-        assert_eq!(primitive(PrimitiveType::Integer as i32).as_str(), "int64");
+        assert_eq!(primitive(PrimitiveType::Integer as i32).as_str(), "sint64");
         assert_eq!(primitive(PrimitiveType::Float as i32).as_str(), "double");
         assert_eq!(primitive(PrimitiveType::Bytes as i32).as_str(), "bytes");
         assert_eq!(primitive(PrimitiveType::String as i32).as_str(), "string");

@@ -65,7 +65,12 @@ baseline of each surface is in `freeze/surfaces.toml`. Some parts of the frozen
 surfaces are frozen by policy and checked by no tool: the formats of
 `interfaces.lock` and `.ridl/baseline`, the exit codes of every subcommand other
 than `ridl check`, the output of `ridl diff` and the `ridl-diff` categories, the
-frame envelope and the `attach` handshake.
+layouts of the `unsubscribe`, `read` and `occurrence` frames, which no test
+vector of the frame specification §11.1 shows, the payload-presence rule of
+§11.1 for a `publish` under `Init` or `Invalid(Declared)` and for a `response`
+under `reply`, which no vector shows, and the codes of §4 and §9.6 that no
+vector carries, among them the `kind` values 2 and 5 and the `attach` encodings
+2 and 3.
 
 1. Run `cargo xtask freeze update` after a change that touches a surface, and
    commit the changed dumps. An added line is not a break.
@@ -209,6 +214,12 @@ The harness checks syntax, never claims. Prose about delivery, timing behaviour,
 or provider-side enforcement describes a specification, not this workspace: the
 one runtime here is `ridl-loopback`, which runs in process and is not reachable
 from anything the CLI emits. Write it so a reader cannot mistake the two.
+
+The fences in `skills/ridl-authoring/` follow the same rules and are compiled by
+the test `skill_examples_compile`, as one workspace separate from the book.
+`crates/ridl/tests/skill_gates.rs` also checks that every diagnostic code the
+skill cites is listed in `freeze/diagnostics.txt`, and that each section of a
+reference file links an existing heading of a language reference.
 
 ## Recipes
 

@@ -470,13 +470,19 @@ async fn an_unsaved_overlay_reports_diagnostics_without_changing_disk() {
         assert_ne!(result.is_error, Some(true));
         let output = result.structured_content.unwrap();
         assert_eq!(output["workspace"]["errors"], 1);
+        // The root is found from `root` normalised lexically, so the
+        // diagnostic names the file without the `..` of `workspace_fixture`.
+        let reported = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("ridl-mcp/tests/fixtures/ws/b/b.ridl");
         assert!(
             output["diagnostics"]
                 .as_array()
                 .unwrap()
                 .iter()
                 .any(|d| d["message"].as_str().unwrap().contains("Missing")
-                    && d["span"]["path"] == path.to_string_lossy().as_ref())
+                    && d["span"]["path"] == reported.to_string_lossy().as_ref())
         );
         assert_eq!(std::fs::read_to_string(&path).unwrap(), disk);
         client.cancel().await.unwrap();

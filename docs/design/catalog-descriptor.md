@@ -241,6 +241,19 @@ differing only in the list have the same hash. The rule is
   a unit with a snapshot in the replaced baseline is read, and one that cannot
   be read or parsed stops the publication, exit 2, naming the file and the line;
   the file of a unit with no such snapshot is not read.
+- **A chain is carried only when its head describes the snapshots beside it.**
+  Before any of the rules above carries a file, its first line is compared with
+  the hash recomputed from the replaced baseline's own snapshots of the unit.
+  When the two differ, the file does not describe the baseline it sits in — a
+  partially hand-edited baseline, for instance, where a unit's root package
+  snapshot was deleted and a sub-package snapshot left behind — and the chain
+  restarts from the one new hash. Restarting is the safe direction: the cost is
+  that a toolchain change that moves the hash restarts every chain once, and the
+  gain is that no hash is carried past a breaking change the edit hid. This is a
+  check on the pair, not a recorded value, so the rule above stands: the hashes
+  that are carried are still read from the file and never recomputed.
+  `ridl build` applies the same check to the published baseline it reads
+  (driftsys/ridl#808).
 - **The verdict is per unit.** `ridl_diff::unit_verdict` takes the maximum
   verdict over the changes of a `DiffReport` that concern the unit: a change in
   one of the unit's source packages, on either side, or in a declaration that an
@@ -264,19 +277,24 @@ differing only in the list have the same hash. The rule is
   verdict from the baseline to the tree is `Compatible` or `Identical`, or when
   the current catalog's hash is the file's first hash. The list is empty for a
   `Breaking` verdict when the current hash is not the file's first hash, for a
-  workspace with no `.ridl/baseline/` directory or one holding no `.ir.json`
-  snapshot, for a unit with no package in the baseline (a file left under its
-  name is not read), and for a unit with no file. A tree whose catalog changed
-  and that is breaking relative to the baseline is built with an empty list, and
-  the recorded chain is not changed until the next publication. A baseline with
-  at least one `<unit>.catalogs` file that cannot be loaded, and a file that
-  cannot be read, are exit 2; a baseline with no such file is not loaded. A
-  compile with an error diagnostic gets no list, and its baseline is not read.
-  When the workspace names `[imports]` and a list is computed, the build prints
-  a note that a unit's list covers the workspace's own packages only.
+  file whose first hash is not the hash recomputed from the baseline's own
+  snapshots of the unit, for a workspace with no `.ridl/baseline/` directory or
+  one holding no `.ir.json` snapshot, for a unit with no package in the baseline
+  (a file left under its name is not read), and for a unit with no file. A tree
+  whose catalog changed and that is breaking relative to the baseline is built
+  with an empty list, and the recorded chain is not changed until the next
+  publication. A baseline with at least one `<unit>.catalogs` file that cannot
+  be loaded, and a file that cannot be read, are exit 2; a baseline with no such
+  file is not loaded. A compile with an error diagnostic gets no list, and its
+  baseline is not read. When the workspace names `[imports]` and a list is
+  computed, the build prints a note that a unit's list covers the workspace's
+  own packages only.
 - **No runtime reads the list.** The generated face compares only its own
   `CATALOG` (ADR-0023 decision 8), and no runtime in this workspace speaks the
-  frame, so nothing here accepts an `attach` on the strength of the list.
+  frame, so nothing here accepts an `attach` on the strength of the list. The
+  frame specification (its As-built note and §6.1) names the descriptor as the
+  source a providing runtime reads the list from; the first WebSocket provider
+  (driftsys/ridl#265) holds no descriptor and applies the exact-match rule.
 
 It is computed in `ridl-ir`, not in `ridl-descriptor`, because three artifacts
 carry it and `ridl-ir` is below all of them:
@@ -339,22 +357,24 @@ is sized, through the projection the wire backend emits:
   `ridl_ir::codegen::fb_unbounded`, the function the codegen model uses. The row
   is absent for a name that does not resolve or a declaration with no root
   table.
-- **proto3** follows ADR-0017. A row is present only for a struct or a union
-  payload, and it is always `Bounded`: typl bounds every collection, so proto3
-  has no unbounded state. A named scalar and an enum set are inlined into their
-  field (ADR-0017 decision 1, with decision 2 rejecting a wrapper message), and
-  an enum is a declared `enum`, so none of the three has a message of its own,
-  and their proto3 state is absent. The row is also absent when a member is one
-  the proto backend refuses (a map key outside the integral and string scalars,
-  a map value that is an array or a map, an optional array or map, an enum value
-  outside int32, a field number protobuf reserves or exceeds), when a member has
-  no proto3 bound (a `string` or `bytes` with no length bound, a type def with
-  no width), when the nesting passes `MAX_DEPTH`, or when the bound overflows
-  `u64` or exceeds `u32::MAX`. The rustdoc of `state` in
-  `crates/ridl-ir/src/projection/size/proto3.rs` has the full list. The proto3
-  sizer counts tags and varint widths at their maximum, and remembers each named
-  struct and union it has sized within one call, so a type that several paths
-  share is walked once.
+- **proto3** follows ADR-0017. A row is present for a struct, a union, a named
+  scalar, an enum set or an enum payload, and a row that is present is always
+  `Bounded`: typl bounds every collection, so proto3 has no unbounded state. A
+  named scalar that no proto3 leaf bounds (a `string` or `bytes` with no length
+  bound, a type def with no width) has no row. A named scalar, an enum set and
+  an enum are inlined into a field that uses them, but each also has a root
+  message `<Name>Box { <type> value = 1; }` that a codec can encode, and the row
+  is the bound of that box. The row is also absent when a member is one the
+  proto backend refuses (a map key outside the integral and string scalars, a
+  map value that is an array or a map, an optional array or map field of a
+  struct or a tuple, an enum value outside int32, a field number protobuf
+  reserves or exceeds), when a member has no proto3 bound (a `string` or `bytes`
+  with no length bound, a type def with no width), when the nesting passes
+  `MAX_DEPTH`, or when the bound overflows `u64` or exceeds `u32::MAX`. The
+  rustdoc of `state` in `crates/ridl-ir/src/projection/size/proto3.rs` has the
+  full list. The proto3 sizer counts tags and varint widths at their maximum,
+  and remembers each named struct and union it has sized within one call, so a
+  type that several paths share is walked once.
 - **repr(C)** has no row until driftsys/ridl#317 defines the layout.
 
 **Absent by shape.** A stream payload (`<T>`), a request of zero or of several
@@ -385,15 +405,17 @@ no return type takes the same absent state, with the cause
 both per encoding:
 
 - **`Interaction.reservation`** is the saturating `u64` sum, in bytes, of the
-  bounded sizes of the member's payloads, in order: a signal, an event or a
-  fixed member has its one payload, a command has its request, and a query has
-  its request and then its reply. The first payload whose state is not bounded
-  makes the reservation `unsized`, naming `<member>.<role>: <payload>`, where
-  `<payload>` is the type's reference when the payload is one named type and
-  otherwise what the shape is — a kind word, a parameter list or `()`. A member
-  of a kind this toolchain does not know is `unsized` naming
-  `<member>: no known payload shape`, never summed as zero. The field's own
-  comment in `ridl/codegen/v1/model.proto` lists every shape.
+  bounded sizes of the member's payloads, in order: a signal or an event has its
+  one payload, a command has its request, and a query has its request and then
+  its reply. A fixed member counts no payload and reserves 0 whatever its
+  payload, which is what the runtime's row carries for it (driftsys/ridl#852).
+  The first payload whose state is not bounded makes the reservation `unsized`,
+  naming `<member>.<role>: <payload>`, where `<payload>` is the type's reference
+  when the payload is one named type and otherwise what the shape is — a kind
+  word, a parameter list or `()`. A member of a kind this toolchain does not
+  know is `unsized` naming `<member>: no known payload shape`, never summed as
+  zero. The field's own comment in `ridl/codegen/v1/model.proto` lists every
+  shape.
 - **`Interface.table_budget`** is the saturating sum of the reservations of the
   live members in `MEMBERS` order. It is `unsized`, naming the first member
   whose reservation is unsized. A tombstone does not count, and an interface
@@ -405,18 +427,17 @@ table: `ridl_rt::contract::reservation::<X, E>()` for a member `X`, and
 states its sums per wire encoding, so a plugin reads them without walking the
 members itself.
 
-The two sides differ for a `fixed` member. The runtime row of a `fixed` is `0`,
-because a fixed value is never in flight, while the model's reservation counts
-the fixed member's payload, and so does its table budget. For an interface with
-a `fixed` member the model's numbers are therefore larger than the runtime's by
-the size of each fixed payload. For every other kind of member the two sides
-agree only where the runtime holds the same per-payload sizes the model holds.
-Today the Rust backend emits a `Sizes<E>` table for FlatBuffers alone, so only
-that column has a runtime counterpart; the model's proto3 column can carry a
-byte count with no table to compare it with. The catalog descriptor this record
-describes is a different artifact, and it does write a proto3 row (`lower.rs` in
+The two sides agree for a `fixed` member: the runtime row of a `fixed` is `0`,
+because a fixed value is never in flight, and the model's reservation and table
+budget count it as `0` for the same reason, whatever its payload
+(driftsys/ridl#852). For every other kind of member the two sides agree only
+where the runtime holds the same per-payload sizes the model holds. Today the
+Rust backend emits a `Sizes<E>` table for FlatBuffers alone, so only that column
+has a runtime counterpart; the model's proto3 column can carry a byte count with
+no table to compare it with. The catalog descriptor this record describes is a
+different artifact, and it does write a proto3 row (`lower.rs` in
 `ridl-descriptor`). The FlatBuffers column is the one where the runtime table
-and the model read the same number for a member that is not a `fixed`.
+and the model read the same number for a member.
 
 ## Verification before access, and `ridl describe`
 
@@ -457,6 +478,12 @@ An excerpt of the corpus snapshot
     {
       "max_sizes": [
         {
+          "bytes": 5,
+          "cause": "Unspecified",
+          "encoding": "Proto3",
+          "state": "Bounded"
+        },
+        {
           "bytes": 46,
           "cause": "Unspecified",
           "encoding": "FlatBuffers",
@@ -475,7 +502,8 @@ An excerpt of the corpus snapshot
 }
 ```
 
-`Speed` is a named scalar, so it has no proto3 row.
+`Speed` is a named scalar, so its proto3 row is the bound of its box message
+`SpeedBox`, 5 bytes.
 
 ## The port's catalog check
 
@@ -564,18 +592,18 @@ For these, the archived design note is the record of the agreed direction.
 
 ## Open items and debt
 
-| Item                                                                                      | Issue             |
-| ----------------------------------------------------------------------------------------- | ----------------- |
-| Narrow a string's byte capacity from an ASCII-only match pattern, after #597              | driftsys/ridl#665 |
-| ridl-rt: streams (ridl §12) have no port; the stream flag and per-element bound follow it | driftsys/ridl#336 |
-| The repr(C) payload codec, which gives the `ReprC` column its rows                        | driftsys/ridl#317 |
-| debt(ridl-descriptor): Windows schema paths and an unpinned guard in the schema tooling   | driftsys/ridl#670 |
-| debt(ridl-ir): catalog hash follow-ups deferred from the review of #676                   | driftsys/ridl#679 |
-| debt: review follow-ups — one name resolver, one proto3 width table                       | driftsys/ridl#684 |
-| debt: review follow-ups — shared proto3 refusal rules, agreement tests                    | driftsys/ridl#690 |
-| debt: deferred review items from PR #692 (the lowering and the catalog check)             | driftsys/ridl#693 |
-| debt: deferred review items from PR #696 (ridl describe)                                  | driftsys/ridl#697 |
-| debt: deferred review items from PR #699 (the catalog hash per region)                    | driftsys/ridl#701 |
+| Item                                                                                                 | Issue             |
+| ---------------------------------------------------------------------------------------------------- | ----------------- |
+| Narrow a string's byte capacity from an ASCII-only match pattern, after #597                         | driftsys/ridl#665 |
+| ridl-rt: streams (ridl §12) have no port; the stream flag and per-element bound follow it            | driftsys/ridl#336 |
+| The repr(C) payload codec, which gives the `ReprC` column its rows                                   | driftsys/ridl#317 |
+| debt(ridl-descriptor): Windows schema paths and an unpinned guard in the schema tooling              | driftsys/ridl#670 |
+| debt(ridl-ir): catalog hash follow-ups deferred from the review of #676                              | driftsys/ridl#679 |
+| debt: review follow-ups — one name resolver, one proto3 width table                                  | driftsys/ridl#684 |
+| debt: review follow-ups — shared proto3 refusal rules (all but `optional_repeated`), agreement tests | driftsys/ridl#690 |
+| debt: deferred review items from PR #692 (the lowering and the catalog check)                        | driftsys/ridl#693 |
+| debt: deferred review items from PR #696 (ridl describe)                                             | driftsys/ridl#697 |
+| debt: deferred review items from PR #699 (the catalog hash per region)                               | driftsys/ridl#701 |
 
 ## Trace
 

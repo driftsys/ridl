@@ -4,7 +4,7 @@ How the `ridl` binary and the VS Code extension reach a user's machine, and how
 the extension finds the binary once it is there. Informative: the normative
 decisions are ADR-0007 decision 14 and its 2026-09-13 amendment (the release
 train and the maintainer acts) and ADR-0005's resolved host-coverage question
-(which agent hosts are first-class, and the VS Code 1.101 floor that follows).
+(which agent hosts are first-class, and the VS Code version floor that follows).
 
 ## Two release trains, disjoint tag namespaces
 

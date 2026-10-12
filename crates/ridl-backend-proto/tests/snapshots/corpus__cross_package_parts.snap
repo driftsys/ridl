@@ -14,3 +14,7 @@ enum Grade {
   GRADE_A = 0;
   GRADE_B = 1;
 }
+
+message GradeBox {
+  Grade value = 1;
+}

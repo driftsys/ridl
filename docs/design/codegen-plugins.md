@@ -486,6 +486,25 @@ carry a codec — the Rust emit and each plugin, not a schema emit, whose backen
 takes no `encodings` option; it is aligned with the transport defaults when
 `repr(C)` or a shared-memory transport lands.
 
+A backend named by both an `--emit` and a `--plugin` is compared once, so its
+links draw one diagnostic rather than one per name. A plugin that emits a schema
+only, as `ridlc-gen-model` does, declares that with an empty list:
+
+```toml
+[backend.model]
+encodings = []
+```
+
+A `[backend.<name>]` table whose `encodings` list is empty says that the backend
+emits no codec, and RSDL-807 does not compare it. A table written with no
+`encodings` key at all is the same declaration: the manifest records the two
+forms alike, both meaning types only (`BackendTable::encodings`). A backend with
+no table at all is compared, and every link of the selected deployment that
+carries an encoding warns, so a build that never declared its encodings is still
+reported. The empty list is the per-backend way to silence the warning; the
+`[lints]` level is global and silences it for every backend at once
+(driftsys/ridl#853).
+
 ### The depth rule
 
 A `Depth` is an optional value and the source of that value. Three sources are
@@ -556,9 +575,11 @@ workspace's system; a workspace has at most one system.
 
 ### Bindings, and what is not built
 
-The `bindings` list is empty today. The emitter writes one entry per row of the
-table of known bindings, in name order, and the table has no row because no
-binding's frame layout is specified (driftsys/ridl#265).
+The `bindings` list holds the `websocket` row (binding version 1, data-plane
+frame header at most 20 bytes, envelope 16 bytes), from
+[the frame specification](../specification/frame-specification.md) §11.1. The
+emitter writes one entry per row of the table of known bindings
+(`crates/ridl-ir/src/codegen/bindings.rs`), in name order.
 
 The overhead of a binding is not part of any payload size. A plugin that sizes a
 socket message adds the frame header and the envelope of the binding the message
@@ -584,15 +605,15 @@ shows that the request carries every input those two layouts need. The layout
 rule belongs to the test plugin: it is stated in the plugin's module comment,
 and neither the toolchain nor the request prescribes it.
 
-Two things the cabin fixture does not show are tested apart from it. The fixture
-states `null` for every socket message's maximum size, because the table of
-binding overheads has no row. A second test adds a `websocket` row to cabin's
-request with a frame header of 14 bytes and an envelope of 2 bytes, values that
-belong to the test and to no binding document, and checks that `Cabin.warning`'s
-maximum size is 14 + 2 + 8 = 24. Declared sizing values are not in the
-`examples/cabin` source; another test in the same file builds a workspace in a
-temporary directory that declares `depth`, `slots` and `budget` and checks that
-each declared value reaches the request with the declared source.
+The fixture states the socket message sizes the `websocket` row gives: 20 + 16 +
+8 = 44 bytes for `Cabin.warning`, whose proto3 bound is 8, and 20 + 16 + 6 = 42
+bytes for each of the other three members, whose payloads are named scalars
+sized as their root box messages. A member with no proto3 bound would be `null`;
+no member of `examples/cabin` has one. A second test checks the same sum on its
+own. Declared sizing values are not in the `examples/cabin` source; another test
+in the same file builds a workspace in a temporary directory that declares
+`depth`, `slots` and `budget` and checks that each declared value reaches the
+request with the declared source.
 
 ## 8. What a plugin author reads
 

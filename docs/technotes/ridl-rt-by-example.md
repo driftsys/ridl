@@ -358,9 +358,14 @@ key with preceding keys, so those key reads are repeated:
 
 Keeping them apart matters downstream: a `Temperature` of 200 is a contract
 error the application caused, and a truncated buffer is an infrastructure
-failure. A `Violation` names the typl type and which rule it broke — `Range`,
-`Step`, `Length`, `Pattern`, `Variant` or `Unique` — so the report says
-`Temperature` broke its range rather than that something somewhere was wrong.
+failure. A `Violation` that the generated code detects names the typl type and
+which rule it broke — `Range`, `Step`, `Length`, `Pattern`, `Variant` or
+`Unique` — so the report says `Temperature` broke its range rather than that
+something somewhere was wrong. A `contract(InvalidValue)` outcome decoded from a
+frame carries the rule alone, and its `type_name` is `None` (the frame
+specification §9.6 says why). A consumer's own detection on bytes received in a
+frame names its type, and an in-process transport such as `ridl-loopback`
+delivers the generated code's name.
 
 Finally, `Payload<E>::MAX_SIZE` is the largest encoded size of any legal value.
 It is what sized the stack buffer in step 1, and what the generated
