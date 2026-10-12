@@ -76,10 +76,7 @@ fn example_dir() -> std::path::PathBuf {
 /// fails. `what` names the artifact, so a failure says which of the four
 /// compilations broke without the reader counting calls.
 fn rustc(what: &str, args: &[&std::ffi::OsStr]) {
-    let output = std::process::Command::new("rustc")
-        .args(args)
-        .output()
-        .expect("rustc must be installed and runnable for this test to be meaningful");
+    let output = rustc_output(args);
     assert!(
         output.status.success(),
         "{what} must compile, rustc said:\n{}",
@@ -87,16 +84,42 @@ fn rustc(what: &str, args: &[&std::ffi::OsStr]) {
     );
 }
 
-#[test]
-fn the_emitted_cabin_crate_runs_six_round_trips_against_a_consumer() {
-    let out = tempfile::tempdir().expect("a temp dir is created");
-    let libs = tempfile::tempdir().expect("a temp dir is created");
-    let out = out.path();
-    let libs = libs.path();
+/// Runs `rustc` with `args` and hands back what it said, success or not. A
+/// proof that a binding must be refused reads the diagnostics instead of
+/// asserting on the exit status alone.
+fn rustc_output(args: &[&std::ffi::OsStr]) -> std::process::Output {
+    std::process::Command::new("rustc")
+        .args(args)
+        .output()
+        .expect("rustc must be installed and runnable for this test to be meaningful")
+}
+
+/// What the build and the two rlib compilations below produce, held together
+/// so that a test can link against them. The two `TempDir` fields are the
+/// directories the paths point into: dropping them removes the artifacts, so
+/// they live as long as the value does.
+struct EmittedCabin {
+    _out_dir: tempfile::TempDir,
+    _libs_dir: tempfile::TempDir,
+    libs: std::path::PathBuf,
+    ridl_rt: std::path::PathBuf,
+    ridl_loopback: std::path::PathBuf,
+    veh_cabin: std::path::PathBuf,
+}
+
+/// Runs the build over `examples/cabin/` and compiles what it wrote, together
+/// with the two runtime crates a consumer names, into linkable rlibs. Both
+/// proofs below start here: one links a program that runs, the other compiles
+/// a program that must be refused.
+fn emit_and_compile_cabin() -> EmittedCabin {
+    let out_dir = tempfile::tempdir().expect("a temp dir is created");
+    let libs_dir = tempfile::tempdir().expect("a temp dir is created");
+    let out = out_dir.path().to_path_buf();
+    let libs = libs_dir.path().to_path_buf();
 
     // 1 — the build under test, through the same entry point the CLI calls.
-    let run =
-        ridlc::run_build(&example_dir(), out, &[Emit::Rust], false.into()).expect("the build runs");
+    let run = ridlc::run_build(&example_dir(), &out, &[Emit::Rust], false.into())
+        .expect("the build runs");
     assert!(
         !run.has_error(),
         "the example must compile clean, diagnostics: {:?}",
@@ -112,8 +135,8 @@ fn the_emitted_cabin_crate_runs_six_round_trips_against_a_consumer() {
 
     // 2 — the runtime crates the generated code and the consumer name,
     // built the way every compile proof in this crate builds `ridl-rt`.
-    let ridl_rt = support::ridl_rt_rlib(libs);
-    let ridl_loopback = support::ridl_loopback_rlib(libs, &ridl_rt);
+    let ridl_rt = support::ridl_rt_rlib(&libs);
+    let ridl_loopback = support::ridl_loopback_rlib(&libs, &ridl_rt);
 
     // 3 — the emitted crate itself, as a linkable rlib rather than the
     // metadata the other proofs stop at: a consumer that runs must link it.
@@ -139,6 +162,28 @@ fn the_emitted_cabin_crate_runs_six_round_trips_against_a_consumer() {
             veh_cabin.as_ref(),
         ],
     );
+
+    EmittedCabin {
+        _out_dir: out_dir,
+        _libs_dir: libs_dir,
+        libs,
+        ridl_rt,
+        ridl_loopback,
+        veh_cabin,
+    }
+}
+
+#[test]
+fn the_emitted_cabin_crate_runs_six_round_trips_against_a_consumer() {
+    let built = emit_and_compile_cabin();
+    let EmittedCabin {
+        libs,
+        ridl_rt,
+        ridl_loopback,
+        veh_cabin,
+        ..
+    } = &built;
+    let dependency = format!("dependency={}", libs.display());
 
     // 4 — the hand-written consumer, which names the generated face and the
     // loopback and nothing of the compiler that produced the crate.
@@ -196,6 +241,295 @@ fn the_emitted_cabin_crate_runs_six_round_trips_against_a_consumer() {
             "the consumer must report the line `{round_trip}`, it said:\n{stdout}"
         );
     }
+}
+
+/// A program that binds a client of the generated `Cabin` face over the
+/// loopback `runtime` builds. The two programs below differ in that
+/// expression alone. The generated prelude is imported for `Bind`, which the
+/// cabin consumer imports the same way; the `ReprC` import is unused in one
+/// of the two programs, which the crate-level attribute covers.
+fn binding_program(runtime: &str) -> String {
+    format!(
+        r#"#![allow(unused_imports)]
+use veh_cabin::veh::cabin as api;
+use api::cabin::prelude::*;
+use ridl_loopback::Loopback;
+use ridl_rt::contract::{{CatalogRef, Interface}};
+use ridl_rt::encoding::ReprC;
+const CATALOG: CatalogRef = *<api::Cabin as Interface>::CATALOG;
+fn main() {{
+    let rt = {runtime};
+    let _client = api::cabin::Client::new(rt.attach());
+}}
+"#
+    )
+}
+
+/// Compiles `source` the way the consumer program above is compiled, and
+/// hands back what `rustc` said. `error_format` is the only flag that may
+/// differ between two calls: a proof that reads the diagnostics asks for
+/// `json`, and every other flag stays the one the consumer program is built
+/// with, so the two compilations cannot drift apart.
+fn compile_against_cabin(
+    built: &EmittedCabin,
+    name: &str,
+    source: &str,
+    error_format: ErrorFormat,
+) -> std::process::Output {
+    let path = built.libs.join(format!("{name}.rs"));
+    std::fs::write(&path, source).expect("the program source is written");
+    let dependency = format!("dependency={}", built.libs.display());
+    let veh_cabin = format!("veh_cabin={}", built.veh_cabin.display());
+    let ridl_rt = format!("ridl_rt={}", built.ridl_rt.display());
+    let ridl_loopback = format!("ridl_loopback={}", built.ridl_loopback.display());
+    let program = built.libs.join(name);
+    let mut args: Vec<&std::ffi::OsStr> = vec![
+        "--edition".as_ref(),
+        "2024".as_ref(),
+        "--crate-name".as_ref(),
+        name.as_ref(),
+        "--extern".as_ref(),
+        veh_cabin.as_ref(),
+        "--extern".as_ref(),
+        ridl_rt.as_ref(),
+        "--extern".as_ref(),
+        ridl_loopback.as_ref(),
+        "-L".as_ref(),
+        dependency.as_ref(),
+        path.as_ref(),
+        "-o".as_ref(),
+        program.as_ref(),
+    ];
+    if let ErrorFormat::Json = error_format {
+        args.push("--error-format=json".as_ref());
+    }
+    rustc_output(&args)
+}
+
+/// How `rustc` is asked to write its diagnostics: the default human text, or
+/// one JSON object per line, which a proof can read field by field.
+enum ErrorFormat {
+    Human,
+    Json,
+}
+
+/// One `rustc` diagnostic, read from the JSON `--error-format=json` writes:
+/// its error code, its message, the source text each primary span points at,
+/// and the human rendering, which only a failure message uses.
+struct Diagnostic {
+    code: Option<String>,
+    message: String,
+    primary_spans: Vec<String>,
+    rendered: String,
+}
+
+/// Reads the diagnostics out of a JSON `rustc` stderr. A line that is not a
+/// JSON object is not a diagnostic and is skipped.
+fn diagnostics(stderr: &str) -> Vec<Diagnostic> {
+    stderr
+        .lines()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .map(|value| Diagnostic {
+            code: value["code"]["code"].as_str().map(str::to_owned),
+            message: value["message"].as_str().unwrap_or_default().to_owned(),
+            primary_spans: value["spans"]
+                .as_array()
+                .map(Vec::as_slice)
+                .unwrap_or_default()
+                .iter()
+                .filter(|span| span["is_primary"].as_bool() == Some(true))
+                .filter_map(span_source)
+                .collect(),
+            rendered: value["rendered"].as_str().unwrap_or_default().to_owned(),
+        })
+        .collect()
+}
+
+/// The source text a span points at: the lines it covers, with the
+/// indentation trimmed, which for a diagnostic on an expression is the
+/// statement that expression sits in.
+fn span_source(span: &serde_json::Value) -> Option<String> {
+    let lines: Vec<&str> = span["text"]
+        .as_array()?
+        .iter()
+        .filter_map(|line| line["text"].as_str())
+        .collect();
+    Some(lines.join("\n").trim().to_owned())
+}
+
+/// The predicate `Self: Trait<Arguments>` a bound diagnostic reports, with
+/// every path reduced to its last segment, so that a fully qualified
+/// rendering and a short one compare equal.
+#[derive(Debug, PartialEq, Eq)]
+struct Predicate {
+    self_type: String,
+    trait_name: String,
+    arguments: Vec<String>,
+}
+
+/// Every predicate a diagnostic message names. `rustc` writes a predicate
+/// between backticks, so each backticked run is read and the ones that are
+/// not predicates are dropped. Reading the predicate rather than matching the
+/// sentence around it means a change of wording does not break the proof.
+fn predicates(message: &str) -> Vec<Predicate> {
+    message
+        .split('`')
+        .skip(1)
+        .step_by(2)
+        .filter_map(parse_predicate)
+        .collect()
+}
+
+/// Reads `Self: Trait<A, B>` out of one backticked run, or hands back `None`
+/// when the run is not a predicate.
+fn parse_predicate(quoted: &str) -> Option<Predicate> {
+    let (self_type, trait_ref) = quoted.split_once(": ")?;
+    let (trait_name, arguments) = match trait_ref.split_once('<') {
+        Some((name, rest)) => (
+            name,
+            split_arguments(rest.strip_suffix('>')?)
+                .iter()
+                .map(|argument| last_segment(argument))
+                .collect(),
+        ),
+        None => (trait_ref, Vec::new()),
+    };
+    Some(Predicate {
+        self_type: last_segment(self_type),
+        trait_name: last_segment(trait_name),
+        arguments,
+    })
+}
+
+/// Splits a generic argument list at its top-level commas, so that a nested
+/// argument list stays one argument.
+fn split_arguments(list: &str) -> Vec<&str> {
+    let mut arguments = Vec::new();
+    let mut depth = 0usize;
+    let mut start = 0usize;
+    for (index, character) in list.char_indices() {
+        match character {
+            '<' | '(' | '[' => depth += 1,
+            '>' | ')' | ']' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                arguments.push(&list[start..index]);
+                start = index + 1;
+            }
+            _ => {}
+        }
+    }
+    if !list[start..].trim().is_empty() {
+        arguments.push(&list[start..]);
+    }
+    arguments
+}
+
+/// The last segment of a path, which is the name a reader writes.
+fn last_segment(path: &str) -> String {
+    path.trim()
+        .rsplit("::")
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_owned()
+}
+
+/// The generated face reads its payload encoding from its port, and the
+/// generated package carries the encoding tables of the encodings it was
+/// built with — for the cabin example, FlatBuffers alone. So a port that
+/// carries `ReprC` has no table in that package, and binding a face over it
+/// must be refused.
+///
+/// What this pins is **where** the refusal lands: at the binding, on the
+/// `Sizes` bound the face declares, and not inside the body of a call that a
+/// reader would have to step into to understand. The port does implement
+/// `Encoded`, so the refusal must not be that the port is not `Encoded`; the
+/// missing item is the package's `Sizes<ReprC>` table.
+///
+/// The same program over `Loopback::new(CATALOG)`, whose encoding is
+/// FlatBuffers, compiles. Without that twin a refusal could come from a
+/// broken compile command rather than from the bound.
+#[test]
+fn a_port_whose_encoding_the_package_lacks_is_refused_at_the_binding() {
+    let built = emit_and_compile_cabin();
+
+    let refused = compile_against_cabin(
+        &built,
+        "encoding_the_package_lacks",
+        &binding_program("Loopback::<ReprC>::with_encoding(CATALOG)"),
+        ErrorFormat::Json,
+    );
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    let emitted = diagnostics(&stderr);
+    let rendered: String = emitted
+        .iter()
+        .map(|diagnostic| diagnostic.rendered.as_str())
+        .collect();
+    assert!(
+        !refused.status.success(),
+        "binding a face over a port whose encoding the package lacks must not compile, rustc said:\n{rendered}"
+    );
+
+    // One diagnostic carries the whole refusal: the code, the unsatisfied
+    // predicate and the span. Reading the three off the same diagnostic is
+    // what ties them together; three independent searches of the output
+    // would be satisfied by three unrelated diagnostics.
+    let expected = Predicate {
+        self_type: "Cabin".to_owned(),
+        trait_name: "Sizes".to_owned(),
+        arguments: vec!["ReprC".to_owned()],
+    };
+    // The statement the refusal must point at. `rustc` highlights the
+    // argument inside it, and the span carries the whole statement, so the
+    // statement is what a proof compares.
+    let binding = "let _client = api::cabin::Client::new(rt.attach());";
+    let refusals: Vec<&Diagnostic> = emitted
+        .iter()
+        .filter(|diagnostic| {
+            diagnostic.code.as_deref() == Some("E0277")
+                && predicates(&diagnostic.message).contains(&expected)
+                && diagnostic.primary_spans.iter().any(|span| span == binding)
+        })
+        .collect();
+    assert_eq!(
+        refusals.len(),
+        1,
+        "exactly one diagnostic must be an E0277 naming the predicate {expected:?} with a primary span on `{binding}`, rustc said:\n{rendered}"
+    );
+
+    // The port is `Encoded`; what the package lacks is its `Sizes` table. So
+    // no unsatisfied-bound diagnostic may report a predicate whose trait is
+    // `Encoded`. The name does appear elsewhere in the output — in the
+    // projection path `<Loopback<ReprC> as Encoded>::Encoding` of the
+    // companion type-mismatch diagnostic, and in the
+    // `ridl_rt::payload::Encoded` struct the generated FlatBuffers codec
+    // names, which is a different item — so the predicate is read rather
+    // than the prose around it.
+    for diagnostic in &emitted {
+        if diagnostic.code.as_deref() != Some("E0277") {
+            continue;
+        }
+        let unmet: Vec<Predicate> = predicates(&diagnostic.message)
+            .into_iter()
+            .filter(|predicate| predicate.trait_name == "Encoded")
+            .collect();
+        assert!(
+            unmet.is_empty(),
+            "the port is `Encoded`; the missing item is the package's `Sizes` table, so no unsatisfied bound may name `Encoded`, this one named {unmet:?}, rustc said:\n{rendered}"
+        );
+    }
+
+    let accepted = compile_against_cabin(
+        &built,
+        "the_encoding_the_package_carries",
+        &binding_program("Loopback::new(CATALOG)"),
+        ErrorFormat::Human,
+    );
+    assert!(
+        accepted.status.success(),
+        "the same program over the package's own encoding must compile, rustc said:\n{}",
+        String::from_utf8_lossy(&accepted.stderr)
+    );
 }
 
 /// The cabin workspace declares one system with one deployment, `Bench`, whose

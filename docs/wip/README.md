@@ -49,9 +49,16 @@ archived on 2026-10-10, once #810 landed; ADR-0014 decision 15 and
 durable records. The on-request encodings design and plan
 (`2026-10-10-on-request-encodings-{design,plan}.md`) were archived on
 2026-10-10, when sub-stage 1a was complete; the 2026-10-10 amendments of
-ADR-0002, ADR-0018, ADR-0020, ADR-0021 and ADR-0023 are their durable records,
-and the unbuilt sub-stage 1b stays here (below). The docs-in-generated-code
-design, plan and brainstorm handoff
+ADR-0002, ADR-0018, ADR-0020, ADR-0021 and ADR-0023 are their durable records.
+The sub-stage 1b design and plan (`2026-10-10-on-request-encodings-1b-design.md`
+and `2026-10-11-on-request-encodings-1b-plan.md`) were archived on 2026-10-12,
+once 1b landed; ADR-0018 decision 15, ADR-0023 decisions 6 and 7 and
+[`../design/interaction-face.md`](../design/interaction-face.md),
+[`../design/ridl-rt.md`](../design/ridl-rt.md) and
+[`../design/ridl-loopback.md`](../design/ridl-loopback.md) are their durable
+records, and the archived plan's Task 7 is the standing instruction for the
+ADR-0021 rewrite, which waits for a separate pull request. The
+docs-in-generated-code design, plan and brainstorm handoff
 (`2026-10-10-docs-in-generated-code-{design,handoff}.md` and
 `2026-10-11-docs-in-generated-code-plan.md`) were archived on 2026-10-11, once
 the work landed; [ADR-0028](../decisions/ADR-0028-docs-in-generated-code.md) and
@@ -237,13 +244,6 @@ durable records.
   documentation (doc lints, language server, rules in generated facade docs),
   split into four specs over a shared lint foundation. Scope only; each spec
   starts its own design session from it.
-- **2026-10-10-on-request-encodings-1b-design.md** — sub-stage 1b of the
-  on-request encodings design (driftsys/ridl#801): the generated face reads its
-  encoding from its port (`P: port::Encoded`, `P::Encoding`), and
-  `ridl-loopback` is typed by the encoding. The sections of the archived design
-  that describe it, copied verbatim, with what changed since it was written.
-  Forward-looking: not built. Its plan is written from this file; archive it
-  when 1b lands.
 
 ridl-boundary-model-review.md, superseded by ADR-0012, is archived too — see
 [`../archive/README.md`](../archive/README.md). So is

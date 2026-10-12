@@ -4,7 +4,8 @@
 //! `face.rs`.
 
 use super::{
-    Call, Member, correlation_type, future_type, interface_number, phase_type, read_fn, send_fn, ty,
+    Call, Member, correlation_type, encoding_bounds, future_type, ident, interface_number,
+    phase_type, read_fn, send_fn, ty,
 };
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
@@ -14,19 +15,24 @@ use quote::quote;
 pub(super) fn futures(
     iface: &Ident,
     iface_name: &str,
+    payloads: &[&str],
     events: &[(Member, &str)],
     commands: &[Call],
     queries: &[Call],
 ) -> Vec<TokenStream> {
+    // Each future holds the port and reads the encoding of the bytes it sends
+    // or checks from it, so each impl that encodes or decodes carries the
+    // face's `where` clause.
+    let encoding = encoding_bounds(&ident("P"), iface, payloads);
     let mut items = Vec::new();
     for call in commands {
-        items.push(call_future(call, "command"));
+        items.push(call_future(call, "command", &encoding));
     }
     for call in queries {
-        items.push(call_future(call, "query"));
+        items.push(call_future(call, "query", &encoding));
     }
     if !events.is_empty() {
-        items.push(next_event_future(iface, iface_name));
+        items.push(next_event_future(iface, iface_name, &encoding));
     }
     items
 }
@@ -40,7 +46,7 @@ pub(super) fn futures(
 /// poll registers the interest of its phase, then reads the port, then
 /// returns (note F-5). Leaving `Waiting` inside `poll` forgets the call
 /// there, so `Drop` forgets only a future that is still waiting.
-fn call_future(call: &Call, kind: &str) -> TokenStream {
+fn call_future(call: &Call, kind: &str, encoding: &TokenStream) -> TokenStream {
     let member = &call.member;
     let method = &member.method;
     let arg_path = ty(call.arg_type);
@@ -50,7 +56,10 @@ fn call_future(call: &Call, kind: &str) -> TokenStream {
     let send = send_fn(call);
     let read = read_fn(call);
     let bounds = quote! {
-        ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable
+        ::ridl_rt::port::Encoded
+            + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable
     };
 
     // A sent call whose bound passes resolves to the port's own expired
@@ -145,7 +154,10 @@ fn call_future(call: &Call, kind: &str) -> TokenStream {
             Done,
         }
 
-        impl<P: #bounds> #future<'_, P> {
+        impl<P: #bounds> #future<'_, P>
+        where
+            #encoding
+        {
             fn expired(&self) -> bool {
                 self.deadline.is_some_and(|deadline| self.port.now() > deadline)
             }
@@ -156,7 +168,10 @@ fn call_future(call: &Call, kind: &str) -> TokenStream {
             }
         }
 
-        impl<P: #bounds> ::core::future::Future for #future<'_, P> {
+        impl<P: #bounds> ::core::future::Future for #future<'_, P>
+        where
+            #encoding
+        {
             type Output = ::core::result::Result<#output, ::ridl_rt::error::ClientError>;
 
             fn poll(
@@ -211,6 +226,9 @@ fn call_future(call: &Call, kind: &str) -> TokenStream {
             }
         }
 
+        // A `Drop` impl must repeat its type's bounds exactly, so this one
+        // carries no `where` clause; it forgets a waiting call at the port and
+        // encodes and decodes nothing.
         impl<P: #bounds> ::core::ops::Drop for #future<'_, P> {
             fn drop(&mut self) {
                 if let #phase::Waiting(correlation) = &self.phase {
@@ -223,9 +241,11 @@ fn call_future(call: &Call, kind: &str) -> TokenStream {
 
 /// The event future: no deadline, because an event has no response bound,
 /// and no `Drop`, because it holds nothing at the port (note F-10).
-fn next_event_future(iface: &Ident, iface_name: &str) -> TokenStream {
+fn next_event_future(iface: &Ident, iface_name: &str, encoding: &TokenStream) -> TokenStream {
     let number = interface_number(iface);
-    let bounds = quote! { ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable };
+    let bounds = quote! {
+        ::ridl_rt::port::Encoded + ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable
+    };
     let doc = format!(
         "The future of `ridl_rt::face::Events::next_event` on the `Client` of \
          interface `{iface_name}`. Each \
@@ -241,7 +261,10 @@ fn next_event_future(iface: &Ident, iface_name: &str) -> TokenStream {
             port: &'a mut P,
         }
 
-        impl<P: #bounds> ::core::future::Future for NextEvent<'_, P> {
+        impl<P: #bounds> ::core::future::Future for NextEvent<'_, P>
+        where
+            #encoding
+        {
             type Output = ::core::result::Result<Event, ::ridl_rt::port::ReadError>;
 
             fn poll(

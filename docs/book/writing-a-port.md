@@ -35,6 +35,7 @@ them has a `&mut self` method, and checks this itself.
 | Trait              | Role                                                          | Used by                                                            |
 | ------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------ |
 | `Attached`         | names the catalog the port serves                             | the face, when it binds; a supertrait of every interaction port    |
+| `Encoded`          | states the encoding of the bytes the port carries             | the face: every port a face is bound to; a conformance fixture need not |
 | `Clock`            | gives the time envelopes are stamped with                     | the runtime; a `Client` with calls, to measure a call's bound      |
 | `SignalReader`     | reads a signal's current value                                | the consumer: `Client`                                             |
 | `SignalWriter`     | stages signal changes and publishes them with `commit`        | the producer: `Publisher`                                          |
@@ -51,6 +52,27 @@ them has a `&mut self` method, and checks this itself.
 the `CatalogRef` the port serves; every interaction port has it as a
 supertrait. `Clock` has one method, `now`. A runtime has one clock and stamps
 every envelope from it. Neither method returns an error.
+
+**`Encoded`.** A port states the encoding of the bytes it carries through one
+associated type:
+
+```rust,ignore
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::port::Encoded;
+
+impl Encoded for MyPort {
+    type Encoding = FlatBuffers;
+}
+```
+
+A generated face reads that encoding from the port it is bound to and names no
+encoding itself, so every port a face is bound to implements `Encoded`. It is
+not a supertrait of `Attached`: a port that never meets a face, such as a
+fixture for the conformance suite below, is not forced to name an encoding. One
+session carries one encoding, so a transport that serves several hands out one
+port type per session, each typed with its own. `ridl-loopback` makes the choice
+a type parameter: `Loopback::new(catalog)` carries FlatBuffers, and
+`Loopback::<E>::with_encoding(catalog)` carries `E`.
 
 **Signals.** `SignalReader::read` copies a signal's current value into a buffer
 and returns its provenance, its freshness and its envelope. `SignalWriter`

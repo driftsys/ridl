@@ -2,7 +2,7 @@
 //! The face as a whole is described in the documentation of the parent
 //! module, `face.rs`.
 
-use super::{Call, catalog_panics_doc, interface_number};
+use super::{Call, catalog_panics_doc, encoding_bounds, ident, interface_number};
 use proc_macro2::{Ident, Literal, TokenStream};
 use quote::quote;
 
@@ -21,6 +21,7 @@ const SERVE_BUDGET: usize = 32;
 pub(super) fn serve(
     iface: &Ident,
     iface_name: &str,
+    payloads: &[&str],
     commands: &[Call],
     queries: &[Call],
 ) -> TokenStream {
@@ -30,7 +31,18 @@ pub(super) fn serve(
         .chain(queries.iter())
         .map(|call| &call.member.ordinal);
     let budget = Literal::usize_unsuffixed(SERVE_BUDGET);
-    let bounds = quote! { H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable, P: Provider };
+    let bounds = quote! {
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
+        P: Provider
+    };
+    // The handler port states the encoding of the claim bytes this future
+    // reads and of the reply bytes it writes.
+    let port = ident("H");
+    let encoding = encoding_bounds(&port, iface, payloads);
+    // The future's claim-buffer field projects through `Sizes`, so the struct
+    // itself carries that one predicate; the payload predicates sit on the
+    // impls, which are what encodes and decodes.
+    let buffer_bound = encoding_bounds(&port, iface, &[]);
 
     let serve_doc = format!(
         "Serves interface `{iface_name}`'s commands and queries with `p`, over \
@@ -61,7 +73,8 @@ pub(super) fn serve(
     let future_doc = format!(
         "The future `serve` returns over interface `{iface_name}`. It holds \
          the handler, the provider, and the claim buffer of \
-         `<{iface_name} as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes. It never resolves to `Ok`, and \
+         `<{iface_name} as Sizes<H::Encoding>>::MAX_BUFFER_SIZE` bytes, in the \
+         encoding the handler port carries. It never resolves to `Ok`, and \
          polling it again after it resolved panics."
     );
 
@@ -86,6 +99,7 @@ pub(super) fn serve(
         pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
         where
             #bounds,
+            #encoding
         {
             check_catalog(::ridl_rt::port::Attached::catalog(&h));
             let state = match h.serve(#number, &[#(#ordinals),*]) {
@@ -96,7 +110,7 @@ pub(super) fn serve(
                 handler: h,
                 provider: p,
                 buf: <super::#iface as ::ridl_rt::contract::Sizes<
-                    ::ridl_rt::encoding::FlatBuffers,
+                    H::Encoding,
                 >>::CLAIM_BUFFER,
                 state,
             }
@@ -104,11 +118,14 @@ pub(super) fn serve(
 
         #[doc = #future_doc]
         #[must_use = "claims are served only while the future is polled"]
-        pub struct Serve<'a, #bounds> {
+        pub struct Serve<'a, #bounds>
+        where
+            #buffer_bound
+        {
             handler: H,
             provider: &'a mut P,
             buf: <super::#iface as ::ridl_rt::contract::Sizes<
-                ::ridl_rt::encoding::FlatBuffers,
+                H::Encoding,
             >>::ClaimBuffer,
             state: ServeState,
         }
@@ -123,9 +140,15 @@ pub(super) fn serve(
         /// `Unpin` whatever `H` is: nothing in the future is pinned, and a
         /// frame loop that stores it in its own state polls it through
         /// `Pin::new`.
-        impl<#bounds> ::core::marker::Unpin for Serve<'_, H, P> {}
+        impl<#bounds> ::core::marker::Unpin for Serve<'_, H, P>
+        where
+            #encoding
+        {}
 
-        impl<#bounds> ::core::future::Future for Serve<'_, H, P> {
+        impl<#bounds> ::core::future::Future for Serve<'_, H, P>
+        where
+            #encoding
+        {
             type Output = ::core::result::Result<
                 ::core::convert::Infallible,
                 ::ridl_rt::error::ProviderError,
@@ -151,7 +174,7 @@ pub(super) fn serve(
                         match dispatch(
                             &mut this.handler,
                             &mut *this.provider,
-                            &mut this.buf,
+                            ::core::convert::AsMut::as_mut(&mut this.buf),
                             &mut budget,
                         ) {
                             Ok(_) => {

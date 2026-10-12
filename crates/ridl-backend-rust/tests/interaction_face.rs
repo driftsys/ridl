@@ -389,6 +389,11 @@ impl ridl_rt::port::Attached for ReportsInitOverRealBytes {
     }
 }
 
+/// The encoding of the `Loopback` this wrapper reads through.
+impl ridl_rt::port::Encoded for ReportsInitOverRealBytes {
+    type Encoding = ridl_rt::encoding::FlatBuffers;
+}
+
 impl ridl_rt::port::SignalReader for ReportsInitOverRealBytes {
     fn read(
         &self,
@@ -2602,6 +2607,12 @@ impl ridl_rt::port::Attached for MinimalSignalOnlyPort {
     }
 }
 
+/// The encoding the generated fixture codec writes, which the face over this
+/// port encodes and decodes with.
+impl ridl_rt::port::Encoded for MinimalSignalOnlyPort {
+    type Encoding = ridl_rt::encoding::FlatBuffers;
+}
+
 impl ridl_rt::port::SignalReader for MinimalSignalOnlyPort {
     fn read(
         &self,
@@ -2667,6 +2678,12 @@ impl ridl_rt::port::Attached for DistinctiveInitPort {
     fn catalog(&self) -> &ridl_rt::contract::CatalogRef {
         &self.catalog
     }
+}
+
+/// The encoding the generated fixture codec writes, which the face over this
+/// port encodes and decodes with.
+impl ridl_rt::port::Encoded for DistinctiveInitPort {
+    type Encoding = ridl_rt::encoding::FlatBuffers;
 }
 
 impl ridl_rt::port::SignalReader for DistinctiveInitPort {
@@ -3282,4 +3299,802 @@ fn deprecated_interaction_does_not_warn_inside_the_generated_crate() {
             );
         }
     }
+}
+
+/// Every port written by hand in this test suite states the encoding of the
+/// bytes it carries, so that a face generic over the port's encoding can be
+/// built over it. The wrappers over `ridl-loopback` carry the encoding of the
+/// handles they wrap, and the ports that hold no handle carry the one the
+/// generated fixture codec writes: FlatBuffers in both cases.
+#[test]
+fn every_hand_written_port_states_its_encoding() {
+    fn encoding_of<P: ridl_rt::port::Encoded>() -> &'static str {
+        <P::Encoding as ridl_rt::encoding::Encoding>::NAME
+    }
+
+    assert_eq!(encoding_of::<ReportsInitOverRealBytes>(), "flatbuffers");
+    assert_eq!(encoding_of::<MinimalSignalOnlyPort>(), "flatbuffers");
+    assert_eq!(encoding_of::<DistinctiveInitPort>(), "flatbuffers");
+    assert_eq!(encoding_of::<doubles::RecordingPorts>(), "flatbuffers");
+    assert_eq!(encoding_of::<doubles::FailingHandler>(), "flatbuffers");
+    assert_eq!(encoding_of::<doubles::QueuedClaims>(), "flatbuffers");
+}
+
+// ---------------------------------------------------------------------------
+// The face reads its encoding from its port.
+// ---------------------------------------------------------------------------
+
+/// The face modules of the checked-in fixture: its text from the first line
+/// that starts with `pub mod` to the end.
+///
+/// The emitted codec comes first in the file and keeps the concrete encoding
+/// it is written for — `Payload<FlatBuffers>` for each payload type and
+/// `Sizes<FlatBuffers>` for each interface. The face is the part that must
+/// name no encoding of its own.
+fn face_modules() -> &'static str {
+    const FIXTURE: &str = include_str!("generated/interaction_face.rs");
+    let start = FIXTURE
+        .find("\npub mod ")
+        .expect("the fixture holds at least one face module");
+    &FIXTURE[start + 1..]
+}
+
+/// The text of one face module of the fixture, from its `pub mod` line to the
+/// next one or to the end.
+fn face_module(name: &str) -> &'static str {
+    let face = face_modules();
+    let head = format!("pub mod {name} {{");
+    let start = face
+        .find(&head)
+        .unwrap_or_else(|| panic!("the fixture holds a face module `{name}`"));
+    let rest = &face[start..];
+    let end = rest[1..]
+        .find("\npub mod ")
+        .map_or(rest.len(), |offset| offset + 1);
+    &rest[..end]
+}
+
+/// The face takes the encoding of its bytes from its port type and names no
+/// encoding itself: every path that once read `::ridl_rt::encoding::FlatBuffers`
+/// is now the projection `P::Encoding`, `W::Encoding` or `H::Encoding`, the
+/// parameter of the item the path sits in, and every port parameter is bound
+/// on `::ridl_rt::port::Encoded`.
+#[test]
+fn the_face_names_no_concrete_encoding() {
+    let face = face_modules();
+    assert!(
+        !face.contains("encoding::FlatBuffers"),
+        "the face still names a concrete encoding"
+    );
+    for needle in [
+        "::ridl_rt::port::Encoded",
+        "P::Encoding",
+        "W::Encoding",
+        "H::Encoding",
+    ] {
+        assert!(face.contains(needle), "the face does not name `{needle}`");
+    }
+}
+
+/// An interface that declares a signal and nothing else is bounded on the one
+/// payload type its face reads, and on no buffer it does not hold: `Horn`'s
+/// face names its own `Sizes` bound and `Health`, and neither the claim buffer
+/// nor the event buffer, which it has no call and no event to fill.
+#[test]
+fn a_signal_only_face_bounds_only_its_own_payload() {
+    let horn = face_module("horn");
+    for needle in [
+        "super::Horn: ::ridl_rt::contract::Sizes<P::Encoding>",
+        "super::Health: ::ridl_rt::payload::Payload<P::Encoding>",
+    ] {
+        assert!(horn.contains(needle), "`horn` does not name `{needle}`");
+    }
+    for needle in ["EVENT_BUFFER", "CLAIM_BUFFER", "super::Level:"] {
+        assert!(!horn.contains(needle), "`horn` names `{needle}`");
+    }
+}
+
+/// Per-payload counters for the second codec, one pair for each payload type:
+/// how many times its `Proto3` `encode` ran, and how many times its `Proto3`
+/// `decode` ran.
+///
+/// A round trip that still encoded or decoded with FlatBuffers on one leg
+/// leaves that leg's counter at zero, which no assertion on the value that
+/// came back can see, because both ends of such a leg agree on the same wrong
+/// encoding and the runtime carries the payload as opaque bytes.
+trait Proto3Counts {
+    fn encodes() -> &'static std::sync::atomic::AtomicUsize;
+
+    fn decodes() -> &'static std::sync::atomic::AtomicUsize;
+
+    fn count_encode() {
+        Self::encodes().fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn count_decode() {
+        Self::decodes().fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The pair `(encodes, decodes)` since the last reset.
+    fn counts() -> (usize, usize) {
+        (
+            Self::encodes().load(std::sync::atomic::Ordering::Relaxed),
+            Self::decodes().load(std::sync::atomic::Ordering::Relaxed),
+        )
+    }
+
+    fn reset() {
+        Self::encodes().store(0, std::sync::atomic::Ordering::Relaxed);
+        Self::decodes().store(0, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// A second codec for the fixture's payload types, written under the `Proto3`
+/// marker: the FlatBuffers bytes of the same value, reversed.
+///
+/// It is not proto3. It is a codec whose bytes differ from the FlatBuffers
+/// ones for every value, carried by a marker a port can be typed with, so that
+/// a face which still encoded or decoded with FlatBuffers anywhere would be
+/// caught by the bytes seen on the port. Reversing keeps the length, so every
+/// size the interface's table states is the one FlatBuffers states, and the
+/// bytes are written at the end of the output buffer, so `Encoded::bytes` is a
+/// subslice and not a prefix, as it is for FlatBuffers.
+///
+/// Each payload also carries its own pair of `Proto3Counts` counters, raised
+/// by this codec's `encode` and `decode`, so that a test can state which leg
+/// of a round trip went through this codec and in which direction.
+macro_rules! reversed_codec {
+    ($($payload:ident),* $(,)?) => {
+        $(
+            impl Proto3Counts for generated::$payload {
+                fn encodes() -> &'static std::sync::atomic::AtomicUsize {
+                    static COUNT: std::sync::atomic::AtomicUsize =
+                        std::sync::atomic::AtomicUsize::new(0);
+                    &COUNT
+                }
+
+                fn decodes() -> &'static std::sync::atomic::AtomicUsize {
+                    static COUNT: std::sync::atomic::AtomicUsize =
+                        std::sync::atomic::AtomicUsize::new(0);
+                    &COUNT
+                }
+            }
+
+            impl ridl_rt::payload::Payload<ridl_rt::encoding::Proto3> for generated::$payload {
+                const MAX_SIZE: usize = <generated::$payload as ridl_rt::payload::Payload<
+                    ridl_rt::encoding::FlatBuffers,
+                >>::MAX_SIZE;
+
+                type Buffer = <generated::$payload as ridl_rt::payload::Payload<
+                    ridl_rt::encoding::FlatBuffers,
+                >>::Buffer;
+
+                const BUFFER: Self::Buffer = <generated::$payload as ridl_rt::payload::Payload<
+                    ridl_rt::encoding::FlatBuffers,
+                >>::BUFFER;
+
+                type View<'a> = &'a [u8];
+
+                fn encode<'o>(
+                    &self,
+                    out: &'o mut [u8],
+                ) -> Result<ridl_rt::payload::Encoded<'o, &'o [u8]>, ridl_rt::payload::EncodeError>
+                {
+                    <generated::$payload as Proto3Counts>::count_encode();
+                    let mut scratch = <generated::$payload as ridl_rt::payload::Payload<
+                        ridl_rt::encoding::FlatBuffers,
+                    >>::BUFFER;
+                    let mut reversed = <generated::$payload as ridl_rt::payload::Payload<
+                        ridl_rt::encoding::FlatBuffers,
+                    >>::BUFFER;
+                    let len = {
+                        let encoded = ridl_rt::payload::Ref::<
+                            generated::$payload,
+                            ridl_rt::encoding::FlatBuffers,
+                        >::encode(self, scratch.as_mut())?;
+                        let bytes = encoded.bytes();
+                        for (slot, byte) in
+                            reversed.as_mut().iter_mut().zip(bytes.iter().rev())
+                        {
+                            *slot = *byte;
+                        }
+                        bytes.len()
+                    };
+                    if out.len() < len {
+                        return Err(ridl_rt::payload::EncodeError::Capacity {
+                            needed: len,
+                            available: out.len(),
+                        });
+                    }
+                    let start = out.len() - len;
+                    out[start..].copy_from_slice(&reversed.as_ref()[..len]);
+                    let bytes: &'o [u8] = &out[start..];
+                    Ok(ridl_rt::payload::Encoded { bytes, view: bytes })
+                }
+
+                fn verify(buf: &[u8]) -> Result<&[u8], ridl_rt::payload::VerifyError> {
+                    let mut scratch = <generated::$payload as ridl_rt::payload::Payload<
+                        ridl_rt::encoding::FlatBuffers,
+                    >>::BUFFER;
+                    if buf.len() > scratch.as_ref().len() {
+                        return Err(ridl_rt::payload::VerifyError::Structure(
+                            ridl_rt::payload::Malformed::TooLarge,
+                        ));
+                    }
+                    for (slot, byte) in scratch.as_mut().iter_mut().zip(buf.iter().rev()) {
+                        *slot = *byte;
+                    }
+                    ridl_rt::payload::Ref::<
+                        generated::$payload,
+                        ridl_rt::encoding::FlatBuffers,
+                    >::verify(&scratch.as_ref()[..buf.len()])?;
+                    Ok(buf)
+                }
+
+                fn decode(
+                    proof: ridl_rt::payload::Ref<'_, Self, ridl_rt::encoding::Proto3>,
+                ) -> Self {
+                    <generated::$payload as Proto3Counts>::count_decode();
+                    let buf = proof.bytes();
+                    let mut scratch = <generated::$payload as ridl_rt::payload::Payload<
+                        ridl_rt::encoding::FlatBuffers,
+                    >>::BUFFER;
+                    for (slot, byte) in scratch.as_mut().iter_mut().zip(buf.iter().rev()) {
+                        *slot = *byte;
+                    }
+                    ridl_rt::payload::Ref::<
+                        generated::$payload,
+                        ridl_rt::encoding::FlatBuffers,
+                    >::verify(&scratch.as_ref()[..buf.len()])
+                        .expect("the bytes were checked before they were decoded")
+                        .decode()
+                }
+            }
+        )*
+    };
+}
+
+reversed_codec!(Temperature, Level, Window, Average, Health, Warning);
+
+/// `Cabin`'s size table under the second codec. Reversing keeps the length of
+/// every encoding, so every item repeats the FlatBuffers one.
+impl ridl_rt::contract::Sizes<ridl_rt::encoding::Proto3> for generated::Cabin {
+    const RESERVATIONS: &'static [u64] = <generated::Cabin as ridl_rt::contract::Sizes<
+        ridl_rt::encoding::FlatBuffers,
+    >>::RESERVATIONS;
+    const MAX_BUFFER_SIZE: usize = <generated::Cabin as ridl_rt::contract::Sizes<
+        ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE;
+    const EVENT_SOURCE_BUFFER_SIZE: usize = <generated::Cabin as ridl_rt::contract::Sizes<
+        ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE;
+    type ClaimBuffer =
+        <generated::Cabin as ridl_rt::contract::Sizes<ridl_rt::encoding::FlatBuffers>>::ClaimBuffer;
+    type EventBuffer =
+        <generated::Cabin as ridl_rt::contract::Sizes<ridl_rt::encoding::FlatBuffers>>::EventBuffer;
+    const CLAIM_BUFFER: Self::ClaimBuffer = <generated::Cabin as ridl_rt::contract::Sizes<
+        ridl_rt::encoding::FlatBuffers,
+    >>::CLAIM_BUFFER;
+    const EVENT_BUFFER: Self::EventBuffer = <generated::Cabin as ridl_rt::contract::Sizes<
+        ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_BUFFER;
+}
+
+/// The face encodes and decodes with the codec its port's type states, and two
+/// codecs live in one binary.
+///
+/// A `Loopback` typed with `Proto3` carries the reversed codec above; a face
+/// bound over it, with no type annotation at any binding, publishes a signal
+/// whose bytes on the port are the reversed ones and reads that signal back,
+/// and serves a command and a query over a handler held by `&mut`. A
+/// `Loopback` built with `new` beside it carries FlatBuffers, the default, and
+/// its bytes on the port are the FlatBuffers ones.
+#[test]
+fn a_second_codec_is_read_from_the_port_type() {
+    use ridl_rt::contract::Interaction;
+    use ridl_rt::encoding::{FlatBuffers, Proto3};
+    use ridl_rt::payload::{Payload, Ref};
+    use ridl_rt::port::SignalReader;
+
+    let ordinal = <generated::CabinTemperature as Interaction>::MEMBER.ordinal;
+    let value = generated::Temperature::new_unchecked(21);
+
+    // The FlatBuffers bytes of the published value, and this codec's bytes
+    // for it: the same bytes, reversed.
+    let mut scratch = <generated::Temperature as Payload<FlatBuffers>>::BUFFER;
+    let flatbuffers: Vec<u8> =
+        Ref::<generated::Temperature, FlatBuffers>::encode(&value, scratch.as_mut())
+            .expect("encode")
+            .bytes()
+            .to_vec();
+    let reversed: Vec<u8> = flatbuffers.iter().rev().copied().collect();
+
+    // 1. The signal round trip over the Proto3 runtime. No binding names an
+    //    encoding.
+    let rt = Loopback::<Proto3>::with_encoding(CATALOG);
+    let mut publisher = generated::cabin::Publisher::new(rt.attach());
+    let mut client = generated::cabin::Client::new(rt.attach());
+    publisher.temperature(value).expect("set");
+    publisher.commit();
+    let sample = client.temperature().expect("read");
+    assert_eq!(sample.value.get(), 21);
+    assert_eq!(sample.provenance, Provenance::Live);
+
+    // 2. The bytes the port carries are this codec's and not FlatBuffers'.
+    let reader = rt.attach();
+    let mut on_the_port = <generated::Temperature as Payload<FlatBuffers>>::BUFFER;
+    let raw = reader
+        .read(CABIN, ordinal, on_the_port.as_mut())
+        .expect("read");
+    let written = &on_the_port.as_ref()[..raw.len];
+    assert_eq!(
+        written,
+        reversed.as_slice(),
+        "the signal was published with the port's own codec"
+    );
+    assert_ne!(
+        written,
+        flatbuffers.as_slice(),
+        "the two codecs produce different bytes, so the check above has force"
+    );
+
+    // 3. A command and a query, served over a handler held by `&mut`. The
+    //    counters are reset first, so what they hold afterwards is what the
+    //    call legs did, not what the signal leg above did.
+    for reset in [
+        <generated::Temperature as Proto3Counts>::reset,
+        <generated::Level as Proto3Counts>::reset,
+        <generated::Window as Proto3Counts>::reset,
+        <generated::Average as Proto3Counts>::reset,
+    ] {
+        reset();
+    }
+    let mut handler = rt.handler();
+    let mut provider = TestProvider::new(7);
+    {
+        let mut serve = generated::cabin::serve(&mut handler, &mut provider);
+        {
+            let mut call = client.set_level(generated::Level::new_unchecked(3));
+            assert!(poll_once(&mut call).is_pending());
+            assert!(poll_once(&mut serve).is_pending());
+            assert_eq!(poll_once(&mut call), Poll::Ready(Ok(())));
+        }
+        {
+            let mut call = client.average(generated::Window::new_unchecked(5));
+            assert!(poll_once(&mut call).is_pending());
+            assert!(poll_once(&mut serve).is_pending());
+            assert_eq!(
+                poll_once(&mut call),
+                Poll::Ready(Ok(generated::Average::new_unchecked(7)))
+            );
+        }
+    }
+    assert_eq!(provider.set_level_calls, vec![3]);
+
+    // 4. Each leg of those two calls went through this codec, in the
+    //    direction that leg uses. A leg left on FlatBuffers would hold zero
+    //    here, and the round trip above would still have passed, because both
+    //    of its ends would agree on FlatBuffers and the runtime carries the
+    //    payload as opaque bytes.
+    assert_eq!(
+        <generated::Level as Proto3Counts>::counts(),
+        (1, 1),
+        "the command's argument was encoded by the client and decoded by the dispatch \
+         with the port's own codec"
+    );
+    assert_eq!(
+        <generated::Window as Proto3Counts>::counts(),
+        (1, 1),
+        "the query's argument was encoded by the client and decoded by the dispatch \
+         with the port's own codec"
+    );
+    assert_eq!(
+        <generated::Average as Proto3Counts>::counts(),
+        (1, 1),
+        "the query's reply was encoded by the provider side and decoded by the client \
+         with the port's own codec"
+    );
+    assert_eq!(
+        <generated::Temperature as Proto3Counts>::counts(),
+        (0, 0),
+        "the call legs carry no signal payload, so the counters above count only those legs"
+    );
+
+    // 5. A FlatBuffers runtime beside it, in the same binary: `Loopback::new`
+    //    is the default encoding, and its bytes are the unreversed ones. The
+    //    counters are reset first, so that what they hold at the end states
+    //    whether this runtime reached the second codec at all.
+    for reset in [
+        <generated::Temperature as Proto3Counts>::reset,
+        <generated::Level as Proto3Counts>::reset,
+        <generated::Window as Proto3Counts>::reset,
+        <generated::Average as Proto3Counts>::reset,
+    ] {
+        reset();
+    }
+    let rt_fb = Loopback::new(CATALOG);
+    let mut publisher_fb = generated::cabin::Publisher::new(rt_fb.attach());
+    let client_fb = generated::cabin::Client::new(rt_fb.attach());
+    publisher_fb.temperature(value).expect("set");
+    publisher_fb.commit();
+    let sample = client_fb.temperature().expect("read");
+    assert_eq!(sample.value.get(), 21);
+    assert_eq!(sample.provenance, Provenance::Live);
+
+    let reader_fb = rt_fb.attach();
+    let mut on_the_port_fb = <generated::Temperature as Payload<FlatBuffers>>::BUFFER;
+    let raw_fb = reader_fb
+        .read(CABIN, ordinal, on_the_port_fb.as_mut())
+        .expect("read");
+    assert_eq!(
+        &on_the_port_fb.as_ref()[..raw_fb.len],
+        flatbuffers.as_slice(),
+        "the loopback's default encoding is FlatBuffers"
+    );
+
+    // 6. The face over the FlatBuffers runtime reached no part of the second
+    //    codec.
+    for (name, counts) in [
+        (
+            "Temperature",
+            <generated::Temperature as Proto3Counts>::counts(),
+        ),
+        ("Level", <generated::Level as Proto3Counts>::counts()),
+        ("Window", <generated::Window as Proto3Counts>::counts()),
+        ("Average", <generated::Average as Proto3Counts>::counts()),
+    ] {
+        assert_eq!(
+            counts,
+            (0, 0),
+            "the FlatBuffers runtime used the second codec for `{name}`"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The encode-side bound of a bounded collection (driftsys/ridl#829).
+// ---------------------------------------------------------------------------
+//
+// A bounded list and a bounded map are plain public fields of the generated
+// struct, so a value longer than the declared bound is representable. The
+// generated `encode` refuses such a value and reports the rule the generated
+// `verify` reports for the same collection, and each face path that encodes a
+// payload returns that violation as the typed error it already returns.
+
+/// The violation the generated `encode` reports for an over-long `Log`.
+const LOG_LENGTH: ridl_rt::payload::Violation = ridl_rt::payload::Violation {
+    type_name: Some("Log"),
+    rule: ridl_rt::payload::Rule::Length,
+};
+
+/// The violation the generated `encode` reports for an over-long `Tally`.
+const TALLY_LENGTH: ridl_rt::payload::Violation = ridl_rt::payload::Violation {
+    type_name: Some("Tally"),
+    rule: ridl_rt::payload::Rule::Length,
+};
+
+/// `Log`'s encoded maximum: the size of every buffer the face gives the
+/// encoder for this payload.
+const LOG_MAX: usize =
+    <generated::Log as ridl_rt::payload::Payload<ridl_rt::encoding::FlatBuffers>>::MAX_SIZE;
+
+/// `ZoneLog`'s claim-buffer maximum, the buffer size `dispatch` is given.
+const ZONE_LOG_MAX: usize = <generated::ZoneLog as ridl_rt::contract::Sizes<
+    ridl_rt::encoding::FlatBuffers,
+>>::MAX_BUFFER_SIZE;
+
+fn tag(text: &str) -> generated::Tag {
+    generated::Tag::new(text.to_string()).expect("a tag within its length bounds")
+}
+
+fn samples(count: usize) -> Vec<generated::Window> {
+    (0..count)
+        .map(|_| generated::Window::new_unchecked(1))
+        .collect()
+}
+
+/// A legal `Log`: the list at its lower bound.
+fn legal_log() -> generated::Log {
+    generated::Log {
+        samples: samples(2),
+        note: None,
+    }
+}
+
+/// A `Log` whose list holds one element more than its bound of 8, and whose
+/// encoding is inside `MAX_SIZE`: `note` is absent, and `MAX_SIZE` provisions
+/// a sixteen-character string for it.
+fn over_long_list_inside_max_size() -> generated::Log {
+    generated::Log {
+        samples: samples(9),
+        note: None,
+    }
+}
+
+/// A `Log` whose list is long enough that its encoding cannot fit `MAX_SIZE`.
+fn over_long_list_beyond_max_size() -> generated::Log {
+    generated::Log {
+        samples: samples(LOG_MAX * 4),
+        note: None,
+    }
+}
+
+/// A legal `Tally`: the map empty.
+fn legal_tally() -> generated::Tally {
+    generated::Tally {
+        entries: Vec::new(),
+    }
+}
+
+/// A `Tally` whose map holds one entry more than its bound of 3, with keys
+/// short enough that its encoding is inside `MAX_SIZE`, which provisions
+/// three sixteen-character keys.
+fn over_long_map_inside_max_size() -> generated::Tally {
+    generated::Tally {
+        entries: ["a", "b", "c", "d"]
+            .into_iter()
+            .map(|key| (tag(key), generated::Level::new_unchecked(1)))
+            .collect(),
+    }
+}
+
+#[test]
+fn encode_refuses_an_over_long_bounded_list() {
+    use ridl_rt::payload::{EncodeError, Ref};
+
+    let mut buf = [0u8; LOG_MAX];
+    assert!(
+        Ref::<generated::Log, ridl_rt::encoding::FlatBuffers>::encode(&legal_log(), &mut buf)
+            .is_ok(),
+        "a value within the bound encodes"
+    );
+    assert_eq!(
+        Ref::<generated::Log, ridl_rt::encoding::FlatBuffers>::encode(
+            &over_long_list_inside_max_size(),
+            &mut buf,
+        )
+        .err(),
+        Some(EncodeError::Contract(LOG_LENGTH)),
+        "an over-long list whose encoding fits the buffer is still refused"
+    );
+    assert_eq!(
+        Ref::<generated::Log, ridl_rt::encoding::FlatBuffers>::encode(
+            &over_long_list_beyond_max_size(),
+            &mut buf,
+        )
+        .err(),
+        Some(EncodeError::Contract(LOG_LENGTH)),
+        "the bound is checked before the buffer runs out"
+    );
+}
+
+#[test]
+fn encode_refuses_an_over_long_bounded_map() {
+    use ridl_rt::payload::{EncodeError, Ref};
+
+    let mut buf = [0u8; <generated::Tally as ridl_rt::payload::Payload<
+        ridl_rt::encoding::FlatBuffers,
+    >>::MAX_SIZE];
+    assert!(
+        Ref::<generated::Tally, ridl_rt::encoding::FlatBuffers>::encode(&legal_tally(), &mut buf)
+            .is_ok(),
+        "a value within the bound encodes"
+    );
+    assert_eq!(
+        Ref::<generated::Tally, ridl_rt::encoding::FlatBuffers>::encode(
+            &over_long_map_inside_max_size(),
+            &mut buf,
+        )
+        .err(),
+        Some(EncodeError::Contract(TALLY_LENGTH)),
+        "an over-long map whose encoding fits the buffer is still refused"
+    );
+}
+
+/// A provider whose replies are test-controlled, so a test can make it hand
+/// the face a bounded collection longer than its declared bound.
+struct LogProvider {
+    log: generated::Log,
+    tally: generated::Tally,
+    recorded: usize,
+}
+
+impl LogProvider {
+    fn new() -> Self {
+        LogProvider {
+            log: legal_log(),
+            tally: legal_tally(),
+            recorded: 0,
+        }
+    }
+}
+
+impl generated::zone_log::Provider for LogProvider {
+    fn record(&mut self, _entry: &generated::Log) {
+        self.recorded += 1;
+    }
+
+    fn recall(&mut self, _window: &generated::Window) -> generated::Log {
+        self.log.clone()
+    }
+
+    fn tally(&mut self, _window: &generated::Window) -> generated::Tally {
+        self.tally.clone()
+    }
+}
+
+/// Sends one of `ZoneLog`'s queries through the raw port, bypassing the
+/// generated client, so that `dispatch` can be called directly with a buffer
+/// the test owns. The client's future holds the port for as long as it lives.
+fn send_zone_log_query_raw(port: &mut Loopback, ordinal: Ordinal) -> Correlation {
+    use ridl_rt::payload::Ref;
+
+    let window = generated::Window::new_unchecked(10);
+    let mut buf = [0u8; ZONE_LOG_MAX];
+    let bytes = Ref::<generated::Window, ridl_rt::encoding::FlatBuffers>::encode(&window, &mut buf)
+        .expect("encode")
+        .bytes();
+    port.query(
+        <generated::ZoneLog as ridl_rt::contract::Interface>::NUMBER,
+        ordinal,
+        bytes,
+        None,
+    )
+    .expect("send")
+}
+
+/// The provider replies with an over-long collection whose encoding fits
+/// inside `MAX_SIZE`, so the buffer's size cannot be what refuses it.
+///
+/// The dispatch buffer is the discriminating observation. A FlatBuffers
+/// builder fills a buffer from its end, and `dispatch` reads the claim's
+/// argument bytes into the front of the same buffer, so the buffer's tail is
+/// written only by the reply's encoder. The control run with a legal reply
+/// leaves that tail non-zero; the over-long reply must leave it as it was.
+/// The settlement alone does not separate the two, because the receiver
+/// checks the same bound and reports the same violation for a value that was
+/// sent.
+#[test]
+fn a_query_reply_with_an_over_long_collection_inside_max_size_is_never_encoded() {
+    use ridl_rt::contract::Interaction;
+
+    /// The bytes at the end of the dispatch buffer, which only the reply's
+    /// encoder writes.
+    fn tail(buf: &[u8]) -> &[u8] {
+        &buf[buf.len() - 8..]
+    }
+
+    let recall = <generated::ZoneLogRecall as Interaction>::MEMBER.ordinal;
+    let tally = <generated::ZoneLogTally as Interaction>::MEMBER.ordinal;
+
+    // The control: a legal reply is encoded, and the encoding is in the
+    // buffer's tail.
+    for ordinal in [recall, tally] {
+        let mut port = loopback();
+        send_zone_log_query_raw(&mut port, ordinal);
+        let mut provider = LogProvider::new();
+        let mut buf = [0u8; ZONE_LOG_MAX];
+        assert_eq!(
+            generated::zone_log::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound()),
+            Ok(1),
+        );
+        assert!(
+            tail(&buf).iter().any(|byte| *byte != 0),
+            "a legal reply is encoded into the buffer's tail"
+        );
+    }
+
+    for (ordinal, provider, violation) in [
+        (
+            recall,
+            LogProvider {
+                log: over_long_list_inside_max_size(),
+                ..LogProvider::new()
+            },
+            LOG_LENGTH,
+        ),
+        (
+            tally,
+            LogProvider {
+                tally: over_long_map_inside_max_size(),
+                ..LogProvider::new()
+            },
+            TALLY_LENGTH,
+        ),
+    ] {
+        let mut port = loopback();
+        let correlation = send_zone_log_query_raw(&mut port, ordinal);
+        let mut provider = provider;
+        let mut buf = [0u8; ZONE_LOG_MAX];
+        assert_eq!(
+            generated::zone_log::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound()),
+            Ok(1),
+            "the claim was settled"
+        );
+        assert!(
+            tail(&buf).iter().all(|byte| *byte == 0),
+            "the encoder wrote the over-long value into the dispatch buffer"
+        );
+
+        let mut out = [0u8; ZONE_LOG_MAX];
+        assert_eq!(
+            port.reply(correlation, &mut out).expect("read"),
+            Some(Err(CallError::Contract(Contract::InvalidValue(violation)))),
+        );
+    }
+}
+
+/// The same reply, long enough that its encoding cannot fit `MAX_SIZE`, over
+/// `serve` rather than over `dispatch` directly. Before the encode-side check
+/// this reached the face's `unreachable!` and panicked the provider.
+#[test]
+fn a_query_reply_with_an_over_long_list_beyond_max_size_settles_invalid_value() {
+    let mut rt = loopback();
+    let handler = rt.handler();
+    let mut provider = LogProvider {
+        log: over_long_list_beyond_max_size(),
+        ..LogProvider::new()
+    };
+    let mut serve = generated::zone_log::serve(handler, &mut provider);
+
+    let mut client = generated::zone_log::Client::new(&mut rt);
+    let mut call = client.recall(generated::Window::new_unchecked(10));
+    assert!(poll_once(&mut call).is_pending());
+    assert!(poll_once(&mut serve).is_pending());
+    assert_eq!(
+        poll_once(&mut call),
+        Poll::Ready(Err(ClientError::Call(CallError::Contract(
+            Contract::InvalidValue(LOG_LENGTH)
+        )))),
+    );
+}
+
+/// The publisher's signal setter returns the violation as its own error type
+/// instead of panicking, and stages nothing.
+#[test]
+fn a_signal_set_with_an_over_long_collection_returns_invalid_value() {
+    let mut port = loopback();
+    let mut publisher = generated::zone_log::Publisher::new(&mut port);
+    for value in [
+        over_long_list_inside_max_size(),
+        over_long_list_beyond_max_size(),
+    ] {
+        assert_eq!(
+            publisher.recent(value),
+            Err(ridl_rt::port::WriteError::Contract(Contract::InvalidValue(
+                LOG_LENGTH
+            ))),
+        );
+    }
+    assert_eq!(
+        publisher.recent(legal_log()),
+        Ok(()),
+        "a legal value stages"
+    );
+}
+
+/// A client's command argument takes the same path through the internal send:
+/// the violation is a send failure, and nothing is sent.
+#[test]
+fn a_command_argument_with_an_over_long_collection_is_a_send_failure() {
+    let mut port = loopback();
+    {
+        let mut client = generated::zone_log::Client::new(&mut port);
+        let mut call = client.record(over_long_list_inside_max_size());
+        assert_eq!(
+            poll_once(&mut call),
+            Poll::Ready(Err(ClientError::Send(SendError::Contract(
+                Contract::InvalidValue(LOG_LENGTH)
+            )))),
+        );
+    }
+
+    let mut provider = LogProvider::new();
+    let mut buf = [0u8; ZONE_LOG_MAX];
+    assert_eq!(
+        generated::zone_log::dispatch(&mut port, &mut provider, &mut buf, &mut no_bound()),
+        Ok(0),
+        "nothing was sent to the port",
+    );
+    assert_eq!(provider.recorded, 0);
 }

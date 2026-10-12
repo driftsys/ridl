@@ -447,6 +447,14 @@ pub(crate) fn __ridl_fb_encode_Samples(
         offset: 8u16,
         value: ::ridl_rt::flatbuffers::Field::Offset({
             let __c = &value.history;
+            if __c.len() < 2usize || __c.len() > 8usize {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("Samples"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
             let mut __bytes: ::std::vec::Vec<::core::primitive::u8> = ::std::vec::Vec::with_capacity(
                 __c.len() * 4usize,
             );
