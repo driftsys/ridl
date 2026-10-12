@@ -239,6 +239,9 @@ pub fn check_path(path: &str) -> Result<(), String> {
 /// the process host writes to a plugin's standard input. The `model` inside
 /// it is [`super::to_json_pretty`]'s output, one indentation level deeper.
 pub fn request_to_json(request: &v1::CodegenRequest) -> Result<String, super::SerializeError> {
+    if let Some(model) = request.model.as_ref() {
+        crate::class::check_model(model).map_err(super::SerializeError::Class)?;
+    }
     v2::render_json(request).map_err(super::SerializeError::from_v2)
 }
 
@@ -261,7 +264,12 @@ pub fn request_to_json(request: &v1::CodegenRequest) -> Result<String, super::Se
 /// built against a `ridl-ir` release from before this rule must be rebuilt
 /// once.
 pub fn request_from_json(text: &str) -> Result<v1::CodegenRequest, serde_json::Error> {
-    v2::read_json_ignoring_unknown(v2::codegen_request_descriptor(), text)
+    let request: v1::CodegenRequest =
+        v2::read_json_ignoring_unknown(v2::codegen_request_descriptor(), text)?;
+    if let Some(model) = request.model.as_ref() {
+        crate::class::check_model(model).map_err(serde::de::Error::custom)?;
+    }
+    Ok(request)
 }
 
 /// Renders a response as pretty-printed canonical protobuf JSON — the bytes

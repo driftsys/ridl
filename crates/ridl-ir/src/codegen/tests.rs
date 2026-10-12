@@ -195,6 +195,49 @@ fn an_enum_carries_its_zero_member_and_its_init_member_by_index() {
     assert_eq!(def.retired[0].value, Some(7));
 }
 
+/// The lenient request reader refuses an invalid interaction class, exactly
+/// as the strict reader does, and so does the request writer.
+#[test]
+fn the_lenient_request_reader_rejects_an_invalid_class() {
+    let model = v1::Model {
+        interfaces: vec![v1::Interface {
+            slots: vec![v1::InteractionSlot {
+                ordinal: 1,
+                occupant: Some(v1::interaction_slot::Occupant::Interaction(Box::new(
+                    v1::Interaction {
+                        kind: v1::Kind::Command as i32,
+                        family: v1::Family::Intent as i32,
+                        shape: Some(v1::interaction::Shape::Command(v1::CommandShape {
+                            shape: v1::Shape::None as i32,
+                            ..Default::default()
+                        })),
+                        ..Default::default()
+                    },
+                ))),
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let request = v1::CodegenRequest {
+        model: Some(model),
+        ..Default::default()
+    };
+    let json = crate::v2::render_json(&request).expect("the raw writer renders it");
+    let err = crate::codegen::contract::request_from_json(&json)
+        .expect_err("the lenient reader must refuse it");
+    assert!(
+        err.to_string().contains("invalid interaction class"),
+        "{err}"
+    );
+    let err =
+        crate::codegen::contract::request_to_json(&request).expect_err("the writer must refuse it");
+    assert!(
+        matches!(err, crate::codegen::SerializeError::Class(_)),
+        "{err}"
+    );
+}
+
 /// The model copies the family of an interaction and the shape of an intent
 /// command from the IR (ADR-0012 decision 6).
 #[test]

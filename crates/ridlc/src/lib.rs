@@ -2418,8 +2418,19 @@ fn write_emits(
                 }
             },
             // Binary needs no descriptors and no transcode, so it has no
-            // recursion-limit failure path (ADR-0014 decision 7).
+            // recursion-limit failure path (ADR-0014 decision 7). The
+            // interaction class is checked here, because `to_binary` cannot
+            // fail and the strict reader refuses an invalid combination.
             Emit::IrBinary => {
+                if let Err(err) = ridl_ir::class::check_package(ir) {
+                    diagnostics.push(error_diagnostic(
+                        "",
+                        err.to_string(),
+                        FileId::DETACHED,
+                        TextRange::default(),
+                    ));
+                    continue;
+                }
                 std::fs::write(
                     ir_dump_path(out_dir, base, *emit),
                     ridl_ir::v2::to_binary(ir),

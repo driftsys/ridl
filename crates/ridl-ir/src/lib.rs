@@ -134,6 +134,9 @@ pub mod v2 {
         /// prost's fixed recursion limit, and legal source can nest
         /// composites past it.
         Text(prost::DecodeError),
+        /// An interaction holds a (kind, family, shape) combination the IR
+        /// does not admit (`ridl_ir::class`).
+        Class(crate::class::InteractionClassError),
     }
 
     impl std::fmt::Display for SerializeError {
@@ -149,6 +152,7 @@ pub mod v2 {
                     "cannot render the package as prototext: {source}; the known cause \
                      is composite nesting deeper than the transcoding decoder's recursion limit"
                 ),
+                Self::Class(source) => write!(f, "{source}"),
             }
         }
     }
@@ -158,6 +162,7 @@ pub mod v2 {
             match self {
                 Self::Json(source) => Some(source),
                 Self::Text(source) => Some(source),
+                Self::Class(source) => Some(source),
             }
         }
     }
@@ -183,6 +188,7 @@ pub mod v2 {
     /// produces one, but the value is data, not schema, so the failure is
     /// returned rather than panicked on.
     pub fn to_json_pretty(package: &Package) -> Result<String, SerializeError> {
+        crate::class::check_package(package).map_err(SerializeError::Class)?;
         render_json(package)
     }
 
@@ -286,8 +292,14 @@ pub mod v2 {
     ///   instead of tracking the ambient stack. On the wasm family there is
     ///   no such thread — see the branch below — and the cap alone guards
     ///   the parse.
+    ///
+    /// After the parse, every interaction's (kind, family, shape) is checked
+    /// against [`crate::class`]; an invalid combination is an error of this
+    /// reader.
     pub fn from_json(text: &str) -> Result<Package, serde_json::Error> {
-        read_json(text)
+        let package: Package = read_json(text)?;
+        crate::class::check_package(&package).map_err(serde::de::Error::custom)?;
+        Ok(package)
     }
 
     /// An error loading an `.ir.json` snapshot with [`load_ir_json`].
@@ -697,7 +709,14 @@ pub mod v2 {
     /// Decodes a package from the protobuf binary wire format — the inverse
     /// of [`to_binary`].
     pub fn from_binary(bytes: &[u8]) -> Result<Package, prost::DecodeError> {
-        prost::Message::decode(bytes)
+        let package: Package = prost::Message::decode(bytes)?;
+        crate::class::check_package(&package).map_err(|err| {
+            // `DecodeError::new` is the only way to build one: prost exposes
+            // no other constructor, and this reader's error type is prost's.
+            #[allow(deprecated)]
+            prost::DecodeError::new(err.to_string())
+        })?;
+        Ok(package)
     }
 
     /// Encodes a lowered system in the protobuf binary wire format — the
@@ -1137,6 +1156,7 @@ pub mod v2 {
 }
 
 pub mod catalog_hash;
+pub mod class;
 pub mod codegen;
 pub mod name;
 pub mod projection;
@@ -1734,6 +1754,86 @@ mod v2_round_trip {
             ["VehicleStatus"],
             "a service's set carries its references and nothing else"
         );
+    }
+
+    /// A package with one interface `I` holding one command `c` of the given
+    /// family and shape.
+    fn package_with_command(family: v2::Family, shape: v2::Shape) -> v2::Package {
+        v2::Package {
+            name: "app".to_string(),
+            interfaces: vec![v2::Interface {
+                name: "I".to_string(),
+                visibility: v2::Visibility::Public as i32,
+                interactions: vec![v2::Decl {
+                    name: "c".to_string(),
+                    visibility: v2::Visibility::Public as i32,
+                    ordinal: 1,
+                    kind: Some(v2::decl::Kind::CommandDef(v2::CommandDef {
+                        family: family as i32,
+                        shape: shape as i32,
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
+
+    /// `(command, intent, none)` is refused where the IR is read, by both
+    /// readers: ADR-0012 decision 5 admits no generic intent command.
+    #[test]
+    fn the_readers_reject_an_invalid_interaction_class() {
+        let package = package_with_command(v2::Family::Intent, v2::Shape::None);
+        let json = v2::render_json(&package).expect("the raw writer renders it");
+        let err = v2::from_json(&json).expect_err("the JSON reader must refuse it");
+        assert!(
+            err.to_string().contains("invalid interaction class"),
+            "{err}"
+        );
+        let bytes = prost::Message::encode_to_vec(&package);
+        let err = v2::from_binary(&bytes).expect_err("the binary reader must refuse it");
+        assert!(
+            err.to_string().contains("invalid interaction class"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn the_json_writer_refuses_an_invalid_interaction_class() {
+        let package = package_with_command(v2::Family::Intent, v2::Shape::None);
+        let err = v2::to_json_pretty(&package).expect_err("the writer must refuse it");
+        assert!(matches!(err, v2::SerializeError::Class(_)), "{err}");
+    }
+
+    #[test]
+    fn a_valid_class_round_trips_through_both_readers() {
+        let package = package_with_command(v2::Family::Intent, v2::Shape::Toggle);
+        let json = v2::to_json_pretty(&package).expect("the writer renders it");
+        assert_eq!(v2::from_json(&json).expect("the JSON parses"), package);
+        assert_eq!(
+            v2::from_binary(&v2::to_binary(&package)).expect("the binary decodes"),
+            package
+        );
+    }
+
+    /// An IR written before `family` existed has no such key and reads as
+    /// dispatch.
+    #[test]
+    fn a_snapshot_without_family_reads_as_dispatch() {
+        let package = package_with_command(v2::Family::Dispatch, v2::Shape::None);
+        let json = v2::to_json_pretty(&package).expect("the writer renders it");
+        let mut value: serde_json::Value =
+            serde_json::from_str(&json).expect("the rendering is JSON");
+        let command = value["interfaces"][0]["interactions"][0]["commandDef"]
+            .as_object_mut()
+            .expect("the command object");
+        assert!(command.remove("family").is_some(), "`family` was rendered");
+        assert!(command.remove("shape").is_some(), "`shape` was rendered");
+        let stripped = serde_json::to_string(&value).expect("the stripped value renders");
+        let read = v2::from_json(&stripped).expect("a 0.9 snapshot reads");
+        assert_eq!(read, package);
     }
 
     #[test]
