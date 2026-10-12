@@ -287,7 +287,8 @@ fn host_version(host: Host) -> String {
 const AGREEMENT_FLOOR: f64 = 0.8;
 
 /// `cargo xtask eval sample --from <dir> [--size <n>]`: writes
-/// `<dir>/judge-check/labels.toml`, one `[[run]]` per sampled judged run,
+/// `<dir>/judge-check/labels.toml`, one `[[run]]` per sampled judged run
+/// (spread across hosts and skill arms, see `report::sample`),
 /// with the rubric items, the judge's marks and an empty `human` array for
 /// the maintainer to fill.
 fn sample_command(root: &Path, args: &[String]) -> Result<(), String> {

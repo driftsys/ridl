@@ -148,7 +148,8 @@ result in the directory, so the eval refuses an `--out` that already holds
 results; `--append` adds the new runs to them on purpose.
 
 `cargo xtask eval sample --from <dir> [--size <n>]` writes
-`<dir>/judge-check/labels.toml`, a deterministic sample of the judged runs for
-the maintainer to label, and `cargo xtask eval agreement <labels.toml>` writes
-`agreement.md` next to it and exits 1 when the judge agrees with the labels on
-fewer than 80% of the rubric items.
+`<dir>/judge-check/labels.toml`, a deterministic sample of the judged runs,
+taken in turn from each host and skill arm, for the maintainer to label, and
+`cargo xtask eval agreement <labels.toml>` writes `agreement.md` next to it and
+exits 1 when the judge agrees with the labels on fewer than 80% of the rubric
+items.

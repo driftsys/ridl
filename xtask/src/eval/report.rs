@@ -166,13 +166,41 @@ pub fn gate(out: &Path) -> Result<Vec<HostGate>, String> {
         .collect())
 }
 
-/// Every k-th run in sorted order, k = max(1, count / size), until `size`
-/// are taken. Deterministic, so a reviewer can reproduce the sample.
+/// Up to `size` runs, spread across hosts and skill arms: the runs are
+/// grouped by the host and the arm their label names (`<host>-<arm>-<n>`),
+/// the groups and the runs in each group are sorted, and the sample takes
+/// one run from each group in turn until `size` are taken or every group is
+/// empty. Deterministic, so a reviewer can reproduce the sample.
 pub fn sample(runs: &[String], size: usize) -> Vec<String> {
-    let mut sorted = runs.to_vec();
-    sorted.sort();
-    let k = (sorted.len() / size.max(1)).max(1);
-    sorted.into_iter().step_by(k).take(size).collect()
+    let mut groups: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
+    for key in runs {
+        let label = key.split_once('/').map_or(key.as_str(), |(_, l)| l);
+        let mut parts = label.split('-');
+        let host = parts.next().unwrap_or_default().to_owned();
+        let arm = parts.next().unwrap_or_default().to_owned();
+        groups.entry((host, arm)).or_default().push(key.clone());
+    }
+    let mut groups: Vec<std::vec::IntoIter<String>> = groups
+        .into_values()
+        .map(|mut g| {
+            g.sort();
+            g.into_iter()
+        })
+        .collect();
+    let mut picked = Vec::new();
+    while picked.len() < size {
+        let before = picked.len();
+        for group in &mut groups {
+            if picked.len() == size {
+                break;
+            }
+            picked.extend(group.next());
+        }
+        if picked.len() == before {
+            break;
+        }
+    }
+    picked
 }
 
 /// The fraction of rubric items on which the maintainer and the judge agree,
@@ -392,17 +420,49 @@ mod tests {
         );
     }
 
+    /// The keys of `tasks` tasks with the four labels of one run each.
+    fn four_labels(tasks: usize) -> Vec<String> {
+        (1..=tasks)
+            .flat_map(|t| {
+                [
+                    "claude-with-1",
+                    "claude-without-1",
+                    "codex-with-1",
+                    "codex-without-1",
+                ]
+                .map(move |l| format!("design-{t:04}/{l}"))
+            })
+            .collect()
+    }
+
     #[test]
-    fn the_sample_takes_every_kth_run_in_order() {
-        let runs: Vec<String> = (0..40).map(|i| format!("t/{i:02}")).collect();
-        let picked = sample(&runs, 20);
-        assert_eq!(picked.len(), 20);
-        assert_eq!(picked[0], "t/00");
-        assert_eq!(picked[1], "t/02");
-        assert_eq!(sample(&runs[..10], 20).len(), 10);
-        // 45 runs give k = 2, which would pick 23 without the size limit.
-        let runs: Vec<String> = (0..45).map(|i| format!("t/{i:02}")).collect();
-        assert_eq!(sample(&runs, 20).len(), 20);
+    fn the_sample_spreads_across_hosts_and_skill_arms() {
+        let runs = four_labels(5);
+        let picked = sample(&runs, 6);
+        assert_eq!(picked.len(), 6);
+        for label in [
+            "claude-with",
+            "claude-without",
+            "codex-with",
+            "codex-without",
+        ] {
+            assert!(
+                picked.iter().any(|k| k.contains(&format!("/{label}-"))),
+                "{label} missing from {picked:?}"
+            );
+        }
+        // Deterministic, and in group order on the first round.
+        assert_eq!(sample(&runs, 6), picked);
+        assert_eq!(picked[0], "design-0001/claude-with-1");
+        assert_eq!(picked[1], "design-0001/claude-without-1");
+        assert_eq!(picked[4], "design-0002/claude-with-1");
+    }
+
+    #[test]
+    fn the_sample_stops_at_its_size_or_when_every_group_is_empty() {
+        assert_eq!(sample(&four_labels(12), 20).len(), 20);
+        assert_eq!(sample(&four_labels(2), 20).len(), 8);
+        assert_eq!(sample(&four_labels(2), 0).len(), 0);
     }
 
     #[test]
