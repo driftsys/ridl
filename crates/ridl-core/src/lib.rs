@@ -11,6 +11,7 @@
 //! (ADR-0007 decision 5). With `--no-default-features` the crate builds for
 //! `wasm32-unknown-unknown`.
 
+pub mod attributes;
 #[cfg(feature = "fetch")]
 pub mod cache;
 pub mod catalog_history;

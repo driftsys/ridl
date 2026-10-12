@@ -52,6 +52,22 @@ words this record retired leave the implemented registry, except `states` and
 `during`, which the general form (§4.8) names as ridl clauses; the rmdl words
 stay reserved. Recorded under decision 4. Issue driftsys/ridl#370.
 
+**Amendment, 2026-10-11 — the registry as built (decisions 8 and 9).** The
+registry is `ridl_core::attributes::ATTRIBUTES`, one table that the ridl member
+check and the rsdl attribute reader read as their only allow-list. Its owner
+field has two values today, `core` and `backend` (a key whose namespace a
+configured backend claims); the `user:<namespace>` owner of decision 8 waits for
+a consumer, and no `extension:<name>` owner exists because no extension does.
+Four general-form keys with no consumer — `default`, `init`, `persist` and
+`invariant` — are not rows, so each draws FORM-106 where one of them drew
+FORM-107. `labels` and `deprecated` keep a row whose sites are the rsdl
+declarations, so on an interface member they draw FORM-107, as they did. For the
+rsdl system diff, which gives no verdict, decision 9's fail-closed rule reads
+"reported": `tier`, `labels`, `deprecated` and every backend key are reported
+changes, and `depth`, `slots` and `budget` are recorded as not reported, with
+the reason that a sizing value changes no link and no contract. Recorded under
+decisions 8 and 9. Issues driftsys/ridl#268 and driftsys/ridl#269.
+
 The exploration that produced it is recorded in
 `docs/archive/ridl-boundary-model-review.md`; where that record and this ADR
 disagree, this ADR is authoritative.
@@ -338,6 +354,9 @@ review and retracted for exactly this reason (decision 10).
    namespaced, so a later core addition cannot collide with a program's private
    key.
 
+   _Amended 2026-10-11:_ built as `ridl_core::attributes`. The owner is `core`
+   or `backend`; `user:<namespace>` waits for a consumer.
+
 9. **Unregistered attribute keys fail closed, in the compiler and in the gate.**
    An unknown key is a compile error, never a pass-through — pass-through turns
    a typo into silent semantics. A key with no diff category is classified
@@ -346,6 +365,10 @@ review and retracted for exactly this reason (decision 10).
    is classified `Compatible`, there is no general attribute-changed category,
    and tightening a tolerance bound is breaking. The four obligations therefore
    need diff categories of their own before any of them can be authored.
+
+   _Amended 2026-10-11:_ for the system diff, which gives no verdict,
+   fail-closed means reported. The three sizing keys are the recorded exception,
+   reason sizing.
 
 10. **The environment boundary needs no language of its own.** Proposed during
     the review and retracted. Every candidate decomposes: no-acknowledgment-of-

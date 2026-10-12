@@ -1,21 +1,23 @@
 // Attribute allow-list diagnostics (general form §4.3): FORM-106, FORM-107,
-// FORM-108. In E2 the only consumable attributes are the `require`/`ensure`
-// predicates, so every flag and assignment key is rejected — a key the general
-// form knows draws FORM-107, an unknown key draws FORM-106.
+// FORM-108. Every key is looked up in the attribute registry
+// (`ridl_core::attributes`): a key with a row that does not name this site
+// draws FORM-107, a key with no row draws FORM-106, and a key written twice
+// in one block draws FORM-108.
 
 package diag.ridl
 
 interface Attrs {
 
-  /// `persist` is a general-form key, but not one E2 consumes on a command.
+  /// `tier` has a registry row, and its only site is a `distribution`.
   /// Writing it twice in one block adds the duplicate-key report.
   command flagged(level: Level) [
-    persist
-    persist
+    tier = PLATFORM
+    tier = PLATFORM
   ] @[..50ms]
 
-  /// Not a key the general form defines at all.
+  /// `persist` has no registry row at all, on any site.
   command unknown(level: Level) [
+    persist
     frobnicate = 3
   ] @[..50ms]
 }

@@ -1,3 +1,33 @@
+attribute budget deployment assignment
+attribute budget placement assignment
+attribute deprecated component assignment
+attribute deprecated deployment assignment
+attribute deprecated distribution assignment
+attribute deprecated machine assignment
+attribute deprecated system assignment
+attribute depth deployment assignment
+attribute depth placement assignment
+attribute ensure query predicate
+attribute external component flag
+attribute external machine flag
+attribute instances component assignment
+attribute labels component assignment
+attribute labels deployment assignment
+attribute labels distribution assignment
+attribute labels machine assignment
+attribute labels system assignment
+attribute ns.key component flag-or-assignment
+attribute ns.key deployment flag-or-assignment
+attribute ns.key distribution flag-or-assignment
+attribute ns.key line flag-or-assignment
+attribute ns.key machine flag-or-assignment
+attribute ns.key placement flag-or-assignment
+attribute ns.key system flag-or-assignment
+attribute require command predicate
+attribute require query predicate
+attribute slots deployment assignment
+attribute slots placement assignment
+attribute tier distribution assignment
 reserved as
 reserved automaton
 reserved boolean

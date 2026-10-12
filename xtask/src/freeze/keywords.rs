@@ -1,4 +1,5 @@
-//! The keyword registry: which word is an active keyword in which profile.
+//! The keyword registry: which word is an active keyword in which profile,
+//! and the attribute registry: which key is accepted on which site.
 
 use ridl_syntax::keywords::{FAMILY_RESERVED, Profile, keyword_in};
 use std::path::Path;
@@ -35,17 +36,59 @@ fn lines(words: &[&str], active: impl Fn(Profile, &str) -> bool) -> Vec<String> 
     lines
 }
 
-/// The lines of [`lines`] for the words of `FAMILY_RESERVED`.
+/// `attribute <key> <site> <form>` for each site of each row of the attribute
+/// registry. A key or a site removed from the registry removes a line.
+fn attribute_lines() -> Vec<String> {
+    ridl_core::attributes::ATTRIBUTES
+        .iter()
+        .flat_map(|row| {
+            row.sites.iter().map(move |site| {
+                format!(
+                    "attribute {} {} {}",
+                    row.key(),
+                    site.word(),
+                    row.form.word()
+                )
+            })
+        })
+        .collect()
+}
+
+/// The lines of [`lines`] for the words of `FAMILY_RESERVED`, then the
+/// attribute lines of [`attribute_lines`].
 pub fn dump(_root: &Path) -> Result<Vec<String>, String> {
-    Ok(lines(FAMILY_RESERVED, |profile, word| {
+    let mut lines = lines(FAMILY_RESERVED, |profile, word| {
         keyword_in(profile, word).is_some()
-    }))
+    });
+    lines.extend(attribute_lines());
+    Ok(lines)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::freeze::missing_lines;
+
+    #[test]
+    fn keywords_dump_lists_the_attribute_registry() {
+        let lines = dump(Path::new(".")).unwrap();
+        for expected in [
+            "attribute tier distribution assignment",
+            "attribute require command predicate",
+            "attribute depth placement assignment",
+            "attribute ns.key line flag-or-assignment",
+        ] {
+            assert!(lines.iter().any(|l| l == expected), "{expected}: {lines:?}");
+        }
+        // One line per (key, site, form): widening an allow-list adds lines,
+        // removing a key or a site removes one.
+        let attribute_lines = lines.iter().filter(|l| l.starts_with("attribute ")).count();
+        let expected: usize = ridl_core::attributes::ATTRIBUTES
+            .iter()
+            .map(|row| row.sites.len())
+            .sum();
+        assert_eq!(attribute_lines, expected);
+    }
 
     #[test]
     fn keywords_dump_lists_a_ridl_keyword() {

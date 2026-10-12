@@ -2118,6 +2118,7 @@ dependencies = [
 name = "ridl-diff"
 version = "0.9.0"
 dependencies = [
+ "ridl-core",
  "ridl-ir",
  "serde",
  "serde_json",
