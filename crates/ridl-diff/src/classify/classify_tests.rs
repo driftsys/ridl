@@ -1390,6 +1390,59 @@ fn an_ensure_added_is_compatible() {
     assert_row(&old, &new, Category::ContractChanged, Verdict::Compatible);
 }
 
+// ==========================================================================
+// Family and shape.
+// ==========================================================================
+
+fn with_class(family: v2::Family, shape: v2::Shape) -> v2::Package {
+    let mut package = pkg(vec![command("c", 1, vec![], vec![])]);
+    let Some(v2::decl::Kind::CommandDef(def)) = package.interfaces[0].interactions[0].kind.as_mut()
+    else {
+        unreachable!("the builder wrote a command");
+    };
+    def.family = family as i32;
+    def.shape = shape as i32;
+    package
+}
+
+/// A family or shape change on a name-paired interaction is breaking in both
+/// directions (ADR-0012 decision 12: evolution rules are uniform). No source
+/// can write a family other than dispatch yet; the walk compares the fields
+/// from the start so the diff fails closed.
+#[test]
+fn a_family_or_shape_change_is_breaking_both_ways() {
+    let dispatch = with_class(v2::Family::Dispatch, v2::Shape::None);
+    let control = with_class(v2::Family::Control, v2::Shape::None);
+    assert_row(
+        &dispatch,
+        &control,
+        Category::InteractionClassChanged,
+        Verdict::Breaking,
+    );
+    assert_row(
+        &control,
+        &dispatch,
+        Category::InteractionClassChanged,
+        Verdict::Breaking,
+    );
+    let toggle = with_class(v2::Family::Intent, v2::Shape::Toggle);
+    let select = with_class(v2::Family::Intent, v2::Shape::Select);
+    assert_row(
+        &toggle,
+        &select,
+        Category::InteractionClassChanged,
+        Verdict::Breaking,
+    );
+    let report = diff_packages(&toggle, &select);
+    let change = report
+        .changes
+        .iter()
+        .find(|change| change.category == Category::InteractionClassChanged)
+        .expect("the change is listed");
+    assert_eq!(change.before.as_deref(), Some("intent toggle"));
+    assert_eq!(change.after.as_deref(), Some("intent select"));
+}
+
 /// The mirror of the `require` rule, for the same reason.
 #[test]
 fn an_ensure_text_change_is_breaking() {

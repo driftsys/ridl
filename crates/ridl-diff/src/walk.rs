@@ -909,6 +909,15 @@ fn diff_interaction(
         &without_member_docs(&new.kind),
     ) {
         (Some(Kind::SignalDef(a)), Some(Kind::SignalDef(b))) => {
+            if a.family != b.family {
+                emit(
+                    changes,
+                    path.to_string(),
+                    Category::InteractionClassChanged,
+                    Some(class_str(a.family, 0)),
+                    Some(class_str(b.family, 0)),
+                );
+            }
             if a.payload != b.payload {
                 emit(
                     changes,
@@ -938,6 +947,15 @@ fn diff_interaction(
             }
         }
         (Some(Kind::EventDef(a)), Some(Kind::EventDef(b))) => {
+            if a.family != b.family {
+                emit(
+                    changes,
+                    path.to_string(),
+                    Category::InteractionClassChanged,
+                    Some(class_str(a.family, 0)),
+                    Some(class_str(b.family, 0)),
+                );
+            }
             if a.payload != b.payload {
                 emit(
                     changes,
@@ -958,6 +976,15 @@ fn diff_interaction(
             }
         }
         (Some(Kind::CommandDef(a)), Some(Kind::CommandDef(b))) => {
+            if a.family != b.family || a.shape != b.shape {
+                emit(
+                    changes,
+                    path.to_string(),
+                    Category::InteractionClassChanged,
+                    Some(class_str(a.family, a.shape)),
+                    Some(class_str(b.family, b.shape)),
+                );
+            }
             if a.params != b.params {
                 emit(
                     changes,
@@ -990,6 +1017,15 @@ fn diff_interaction(
             }
         }
         (Some(Kind::QueryDef(a)), Some(Kind::QueryDef(b))) => {
+            if a.family != b.family {
+                emit(
+                    changes,
+                    path.to_string(),
+                    Category::InteractionClassChanged,
+                    Some(class_str(a.family, 0)),
+                    Some(class_str(b.family, 0)),
+                );
+            }
             if a.params != b.params {
                 emit(
                     changes,
@@ -1452,6 +1488,30 @@ fn member_docs_differ(old: &Option<v2::decl::Kind>, new: &Option<v2::decl::Kind>
 
 /// A declaration body with every member's doc fields cleared, so that the
 /// body comparisons see only what carries contract identity.
+/// `dispatch`, `control`, `intent toggle`: the family, then the shape when
+/// one is set.
+fn class_str(family: i32, shape: i32) -> String {
+    let family = v2::Family::try_from(family).map_or_else(
+        |_| family.to_string(),
+        |family| {
+            family
+                .as_str_name()
+                .trim_start_matches("FAMILY_")
+                .to_ascii_lowercase()
+        },
+    );
+    match v2::Shape::try_from(shape) {
+        Ok(v2::Shape::None) | Err(_) => family,
+        Ok(shape) => format!(
+            "{family} {}",
+            shape
+                .as_str_name()
+                .trim_start_matches("SHAPE_")
+                .to_ascii_lowercase()
+        ),
+    }
+}
+
 fn without_member_docs(kind: &Option<v2::decl::Kind>) -> Option<v2::decl::Kind> {
     use v2::decl::Kind;
     let mut kind = kind.clone();
