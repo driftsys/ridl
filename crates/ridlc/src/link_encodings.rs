@@ -129,6 +129,34 @@ mod tests {
 
     use super::*;
 
+    /// Every codegen-model discriminant maps to the name of `ENCODING_NAMES`
+    /// that spells its variant, or to `None` when it is the unspecified
+    /// encoding or no variant, and every name of the table is reached.
+    /// `expected` has no wildcard arm, so a variant added to the generated
+    /// enum does not compile until it has an entry here.
+    #[test]
+    fn encoding_name_covers_exactly_the_manifest_encoding_names() {
+        fn expected(encoding: v1::Encoding) -> Option<&'static str> {
+            match encoding {
+                v1::Encoding::Unspecified => None,
+                v1::Encoding::Flatbuffers => Some("flatbuffers"),
+                v1::Encoding::Proto3 => Some("proto3"),
+                v1::Encoding::ReprC => Some("repr-c"),
+            }
+        }
+        let mut reached = Vec::new();
+        for discriminant in -4..64 {
+            let want = v1::Encoding::try_from(discriminant).ok().and_then(expected);
+            let name = encoding_name(discriminant);
+            assert_eq!(name, want, "discriminant {discriminant}");
+            reached.extend(name);
+        }
+        reached.sort_unstable();
+        let mut table = ridl_core::manifest::ENCODING_NAMES.to_vec();
+        table.sort_unstable();
+        assert_eq!(reached, table);
+    }
+
     /// The crossing the lowering writes decides the encoding the list must
     /// name: within one machine FlatBuffers, across machines proto3.
     #[test]
