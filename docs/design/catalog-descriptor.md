@@ -358,21 +358,23 @@ is sized, through the projection the wire backend emits:
   is absent for a name that does not resolve or a declaration with no root
   table.
 - **proto3** follows ADR-0017. A row is present for a struct, a union, a named
-  scalar, an enum set or an enum payload, and it is always `Bounded`: typl
-  bounds every collection, so proto3 has no unbounded state. A named scalar, an
-  enum set and an enum are inlined into a field that uses them, but each also
-  has a root message `<Name>Box { <type> value = 1; }` that a codec can encode,
-  and the row is the bound of that box. The row is also absent when a member is
-  one the proto backend refuses (a map key outside the integral and string
-  scalars, a map value that is an array or a map, an optional array or map, an
-  enum value outside int32, a field number protobuf reserves or exceeds), when a
-  member has no proto3 bound (a `string` or `bytes` with no length bound, a type
-  def with no width), when the nesting passes `MAX_DEPTH`, or when the bound
-  overflows `u64` or exceeds `u32::MAX`. The rustdoc of `state` in
-  `crates/ridl-ir/src/projection/size/proto3.rs` has the full list. The proto3
-  sizer counts tags and varint widths at their maximum, and remembers each named
-  struct and union it has sized within one call, so a type that several paths
-  share is walked once.
+  scalar, an enum set or an enum payload, and a row that is present is always
+  `Bounded`: typl bounds every collection, so proto3 has no unbounded state. A
+  named scalar that no proto3 leaf bounds (a `string` or `bytes` with no length
+  bound, a type def with no width) has no row. A named scalar, an enum set and
+  an enum are inlined into a field that uses them, but each also has a root
+  message `<Name>Box { <type> value = 1; }` that a codec can encode, and the row
+  is the bound of that box. The row is also absent when a member is one the
+  proto backend refuses (a map key outside the integral and string scalars, a
+  map value that is an array or a map, an optional array or map field of a
+  struct or a tuple, an enum value outside int32, a field number protobuf
+  reserves or exceeds), when a member has no proto3 bound (a `string` or `bytes`
+  with no length bound, a type def with no width), when the nesting passes
+  `MAX_DEPTH`, or when the bound overflows `u64` or exceeds `u32::MAX`. The
+  rustdoc of `state` in `crates/ridl-ir/src/projection/size/proto3.rs` has the
+  full list. The proto3 sizer counts tags and varint widths at their maximum,
+  and remembers each named struct and union it has sized within one call, so a
+  type that several paths share is walked once.
 - **repr(C)** has no row until driftsys/ridl#317 defines the layout.
 
 **Absent by shape.** A stream payload (`<T>`), a request of zero or of several

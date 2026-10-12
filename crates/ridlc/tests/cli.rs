@@ -256,12 +256,12 @@ fn build_emit_typescript_writes_the_backend_module() {
 /// of whatever the emit happens to write.
 #[test]
 fn build_emit_proto_writes_the_backend_schema() {
-    // A bare named scalar alone would not do: unlike the Rust and TypeScript
-    // backends, the proto3 backend gives a named scalar no declaration of its
-    // own — it inlines only where a field references it (the design this
-    // crate's own `ridl-backend-proto` tests already pin) — so `SPEED_SOURCE`
-    // alone would emit nothing past the file header, and the equality below
-    // would prove nothing.
+    // A bare named scalar alone would prove less: the proto3 backend gives a
+    // named scalar only its root box message `SpeedBox`, and inlines it where
+    // a field references it (the design this crate's own `ridl-backend-proto`
+    // tests already pin). `SPEED_SOURCE` alone would emit `SpeedBox` and
+    // nothing else, so `Reading` adds a struct whose field takes the inlined
+    // scalar and its constraint comment.
     const PROTO_SOURCE: &str = "package veh.common\n\
          type Speed: km/h [0.0..250.0 step 0.5]\n\
          struct Reading {\n  value: Speed\n}\n";

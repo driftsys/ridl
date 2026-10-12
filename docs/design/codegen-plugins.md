@@ -587,12 +587,14 @@ rule belongs to the test plugin: it is stated in the plugin's module comment,
 and neither the toolchain nor the request prescribes it.
 
 The fixture states the socket message sizes the `websocket` row gives: 20 + 16 +
-8 = 44 bytes for `Cabin.warning`, whose proto3 bound is 8, and `null` for the
-members that have no proto3 bound. A second test checks the same sum on its own.
-Declared sizing values are not in the `examples/cabin` source; another test in
-the same file builds a workspace in a temporary directory that declares `depth`,
-`slots` and `budget` and checks that each declared value reaches the request
-with the declared source.
+8 = 44 bytes for `Cabin.warning`, whose proto3 bound is 8, and 20 + 16 + 6 = 42
+bytes for each of the other three members, whose payloads are named scalars
+sized as their root box messages. A member with no proto3 bound would be `null`;
+no member of `examples/cabin` has one. A second test checks the same sum on its
+own. Declared sizing values are not in the `examples/cabin` source; another test
+in the same file builds a workspace in a temporary directory that declares
+`depth`, `slots` and `budget` and checks that each declared value reaches the
+request with the declared source.
 
 ## 8. What a plugin author reads
 

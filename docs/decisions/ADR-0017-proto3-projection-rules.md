@@ -23,8 +23,10 @@ proto3 payload codec (driftsys/ridl#264) would otherwise have had to change a
 schema that 0.10 freezes: a root message for a named scalar, an enum and an enum
 set (decision 6), the `optional` keyword on an optional tuple field (decision
 7), and `sint64` for a bare `integer` (decision 8). Decisions 1 to 5 are
-unchanged. Decision 2's rejection of a wrapper message still holds: it is about
-a field position, and decision 6's message is never referenced from one.
+unchanged, except that decision 1's statement that a named scalar emits no
+declaration is corrected in place by decision 6. Decision 2's rejection of a
+wrapper message still holds: it is about a field position, and decision 6's
+message is never referenced from one.
 
 This ADR was accepted under the delegated authority recorded in
 [ADR-0005](ADR-0005-agent-enablement.md)'s working model.
@@ -65,6 +67,12 @@ distinct reachable cases.
    `union` — the kinds that emit a declaration another file can reference. A
    named scalar emits no declaration at all, so importing one names a type that
    does not exist in the imported file, which `protoc` rejects.
+
+   **Corrected 2026-10-12 by decision 6.** A named scalar and an enum set now
+   each emit one declaration, the root box message `<Name>Box`. No field names a
+   box, so the rule above is unchanged: a field of one of the two kinds still
+   inlines and still needs no import, and importing the file for the scalar's
+   own name still names a type the file does not declare.
 
    This requires the backend to see the referenced packages, so `generate` gains
    a companion: `generate_with(package, others)`, with `generate(package)`
@@ -187,9 +195,12 @@ distinct reachable cases.
    emitted the field without `optional`, so a conforming writer omitted a
    present 0 and a `prost` peer read it as absent. The field is now emitted the
    way a struct field is, and an optional tuple field whose type is an array or
-   a map is refused with the struct field's message, because proto3 cannot mark
-   a repeated or map field absent ([ADR-0013](ADR-0013-codegen-backend-scope.md)
-   decision 7). One helper holds the refusal for both positions.
+   a map is refused as the struct field is, because proto3 cannot mark a
+   repeated or map field absent ([ADR-0013](ADR-0013-codegen-backend-scope.md)
+   decision 7); the message names the tuple field's source path. One helper
+   holds the refusal for both positions, and the rule it reads,
+   `ridl_ir::projection::proto3::optional_repeated`, is the one the proto3 sizer
+   reads, so a payload that holds such a field has no proto3 bound.
 
    An optional **array element** and an optional **map value** are not changed.
    proto3 has no construct for an absent element or an absent map value, so the
