@@ -159,9 +159,15 @@ has a codec. In the IR, `request_sizes` and `reply_sizes` stop being
 state the old behaviour in prose and are part of the change, including
 `ReservationState.unsized`, which enumerates the parameter-list form `(a, b)`.
 
-**The catalog hash does not move.** It is taken over reduced IR packages
-(`crates/ridl-ir/src/catalog_hash.rs`); an induced type exists only in the
-codegen model, downstream of it. A parameter list that already hashed as a
+**Prose carried from the source.** A parameter carries a doc comment in the IR
+and a tuple field does not, so the lowering copies a parameter's doc, its links,
+its `@see` targets and its `@since` versions onto the matching field of the
+induced argument struct. A generated item renders the doc its source item has
+(ADR-0028).
+
+**The catalog hash does not move.** It is taken over reduced IR
+packages(`crates/ridl-ir/src/catalog_hash.rs`); an induced type exists only in
+the codegen model, downstream of it. A parameter list that already hashed as a
 parameter list still does. No catalog identity changes, and `ridl diff` reports
 nothing.
 
