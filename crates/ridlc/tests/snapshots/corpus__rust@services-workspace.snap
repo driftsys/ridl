@@ -399,6 +399,13 @@ impl ::core::default::Default for DoorFault {
         DoorFault::Jammed
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TelemetryFuelLevelParams {}
+impl ::core::default::Default for TelemetryFuelLevelParams {
+    fn default() -> Self {
+        TelemetryFuelLevelParams {}
+    }
+}
 /// A `DoorId` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]

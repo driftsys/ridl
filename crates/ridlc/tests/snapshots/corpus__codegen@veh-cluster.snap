@@ -4226,6 +4226,64 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": {
+        "rust": "WheelDiagnosticsReadTicksParams",
+        "wire": "WheelDiagnosticsReadTicksParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_INTERNAL",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "interaction": {
+        "interface": 2,
+        "slot": 2,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "WheelDiagnosticsReadSpanParams",
+        "wire": "WheelDiagnosticsReadSpanParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_INTERNAL",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "interaction": {
+        "interface": 2,
+        "slot": 4,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
         "rust": "WheelDiagnosticsReadSpan",
         "wire": "WheelDiagnosticsReadSpan"
       },
@@ -4411,6 +4469,35 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": {
+        "rust": "VehHvacCabinGetBoundsParams",
+        "wire": "VehHvacCabinGetBoundsParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "interaction": {
+        "interface": 5,
+        "slot": 11,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
         "rust": "VehHvacCabinGetBounds",
         "wire": "VehHvacCabinGetBounds"
       },
@@ -4498,6 +4585,93 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "slot": 11,
         "segments": [
           "reply"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "VehHvacCabinGetClimateParams",
+        "wire": "VehHvacCabinGetClimateParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "interaction": {
+        "interface": 5,
+        "slot": 13,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "VehHvacCabinGetCabinTempParams",
+        "wire": "VehHvacCabinGetCabinTempParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "interaction": {
+        "interface": 5,
+        "slot": 14,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "VehHvacCabinScaledFanParams",
+        "wire": "VehHvacCabinScaledFanParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "interaction": {
+        "interface": 5,
+        "slot": 19,
+        "segments": [
+          "Params"
         ]
       }
     }
@@ -6007,6 +6181,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "flatbuffers": {
                   "bounded": 44
                 }
+              },
+              "requestTuple": {
+                "index": 2
               }
             }
           }
@@ -6163,7 +6340,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": {
                   "optional": false,
                   "tuple": {
-                    "index": 2
+                    "index": 4
                   }
                 }
               },
@@ -6191,6 +6368,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                     "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
                   }
                 }
+              },
+              "requestTuple": {
+                "index": 3
               }
             }
           }
@@ -6229,7 +6409,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "element": {
                     "optional": false,
                     "tuple": {
-                      "index": 3
+                      "index": 5
                     }
                   },
                   "min": "2",
@@ -7528,7 +7708,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": {
                   "optional": false,
                   "tuple": {
-                    "index": 4
+                    "index": 7
                   }
                 }
               },
@@ -7575,6 +7755,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                     "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
                   }
                 }
+              },
+              "requestTuple": {
+                "index": 6
               }
             }
           }
@@ -7818,6 +8001,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "flatbuffers": {
                   "bounded": 69
                 }
+              },
+              "requestTuple": {
+                "index": 8
               }
             }
           }
@@ -7916,6 +8102,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "flatbuffers": {
                   "bounded": 46
                 }
+              },
+              "requestTuple": {
+                "index": 9
               }
             }
           }
@@ -8410,6 +8599,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "flatbuffers": {
                   "bounded": 43
                 }
+              },
+              "requestTuple": {
+                "index": 10
               }
             }
           }

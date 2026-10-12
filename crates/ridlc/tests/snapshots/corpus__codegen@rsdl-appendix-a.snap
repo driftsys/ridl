@@ -1060,7 +1060,37 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
     ]
   },
   "declarations": [],
-  "tuples": [],
+  "tuples": [
+    {
+      "name": {
+        "rust": "VehDiagAccessReadFaultsParams",
+        "wire": "VehDiagAccessReadFaultsParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "interaction": {
+        "interface": 0,
+        "slot": 0,
+        "segments": [
+          "Params"
+        ]
+      }
+    }
+  ],
   "interfaces": [
     {
       "number": 3,
@@ -1162,6 +1192,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "flatbuffers": {
                   "bounded": 43
                 }
+              },
+              "requestTuple": {
+                "index": 0
               }
             }
           }

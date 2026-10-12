@@ -2294,6 +2294,13 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FaultRepo
 
 
 // ===== package veh.diag =====
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct VehDiagAccessReadFaultsParams {}
+impl ::core::default::Default for VehDiagAccessReadFaultsParams {
+    fn default() -> Self {
+        VehDiagAccessReadFaultsParams {}
+    }
+}
 
 
 // ===== package veh.topology =====

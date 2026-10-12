@@ -4074,3 +4074,23 @@ fn a_zero_parameter_command_induces_an_empty_argument_struct() {
         .expect("the induced argument struct");
     assert!(induced.fields.is_empty());
 }
+
+/// A query's request follows the same rule as a command's: the `none` query
+/// of the fixture declares no parameter, so it induces an empty struct.
+#[test]
+fn a_query_request_follows_the_command_rule() {
+    let model = lower(&call_package(), &[]);
+    let v1::interaction::Shape::Query(query) = call_shape(&model, 2) else {
+        panic!("the `none` query");
+    };
+    let reference = query
+        .request_tuple
+        .as_ref()
+        .expect("a zero-parameter query induces an argument struct");
+    let induced = &model.tuples[reference.index as usize];
+    assert_eq!(
+        induced.name.as_ref().expect("a name").rust,
+        "CallsNoneParams"
+    );
+    assert!(induced.fields.is_empty());
+}

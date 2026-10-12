@@ -904,6 +904,15 @@ impl<'a> Lowering<'a> {
                 );
                 let request =
                     single_param_type(&query.params).map(|reference| self.payload(home, reference));
+                let request_tuple = self.request_tuple(
+                    home,
+                    &query.params,
+                    interface,
+                    slot,
+                    visibility,
+                    owner,
+                    decl.name.as_str(),
+                );
                 let reply_named = query_reply_type(query);
                 let reply = query.return_type.as_ref().map(|ret| {
                     let at = Path::interaction(
@@ -952,7 +961,7 @@ impl<'a> Lowering<'a> {
                         clauses,
                         request_sizes: Some(request_sizes),
                         reply_sizes: Some(reply_sizes),
-                        request_tuple: None,
+                        request_tuple,
                         reply_tuple: None,
                     }))),
                     Some(payloads),

@@ -3331,6 +3331,24 @@ impl ::core::default::Default for RawWheelSpanBurstsElement {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[allow(dead_code)]
+pub(crate) struct WheelDiagnosticsReadTicksParams {}
+#[allow(dead_code)]
+impl ::core::default::Default for WheelDiagnosticsReadTicksParams {
+    fn default() -> Self {
+        WheelDiagnosticsReadTicksParams {}
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
+pub(crate) struct WheelDiagnosticsReadSpanParams {}
+#[allow(dead_code)]
+impl ::core::default::Default for WheelDiagnosticsReadSpanParams {
+    fn default() -> Self {
+        WheelDiagnosticsReadSpanParams {}
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
 pub(crate) struct WheelDiagnosticsReadSpan {
     pub min: RawTickCount,
     pub max: RawTickCount,
@@ -3359,10 +3377,38 @@ impl ::core::default::Default for WheelDiagnosticsTickBoundsElement {
         }
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct VehHvacCabinGetBoundsParams {}
+impl ::core::default::Default for VehHvacCabinGetBoundsParams {
+    fn default() -> Self {
+        VehHvacCabinGetBoundsParams {}
+    }
+}
 #[derive(Debug, Clone, PartialEq)]
 pub struct VehHvacCabinGetBounds {
     pub min: crate::veh::common::Temperature,
     pub max: crate::veh::common::Temperature,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct VehHvacCabinGetClimateParams {}
+impl ::core::default::Default for VehHvacCabinGetClimateParams {
+    fn default() -> Self {
+        VehHvacCabinGetClimateParams {}
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct VehHvacCabinGetCabinTempParams {}
+impl ::core::default::Default for VehHvacCabinGetCabinTempParams {
+    fn default() -> Self {
+        VehHvacCabinGetCabinTempParams {}
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct VehHvacCabinScaledFanParams {}
+impl ::core::default::Default for VehHvacCabinScaledFanParams {
+    fn default() -> Self {
+        VehHvacCabinScaledFanParams {}
+    }
 }
 /// `DiagFilter` carries no `Payload<FlatBuffers>` implementation.
 ///
