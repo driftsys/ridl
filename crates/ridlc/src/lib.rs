@@ -26,12 +26,14 @@
 //! a `.typl` file, a package directory, or a workspace root ([`ridl_core::load_workspace`])
 //! — returning the per-package IR and the merged, render-ready diagnostics
 //! (load + parse + resolve + check). It is the library face the language server
-//! drives; it performs no network or lockfile side effects.
+//! drives; it reads the remote units of the manifest's `[imports]` from the
+//! cache and never fetches or writes `ridl.lock`.
 //!
 //! [`run_check`] and [`run_build`] are the stable command drivers shared by the
 //! `ridlc` plumbing binary and the `ridl` porcelain facade (concept note §8.1):
-//! they add the remote-import lockfile round trip on top of `compile_workspace`
-//! and, for `build`, write the selected [`Emit`] artifacts. [`run_build_with`]
+//! they load the same workspace with the caller's [`Frozen`] mode — a fetch
+//! and the `ridl.lock` round trip under [`Frozen::No`] — and, for `build`,
+//! write the selected [`Emit`] artifacts. [`run_build_with`]
 //! is `run_build` plus the codegen plugins of `--plugin`, run through the
 //! process host in [`plugin`] (ADR-0020 decision 10); every code emit but
 //! [`Emit::Catalog`], and every plugin, is reached through one contract,
@@ -96,8 +98,8 @@ use ridl_core::diag::{
 use ridl_core::lint::{LintScopes, apply_lint_levels, drop_allowed_by_default};
 use ridl_core::package::{Package, PackageOrigin, Workspace};
 use ridl_core::{
-    Cache, Frozen, ImportUnion, LoadedWorkspace, RidlDatabase, materialize_imports, parse_file,
-    read_lockfile, std_package, write_lockfile,
+    Cache, Frozen, LoadedWorkspace, MaterializedUnit, RemoteAccess, RidlDatabase,
+    load_workspace_with_remotes, parse_file, std_package,
 };
 use ridl_ir::codegen::{self, v1};
 use ridl_sem::{
@@ -393,6 +395,11 @@ pub struct WorkspaceOutput {
     /// workspace; a consumer that reports them passes this to
     /// [`retain_in_report_scope`].
     pub report_scope: Option<PathBuf>,
+    /// The remote units the load took (ADR-0002 §5), keyed by unit name;
+    /// `checked` holds their packages beside the consumer's. A consumer that
+    /// publishes, locks, tests or diffs the workspace's own packages tells
+    /// them apart with [`is_remote`].
+    pub remote_units: BTreeMap<String, MaterializedUnit>,
 }
 
 /// The lowered IR of the built-in `ridl.std` package (typl Appendix A), checked
@@ -412,11 +419,13 @@ pub fn std_ir() -> ridl_ir::v2::Package {
 /// package in it.
 ///
 /// `entry` is a `.typl` file (single-file mode), a package directory, or a
-/// workspace root — whatever [`ridl_core::load_workspace`] accepts. The function performs
-/// no network or lockfile side effects: remote-import materialization and the
-/// `ridl.lock` round trip live in the command drivers ([`run_check`],
-/// [`run_build`]), so the language server can drive this on every edit without
-/// touching the filesystem beyond the initial load.
+/// workspace root — whatever [`ridl_core::load_workspace`] accepts. The
+/// remote units of the manifest's `[imports]` are read from the cache under
+/// [`Frozen::Yes`]: nothing is fetched and `ridl.lock` is never written, so
+/// the language server can drive this on every edit without touching the
+/// filesystem beyond the load. A pin the cache does not hold is MANI-104;
+/// the command drivers ([`run_check`], [`run_build`]) are the ones that
+/// fetch.
 ///
 /// `Err` is reserved for a filesystem failure while loading (the entry does not
 /// exist, or a file cannot be read); every content problem is a [`Diagnostic`].
@@ -431,7 +440,9 @@ fn load_io_error(error: ridl_core::LoadError) -> std::io::Error {
     }
 }
 
-/// Compiles a workspace with unsaved source overlays, without writes or fetches.
+/// Compiles a workspace with unsaved source overlays, without writes or
+/// fetches: the remote units are read under [`Frozen::Yes`], as
+/// [`compile_workspace`] reads them.
 pub fn compile_workspace_with(
     db: &mut RidlDatabase,
     entry: &Path,
@@ -448,8 +459,17 @@ pub fn compile_workspace_with(
         sources,
         lints,
         report_scope,
+        remote_units,
         ..
-    } = load_and_check(db, entry, overlays)?;
+    } = load_and_check(
+        db,
+        entry,
+        overlays,
+        RemoteAccess {
+            frozen: Frozen::Yes,
+            cache: &Cache::user_default(),
+        },
+    )?;
     // System lowering resolves references into the standard package.
     let std_ir = check_package(&*db, workspace, std, std).ir;
     let packages: Vec<&ridl_ir::v2::Package> = checked.iter().map(|package| &package.ir).collect();
@@ -466,6 +486,7 @@ pub fn compile_workspace_with(
         sources,
         lints,
         report_scope,
+        remote_units,
     })
 }
 
@@ -475,29 +496,64 @@ pub fn compile_workspace_with(
 /// root's `ridl.toml` — the `ridl.toml` of a directory above `scope` — because
 /// the root's `[imports]`, `[lints]` and `members` govern the member, so a
 /// problem there (MANI-007, for one) is the member's to see. A diagnostic
-/// with no file path is kept. With `scope` `None` every diagnostic is kept.
-/// The whole workspace is still loaded and checked; this only narrows what is
+/// with no file path is kept, and so is one in a file under any of
+/// `remote_dirs`, the directories a remote unit is read from
+/// ([`remote_dirs`]): a remote unit's error is every member's to see,
+/// whatever the scope. With `scope` `None` every diagnostic is kept. The
+/// whole workspace is still loaded and checked; this only narrows what is
 /// reported (ADR-0024 decision 9, as ADR-0026 amends it).
 pub fn retain_in_report_scope(
     diagnostics: &mut Vec<Diagnostic>,
     sources: &SourceMap,
     scope: Option<&Path>,
+    remote_dirs: &[PathBuf],
 ) {
-    diagnostics.retain(|diagnostic| in_report_scope(diagnostic, sources, scope));
+    diagnostics.retain(|diagnostic| in_report_scope(diagnostic, sources, scope, remote_dirs));
 }
 
 /// Whether [`retain_in_report_scope`] keeps `diagnostic`.
-fn in_report_scope(diagnostic: &Diagnostic, sources: &SourceMap, scope: Option<&Path>) -> bool {
+fn in_report_scope(
+    diagnostic: &Diagnostic,
+    sources: &SourceMap,
+    scope: Option<&Path>,
+    remote_dirs: &[PathBuf],
+) -> bool {
     let Some(scope) = scope else {
         return true;
     };
     match sources.path(diagnostic.primary.file) {
         Some(path) => {
             let path = Path::new(path);
-            path.starts_with(scope) || is_manifest_above(path, scope)
+            path.starts_with(scope)
+                || is_manifest_above(path, scope)
+                || remote_dirs.iter().any(|dir| path.starts_with(dir))
         }
         None => true,
     }
+}
+
+/// The directories a remote unit is read from, for
+/// [`retain_in_report_scope`]: the directory of each loaded remote unit, and
+/// the root of `cache`, which holds the tree of a unit that was materialized
+/// but not loaded — one whose manifest drew MANI-014, spanned at that
+/// manifest, is in no entry of `remote_units`.
+pub fn remote_dirs(
+    remote_units: &BTreeMap<String, MaterializedUnit>,
+    cache: &Cache,
+) -> Vec<PathBuf> {
+    remote_units
+        .values()
+        .map(|unit| unit.dir.clone())
+        .chain(std::iter::once(cache.root.clone()))
+        .collect()
+}
+
+/// Whether `package` belongs to a loaded remote unit.
+pub fn is_remote(
+    package: &ridl_ir::v2::Package,
+    remote_units: &BTreeMap<String, MaterializedUnit>,
+) -> bool {
+    remote_units.contains_key(ridl_ir::v2::unit_of(package))
 }
 
 /// Whether `path` is the `ridl.toml` of a directory at or above `scope`: the
@@ -786,27 +842,41 @@ impl CliRun {
     }
 }
 
-/// Runs `check`: loads, resolves, and checks the workspace at `entry`, then
-/// materializes remote imports against `ridl.lock` (regenerating it on a clean
-/// non-frozen run), and applies the lint levels of every `[lints]` table
-/// (ADR-0024 decision 6). Returns the diagnostics and the source map for
-/// rendering; for an entry inside a workspace member, the compile diagnostics
-/// are those of the member's files ([`retain_in_report_scope`]).
+/// Runs `check`: loads the workspace at `entry` with the remote units of its
+/// `[imports]` — materialized against `ridl.lock`, which a clean non-frozen
+/// run regenerates — then resolves and checks every package, and applies the
+/// lint levels of every `[lints]` table (ADR-0024 decision 6). Returns the
+/// diagnostics and the source map for rendering; for an entry inside a
+/// workspace member, the compile diagnostics are those of the member's files
+/// and of the remote units ([`retain_in_report_scope`]).
 pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
     let mut db = RidlDatabase::default();
+    let cache = Cache::user_default();
     let Compiled {
-        workspace,
         mut diagnostics,
         sources,
         lints,
         report_scope,
+        remote_units,
         ..
-    } = load_and_check(&mut db, entry, &[]).map_err(load_io_error)?;
+    } = load_and_check(
+        &mut db,
+        entry,
+        &[],
+        RemoteAccess {
+            frozen,
+            cache: &cache,
+        },
+    )
+    .map_err(load_io_error)?;
     // An entry inside a member reports on the member only (ADR-0024 decision
-    // 9, as ADR-0026 amends it). The lockfile diagnostics concern the whole
-    // workspace, so they are added after the filter.
-    retain_in_report_scope(&mut diagnostics, &sources, report_scope.as_deref());
-    diagnostics.extend(materialize_and_lock(&db, workspace, entry, frozen));
+    // 9, as ADR-0026 amends it).
+    retain_in_report_scope(
+        &mut diagnostics,
+        &sources,
+        report_scope.as_deref(),
+        &remote_dirs(&remote_units, &cache),
+    );
     apply_lint_levels(&mut diagnostics, &sources, &lints);
     Ok(CliRun {
         diagnostics,
@@ -819,7 +889,7 @@ pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
 /// Runs `build`: everything [`run_check`] does, plus it writes the selected
 /// `emits` for every checked package into `out_dir` — but only when the whole
 /// run produced no error-severity diagnostic, whether from the compile or from
-/// remote-import materialization (a manifest, lockfile, or fetch error, MANI-1xx).
+/// the load of a remote unit (a manifest, lockfile, or fetch error, MANI-1xx).
 /// An error-bearing build renders its diagnostics and exits non-zero without
 /// writing any artifact (C1). A Rust build whose output directory already
 /// holds a `lib.rs` or a `Cargo.toml` that ridlc did not write is refused on
@@ -921,9 +991,10 @@ pub fn run_build_with(
 }
 
 /// What a build gives the function that computes the earlier catalogs each
-/// unit is compatible with: every checked package of the workspace, the
-/// `ridl.std` package, and whether the workspace names any `[imports]`. The
-/// packages of an import are not among the checked packages.
+/// unit is compatible with: every checked package of the workspace's own
+/// units, the `ridl.std` package, and whether the workspace names any
+/// `[imports]`. The packages of a remote unit are not among the packages
+/// given.
 ///
 /// `E` is the error the function reports, chosen by the caller; it defaults to
 /// [`std::io::Error`].
@@ -935,11 +1006,13 @@ pub type CompatibleCatalogsFn<'a, E = std::io::Error> = dyn FnMut(
     + 'a;
 
 /// [`run_build_with`], with the list computed from the build's own compile
-/// instead of given. `compute` is called once, right after the compile and
-/// before the manifest's imports are materialized, a plugin is resolved or
-/// any lint level is applied, with the checked packages, the `ridl.std`
-/// package and whether the workspace names `[imports]`. It is not called when
-/// the compile has an error diagnostic, whatever the build later writes. Its
+/// instead of given. `compute` is called once, right after the compile — the
+/// load, which materializes the manifest's imports, and the check — and
+/// before a plugin is resolved or any lint level is applied, with the
+/// checked packages of the workspace's own units, the `ridl.std` package and
+/// whether the workspace names `[imports]`. It is not called when the
+/// compile has an error diagnostic, a remote unit's or a MANI-1xx one
+/// included, whatever the build later writes. Its
 /// result is used as `run_build_with` uses its `compatible` argument, and an
 /// error it returns is returned as the error of the build, unchanged. An
 /// input or output error of the build itself is converted with `E::from`.
@@ -993,6 +1066,7 @@ fn run_build_inner<E: From<std::io::Error>>(
     compute: Option<&mut CompatibleCatalogsFn<'_, E>>,
 ) -> Result<CliRun, E> {
     let mut db = RidlDatabase::default();
+    let cache = Cache::user_default();
     let Compiled {
         workspace,
         std,
@@ -1005,8 +1079,18 @@ fn run_build_inner<E: From<std::io::Error>>(
         backends,
         report_scope,
         root_package,
+        remote_units,
         ..
-    } = load_and_check(&mut db, entry, &[]).map_err(|err| E::from(load_io_error(err)))?;
+    } = load_and_check(
+        &mut db,
+        entry,
+        &[],
+        RemoteAccess {
+            frozen,
+            cache: &cache,
+        },
+    )
+    .map_err(|err| E::from(load_io_error(err)))?;
     // The backends read names only; the spans served the loader's diagnostics.
     let backends: BTreeMap<String, Vec<String>> = backends
         .into_iter()
@@ -1021,14 +1105,19 @@ fn run_build_inner<E: From<std::io::Error>>(
     // The earlier catalogs per unit, computed from this compile before
     // anything else can fail, so a history that cannot be read is reported
     // first. A compile with an error diagnostic gets no list from `compute`.
+    // The list covers the workspace's own units: a remote unit's catalog is
+    // its owner's to publish, so its packages are not given.
     let computed = match compute {
         Some(compute)
             if !diagnostics
                 .iter()
                 .any(|diagnostic| diagnostic.severity == Severity::Error) =>
         {
-            let packages: Vec<&ridl_ir::v2::Package> =
-                checked.iter().map(|package| &package.ir).collect();
+            let packages: Vec<&ridl_ir::v2::Package> = checked
+                .iter()
+                .map(|package| &package.ir)
+                .filter(|ir| !is_remote(ir, &remote_units))
+                .collect();
             let std_for_catalogs = check_package(&db, workspace, std, std).ir;
             let names_imports = !workspace.imports(&db).is_empty()
                 || workspace
@@ -1045,19 +1134,26 @@ fn run_build_inner<E: From<std::io::Error>>(
     // 9, as ADR-0026 amends it). The diagnostics of the other members are
     // kept aside: an error there still blocks every artifact below, because
     // the build writes the whole workspace.
+    let remote_dirs = remote_dirs(&remote_units, &cache);
     let mut outside_scope: Vec<Diagnostic> = diagnostics
         .iter()
-        .filter(|diagnostic| !in_report_scope(diagnostic, &sources, report_scope.as_deref()))
+        .filter(|diagnostic| {
+            !in_report_scope(diagnostic, &sources, report_scope.as_deref(), &remote_dirs)
+        })
         .cloned()
         .collect();
-    retain_in_report_scope(&mut diagnostics, &sources, report_scope.as_deref());
+    retain_in_report_scope(
+        &mut diagnostics,
+        &sources,
+        report_scope.as_deref(),
+        &remote_dirs,
+    );
 
-    // Materialize remote imports and round-trip the lockfile before the emit
-    // gate, so any error it raises (a manifest, lockfile, or fetch problem,
-    // MANI-1xx — for example a frozen build with no `ridl.lock`) joins the
-    // compile diagnostics and suppresses code generation, exactly like a
-    // compile error does.
-    diagnostics.extend(materialize_and_lock(&db, workspace, entry, frozen));
+    // The load materialized the remote imports and round-tripped the
+    // lockfile, so any error that raised (a manifest, lockfile, or fetch
+    // problem, MANI-1xx — for example a frozen build with no `ridl.lock`) is
+    // already among the compile diagnostics, and suppresses code generation
+    // below exactly like a compile error does.
 
     // A plugin that cannot be found is known before anything is generated,
     // and is reported the way a manifest error is: an error that joins the
@@ -1139,8 +1235,8 @@ fn run_build_inner<E: From<std::io::Error>>(
 
     // The levels are applied before the emit gate below, so a lint at `deny`
     // is an error by the time the gate reads the list and no artifact is
-    // written for it. `ridl.lock` is already written by `materialize_and_lock`
-    // above; the lockfile is not an artifact (Task 4 of
+    // written for it. `ridl.lock` is already written by the load; the
+    // lockfile is not an artifact (Task 4 of
     // docs/archive/2026-10-03-lint-foundation-plan.md).
     if apply_lints == ApplyLints::Yes {
         apply_lint_levels(&mut diagnostics, &sources, &lints);
@@ -1191,6 +1287,13 @@ fn run_build_inner<E: From<std::io::Error>>(
         // `check_package` call either use pays for.
         let packages: Vec<&ridl_ir::v2::Package> =
             checked.iter().map(|package| &package.ir).collect();
+        // The workspace's own packages: a remote unit's are generated below
+        // but get no catalog, which is its owner's to publish.
+        let own: Vec<&ridl_ir::v2::Package> = packages
+            .iter()
+            .copied()
+            .filter(|ir| !is_remote(ir, &remote_units))
+            .collect();
         let references_std = references_std(&packages);
         // Every emit kind except the direct IR dumps. The reasoning, and the
         // exhaustive classification ADR-0014 decision 10 requires, live on
@@ -1328,13 +1431,25 @@ fn run_build_inner<E: From<std::io::Error>>(
             let unit_compatible = compatible
                 .get(ridl_ir::v2::unit_of(&package.ir))
                 .map_or(&[][..], Vec::as_slice);
+            // A remote package is generated like a member's but is not part
+            // of the consumer's contract snapshot: no IR dump is written for
+            // it.
+            let package_emits: Vec<Emit> = if is_remote(&package.ir, &remote_units) {
+                emits
+                    .iter()
+                    .copied()
+                    .filter(|emit| !emit.is_ir_dump())
+                    .collect()
+            } else {
+                emits.to_vec()
+            };
             write_emits(
                 out_dir,
                 &base,
                 &package.ir,
                 &others,
                 unit_compatible,
-                emits,
+                &package_emits,
                 &resolved_plugins,
                 plugin_timeout,
                 selected.as_ref(),
@@ -1345,7 +1460,7 @@ fn run_build_inner<E: From<std::io::Error>>(
         }
 
         if emits.contains(&Emit::Catalog) {
-            write_catalogs(out_dir, &packages, &others, compatible)?;
+            write_catalogs(out_dir, &own, &others, compatible)?;
         }
 
         if let Some(std_ir) = &std_ir {
@@ -1897,17 +2012,22 @@ struct Compiled {
     /// already parsed rather than by finding the root and parsing it again
     /// (driftsys/ridl#760).
     root_package: Option<String>,
+    /// The remote units the load took
+    /// ([`LoadedWorkspace::remote_units`]); their packages are in `checked`.
+    remote_units: BTreeMap<String, MaterializedUnit>,
 }
 
-/// Loads the workspace at `entry` and runs parse, resolve, and check over every
+/// Loads the workspace at `entry`, with the remote units of its `[imports]`
+/// reached through `access`, and runs parse, resolve, and check over every
 /// package, merging all diagnostics onto one [`SourceMap`].
 fn load_and_check(
     db: &mut RidlDatabase,
     entry: &Path,
     overlays: &[ridl_core::Overlay],
+    access: RemoteAccess<'_>,
 ) -> Result<Compiled, ridl_core::LoadError> {
     let std = std_package(db);
-    let loaded = ridl_core::load_workspace_with(db, entry, overlays)?;
+    let loaded = load_workspace_with_remotes(db, entry, overlays, access)?;
     Ok(check_loaded(db, std, loaded))
 }
 
@@ -1929,7 +2049,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         units: _,
         root_package,
         imports: _,
-        remote_units: _,
+        remote_units,
     } = loaded;
 
     let packages = workspace.packages(db).clone();
@@ -2017,6 +2137,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         &resolutions,
         &mut sources,
     ));
+    drop_remote_non_errors(&mut diagnostics, &sources, &remote_units);
 
     Compiled {
         workspace,
@@ -2032,63 +2153,42 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         backends,
         report_scope,
         root_package,
+        remote_units,
     }
 }
 
-/// Materializes every remote import of the workspace and round-trips
-/// `ridl.lock` at the manifest root (ADR-0002 §5, §7).
-///
-/// Reads `ridl.lock`, calls [`materialize_imports`] with the given `frozen`
-/// mode, and — on a clean non-frozen run — writes the regenerated lockfile back.
-/// Under [`Frozen::Yes`] nothing is ever fetched and the lockfile is never
-/// rewritten. Single-file mode (no manifest up the tree) and a workspace with no
-/// remote imports both short-circuit to no diagnostics and no lockfile.
-fn materialize_and_lock(
-    db: &RidlDatabase,
-    workspace: Workspace,
-    entry: &Path,
-    frozen: Frozen,
-) -> Vec<Diagnostic> {
-    let Some(root) = manifest_root_of(entry) else {
-        return Vec::new();
-    };
-
-    // The union of every import pin — the workspace root's and each package's
-    // (ADR-0002 §5), keyed by URL so that every distinct URL is kept.
-    let mut imports = ImportUnion::new();
-    for (name, url) in workspace.imports(db) {
-        imports.entry(url.clone()).or_default().insert(name.clone());
-    }
-    for package in workspace.packages(db) {
-        for (name, url) in package.imports(db) {
-            imports.entry(url.clone()).or_default().insert(name.clone());
+/// A remote unit is a read-only dependency (ADR-0002 §5): every Warning and
+/// Info whose primary span is in a file of a remote unit is dropped, before
+/// any lint level is applied — so the consumer's `[lints]` never reach the
+/// unit, wherever the cache lies — and every Error there is prefixed with the
+/// unit name when the loader has not done so already. The loader applies the
+/// same rule to its own findings; this applies it to the parser's, the
+/// resolver's, the checker's and the workspace passes'.
+fn drop_remote_non_errors(
+    diagnostics: &mut Vec<Diagnostic>,
+    sources: &SourceMap,
+    remote_units: &BTreeMap<String, MaterializedUnit>,
+) {
+    diagnostics.retain_mut(|diagnostic| {
+        let Some(path) = sources.path(diagnostic.primary.file) else {
+            return true;
+        };
+        let path = Path::new(path);
+        let Some((unit, _)) = remote_units
+            .iter()
+            .find(|(_, unit)| path.starts_with(&unit.dir))
+        else {
+            return true;
+        };
+        if diagnostic.severity != Severity::Error {
+            return false;
         }
-    }
-    if imports.is_empty() {
-        return Vec::new();
-    }
-
-    let lock_path = root.join("ridl.lock");
-    let (lock, mut diagnostics) = read_lockfile(&lock_path);
-    let (_units, regenerated, materialize_diags) =
-        materialize_imports(&imports, lock.as_ref(), &Cache::user_default(), frozen);
-    let had_error = materialize_diags
-        .iter()
-        .any(|diagnostic| diagnostic.severity == Severity::Error);
-    diagnostics.extend(materialize_diags);
-
-    // A frozen build never regenerates the lockfile (ADR-0002 §7); a failed run
-    // must not overwrite the pins it could not verify.
-    if frozen == Frozen::No
-        && !had_error
-        && let Err(err) = write_lockfile(&lock_path, &regenerated)
-    {
-        diagnostics.push(detached_warning(format!(
-            "cannot write `{}`: {err}",
-            lock_path.display()
-        )));
-    }
-    diagnostics
+        let prefix = format!("remote unit `{unit}`: ");
+        if !diagnostic.message.starts_with(&prefix) {
+            diagnostic.message.insert_str(0, &prefix);
+        }
+        true
+    });
 }
 
 /// The codegen request for one package (ADR-0020 decision 9; the IR
@@ -2630,22 +2730,6 @@ fn manifest_root_of(entry: &Path) -> Option<PathBuf> {
         ridl_core::find_root(entry)
     } else {
         None
-    }
-}
-
-/// A detached warning [`Diagnostic`] — no source span, for a problem (a failed
-/// lockfile write) that concerns a file rather than a byte range.
-fn detached_warning(message: String) -> Diagnostic {
-    Diagnostic {
-        code: DiagCode::NONE,
-        severity: Severity::Warning,
-        message,
-        primary: Span {
-            file: FileId::DETACHED,
-            range: TextRange::default(),
-        },
-        labels: Vec::new(),
-        fixits: Vec::new(),
     }
 }
 

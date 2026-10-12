@@ -63,6 +63,7 @@ pub fn snapshot(path: &str, overlays: &[OverlayInput]) -> Result<Snapshot, ToolE
         &mut output.diagnostics,
         &output.sources,
         output.report_scope.as_deref(),
+        &ridlc::remote_dirs(&output.remote_units, &ridl_core::Cache::user_default()),
     );
     let root = if entry.is_file() {
         entry.parent().and_then(ridl_core::find_root)

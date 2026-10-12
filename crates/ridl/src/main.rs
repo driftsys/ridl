@@ -1510,7 +1510,9 @@ fn desk_check(
     }
     // An entry inside a member reports on the member only (ADR-0024 decision
     // 9, as ADR-0026 amends it).
-    ridlc::retain_in_report_scope(&mut warnings, &run.sources, report_scope.as_deref());
+    // RIDL-407 is raised on the consumer's own declarations, so no remote
+    // unit directory is passed.
+    ridlc::retain_in_report_scope(&mut warnings, &run.sources, report_scope.as_deref(), &[]);
     run.diagnostics.extend(warnings);
     rename_labels(&baseline, &current, &index, run);
     Ok(())
