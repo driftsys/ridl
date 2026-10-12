@@ -511,11 +511,14 @@ fn resolve_source(
     pkg: Package,
     package_path: &str,
 ) -> PackageSource {
-    // Step 1 sees members only: a remote package is in `ws.packages` so that
-    // the checker and the cycle walk find it by name, but an import reaches
-    // it only through the key that pins it, so a sibling's pin never leaks.
+    // Step 1 sees the packages of the referencing package's own unit: the
+    // workspace members from a member, the packages loaded for the same URL
+    // from a remote package. A remote package is in `ws.packages` so that
+    // the checker and the cycle walk find it by name, but a member's import
+    // reaches it only through the key that pins it, so a sibling's pin never
+    // leaks.
     if let Some(member) = package_of(db, ws, package_path.to_string())
-        && !matches!(member.origin(db), PackageOrigin::Remote { .. })
+        && same_unit(db, member, pkg)
     {
         return PackageSource::Member(member);
     }
@@ -530,6 +533,16 @@ fn resolve_source(
             PackageSource::Remote { url, package }
         }
         None => PackageSource::Unknown,
+    }
+}
+
+/// Whether `candidate` belongs to the unit `pkg` is a package of: a package
+/// of a remote unit belongs to the unit loaded for its URL, every other
+/// package to the workspace.
+fn same_unit(db: &dyn salsa::Database, candidate: Package, pkg: Package) -> bool {
+    match candidate.origin(db) {
+        PackageOrigin::Remote { .. } => candidate.origin(db) == pkg.origin(db),
+        _ => true,
     }
 }
 
@@ -2115,6 +2128,36 @@ mod package_tests {
         let ws = Workspace::new(&db, vec![app, common, types], BTreeMap::new());
         let resolution = resolve_package(&db, ws, app, std);
         assert_eq!(resolution.symbols["Speed"].package, "veh.common.types");
+        assert!(
+            codes(&resolution).is_empty(),
+            "got: {:?}",
+            resolution.diagnostics
+        );
+    }
+
+    /// Inside a remote unit, one package imports a sibling package of the
+    /// same unit as a workspace member (ADR-0002 §5 step 1 from the unit's
+    /// own view), whatever the consumer pins.
+    #[test]
+    fn a_remote_unit_imports_its_own_sibling_package_as_a_member() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = remote_package(
+            &db,
+            "veh.common",
+            URL,
+            "package veh.common\ntype Speed: km/h\n",
+        );
+        let types = remote_package(
+            &db,
+            "veh.common.types",
+            URL,
+            "package veh.common.types\nimport veh.common.Speed\nstruct Fast { v: Speed }\n",
+        );
+        let app = app_package(&db, "package app\n", &[("veh.common", URL)]);
+        let ws = Workspace::new(&db, vec![app, common, types], BTreeMap::new());
+        let resolution = resolve_package(&db, ws, types, std);
+        assert_eq!(resolution.symbols["Speed"].package, "veh.common");
         assert!(
             codes(&resolution).is_empty(),
             "got: {:?}",
