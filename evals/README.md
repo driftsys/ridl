@@ -80,3 +80,56 @@ fall in that task's workspace and match a rubric item.
 `calibration/expected-counts.toml` pins the per-workspace counts of the shipped
 lints; the test `design_lint_counts_on_the_corpus_are_pinned` compares them with
 `ridl check` and prints the actual table on a mismatch.
+
+## Running the eval tasks
+
+`cargo xtask eval` runs each task on Claude Code and on Codex, with and without
+the `ridl-authoring` skill from `skills/`, scores each run, and writes the
+results:
+
+```sh
+cargo xtask eval [--task <id>]... [--host claude|codex]... [--runs <n>] \
+  [--skill with|without|both] [--out <dir>] [--append] [--claude-handoff]
+```
+
+With no option, every task runs once on both hosts, with and without the skill.
+Each run starts in a new directory under the system temporary directory, outside
+any git repository, with an empty host home, so no user skill, rule, memory,
+hook or `AGENTS.md` reaches the agent. The directory is removed when the run's
+result is written. A run is scored mechanically (`ridl check` reports no error,
+the design lints match `expect.lints`, an evolve task's `ridl diff` verdict
+matches `expect.diff`, and the agent checked its work with the `ridl_check` MCP
+tool or a shell `ridl check`); a run that passes is then judged against its
+rubric by the other host's model. `runner.toml` pins the model of each host.
+
+Each host signs in with its own CLI login, and both are needed, because the
+judge of a run on one host is the other host:
+
+- Codex uses the stored login that `codex login` writes, `auth.json` in
+  `$CODEX_HOME` or in `~/.codex`. Each Codex run gets a copy of that file only,
+  and a token that the run refreshed is copied back.
+- Claude reads `CLAUDE_CODE_OAUTH_TOKEN`, which `claude setup-token` prints, or
+  `ANTHROPIC_API_KEY`.
+
+With `--claude-handoff`, no `claude` command runs and no Claude token is needed.
+For each Claude agent run and each Claude judgement, the eval writes a
+`*.request.toml` file in the run's directory, prints its path after
+`eval: handoff:`, and waits. The request holds the working directory, the
+arguments, the environment and the prompt; the operator runs the prompt with an
+agent of their own, writes its output to the request's `output` path, and then
+creates the file its `done` path names. The result of a handed-off run or
+judgement records `handoff = true` and `model = "handoff"` (`judge_model` for a
+judgement), because the pinned model did not necessarily run.
+
+The results go to `--out`, by default `evals/results/<YYYY-MM-DD>/`: one
+`<task>/<host>-<with|without>-<n>.toml` per run, the run's transcript under
+`transcripts/` (not committed), and `summary.md` with the pass rates, the rubric
+means and the release gate for each host. The summary and the gate read every
+result in the directory, so the eval refuses an `--out` that already holds
+results; `--append` adds the new runs to them on purpose.
+
+`cargo xtask eval sample --from <dir> [--size <n>]` writes
+`<dir>/judge-check/labels.toml`, a deterministic sample of the judged runs for
+the maintainer to label, and `cargo xtask eval agreement <labels.toml>` writes
+`agreement.md` next to it and exits 1 when the judge agrees with the labels on
+fewer than 80% of the rubric items.

@@ -1,8 +1,8 @@
 1. **must** make the `Telemetry` component require the `Horn` interface.
 
 2. **must** add the activation count to the `Horn` interface as an interaction
-   appended after `active`, whose payload type has an explicit range such as
-   `integer [0..N]`.
+   appended after `active`, whose payload is a named typl type with an explicit
+   range.
 
 3. **must** keep every existing declaration unchanged except that `Horn` gains
    the appended interaction and `Telemetry` gains the `requires Horn` line;

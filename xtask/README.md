@@ -6,6 +6,7 @@ Run the automation crate from the workspace root:
 cargo xtask codegen
 cargo xtask descriptor-codegen
 cargo xtask calibrate --help
+cargo xtask eval
 cargo xtask freeze update
 cargo xtask freeze check
 ```
@@ -25,6 +26,14 @@ committed dump differs from a regeneration, when a line of a surface's dump at
 its baseline ref is missing, or when `cargo semver-checks` finds a Rust API
 break against the baseline. [`freeze/README.md`](../freeze/README.md) describes
 the dumps and the baseline table, and ADR-0029 is the policy.
+
+## Run the eval tasks
+
+`cargo xtask eval` runs the tasks under `evals/tasks/` on Claude Code and on
+Codex, with and without the `ridl-authoring` skill, scores and judges each run,
+and writes the results and the release gate under `evals/results/<date>/`.
+[`evals/README.md`](../evals/README.md#running-the-eval-tasks) describes its
+options, the host logins it needs, `--claude-handoff`, and where the results go.
 
 ## Dump calibration findings
 
