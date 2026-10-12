@@ -273,10 +273,10 @@ language layer at `int64`/`float64`.
    constructor checks a pattern too where the backend offers it; a backend may
    make the pattern check optional, because it needs a regular-expression engine
    in the consumer's build. A second constructor that does not check is emitted
-   for the decoder, over a value the payload validator (typl §5.3) has already
-   checked, and for other code that has already checked the value. A wire
-   backend emits neither: decision 2's ceiling holds for it, and a schema cannot
-   reject a value at construction.
+   for the decoder, over a value the payload validator has already checked, and
+   for other code that has already checked the value. A wire backend emits
+   neither: decision 2's ceiling holds for it, and a schema cannot reject a
+   value at construction.
 
    The ground is decision 1: a general-purpose language can represent a
    constraint, so a language backend emits it. The type then carries its typl
@@ -295,8 +295,8 @@ language layer at `int64`/`float64`.
    classifies a constraint change (`constraint_changed`); that classification
    and its reasons are `ridl-diff`'s. Whether a widened constraint is compatible
    for a consumer that receives the value, and not only for one that builds it,
-   is open as driftsys/ridl#926; a lowered minimum that moves a step grid is
-   classified compatible, which is driftsys/ridl#925.
+   is open as driftsys/ridl#926, and driftsys/ridl#925 reports that a lowered
+   minimum that moves a step grid is classified compatible.
    `a_narrowed_range_exits_one_and_a_widened_range_exits_zero` in
    `crates/ridl/tests/diff_cli.rs` runs the built `ridl` binary on one case, a
    narrowed and a widened integer maximum.
