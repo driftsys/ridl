@@ -665,6 +665,11 @@ trusted with no `unsafe` and no second verification pass.
     port is later work, and until it lands no port in this workspace implements
     the trait.
 
+    **Amendment (2026-10-12) — `port::Encoded` forwards for `&P`.**
+    `ridl_rt::port` also gains `impl<P: Encoded + ?Sized> Encoded for &P`, in
+    the same form as the `&mut P` impl, so `Encoded` forwards for both borrows
+    like the other `&self`-only port traits (driftsys/ridl#855).
+
 12. **Amendment (2026-09-20) — a runtime presents one handle per port role, it
     may also offer an aggregate handle per face, and `ridl-rt` adds no `Send` or
     `Sync` bound to any port trait.** A **port role** is one port trait. A
