@@ -1100,6 +1100,12 @@ fn the_provider_trait_carries_the_settled_method_signatures() {
         d.contains("fnaverage(&mutself,window:&super::Window)->super::Average;"),
         "the query provider method returns its declared reply",
     );
+    // The by-reference choice stands on `serve` reading the argument again;
+    // the generated payload types do derive `Clone` (driftsys/ridl#486).
+    assert!(
+        !dense(&face()).contains("implementneither`Copy`nor`Clone`"),
+        "the Provider doc does not claim the payload types have no Copy and no Clone",
+    );
 }
 
 #[test]
@@ -1114,5 +1120,72 @@ fn the_pipeline_generate_emits_no_face_module() {
     assert!(
         !plain.contains("Publisher"),
         "the pipeline emits no publisher"
+    );
+}
+
+/// The face of `event_derives.ridl`, whose four interfaces carry one event
+/// each, over a payload that is `Copy` and `Eq`, one that is `Eq` alone, one
+/// that is `Copy` alone, and one that is neither.
+fn events_face() -> String {
+    let package = ir::compile_fixture("event_derives.ridl");
+    generate_face_with(&package, &[WireEncoding::FlatBuffers])
+        .expect("generate_face_with")
+        .rust_source
+}
+
+#[test]
+fn the_event_enum_derives_the_full_set_when_every_payload_does() {
+    let d = dense(&module(&events_face(), "plain"));
+
+    assert!(
+        d.contains("#[derive(Debug,Clone,Copy,PartialEq,Eq)]pubenumEvent{"),
+        "an Event over a payload that derives all four takes all five",
+    );
+}
+
+#[test]
+fn the_event_enum_keeps_the_equality_pair_when_a_payload_is_not_copy() {
+    let d = dense(&module(&events_face(), "noted"));
+
+    // `Note` holds a string-backed named scalar, so it is `Eq` and not
+    // `Copy`. The traits are independent, so only `Copy` is lost.
+    assert!(
+        d.contains("#[derive(Debug,Clone,PartialEq,Eq)]pubenumEvent{"),
+        "an Event over a payload that is not Copy keeps Clone, PartialEq and Eq",
+    );
+}
+
+#[test]
+fn the_event_enum_keeps_copy_when_a_payload_is_not_eq() {
+    let d = dense(&module(&events_face(), "drifted"));
+
+    // `Drift` holds a float-backed named scalar, so it is `Copy` and not
+    // `Eq`. Only `Eq` is lost.
+    assert!(
+        d.contains("#[derive(Debug,Clone,Copy,PartialEq)]pubenumEvent{"),
+        "an Event over a payload that is not Eq keeps Clone, Copy and PartialEq",
+    );
+}
+
+#[test]
+fn the_event_enum_keeps_the_unconditional_three_when_a_payload_has_neither() {
+    let d = dense(&module(&events_face(), "blended"));
+
+    // `Mixed` holds both a string-backed and a float-backed named scalar, so
+    // it is neither `Copy` nor `Eq`. The three unconditional traits remain.
+    assert!(
+        d.contains("#[derive(Debug,Clone,PartialEq)]pubenumEvent{"),
+        "an Event over a payload that is neither Copy nor Eq keeps Debug, Clone and PartialEq",
+    );
+}
+
+#[test]
+fn the_event_enum_is_not_non_exhaustive() {
+    // The generated crate is regenerated with its consumer, so a new event
+    // arrives with a recompile and an exhaustive match failing is the signal
+    // that there is one to handle (driftsys/ridl#486).
+    assert!(
+        !dense(&events_face()).contains("#[non_exhaustive]pubenumEvent"),
+        "the Event enum is not non_exhaustive",
     );
 }

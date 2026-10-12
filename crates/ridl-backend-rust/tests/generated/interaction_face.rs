@@ -3198,6 +3198,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
         }
     }
     ///One occurrence of an event of interface `Cabin`.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum Event {
         ///An occurrence of event `warning`.
         Warning(::ridl_rt::sample::Occurrence<super::Warning>),
@@ -3939,7 +3940,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     }
     /**What an application implements to serve interface `Cabin`'s calls.
 
-An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses, and the generated payload types implement neither `Copy` nor `Clone`.*/
+An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses.*/
     pub trait Provider {
         /// Sets the control level.
         ///
@@ -4939,6 +4940,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
         }
     }
     ///One occurrence of an event of interface `Siren`.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum Event {
         ///An occurrence of event `tripped`.
         Tripped(::ridl_rt::sample::Occurrence<super::Warning>),
@@ -5782,7 +5784,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     }
     /**What an application implements to serve interface `Valve`'s calls.
 
-An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses, and the generated payload types implement neither `Copy` nor `Clone`.*/
+An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses.*/
     pub trait Provider {
         ///Serves command `open`. It returns nothing: a command has no failure the application reports (ridl §6.1). Arguments that break their typl constraints or the `require` clauses never reach it.
         ///
@@ -7325,7 +7327,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     }
     /**What an application implements to serve interface `Zone`'s calls.
 
-An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses, and the generated payload types implement neither `Copy` nor `Clone`.*/
+An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses.*/
     pub trait Provider {
         /// Sets the zone level.
         ///
@@ -8935,7 +8937,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     }
     /**What an application implements to serve interface `ZoneLog`'s calls.
 
-An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses, and the generated payload types implement neither `Copy` nor `Clone`.*/
+An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses.*/
     pub trait Provider {
         ///Serves command `record`. It returns nothing: a command has no failure the application reports (ridl §6.1). Arguments that break their typl constraints or the `require` clauses never reach it.
         ///

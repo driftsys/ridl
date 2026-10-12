@@ -192,6 +192,23 @@ consumer side is:
   compile at all.)
 - **`Event`** — one enum per interface that declares an event, with one variant
   per event carrying `Occurrence<T>`, which `next_event` routes into by ordinal.
+  `Occurrence<T>` derives `Debug`, `Clone`, `Copy`, `PartialEq` and `Eq`, each
+  under the matching bound on `T`, so the enum emits each trait on its own
+  condition rather than all or none: `Debug`, `Clone` and `PartialEq` always,
+  because every generated payload type derives all three unconditionally; `Copy`
+  when every payload it carries is `Copy`; `Eq` when every payload it carries is
+  `Eq`. The conditions are the derive eligibility the generated payload types
+  already follow (`src/derives.rs`), read for the payload types rather than
+  restated. A payload that is `Clone` but not `Copy` therefore keeps the enum's
+  `Clone`, `PartialEq` and `Eq`, and loses only `Copy`. The enum is **not**
+  `#[non_exhaustive]`: that attribute protects a consumer who upgrades a
+  dependency without recompiling against the new source, and the generated crate
+  is regenerated with its consumer, so a new event arrives with a recompile and
+  the exhaustive `match` failing is the signal that there is one to handle.
+  Marking it `#[non_exhaustive]` would replace that signal with a wildcard arm
+  that drops the new event. `ridl diff` calls adding an event a compatible
+  evolution of the interface, which is a statement about the wire and not about
+  a generated Rust `match` (driftsys/ridl#486).
 - **One future type per command and per query, `<Name>Call<'a, P>`**, and
   **`NextEvent<'a, P>`** when the interface declares an event.
 - **`blocking::Client<P>`**, under the emitted crate's `std` feature — the
@@ -376,10 +393,12 @@ runtime's finding, and carries no acceptance value.
   the interface declares one. **A method takes its argument by reference**
   (`fn set_level(&mut self, level: &Level)`), because the internal step reads
   the argument again when it evaluates a query's `ensure` clause after the
-  provider returns, and the generated payload types implement neither `Copy` nor
-  `Clone`. A command method returns nothing — a command has no failure the
-  application reports (ridl §6.1) — and a query method returns its declared
-  reply type.
+  provider returns. The generated doc once gave a second reason, that the
+  payload types implement neither `Copy` nor `Clone`; that stopped being true
+  when the payload types took their derive set, and the choice stands on the
+  first reason alone (driftsys/ridl#486). A command method returns nothing — a
+  command has no failure the application reports (ridl §6.1) — and a query
+  method returns its declared reply type.
 - **`serve`** — the next section.
 
 ## `serve`, the internal step, and the settlement table
@@ -979,6 +998,36 @@ clients: a consumer with no `use` of a prelude gets E0599 on every fixed method.
 ADR-0023 decision 7 and ADR-0021 decision 19 record it; the design note is
 archived as
 [`2026-09-28-face-fixed-methods-traits-design.md`](../archive/2026-09-28-face-fixed-methods-traits-design.md).
+
+## The crate paths and the payload buffers (driftsys/ridl#487)
+
+**The crate root of a single-package build gains no re-export.** The path a
+consumer writes repeats what the crate name already carries —
+`veh_cabin::veh::cabin::cabin::Client` repeats `veh` and `cabin` — and the cure
+proposed for it was a re-export at the crate root, emitted when the build holds
+exactly one package. That is declined, because the re-export's presence would
+depend on a property of the build rather than on the package being built: a
+consumer writes `veh_cabin::cabin::Client`, someone adds a second, unrelated
+package to the workspace, and the short path disappears from a change that has
+nothing to do with the package the consumer uses. A generated API that changes
+shape because of its neighbours is worse than one that is verbose. The
+repetition is also not this emitter's to remove: it comes from the crate name
+being derived from the package name, so if the verbosity is worth addressing,
+the place is how `ridlc` names the crate and its module tree, for every
+workspace alike, and not a special case for one.
+
+**Every face method sizes its payload buffer from `MAX_SIZE` and puts it on the
+stack.** That follows from two decisions the records already hold: the face
+allocates nothing
+([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md)), and the
+declared bound is the buffer size ([the codec design](flatbuffers-codec.md)). So
+a payload such as `[string [0..256]; 0..1000]` gives a stack frame on the order
+of a megabyte, whatever the actual value carries. This is recorded as a known
+property rather than a defect, and nothing in the corpus meets it. The two ways
+out are named here so that a consumer who does meet it finds them stated: a
+caller-supplied buffer variant of each method, which is the shape `dispatch`
+already has, or a runtime that hands the face a buffer it owns. Neither is
+built.
 
 ## What is provisional
 

@@ -1630,6 +1630,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
         }
     }
     ///One occurrence of an event of interface `Cabin`.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum Event {
         ///An occurrence of event `warning`.
         Warning(::ridl_rt::sample::Occurrence<super::Warning>),
@@ -2371,7 +2372,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     }
     /**What an application implements to serve interface `Cabin`'s calls.
 
-An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses, and the generated payload types implement neither `Copy` nor `Clone`.*/
+An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses.*/
     pub trait Provider {
         /// Sets the cabin level, below 100.
         ///
