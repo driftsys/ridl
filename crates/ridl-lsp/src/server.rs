@@ -336,6 +336,7 @@ impl ServerState {
             lints,
             report_scope: _,
             units: _,
+            root_package: _,
             codegen_header: _,
             backends: _,
         } = load_workspace(&mut self.db, dir)?;

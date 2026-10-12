@@ -60,8 +60,8 @@ use ridl_core::diag::{
 use ridl_core::lint::{LintScopes, apply_lint_levels, drop_allowed_by_default};
 use ridl_core::package::{Package, PackageOrigin, Workspace};
 use ridl_core::{
-    Cache, Frozen, LoadedWorkspace, ManifestKind, RidlDatabase, materialize_imports, parse_file,
-    parse_manifest, read_lockfile, std_package, write_lockfile,
+    Cache, Frozen, LoadedWorkspace, RidlDatabase, materialize_imports, parse_file, read_lockfile,
+    std_package, write_lockfile,
 };
 use ridl_ir::codegen::{self, v1};
 use ridl_sem::{
@@ -143,6 +143,8 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
             report_scope: None,
             // A source text has no directory, so no unit is recorded.
             units: BTreeMap::new(),
+            // No manifest: no root package name.
+            root_package: None,
         },
     );
     // The callers, `check_source` and `compile`, report their diagnostics, so
@@ -963,6 +965,7 @@ fn run_build_inner<E: From<std::io::Error>>(
         codegen_header,
         backends,
         report_scope,
+        root_package,
         ..
     } = load_and_check(&mut db, entry, &[]).map_err(|err| E::from(load_io_error(err)))?;
     // The backends read names only; the spans served the loader's diagnostics.
@@ -1343,8 +1346,8 @@ fn run_build_inner<E: From<std::io::Error>>(
             let rust_encodings: &[String] = backends.get("rust").map_or(&[], Vec::as_slice);
             write_crate_files(
                 out_dir,
-                &crate_name_for(entry),
-                manifest_package_name(entry).as_deref(),
+                &crate_name_for(root_package.as_deref()),
+                root_package.as_deref(),
                 &package_names,
                 codegen_header.as_deref(),
                 rust_encodings,
@@ -1369,29 +1372,20 @@ fn run_build_inner<E: From<std::io::Error>>(
     })
 }
 
-/// The crate name for the generated `Cargo.toml`: the loaded manifest's
+/// The crate name for the generated `Cargo.toml`: the root manifest's
 /// `[package]` name with every `.` replaced by `_`, since a dotted ridl
 /// package name (`veh.common`) is not a legal Cargo package name. A
 /// `[workspace]` manifest names no package, so it falls back to
 /// `ridl_generated`; single-file mode never reaches this function (`run_build`
 /// gates the call on `!single_file`).
-fn crate_name_for(entry: &Path) -> String {
-    manifest_package_name(entry)
+///
+/// The name comes from [`Compiled::root_package`], which the loader read from
+/// the manifest it parsed, so the build does not find the root and parse the
+/// manifest again (driftsys/ridl#760).
+fn crate_name_for(root_package: Option<&str>) -> String {
+    root_package
         .map(|name| name.replace('.', "_"))
         .unwrap_or_else(|| "ridl_generated".to_string())
-}
-
-/// The dotted `[package]` name of the manifest that governs `entry`, or `None`
-/// when the manifest names no package (a `[workspace]` manifest) or cannot be
-/// read.
-fn manifest_package_name(entry: &Path) -> Option<String> {
-    let root = manifest_root_of(entry)?;
-    let text = std::fs::read_to_string(root.join("ridl.toml")).ok()?;
-    let (manifest, _) = parse_manifest(FileId::DETACHED, &text);
-    match manifest.map(|manifest| manifest.kind) {
-        Some(ManifestKind::Package { name, .. }) => Some(name),
-        _ => None,
-    }
 }
 
 /// The first line of a `Cargo.toml` that an earlier release generated. A build
@@ -1859,6 +1853,11 @@ struct Compiled {
     /// The member directory the entry lies in
     /// ([`LoadedWorkspace::report_scope`]).
     report_scope: Option<PathBuf>,
+    /// The root manifest's `[package]` name
+    /// ([`LoadedWorkspace::root_package`]), read from the manifest the load
+    /// already parsed rather than by finding the root and parsing it again
+    /// (driftsys/ridl#760).
+    root_package: Option<String>,
 }
 
 /// Loads the workspace at `entry` and runs parse, resolve, and check over every
@@ -1889,6 +1888,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         backends,
         report_scope,
         units: _,
+        root_package,
     } = loaded;
 
     let packages = workspace.packages(db).clone();
@@ -1990,6 +1990,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         codegen_header,
         backends,
         report_scope,
+        root_package,
     }
 }
 

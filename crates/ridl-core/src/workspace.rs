@@ -83,6 +83,12 @@ pub struct LoadedWorkspace {
     /// workspace root is not a unit; its members are. In single-file mode the
     /// one unit is the file's package, mapped to the file's directory.
     pub units: BTreeMap<String, PathBuf>,
+    /// The dotted `name` of the root manifest's `[package]`, read from the
+    /// manifest this load already parsed. `None` when the root is a
+    /// `[workspace]` manifest, which names no package, when the manifest did
+    /// not parse, and in single-file mode. A caller that needs it must not
+    /// find the root and parse the manifest again (driftsys/ridl#760).
+    pub root_package: Option<String>,
 }
 
 /// Unsaved source text for a file in a loaded package directory.
@@ -282,6 +288,7 @@ pub fn load_workspace_with(
         backends: loader.backends,
         report_scope,
         units: loader.units,
+        root_package: loader.root_package,
     })
 }
 
@@ -518,6 +525,8 @@ struct TreeScope<'a> {
 /// The accumulating state of one [`load_workspace`] run.
 #[derive(Default)]
 struct Loader {
+    /// The root manifest's `[package]` name, for `LoadedWorkspace::root_package`.
+    root_package: Option<String>,
     /// Source package name to the unit that claimed it and that unit's
     /// manifest directory.
     claims: BTreeMap<String, (String, PathBuf)>,
@@ -627,6 +636,7 @@ impl Loader {
                 // A standalone package: the manifest's `[imports]` and
                 // `[defaults]` ride on its packages; the workspace maps
                 // stay empty.
+                self.root_package = Some(name.clone());
                 self.units.insert(name.clone(), root.to_path_buf());
                 self.unit_name_spans.insert(
                     name.clone(),
