@@ -212,6 +212,11 @@ The frame header and envelope byte sizes per frame version are stated by the
 binding document, as frame spec §10 item 2 already says; #265 writes it and
 fills the `KNOWN` row and #718's WebSocket row.
 
+**Changed 2026-10-12 (WebSocket binding design, R-W-16).** The `KNOWN` row and
+#718's first half moved from #265 to the pull request that amended the frame
+specification §11.1; #265 keeps the test that checks the sum against a frame the
+transport writes.
+
 ## 3. Questions left open
 
 - **The `repr(C)` projection record** (stage 4) must settle: the C-representable

@@ -1356,3 +1356,87 @@ fn a_baseline_that_cannot_be_loaded_is_reported_before_a_deny_level_applies() {
     assert!(stderr.contains("ir.json"), "{stderr}");
     assert!(!stderr.contains("RIDL-100"), "{stderr}");
 }
+
+/// (driftsys/ridl#808) A published history whose first hash is not the hash
+/// recomputed from the published snapshots does not describe those snapshots,
+/// so the chain restarts instead of carrying hashes that may reach past a
+/// breaking change. The verdict here is identical, which used to carry the
+/// whole file.
+#[test]
+fn a_publication_restarts_a_chain_whose_head_does_not_match_the_snapshots() {
+    let dir = TempDir::new("head-mismatch-publish");
+    let out = TempDir::new("head-mismatch-publish-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    let hash = describe_hash(&root, out.path(), UNIT);
+    // A hand edit: a head that no published snapshot produces, with an
+    // earlier hash behind it.
+    std::fs::write(
+        baseline_dir(&root).join(format!("{UNIT}.catalogs")),
+        format!("{}\n{}\n", "ab".repeat(32), "cd".repeat(32)),
+    )
+    .expect("overwrite the published history");
+
+    publish(&root);
+
+    assert_eq!(
+        history_lines(&root),
+        vec![hash],
+        "the chain restarts from the one new hash"
+    );
+}
+
+/// (driftsys/ridl#808) The same rule on the build side: a published history
+/// whose first hash is not the hash recomputed from the published snapshots
+/// carries nothing into the catalog descriptor and the codegen model.
+#[test]
+fn a_build_lists_nothing_when_the_chain_head_does_not_match_the_snapshots() {
+    let dir = TempDir::new("head-mismatch-build");
+    let out = TempDir::new("head-mismatch-build-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    std::fs::write(
+        baseline_dir(&root).join(format!("{UNIT}.catalogs")),
+        format!("{}\n{}\n", "ab".repeat(32), "cd".repeat(32)),
+    )
+    .expect("overwrite the published history");
+
+    set_source(&dir, APPENDED);
+    let (code, stderr) = build(&root, out.path(), "catalog,codegen-model");
+
+    assert_eq!(code, 0, "the build succeeds: {stderr}");
+    assert!(
+        compatible_of(out.path(), UNIT).is_empty(),
+        "the descriptor lists nothing: {:?}",
+        compatible_of(out.path(), UNIT)
+    );
+    assert!(
+        model_compatible_of(out.path(), UNIT).is_empty(),
+        "the model lists nothing"
+    );
+}
+
+/// (driftsys/ridl#808) A `ridl build` whose workspace names `[imports]` and
+/// whose unit list comes out empty still gets the note, so an empty list is
+/// explained rather than silent. The list is emptied here by a head that does
+/// not describe the published snapshots.
+#[test]
+fn a_build_with_imports_and_an_empty_list_still_gets_the_note() {
+    let dir = TempDir::new("imports-empty-list");
+    let out = TempDir::new("imports-empty-list-out");
+    let root = set_source(&dir, BASE);
+    publish(&root);
+    std::fs::write(
+        baseline_dir(&root).join(format!("{UNIT}.catalogs")),
+        format!("{}\n", "ab".repeat(32)),
+    )
+    .expect("overwrite the published history");
+    dir.write("ridl.toml", &format!("{MANIFEST}{IMPORTS}"));
+
+    let (_, stderr) = frozen_catalog_build(&root, out.path());
+
+    assert!(
+        stderr.contains("note: the workspace names `[imports]`"),
+        "the empty list is explained: {stderr}"
+    );
+}

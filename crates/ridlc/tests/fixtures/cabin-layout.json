@@ -17,7 +17,8 @@
 //   channel's ring depth is the maximum, 10.
 // - Slots of each call consumer link: 16, the default, because
 //   `examples/cabin/system.rsdl` declares no sizing key. No budget.
-// - Bindings: none, so no `websocket` row.
+// - Bindings: the `websocket` row, a frame header of at most 20 bytes and an
+//   envelope of 16 bytes (the frame specification §11.1).
 {
   "regions": [
     {
@@ -41,7 +42,8 @@
   // The proto3 links: `Telemetry.Unit` on `Gateway` consumes `Cabin` from
   // `Climate.Unit` on `Hpc`, a different machine. `Panel.Unit` is on `Hpc`, so
   // its links are FlatBuffers and are not messages. `Horn` has no proto3 link.
-  // With no `websocket` row, every `max_message_bytes` is null.
+  // With the `websocket` row, `max_message_bytes` is 20 + 16 + `proto3_bound`,
+  // and null when `proto3_bound` is null.
   "messages": [
     // `Temperature` is a named scalar, an integer in [-40..85]: a signed
     // width, projected as sint32, a varint of at most 5 bytes. Its proto3
@@ -62,12 +64,13 @@
     // projected as uint32: a varint of at most 5 bytes. `Health` is an enum
     // with values 0 to 2: a varint of at most 1 byte.
     // (1 + 5) + (1 + 1) = 8.
+    // max_message_bytes: 20 + 16 + 8 = 44.
     {
       "interface": "Cabin",
       "member": "warning",
       "consumer": "veh.cabin.Telemetry.Unit",
       "proto3_bound": 8,
-      "max_message_bytes": null
+      "max_message_bytes": 44
     },
     // `setLevel`'s request is the named scalar `Level`, an integer in
     // [0..100] projected as uint32 (at most 5 bytes): the box message
