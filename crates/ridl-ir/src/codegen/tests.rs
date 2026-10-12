@@ -1830,6 +1830,12 @@ fn budget_package() -> v2::Package {
                     ..Default::default()
                 }),
             ),
+            decl(
+                "table",
+                v2::decl::Kind::FixedDef(v2::FixedDef {
+                    payload: Some(named("Pair")),
+                }),
+            ),
         ],
     );
     let mixed = interface(
@@ -1934,10 +1940,62 @@ fn a_table_budget_sums_every_live_member() {
     let model = lower(&budget_package(), &[]);
     let tally = interface_named(&model, "Tally");
     for proto3 in [true, false] {
-        // level (1) + ask (2) + set (1)
+        // level (1) + ask (2) + set (1) + table (0, a fixed)
         let one = pair_size(&model, proto3);
         assert_eq!(reserved(&tally.table_budget, proto3), &bytes(4 * one));
     }
+}
+
+/// (driftsys/ridl#852) A `fixed` is provisioned, never in flight, so it
+/// reserves nothing and adds nothing to the table budget — the same number
+/// the runtime's `Sizes` row carries for it. Its payload has a size, so a
+/// model that counted the payload would give a different number from the
+/// runtime for any interface with a `fixed` member.
+#[test]
+fn a_fixed_reserves_nothing() {
+    let model = lower(&budget_package(), &[]);
+    let table = live_member(interface_named(&model, "Tally"), "table");
+    for proto3 in [true, false] {
+        assert!(pair_size(&model, proto3) > 0, "the payload has a size");
+        assert_eq!(reserved(&table.reservation, proto3), &bytes(0));
+    }
+}
+
+/// (driftsys/ridl#852) An unbounded `fixed` payload still reserves nothing,
+/// rather than making the interface's budget unsized: the runtime's row is 0
+/// whatever the payload is.
+#[test]
+fn an_unbounded_fixed_payload_reserves_nothing_and_keeps_the_budget_sized() {
+    let model = lower(&unbounded_fixed_package(), &[]);
+    let kinds = interface_named(&model, "Tally");
+    let table = live_member(kinds, "table");
+    for proto3 in [true, false] {
+        assert_eq!(reserved(&table.reservation, proto3), &bytes(0));
+        assert_eq!(
+            reserved(&kinds.table_budget, proto3),
+            &bytes(4 * pair_size(&model, proto3)),
+            "the unbounded fixed does not make the budget unsized"
+        );
+    }
+}
+
+/// [`budget_package`] with the `fixed` member's payload the unbounded
+/// `Tagged` type instead of `Pair`.
+fn unbounded_fixed_package() -> v2::Package {
+    let mut package = budget_package();
+    for interface in &mut package.interfaces {
+        if interface.name != "Tally" {
+            continue;
+        }
+        for interaction in &mut interface.interactions {
+            if interaction.name == "table" {
+                interaction.kind = Some(v2::decl::Kind::FixedDef(v2::FixedDef {
+                    payload: Some(named("Tagged")),
+                }));
+            }
+        }
+    }
+    package
 }
 
 #[test]
@@ -1958,7 +2016,7 @@ fn one_unsized_member_makes_the_budget_unsized() {
 fn a_tombstone_does_not_count() {
     let model = lower(&budget_package(), &[]);
     let tally = interface_named(&model, "Tally");
-    assert_eq!(tally.slots.len(), 4, "the tombstone holds its slot");
+    assert_eq!(tally.slots.len(), 5, "the tombstone holds its slot");
     let live_sum: u64 = tally
         .slots
         .iter()
@@ -2049,15 +2107,14 @@ fn a_query_with_no_return_type_has_undefined_reply_sizes() {
     }
 }
 
+/// (driftsys/ridl#852) A fixed member reserves nothing whatever its payload,
+/// a missing payload included, so it is never unsized.
 #[test]
-fn a_fixed_member_with_no_payload_is_unsized_and_says_so() {
+fn a_fixed_member_with_no_payload_reserves_nothing() {
     let model = lower(&bare_package(), &[]);
     let tick = live_member(interface_named(&model, "Bare"), "tick");
     for proto3 in [true, false] {
-        assert_eq!(
-            reserved(&tick.reservation, proto3),
-            &unsized_by("tick.payload: no payload")
-        );
+        assert_eq!(reserved(&tick.reservation, proto3), &bytes(0));
     }
 }
 
@@ -2123,10 +2180,12 @@ fn each_encoding_lands_in_its_own_column() {
     ));
 }
 
-/// The `Kinds` interface: five fixed members whose payloads are, in order, a
+/// The `Kinds` interface: five queries whose reply types are, in order, a
 /// primitive, an inline scalar, a map, an array of a named type, and a
-/// payload position that declares no type at all. No codec defines a size for
-/// any of them, so each reservation is unsized and states the payload's kind.
+/// payload position that declares no type at all. Each takes one bounded
+/// parameter, so the request is sized and the reply is what the reservation
+/// reports. No codec defines a size for any of the reply types, so each
+/// reservation is unsized and states the reply's kind.
 fn kinds_package() -> v2::Package {
     let package = sized_package();
     let primitive = v2::FieldType {
@@ -2164,11 +2223,19 @@ fn kinds_package() -> v2::Package {
             max: 2,
         }))),
     };
-    let fixed = |name: &str, payload: v2::FieldType| v2::Decl {
+    let replying = |name: &str, reply: v2::FieldType| v2::Decl {
         name: name.to_string(),
         visibility: v2::Visibility::Public as i32,
-        kind: Some(v2::decl::Kind::FixedDef(v2::FixedDef {
-            payload: Some(payload),
+        kind: Some(v2::decl::Kind::QueryDef(v2::QueryDef {
+            params: vec![v2::Param {
+                name: "a".to_string(),
+                r#type: Some(named("Pair")),
+                ..Default::default()
+            }],
+            return_type: Some(v2::ReturnType {
+                kind: Some(v2::return_type::Kind::Value(reply)),
+            }),
+            ..Default::default()
         })),
         ..Default::default()
     };
@@ -2176,11 +2243,11 @@ fn kinds_package() -> v2::Package {
         name: "Kinds".to_string(),
         visibility: v2::Visibility::Public as i32,
         interactions: vec![
-            fixed("flag", primitive),
-            fixed("count", inline),
-            fixed("table", map),
-            fixed("list", array),
-            fixed(
+            replying("flag", primitive),
+            replying("count", inline),
+            replying("table", map),
+            replying("list", array),
+            replying(
                 "void",
                 v2::FieldType {
                     optional: false,
@@ -2199,19 +2266,19 @@ fn kinds_package() -> v2::Package {
 }
 
 #[test]
-fn an_unsized_fixed_member_states_the_kind_of_its_payload() {
+fn an_unsized_reply_states_the_kind_of_its_type() {
     // Each kind is named distinctly, so a lowering that spelled two kinds
     // the same way fails here.
     let model = lower(&kinds_package(), &[]);
     let kinds = interface_named(&model, "Kinds");
     let expected = [
-        ("flag", "flag.payload: primitive"),
-        ("count", "count.payload: inline scalar"),
-        ("table", "table.payload: map"),
-        ("list", "list.payload: array of Pair"),
+        ("flag", "flag.reply: primitive"),
+        ("count", "count.reply: inline scalar"),
+        ("table", "table.reply: map"),
+        ("list", "list.reply: array of Pair"),
         // A field position with no kind at all: its own word, not `map` and
         // not `no payload`, which is the member that carries no payload.
-        ("void", "void.payload: no type"),
+        ("void", "void.reply: no type"),
     ];
     for (member, text) in expected {
         for proto3 in [true, false] {

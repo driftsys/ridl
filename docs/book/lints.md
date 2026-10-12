@@ -165,6 +165,13 @@ Setting `ordinal-changed` to `allow` makes `ridl check --baseline` report
 nothing for ordinal changes, so the baseline desk check no longer warns about
 them.
 
+`link-encoding-not-emitted` has a per-backend way to silence it, which the
+`[lints]` level does not: a `[backend.<name>]` table that names no encoding —
+an empty `encodings` list, or no `encodings` key at all — declares that the
+backend emits no codec, and that backend's links are not compared. A backend
+with no table at all is still compared. See
+[`ridl build`](cli-reference.md#ridl-build) for the rule in full.
+
 ## How the design lints' levels were set
 
 `inconsistent-unit`, `duplicate-shape` and `low-cohesion-interface` are

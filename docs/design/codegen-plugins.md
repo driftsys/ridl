@@ -486,6 +486,25 @@ carry a codec — the Rust emit and each plugin, not a schema emit, whose backen
 takes no `encodings` option; it is aligned with the transport defaults when
 `repr(C)` or a shared-memory transport lands.
 
+A backend named by both an `--emit` and a `--plugin` is compared once, so its
+links draw one diagnostic rather than one per name. A plugin that emits a schema
+only, as `ridlc-gen-model` does, declares that with an empty list:
+
+```toml
+[backend.model]
+encodings = []
+```
+
+A `[backend.<name>]` table whose `encodings` list is empty says that the backend
+emits no codec, and RSDL-807 does not compare it. A table written with no
+`encodings` key at all is the same declaration: the manifest records the two
+forms alike, both meaning types only (`BackendTable::encodings`). A backend with
+no table at all is compared, and every link of the selected deployment that
+carries an encoding warns, so a build that never declared its encodings is still
+reported. The empty list is the per-backend way to silence the warning; the
+`[lints]` level is global and silences it for every backend at once
+(driftsys/ridl#853).
+
 ### The depth rule
 
 A `Depth` is an optional value and the source of that value. Three sources are

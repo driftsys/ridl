@@ -62,7 +62,7 @@ impl Payload<ReprC> for Speed {
             .map_err(|_| VerifyError::Structure(Malformed::OutOfBounds))?;
         if u16::from_le_bytes(bytes) > 300 {
             return Err(VerifyError::Contract(Violation {
-                type_name: "Speed",
+                type_name: Some("Speed"),
                 rule: Rule::Range,
             }));
         }

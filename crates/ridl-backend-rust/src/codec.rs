@@ -2052,7 +2052,7 @@ impl<'a> Codec<'a> {
                             };
                             if __previous_key == __key {
                                 return ::core::result::Result::Err(::ridl_rt::payload::VerifyError::Contract(
-                                    ::ridl_rt::payload::Violation { type_name: #owner, rule: ::ridl_rt::payload::Rule::Unique }
+                                    ::ridl_rt::payload::Violation { type_name: ::core::option::Option::Some(#owner), rule: ::ridl_rt::payload::Rule::Unique }
                                 ));
                             }
                         }
@@ -2844,7 +2844,7 @@ fn count_check(owner: &str, min: u64, max: u64) -> TokenStream {
     let violation = quote! {
         return ::core::result::Result::Err(::ridl_rt::payload::VerifyError::Contract(
             ::ridl_rt::payload::Violation {
-                type_name: #owner,
+                type_name: ::core::option::Option::Some(#owner),
                 rule: ::ridl_rt::payload::Rule::Length,
             },
         ));

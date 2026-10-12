@@ -1285,19 +1285,19 @@ impl Speed {
         let value = *value;
         if !value.is_finite() {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Speed",
+                type_name: ::core::option::Option::Some("Speed"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Speed",
+                type_name: ::core::option::Option::Some("Speed"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 250.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Speed",
+                type_name: ::core::option::Option::Some("Speed"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
@@ -1412,7 +1412,7 @@ impl Speed {
             };
             if __step_invalid {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Speed",
+                    type_name: ::core::option::Option::Some("Speed"),
                     rule: ::ridl_rt::payload::Rule::Step,
                 });
             }
@@ -1495,7 +1495,7 @@ impl ::core::convert::TryFrom<::core::primitive::i64> for LeverCmd {
             3 => ::core::result::Result::Ok(Self::Resume),
             _ => {
                 ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "LeverCmd",
+                    type_name: ::core::option::Option::Some("LeverCmd"),
                     rule: ::ridl_rt::payload::Rule::Variant,
                 })
             }
@@ -1986,13 +1986,13 @@ pub(crate) fn __ridl_fb_verify_FaultReport(
             let __value = ::core::primitive::i64::from(__raw);
             if __value < 0 {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "FaultReport",
+                    type_name: ::core::option::Option::Some("FaultReport"),
                     rule: ::ridl_rt::payload::Rule::Range,
                 });
             }
             if __value > 255 {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "FaultReport",
+                    type_name: ::core::option::Option::Some("FaultReport"),
                     rule: ::ridl_rt::payload::Rule::Range,
                 });
             }
