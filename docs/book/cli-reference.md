@@ -849,9 +849,17 @@ MANI-005. The table is not the `backend.` attribute namespace of an rsdl
 declaration. The lint RSDL-807 `link-encoding-not-emitted` warns when a link of
 the selected deployment carries an encoding that the emitted backend's list
 does not name. It is compared once per emitted backend that can carry a codec:
-the `rust` emit and each `--plugin`. A schema emit (`proto`, `flatbuffers`),
+the `rust` emit and each `--plugin`, and a backend named by both an `--emit`
+and a `--plugin` is compared once. A schema emit (`proto`, `flatbuffers`),
 the `typescript` emit and `codegen-model` are not compared, because their
-backends take no `encodings` option.
+backends take no `encodings` option. A `[backend.<name>]` table whose
+`encodings` list is empty declares that the backend emits no codec, and it is
+not compared either; a table written with no `encodings` key at all is the same
+declaration, as the manifest records the two forms alike. A backend with no
+table at all is compared, so a build that declared no encodings is still
+reported. An empty list is how a
+schema-only plugin silences the lint for its own backend, where the `[lints]`
+level silences it for every backend at once.
 
 **`proto` is a wire backend** (ADR-0013 decision 2): it emits the typl
 surface — structs, enums, enum sets and unions, projected to proto3 messages

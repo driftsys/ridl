@@ -113,9 +113,8 @@ pub trait Sizes<E: Encoding>: Interface {
     /// The rows are parallel to [`Interface::MEMBERS`].
     ///
     /// The codegen model's `Interaction.reservation` and
-    /// `Interface.table_budget` count a `fixed` member's payload, so for an
-    /// interface with a `fixed` member they are larger than this row and
-    /// than [`table_budget`] by the size of each fixed payload.
+    /// `Interface.table_budget` count a `fixed` member as `0` for the same
+    /// reason, so the two sums give the same number for every interface.
     const RESERVATIONS: &'static [u64];
     /// The largest `MAX_SIZE` over the argument and reply payloads of the
     /// interface's commands and queries; `0` when it has none.
