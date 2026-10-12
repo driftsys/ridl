@@ -60,6 +60,11 @@ where
     F::Runtime: ScannableSignals,
 {
     let mut rt = runtime::<F>();
+    // OTHER is published twice and ORD once, so the two signals carry
+    // different sequence numbers, and neither equals the interface
+    // generation (2) at the scan.
+    rt.set(IFACE, OTHER, &[1]).expect("set");
+    rt.commit();
     rt.set(IFACE, ORD, &[1]).expect("set");
     rt.set(IFACE, OTHER, &[2]).expect("set");
     rt.commit();
@@ -72,9 +77,17 @@ where
     let written = rt.scan(&mut marks, &mut out);
     assert_eq!(written, 2);
     assert_eq!(out[0].ord, ORD);
+    assert_eq!(
+        out[0].seq, 1,
+        "each entry carries its own signal's sequence"
+    );
     assert_eq!(out[1].ord, OTHER);
     assert_eq!(
-        marks[0].generation, 1,
+        out[1].seq, 2,
+        "each entry carries its own signal's sequence"
+    );
+    assert_eq!(
+        marks[0].generation, 2,
         "the mark moved to the current generation"
     );
 
@@ -84,12 +97,15 @@ where
         "a second scan with the moved mark reports nothing"
     );
 
-    rt.set(IFACE, OTHER, &[3]).expect("set");
+    rt.set(IFACE, ORD, &[3]).expect("set");
     rt.commit();
     let written = rt.scan(&mut marks, &mut out);
     assert_eq!(written, 1, "only the signal that changed since the mark");
-    assert_eq!(out[0].ord, OTHER);
-    assert_eq!(out[0].seq, 2);
+    assert_eq!(out[0].ord, ORD);
+    assert_eq!(
+        out[0].seq, 2,
+        "the entry carries its own signal's sequence, not the generation (3)"
+    );
 }
 
 /// An interface's changes are written all together or not at all, and a mark
