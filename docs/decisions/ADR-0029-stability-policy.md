@@ -47,10 +47,11 @@ and the codes no vector carries, among them the `kind` values 2 and 5 and the
 2021.** `ridl build` writes `edition = "2021"` in the manifest of the generated
 crate, where it wrote edition 2024, which cargo before 1.85 cannot read, so a
 Rust 1.83 user no longer edits that manifest. `just compat-check` reads the
-edition of the manifest it builds and fails when it is not 2021, where it
-rewrote edition 2024 to 2021 before (driftsys/ridl#881). Decision 5 also says
-how a Rust 1.83 user resolves dependencies. The Context bullet on the minimum,
-decision 1's paragraph under the table and decision 5 are changed in place.
+edition of the manifest it emits for the `veh-cluster` corpus and fails when it
+is not 2021, where it rewrote edition 2024 to 2021 before (driftsys/ridl#881).
+Decision 5 also says how a Rust 1.83 user resolves dependencies. The Context
+bullet on the minimum, decision 1's paragraph under the table and decision 5 are
+changed in place.
 
 ## Context
 

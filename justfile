@@ -280,8 +280,9 @@ wasm-check:
 # The crate emitted for the veh-cluster corpus is built with cargo, not with
 # rustc as the cabin crate is, and with every cargo feature on. With the default
 # features off it does not build on the minimum (driftsys/ridl#874), so that
-# cell is not here. The recipe reads the edition from the emitted manifest and
-# fails when it is not 2021: `ridl build` writes edition 2021, so a Rust 1.83
+# cell is not here. The recipe reads the edition from the emitted veh-cluster
+# manifest and fails when it is not 2021 (the cabin cell compiles with rustc
+# and does not read its manifest): `ridl build` writes edition 2021, so a Rust 1.83
 # user builds the emitted crate without editing its manifest (ADR-0029
 # decision 5).
 #
@@ -636,6 +637,11 @@ compat-check: toolchain-check
         echo "compat-check: (ADR-0029 decision 5); the manifest ridl build wrote does not." >&2
         exit 1
     fi
+    if grep -q '^rust-version' "$corpus/generated/Cargo.toml"; then
+        echo "compat-check: the emitted veh-cluster manifest now declares a rust-version;" >&2
+        echo "compat-check: check it instead of adding one here." >&2
+        exit 1
+    fi
     awk -v minimum="$minimum" '
         { print }
         /^edition = "2021"$/ { print "rust-version = \"" minimum "\"" }
@@ -718,6 +724,10 @@ compat-check: toolchain-check
 # A lint that is not on the list then fails the run as a new defect in the
 # emitter, and a listed lint that no longer fires fails through
 # `unfulfilled_lint_expectations`, so the list cannot go stale.
+#
+# Both generated crates are linted as the edition their emitted manifest
+# declares, 2021; no gate runs clippy on them as edition 2024, which a user
+# reaches only by copying the emitted source into an edition 2024 crate.
 #
 # The crate emitted for the veh-cluster corpus is linted too, with its default
 # features and with them off, under `-D warnings` with no command-line
