@@ -43,13 +43,15 @@
   // its links are FlatBuffers and are not messages. `Horn` has no proto3 link.
   // With no `websocket` row, every `max_message_bytes` is null.
   "messages": [
-    // `Temperature` is a named scalar: no proto3 message of its own
-    // (ABSENT_CAUSE_NO_MESSAGE), so no bound.
+    // `Temperature` is a named scalar, an integer in [-40..85]: a signed
+    // width, projected as sint32, a varint of at most 5 bytes. Its proto3
+    // root is the box message `TemperatureBox { sint32 value = 1; }`; field
+    // 1's tag is (1 << 3) | 0 = 8, below 128: 1 byte. 1 + 5 = 6.
     {
       "interface": "Cabin",
       "member": "temperature",
       "consumer": "veh.cabin.Telemetry.Unit",
-      "proto3_bound": null,
+      "proto3_bound": 6,
       "max_message_bytes": null
     },
     // `Warning` is a message of two fields, `code: Level` (field 1) and
@@ -67,21 +69,25 @@
       "proto3_bound": 8,
       "max_message_bytes": null
     },
-    // `setLevel`'s request is the named scalar `Level`: no message, no bound.
+    // `setLevel`'s request is the named scalar `Level`, an integer in
+    // [0..100] projected as uint32 (at most 5 bytes): the box message
+    // `LevelBox { uint32 value = 1; }` is 1 + 5 = 6.
     {
       "interface": "Cabin",
       "member": "setLevel",
       "consumer": "veh.cabin.Telemetry.Unit",
-      "proto3_bound": null,
+      "proto3_bound": 6,
       "max_message_bytes": null
     },
-    // `average`'s request `Window` and reply `Average` are named scalars: no
-    // message, no bound.
+    // `average`'s request `Window`, an integer in [0..100000], and reply
+    // `Average`, an integer in [0..1000], are named scalars, both projected
+    // as uint32 (at most 5 bytes). Each box message is 1 + 5 = 6, and the
+    // larger of the two is 6.
     {
       "interface": "Cabin",
       "member": "average",
       "consumer": "veh.cabin.Telemetry.Unit",
-      "proto3_bound": null,
+      "proto3_bound": 6,
       "max_message_bytes": null
     }
   ]

@@ -214,9 +214,11 @@ pub enum AbsentCause {
     /// reply that is a bare scalar some proto3 leaf bounds, which has a size
     /// of its own but no defined payload encoding.
     EncodingUndefined,
-    /// proto3 only: the type has no message of its own. ADR-0017 decision 1
-    /// inlines a named scalar and an enum set into their field (decision 2
-    /// rejects a wrapper message), and an enum is a declared `enum`.
+    /// proto3 only: the type has no message of its own. Kept because it is
+    /// part of the codegen protocol, but no declaration kind the proto3 sizer
+    /// reads produces it: a struct and a union are messages, and a named
+    /// scalar, an enum and an enum set each have the root box message
+    /// `<Name>Box` the proto backend emits for them.
     NoMessage,
     /// proto3 only: a failure inside the message other than the depth limit
     /// and an overflowing bound, which are [`AbsentCause::Overflow`]. Every
@@ -1349,18 +1351,18 @@ mod tests {
     }
 
     #[test]
-    fn a_named_scalar_has_no_proto3_message() {
-        // ADR-0017 decision 1 inlines a named scalar into its field and
-        // decision 2 rejects a wrapper message, so proto3 has no message to
-        // size. ADR-0019 decision 8 gives the same scalar a box table, so
-        // FlatBuffers does have a bound.
+    fn a_named_scalar_has_a_root_box_in_both_encodings() {
+        // The proto backend gives a named scalar the root message
+        // `VinBox { string value = 1; }`, and ADR-0019 decision 8 gives it a
+        // box table, so both encodings have a bound. `Vin` is
+        // `string [17..17]`, at most 68 bytes: 1 + varint_len(68) + 68 = 70.
         let package = tests_support::fixture();
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
         let shape = PayloadShape::Named("Vin");
         assert_eq!(
             size_state(&package, &shape, &ctx, Encoding::Proto3),
-            SizeState::Absent(AbsentCause::NoMessage)
+            SizeState::Bounded(70)
         );
         assert!(matches!(
             size_state(&package, &shape, &ctx, Encoding::FlatBuffers),

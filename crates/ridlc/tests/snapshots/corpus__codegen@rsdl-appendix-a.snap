@@ -55,7 +55,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "engaged.payload: veh.common.Engaged"
+                "bytes": "2"
               },
               "flatbuffers": {
                 "bytes": "43"
@@ -88,9 +88,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "flatbuffersMaxSize": 43,
                 "sizes": {
                   "proto3": {
-                    "absent": {
-                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
-                    }
+                    "bounded": 2
                   },
                   "flatbuffers": {
                     "bounded": 43
@@ -128,7 +126,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "target.payload: veh.common.Speed"
+                "bytes": "5"
               },
               "flatbuffers": {
                 "bytes": "46"
@@ -161,9 +159,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "flatbuffersMaxSize": 46,
                 "sizes": {
                   "proto3": {
-                    "absent": {
-                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
-                    }
+                    "bounded": 5
                   },
                   "flatbuffers": {
                     "bounded": 46
@@ -200,7 +196,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "setLever.request: veh.common.LeverCmd"
+                "bytes": "2"
               },
               "flatbuffers": {
                 "bytes": "50"
@@ -258,9 +254,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "flatbuffersMaxSize": 50,
                 "sizes": {
                   "proto3": {
-                    "absent": {
-                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
-                    }
+                    "bounded": 2
                   },
                   "flatbuffers": {
                     "bounded": 50
@@ -270,9 +264,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               "clauses": [],
               "requestSizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_NO_MESSAGE"
-                  }
+                  "bounded": 2
                 },
                 "flatbuffers": {
                   "bounded": 50
@@ -285,7 +277,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       ],
       "tableBudget": {
         "proto3": {
-          "unsized": "engaged"
+          "bytes": "9"
         },
         "flatbuffers": {
           "bytes": "139"
@@ -332,7 +324,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "active.payload: veh.common.Engaged"
+                "bytes": "2"
               },
               "flatbuffers": {
                 "bytes": "43"
@@ -365,9 +357,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "flatbuffersMaxSize": 43,
                 "sizes": {
                   "proto3": {
-                    "absent": {
-                      "cause": "ABSENT_CAUSE_NO_MESSAGE"
-                    }
+                    "bounded": 2
                   },
                   "flatbuffers": {
                     "bounded": 43
@@ -386,7 +376,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       ],
       "tableBudget": {
         "proto3": {
-          "unsized": "active"
+          "bytes": "2"
         },
         "flatbuffers": {
           "bytes": "43"

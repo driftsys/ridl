@@ -42,6 +42,31 @@ message Command {
   reserved 3;
 }
 
+message SpeedBox {
+  // Speed — km/h [0..250 step 0.5]
+  float value = 1;
+}
+
+message PercentBox {
+  // Percent — [0..100]
+  uint32 value = 1;
+}
+
+message DeltaBox {
+  // Delta — [-100..100]
+  sint32 value = 1;
+}
+
+message EngageStateBox {
+  EngageState value = 1;
+}
+
+message WarningsBox {
+  // LOW_FUEL = bit 0
+  // DOOR_AJAR = bit 1
+  uint32 value = 1;
+}
+
 message TelemetryBounds {
   // Speed — km/h [0..250 step 0.5]
   float field_1 = 1;

@@ -385,8 +385,9 @@ fn a_websocket_row_adds_its_frame_header_and_envelope_to_the_proto3_bound() {
     };
     // `Warning`'s proto3 bound is 8 (the fixture derives it): 14 + 2 + 8.
     assert_eq!(max_message_bytes("warning"), json!(24));
-    // `Temperature` has no proto3 bound, so the sum has no value.
-    assert_eq!(max_message_bytes("temperature"), Value::Null);
+    // `Temperature`'s proto3 bound is its root box message's, 6 (the
+    // fixture derives it): 14 + 2 + 6.
+    assert_eq!(max_message_bytes("temperature"), json!(22));
 }
 
 /// The proto3 size states of one payload: `proto3` bounded at `bound`, or

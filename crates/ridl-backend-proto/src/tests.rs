@@ -206,7 +206,7 @@ fn a_named_scalar_inlines_and_leaves_its_constraint_in_a_comment() {
 
     // The named type does not become a declaration of its own: it inlines.
     assert!(
-        !generated.proto_source.contains("message Speed"),
+        !generated.proto_source.contains("message Speed {"),
         "got:\n{}",
         generated.proto_source
     );
@@ -1092,11 +1092,12 @@ fn an_array_of_maps_is_refused() {
 }
 
 // A named scalar inlines whether it is local or foreign — Task 3 already
-// established that for the local case (`!contains("message Speed")` in
+// established that for the local case (`!contains("message Speed {")` in
 // `a_named_scalar_inlines_and_leaves_its_constraint_in_a_comment`), and a
-// foreign one is no different: it never becomes a declaration of its own for
-// another file to import. `veh.common` here holds only the `Speed` named
-// scalar — never a `message Speed` — so an import naming `veh.common.proto`
+// foreign one is no different: a field never names a declaration of it, so
+// no field needs another file's import for it. `veh.common` here holds the
+// `Speed` named scalar — never a `message Speed`, only its root box
+// `message SpeedBox`, which no field names — so an import naming `veh.common.proto`
 // would point at a file that does not declare the type it was imported for,
 // which `protoc` rejects. `compile_with_protox` is run on every test below
 // except the unresolvable-reference case, so that defect cannot hide behind
@@ -2121,4 +2122,151 @@ fn tuple_of(fields: Vec<v2::FieldType>) -> v2::FieldType {
                 .collect(),
         })),
     }
+}
+
+#[test]
+fn a_named_scalar_an_enum_and_an_enum_set_each_get_a_root_box_message() {
+    // A payload of a named scalar, an enum or an enum set needs a message a
+    // codec can encode, as FlatBuffers' box table gives one (ADR-0019
+    // decision 8). The box holds one field `value = 1` of exactly the type and
+    // comment a struct field of that type gets; a struct has a message of its
+    // own and gets no box.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Speed".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(speed_type_def())),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "GearPosition".to_string(),
+                kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                    values: vec![v2::EnumValue {
+                        name: "PARK".to_string(),
+                        value: 1,
+                        doc: String::new(),
+                        links: Vec::new(),
+                        see: Vec::new(),
+                        since: Vec::new(),
+                    }],
+                    reserved: Vec::new(),
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Warnings".to_string(),
+                kind: Some(v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+                    backing_enum: None,
+                    bits: vec![
+                        v2::EnumValue {
+                            name: "LOW_FUEL".to_string(),
+                            value: 0,
+                            doc: String::new(),
+                            links: Vec::new(),
+                            see: Vec::new(),
+                            since: Vec::new(),
+                        },
+                        v2::EnumValue {
+                            name: "DOOR_AJAR".to_string(),
+                            value: 1,
+                            doc: String::new(),
+                            links: Vec::new(),
+                            see: Vec::new(),
+                            since: Vec::new(),
+                        },
+                    ],
+                    width: v2::IntWidth::U32 as i32,
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Reading".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![
+                        field_member("speed", 1, named_type("Speed")),
+                        field_member("pair", 2, tuple_of(vec![float64_type(), float64_type()])),
+                    ],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let generated = generate(&package).expect("generate");
+    let source = &generated.proto_source;
+
+    let speed_box = "\nmessage SpeedBox {\n  \
+                     // Speed — km/h [0.0..250.0]\n  \
+                     double value = 1;\n}\n";
+    let gear_box = "\nmessage GearPositionBox {\n  GearPosition value = 1;\n}\n";
+    let warnings_box = "\nmessage WarningsBox {\n  \
+                        // LOW_FUEL = bit 0\n  \
+                        // DOOR_AJAR = bit 1\n  \
+                        uint32 value = 1;\n}\n";
+    for expected in [speed_box, gear_box, warnings_box] {
+        assert_eq!(
+            source.matches(expected).count(),
+            1,
+            "expected exactly one of {expected:?}, got:\n{source}"
+        );
+    }
+    assert!(!source.contains("ReadingBox"), "got:\n{source}");
+
+    // Declared messages and enums first, then the boxes in declaration
+    // order, then the induced tuple messages.
+    let position = |needle: &str| {
+        source
+            .find(needle)
+            .unwrap_or_else(|| panic!("{needle:?} is missing from:\n{source}"))
+    };
+    assert!(position("message Reading {") < position("message SpeedBox {"));
+    assert!(position("message SpeedBox {") < position("message GearPositionBox {"));
+    assert!(position("message GearPositionBox {") < position("message WarningsBox {"));
+    assert!(position("message WarningsBox {") < position("message ReadingPair {"));
+
+    compile_with_protox("veh.common.proto", source);
+}
+
+#[test]
+fn a_declared_type_colliding_with_a_root_box_message_is_refused() {
+    // `type Speed` generates `message SpeedBox`, and nothing keeps a package
+    // from also declaring a struct of that name.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Speed".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(speed_type_def())),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "SpeedBox".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member("x", 1, float64_type())],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("`SpeedBox` is claimed twice"),
+        "got: {}",
+        error.message
+    );
+    assert!(
+        error.message.contains("struct `SpeedBox`"),
+        "got: {}",
+        error.message
+    );
+    assert!(
+        error.message.contains("the proto3 root of `Speed`"),
+        "got: {}",
+        error.message
+    );
 }
