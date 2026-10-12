@@ -2752,8 +2752,12 @@ clean:
 # packaged notices, requested output paths, and the target manifest. A
 # placeholder bin/ridl is staged just for this check, so a
 # .vscodeignore mistake that drops the binary is caught here instead of in a
-# release, where it would ship five VSIXs with no binary at all. Invoked by
-# vscode-verify.yaml on pull requests that touch editors/vscode. Not a member
+# release, where it would ship five VSIXs with no binary at all. It also
+# checks that every chatSkills and chatInstructions path the manifest
+# contributes is in each VSIX, and that `just package-skill` writes the skill
+# archive named after the workspace version with only ridl-authoring/ in it.
+# Invoked by vscode-verify.yaml on pull requests that touch editors/vscode or
+# skills/. Not a member
 # of `build`, so gate-parity does not cover it; the workflow is the only
 # caller besides a contributor.
 vscode-verify:

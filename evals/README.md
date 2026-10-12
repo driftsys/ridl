@@ -95,13 +95,15 @@ cargo xtask eval [--task <id>]... [--host claude|codex]... [--runs <n>] \
 
 With no option, every task runs once on both hosts, with and without the skill.
 Each run starts in a new directory under the system temporary directory, outside
-any git repository, with an empty host home, so no user skill, rule, memory,
-hook or `AGENTS.md` reaches the agent. The directory is removed when the run's
-result is written. A run is scored mechanically (`ridl check` reports no error,
-the design lints match `expect.lints`, an evolve task's `ridl diff` verdict
-matches `expect.diff`, and the agent checked its work with the `ridl_check` MCP
-tool or a shell `ridl check`); a run that passes is then judged against its
-rubric by the other host's model. `runner.toml` pins the model of each host.
+any git repository, with a new host home that holds only what the eval puts
+there (for Codex: its configuration, the lent login and, on a "with" run, the
+skill), so no user skill, rule, memory, hook or `AGENTS.md` reaches the agent.
+The directory is removed when the run's result is written. A run is scored
+mechanically (`ridl check` reports no error, the design lints match
+`expect.lints`, an evolve task's `ridl diff` verdict matches `expect.diff`, and
+the agent checked its work with the `ridl_check` MCP tool or a shell
+`ridl check`); a run that passes is then judged against its rubric by the other
+host's model. `runner.toml` pins the model of each host.
 
 A run that cannot be scored is recorded with a `setup_error` and no score, and
 the batch goes on: a "with" run that shows no evidence of loading the skill, or
@@ -130,10 +132,11 @@ sandbox: it can run any command as the user, inside or outside its temporary
 workspace. This is an accepted risk of the eval, which runs the pinned model on
 the eval's own prompts. Codex runs in its `workspace-write` sandbox.
 
-With `--claude-handoff`, no `claude` command runs and no Claude token is needed.
-For each Claude agent run and each Claude judgement, the eval writes a
-`*.request.toml` file in the run's directory, prints its path after
-`eval: handoff:`, and waits. The request holds the working directory, the
+With `--claude-handoff`, no Claude agent run or judgement starts a `claude`
+command (only `claude --version` runs, to record the host version), and no
+Claude token is needed. For each Claude agent run and each Claude judgement, the
+eval writes a `*.request.toml` file in the run's directory, prints its path
+after `eval: handoff:`, and waits. The request holds the working directory, the
 arguments, the environment and the prompt; the operator runs the prompt with an
 agent of their own, writes its output to the request's `output` path, and then
 creates the file its `done` path names. The result of a handed-off run or
