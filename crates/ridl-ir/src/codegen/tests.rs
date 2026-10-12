@@ -1586,6 +1586,26 @@ fn call_package() -> v2::Package {
     }
 }
 
+/// One public interaction declaration, for a test that extends
+/// `call_package`'s `Calls` interface with a shape the fixture does not hold.
+fn call_decl(name: &str, kind: v2::decl::Kind) -> v2::Decl {
+    v2::Decl {
+        name: name.to_string(),
+        visibility: v2::Visibility::Public as i32,
+        kind: Some(kind),
+        ..Default::default()
+    }
+}
+
+/// `call_package`'s `Calls` interface, to push an interaction onto.
+fn calls_interface(package: &mut v2::Package) -> &mut v2::Interface {
+    package
+        .interfaces
+        .iter_mut()
+        .find(|interface| interface.name == "Calls")
+        .expect("the Calls interface")
+}
+
 fn call_shape(model: &v1::Model, position: usize) -> &v1::interaction::Shape {
     let v1::Model { interfaces, .. } = model;
     let interface = interfaces
@@ -3955,4 +3975,41 @@ fn foreign_declaration_carries_rules() {
     // package that declares the struct, not in the lowered package.
     let leg_field = model_fields(foreign("Leg"))[0];
     assert_eq!(texts(&leg_field.rules), ["range 0 ..= 300"]);
+}
+
+/// A tuple reached from a parameter is named from the interface and the
+/// interaction, so it is emitted rather than skipped (ADR-0016).
+#[test]
+fn a_tuple_in_a_parameter_is_named_from_its_interaction() {
+    let mut package = call_package();
+    calls_interface(&mut package).interactions.push(call_decl(
+        "withSpan",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![v2::Param {
+                name: "span".to_string(),
+                r#type: Some(v2::FieldType {
+                    kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                        fields: vec![v2::TupleField {
+                            name: "lo".to_string(),
+                            r#type: Some(named("Pair")),
+                        }],
+                    })),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }),
+    ));
+    let model = lower(&package, &[]);
+    let names: Vec<&str> = model
+        .tuples
+        .iter()
+        .filter_map(|tuple| tuple.name.as_ref())
+        .map(|name| name.rust.as_str())
+        .collect();
+    assert!(
+        names.contains(&"CallsWithSpanSpan"),
+        "the induced name is spelled from the interface and the interaction: {names:?}"
+    );
 }

@@ -4226,8 +4226,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": {
-        "rust": "",
-        "wire": ""
+        "rust": "WheelDiagnosticsReadSpan",
+        "wire": "WheelDiagnosticsReadSpan"
       },
       "fields": [
         {
@@ -4318,8 +4318,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": {
-        "rust": "",
-        "wire": ""
+        "rust": "WheelDiagnosticsTickBoundsElement",
+        "wire": "WheelDiagnosticsTickBoundsElement"
       },
       "fields": [
         {
@@ -4411,8 +4411,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": {
-        "rust": "",
-        "wire": ""
+        "rust": "VehHvacCabinGetBounds",
+        "wire": "VehHvacCabinGetBounds"
       },
       "fields": [
         {

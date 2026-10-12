@@ -118,8 +118,8 @@ struct Path {
     rust: String,
     wire: String,
     visibility: i32,
-    /// False where no backend has a naming rule for the origin, which is
-    /// every interaction position today.
+    /// False where no backend has a naming rule for the origin, which is a
+    /// position inside a declaration of another package.
     named: bool,
 }
 
@@ -155,14 +155,31 @@ impl Path {
         }
     }
 
-    fn interaction(interface: u32, slot: u32, visibility: i32, segments: Vec<String>) -> Self {
+    /// An interaction position. The induced name starts at the interface's
+    /// name and the interaction's, which is unique in the package because
+    /// an induced struct is emitted at the package's own scope: an interface
+    /// name is unique in a package, and an interaction name is unique in an
+    /// interface (ADR-0016).
+    ///
+    /// The owner is the declared interface name, or the owning service's
+    /// dotted name for a service's inline shape, so the Rust name composes
+    /// both transforms: `joined_camel` joins the dotted segments, and
+    /// `camel_case` removes any underscore.
+    fn interaction(
+        interface: u32,
+        slot: u32,
+        visibility: i32,
+        owner: &str,
+        member: &str,
+        segments: Vec<String>,
+    ) -> Self {
         Self {
             base: Base::Interaction(interface, slot),
             segments,
-            rust: String::new(),
-            wire: String::new(),
+            rust: format!("{}{}", camel_case(&joined_camel(owner)), camel_case(member)),
+            wire: format!("{}{}", joined_camel(owner), joined_camel(member)),
             visibility,
-            named: false,
+            named: true,
         }
     }
 
@@ -719,6 +736,10 @@ impl<'a> Lowering<'a> {
     ) -> v1::Interface {
         let interface = shape.interface;
         let visibility = shape.visibility();
+        let owner = match shape.service {
+            Some(service) => service.name.clone(),
+            None => interface.name.clone(),
+        };
         let mut row = 0u32;
         let slots: Vec<v1::InteractionSlot> = interface
             .interactions
@@ -744,6 +765,7 @@ impl<'a> Lowering<'a> {
                                     slot as u32,
                                     this_row,
                                     visibility,
+                                    &owner,
                                 ),
                             ))),
                         }
@@ -789,6 +811,7 @@ impl<'a> Lowering<'a> {
         slot: u32,
         row: u32,
         visibility: i32,
+        owner: &str,
     ) -> v1::Interaction {
         let (kind, timing, shape, payloads, family) = match decl.kind.as_ref() {
             Some(v2::decl::Kind::SignalDef(signal)) => {
@@ -823,7 +846,15 @@ impl<'a> Lowering<'a> {
                 )
             }
             Some(v2::decl::Kind::CommandDef(command)) => {
-                let params = self.params(home, &command.params, interface, slot, visibility);
+                let params = self.params(
+                    home,
+                    &command.params,
+                    interface,
+                    slot,
+                    visibility,
+                    owner,
+                    decl.name.as_str(),
+                );
                 let request = single_param_type(&command.params)
                     .map(|reference| self.payload(home, reference));
                 let request_sizes = self.sizes(
@@ -853,13 +884,27 @@ impl<'a> Lowering<'a> {
                 )
             }
             Some(v2::decl::Kind::QueryDef(query)) => {
-                let params = self.params(home, &query.params, interface, slot, visibility);
+                let params = self.params(
+                    home,
+                    &query.params,
+                    interface,
+                    slot,
+                    visibility,
+                    owner,
+                    decl.name.as_str(),
+                );
                 let request =
                     single_param_type(&query.params).map(|reference| self.payload(home, reference));
                 let reply_named = query_reply_type(query);
                 let reply = query.return_type.as_ref().map(|ret| {
-                    let at =
-                        Path::interaction(interface, slot, visibility, vec!["reply".to_string()]);
+                    let at = Path::interaction(
+                        interface,
+                        slot,
+                        visibility,
+                        owner,
+                        decl.name.as_str(),
+                        vec!["reply".to_string()],
+                    );
                     self.reply(home, ret, &at)
                 });
                 let request_sizes = self.sizes(
@@ -906,8 +951,14 @@ impl<'a> Lowering<'a> {
                 )
             }
             Some(v2::decl::Kind::FixedDef(fixed)) => {
-                let at =
-                    Path::interaction(interface, slot, visibility, vec!["payload".to_string()]);
+                let at = Path::interaction(
+                    interface,
+                    slot,
+                    visibility,
+                    owner,
+                    decl.name.as_str(),
+                    vec!["payload".to_string()],
+                );
                 let payload = fixed.payload.as_ref().map(|ty| self.type_at(home, ty, &at));
                 let named = fixed
                     .payload
@@ -960,6 +1011,7 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn params(
         &mut self,
         home: &'a v2::Package,
@@ -967,16 +1019,23 @@ impl<'a> Lowering<'a> {
         interface: u32,
         slot: u32,
         visibility: i32,
+        owner: &str,
+        member: &str,
     ) -> Vec<v1::Param> {
         params
             .iter()
             .map(|param| {
+                // The parameter's own name closes the induced name, so two
+                // tuple-typed parameters of one interaction are two types.
                 let at = Path::interaction(
                     interface,
                     slot,
                     visibility,
-                    vec!["param".to_string(), param.name.clone()],
-                );
+                    owner,
+                    member,
+                    vec!["param".to_string()],
+                )
+                .field(&param.name);
                 v1::Param {
                     name: Some(spellings(&param.name)),
                     r#type: param.r#type.as_ref().map(|ty| self.type_at(home, ty, &at)),

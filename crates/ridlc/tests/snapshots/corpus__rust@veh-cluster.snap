@@ -3329,6 +3329,41 @@ impl ::core::default::Default for RawWheelSpanBurstsElement {
         }
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
+pub(crate) struct WheelDiagnosticsReadSpan {
+    pub min: RawTickCount,
+    pub max: RawTickCount,
+}
+#[allow(dead_code)]
+impl ::core::default::Default for WheelDiagnosticsReadSpan {
+    fn default() -> Self {
+        WheelDiagnosticsReadSpan {
+            min: <RawTickCount as ::core::default::Default>::default(),
+            max: <RawTickCount as ::core::default::Default>::default(),
+        }
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
+pub(crate) struct WheelDiagnosticsTickBoundsElement {
+    pub low: RawTickCount,
+    pub high: RawTickCount,
+}
+#[allow(dead_code)]
+impl ::core::default::Default for WheelDiagnosticsTickBoundsElement {
+    fn default() -> Self {
+        WheelDiagnosticsTickBoundsElement {
+            low: <RawTickCount as ::core::default::Default>::default(),
+            high: <RawTickCount as ::core::default::Default>::default(),
+        }
+    }
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct VehHvacCabinGetBounds {
+    pub min: crate::veh::common::Temperature,
+    pub max: crate::veh::common::Temperature,
+}
 /// `DiagFilter` carries no `Payload<FlatBuffers>` implementation.
 ///
 /// The member `category` reaches a reference this backend does not resolve — a reference into another package, which this call was handed no package to resolve, a same-package cycle, or a stream.
