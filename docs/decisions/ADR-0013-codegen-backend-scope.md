@@ -15,7 +15,8 @@ amendment of 2026-10-12 below.
 interaction-face half was answered by
 [ADR-0018](ADR-0018-runtime-core-and-generated-surface.md) decision 15. The
 validator half is answered by decision 8 below: a language backend emits a
-constructor that checks a type's typl constraint, and a wire backend does not.
+constructor that checks a type's range, step and length bounds, and a wire
+backend does not.
 
 **Amendment (2026-08-08).** A proto3 backend now exists —
 `crates/ridl-backend-proto`, built by roadmap story E9.8 — so "nothing here is
@@ -264,7 +265,7 @@ language layer at `int64`/`float64`.
    typl §17 open question 8, narrowed to that case by this amendment.
 
 8. **Amendment (2026-10-12) — a language backend emits a constructor that checks
-   the typl constraint; a wire backend does not.** A named type that carries a
+   a type's bounds; a wire backend does not.** A named type that carries a
    range, a step, a length bound or a pattern (typl §5.1 to §5.5) is emitted by
    a language backend as a nominal type (typl §5.7) whose value can be built
    only through a constructor that checks the type's range, step and length
@@ -272,7 +273,8 @@ language layer at `int64`/`float64`.
    constructor checks a pattern too where the backend offers it; a backend may
    make the pattern check optional, because it needs a regular-expression engine
    in the consumer's build. A second constructor that does not check is emitted
-   for the decoder and for code that has already checked the value. A wire
+   for the decoder, over a value the payload validator (typl §5.3) has already
+   checked, and for other code that has already checked the value. A wire
    backend emits neither: decision 2's ceiling holds for it, and a schema cannot
    reject a value at construction.
 
@@ -286,17 +288,18 @@ language layer at `int64`/`float64`.
    length bounds; it checks a pattern on a string backing only when the
    generated crate's `validate-pattern` feature is on
    ([Generated code](../book/generated-code.md)). `ridl-backend-ts` does not yet
-   emit a checking constructor: it records the range in a `@range` doc tag only.
+   emit a checking constructor: it records the constraint in the type's doc
+   comment only (driftsys/ridl#923).
 
-   **Consequence for `ridl diff`.** Because a consumer constructs values through
-   the checking constructor, a narrower constraint rejects a value that the
-   consumer built under the old one. `ridl diff` therefore classifies a narrowed
-   constraint as breaking and a widened one as compatible
-   (`constraint_changed`). The classification is pinned in `ridl-diff` by the
-   constraint cases of `crates/ridl-diff/src/classify/classify_tests.rs`, and
-   through the built `ridl` binary by
+   **`ridl diff` is unchanged.** This decision does not change how `ridl diff`
+   classifies a constraint change (`constraint_changed`); that classification
+   and its reasons are `ridl-diff`'s. Whether a widened constraint is compatible
+   for a consumer that receives the value, and not only for one that builds it,
+   is open as driftsys/ridl#926; a lowered minimum that moves a step grid is
+   classified compatible, which is driftsys/ridl#925.
    `a_narrowed_range_exits_one_and_a_widened_range_exits_zero` in
-   `crates/ridl/tests/diff_cli.rs`.
+   `crates/ridl/tests/diff_cli.rs` runs the built `ridl` binary on one case, a
+   narrowed and a widened integer maximum.
 
 ## Alternatives considered
 
@@ -328,6 +331,9 @@ language layer at `int64`/`float64`.
   gRPC needs work this ADR places outside the backend.
 - **Negative — decision 3 is work on shipped code.** Both existing backends gain
   an emit and the snapshot tests that cover them.
+- **Negative — decision 8 is work on a shipped backend.** `ridl-backend-ts`
+  emits no checking constructor yet, so a TypeScript consumer can build a value
+  outside its type's bounds until driftsys/ridl#923 is done.
 - **Neutral — how far the ceiling describes the language backends is settled.**
   Open item 1: ADR-0018 decision 15 for the interaction face, decision 8 for the
   constraint-checking constructor.
