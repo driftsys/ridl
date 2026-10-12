@@ -207,6 +207,18 @@ macro_rules! pin {
 }
 fn main() {
     pin!(Grid32, 4, 25.35f32.to_le_bytes());
+    // One float32 unit in the last place above the grid point: on the grid
+    // only within the float32 rounding allowance, so a zero tolerance
+    // rejects it, in the constructor and in verify.
+    let near = f32::from_bits(25.3f32.to_bits() + 1);
+    assert_ne!(near, 25.3f32);
+    assert!(Grid32::new(f64::from(near)).is_ok());
+    let mut out = vec![0; <Grid32 as Payload<FlatBuffers>>::MAX_SIZE];
+    let mut bytes = Grid32::new(25.3).unwrap().encode(&mut out).unwrap().bytes.to_vec();
+    let root = ridl_rt::flatbuffers::root(&bytes).unwrap();
+    let at = ridl_rt::flatbuffers::field(&bytes, root, 0, 4).unwrap().unwrap();
+    bytes[at..at + 4].copy_from_slice(&near.to_le_bytes());
+    assert!(<Grid32 as Payload<FlatBuffers>>::verify(&bytes).is_ok());
     // The float32 grid is a 4-byte field: its table is too short to hold
     // an 8-byte read at the same slot, so a binary64 field type would pass
     // the width-4 pin above but fail this one.
@@ -215,6 +227,17 @@ fn main() {
     let root = ridl_rt::flatbuffers::root(&bytes).unwrap();
     assert!(ridl_rt::flatbuffers::field(&bytes, root, 0, 8).is_err());
     pin!(Grid64, 8, 25.35f64.to_le_bytes());
+    // A float64 wire is checked at float64 precision: an offset that float32
+    // precision would absorb is rejected.
+    let off = 25.3f64 + 1e-9;
+    assert_eq!(Grid64::new(off).unwrap_err().rule, Rule::Step);
+    let mut out = vec![0; <Grid64 as Payload<FlatBuffers>>::MAX_SIZE];
+    let mut bytes = Grid64::new(25.3).unwrap().encode(&mut out).unwrap().bytes.to_vec();
+    let root = ridl_rt::flatbuffers::root(&bytes).unwrap();
+    let at = ridl_rt::flatbuffers::field(&bytes, root, 0, 8).unwrap().unwrap();
+    bytes[at..at + 8].copy_from_slice(&off.to_le_bytes());
+    assert!(matches!(<Grid64 as Payload<FlatBuffers>>::verify(&bytes),
+        Err(VerifyError::Contract(v)) if v.rule == Rule::Step));
     // One rounding error above the binary64 nearest to 0.3: on the grid
     // only within the rounding allowance, so a zero tolerance rejects it.
     let sum = 0.1f64 + 0.2f64;
