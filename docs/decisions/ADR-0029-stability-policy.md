@@ -246,7 +246,7 @@ design in each:
    | Runtime crates          | `runtime-crates` (`cargo semver-checks`)                                       | the wire and runtime lane            |            |
    | Codegen plugin protocol | `codegen-protocol`                                                             | the codegen lane                     |            |
    | MCP tools               | `mcp`                                                                          | the release and policy lane, at once | `3c3301df` |
-   | Wire format             | `wire`: encoding names, `.proto` and `.fbs` lines, catalog hash, frame vectors | the wire and runtime lane            |            |
+   | Wire format             | `wire`: encoding names, `.proto` and `.fbs` lines, catalog hash, frame vectors | the wire and runtime lane            | `e6620b0e` |
    | Minimum Rust version    | `msrv`                                                                         | the wire and runtime lane            | `7e83024d` |
 
 ## Alternatives considered
