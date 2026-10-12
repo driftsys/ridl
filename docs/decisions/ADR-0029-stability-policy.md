@@ -62,15 +62,16 @@ design in each:
   `examples/` and `evals/corpus/`; it does not include the fences of
   `docs/book/`, which a test already compiles.
 - The wire dump holds the encoding names, the `.proto` and `.fbs` lines for the
-  corpus, the catalog hash of the cabin example, and the test vectors of the
-  WebSocket binding (the frame specification §11.1), which cover the frame
-  envelope and the `attach` handshake.
-- The minimum of Rust 1.83 and edition 2021 applies to `ridl-rt` and
-  `ridl-rt-conformance` only. The `msrv` dump also records the edition of
-  `ridl-loopback` and `ridl-descriptor`, which are edition 2024 today, so a
-  change of their edition fails the check, but the minimum does not apply to
-  them. The generated crate compiles as edition 2021 with Rust 1.83, which
-  `just compat-check` checks and `just freeze-check` does not.
+  corpus and the catalog hash of the cabin example. It holds no frame vectors
+  and no `attach` handshake vectors, so the frame envelope and the handshake are
+  frozen by policy with no automated check until the wire dump gains them.
+- The minimum of Rust 1.83 and edition 2021 applies to `ridl-rt`,
+  `ridl-rt-conformance` and `ridl-loopback`. `ridl-descriptor` has its own
+  minimum, Rust 1.88 and edition 2024, because `planus` 1.3.0 declares 1.88. The
+  generated crate compiles as edition 2021 with Rust 1.83 with every cargo
+  feature on. `just compat-check` checks this for the crate emitted for the
+  `veh-cluster` corpus with every feature on, and for the crate emitted for
+  `examples/cabin` with its `std` feature on; `just freeze-check` does not.
 
 ## Decision
 
