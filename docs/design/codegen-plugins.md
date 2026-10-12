@@ -129,8 +129,8 @@ the same generated impls as the IR and the model (`request_to_json`,
 equal as JSON but not byte for byte; a plugin author's fixture is therefore a
 file `ridlc` wrote, wrapped. `--emit codegen-request` writes the whole request
 through the same renderer, to `<base>.codegen-request.json`, so the wrapper
-itself is a file `ridlc` wrote too; it is the one emit that accepts options
-rather than refusing them, because `options` is a field of what it writes
+itself is a file `ridlc` wrote too; it accepts options where the model emit
+refuses them, because `options` is a field of what it writes
 (driftsys/ridl#725). The reader keeps the IR's nesting ceiling of 1,000 JSON
 levels; the deepest request the front end admits nests to 265 (the model's 264
 plus one for the field), and a plugin's parser must provision that much.
