@@ -7,7 +7,9 @@
 //! conflicting imports (TYPL-006), unused imports (TYPL-007), needless
 //! aliases (TYPL-008), and duplicate declarations (TYPL-009). It resolves
 //! package references in the fixed order of ADR-0002 §5: workspace member →
-//! the package's own `[imports]` → the workspace `[imports]` → error.
+//! the package's own `[imports]` → the workspace `[imports]` → error. A key of
+//! an `[imports]` map binds to the remote unit the loader loaded for the key's
+//! URL; that unit's packages are reached only through the key that pins them.
 //!
 //! [`resolve_doc_link`] resolves the target of a doc link or an `@see` tag
 //! (typl §14, ADR-0026) against that view, for the checker and the language
@@ -23,7 +25,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use ridl_core::db::InputFile;
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span};
-use ridl_core::package::{Package, Workspace, package_of};
+use ridl_core::package::{Package, PackageOrigin, Workspace, package_of};
 use ridl_core::parse_file;
 use ridl_ir::v2;
 use ridl_syntax::ast::{
@@ -178,13 +180,15 @@ struct ImportRecord {
     package_path: String,
     file_id: FileId,
     range: TextRange,
-    /// The resolved declaration, when the path names a workspace member that
+    /// The resolved declaration, when the path names a loaded package that
     /// exposes the imported symbol.
     bound: Option<Symbol>,
-    /// The workspace member the path resolves to (for cycle detection).
-    member: Option<Package>,
-    /// The URL a remote import resolves to (the compile path does not fetch remote imports).
-    remote_url: Option<String>,
+    /// The loaded package the path resolves to, member or remote (for cycle
+    /// detection).
+    target: Option<Package>,
+    /// The URL of the remote unit the path's key pins, when that unit holds
+    /// no package named by the path.
+    missing_remote: Option<String>,
     /// The path resolves nowhere (ADR-0002 §5 step 4).
     unknown: bool,
 }
@@ -230,16 +234,23 @@ fn collect_imports(
                         .and_then(|alias| alias.ident_token())
                         .map(|token| token.text().to_string())
                         .unwrap_or_else(|| symbol_name.clone());
-                    let (bound, member, remote_url, unknown) =
+                    let (bound, target, missing_remote, unknown) =
                         match resolve_source(db, ws, pkg, &package_path) {
                             PackageSource::Member(member) => {
-                                let bound = declared_symbols(db, member)
-                                    .get(&symbol_name)
-                                    .filter(|symbol| !symbol.internal)
-                                    .cloned();
-                                (bound, Some(member), None, false)
+                                (exposed(db, member, &symbol_name), Some(member), None, false)
                             }
-                            PackageSource::Remote(url) => (None, None, Some(url), false),
+                            PackageSource::Remote {
+                                package: Some(package),
+                                ..
+                            } => (
+                                exposed(db, package, &symbol_name),
+                                Some(package),
+                                None,
+                                false,
+                            ),
+                            PackageSource::Remote { url, package: None } => {
+                                (None, None, Some(url), false)
+                            }
                             PackageSource::Unknown => (None, None, None, true),
                         };
                     records.push(ImportRecord {
@@ -250,8 +261,8 @@ fn collect_imports(
                         file_id,
                         range,
                         bound,
-                        member,
-                        remote_url,
+                        target,
+                        missing_remote,
                         unknown,
                     });
                 }
@@ -261,10 +272,18 @@ fn collect_imports(
     records
 }
 
+/// The non-`internal` declaration `name` of `package`, if any.
+fn exposed(db: &dyn salsa::Database, package: Package, name: &str) -> Option<Symbol> {
+    declared_symbols(db, package)
+        .get(name)
+        .filter(|symbol| !symbol.internal)
+        .cloned()
+}
+
 /// Analyses the collected imports: binds the winners, and raises the
 /// collision (TYPL-006), needless-alias (TYPL-008), unused (TYPL-007),
-/// unresolved-remote (the compile path does not fetch remote imports), and unresolved-package (§5 step 4)
-/// diagnostics.
+/// missing-remote-package (a path the pinned remote unit does not hold), and
+/// unresolved-package (§5 step 4) diagnostics.
 fn apply_imports(
     records: &[ImportRecord],
     locals: &HashSet<String>,
@@ -296,18 +315,14 @@ fn apply_imports(
         let target = (record.package_path.as_str(), record.base_name.as_str());
         let first_for_name = !first_target.contains_key(record.local_name.as_str());
 
-        if let Some(url) = &record.remote_url {
-            // The import itself is valid; remote materialization is not yet
-            // wired into the compile path, so the remote package is not
-            // available here (a known limitation, tracked as epic debt).
-            // Informational, no code.
+        if let Some(url) = &record.missing_remote {
             diagnostics.push(diagnostic(
                 DiagCode::NONE,
-                Severity::Info,
+                Severity::Error,
                 record.file_id,
                 record.range,
                 format!(
-                    "remote import `{}` is not yet available: `{url}` (remote materialization is not yet wired into the compile path)",
+                    "unresolved import: `{}` is not a package of the remote unit at `{url}`",
                     record.package_path
                 ),
             ));
@@ -400,8 +415,10 @@ fn apply_imports(
 }
 
 /// Emits TYPL-004 for every import of `pkg` that closes a cross-package cycle
-/// (ADR-0002 §6): the imported member can reach `pkg` again through member
-/// import edges.
+/// (ADR-0002 §6): the imported package can reach `pkg` again through import
+/// edges. A remote unit's package is a node of this walk like a member, so
+/// a cycle across the boundary between the consumer and a remote unit is
+/// reported on both sides.
 fn detect_cycles(
     db: &dyn salsa::Database,
     ws: Workspace,
@@ -410,14 +427,14 @@ fn detect_cycles(
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     for record in records {
-        let Some(member) = record.member else {
+        let Some(target) = record.target else {
             continue;
         };
         // Importing the package's own name is not a cross-package cycle.
-        if member == pkg {
+        if target == pkg {
             continue;
         }
-        if reaches(db, ws, member, pkg, &mut HashSet::new()) {
+        if reaches(db, ws, target, pkg, &mut HashSet::new()) {
             diagnostics.push(diagnostic(
                 DiagCode::TYPL_004,
                 Severity::Error,
@@ -433,7 +450,7 @@ fn detect_cycles(
     }
 }
 
-/// Whether `from` can reach `target` by following member import edges.
+/// Whether `from` can reach `target` by following import edges.
 fn reaches(
     db: &dyn salsa::Database,
     ws: Workspace,
@@ -452,9 +469,9 @@ fn reaches(
     false
 }
 
-/// The workspace members `package` imports (its member import edges). Only
-/// member edges can form an in-workspace cycle; remote and unresolved imports
-/// cannot.
+/// The loaded packages `package` imports (its import edges), found by name
+/// through [`package_of`], which holds the members and the remote units'
+/// packages alike. An unresolved import is not an edge.
 fn member_edges(db: &dyn salsa::Database, ws: Workspace, package: Package) -> Vec<Package> {
     let mut edges = Vec::new();
     for file in package.files(db) {
@@ -473,8 +490,15 @@ fn member_edges(db: &dyn salsa::Database, ws: Workspace, package: Package) -> Ve
 
 /// Where a package reference resolves, following ADR-0002 §5 in order.
 enum PackageSource {
+    /// A workspace member (step 1).
     Member(Package),
-    Remote(String),
+    /// A key of the package's own or the workspace's `[imports]` (steps 2
+    /// and 3): the URL, and the package of the remote unit loaded for that
+    /// URL whose name is the path, when the unit holds one.
+    Remote {
+        url: String,
+        package: Option<Package>,
+    },
     Unknown,
 }
 
@@ -487,16 +511,26 @@ fn resolve_source(
     pkg: Package,
     package_path: &str,
 ) -> PackageSource {
-    if let Some(member) = package_of(db, ws, package_path.to_string()) {
+    // Step 1 sees members only: a remote package is in `ws.packages` so that
+    // the checker and the cycle walk find it by name, but an import reaches
+    // it only through the key that pins it, so a sibling's pin never leaks.
+    if let Some(member) = package_of(db, ws, package_path.to_string())
+        && !matches!(member.origin(db), PackageOrigin::Remote { .. })
+    {
         return PackageSource::Member(member);
     }
-    if let Some(url) = longest_import_prefix(pkg.imports(db), package_path) {
-        return PackageSource::Remote(url);
+    let url = longest_import_prefix(pkg.imports(db), package_path)
+        .or_else(|| longest_import_prefix(ws.imports(db), package_path));
+    match url {
+        Some(url) => {
+            let package = ws.packages(db).iter().copied().find(|candidate| {
+                candidate.name(db) == package_path
+                    && *candidate.origin(db) == PackageOrigin::Remote { url: url.clone() }
+            });
+            PackageSource::Remote { url, package }
+        }
+        None => PackageSource::Unknown,
     }
-    if let Some(url) = longest_import_prefix(ws.imports(db), package_path) {
-        return PackageSource::Remote(url);
-    }
-    PackageSource::Unknown
 }
 
 /// The URL of the longest `[imports]` alias that equals `package_path` or is a
@@ -939,9 +973,9 @@ fn resolve_declaration(
 }
 
 /// The package `name` names from `pkg`: `pkg` itself, the embedded
-/// `ridl.std`, or a workspace member (ADR-0002 §5 step 1). A remote
-/// `[imports]` entry (steps 2 and 3) is not materialized, so a path into one
-/// resolves nowhere, as a type reference into one does today.
+/// `ridl.std`, or a loaded package found by name through [`package_of`] — a
+/// workspace member (ADR-0002 §5 step 1) or a package of a loaded remote
+/// unit, as a qualified type reference finds one.
 fn package_named(
     db: &dyn salsa::Database,
     ws: Workspace,
@@ -1206,7 +1240,7 @@ mod package_tests {
         );
 
         // Step 1: the workspace member wins — `Speed` binds to the real
-        // declaration, no unresolved-remote note.
+        // declaration, and no remote unit is consulted.
         let member_first = resolve_package(&db, ws, app, std);
         assert!(
             codes(&member_first).is_empty(),
@@ -1222,12 +1256,14 @@ mod package_tests {
             "the member declaration is the binding",
         );
 
-        // Step 2: drop the member — `app`'s own `[imports]` alias wins.
+        // Step 2: drop the member — `app`'s own `[imports]` alias wins. No
+        // unit is loaded for either URL, so the import binds nothing and the
+        // error names the URL the step resolved.
         ws.set_packages(&mut db).to(vec![app]);
         let package_import = resolve_package(&db, ws, app, std);
         assert!(
             !package_import.symbols.contains_key("Speed"),
-            "a remote import binds nothing in this build",
+            "no unit is loaded for the URL",
         );
         assert!(
             package_import
@@ -1975,6 +2011,251 @@ mod package_tests {
         assert_eq!(
             LinkError::NoSuchMember.message("doc link", "veh.Gear.NEUTRAL"),
             "doc link `veh.Gear.NEUTRAL`: `veh.Gear` has no member `NEUTRAL`"
+        );
+    }
+
+    // ----------------------------------------------------------------------
+    // Remote imports: a key of `[imports]` binds to the unit loaded for its URL
+    // ----------------------------------------------------------------------
+
+    /// A single-file package of the remote unit loaded for `url`.
+    fn remote_package(db: &RidlDatabase, name: &str, url: &str, text: &str) -> Package {
+        Package::new(
+            db,
+            name.to_string(),
+            name.split('.').take(2).collect::<Vec<_>>().join("."),
+            vec![input(
+                db,
+                &format!("cache/{}.typl", name.replace('.', "/")),
+                text,
+            )],
+            PackageOrigin::Remote {
+                url: url.to_string(),
+            },
+            BTreeMap::new(),
+            TimingDefaults::default(),
+            None,
+        )
+    }
+
+    /// A workspace member named `app` whose own `[imports]` is `imports`.
+    fn app_package(db: &RidlDatabase, text: &str, imports: &[(&str, &str)]) -> Package {
+        Package::new(
+            db,
+            "app".to_string(),
+            "app".to_string(),
+            vec![input(db, "app/app.ridl", text)],
+            PackageOrigin::WorkspaceMember,
+            imports_map(imports),
+            TimingDefaults::default(),
+            None,
+        )
+    }
+
+    const URL: &str = "https://registry.example.com/veh/common@v1";
+
+    /// `import veh.common.Speed` binds to the declaration of the remote
+    /// package loaded for the key's URL (ADR-0002 §5 step 2); the remote
+    /// unit's `internal` declarations stay out of the consumer's view, and
+    /// no Info is raised.
+    #[test]
+    fn a_remote_import_binds_to_the_loaded_unit() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = remote_package(
+            &db,
+            "veh.common",
+            URL,
+            "package veh.common\ntype Speed: km/h\ninternal type Raw: m\n",
+        );
+        let app = app_package(
+            &db,
+            "package app\nimport veh.common.Speed\nimport veh.common.Raw\nstruct Fast { v: Speed }\n",
+            &[("veh.common", URL)],
+        );
+        let ws = Workspace::new(&db, vec![app, common], BTreeMap::new());
+        let resolution = resolve_package(&db, ws, app, std);
+        let speed = &resolution.symbols["Speed"];
+        assert_eq!(speed.package, "veh.common");
+        assert_eq!(speed.kind, SymbolKind::Type);
+        assert!(
+            !resolution.symbols.contains_key("Raw"),
+            "internal is not visible"
+        );
+        assert!(
+            resolution
+                .diagnostics
+                .iter()
+                .all(|d| d.severity != Severity::Info),
+            "the uncoded Info is gone: {:?}",
+            resolution.diagnostics
+        );
+    }
+
+    /// A key is found by the longest dot-separated prefix of the import
+    /// path: `import veh.common.types.Speed` finds the key `veh.common`,
+    /// and binds to the package `veh.common.types` of the unit loaded for
+    /// that key's URL.
+    #[test]
+    fn a_key_is_found_by_the_longest_prefix_of_the_path() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = remote_package(&db, "veh.common", URL, "package veh.common\n");
+        let types = remote_package(
+            &db,
+            "veh.common.types",
+            URL,
+            "package veh.common.types\ntype Speed: km/h\n",
+        );
+        let app = app_package(
+            &db,
+            "package app\nimport veh.common.types.Speed\nstruct Fast { v: Speed }\n",
+            &[("veh.common", URL)],
+        );
+        let ws = Workspace::new(&db, vec![app, common, types], BTreeMap::new());
+        let resolution = resolve_package(&db, ws, app, std);
+        assert_eq!(resolution.symbols["Speed"].package, "veh.common.types");
+        assert!(
+            codes(&resolution).is_empty(),
+            "got: {:?}",
+            resolution.diagnostics
+        );
+    }
+
+    /// A key's URL in the package's own `[imports]` wins over the
+    /// workspace's URL for the same key (ADR-0002 §5 steps 2 and 3): the
+    /// import binds to the unit loaded for the package's URL, and the unit
+    /// loaded for the workspace's URL is not consulted.
+    #[test]
+    fn the_packages_own_pin_shadows_the_workspace_pin() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let mine = remote_package(
+            &db,
+            "veh.common",
+            "https://r.example.com/a@v2",
+            "package veh.common\ntype Speed: km/h\n",
+        );
+        let app = app_package(
+            &db,
+            "package app\nimport veh.common.Speed\nstruct Fast { v: Speed }\n",
+            &[("veh.common", "https://r.example.com/a@v2")],
+        );
+        let ws = Workspace::new(&db, vec![app, mine], imports_map(&[("veh.common", URL)]));
+        let resolution = resolve_package(&db, ws, app, std);
+        assert_eq!(resolution.symbols["Speed"].package, "veh.common");
+        assert!(
+            codes(&resolution).is_empty(),
+            "got: {:?}",
+            resolution.diagnostics
+        );
+
+        // The workspace's URL alone does not reach the unit loaded for the
+        // package's URL.
+        app.set_imports(&mut db).to(BTreeMap::new());
+        let resolution = resolve_package(&db, ws, app, std);
+        assert!(!resolution.symbols.contains_key("Speed"));
+        assert!(
+            resolution.diagnostics.iter().any(|d| {
+                d.severity == Severity::Error
+                    && d.message.contains("veh.common")
+                    && d.message.contains(URL)
+            }),
+            "got: {:?}",
+            resolution.diagnostics
+        );
+    }
+
+    /// A remote package loaded for a sibling's pin is not visible to a
+    /// member that pins nothing (ADR-0002 §5 step 4 stays an error).
+    #[test]
+    fn a_siblings_pin_is_not_visible() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = remote_package(
+            &db,
+            "veh.common",
+            URL,
+            "package veh.common\ntype Speed: km/h\n",
+        );
+        let app = app_package(&db, "package app\nimport veh.common.Speed\n", &[]);
+        let ws = Workspace::new(&db, vec![app, common], BTreeMap::new());
+        let resolution = resolve_package(&db, ws, app, std);
+        assert!(!resolution.symbols.contains_key("Speed"));
+        assert!(
+            resolution.diagnostics.iter().any(|d| d
+                .message
+                .starts_with("unresolved import: `veh.common` is not a workspace member")),
+            "got: {:?}",
+            resolution.diagnostics
+        );
+    }
+
+    /// A path under a pinned key that names no package of the unit is an
+    /// error that names the path and the unit's URL.
+    #[test]
+    fn a_missing_package_of_a_remote_unit_is_an_error_naming_the_url() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = remote_package(&db, "veh.common", URL, "package veh.common\n");
+        let app = app_package(
+            &db,
+            "package app\nimport veh.common.nope.Speed\n",
+            &[("veh.common", URL)],
+        );
+        let ws = Workspace::new(&db, vec![app, common], BTreeMap::new());
+        let resolution = resolve_package(&db, ws, app, std);
+        let error = resolution
+            .diagnostics
+            .iter()
+            .find(|d| d.severity == Severity::Error)
+            .expect("an error");
+        assert_eq!(
+            error.message,
+            format!(
+                "unresolved import: `veh.common.nope` is not a package of the remote unit at `{URL}`"
+            )
+        );
+        assert_eq!(
+            resolution.diagnostics.len(),
+            1,
+            "got: {:?}",
+            resolution.diagnostics
+        );
+    }
+
+    /// A remote unit may import one of the consumer's members (ADR-0002 §5
+    /// step 1), and a cycle across the boundary is TYPL-004 on both sides:
+    /// on the remote unit's import, which fails the check, and on the
+    /// consumer's.
+    #[test]
+    fn a_cycle_across_the_remote_boundary_is_typl_004() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = remote_package(
+            &db,
+            "veh.common",
+            URL,
+            "package veh.common\nimport app.Id\ntype Speed: km/h\nstruct Tag { id: Id }\n",
+        );
+        let app = app_package(
+            &db,
+            "package app\nimport veh.common.Speed\ntype Id: integer[0..9]\nstruct Fast { v: Speed }\n",
+            &[("veh.common", URL)],
+        );
+        let ws = Workspace::new(&db, vec![app, common], BTreeMap::new());
+        let remote = resolve_package(&db, ws, common, std);
+        assert_eq!(
+            remote.symbols["Id"].package, "app",
+            "the member binds in the remote unit"
+        );
+        assert_eq!(codes(&remote), vec!["TYPL-004"], "{:?}", remote.diagnostics);
+        let consumer = resolve_package(&db, ws, app, std);
+        assert_eq!(
+            codes(&consumer),
+            vec!["TYPL-004"],
+            "{:?}",
+            consumer.diagnostics
         );
     }
 }
