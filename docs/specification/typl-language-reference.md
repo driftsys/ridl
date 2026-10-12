@@ -697,13 +697,13 @@ nominal types as distinct wrapper types where the target allows (Rust newtype,
 Kotlin `value class`) and as documented aliases where it does not (proto3).
 
 A language backend's wrapper type also carries the type's constraints: its value
-is built through a constructor that checks every constraint of §5.1 to §5.5 and
-reports a violation instead of building the value, beside a constructor that
-does not check, which the decoder uses. A wire backend emits neither, because a
-schema cannot refuse a value when it is built (ADR-0013 decision 8). Because a
-consumer builds values through the checking constructor, narrowing a constraint
-is a breaking change and widening one is compatible, which is how `ridl diff`
-classifies it.
+is built through a constructor that checks the range, step and length bounds of
+§5.1 to §5.5 and reports a violation instead of building the value, beside a
+constructor that does not check, which the decoder uses. The pattern check is
+optional, as §2.7 states. A wire backend emits neither, because a schema cannot
+refuse a value when it is built (ADR-0013 decision 8). Because a consumer builds
+values through the checking constructor, narrowing a constraint is a breaking
+change and widening one is compatible, which is how `ridl diff` classifies it.
 
 ### 5.8 Init Values
 

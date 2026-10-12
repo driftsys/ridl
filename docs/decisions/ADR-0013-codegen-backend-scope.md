@@ -267,11 +267,14 @@ language layer at `int64`/`float64`.
    the typl constraint; a wire backend does not.** A named type that carries a
    range, a step, a length bound or a pattern (typl §5.1 to §5.5) is emitted by
    a language backend as a nominal type (typl §5.7) whose value can be built
-   only through a constructor that checks every constraint the type carries and
-   reports a violation instead of building the value. A second constructor that
-   does not check is emitted for the decoder and for code that has already
-   checked the value. A wire backend emits neither: decision 2's ceiling holds
-   for it, and a schema cannot reject a value at construction.
+   only through a constructor that checks the type's range, step and length
+   bounds, and reports a violation instead of building the value. The
+   constructor checks a pattern too where the backend offers it; a backend may
+   make the pattern check optional, because it needs a regular-expression engine
+   in the consumer's build. A second constructor that does not check is emitted
+   for the decoder and for code that has already checked the value. A wire
+   backend emits neither: decision 2's ceiling holds for it, and a schema cannot
+   reject a value at construction.
 
    The ground is decision 1: a general-purpose language can represent a
    constraint, so a language backend emits it. The type then carries its typl
@@ -279,8 +282,11 @@ language layer at `int64`/`float64`.
    refused when it is built rather than when it is encoded or received.
 
    **As built.** `ridl-backend-rust` emits `new`, which checks, and
-   `new_unchecked`, which does not. `ridl-backend-ts` does not yet emit a
-   checking constructor: it records the range in a `@range` doc tag only.
+   `new_unchecked`, which does not. `new` always checks the range, step and
+   length bounds; it checks a pattern on a string backing only when the
+   generated crate's `validate-pattern` feature is on
+   ([Generated code](../book/generated-code.md)). `ridl-backend-ts` does not yet
+   emit a checking constructor: it records the range in a `@range` doc tag only.
 
    **Consequence for `ridl diff`.** Because a consumer constructs values through
    the checking constructor, a narrower constraint rejects a value that the
