@@ -1382,10 +1382,10 @@ query getAverageSpeed(window: Duration): Speed [
 Both predicates are rows of the attribute registry (`ridl_core::attributes`,
 ADR-0012 decision 8): owner `core`, form predicate, sites as the table above
 says, consumer the clause check, and a change to either reported by `ridl diff`
-as `contract_changed`. The registry is the one allow-list the checker reads: a
-plain key on a member draws FORM-107 when the registry has a row for it on an
-rsdl site and FORM-106 when it has none. No plain key is accepted on a member
-today.
+as `contract_changed`. The registry is the one allow-list the checker reads for
+a plain key: a plain key on a member draws FORM-107 when the registry has a row
+for it on an rsdl site and FORM-106 when it has none. No plain key is accepted
+on a member today.
 
 - Expressions are type-checked, unquoted, side-effect-free; they reference
   parameters, `result`, constants, enum values, and the interface's own signals

@@ -795,7 +795,9 @@ still reported.
   `tier` or backend key changed on the system, on a component, on a distribution
   or on one of their lines — is listed under a second heading, **composition
   changed**, likewise with no verdict, because it changes the derived links and
-  not the contract.
+  not the contract. A distribution one side declares and the other does not is
+  the one gap: the distribution set itself is not compared, so neither the
+  distribution nor its attributes are listed (driftsys/ridl#884).
 - Which of these changes are breaking, and for whom, is decided by the stability
   policy ([IR specification](ir-specification.md)), not here.
 

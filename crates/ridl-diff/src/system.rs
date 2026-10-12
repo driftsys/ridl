@@ -116,8 +116,9 @@ pub fn diff_systems(old: &System, new: &System) -> Vec<SystemChange> {
             .iter()
             .find(|before| before.qualified_name() == name)
         else {
-            // A distribution present on one side only is not a composition
-            // change today, and the registry work does not widen that.
+            // The distribution set is not compared, so a distribution present
+            // on one side only is reported neither as added nor as removed
+            // (driftsys/ridl#884).
             continue;
         };
         value_change(
@@ -450,11 +451,14 @@ fn value_text(value: &v2::AttributeValue) -> String {
 }
 
 /// `PLATFORM` or `APPLICATION`, or `None` when the distribution has no tier.
+/// A value this build does not know renders as `tier(<n>)`, so that a
+/// snapshot written by a later toolchain does not read as "no tier".
 fn tier_text(tier: i32) -> Option<String> {
     match v2::Tier::try_from(tier) {
         Ok(v2::Tier::Platform) => Some("PLATFORM".to_string()),
         Ok(v2::Tier::Application) => Some("APPLICATION".to_string()),
-        _ => None,
+        Ok(v2::Tier::Unspecified) => None,
+        Err(_) => Some(format!("tier({tier})")),
     }
 }
 
@@ -663,9 +667,20 @@ mod tests {
         }
     }
 
-    /// `base()` plus one distribution, so that every rsdl site is present.
+    /// `base()` plus one distribution and the system's own member lines, so
+    /// that every rsdl site is present.
     fn with_distribution() -> System {
         let mut system = base();
+        system.members = vec![
+            v2::MemberLine {
+                component: "veh.topology.Cruise".to_string(),
+                ..Default::default()
+            },
+            v2::MemberLine {
+                component: "veh.topology.Panel".to_string(),
+                ..Default::default()
+            },
+        ];
         system.distributions.push(v2::Distribution {
             name: "Adas".to_string(),
             package: "veh.topology".to_string(),
@@ -746,7 +761,10 @@ mod tests {
 
     /// rsdl §14: `labels`, `deprecated`, `tier` and a backend key are listed
     /// under the heading of the declaration they are on, as a before-and-after
-    /// line, on every site that takes them.
+    /// line. Every site the registry names is exercised here: the system and
+    /// its member lines, a component with its `offers` and `requires` lines, a
+    /// distribution with its member lines, a deployment, a machine and a
+    /// placement line.
     #[test]
     fn attribute_changes_are_listed_under_the_heading_of_their_site() {
         let old = with_distribution();
@@ -754,6 +772,12 @@ mod tests {
         new.labels = vec!["QM".to_string()];
         new.components[0].deprecated = Some("use Cruise2".to_string());
         new.distributions[0].tier = v2::Tier::Platform as i32;
+        new.members[0]
+            .attributes
+            .push(backend("deb", "section", Some("net")));
+        new.components[0].requires[0]
+            .attributes
+            .push(backend("someip", "clientId", Some("17")));
         new.distributions[0].members[0]
             .attributes
             .push(backend("sign", "key", None));
@@ -771,9 +795,13 @@ mod tests {
             lines(&diff_systems(&old, &new)),
             [
                 "composition changed: veh.topology.Vehicle/labels: () -> (QM)",
+                "composition changed: veh.topology.Vehicle/veh.topology.Cruise/attributes: \
+                 [] -> [ deb.section = net ]",
                 "composition changed: veh.topology.Cruise/deprecated: (absent) -> \"use Cruise2\"",
                 "composition changed: veh.topology.Cruise/offers/veh.adas.cruise/attributes: \
                  [] -> [ someip.serviceId = 4660 ]",
+                "composition changed: veh.topology.Cruise/requires/veh.adas.LaneAssist/attributes: \
+                 [] -> [ someip.clientId = 17 ]",
                 "composition changed: veh.topology.Adas/tier: (absent) -> PLATFORM",
                 "composition changed: veh.topology.Adas/veh.topology.Cruise/attributes: \
                  [] -> [ sign.key ]",

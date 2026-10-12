@@ -1,7 +1,7 @@
 //! The attribute blocks of the rsdl declarations and lines (rsdl reference §5).
 //!
-//! Every key is looked up in the attribute registry
-//! (`ridl_core::attributes`), the one allow-list. A key with no row is
+//! Every plain and every namespaced key is looked up in the attribute
+//! registry (`ridl_core::attributes`), the one allow-list. A key with no row is
 //! FORM-106, a key whose row does not name this site is FORM-107, and a key
 //! twice in one block is FORM-108. A `namespace.key` is a backend key, carried
 //! uninterpreted. The value rules of the core keys are RSDL-305 (`instances`),

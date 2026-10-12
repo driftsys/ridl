@@ -58,14 +58,15 @@ check and the rsdl attribute reader read as their only allow-list. Its owner
 field has two values today, `core` and `backend` (a key whose namespace a
 configured backend claims); the `user:<namespace>` owner of decision 8 waits for
 a consumer, and no `extension:<name>` owner exists because no extension does.
-The six general-form keys with no consumer (`default`, `init`, `persist`,
-`invariant`, and `labels`/`deprecated` on an interface member) are not rows:
-each draws FORM-106. For the rsdl system diff, which gives no verdict, decision
-9's fail-closed rule reads "reported": `tier`, `labels`, `deprecated` and every
-backend key are reported changes, and `depth`, `slots` and `budget` are recorded
-as not reported, with the reason that a sizing value changes no link and no
-contract. Recorded under decisions 8 and 9. Issues driftsys/ridl#268 and
-driftsys/ridl#269.
+Four general-form keys with no consumer — `default`, `init`, `persist` and
+`invariant` — are not rows, so each draws FORM-106 where one of them drew
+FORM-107. `labels` and `deprecated` keep a row whose sites are the rsdl
+declarations, so on an interface member they draw FORM-107, as they did. For the
+rsdl system diff, which gives no verdict, decision 9's fail-closed rule reads
+"reported": `tier`, `labels`, `deprecated` and every backend key are reported
+changes, and `depth`, `slots` and `budget` are recorded as not reported, with
+the reason that a sizing value changes no link and no contract. Recorded under
+decisions 8 and 9. Issues driftsys/ridl#268 and driftsys/ridl#269.
 
 The exploration that produced it is recorded in
 `docs/archive/ridl-boundary-model-review.md`; where that record and this ADR
