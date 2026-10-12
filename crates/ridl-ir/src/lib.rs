@@ -366,7 +366,7 @@ pub mod v2 {
         on_parse_stack(|| {
             let mut deserializer = serde_json::Deserializer::from_str(text);
             deserializer.disable_recursion_limit();
-            let known = Shape::Message(descriptor).deserialize(&mut deserializer)?;
+            let known = JsonShape::Message(descriptor).deserialize(&mut deserializer)?;
             deserializer.end()?;
             serde::Deserialize::deserialize(known)
         })
@@ -375,50 +375,50 @@ pub mod v2 {
     /// What a JSON value is expected to be, as far as dropping unknown keys
     /// needs to know.
     #[derive(Clone)]
-    enum Shape {
+    enum JsonShape {
         /// A message: an object whose unknown keys are dropped.
         Message(prost_reflect::MessageDescriptor),
         /// A repeated field: an array of the inner shape.
-        List(Box<Shape>),
+        List(Box<JsonShape>),
         /// A map field: an object whose values have the inner shape.
-        Map(Box<Shape>),
+        Map(Box<JsonShape>),
         /// Anything else: kept as read.
         Opaque,
     }
 
-    impl Shape {
+    impl JsonShape {
         /// The shape of the value of one field.
-        fn of(field: &prost_reflect::FieldDescriptor) -> Shape {
+        fn of(field: &prost_reflect::FieldDescriptor) -> JsonShape {
             use prost_reflect::Kind;
             if field.is_map() {
                 let Kind::Message(entry) = field.kind() else {
-                    return Shape::Opaque;
+                    return JsonShape::Opaque;
                 };
-                return Shape::Map(Box::new(Shape::of_kind(
+                return JsonShape::Map(Box::new(JsonShape::of_kind(
                     &entry.map_entry_value_field().kind(),
                 )));
             }
-            let item = Shape::of_kind(&field.kind());
+            let item = JsonShape::of_kind(&field.kind());
             if field.is_list() {
-                Shape::List(Box::new(item))
+                JsonShape::List(Box::new(item))
             } else {
                 item
             }
         }
 
-        fn of_kind(kind: &prost_reflect::Kind) -> Shape {
+        fn of_kind(kind: &prost_reflect::Kind) -> JsonShape {
             match kind {
                 prost_reflect::Kind::Message(message)
                     if !message.full_name().starts_with("google.protobuf.") =>
                 {
-                    Shape::Message(message.clone())
+                    JsonShape::Message(message.clone())
                 }
-                _ => Shape::Opaque,
+                _ => JsonShape::Opaque,
             }
         }
     }
 
-    impl<'de> serde::de::DeserializeSeed<'de> for Shape {
+    impl<'de> serde::de::DeserializeSeed<'de> for JsonShape {
         type Value = serde_json::Value;
 
         fn deserialize<D: serde::Deserializer<'de>>(
@@ -426,20 +426,20 @@ pub mod v2 {
             deserializer: D,
         ) -> Result<Self::Value, D::Error> {
             match self {
-                Shape::Opaque => serde::Deserialize::deserialize(deserializer),
+                JsonShape::Opaque => serde::Deserialize::deserialize(deserializer),
                 shape => deserializer.deserialize_any(ShapeVisitor(shape)),
             }
         }
     }
 
-    struct ShapeVisitor(Shape);
+    struct ShapeVisitor(JsonShape);
 
     impl<'de> serde::de::Visitor<'de> for ShapeVisitor {
         type Value = serde_json::Value;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             formatter.write_str(match self.0 {
-                Shape::List(_) => "an array",
+                JsonShape::List(_) => "an array",
                 _ => "an object",
             })
         }
@@ -453,7 +453,7 @@ pub mod v2 {
             self,
             mut seq: A,
         ) -> Result<Self::Value, A::Error> {
-            let Shape::List(item) = self.0 else {
+            let JsonShape::List(item) = self.0 else {
                 return Err(serde::de::Error::invalid_type(
                     serde::de::Unexpected::Seq,
                     &self,
@@ -473,7 +473,7 @@ pub mod v2 {
             use serde::de::Error as _;
             let mut out = serde_json::Map::new();
             match &self.0 {
-                Shape::Message(descriptor) => {
+                JsonShape::Message(descriptor) => {
                     let mut seen = std::collections::HashSet::new();
                     while let Some(key) = map.next_key::<String>()? {
                         let field = descriptor
@@ -486,7 +486,7 @@ pub mod v2 {
                                         "duplicate field `{key}`"
                                     )));
                                 }
-                                let value = map.next_value_seed(Shape::of(&field))?;
+                                let value = map.next_value_seed(JsonShape::of(&field))?;
                                 out.insert(key, value);
                             }
                             None => {
@@ -495,7 +495,7 @@ pub mod v2 {
                         }
                     }
                 }
-                Shape::Map(value_shape) => {
+                JsonShape::Map(value_shape) => {
                     while let Some(key) = map.next_key::<String>()? {
                         let value = map.next_value_seed((**value_shape).clone())?;
                         if out.insert(key.clone(), value).is_some() {
@@ -503,7 +503,7 @@ pub mod v2 {
                         }
                     }
                 }
-                Shape::List(_) | Shape::Opaque => {
+                JsonShape::List(_) | JsonShape::Opaque => {
                     return Err(A::Error::invalid_type(serde::de::Unexpected::Map, &self));
                 }
             }
@@ -1204,6 +1204,7 @@ mod v2_round_trip {
                 max_us: Some("10000".to_string()),
                 default_applied: false,
             }),
+            family: v2::Family::Dispatch as i32,
         };
 
         // event doorOpened : DoorEvent — untimed in source, so the
@@ -1216,6 +1217,7 @@ mod v2_round_trip {
                 max_us: Some("500000".to_string()),
                 default_applied: true,
             }),
+            family: v2::Family::Dispatch as i32,
         };
 
         // command setTarget(target : Speed) [ require target >= speed ]
@@ -1237,6 +1239,8 @@ mod v2_round_trip {
                 observer_id: "VehicleStatus.setTarget.require[0]".to_string(),
             }],
             timing: None,
+            family: v2::Family::Dispatch as i32,
+            shape: v2::Shape::None as i32,
         };
 
         // query fetchFaults(page : PageSpec) : FaultPage | DiagError
@@ -1265,6 +1269,7 @@ mod v2_round_trip {
                 observer_id: "VehicleStatus.fetchFaults.ensure[0]".to_string(),
             }],
             timing: None,
+            family: v2::Family::Dispatch as i32,
         };
 
         // fixed vin : Vin
@@ -1323,6 +1328,7 @@ mod v2_round_trip {
             }),
             contracts: Vec::new(),
             timing: None,
+            family: v2::Family::Dispatch as i32,
         };
 
         // service veh.adas.status : VehicleStatus — one named reference in

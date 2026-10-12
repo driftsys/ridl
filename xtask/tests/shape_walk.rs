@@ -225,6 +225,14 @@ const ALLOWED: &[Allowed] = &[
               interface into a service's inline shape",
     },
     Allowed {
+        path: "crates/ridl-ir/src/codegen/tests.rs",
+        lines: 2,
+        why: "one test fixture sets a package's named interfaces and reads \
+              the lowered model's own `Model.interfaces` field back, to pin \
+              that the model copies the interaction's family and an intent \
+              command's shape",
+    },
+    Allowed {
         path: "crates/ridl-ir/src/lib.rs",
         lines: 9,
         why: "the IR-side `shapes()` helper itself; `referenced_packages`, \

@@ -790,7 +790,7 @@ impl<'a> Lowering<'a> {
         row: u32,
         visibility: i32,
     ) -> v1::Interaction {
-        let (kind, timing, shape, payloads) = match decl.kind.as_ref() {
+        let (kind, timing, shape, payloads, family) = match decl.kind.as_ref() {
             Some(v2::decl::Kind::SignalDef(signal)) => {
                 let payload = self.payload(home, &signal.payload);
                 let payloads = vec![("payload", signal.payload.clone(), payload.sizes.clone())];
@@ -806,6 +806,7 @@ impl<'a> Lowering<'a> {
                         ),
                     })),
                     Some(payloads),
+                    signal.family,
                 )
             }
             Some(v2::decl::Kind::EventDef(event)) => {
@@ -818,6 +819,7 @@ impl<'a> Lowering<'a> {
                         payload: Some(payload),
                     })),
                     Some(payloads),
+                    event.family,
                 )
             }
             Some(v2::decl::Kind::CommandDef(command)) => {
@@ -843,8 +845,10 @@ impl<'a> Lowering<'a> {
                         request,
                         clauses,
                         request_sizes: Some(request_sizes),
+                        shape: command.shape,
                     })),
                     Some(payloads),
+                    command.family,
                 )
             }
             Some(v2::decl::Kind::QueryDef(query)) => {
@@ -895,6 +899,7 @@ impl<'a> Lowering<'a> {
                         reply_sizes: Some(reply_sizes),
                     }))),
                     Some(payloads),
+                    query.family,
                 )
             }
             Some(v2::decl::Kind::FixedDef(fixed)) => {
@@ -921,9 +926,18 @@ impl<'a> Lowering<'a> {
                         named,
                     })),
                     Some(vec![("payload", text, Some(sizes))]),
+                    // A fixed is family-neutral (ADR-0012 decision 4), so the
+                    // model carries the zero value for it.
+                    v2::Family::Dispatch as i32,
                 )
             }
-            _ => (v1::Kind::Unspecified, None, None, None),
+            _ => (
+                v1::Kind::Unspecified,
+                None,
+                None,
+                None,
+                v2::Family::Dispatch as i32,
+            ),
         };
         let member = decl.name.as_str();
         let reservation = reserve(member, payloads.as_deref());
@@ -936,6 +950,7 @@ impl<'a> Lowering<'a> {
             deprecated: decl.deprecated.clone(),
             timing: timing.map(timing_of),
             reservation: Some(reservation),
+            family,
             shape,
             links: doc_links(&decl.links),
             see: doc_links(&decl.see),

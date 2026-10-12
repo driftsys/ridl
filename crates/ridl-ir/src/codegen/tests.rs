@@ -195,6 +195,40 @@ fn an_enum_carries_its_zero_member_and_its_init_member_by_index() {
     assert_eq!(def.retired[0].value, Some(7));
 }
 
+/// The model copies the family of an interaction and the shape of an intent
+/// command from the IR (ADR-0012 decision 6).
+#[test]
+fn the_model_carries_the_family_and_the_command_shape() {
+    let mut package = package();
+    package.interfaces = vec![v2::Interface {
+        name: "Gestures".to_string(),
+        visibility: v2::Visibility::Public as i32,
+        interactions: vec![v2::Decl {
+            name: "toggleLight".to_string(),
+            visibility: v2::Visibility::Public as i32,
+            ordinal: 1,
+            kind: Some(v2::decl::Kind::CommandDef(v2::CommandDef {
+                family: v2::Family::Intent as i32,
+                shape: v2::Shape::Toggle as i32,
+                ..Default::default()
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }];
+    let model = lower(&package, &[]);
+    let slot = &model.interfaces[0].slots[0];
+    let Some(v1::interaction_slot::Occupant::Interaction(interaction)) = slot.occupant.as_ref()
+    else {
+        panic!("a live slot");
+    };
+    assert_eq!(interaction.family, v1::Family::Intent as i32);
+    let Some(v1::interaction::Shape::Command(command)) = interaction.shape.as_ref() else {
+        panic!("a command, got {:?}", interaction.shape);
+    };
+    assert_eq!(command.shape, v1::Shape::Toggle as i32);
+}
+
 /// Without a zero member the init is the lowest declared value.
 #[test]
 fn an_enum_with_no_zero_member_inits_at_its_lowest_value() {
@@ -3303,6 +3337,7 @@ fn docs_package() -> v2::Package {
             max_us: Some("5000".to_string()),
             default_applied: false,
         }),
+        family: v2::Family::Dispatch as i32,
     };
     let drive = {
         let DocParts {

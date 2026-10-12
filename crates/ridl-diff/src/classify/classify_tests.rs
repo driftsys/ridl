@@ -38,6 +38,7 @@ fn signal(name: &str, ordinal: u32, payload: &str) -> v2::Decl {
             declared_init: None,
             init: None,
             timing: Some(range(Some("10000"), Some("100000"))),
+            family: ridl_ir::v2::Family::Dispatch as i32,
         }),
     )
 }
@@ -49,6 +50,7 @@ fn event(name: &str, ordinal: u32, payload: &str) -> v2::Decl {
         v2::decl::Kind::EventDef(v2::EventDef {
             payload: payload.to_string(),
             timing: Some(range(Some("10000"), Some("100000"))),
+            family: ridl_ir::v2::Family::Dispatch as i32,
         }),
     )
 }
@@ -142,6 +144,8 @@ fn command(
             params,
             contracts,
             timing: None,
+            family: ridl_ir::v2::Family::Dispatch as i32,
+            shape: ridl_ir::v2::Shape::None as i32,
         }),
     )
 }
@@ -161,6 +165,7 @@ fn query(
             return_type: Some(return_type),
             contracts,
             timing: None,
+            family: ridl_ir::v2::Family::Dispatch as i32,
         }),
     )
 }
@@ -869,6 +874,7 @@ fn timed(timing: v2::Timing) -> v2::Package {
             declared_init: None,
             init: None,
             timing: Some(timing),
+            family: ridl_ir::v2::Family::Dispatch as i32,
         }),
     )])
 }
@@ -894,6 +900,7 @@ fn timed_event(timing: v2::Timing) -> v2::Package {
         v2::decl::Kind::EventDef(v2::EventDef {
             payload: "T".to_string(),
             timing: Some(timing),
+            family: ridl_ir::v2::Family::Dispatch as i32,
         }),
     )])
 }
@@ -1040,6 +1047,8 @@ fn bounded_command(timing: Option<v2::Timing>) -> v2::Package {
             params: Vec::new(),
             contracts: Vec::new(),
             timing,
+            family: ridl_ir::v2::Family::Dispatch as i32,
+            shape: ridl_ir::v2::Shape::None as i32,
         }),
     )])
 }
@@ -1055,6 +1064,7 @@ fn bounded_query(timing: Option<v2::Timing>) -> v2::Package {
             return_type: Some(value_return("T")),
             contracts: Vec::new(),
             timing,
+            family: ridl_ir::v2::Family::Dispatch as i32,
         }),
     )])
 }
@@ -2788,6 +2798,7 @@ fn an_init_change_is_breaking() {
                 declared_init: Some(init.to_string()),
                 init: None,
                 timing: Some(range(Some("10000"), Some("100000"))),
+                family: ridl_ir::v2::Family::Dispatch as i32,
             }),
         )])
     };
