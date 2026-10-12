@@ -207,6 +207,13 @@ macro_rules! pin {
 }
 fn main() {
     pin!(Grid32, 4, 25.35f32.to_le_bytes());
+    // The float32 grid is a 4-byte field: its table is too short to hold
+    // an 8-byte read at the same slot, so a binary64 field type would pass
+    // the width-4 pin above but fail this one.
+    let mut out = vec![0; <Grid32 as Payload<FlatBuffers>>::MAX_SIZE];
+    let bytes = Grid32::new(25.3).unwrap().encode(&mut out).unwrap().bytes.to_vec();
+    let root = ridl_rt::flatbuffers::root(&bytes).unwrap();
+    assert!(ridl_rt::flatbuffers::field(&bytes, root, 0, 8).is_err());
     pin!(Grid64, 8, 25.35f64.to_le_bytes());
     // One rounding error above the binary64 nearest to 0.3: on the grid
     // only within the rounding allowance, so a zero tolerance rejects it.
