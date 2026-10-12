@@ -30,10 +30,18 @@ use crate::{default_baseline_dir, report_diff_side_error};
 /// file's hashes less the unit's current catalog hash when the unit's verdict
 /// is compatible or identical, or when the current catalog hash is the file's
 /// first hash: the catalog did not change, so every hash the file lists still
-/// applies. Otherwise the unit's list is empty. The hashes are read from the
-/// file and never recomputed from a snapshot; a file that cannot be read is
-/// an error (exit 2), and so is a baseline that cannot be loaded once a history
-/// file exists.
+/// applies. Otherwise the unit's list is empty.
+///
+/// A history is carried only when its first hash is the hash recomputed from
+/// the published snapshots of that unit, so a history that does not describe
+/// the snapshots beside it — a partially hand-edited baseline — restarts the
+/// chain rather than carrying a hash that may reach past a breaking change
+/// (driftsys/ridl#808). This is a check on the pair, not a recorded value:
+/// the hashes carried are still read from the file and never recomputed.
+///
+/// The hashes are read from the file and never recomputed from a snapshot; a
+/// file that cannot be read is an error (exit 2), and so is a baseline that
+/// cannot be loaded once a history file exists.
 pub(crate) fn compatible_catalogs(
     db: &mut RidlDatabase,
     entry: &Path,
@@ -53,6 +61,7 @@ pub(crate) fn compatible_catalogs(
     let report = ridl_diff::diff_refs_in(&old_refs, checked, &[std]);
     let verdicts = ridl_diff::UnitVerdicts::from_refs(&report, &old_refs, checked);
     let scope = ridlc::catalog_scope(checked, Some(std));
+    let published_scope = ridlc::catalog_scope(&old_refs, Some(std));
     for unit in shaped_units(checked.iter().copied()) {
         // A unit with no published snapshot has no earlier baseline, so a
         // history file left under its name is not read, whatever the verdict.
@@ -63,11 +72,14 @@ pub(crate) fn compatible_catalogs(
             continue;
         };
         let current_hash = catalog_hash(unit, &scope);
-        let carried = history.hashes.first() == Some(&current_hash)
-            || matches!(
-                verdicts.verdict(unit),
-                Verdict::Compatible | Verdict::Identical
-            );
+        let describes_published =
+            history.hashes.first() == Some(&catalog_hash(unit, &published_scope));
+        let carried = describes_published
+            && (history.hashes.first() == Some(&current_hash)
+                || matches!(
+                    verdicts.verdict(unit),
+                    Verdict::Compatible | Verdict::Identical
+                ));
         let hashes = if carried {
             history
                 .hashes
@@ -100,6 +112,12 @@ pub(crate) fn compatible_catalogs(
 /// Otherwise the chain starts again from the one new hash. A hash is listed
 /// once.
 ///
+/// The file is carried only when its first hash is the hash recomputed from
+/// `old` for that unit, so a history that does not describe the snapshots
+/// beside it — a partially hand-edited baseline — restarts the chain rather
+/// than carrying a hash that may reach past a breaking change
+/// (driftsys/ridl#808).
+///
 /// A unit with no snapshot in `old` has nothing to compare against, so it
 /// starts a chain, and a history file left under its name is not read. A
 /// published history file of a unit with a published snapshot that cannot be
@@ -117,7 +135,9 @@ pub(crate) fn write_catalog_histories(
         .as_ref()
         .map(|report| ridl_diff::UnitVerdicts::new(report, old, fresh));
     let fresh_refs: Vec<&Package> = fresh.iter().collect();
+    let old_refs: Vec<&Package> = old.iter().collect();
     let scope = ridlc::catalog_scope(&fresh_refs, Some(&std));
+    let published_scope = ridlc::catalog_scope(&old_refs, Some(&std));
     for unit in shaped_units(fresh.iter()) {
         // A unit with no published snapshot has no earlier baseline, so a
         // history file left under its name is not carried, whatever the verdict.
@@ -130,7 +150,9 @@ pub(crate) fn write_catalog_histories(
             CatalogHistory::default()
         };
         let new_hash = catalog_hash(unit, &scope);
-        let carried = published_before
+        let describes_published = published_before
+            && earlier.hashes.first() == Some(&catalog_hash(unit, &published_scope));
+        let carried = describes_published
             && (earlier.hashes.first() == Some(&new_hash)
                 || verdicts.as_ref().is_some_and(|verdicts| {
                     matches!(

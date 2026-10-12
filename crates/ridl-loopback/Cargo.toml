@@ -1,7 +1,11 @@
 [package]
 name = "ridl-loopback"
 version.workspace = true
-edition.workspace = true
+# Edition 2021 and rust-version 1.83 as literals, the same as `ridl-rt`:
+# edition 2024 cannot build before Rust 1.85. `just compat-check` builds the
+# packaged crate at this minimum.
+edition = "2021"
+rust-version = "1.83"
 license.workspace = true
 repository.workspace = true
 description = "The in-process reference runtime: an implementation of ridl-rt's port traits over one in-memory store."
