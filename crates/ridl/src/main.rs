@@ -1700,6 +1700,11 @@ enum MemberDrift {
         ordinal: u32,
         tombstone: Option<u32>,
         shifted: Vec<String>,
+        /// The member this edit gives the freed ordinal to, when it gives it
+        /// to one: the removal then says who took it rather than call the
+        /// ordinal one a later member could take, which the insertion
+        /// warning in the same run contradicts (driftsys/ridl#590).
+        taken_by: Option<String>,
     },
     /// A member the baseline declares whose ordinal a `reserved` entry now
     /// holds. `name_kept` says the entry carries the member's name; a bare
@@ -1708,7 +1713,14 @@ enum MemberDrift {
     /// breaking removal: its composite comparison matches by name and does
     /// not read the `reserved` list (the limit `diff_composite` records), and
     /// the desk repeats the gate rather than disagree with it.
-    Retired { name_kept: bool },
+    Retired {
+        name_kept: bool,
+        /// The surviving members whose ordinal changed in the same edit.
+        /// `ridl diff` reports no reorder beside a removal, and a retirement
+        /// is reported as a removal, so without this the swap beside a
+        /// tombstone is named nowhere (driftsys/ridl#590).
+        shifted: Vec<String>,
+    },
     /// A surviving member whose ordinal changed while it kept its place
     /// among the live members: a `reserved` entry above it was added, moved
     /// or removed. Decided per member, so a swap and a tombstone in one
@@ -1903,9 +1915,14 @@ fn member_drift(
                     .find(|(_, held)| *held == ordinal)
                     .map(|(name, _)| name.clone())
             });
+            let shifted = after
+                .as_ref()
+                .map(|after| after.moved_since(&before))
+                .unwrap_or_default();
             Some(match holder {
                 Some(name) => MemberDrift::Retired {
                     name_kept: name.as_deref() == Some(member),
+                    shifted,
                 },
                 None => {
                     let tombstone = after.as_ref().and_then(|after| {
@@ -1915,12 +1932,23 @@ fn member_drift(
                             .find(|(name, _)| name.as_deref() == Some(member))
                             .map(|(_, held)| *held)
                     });
+                    // The member, if any, that this edit gives the freed
+                    // ordinal to: a live member there now that the baseline
+                    // did not declare (driftsys/ridl#590).
+                    let taken_by = after.as_ref().and_then(|after| {
+                        after
+                            .live
+                            .iter()
+                            .find(|(name, held)| {
+                                *held == ordinal && before.ordinal_of(name).is_none()
+                            })
+                            .map(|(name, _)| name.clone())
+                    });
                     MemberDrift::Removed {
                         ordinal,
                         tombstone,
-                        shifted: after
-                            .map(|after| after.moved_since(&before))
-                            .unwrap_or_default(),
+                        shifted,
+                        taken_by,
                     }
                 }
             })
@@ -1937,6 +1965,30 @@ fn member_drift(
             })
         }
         _ => None,
+    }
+}
+
+/// The clause naming the siblings whose ordinal changed beside a change
+/// `ridl diff` reports no reorder for, or nothing when none did
+/// (driftsys/ridl#590).
+fn moved_beside(shifted: &[String]) -> String {
+    if shifted.is_empty() {
+        return String::new();
+    }
+    format!(
+        ". {} also changed ordinal in this edit, which `ridl diff` does not report beside a \
+         removal — put them back where the baseline has them",
+        quoted_list(shifted)
+    )
+}
+
+/// `a`, `a and b`, `a, b and c` — [`quoted_list`]'s shape for phrases that
+/// are already written, which are not quoted again (driftsys/ridl#590).
+fn and_list(parts: &[String]) -> String {
+    match parts {
+        [] => String::new(),
+        [one] => one.clone(),
+        [head @ .., last] => format!("{} and {last}", head.join(", ")),
     }
 }
 
@@ -2019,7 +2071,7 @@ fn member_message(change: &ridl_diff::Change, drift: MemberDrift) -> String {
                  a removal, so this warning stands for that change: a struct field or union arm \
                  keeps its ordinal for ever (typl §7.4) — put the other members back where the \
                  baseline has them; this one stays at the end{by_type}",
-                reasons.join(" and "),
+                and_list(&reasons),
             )
         }
         MemberDrift::ResultArm => format!(
@@ -2033,6 +2085,7 @@ fn member_message(change: &ridl_diff::Change, drift: MemberDrift) -> String {
             ordinal,
             tombstone,
             shifted,
+            taken_by,
         } => {
             let tombstone = match tombstone {
                 Some(held) => {
@@ -2040,13 +2093,20 @@ fn member_message(change: &ridl_diff::Change, drift: MemberDrift) -> String {
                 }
                 None => String::new(),
             };
-            let consequence = if shifted.is_empty() {
-                "which a later member could take".to_string()
-            } else {
-                format!(
+            let mut consequences = Vec::new();
+            if let Some(taken_by) = &taken_by {
+                consequences.push(format!("and `{taken_by}` has taken it in this edit"));
+            }
+            if !shifted.is_empty() {
+                consequences.push(format!(
                     "and {} slid into a wire identity that is not its own",
                     quoted_list(&shifted)
-                )
+                ));
+            }
+            let consequence = if consequences.is_empty() {
+                "which a later member could take".to_string()
+            } else {
+                and_list(&consequences)
             };
             format!(
                 "`{name}` is gone{in_shape} but the published baseline declares it at ordinal \
@@ -2055,20 +2115,28 @@ fn member_message(change: &ridl_diff::Change, drift: MemberDrift) -> String {
                  which holds the slot for ever",
             )
         }
-        MemberDrift::Retired { name_kept: true } => format!(
+        MemberDrift::Retired {
+            name_kept: true,
+            shifted,
+        } => format!(
             "`{name}` is retired{in_shape} with `reserved`, which keeps its ordinal \
              (typl §7.4), and `ridl diff` still reports the retirement as breaking: it \
              matches a struct field or union arm by name and does not yet read the body's \
              `reserved` entries, so it gates a tombstoned removal like a bare one. This \
-             warning repeats the gate rather than disagree with it",
+             warning repeats the gate rather than disagree with it{}",
+            moved_beside(&shifted),
         ),
-        MemberDrift::Retired { name_kept: false } => format!(
+        MemberDrift::Retired {
+            name_kept: false,
+            shifted,
+        } => format!(
             "`{name}` is gone{in_shape}, and a `reserved` entry holds its ordinal without its \
              name: the slot is kept (typl §7.4), but the name is not retired and could be \
              redeclared with a new meaning — write `reserved {name}` instead. `ridl diff` \
              still reports the removal as breaking, because it matches a struct field or \
              union arm by name and does not yet read the body's `reserved` entries; this \
-             warning repeats the gate rather than disagree with it",
+             warning repeats the gate rather than disagree with it{}",
+            moved_beside(&shifted),
         ),
         MemberDrift::Shifted => format!(
             "`{name}` has not moved{in_shape}, but its ordinal has changed since the published \

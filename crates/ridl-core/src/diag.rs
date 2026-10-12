@@ -917,7 +917,11 @@ diag_codes! {
         /// source→IR function (ADR-0008 decisions 9 and 13). For a struct
         /// field or union arm the desk reads the verdict `ridl diff` gates
         /// on, so the two agree by construction (driftsys/ridl#533): one
-        /// warning per change the diff reports as breaking. That is a member
+        /// warning per change the diff reports as breaking **that moves an
+        /// ordinal**. A change that moves none draws nothing here, however
+        /// the gate judges it — an in-place field type or constraint change
+        /// is breaking and silent (driftsys/ridl#590). The ones that move an
+        /// ordinal are a member
         /// inserted above a live one or into a retired slot; a member
         /// removed, with or without a tombstone, because `ridl diff` matches
         /// a composite member by name and does not yet read the body's
@@ -932,8 +936,10 @@ diag_codes! {
         /// arm added to a result union, whose arms are its transport
         /// identity (ADR-0008 decision 4).
         /// The diff reports no reorder beside an addition or a removal, so
-        /// the warning for an added or removed member names the siblings
-        /// whose ordinal changed. An enum value's or enum-set bit's reorder
+        /// the warning for an added, removed or retired member names the
+        /// siblings whose ordinal changed, and a removal whose ordinal this
+        /// edit gives to a new member names that member
+        /// (driftsys/ridl#590). An enum value's or enum-set bit's reorder
         /// moves no wire identity (typl §8, §9) and does not draw this warning
         /// (driftsys/ridl#335); an enum value added or removed is `ridl
         /// diff`'s alone.
