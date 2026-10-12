@@ -377,6 +377,7 @@ fn a_run_writes_its_mechanical_score() {
     let mechanical = &result["mechanical"];
     assert_eq!(mechanical["no_error"].as_bool(), Some(true));
     assert_eq!(mechanical["verify_loop"].as_bool(), Some(true));
+    assert_eq!(mechanical["verify_via"].as_str(), Some("mcp"));
     assert_eq!(mechanical["diff_matches"].as_bool(), Some(true));
     assert_eq!(mechanical["passed"].as_bool(), Some(true));
 }

@@ -21,6 +21,8 @@ pub struct Mechanical {
     /// `Some` only for an evolve task.
     pub diff_matches: Option<bool>,
     pub verify_loop: bool,
+    /// How the agent checked its workspace: `mcp`, `cli`, `both` or `none`.
+    pub verify_via: &'static str,
     /// Why a check failed.
     pub notes: Vec<String>,
 }
@@ -201,16 +203,60 @@ pub fn score_mechanical(task: &Task, dirs: &RunDirs, transcript: &str) -> Mechan
         }
         matches
     });
-    let verify_loop = used_ridl_check(transcript);
+    let verify_via = verify_via(transcript);
+    let verify_loop = verify_via != "none";
     if !verify_loop {
-        notes.push("the agent made no ridl_check call".to_owned());
+        notes.push("the agent neither called ridl_check nor ran `ridl check`".to_owned());
     }
     Mechanical {
         no_error,
         lints_match,
         diff_matches,
         verify_loop,
+        verify_via,
         notes,
+    }
+}
+
+/// True when the transcript holds a shell command that runs `ridl check`:
+/// a Claude `Bash` call or a Codex `command_execution`. `ridl checker` and
+/// `myridl check` do not count, nor does text that only mentions it.
+pub fn ran_ridl_check_command(transcript: &str) -> bool {
+    json_lines(transcript).any(|line| {
+        objects(&line).into_iter().any(|map| {
+            let command = match str_field(map, "type") {
+                Some("tool_use") if str_field(map, "name") == Some("Bash") => map
+                    .get("input")
+                    .and_then(|input| input.get("command"))
+                    .and_then(serde_json::Value::as_str),
+                Some("command_execution") => str_field(map, "command"),
+                _ => None,
+            };
+            command.is_some_and(runs_ridl_check)
+        })
+    })
+}
+
+fn runs_ridl_check(command: &str) -> bool {
+    let word = |c: char| c.is_alphanumeric() || c == '-' || c == '_' || c == '.';
+    command.match_indices("ridl check").any(|(at, found)| {
+        let before = command[..at].chars().next_back();
+        let after = command[at + found.len()..].chars().next();
+        !before.is_some_and(word) && !after.is_some_and(word)
+    })
+}
+
+/// How the agent checked its workspace: through the MCP tool, the CLI, both,
+/// or neither. Either one is a verify loop; the result records which.
+pub fn verify_via(transcript: &str) -> &'static str {
+    match (
+        used_ridl_check(transcript),
+        ran_ridl_check_command(transcript),
+    ) {
+        (true, true) => "both",
+        (true, false) => "mcp",
+        (false, true) => "cli",
+        (false, false) => "none",
     }
 }
 
@@ -239,6 +285,27 @@ mod tests {
         let tool_error = r#"{"type":"item.completed","item":{"type":"mcp_tool_call","server":"ridl","tool":"ridl_check","result":{"content":[{"type":"text","text":"no `ridl.toml` found"}]},"error":null,"status":"failed"}}"#;
         assert!(!used_ridl_check(refused));
         assert!(used_ridl_check(tool_error));
+    }
+
+    #[test]
+    fn a_shell_ridl_check_is_found_on_each_host() {
+        let claude = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"cd /r/ws && ridl check ."}}]}}"#;
+        let codex = r#"{"type":"item.completed","item":{"type":"command_execution","command":"/bin/bash -lc 'ridl check --format json .'"}}"#;
+        let other = r#"{"type":"item.completed","item":{"type":"command_execution","command":"/bin/bash -lc 'ridl checker; ridl fmt .; myridl check'"}}"#;
+        assert!(ran_ridl_check_command(claude));
+        assert!(ran_ridl_check_command(codex));
+        assert!(!ran_ridl_check_command(other));
+        assert!(!ran_ridl_check_command(TEXT_ONLY));
+        assert!(!ran_ridl_check_command(CLAUDE_CALL));
+    }
+
+    #[test]
+    fn the_verify_loop_records_which_check_the_agent_used() {
+        let shell = r#"{"type":"item.completed","item":{"type":"command_execution","command":"ridl check ."}}"#;
+        assert_eq!(verify_via(CLAUDE_CALL), "mcp");
+        assert_eq!(verify_via(shell), "cli");
+        assert_eq!(verify_via(&format!("{CODEX_CALL}\n{shell}")), "both");
+        assert_eq!(verify_via(TEXT_ONLY), "none");
     }
 
     #[test]
@@ -333,6 +400,7 @@ mod tests {
             lints_match: true,
             diff_matches: None,
             verify_loop: true,
+            verify_via: "mcp",
             notes: vec![],
         };
         assert!(all.passed());

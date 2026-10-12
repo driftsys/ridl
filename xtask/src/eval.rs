@@ -404,6 +404,7 @@ fn mechanical_table(mechanical: &score::Mechanical) -> toml::Table {
         table.insert("diff_matches".into(), matches.into());
     }
     table.insert("verify_loop".into(), mechanical.verify_loop.into());
+    table.insert("verify_via".into(), mechanical.verify_via.into());
     table.insert("passed".into(), mechanical.passed().into());
     table.insert(
         "notes".into(),
