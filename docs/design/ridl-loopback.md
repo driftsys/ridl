@@ -572,8 +572,8 @@ lock each is a few lines.
   number of entries written so far" that keeps the order of `marks` a priority
   order and keeps the `ScannableSignals::scan` loop — grow `out` when the call
   returns 0 and a mark is still behind — the way to make progress.
-- **`Watermark`** carries the generation only; `scan` moves it to the current
-  generation of the interface.
+- **`Watermark`** carries the generation only; `scan` moves the mark to the
+  interface's current generation when it writes that interface's changes.
 - **`read_coherent`** answers every ordinal from the one publication state the
   lock is held over, which is what makes the read coherent. It reports
   `ReadError::Short` with the size of the whole set, not of the first value, and
