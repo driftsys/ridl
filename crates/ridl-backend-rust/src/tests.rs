@@ -3321,7 +3321,7 @@ impl Speed {
     pub fn new(value: u16) -> Result<Self, ::ridl_rt::payload::Violation> {
         if value > 300 {
             return Err(::ridl_rt::payload::Violation {
-                type_name: "Speed",
+                type_name: ::core::option::Option::Some("Speed"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }

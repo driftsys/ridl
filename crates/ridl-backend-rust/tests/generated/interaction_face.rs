@@ -21,13 +21,13 @@ impl Temperature {
         let value = *value;
         if value < -40 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Temperature",
+                type_name: ::core::option::Option::Some("Temperature"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 85 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Temperature",
+                type_name: ::core::option::Option::Some("Temperature"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
@@ -86,13 +86,13 @@ impl Level {
         let value = *value;
         if value < 0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Level",
+                type_name: ::core::option::Option::Some("Level"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 100 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Level",
+                type_name: ::core::option::Option::Some("Level"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
@@ -151,13 +151,13 @@ impl Window {
         let value = *value;
         if value < 0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Window",
+                type_name: ::core::option::Option::Some("Window"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 100000 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Window",
+                type_name: ::core::option::Option::Some("Window"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
@@ -216,13 +216,13 @@ impl Average {
         let value = *value;
         if value < 0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Average",
+                type_name: ::core::option::Option::Some("Average"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 1000 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Average",
+                type_name: ::core::option::Option::Some("Average"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
@@ -276,7 +276,7 @@ impl ::core::convert::TryFrom<::core::primitive::i64> for Health {
             2 => ::core::result::Result::Ok(Self::Fail),
             _ => {
                 ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Health",
+                    type_name: ::core::option::Option::Some("Health"),
                     rule: ::ridl_rt::payload::Rule::Variant,
                 })
             }

@@ -85,7 +85,7 @@ fn a_hand_written_program_reads_a_signal_with_its_provenance() {
     assert_eq!(
         detected.provenance,
         Provenance::Invalid(Cause::Detected(Detection::InvalidValue(Violation {
-            type_name: "Speed",
+            type_name: Some("Speed"),
             rule: Rule::Range,
         })))
     );

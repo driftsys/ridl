@@ -27,19 +27,19 @@ impl Speed {
         let value = *value;
         if !value.is_finite() {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Speed",
+                type_name: ::core::option::Option::Some("Speed"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Speed",
+                type_name: ::core::option::Option::Some("Speed"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 250.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Speed",
+                type_name: ::core::option::Option::Some("Speed"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
@@ -154,7 +154,7 @@ impl Speed {
             };
             if __step_invalid {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Speed",
+                    type_name: ::core::option::Option::Some("Speed"),
                     rule: ::ridl_rt::payload::Rule::Step,
                 });
             }
@@ -212,13 +212,13 @@ impl Vin {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.chars().count() as ::core::primitive::u64) < 17 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Vin",
+                type_name: ::core::option::Option::Some("Vin"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.chars().count() as ::core::primitive::u64) > 17 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Vin",
+                type_name: ::core::option::Option::Some("Vin"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -231,7 +231,7 @@ impl Vin {
             });
             if !PATTERN.is_match(value) {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Vin",
+                    type_name: ::core::option::Option::Some("Vin"),
                     rule: ::ridl_rt::payload::Rule::Pattern,
                 });
             }

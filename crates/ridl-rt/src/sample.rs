@@ -298,7 +298,7 @@ mod tests {
     #[test]
     fn only_a_live_value_that_is_not_stale_is_usable() {
         let violation = Violation {
-            type_name: "Speed",
+            type_name: Some("Speed"),
             rule: Rule::Range,
         };
         let provenances = [
