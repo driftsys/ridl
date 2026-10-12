@@ -63,13 +63,17 @@
 //! `ridl_rt::port::Encoded`, and every `Payload` and `Sizes` path the face
 //! writes projects through that parameter — `P::Encoding` on the client and
 //! its futures, `W::Encoding` on the publisher, `H::Encoding` on `serve`,
-//! `Serve` and `dispatch`. The face gains no type parameter of its own, so an
-//! application binds it as before and names no encoding either; the encoding
-//! is chosen once, where the runtime or the transport is built.
+//! `Serve` and `dispatch`. An item with no port parameter is unchanged:
+//! `check_catalog`, the blocking deadline helper, `Provider`, `Subscribe`,
+//! `Invalidate`, the descriptors and the prelude. The face gains no type
+//! parameter of its own, so a consumer that binds it to a runtime it did not
+//! write names no encoding; a program that writes its own port names one in
+//! that port's `Encoded` implementation.
 //!
 //! A trait's `where` clause is not assumed by its users on stable Rust, so the
 //! predicates generic code needs are written out: each impl and each free
-//! function of the face carries a generated `where` clause naming the
+//! function that encodes, decodes or projects through `Sizes` carries a
+//! generated `where` clause naming the
 //! interface's `Sizes` in the port's encoding and one `Payload` per payload
 //! type the interface uses ([`encoding_bounds`]). A struct carries its port
 //! bounds alone, except `Serve`, whose claim-buffer field projects through
