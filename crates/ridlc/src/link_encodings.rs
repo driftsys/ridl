@@ -129,17 +129,39 @@ mod tests {
 
     use super::*;
 
-    /// Every named codegen-model encoding maps to one name of
-    /// `ENCODING_NAMES`, and every name of it is mapped. The match in
-    /// `encoding_name` is over a generated enum, so this test is what ties it
-    /// to the table.
+    /// Every codegen-model encoding variant that a list can name maps to the
+    /// name of `ENCODING_NAMES` that spells it, and every name of the table
+    /// is reached. The match in `encoding_name` is over a generated enum, so
+    /// this test ties it to the table. The generated enum has no variant
+    /// iterator; the exhaustive `match` below stops compiling when a variant
+    /// is added, which forces `variants` to be extended.
     #[test]
     fn encoding_name_covers_exactly_the_manifest_encoding_names() {
-        let mut mapped: Vec<&str> = (0..64).filter_map(encoding_name).collect();
-        mapped.sort_unstable();
+        fn exhaustive(encoding: v1::Encoding) {
+            match encoding {
+                v1::Encoding::Unspecified
+                | v1::Encoding::Proto3
+                | v1::Encoding::Flatbuffers
+                | v1::Encoding::ReprC => {}
+            }
+        }
+        exhaustive(v1::Encoding::Unspecified);
+        let variants = [
+            (v1::Encoding::Unspecified, None),
+            (v1::Encoding::Flatbuffers, Some("flatbuffers")),
+            (v1::Encoding::Proto3, Some("proto3")),
+            (v1::Encoding::ReprC, Some("repr-c")),
+        ];
+        let mut reached = Vec::new();
+        for (variant, expected) in variants {
+            let name = encoding_name(variant as i32);
+            assert_eq!(name, expected, "{variant:?}");
+            reached.extend(name);
+        }
+        reached.sort_unstable();
         let mut table = ridl_core::manifest::ENCODING_NAMES.to_vec();
         table.sort_unstable();
-        assert_eq!(mapped, table);
+        assert_eq!(reached, table);
     }
 
     /// The crossing the lowering writes decides the encoding the list must

@@ -334,6 +334,15 @@ fn source(name: &str) -> String {
 mod tests {
     use super::*;
 
+    /// `BACKEND_HINT` is a constant string and cannot interpolate the key, so
+    /// this test ties its spelling to the manifest's constant.
+    #[test]
+    fn the_backend_hint_spells_the_manifest_encodings_key() {
+        let line = format!("# {} = [", ridl_core::manifest::ENCODINGS_KEY);
+        assert!(BACKEND_HINT.contains(&line), "{BACKEND_HINT}");
+        assert!(BACKEND_HINT.contains(ridl_core::manifest::ENCODING_NAMES[0]));
+    }
+
     #[test]
     fn the_workspace_root_manifest_is_written_last() {
         let request = Request {

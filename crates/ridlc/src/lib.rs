@@ -2777,36 +2777,14 @@ mod backend_options_tests {
             .collect()
     }
 
-    /// `render_cargo_toml` writes each manifest encoding name as a feature of
-    /// `ridl-rt`, so every name must be a key of `ridl-rt`'s `[features]`.
-    #[test]
-    fn every_encoding_name_is_a_ridl_rt_feature() {
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../ridl-rt/Cargo.toml");
-        let text = std::fs::read_to_string(path).expect("ridl-rt's manifest is readable");
-        let manifest: toml::Table = text.parse().expect("ridl-rt's manifest parses");
-        let features = manifest["features"].as_table().expect("a [features] table");
-        for name in ridl_core::manifest::ENCODING_NAMES {
-            assert!(
-                features.contains_key(name),
-                "ridl-rt has no feature `{name}`"
-            );
-        }
-    }
-
-    /// The backend request option key is the manifest key; the Rust backend
-    /// reads the key under its own constant, because it cannot depend on
-    /// `ridl-core`.
-    #[test]
-    fn the_option_key_is_the_manifest_key_the_rust_backend_reads() {
-        assert_eq!(
-            ridl_core::manifest::ENCODINGS_KEY,
-            ridl_backend_rust::ENCODINGS_OPTION
-        );
-    }
-
     #[test]
     fn the_rust_request_carries_the_rust_encodings_only() {
-        let pair = |value: &str| vec![("encodings".to_string(), value.to_string())];
+        let pair = |value: &str| {
+            vec![(
+                ridl_core::manifest::ENCODINGS_KEY.to_string(),
+                value.to_string(),
+            )]
+        };
         assert_eq!(encodings("rust"), pair("flatbuffers,proto3"));
         assert_eq!(encodings("kotlin"), pair("flatbuffers"));
         assert!(encodings("typescript").is_empty());

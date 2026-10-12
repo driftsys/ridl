@@ -548,13 +548,15 @@ fn collect_backends(
         return (backends, None);
     };
     let span = backend.span();
-    let known = known_encodings();
     let Shape::Right(tables) = backend.into_inner() else {
         diags.push(error(
             DiagCode::MANI_015,
             file_id,
             span.clone(),
-            format!("`backend` must be a table of `[backend.<name>]` tables; {known}"),
+            format!(
+                "`backend` must be a table of `[backend.<name>]` tables; {}",
+                known_encodings()
+            ),
         ));
         return (backends, Some(span));
     };
@@ -565,7 +567,7 @@ fn collect_backends(
                 DiagCode::MANI_015,
                 file_id,
                 table_span,
-                format!("`[backend.{name}]` must be a table; {known}"),
+                format!("`[backend.{name}]` must be a table; {}", known_encodings()),
             ));
             continue;
         };
@@ -580,7 +582,8 @@ fn collect_backends(
                         file_id,
                         encodings_span,
                         format!(
-                            "`[backend.{name}] encodings` must be an array of encoding names; {known}"
+                            "`[backend.{name}] encodings` must be an array of encoding names; {}",
+                            known_encodings()
                         ),
                     )),
                     Shape::Right(elements) => {
@@ -588,11 +591,15 @@ fn collect_backends(
                             let range = element.span();
                             let message = match element.get_ref().as_str() {
                                 Some(value) if !ENCODING_NAMES.contains(&value) => Some(format!(
-                                    "unknown encoding `{value}` in `[backend.{name}] encodings`; {known}"
+                                    "unknown encoding `{value}` in `[backend.{name}] encodings`; {}",
+                                    known_encodings()
                                 )),
-                                Some(value) if entry.encodings.iter().any(|(seen, _)| seen == value) => {
+                                Some(value)
+                                    if entry.encodings.iter().any(|(seen, _)| seen == value) =>
+                                {
                                     Some(format!(
-                                        "encoding `{value}` is named twice in `[backend.{name}] encodings`; {known}"
+                                        "encoding `{value}` is named twice in `[backend.{name}] encodings`; {}",
+                                        known_encodings()
                                     ))
                                 }
                                 Some(value) => {
@@ -600,8 +607,9 @@ fn collect_backends(
                                     None
                                 }
                                 None => Some(format!(
-                                    "`[backend.{name}] encodings` holds `{}`, which is not a string; {known}",
-                                    element.get_ref()
+                                    "`[backend.{name}] encodings` holds `{}`, which is not a string; {}",
+                                    element.get_ref(),
+                                    known_encodings()
                                 )),
                             };
                             if let Some(message) = message {
