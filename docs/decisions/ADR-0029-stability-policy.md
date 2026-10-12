@@ -202,13 +202,15 @@ design in each:
    `rust-version` of `ridl-rt`, `ridl-rt-conformance` or `ridl-loopback`, or
    dropping edition 2021 for them, is a break. Raising the `rust-version` of
    `ridl-descriptor` above 1.88, or changing its edition, is a break. The `msrv`
-   dump checks all four crates. The generated crate must compile as edition 2021
-   with Rust 1.83 with every cargo feature on. `just compat-check` checks the
-   crate emitted for the `veh-cluster` corpus with every feature on, and the
-   crate emitted for `examples/cabin` with its `std` feature on. With the
-   default features off it does not compile on 1.83 (driftsys/ridl#874), and
-   `just compat-check` does not check that combination. This restates ADR-0021
-   decision 10 as a frozen surface and adds the `msrv` check.
+   dump checks all four crates and fails on any change of a value, a lower
+   `rust-version` included, so such a change also needs the approval of
+   decision 4. The generated crate must compile as edition 2021 with Rust 1.83
+   with every cargo feature on. `just compat-check` checks the crate emitted for
+   the `veh-cluster` corpus with every feature on, and the crate emitted for
+   `examples/cabin` with its `std` feature on. With the default features off it
+   does not compile on 1.83 (driftsys/ridl#874), and `just compat-check` does
+   not check that combination. This restates ADR-0021 decision 10 as a frozen
+   surface and adds the `msrv` check.
 
 6. **The gate table says which gate covers which surface.** The `baseline`
    column is empty on the day this record is accepted. `freeze/surfaces.toml` is
