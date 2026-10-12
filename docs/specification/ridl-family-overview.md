@@ -215,11 +215,11 @@ By home; see each reference for full statements.
   standards-fixed invalid sentinels, **narrowed by ADR-0013 decision 7 to the
   case where a published standard fixes the value** (§17.8, v0.2) · the
   deployment surface for byte order (§17.9, rsdl v0.2) · the canonical-encoding
-  rule, owned by the frame specification (§17.10, v0.3) · the explicit
-  wire-width floor, the deferred `wire` clause (§17.11, v0.2) · integer-backed
-  unit types (§17.12, v0.2) · whether a reorder arriving with an addition or a
-  removal should also report `member_reordered` (§17.15, v0.2, behind
-  driftsys/ridl#302). **Resolved and moved out of §17:** exclusive bounds
+  rule, owned by the frame specification §4 and each projection record (§17.10)
+  · the explicit wire-width floor, the deferred `wire` clause (§17.11, v0.2) ·
+  integer-backed unit types (§17.12, v0.2) · whether a reorder arriving with an
+  addition or a removal should also report `member_reordered` (§17.15, v0.2,
+  behind driftsys/ridl#302). **Resolved and moved out of §17:** exclusive bounds
   (closed — typl §5.5) · recursion policy (closed — typl §7.3) · what a `string`
   is made of and how it is encoded (typl §4 and §4.4) · value-aware `enum` and
   `enumset` reorder comparison (typl §8 and §9) · byte order as a type property
