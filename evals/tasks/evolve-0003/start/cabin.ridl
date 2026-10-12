@@ -1,0 +1,85 @@
+package veh.cabin
+
+/// Cabin air temperature, in degrees.
+type Temperature: integer [-40..85]
+
+/// A percentage of full scale.
+type Level: integer [0..100]
+
+/// An averaging window, in milliseconds.
+type Window: integer [0..100000]
+
+/// The average a query replies with. Its range is wider than `Level`'s,
+/// so a reply is not constrained to the scale the command takes.
+type Average: integer [0..1000]
+
+/// The health of a cabin subsystem.
+enum Health {
+  /// The subsystem works normally.
+  OK = 0
+  /// The subsystem works, with a fault that needs attention.
+  WARN = 1
+  /// The subsystem does not work.
+  FAIL = 2
+}
+
+/// Raised when a subsystem leaves `OK`.
+struct Warning {
+  /// The warning code, as a percentage of full scale.
+  code: Level
+  /// The health the subsystem moved to.
+  health: Health
+}
+
+/// The cabin's own interface: a signal, an event, a command and a query, so
+/// the proof covers every interaction kind that carries a payload.
+interface Cabin {
+  /// The current cabin air temperature.
+  signal temperature: Temperature @10ms
+  /// Sent when a subsystem leaves `OK`.
+  event warning: Warning @[100ms..1s]
+  /// Sets the cabin level, below 100.
+  command setLevel(level: Level) @[..50ms] [
+    require level < 100
+  ]
+  /// The average level over the window, in milliseconds.
+  query average(window: Window): Average @[..200ms] [
+    require window > 0
+    ensure result >= 0
+  ]
+}
+
+
+/// Which cabin subsystems a report covers. A set holds any number of them.
+enumset Subsystems {
+  /// The climate control, which holds [Temperature].
+  CLIMATE = 0
+  /// The horn, which [Horn.active] reports on.
+  HORN = 1
+}
+
+/// A report that links to an enum set bit, an enum value and an interaction,
+/// and holds a range written as prose: a value in [0, 1].
+/// @see veh.cabin.Cabin.warning
+/// @see veh.cabin.Cabin.setLevel
+/// @since 1.0
+struct Diagnostic {
+  /// The subsystems covered, which include [Subsystems.CLIMATE] when the
+  /// climate control is checked.
+  covers: Subsystems
+  /// The health found. It is [Health.OK] when no fault was found.
+  health: Health
+  /// The level taken, which [Diagnostic.loop] names: a Rust keyword.
+  loop: Level
+}
+
+/// A second interface with a signal and nothing else, so the emitted crate
+/// holds more than one interface module and the per-interface buffer bound is
+/// visibly computed per interface rather than fixed.
+interface Horn {
+  /// The health of the horn.
+  signal active: Health @10ms
+}
+
+/// The cabin's one service: both interfaces, provided by one component.
+service veh.cabin.control: Cabin, Horn

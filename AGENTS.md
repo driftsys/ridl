@@ -15,15 +15,17 @@ under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`,
 `ridl-rt`, `ridl-loopback`, `ridl-rt-conformance` (the port contract tests any
 runtime runs, published for runtimes outside this repository), and
 `ridlc-gen-model` and `ridlc-gen-rust` (the reference codegen plugins,
-test-only) — plus `xtask` at the root, the `editors/vscode` extension, `evals/`
-(the public corpus, the calibration records and the eval tasks for design
-evaluation, outside the published crates and the book), and `examples/`, whose
-worked examples are compiled and run by the test suite rather than being prose.
-The typl v0.1 toolchain (epic E1), the ridl interface layer over it (epic E2)
-and rsdl's checks, lowering and `ridl diff` at the system (epic E6) are built;
-the boundary model (epic E3) is sequenced in the roadmap, and `rmdl` stays a
-Proposed draft with no implementation. See
-`docs/technotes/walking-skeleton-architecture.md` for the as-built map.
+test-only) — plus `xtask` at the root, the `editors/vscode` extension, `skills/`
+(the `ridl-authoring` agent skill, which the extension and the editor release
+package), `evals/` (the public corpus, the calibration records and the eval
+tasks for design evaluation, which `cargo xtask eval` runs, outside the
+published crates and the book), and `examples/`, whose worked examples are
+compiled and run by the test suite rather than being prose. The typl v0.1
+toolchain (epic E1), the ridl interface layer over it (epic E2) and rsdl's
+checks, lowering and `ridl diff` at the system (epic E6) are built; the boundary
+model (epic E3) is sequenced in the roadmap, and `rmdl` stays a Proposed draft
+with no implementation. See `docs/technotes/walking-skeleton-architecture.md`
+for the as-built map.
 
 **Start from the map for your task, then read what the task touches.**
 
@@ -221,7 +223,8 @@ member; rsdl is the apex.
     just book-build      render the book to ./book — what CI publishes to Pages
     just vscode-verify   compile, test, and package the VS Code extension as a
                          generic and a linux-x64 VSIX, with a placeholder
-                         binary, and check each archive
+                         binary, and check each archive and the skill archive
+                         that package-skill writes
     just package-vsix    compile the extension, then vsce package (optional
                          vsce-target)
     just package-vscode  build ridl for this machine and package the extension

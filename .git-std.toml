@@ -27,6 +27,8 @@ scopes = [
   "adr",
   # repo-wide: tooling, community files, layout
   "repo",
+  # the agent skill under skills/ (ADR-0005 Layer A)
+  "skills",
   "docs",
   "ci",
   "hooks",
@@ -98,3 +100,7 @@ regex = '(?m)^ridl-rt = "([^"]+)"'
 [[version_files]]
 path = "docs/book/writing-a-port.md"
 regex = 'ridl-rt-conformance = "=([^"]+)"'
+
+[[version_files]]
+path = "skills/ridl-authoring/SKILL.md"
+regex = '(?m)^  version: "([^"]+)"'

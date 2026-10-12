@@ -913,6 +913,23 @@ fn book_root() -> PathBuf {
         .expect("docs/book must exist")
 }
 
+/// The root of `skills/ridl-authoring/`, whose fences follow the book's rules
+/// and form a workspace of their own.
+fn skill_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../skills/ridl-authoring")
+        .canonicalize()
+        .expect("skills/ridl-authoring must exist")
+}
+
+#[test]
+fn skill_examples_compile() {
+    match verify_book(&skill_root()) {
+        Ok(count) => assert!(count > 0, "the skill holds no verified example"),
+        Err(report) => panic!("{report}"),
+    }
+}
+
 /// Writes one Markdown file into a fresh book directory.
 fn book_of(label: &str, markdown: &str) -> TempDir {
     let book = TempDir::new(label);

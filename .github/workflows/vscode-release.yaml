@@ -243,10 +243,25 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - name: install just
+        # `set -o pipefail` and the closing version line for the reason ci.yml's
+        # header gives: without them a failed download leaves the step green and
+        # the missing tool surfaces as a confusing failure later (#395).
+        run: |
+          set -o pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin" just
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/just" --version
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
+      # The ridl-authoring skill, for Claude Code and Codex; the VSIX already
+      # carries it for GitHub Copilot.
+      - name: package the skill
+        run: just package-skill artifacts
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
@@ -258,6 +273,7 @@ jobs:
             artifacts/*.tar.gz
             artifacts/*.sha256
             artifacts/*.vsix
+            artifacts/*.zip
 
   publish-vsce:
     name: publish to the VS Code Marketplace
