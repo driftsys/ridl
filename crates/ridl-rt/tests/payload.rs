@@ -241,4 +241,11 @@ fn a_violation_admits_no_type_name_and_keeps_its_rule() {
     assert_eq!(SPEED_RANGE.type_name, Some("Speed"));
     assert_ne!(decoded, SPEED_RANGE);
     assert_eq!(decoded.rule, SPEED_RANGE.rule);
+
+    let other_rule = Violation {
+        type_name: None,
+        rule: Rule::Length,
+    };
+    assert_ne!(decoded, other_rule);
+    assert_eq!(other_rule.rule, Rule::Length);
 }
