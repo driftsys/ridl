@@ -5531,15 +5531,15 @@ impl Checker<'_> {
         }
     }
 
-    /// The gf §4.3 attribute allow-list plus the ridl §13 predicate table,
-    /// over the member's attr block (if any). In E2 the only consumable
-    /// attributes are the `require`/`ensure` predicates: every flag or
-    /// assignment key draws FORM-107 when gf §4.3 knows it, FORM-106 when it
-    /// is unknown; a repeated key draws FORM-108.
+    /// The attribute registry (`ridl_core::attributes`) over the member's attr
+    /// block (if any): a `require`/`ensure` predicate on a site its row does
+    /// not name draws RIDL-301 or RIDL-302; a plain key with a row draws
+    /// FORM-107, because no row names a member site; a key with no row draws
+    /// FORM-106; a repeated key draws FORM-108.
     ///
     /// Recorded deferral (gf §4.5): attribute keys are doctrine-bound to
     /// become contextual (recognised only inside `[ ]`, not registry words).
-    /// E2 does not implement that downgrade: `init` stays family-reserved —
+    /// That downgrade is not implemented: `init` stays family-reserved —
     /// `[ init = X ]` already draws FORM-105 at parse, and signal init is the
     /// bare `= value` form (ADR-0008 decision 2) — so no key is special-cased
     /// here.
@@ -5552,7 +5552,7 @@ impl Checker<'_> {
         for attribute in block.attributes() {
             match attribute.predicate_kind() {
                 Some(ast::PredicateKind::Require) => {
-                    if !matches!(kind, MemberKind::Command | MemberKind::Query) {
+                    if !kind.registry_allows("require") {
                         self.error(
                             DiagCode::RIDL_301,
                             attribute.syntax().text_range(),
@@ -5562,20 +5562,26 @@ impl Checker<'_> {
                         );
                     }
                 }
-                Some(ast::PredicateKind::Ensure) => match kind {
-                    MemberKind::Query => {}
-                    MemberKind::Command => self.error(
-                        DiagCode::RIDL_302,
-                        attribute.syntax().text_range(),
-                        "`ensure` not valid on command — a command has no result to observe"
-                            .to_string(),
-                    ),
-                    _ => self.error(
-                        DiagCode::RIDL_301,
-                        attribute.syntax().text_range(),
-                        format!("`ensure` not valid on {noun} — contracts belong to `query`"),
-                    ),
-                },
+                Some(ast::PredicateKind::Ensure) => {
+                    if !kind.registry_allows("ensure") {
+                        if matches!(kind, MemberKind::Command) {
+                            self.error(
+                                DiagCode::RIDL_302,
+                                attribute.syntax().text_range(),
+                                "`ensure` not valid on command — a command has no result to observe"
+                                    .to_string(),
+                            );
+                        } else {
+                            self.error(
+                                DiagCode::RIDL_301,
+                                attribute.syntax().text_range(),
+                                format!(
+                                    "`ensure` not valid on {noun} — contracts belong to `query`"
+                                ),
+                            );
+                        }
+                    }
+                }
                 None => {
                     // A reserved-word key already drew FORM-105 at parse and
                     // carries no name node.
@@ -5583,18 +5589,17 @@ impl Checker<'_> {
                         continue;
                     };
                     let range = attribute.syntax().text_range();
-                    if GF_ATTRIBUTE_KEYS.contains(&key.as_str()) {
-                        self.error(
+                    match ridl_core::attributes::lookup(&key) {
+                        Some(_) => self.error(
                             DiagCode::FORM_107,
                             range,
                             format!("attribute `{key}` not valid on {noun}"),
-                        );
-                    } else {
-                        self.error(
+                        ),
+                        None => self.error(
                             DiagCode::FORM_106,
                             range,
                             format!("unknown attribute key `{key}`"),
-                        );
+                        ),
                     }
                     if !seen.insert(key.clone()) {
                         self.error(
@@ -6127,22 +6132,26 @@ impl MemberKind {
             Self::Fixed => "fixed",
         }
     }
-}
 
-/// The attribute keys the general form §4.3 table defines (the key forms —
-/// `require`/`ensure` parse as predicates, never as keys). A key outside
-/// this list is FORM-106; inside it but not consumable here, FORM-107.
-/// Recorded debt (issue #172, M3): in E2 no key is consumable, so a flat list
-/// suffices; the task that first consumes a key (`persist`, `labels`, …)
-/// must turn this into the full gf §4.3 key×kind allow-list.
-const GF_ATTRIBUTE_KEYS: &[&str] = &[
-    "default",
-    "init",
-    "persist",
-    "invariant",
-    "labels",
-    "deprecated",
-];
+    /// The registry site of the member, or `None` for a kind no row names: a
+    /// key on a signal, an event or a fixed is then FORM-107 when it has a
+    /// row and FORM-106 when it has none.
+    fn registry_site(self) -> Option<ridl_core::attributes::Site> {
+        use ridl_core::attributes::Site;
+        match self {
+            Self::Command => Some(Site::Command),
+            Self::Query => Some(Site::Query),
+            Self::Signal | Self::Event | Self::Fixed => None,
+        }
+    }
+
+    /// Whether the registry row of `key` names this member's site.
+    fn registry_allows(self, key: &str) -> bool {
+        self.registry_site().is_some_and(|site| {
+            ridl_core::attributes::lookup(key).is_some_and(|row| row.allows(site))
+        })
+    }
+}
 
 /// The Stratum-2 contract-error category names (ridl §10.2): implicit,
 /// standardized, derived — never declared as error-type values. An `error`
@@ -11610,7 +11619,8 @@ mod tests {
             "app",
             &format!("{PRELUDE}interface I {{\n  fixed v : Version [ persist ]\n}}\n"),
         );
-        assert_eq!(codes(&attributed), vec!["RIDL-106", "FORM-107"]);
+        // `persist` has no registry row, so the key half is FORM-106.
+        assert_eq!(codes(&attributed), vec!["RIDL-106", "FORM-106"]);
         assert!(
             attributed.diagnostics[0]
                 .message
@@ -12813,14 +12823,15 @@ interface I {\n\
 
     #[test]
     fn form_106_107_108_attribute_allow_list() {
-        // gf §4.3: in E2 only `require`/`ensure` predicates are consumable —
-        // a known key on the wrong kind is FORM-107, an unknown key FORM-106,
-        // a duplicate key FORM-108.
+        // The registry (ridl_core::attributes): a key with a row that does not
+        // name this site is FORM-107, a key with no row FORM-106, a key twice
+        // FORM-108. `persist` has no row, so it moved from FORM-107 to
+        // FORM-106.
         let known = check_ridl(
             "app",
             &format!("{PRELUDE}interface I {{\n  command c() [ persist ] @[..50ms]\n}}\n"),
         );
-        assert_eq!(codes(&known), vec!["FORM-107"]);
+        assert_eq!(codes(&known), vec!["FORM-106"]);
         assert!(
             known.diagnostics[0].message.contains("persist"),
             "got: {}",
@@ -12837,13 +12848,23 @@ interface I {\n\
             "app",
             &format!("{PRELUDE}interface I {{\n  command c() [ persist, persist ] @[..50ms]\n}}\n"),
         );
-        assert_eq!(codes(&duplicate), vec!["FORM-107", "FORM-107", "FORM-108"]);
+        assert_eq!(codes(&duplicate), vec!["FORM-106", "FORM-106", "FORM-108"]);
 
         let assignment = check_ridl(
             "app",
             &format!("{PRELUDE}interface I {{\n  signal s : Speed @10ms [ labels = (A) ]\n}}\n"),
         );
         assert_eq!(codes(&assignment), vec!["FORM-107"]);
+    }
+
+    #[test]
+    fn a_registered_rsdl_key_on_a_member_is_form_107() {
+        // `tier` has a row whose sites are rsdl declarations only.
+        let checked = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  command c() [ tier = PLATFORM ] @[..50ms]\n}}\n"),
+        );
+        assert_eq!(codes(&checked), vec!["FORM-107"]);
     }
 
     #[test]

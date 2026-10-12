@@ -1,12 +1,12 @@
 //! The attribute blocks of the rsdl declarations and lines (rsdl reference §5).
 //!
-//! An rsdl-owned key is allow-listed per declaration kind and has a consumer;
-//! every other key belongs to a backend and is carried uninterpreted. A key no
-//! row of the §5 table and no backend namespace defines is FORM-106, an
-//! rsdl-owned key where its row does not allow it is FORM-107, and a key twice
-//! in one block is FORM-108. The value rules of the rsdl-owned keys are
-//! RSDL-305 (`instances`), RSDL-313 (`external`), RSDL-908 (`tier`) and
-//! RSDL-709 (`depth`, `slots`, `budget`).
+//! Every key is looked up in the attribute registry
+//! (`ridl_core::attributes`), the one allow-list. A key with no row is
+//! FORM-106, a key whose row does not name this site is FORM-107, and a key
+//! twice in one block is FORM-108. A `namespace.key` is a backend key, carried
+//! uninterpreted. The value rules of the core keys are RSDL-305 (`instances`),
+//! RSDL-313 (`external`), RSDL-908 (`tier`) and RSDL-709 (`depth`, `slots`,
+//! `budget`).
 //!
 //! The ridl member check (`check::Checker::check_member_attrs`) raises the same
 //! three FORM codes, but it is a method of the package checker, bound to the
@@ -51,30 +51,20 @@ impl AttrSite {
         }
     }
 
-    /// Whether the rsdl-owned `key` is legal here (the rsdl §5 table).
-    fn allows(self, key: &str) -> bool {
-        match key {
-            "instances" => self == Self::Component,
-            "external" => matches!(self, Self::Component | Self::Machine),
-            "tier" => self == Self::Distribution,
-            "labels" | "deprecated" => !matches!(self, Self::Placement | Self::Line),
-            "depth" | "slots" | "budget" => matches!(self, Self::Deployment | Self::Placement),
-            _ => false,
+    /// The registry site this block sits on.
+    fn registry_site(self) -> ridl_core::attributes::Site {
+        use ridl_core::attributes::Site;
+        match self {
+            Self::System => Site::System,
+            Self::Component => Site::Component,
+            Self::Distribution => Site::Distribution,
+            Self::Deployment => Site::Deployment,
+            Self::Machine => Site::Machine,
+            Self::Placement => Site::Placement,
+            Self::Line => Site::Line,
         }
     }
 }
-
-/// The rsdl-owned keys (rsdl §5 table).
-const RSDL_KEYS: [&str; 8] = [
-    "instances",
-    "external",
-    "tier",
-    "labels",
-    "deprecated",
-    "depth",
-    "slots",
-    "budget",
-];
 
 /// What one attribute block yields. A line uses `attrs.backend_keys` only, and
 /// a placement line `sizing` beside it: the other fields stay empty, because
@@ -129,6 +119,10 @@ pub(super) fn read(
         }
         if let [namespace, key_name] = segments.as_slice() {
             if is_lower_camel(namespace) && is_lower_camel(key_name) {
+                debug_assert!(
+                    ridl_core::attributes::backend_pattern().allows(at.registry_site()),
+                    "every rsdl site takes a backend key"
+                );
                 out.attrs.backend_keys.push(BackendKey {
                     namespace: namespace.clone(),
                     key: key_name.clone(),
@@ -147,15 +141,15 @@ pub(super) fn read(
             }
             continue;
         }
-        if !RSDL_KEYS.contains(&key.as_str()) {
+        let Some(row) = ridl_core::attributes::lookup(&key) else {
             reporter.error(
                 DiagCode::FORM_106,
                 site,
                 format!("unknown attribute key `{key}`"),
             );
             continue;
-        }
-        if !at.allows(&key) {
+        };
+        if !row.allows(at.registry_site()) {
             let message = if at == AttrSite::Line {
                 format!(
                     "attribute `{key}` not valid on a line — a line takes backend keys only \
