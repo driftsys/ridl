@@ -408,7 +408,7 @@ impl<'a, T: Payload<E>, E: Encoding> Ref<'a, T, E> {
 #[non_exhaustive] pub enum Malformed {
     OutOfBounds, Unaligned, MissingRequired, Utf8, Union, TooDeep, TooManyTables, TooLarge,
 }
-pub struct Violation { pub type_name: &'static str, pub rule: Rule }
+pub struct Violation { pub type_name: Option<&'static str>, pub rule: Rule }
 #[non_exhaustive] pub enum Rule { Range, Step, Length, Pattern, Variant, Unique }
 ```
 
