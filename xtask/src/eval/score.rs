@@ -85,7 +85,7 @@ pub fn used_ridl_check(transcript: &str) -> bool {
 /// Whether the transcript shows that the host made the skill available.
 /// Claude: the `init` line lists `ridl-authoring` among its skills, the
 /// agent called the `Skill` tool on it, or, in a handed-off run, the agent
-/// read its `SKILL.md`. Codex: the agent read a file of the
+/// read its `SKILL.md` or ran a command on its directory. Codex: the agent read a file of the
 /// skill's directory with a command. Text that only mentions the skill does
 /// not count.
 pub fn skill_was_loaded(host: Host, transcript: &str) -> bool {
@@ -110,7 +110,14 @@ pub fn skill_was_loaded(host: Host, transcript: &str) -> bool {
                         .and_then(|input| input.get("file_path"))
                         .and_then(serde_json::Value::as_str)
                         .is_some_and(|p| p.ends_with("ridl-authoring/SKILL.md"));
-                listed || called || read
+                let shell = str_field(map, "type") == Some("tool_use")
+                    && str_field(map, "name") == Some("Bash")
+                    && map
+                        .get("input")
+                        .and_then(|input| input.get("command"))
+                        .and_then(serde_json::Value::as_str)
+                        .is_some_and(|c| c.contains("skills/ridl-authoring"));
+                listed || called || read || shell
             }
             Host::Codex => {
                 str_field(map, "type") == Some("command_execution")
@@ -246,8 +253,12 @@ mod tests {
     fn a_handed_off_claude_run_loads_the_skill_by_reading_it() {
         let read = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t3","name":"Read","input":{"file_path":"/r/ws/.claude/skills/ridl-authoring/SKILL.md"}}]}}"#;
         let other = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t4","name":"Read","input":{"file_path":"/r/ws/ridl.toml"}}]}}"#;
+        let cat = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t5","name":"Bash","input":{"command":"W=/r/ws/.claude/skills/ridl-authoring; cat $W/SKILL.md"}}]}}"#;
+        let ls = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t6","name":"Bash","input":{"command":"ls /r/ws"}}]}}"#;
         assert!(skill_was_loaded(Host::Claude, read));
+        assert!(skill_was_loaded(Host::Claude, cat));
         assert!(!skill_was_loaded(Host::Claude, other));
+        assert!(!skill_was_loaded(Host::Claude, ls));
     }
 
     #[test]
