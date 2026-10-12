@@ -29,7 +29,7 @@ effect now; release 0.10.0 is not published yet.
   the catalog hash, the emitted `.proto` and `.fbs` mapping and the encoding
   names.
 - **The minimum Rust version.** Rust 1.83 and edition 2021 for `ridl-rt`,
-  `ridl-rt-conformance` and `ridl-loopback`, and Rust 1.88 for
+  `ridl-rt-conformance` and `ridl-loopback`, and Rust 1.88 and edition 2024 for
   `ridl-descriptor`. The generated crate compiles as edition 2021 with Rust 1.83
   with every cargo feature on. A 0.10.x release does not raise a minimum.
 
