@@ -48,7 +48,7 @@ pub trait Attached {
 ///
 /// A separate trait, not a supertrait of [`Attached`], so a port that never
 /// meets a face — a conformance fixture — is not forced to name an encoding.
-/// What is built is the trait and its forwarding implementation for
+/// What is built is the trait and its forwarding implementations for `&P` and
 /// `&mut P`: no port type in this crate's workspace implements it, and the
 /// generated face is written over the FlatBuffers codec and does not read a
 /// port's encoding. A face that takes its encoding from its port, so that a
@@ -687,10 +687,10 @@ pub enum SettleError {
 
 // Forwarding impls (ADR-0021 decision 11).
 //
-// Every port trait above is implemented for `&mut P`, and the seven whose
-// methods all take `&self` — `Attached`, `Clock`, `SignalReader`,
-// `FixedReader`, `ScannableSignals`, `CoherentSignals` and `Wakeable` — also
-// for `&P`.
+// Every port trait above is implemented for `&mut P`, and the eight whose
+// methods all take `&self`, or that have no methods — `Attached`, `Clock`,
+// `SignalReader`, `FixedReader`, `ScannableSignals`, `CoherentSignals`,
+// `Wakeable` and `Encoded` — also for `&P`.
 // What they buy is one thing: a value generic over a port trait, such as a
 // generated face, can be built over a reference to a port rather than over the
 // port itself. A wrapper that adds tracing and a test double are accepted by

@@ -3,7 +3,7 @@
 
 #![forbid(unsafe_code)]
 
-use ridl_rt::encoding::{Encoding, FlatBuffers};
+use ridl_rt::encoding::{Encoding, FlatBuffers, Proto3};
 use ridl_rt::port::Encoded;
 
 /// A port that carries FlatBuffers bytes. It implements no other port trait:
@@ -27,17 +27,27 @@ fn a_mut_borrow_carries_the_ports_encoding() {
     assert_eq!(name(&&mut port), "flatbuffers");
 }
 
-#[test]
-fn a_shared_borrow_carries_the_ports_encoding() {
-    let port = P;
-    assert_eq!(name(&&port), "flatbuffers");
+/// A port that carries Protobuf bytes, so an impl that fixes the encoding
+/// to one type does not pass for both fixtures.
+struct Q;
+
+impl Encoded for Q {
+    type Encoding = Proto3;
 }
 
 /// Compiles only when `Q::Encoding` is the same type as `E`.
 fn same_encoding<Q: Encoded<Encoding = E>, E: Encoding>() {}
 
+/// A shared and a mutable borrow of `T` carry `T`'s encoding. `T` may be
+/// unsized, which pins `?Sized` on both forwarding impls.
+fn forwards<T: Encoded + ?Sized>() {
+    same_encoding::<&T, T::Encoding>();
+    same_encoding::<&mut T, T::Encoding>();
+}
+
 #[test]
 fn borrows_have_the_same_encoding_type_as_the_port() {
-    same_encoding::<&P, FlatBuffers>();
-    same_encoding::<&mut P, FlatBuffers>();
+    forwards::<P>();
+    forwards::<Q>();
+    forwards::<dyn Encoded<Encoding = Proto3>>();
 }

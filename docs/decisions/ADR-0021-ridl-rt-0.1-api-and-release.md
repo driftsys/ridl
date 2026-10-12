@@ -153,6 +153,12 @@ breaking change under decision 10, to be released with the workspace in
 driftsys/ridl#801; the as-built record is
 [the `ridl-rt` design record](../design/ridl-rt.md).
 
+**Amendment (2026-10-12) — decision 11: `port::Encoded` forwards for `&P`.**
+`Encoded` is also implemented for a shared reference, in the same form as the
+`&mut P` impl. This is a breaking change under decision 10 for a crate that
+implemented `Encoded` for a shared reference. It is tracked as driftsys/ridl#855
+and is made before 0.10.0 freezes the runtime crates.
+
 Amended 2026-10-11 by [ADR-0029](ADR-0029-stability-policy.md): the public API
 of `ridl-rt` and the minimum Rust version of decision 10 are frozen surfaces
 from 0.10.0, checked by `just freeze-check`.
@@ -668,7 +674,12 @@ trusted with no `unsafe` and no second verification pass.
     **Amendment (2026-10-12) — `port::Encoded` forwards for `&P`.**
     `ridl_rt::port` also gains `impl<P: Encoded + ?Sized> Encoded for &P`, in
     the same form as the `&mut P` impl, so `Encoded` forwards for both borrows
-    like the other `&self`-only port traits (driftsys/ridl#855).
+    like the other `&self`-only port traits (driftsys/ridl#855). The addition is
+    a break under decision 10 for a crate that implemented `Encoded` for a
+    shared reference, because that impl now overlaps with the blanket one;
+    `cargo semver-checks` does not detect an added blanket impl. The change is
+    made before 0.10.0 freezes the runtime crates, and no crate in this
+    workspace implements `Encoded` for a reference.
 
 12. **Amendment (2026-09-20) — a runtime presents one handle per port role, it
     may also offer an aggregate handle per face, and `ridl-rt` adds no `Send` or
@@ -1203,6 +1214,7 @@ trusted with no `unsafe` and no second verification pass.
 | [ADR-0006](ADR-0006-walking-skeleton-execution.md) decision 1                                    | a 2026-09-14 amendment records that `ridl-rt` is the one workspace crate on edition 2021, tested as both editions under this record's decision 10                                                                                                                                                                                |
 | [ADR-0009](ADR-0009-toolchain-and-gate-parity.md) decision 4                                     | a 2026-09-14 amendment records that `cargo fmt --all`'s style edition now follows each crate's own edition rather than one workspace-wide value, because `ridl-rt` is edition 2021 and every other crate is edition 2024                                                                                                         |
 | [the `ridl-rt` design record](../design/ridl-rt.md), "The ports"                                 | two paragraphs record the forwarding impls of decision 11 and the handle model of decision 12                                                                                                                                                                                                                                    |
+| [the `ridl-rt` design record](../design/ridl-rt.md), "The ports"                                 | a 2026-10-12 amendment adds `Encoded` to the traits forwarded for `&P` (decision 11)                                                                                                                                                                                                                                             |
 | [the `ridl-rt` design record](../design/ridl-rt.md), the API table and the feature paragraph     | `Builder::push_offset_vector` joins the `flatbuffers` row, and the paragraph's claim that a field's inline offset and a table's size are the projection's facts is corrected: they are the codec emitter's, because no other emitter can observe them (2026-09-21, story E11.7, stage K5)                                        |
 | [the roadmap](../ROADMAP.md), story E11.9, then E11.15                                           | its `Done when` gains the handle model of decision 12: the loopback exposes one handle per port role, its reader handle is `Sync`, and it offers the aggregate the generated face is built over. E11.9 was split on 2026-09-20 (driftsys/ridl#445) and that clause moved to story E11.15's row unchanged                         |
 | [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decision 5             | a 2026-09-26 amendment records `correlate` as the seventh unconditional module (decision 15)                                                                                                                                                                                                                                     |
