@@ -336,7 +336,6 @@ fn scannable_signals_is_reached_through_a_borrow() {
         let mut marks = [Watermark {
             iface: IFACE,
             generation: 7,
-            seq: 0,
         }];
         let mut out = [Changed {
             iface: IFACE,
