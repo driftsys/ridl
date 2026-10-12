@@ -1122,7 +1122,6 @@ impl ::core::default::Default for WarningFlags {
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq)]
-#[repr(C)]
 pub struct SpeedLimitPayload {
     /// # Rules
     ///
@@ -1192,7 +1191,6 @@ impl ::core::default::Default for SensorResult {
     }
 }
 #[derive(Debug, Clone, PartialEq)]
-#[repr(C)]
 pub struct SensorReading {
     /// # Rules
     ///
@@ -2911,7 +2909,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelF
 
 // ===== package veh.cluster =====
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(C)]
 pub struct DoorPayload {
     /// # Rules
     ///
@@ -3076,7 +3073,6 @@ impl ::core::default::Default for RawTickCount {
 }
 /// The window of raw tick counts a wheel diagnostic covers.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[repr(C)]
 #[allow(dead_code)]
 pub(crate) struct RawWheelSpan {
     pub span: RawWheelSpanSpan,
@@ -3158,7 +3154,6 @@ impl ::core::default::Default for FanLevel {
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(C)]
 pub struct FilterState {
     /// # Rules
     ///
@@ -3175,7 +3170,6 @@ impl ::core::default::Default for FilterState {
     }
 }
 #[derive(Debug, Clone, PartialEq)]
-#[repr(C)]
 pub struct ClimateReport {
     pub cabin: crate::veh::common::Temperature,
     pub setpoint: crate::veh::common::Temperature,

@@ -220,7 +220,6 @@ impl ::core::default::Default for Counter {
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq)]
-#[repr(C)]
 pub struct SensorReading {
     /// # Rules
     ///
@@ -237,7 +236,6 @@ impl ::core::default::Default for SensorReading {
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(C)]
 pub struct SensorFault {
     pub code: Counter,
 }

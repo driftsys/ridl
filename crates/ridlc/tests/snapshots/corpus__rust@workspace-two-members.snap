@@ -648,7 +648,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
 // ===== package veh.cluster =====
 /// Instrument-cluster reading, carrying a speed from the common package.
 #[derive(Debug, Clone, PartialEq)]
-#[repr(C)]
 pub struct ClusterReading {
     pub speed: crate::veh::common::Speed,
 }
